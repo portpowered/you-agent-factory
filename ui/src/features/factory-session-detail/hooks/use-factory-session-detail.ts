@@ -10,8 +10,8 @@ import type {
 } from "../../../api/factory-sessions";
 import {
   scopedRuntimeQueryKey,
-} from "../../dashboard/lib/backend-runtime-cache-scope";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+  useDashboardStreamStore,
+} from "../../dashboard/public/runtime-cache-scope";
 import { loadFactorySessionDetailData } from "./load-factory-session-detail-data";
 
 export const FACTORY_SESSION_DETAIL_QUERY_KEY = [

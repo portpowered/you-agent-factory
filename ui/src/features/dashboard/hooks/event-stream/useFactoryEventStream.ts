@@ -18,7 +18,9 @@ import {
   compactFactoryEventForTimeline,
   readFactoryTimelineDebugOptions,
 } from "../../../timeline/state/factoryTimelineDebug";
-import type { TimelineCheckpointStreamIdentity } from "../../../timeline/state/timelineCheckpointPersistence";
+import {
+  type TimelineCheckpointStreamIdentity,
+} from "../../../timeline/public";
 import {
   clearQueuedFlush,
   pausedDashboardStreamState,

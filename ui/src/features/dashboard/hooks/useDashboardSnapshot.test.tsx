@@ -25,7 +25,6 @@ import {
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
 import { useDashboardSnapshot } from "./useDashboardSnapshot";
-import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 const BACKEND_SCOPE_A = "backend-scope-a";
 const BACKEND_SCOPE_B = "backend-scope-b";

@@ -6,7 +6,7 @@ import {
   type ProviderSessionDetailResponse,
   type ProviderSessionDetailsAPIError,
 } from "../../../api/provider-session-details";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import { useDashboardStreamStore } from "../../dashboard/public/runtime-cache-scope";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 
 export const PROVIDER_SESSION_DETAIL_QUERY_KEY = [

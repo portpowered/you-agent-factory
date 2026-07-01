@@ -95,23 +95,152 @@ function installIndexedDBStub(): void {
   });
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: stale-cursor scenarios share one store harness and query client setup.
+function seedStaleCursorQueryCache(queryClient: QueryClient): void {
+  queryClient.setQueryData(
+    currentFactoryDefinitionQueryKey(
+      DEFAULT_FACTORY_SESSION_ID,
+      TEST_BACKEND_SCOPE,
+    ),
+    {
+      workers: [],
+      workstations: [],
+      workTypes: [],
+    },
+  );
+  queryClient.setQueryData(
+    currentFactoryDocumentQueryKey(
+      DEFAULT_FACTORY_SESSION_ID,
+      TEST_BACKEND_SCOPE,
+    ),
+    {
+      name: "default",
+      version: { logical: "1", physical: "2026-06-26T00:00:00Z" },
+      workers: [],
+      workstations: [],
+      workTypes: [],
+    },
+  );
+  queryClient.setQueryData(
+    factorySessionDetailQueryKey(
+      DEFAULT_FACTORY_SESSION_ID,
+      TEST_BACKEND_SCOPE,
+    ),
+    { status: "success" },
+  );
+  queryClient.setQueryData(
+    currentFactoryDefinitionQueryKey("session-beta", TEST_BACKEND_SCOPE),
+    {
+      workers: [{ name: "kept" }],
+    },
+  );
+}
+
+function expectAffectedSessionQueriesCleared(
+  queryClient: QueryClient,
+): void {
+  expect(
+    queryClient.getQueryData(
+      currentFactoryDefinitionQueryKey(
+        DEFAULT_FACTORY_SESSION_ID,
+        TEST_BACKEND_SCOPE,
+      ),
+    ),
+  ).toBeUndefined();
+  expect(
+    queryClient.getQueryData(
+      currentFactoryDocumentQueryKey(
+        DEFAULT_FACTORY_SESSION_ID,
+        TEST_BACKEND_SCOPE,
+      ),
+    ),
+  ).toBeUndefined();
+  expect(
+    queryClient.getQueryData(
+      factorySessionDetailQueryKey(
+        DEFAULT_FACTORY_SESSION_ID,
+        TEST_BACKEND_SCOPE,
+      ),
+    ),
+  ).toBeUndefined();
+  expect(
+    queryClient.getQueryData(
+      currentFactoryDefinitionQueryKey("session-beta", TEST_BACKEND_SCOPE),
+    ),
+  ).toEqual({ workers: [{ name: "kept" }] });
+}
+
+function createStaleCursorProbeRecovery() {
+  return vi.fn().mockResolvedValue({
+    factorySessionId: DEFAULT_FACTORY_SESSION_ID,
+    outcome: "CURSOR_STALE",
+    retry: {
+      omitAfterEventId: true,
+      omitAfterSequence: true,
+    },
+  });
+}
+
+function renderStaleCursorEventStream(
+  queryClient: QueryClient,
+  probeRecovery: ReturnType<typeof createStaleCursorProbeRecovery>,
+) {
+  return renderHook(
+    () =>
+      useFactoryEventStream({
+        enabled: true,
+        initialReconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+        },
+        locale: "en",
+        onEvent: () => {},
+        probeRecovery,
+        sessionID: DEFAULT_FACTORY_SESSION_ID,
+        streamIdentity: {
+          backendScopeID: TEST_BACKEND_SCOPE,
+          factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+          streamGenerationID: "2026-06-26T00:00:00Z",
+        },
+        validateReconnectCursor: vi.fn().mockResolvedValue({ ok: true }),
+      }),
+    { wrapper: createWrapper(queryClient) },
+  );
+}
+
+async function openInitialReconnectStream(): Promise<
+  NonNullable<ReturnType<typeof replayHarness.getStreams>[number]>
+> {
+  await waitFor(() => {
+    expect(replayHarness.getStreams()).toHaveLength(1);
+  });
+  const initialStream = replayHarness.getStreams()[0];
+  if (!initialStream) {
+    throw new Error("expected initial reconnect stream to be opened");
+  }
+  return initialStream;
+}
+
+function installStaleCursorTestHarness(): QueryClient {
+  replayHarness.install();
+  installIndexedDBStub();
+  const queryClient = createFactoryEventStreamQueryClient();
+  seedFactoryEventStreamStores();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 200,
+      }),
+    ),
+  );
+  return queryClient;
+}
+
 describe("useFactoryEventStream stale cursor recovery", () => {
   let queryClient = createFactoryEventStreamQueryClient();
 
   beforeEach(() => {
-    replayHarness.install();
-    installIndexedDBStub();
-    queryClient = createFactoryEventStreamQueryClient();
-    seedFactoryEventStreamStores();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(null, {
-          status: 200,
-        }),
-      ),
-    );
+    queryClient = installStaleCursorTestHarness();
   });
 
   afterEach(() => {
@@ -120,84 +249,16 @@ describe("useFactoryEventStream stale cursor recovery", () => {
   });
 
   it("clears only the affected session checkpoint and runtime queries before replaying from scratch", async () => {
-    const probeRecovery = vi.fn().mockResolvedValue({
-      factorySessionId: DEFAULT_FACTORY_SESSION_ID,
-      outcome: "CURSOR_STALE",
-      retry: {
-        omitAfterEventId: true,
-        omitAfterSequence: true,
-      },
-    });
+    const probeRecovery = createStaleCursorProbeRecovery();
     const deleteCheckpoint = vi.spyOn(
       timelineCheckpointPersistence,
       "clearTimelineCheckpoint",
     );
 
-    queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey(
-        DEFAULT_FACTORY_SESSION_ID,
-        TEST_BACKEND_SCOPE,
-      ),
-      {
-      workers: [],
-      workstations: [],
-      workTypes: [],
-    });
-    queryClient.setQueryData(
-      currentFactoryDocumentQueryKey(
-        DEFAULT_FACTORY_SESSION_ID,
-        TEST_BACKEND_SCOPE,
-      ),
-      {
-      name: "default",
-      version: { logical: "1", physical: "2026-06-26T00:00:00Z" },
-      workers: [],
-      workstations: [],
-      workTypes: [],
-    });
-    queryClient.setQueryData(
-      factorySessionDetailQueryKey(
-        DEFAULT_FACTORY_SESSION_ID,
-        TEST_BACKEND_SCOPE,
-      ),
-      { status: "success" },
-    );
-    queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey("session-beta", TEST_BACKEND_SCOPE),
-      {
-      workers: [{ name: "kept" }],
-    });
+    seedStaleCursorQueryCache(queryClient);
+    renderStaleCursorEventStream(queryClient, probeRecovery);
 
-    renderHook(
-      () =>
-        useFactoryEventStream({
-          enabled: true,
-          initialReconnectCursor: {
-            afterEventId: "checkpoint-event-7",
-            afterSequence: 7,
-          },
-          locale: "en",
-          onEvent: () => {},
-          probeRecovery,
-          sessionID: DEFAULT_FACTORY_SESSION_ID,
-          streamIdentity: {
-            backendScopeID: TEST_BACKEND_SCOPE,
-            factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-            streamGenerationID: "2026-06-26T00:00:00Z",
-          },
-          validateReconnectCursor: vi.fn().mockResolvedValue({ ok: true }),
-        }),
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    await waitFor(() => {
-      expect(replayHarness.getStreams()).toHaveLength(1);
-    });
-    const initialStream = replayHarness.getStreams()[0];
-    if (!initialStream) {
-      throw new Error("expected initial reconnect stream to be opened");
-    }
-
+    const initialStream = await openInitialReconnectStream();
     act(() => {
       initialStream.onerror?.(new Event("error"));
     });
@@ -223,80 +284,17 @@ describe("useFactoryEventStream stale cursor recovery", () => {
       factorySessionID: DEFAULT_FACTORY_SESSION_ID,
       streamGenerationID: "2026-06-26T00:00:00Z",
     });
-    expect(
-      queryClient.getQueryData(
-        currentFactoryDefinitionQueryKey(
-          DEFAULT_FACTORY_SESSION_ID,
-          TEST_BACKEND_SCOPE,
-        ),
-      ),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(
-        currentFactoryDocumentQueryKey(
-          DEFAULT_FACTORY_SESSION_ID,
-          TEST_BACKEND_SCOPE,
-        ),
-      ),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(
-        factorySessionDetailQueryKey(
-          DEFAULT_FACTORY_SESSION_ID,
-          TEST_BACKEND_SCOPE,
-        ),
-      ),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(
-        currentFactoryDefinitionQueryKey("session-beta", TEST_BACKEND_SCOPE),
-      ),
-    ).toEqual({ workers: [{ name: "kept" }] });
+    expectAffectedSessionQueriesCleared(queryClient);
     expect(useDashboardStreamStore.getState().streamState.status).not.toBe(
       "recovery_failed",
     );
   });
 
   it("shows a recoverable stream state when replay from scratch cannot reopen the session", async () => {
-    const probeRecovery = vi.fn().mockResolvedValue({
-      factorySessionId: DEFAULT_FACTORY_SESSION_ID,
-      outcome: "CURSOR_STALE",
-      retry: {
-        omitAfterEventId: true,
-        omitAfterSequence: true,
-      },
-    });
+    const probeRecovery = createStaleCursorProbeRecovery();
+    renderStaleCursorEventStream(queryClient, probeRecovery);
 
-    renderHook(
-      () =>
-        useFactoryEventStream({
-          enabled: true,
-          initialReconnectCursor: {
-            afterEventId: "checkpoint-event-7",
-            afterSequence: 7,
-          },
-          locale: "en",
-          onEvent: () => {},
-          probeRecovery,
-          sessionID: DEFAULT_FACTORY_SESSION_ID,
-          streamIdentity: {
-            backendScopeID: TEST_BACKEND_SCOPE,
-            factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-            streamGenerationID: "2026-06-26T00:00:00Z",
-          },
-          validateReconnectCursor: vi.fn().mockResolvedValue({ ok: true }),
-        }),
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    await waitFor(() => {
-      expect(replayHarness.getStreams()).toHaveLength(1);
-    });
-    const initialStream = replayHarness.getStreams()[0];
-    if (!initialStream) {
-      throw new Error("expected initial reconnect stream to be opened");
-    }
-
+    const initialStream = await openInitialReconnectStream();
     act(() => {
       initialStream.onerror?.(new Event("error"));
     });

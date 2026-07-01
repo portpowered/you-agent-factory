@@ -1,7 +1,7 @@
 import { QueryClient } from "@tanstack/react-query";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import { useDashboardStreamStore } from "../../dashboard/public/runtime-cache-scope";
 import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,

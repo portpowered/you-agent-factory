@@ -5,7 +5,7 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../hooks/useCurrentFactoryDefinition";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+import { useDashboardStreamStore } from "../../dashboard/public/runtime-cache-scope";
 
 export function syncCurrentFactoryDocumentCache(
   queryClient: QueryClient,

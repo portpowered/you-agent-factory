@@ -7,9 +7,9 @@ import {
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../../current-selection/base/public";
 import {
-  factorySessionDetailQueryKey,
   FACTORY_SESSION_DETAIL_QUERY_KEY,
-} from "../../factory-session-detail/hooks/use-factory-session-detail";
+  factorySessionDetailQueryKey,
+} from "../../factory-session-detail/public";
 import { backendRuntimeCacheScopeKey } from "./backend-runtime-cache-scope";
 
 export function dashboardSessionKey(

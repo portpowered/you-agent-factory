@@ -7,8 +7,10 @@ import {
 } from "../../../api/current-factory-definition";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
-import { backendRuntimeCacheScopeKey } from "../../dashboard/lib/backend-runtime-cache-scope";
+import {
+  backendRuntimeCacheScopeKey,
+  useDashboardStreamStore,
+} from "../../dashboard/public/runtime-cache-scope";
 
 export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
   "current-factory-definition";

@@ -8,7 +8,7 @@ import type {
 import {
   clearTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
-} from "../../../timeline/state/timelineCheckpointPersistence";
+} from "../../../timeline/public";
 import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
 import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
 import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";
