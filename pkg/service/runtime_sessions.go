@@ -343,6 +343,9 @@ func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context
 	if err != nil {
 		return nil, fmt.Errorf("subscribe factory events: %w", err)
 	}
+	if session, sessionErr := fs.requireSession(sessionID); sessionErr == nil {
+		stream.BackendScopeID = factorySessionBackendScopeID(fs, session)
+	}
 	return stream, nil
 }
 
@@ -998,7 +1001,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessi
 }
 
 func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
-	_ context.Context,
+	ctx context.Context,
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
@@ -1022,7 +1025,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	response.BackendScopeId = stringPointer(factorySessionBackendScopeID(fs, session))
 	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(session))
 	response.FactorySessionId = stringPointer(session.ID)
-	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
+	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(ctx, fs, session))
 	if resolved.remapped {
 		response.ReasonCode = factoryapi.LogicalSessionRemap
 		return response, nil
@@ -1120,7 +1123,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	projectionCtx := factorysessions.ProjectionContext{
 		Session:          session,
 		FactoryCfg:       factoryCfg,
-		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).backendScopeID),
+		BackendScopeID:   factorySessionBackendScopeID(fs, session),
 		RuntimeStartedAt: liveSessionBundle(session).startedAtUTC,
 		Now:              time.Now().UTC(),
 	}
@@ -1352,20 +1355,18 @@ func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) str
 	return strings.Join([]string{folderPath, targetKind, targetName}, "::")
 }
 
-func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
-	factorySessionID := ""
-	if session != nil {
-		factorySessionID = strings.TrimSpace(session.ID)
+func factorySessionStreamGenerationID(ctx context.Context, fs *FactoryService, session *factorysessions.LiveSession) string {
+	if fs != nil && session != nil {
+		if snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID); err == nil {
+			if streamGenerationID := strings.TrimSpace(snapshot.StreamGenerationID); streamGenerationID != "" {
+				return streamGenerationID
+			}
+		}
 	}
-	backendScopeID := factorySessionBackendScopeID(fs, session)
-	switch {
-	case backendScopeID != "" && factorySessionID != "":
-		return backendScopeID + "::" + factorySessionID
-	case factorySessionID != "":
-		return factorySessionID
-	default:
-		return backendScopeID
+	if bundle := liveSessionBundle(session); bundle != nil && !bundle.startedAtUTC.IsZero() {
+		return bundle.startedAtUTC.UTC().Format(time.RFC3339Nano)
 	}
+	return ""
 }
 
 func stringPointer(value string) *string {

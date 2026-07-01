@@ -17,7 +17,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const sessionEventStreamGenerationHeader = "X-Factory-Session-Stream-Generation-Id"
+const (
+	sessionEventStreamBackendScopeHeader   = "X-Factory-Session-Backend-Scope-Id"
+	sessionEventStreamGenerationHeader     = "X-Factory-Session-Stream-Generation-Id"
+)
 
 // GetStatus handles GET /status as the supported runtime status read model.
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +257,9 @@ func (s *Server) getEvents(
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	if includeSessionHandshake {
+		if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
+			w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
+		}
 		if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
 			w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
 		}

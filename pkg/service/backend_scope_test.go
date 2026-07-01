@@ -3,11 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
@@ -323,4 +327,93 @@ func TestBuildFactoryService_MalformedConfiguredScopeFailsStartup(t *testing.T) 
 	if err == nil {
 		t.Fatal("expected malformed backend scope startup failure")
 	}
+}
+
+func TestBuildFactoryService_ExposesPersistedBackendScopeThroughSessionIdentitySurfaces(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	homeDir := t.TempDir()
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		Logger:                                  zap.NewNop(),
+		SystemConfigHomeDir:                     homeDir,
+		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	persistedScope := svc.cfg.BackendScopeID
+	if persistedScope == "" {
+		t.Fatal("expected persisted backend scope before session identity reads")
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime idle")
+
+	server := httptest.NewServer(api.NewServer(svc, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	session := getLiveFactorySessionForBackendScopeTest(t, server.URL, defaultFactorySessionID)
+	if session.Runtime.StreamIdentity == nil {
+		t.Fatal("streamIdentity = nil, want persisted backend scope identity")
+	}
+	if session.Runtime.StreamIdentity.BackendScopeID != persistedScope {
+		t.Fatalf("session streamIdentity.backendScopeID = %q, want persisted %q", session.Runtime.StreamIdentity.BackendScopeID, persistedScope)
+	}
+	if strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatal("session streamIdentity.streamGenerationID is empty")
+	}
+
+	preflight, err := svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
+	}
+	if preflight.BackendScopeId == nil || *preflight.BackendScopeId != persistedScope {
+		t.Fatalf("preflight backendScopeId = %#v, want persisted %q", preflight.BackendScopeId, persistedScope)
+	}
+	if preflight.StreamGenerationId == nil || *preflight.StreamGenerationId != session.Runtime.StreamIdentity.StreamGenerationID {
+		t.Fatalf("preflight streamGenerationId = %#v, want session read %q", preflight.StreamGenerationId, session.Runtime.StreamIdentity.StreamGenerationID)
+	}
+
+	eventsCtx, cancelEvents := context.WithCancel(context.Background())
+	eventsRecorder := httptest.NewRecorder()
+	eventsRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+defaultFactorySessionID+"/events", nil).WithContext(eventsCtx)
+	cancelEvents()
+	api.NewServer(svc, 0, zap.NewNop()).Handler().ServeHTTP(eventsRecorder, eventsRequest)
+	if eventsRecorder.Code != http.StatusOK {
+		t.Fatalf("GET events status = %d, want 200", eventsRecorder.Code)
+	}
+	if got := eventsRecorder.Header().Get("X-Factory-Session-Backend-Scope-Id"); got != persistedScope {
+		t.Fatalf("event handshake backend scope = %q, want persisted %q", got, persistedScope)
+	}
+	if got := eventsRecorder.Header().Get("X-Factory-Session-Stream-Generation-Id"); got != session.Runtime.StreamIdentity.StreamGenerationID {
+		t.Fatalf("event handshake stream generation = %q, want session read %q", got, session.Runtime.StreamIdentity.StreamGenerationID)
+	}
+}
+
+func getLiveFactorySessionForBackendScopeTest(t *testing.T, serverURL, sessionID string) factoryapi.FactorySession {
+	t.Helper()
+	resp, err := http.Get(serverURL + "/factory-sessions/" + sessionID)
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/%s: %v", sessionID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s status = %d, want 200", sessionID, resp.StatusCode)
+	}
+	var session factoryapi.FactorySession
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		t.Fatalf("decode factory session: %v", err)
+	}
+	return session
 }

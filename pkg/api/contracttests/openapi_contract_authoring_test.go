@@ -569,15 +569,22 @@ func TestOpenAPIContract_FactorySessionExposesRuntimeProjectionSchema(t *testing
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionStatus"), "FactorySessionStatus", []string{"ACTIVE", "IDLE", "FINISHED"})
 }
 
-func TestOpenAPIContract_SessionEventStreamHandshakeExposesStreamGenerationHeader(t *testing.T) {
+func TestOpenAPIContract_SessionEventStreamHandshakeExposesIdentityHeaders(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	paths, ok := doc["paths"].(map[string]any)
 	if !ok {
 		t.Fatal("bundled OpenAPI paths are missing")
 	}
+	operation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
 	assertResponseHeaderString(
 		t,
-		pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"),
+		operation,
+		"200",
+		"X-Factory-Session-Backend-Scope-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
 		"200",
 		"X-Factory-Session-Stream-Generation-Id",
 	)

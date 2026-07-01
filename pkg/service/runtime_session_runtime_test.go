@@ -1601,6 +1601,13 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHa
 	if handshakeGenerationID != streamGenerationID {
 		t.Fatalf("event handshake stream generation id = %q, want session read id %q", handshakeGenerationID, streamGenerationID)
 	}
+	if session.Runtime.StreamIdentity == nil {
+		t.Fatal("streamIdentity = nil, want backend scope for handshake comparison")
+	}
+	handshakeBackendScopeID := eventsRecorder.Header().Get("X-Factory-Session-Backend-Scope-Id")
+	if handshakeBackendScopeID != session.Runtime.StreamIdentity.BackendScopeID {
+		t.Fatalf("event handshake backend scope id = %q, want session read id %q", handshakeBackendScopeID, session.Runtime.StreamIdentity.BackendScopeID)
+	}
 }
 
 func TestFactoryService_ListFactorySessions_IncludesRuntimeProjection(t *testing.T) {
@@ -2949,10 +2956,14 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(valid): %v", err)
 	}
+	sessionRead, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession: %v", err)
+	}
 	assertSyncPreflightReasonCode(t, valid, factoryapi.Ok, "valid")
 	assertSyncPreflightCheckpointReusable(t, valid, true, "valid")
 	assertSyncPreflightCursorState(t, valid, true, true, "valid")
-	assertSyncPreflightDefaultSessionIdentity(t, valid)
+	assertSyncPreflightDefaultSessionIdentity(t, valid, sessionRead)
 
 	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
 		AfterEventID: "factory-event/missing-preflight-cursor",
@@ -3018,8 +3029,15 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
 		t.Fatalf("logicalSessionKeyId = %v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
 	}
-	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, betaSessionID) {
-		t.Fatalf("streamGenerationId = %#v, want promoted session-scoped generation", response.StreamGenerationId)
+	betaSessionRead, err := harness.svc.GetFactorySession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession(beta): %v", err)
+	}
+	if betaSessionRead.Runtime.StreamIdentity == nil || strings.TrimSpace(betaSessionRead.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("beta session streamIdentity = %#v, want non-empty stream generation", betaSessionRead.Runtime.StreamIdentity)
+	}
+	if response.StreamGenerationId == nil || *response.StreamGenerationId != betaSessionRead.Runtime.StreamIdentity.StreamGenerationID {
+		t.Fatalf("streamGenerationId = %#v, want beta session read %q", response.StreamGenerationId, betaSessionRead.Runtime.StreamIdentity.StreamGenerationID)
 	}
 	if response.ReconnectCursor.Provided || response.ReconnectCursor.ValidForStreamGeneration {
 		t.Fatalf("reconnect cursor = %#v, want absent and invalid", response.ReconnectCursor)
@@ -3047,7 +3065,7 @@ func assertSyncPreflightCursorState(t *testing.T, response factoryapi.FactorySes
 	}
 }
 
-func assertSyncPreflightDefaultSessionIdentity(t *testing.T, response factoryapi.FactorySessionSyncPreflightResponse) {
+func assertSyncPreflightDefaultSessionIdentity(t *testing.T, response factoryapi.FactorySessionSyncPreflightResponse, session factoryapi.FactorySession) {
 	t.Helper()
 	if response.BackendScopeId == nil || strings.TrimSpace(*response.BackendScopeId) == "" {
 		t.Fatalf("backendScopeId = %#v, want non-empty", response.BackendScopeId)
@@ -3058,8 +3076,14 @@ func assertSyncPreflightDefaultSessionIdentity(t *testing.T, response factoryapi
 	if response.LogicalSessionKeyId == nil || !strings.Contains(*response.LogicalSessionKeyId, "::default::") {
 		t.Fatalf("logicalSessionKeyId = %#v, want default target key", response.LogicalSessionKeyId)
 	}
-	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, defaultFactorySessionID) {
-		t.Fatalf("streamGenerationId = %#v, want session-scoped generation", response.StreamGenerationId)
+	if session.Runtime.StreamIdentity == nil || strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("session streamIdentity = %#v, want non-empty stream generation", session.Runtime.StreamIdentity)
+	}
+	if response.StreamGenerationId == nil || *response.StreamGenerationId != session.Runtime.StreamIdentity.StreamGenerationID {
+		t.Fatalf("streamGenerationId = %#v, want session read %q", response.StreamGenerationId, session.Runtime.StreamIdentity.StreamGenerationID)
+	}
+	if session.Runtime.StreamIdentity.BackendScopeID != *response.BackendScopeId {
+		t.Fatalf("session streamIdentity.backendScopeID = %q, want preflight %q", session.Runtime.StreamIdentity.BackendScopeID, *response.BackendScopeId)
 	}
 }
 
