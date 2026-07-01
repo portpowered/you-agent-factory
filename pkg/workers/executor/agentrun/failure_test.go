@@ -95,6 +95,28 @@ func TestFailureMetadataForError_ModelhostLeaseDeniedIsThrottle(t *testing.T) {
 	}
 }
 
+func TestModelhostOperationalFailureClass_MissingAssets(t *testing.T) {
+	t.Parallel()
+
+	if got := modelhostOperationalFailureClass(modelhost.ErrMissingAssets); got != FailureClassModelNotReady {
+		t.Fatalf("modelhostOperationalFailureClass = %q, want %q", got, FailureClassModelNotReady)
+	}
+	if got := modelhostOperationalFailureClass(modelhost.ErrProcessCrash); got != FailureClassModelRuntime {
+		t.Fatalf("modelhostOperationalFailureClass = %q, want %q", got, FailureClassModelRuntime)
+	}
+}
+
+func TestRecoveryActionForReadiness_ReturnsActionableGuidance(t *testing.T) {
+	t.Parallel()
+
+	if got := recoveryActionForReadiness(factoryapi.ManagedRuntimeReadinessStateMISSING); got == "" {
+		t.Fatal("expected recovery action for missing runtime")
+	}
+	if got := recoveryActionForReadiness(factoryapi.ManagedRuntimeReadinessStateLOADING); got == "" {
+		t.Fatal("expected recovery action for loading runtime")
+	}
+}
+
 func TestFormatAgentRunError_ModelhostErrorsUseAgentRunWording(t *testing.T) {
 	t.Parallel()
 

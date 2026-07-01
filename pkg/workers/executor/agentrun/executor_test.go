@@ -326,6 +326,66 @@ func (cfg staticRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstati
 func (cfg staticRuntimeConfig) RuntimeBaseDir() string { return "" }
 func (cfg staticRuntimeConfig) FactoryDir() string     { return "" }
 
+func TestAgentRunExecutor_MissingWorkerConfigFails(t *testing.T) {
+	t.Parallel()
+
+	executor := NewAgentRunExecutor(staticRuntimeConfig{}, &stubRunner{})
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	}
+	if result.Error != "worker config not found: agent-worker" {
+		t.Fatalf("Error = %q", result.Error)
+	}
+}
+
+func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
+	t.Parallel()
+
+	worker := &interfaces.WorkerConfig{StopToken: "<COMPLETE>"}
+	if got := evaluateAgentRunOutcome("done <COMPLETE>", worker); got != interfaces.OutcomeAccepted {
+		t.Fatalf("stop token outcome = %s, want ACCEPTED", got)
+	}
+	if got := evaluateAgentRunOutcome("still working <CONTINUE>", worker); got != interfaces.OutcomeContinue {
+		t.Fatalf("continue outcome = %s, want CONTINUE", got)
+	}
+	if got := evaluateAgentRunOutcome("needs revision", worker); got != interfaces.OutcomeRejected {
+		t.Fatalf("rejected outcome = %s, want REJECTED", got)
+	}
+	if got := evaluateAgentRunOutcome("plain output", nil); got != interfaces.OutcomeAccepted {
+		t.Fatalf("nil worker outcome = %s, want ACCEPTED", got)
+	}
+}
+
+type spyLogger struct{}
+
+func (spyLogger) Debug(string, ...any) {}
+func (spyLogger) Info(string, ...any)  {}
+func (spyLogger) Warn(string, ...any)  {}
+func (spyLogger) Error(string, ...any) {}
+func (spyLogger) Verbose(string, ...any) {}
+
+func TestWithAgentRunLogger_ConfiguresExecutor(t *testing.T) {
+	t.Parallel()
+
+	logger := spyLogger{}
+	executor := NewAgentRunExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			},
+		},
+		&stubRunner{},
+		WithAgentRunLogger(logger),
+	)
+	if executor.logger == nil {
+		t.Fatal("expected logger to be configured")
+	}
+}
+
 func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 	t.Parallel()
 

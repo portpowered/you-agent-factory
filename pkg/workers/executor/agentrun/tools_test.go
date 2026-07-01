@@ -127,6 +127,42 @@ func TestPolicyToolExecutor_RejectsPathEscape(t *testing.T) {
 	}
 }
 
+func TestToolDefinitionsForPolicy_ExposesSupportedTools(t *testing.T) {
+	t.Parallel()
+
+	readOnly := toolDefinitionsForPolicy(interfaces.AgentWorkerToolPolicyReadOnly)
+	if len(readOnly) != 2 {
+		t.Fatalf("read-only tools = %d, want 2", len(readOnly))
+	}
+	enabled := toolDefinitionsForPolicy(interfaces.AgentWorkerToolPolicyEnabled)
+	if len(enabled) != 3 {
+		t.Fatalf("enabled tools = %d, want 3", len(enabled))
+	}
+	if toolDefinitionsForPolicy(interfaces.AgentWorkerToolPolicyDisabled) != nil {
+		t.Fatal("disabled policy should not expose tool definitions")
+	}
+}
+
+func TestLibraryHarnessAdapter_EnabledToolsRegistersExecutor(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	adapter := NewLibraryHarnessAdapter()
+	result, err := adapter.Execute(context.Background(), HarnessInput{
+		UserMessage:  "hello",
+		Inferencer:   staticInferencer{response: "done"},
+		ToolPolicy:   interfaces.AgentWorkerToolPolicyReadOnly,
+		WorkingDir:   dir,
+		ToolRecorder: NewToolDiagnosticRecorder(),
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.FinalText != "done" {
+		t.Fatalf("FinalText = %q, want done", result.FinalText)
+	}
+}
+
 func TestLibraryHarnessAdapter_DisabledRunsNoToolsMode(t *testing.T) {
 	t.Parallel()
 

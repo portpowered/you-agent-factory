@@ -196,4 +196,14 @@ describe("buildWorkstationRequestDetailView agent taxonomy", () => {
 
     expect(view.isAgentBackedRequest).toBe(false);
   });
+
+  it("treats legacy MODEL_WORKSTATION requests as agent-backed", () => {
+    const view = buildWorkstationRequestDetailView(
+      workstationRequest("dispatch-legacy-agent-empty", {
+        workstation_type: "MODEL_WORKSTATION",
+      }),
+    );
+
+    expect(view.isAgentBackedRequest).toBe(true);
+  });
 });
