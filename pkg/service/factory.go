@@ -581,14 +581,14 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 	fs := c.service
 	runtimeBundle := fs.currentRuntimeBundle()
 	currentRuntime := fs.startLiveRuntime(runCtx, runtimeBundle)
-	fs.registerLiveSession(
+	registeredSessionID := fs.registerLiveSession(
 		defaultFactorySessionID,
 		currentRuntime,
 		defaultSessionTargetFromRuntimeBundle(runtimeBundle, fs.factoryRootDir),
 		true,
 	)
 	fs.clearStartupBundle()
-	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
+	fs.setRunState(runCtx, registeredSessionID, currentRuntime)
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
 	}

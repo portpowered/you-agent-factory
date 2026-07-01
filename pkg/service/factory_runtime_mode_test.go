@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -2074,8 +2075,11 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 	if defaultSession == nil {
 		t.Fatal("defaultSession = nil after Run, want ~default registry entry")
 	}
-	if defaultSession.ID != defaultFactorySessionID {
-		t.Fatalf("default session id = %q, want %q", defaultSession.ID, defaultFactorySessionID)
+	if defaultSession.ID == factorysessions.DefaultSessionID {
+		t.Fatalf("default session id = %q, want resolved uuid", defaultSession.ID)
+	}
+	if _, err := uuid.Parse(defaultSession.ID); err != nil {
+		t.Fatalf("default session id = %q, want uuid: %v", defaultSession.ID, err)
 	}
 	if !defaultSession.IsDefault {
 		t.Fatal("default session IsDefault = false, want true")
@@ -2099,11 +2103,12 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 	if runState == nil {
 		t.Fatal("runState = nil after Run, want default session run state")
 	}
-	if runState.sessionID != defaultFactorySessionID {
-		t.Fatalf("runState.sessionID = %q, want %q", runState.sessionID, defaultFactorySessionID)
+	if runState.sessionID == factorysessions.DefaultSessionID {
+		t.Fatalf("runState.sessionID = %q, want resolved uuid", runState.sessionID)
 	}
-	if current := svc.currentSession(); current == nil || current.ID != defaultFactorySessionID {
-		t.Fatalf("currentSession = %#v, want selected %q", current, defaultFactorySessionID)
+	assertResolvedDefaultLiveSessionID(t, runState.sessionID)
+	if current := svc.currentSession(); current == nil || current.ID != runState.sessionID {
+		t.Fatalf("currentSession = %#v, want selected %q", current, runState.sessionID)
 	}
 	if bundle := svc.currentRuntimeBundle(); bundle != defaultHandle.Bundle {
 		t.Fatal("currentRuntimeBundle should resolve through the default session registry handle after Run")

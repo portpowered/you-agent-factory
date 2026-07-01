@@ -2,6 +2,7 @@ package factorysessions
 
 import (
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -62,7 +63,14 @@ func (m *Registry) Current() *LiveSession {
 
 // Get returns the live session for id when registered.
 func (m *Registry) Get(id string) *LiveSession {
-	if m == nil || id == "" {
+	if m == nil {
+		return nil
+	}
+	if IsDefaultSessionSelector(id) {
+		return m.DefaultSession()
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return nil
 	}
 	m.mu.RLock()
@@ -74,6 +82,13 @@ func (m *Registry) Get(id string) *LiveSession {
 func (m *Registry) Remove(id string) {
 	if m == nil || id == "" {
 		return
+	}
+	if IsDefaultSessionSelector(id) {
+		if session := m.DefaultSession(); session != nil {
+			id = session.ID
+		} else {
+			return
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

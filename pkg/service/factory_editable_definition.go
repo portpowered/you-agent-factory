@@ -882,15 +882,17 @@ func ComposeFactoryCore(
 	if err != nil {
 		return nil, err
 	}
+	defaultLiveSessionID := factorysessions.NewSessionID()
 	defaultSessionSpec, err := collaborators.RuntimeBuild.BuildSpec(ctx, runtimebuild.SessionSpecInput{
-		Dir:                   cfg.Dir,
-		FolderPath:            root.FactoryRootDir,
-		SessionID:             defaultFactorySessionID,
-		ExecutionBaseDir:      cfg.ExecutionBaseDir,
-		LoadedFactoryCfg:      load.LoadedFactoryCfg,
-		RuntimeInstanceID:     cfg.RuntimeInstanceID,
-		SideEffects:           replaySideEffects,
-		AdditionalFactoryOpts: replayFactoryOpts,
+		Dir:                                   cfg.Dir,
+		FolderPath:                            root.FactoryRootDir,
+		SessionID:                             defaultLiveSessionID,
+		ExecutionBaseDir:                      cfg.ExecutionBaseDir,
+		LoadedFactoryCfg:                      load.LoadedFactoryCfg,
+		RuntimeInstanceID:                     cfg.RuntimeInstanceID,
+		SideEffects:                           replaySideEffects,
+		AdditionalFactoryOpts:                 replayFactoryOpts,
+		PreserveCompatibilityDefaultRecordPath: true,
 	})
 	if err != nil {
 		return nil, err
@@ -904,7 +906,7 @@ func ComposeFactoryCore(
 		return nil, fmt.Errorf("default runtime bundle is required")
 	}
 	collaborators.Sessions.Upsert(factorysessions.NewLiveSession(
-		defaultFactorySessionID,
+		defaultLiveSessionID,
 		runtimeBundle.Dir,
 		runtimeBundle.FolderPath,
 		runtimeBundle.RuntimeCfg.RuntimeBaseDir(),

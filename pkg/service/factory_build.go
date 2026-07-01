@@ -1066,7 +1066,7 @@ func (fs *FactoryService) defaultSessionClosedDuringStartup() bool {
 	if fs == nil || runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService {
 		return false
 	}
-	return fs.sessionByID(defaultFactorySessionID) == nil
+	return fs.defaultSession() == nil
 }
 
 func (fs *FactoryService) handleDefaultRuntimeStartFailure(
@@ -1080,7 +1080,11 @@ func (fs *FactoryService) handleDefaultRuntimeStartFailure(
 		return nil
 	}
 	fs.clearRunState()
-	fs.unregisterLiveSession(defaultFactorySessionID)
+	if session := fs.defaultSession(); session != nil {
+		fs.unregisterLiveSession(session.ID)
+	} else {
+		fs.unregisterLiveSession(defaultFactorySessionID)
+	}
 	stopErr := fs.stopLiveRuntime(currentRuntime)
 	if isCanceledServiceStartup(ctx, startErr) {
 		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {

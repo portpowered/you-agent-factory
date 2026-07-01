@@ -196,9 +196,17 @@ func (fs *FactoryService) registerLiveSession(
 	handle *liveRuntimeHandle,
 	target FactorySessionTarget,
 	selectSession bool,
-) {
+) string {
 	if fs == nil || fs.sessions == nil || sessionID == "" || handle == nil {
-		return
+		return ""
+	}
+	isDefault := factorysessions.IsDefaultSessionSelector(sessionID)
+	if isDefault {
+		if existing := fs.defaultSession(); existing != nil {
+			sessionID = existing.ID
+		} else {
+			sessionID = factorysessions.NewSessionID()
+		}
 	}
 	registration := fs.buildLiveSessionRegistration(sessionID, handle, target)
 	fs.sessions.Upsert(factorysessions.NewLiveSession(
@@ -208,9 +216,10 @@ func (fs *FactoryService) registerLiveSession(
 		registration.executionBaseDir,
 		registration.targetRef,
 		&liveSessionState{bundle: handle.Bundle, handle: handle, spec: registration.preparedSpec},
-		sessionID == defaultFactorySessionID,
+		isDefault,
 		registration.project,
 	), selectSession)
+	return sessionID
 }
 
 func defaultSessionTargetFromRuntimeBundle(
@@ -237,6 +246,11 @@ func (fs *FactoryService) unregisterLiveSession(sessionID string) {
 	if fs == nil || fs.sessions == nil {
 		return
 	}
+	if factorysessions.IsDefaultSessionSelector(sessionID) {
+		if session := fs.defaultSession(); session != nil {
+			sessionID = session.ID
+		}
+	}
 	fs.closeSessionResponseStreams(fs.sessionByID(sessionID))
 	fs.sessions.Remove(sessionID)
 }
@@ -252,7 +266,7 @@ func (fs *FactoryService) defaultSession() *factorysessions.LiveSession {
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
-	return fs.sessions.Get(defaultFactorySessionID)
+	return fs.sessions.DefaultSession()
 }
 
 func (fs *FactoryService) sessionByID(sessionID string) *factorysessions.LiveSession {
@@ -262,9 +276,28 @@ func (fs *FactoryService) sessionByID(sessionID string) *factorysessions.LiveSes
 	return fs.sessions.Get(sessionID)
 }
 
-func (fs *FactoryService) requireSession(sessionID string) (*factorysessions.LiveSession, error) {
+func (fs *FactoryService) resolveLiveSessionSelector(sessionID string) (*factorysessions.LiveSession, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory service is required")
+	}
+	if factorysessions.IsDefaultSessionSelector(sessionID) {
+		session := fs.defaultSession()
+		if session == nil {
+			selector := strings.TrimSpace(sessionID)
+			if selector == "" {
+				selector = defaultFactorySessionID
+			}
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, selector)
+		}
+		handle := liveSessionHandle(session)
+		if handle == nil || handle.runtime == nil {
+			selector := strings.TrimSpace(sessionID)
+			if selector == "" {
+				selector = defaultFactorySessionID
+			}
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, selector)
+		}
+		return session, nil
 	}
 	session := fs.sessionByID(sessionID)
 	handle := liveSessionHandle(session)
@@ -272,6 +305,10 @@ func (fs *FactoryService) requireSession(sessionID string) (*factorysessions.Liv
 		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 	}
 	return session, nil
+}
+
+func (fs *FactoryService) requireSession(sessionID string) (*factorysessions.LiveSession, error) {
+	return fs.resolveLiveSessionSelector(sessionID)
 }
 
 func (fs *FactoryService) sessionFactory(sessionID string) (factory.Factory, error) {
@@ -490,11 +527,15 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	session := fs.sessionByID(sessionID)
+	session, err := fs.resolveLiveSessionSelector(sessionID)
+	if err != nil {
+		return err
+	}
 	handle := liveSessionHandle(session)
-	if session == nil || handle == nil {
+	if handle == nil {
 		return fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 	}
+	sessionID = session.ID
 
 	runState := fs.currentRunState()
 	if runState != nil && runState.sessionID == sessionID {
@@ -519,6 +560,9 @@ func (fs *FactoryService) runSessionID() string {
 	}
 	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
 		return runState.sessionID
+	}
+	if session := fs.defaultSession(); session != nil {
+		return session.ID
 	}
 	return defaultFactorySessionID
 }

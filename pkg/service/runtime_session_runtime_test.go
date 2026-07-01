@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	api "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -337,12 +338,12 @@ func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts
 	secondBeta := harness.requireSession(t, betaSessionTwo)
 
 	workBySession := map[string]string{
-		defaultFactorySessionID: "alpha-session-work",
-		betaSessionOne:          "beta-session-one-work",
-		betaSessionTwo:          "beta-session-two-work",
+		defaultSession.ID: "alpha-session-work",
+		betaSessionOne:    "beta-session-one-work",
+		betaSessionTwo:    "beta-session-two-work",
 	}
 	assertSessionWorkIsolation(t, []sessionWorkExpectation{
-		{session: defaultSession, workID: workBySession[defaultFactorySessionID], traceID: "trace-alpha-session"},
+		{session: defaultSession, workID: workBySession[defaultSession.ID], traceID: "trace-alpha-session"},
 		{session: firstBeta, workID: workBySession[betaSessionOne], traceID: "trace-beta-session-one"},
 		{session: secondBeta, workID: workBySession[betaSessionTwo], traceID: "trace-beta-session-two"},
 	})
@@ -735,9 +736,10 @@ func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
 	restarted := startRunningSessionServiceOnDir(t, harness.rootDir)
 	defer restarted.stop(t)
 
-	if got := restarted.svc.sessions.IDs(); len(got) != 1 || got[0] != defaultFactorySessionID {
-		t.Fatalf("restarted session ids = %v, want [%s]", got, defaultFactorySessionID)
+	if got := restarted.svc.sessions.IDs(); len(got) != 1 {
+		t.Fatalf("restarted session ids = %v, want one default session", got)
 	}
+	assertResolvedDefaultLiveSessionID(t, restarted.svc.sessions.IDs()[0])
 	defaultSession := restarted.requireSession(t, defaultFactorySessionID)
 	if liveSessionHandle(defaultSession).Bundle.Dir != harness.factoryDirs["alpha"] {
 		t.Fatalf("restarted default runtime dir = %q, want %q", liveSessionHandle(defaultSession).Bundle.Dir, harness.factoryDirs["alpha"])
@@ -1192,9 +1194,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_CanceledRequestDoesNotRegis
 	defer harness.stop(t)
 
 	beforeIDs := harness.svc.sessions.IDs()
-	if len(beforeIDs) != 1 || beforeIDs[0] != defaultFactorySessionID {
-		t.Fatalf("session ids before canceled open = %v, want [%s]", beforeIDs, defaultFactorySessionID)
-	}
+	assertSingleDefaultSessionIDs(t, beforeIDs)
 
 	openCtx, cancelOpen := context.WithCancel(context.Background())
 	cancelOpen()
@@ -1205,11 +1205,11 @@ func TestFactoryService_OpenFactorySessionFromFolder_CanceledRequestDoesNotRegis
 
 	deadline := time.Now().Add(200 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		if got := harness.svc.sessions.IDs(); len(got) == 1 && got[0] == defaultFactorySessionID {
+		if got := harness.svc.sessions.IDs(); len(got) == 1 {
 			time.Sleep(10 * time.Millisecond)
 			continue
 		}
-		t.Fatalf("canceled open mutated live sessions to %v, want only [%s]", harness.svc.sessions.IDs(), defaultFactorySessionID)
+		t.Fatalf("canceled open mutated live sessions to %v, want only one default session", harness.svc.sessions.IDs())
 	}
 }
 
@@ -1482,9 +1482,7 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	if err != nil {
 		t.Fatalf("GetFactorySession: %v", err)
 	}
-	if session.Id != defaultFactorySessionID {
-		t.Fatalf("session id = %q, want %q", session.Id, defaultFactorySessionID)
-	}
+	assertResolvedDefaultLiveSessionID(t, session.Id)
 	if session.Runtime.OrchestratorKind != factoryapi.PETRI {
 		t.Fatalf("orchestrator kind = %q, want PETRI", session.Runtime.OrchestratorKind)
 	}
@@ -1620,8 +1618,9 @@ func TestFactoryService_ListFactorySessions_IncludesRuntimeProjection(t *testing
 		t.Fatal("expected at least one live session")
 	}
 	found := false
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
 	for _, summary := range listed.Sessions {
-		if summary.Id != defaultFactorySessionID {
+		if summary.Id != defaultSession.ID {
 			continue
 		}
 		found = true
@@ -3054,8 +3053,11 @@ func assertSyncPreflightDefaultSessionIdentity(t *testing.T, response factoryapi
 	if response.BackendScopeId == nil || strings.TrimSpace(*response.BackendScopeId) == "" {
 		t.Fatalf("backendScopeId = %#v, want non-empty", response.BackendScopeId)
 	}
-	if response.FactorySessionId == nil || *response.FactorySessionId != defaultFactorySessionID {
-		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, defaultFactorySessionID)
+	if response.FactorySessionId == nil || *response.FactorySessionId == factorysessions.DefaultSessionID {
+		t.Fatalf("factorySessionId = %#v, want resolved uuid", response.FactorySessionId)
+	}
+	if _, err := uuid.Parse(*response.FactorySessionId); err != nil {
+		t.Fatalf("factorySessionId = %#v, want uuid: %v", response.FactorySessionId, err)
 	}
 	if response.LogicalSessionKeyId == nil || !strings.Contains(*response.LogicalSessionKeyId, "::default::") {
 		t.Fatalf("logicalSessionKeyId = %#v, want default target key", response.LogicalSessionKeyId)
