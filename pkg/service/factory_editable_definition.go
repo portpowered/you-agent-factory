@@ -243,18 +243,6 @@ func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, 
 	return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("factory definition service is required")
 }
 
-func (fs *FactoryService) serializeNamedFactory(
-	name factoryapi.FactoryName,
-	current *factoryconfig.LoadedFactoryConfig,
-	inlineBundledFiles bool,
-) (factoryapi.Factory, error) {
-	svc := fs.definitionService()
-	if svc == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
-	}
-	return svc.SerializeNamedFactory(name, current, inlineBundledFiles)
-}
-
 func (fs *FactoryService) serializeNamedFactoryUpsertResponse(
 	name factoryapi.FactoryName,
 	current *factoryconfig.LoadedFactoryConfig,
