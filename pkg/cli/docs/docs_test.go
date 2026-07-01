@@ -545,6 +545,12 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 		"sourceWorkName",
 		"targetWorkName",
 		"requiredState",
+		"## Visualize batch dependencies (`you work visualize`)",
+		"you work visualize batch.json > my-graph.mermaid",
+		"you work visualize --format markdown-mermaid batch.json > graph.md",
+		"Graph nodes represent work items",
+		"It does not submit",
+		"render diagram images",
 	} {
 		if !strings.Contains(canonical, want) {
 			t.Fatalf("Markdown(batch-inputs) missing %q:\n%s", want, canonical)

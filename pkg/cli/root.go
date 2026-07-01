@@ -41,6 +41,7 @@ var submitBatch = submitcli.SubmitBatch
 var listWork = workcli.List
 var showWork = workcli.Show
 var moveWork = workcli.Move
+var visualizeWork = workcli.Visualize
 var listSessions = sessioncli.List
 var showSession = sessioncli.Show
 var pauseSession = sessioncli.Pause

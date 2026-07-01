@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { compile } from "@tailwindcss/node";
 import { beforeAll, describe, expect, it } from "vitest";
+
+import { compileDashboardStyles } from "./test-support/compile-dashboard-styles";
 
 const stylesSourcePath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -23,13 +23,8 @@ function injectCompiledRootRules(compiledCss: string): void {
 
 describe("page-shell background", () => {
   beforeAll(async () => {
-    const source = readFileSync(stylesSourcePath, "utf8");
-    const compiled = await compile(source, {
-      base: path.dirname(stylesSourcePath),
-      from: stylesSourcePath,
-      onDependency: () => {},
-    });
-    injectCompiledRootRules(compiled.build([]));
+    const compiledCss = await compileDashboardStyles(stylesSourcePath);
+    injectCompiledRootRules(compiledCss);
   });
 
   it("renders a flat token-backed fill on the document root", () => {

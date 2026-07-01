@@ -1,0 +1,4 @@
+/** Stable category path for `youagentfactory/components/testing`. */
+export const COMPONENTS_CATEGORY = "testing" as const;
+
+export type ComponentsCategory = typeof COMPONENTS_CATEGORY;

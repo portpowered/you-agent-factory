@@ -9,6 +9,10 @@ import {
   clearTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
 } from "../../../timeline/public";
+import {
+  recordSessionPersistenceInvalidation,
+  silentReplayRecoveryDiagnostic,
+} from "../../lib/session-persistence/diagnostics";
 import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
 import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
 import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";
@@ -151,6 +155,12 @@ async function recoverStaleCursor({
     cursorFreeReplayPendingRef.current = true;
     reconnectCursorRef.current = undefined;
     queuedEventsRef.current = [];
+    recordSessionPersistenceInvalidation(
+      silentReplayRecoveryDiagnostic(
+        { factorySessionID: streamSessionID },
+        streamSessionID,
+      ),
+    );
     onInvalidReconnectCursor?.();
     recoverDashboardSessionScopedState(
       queryClient,

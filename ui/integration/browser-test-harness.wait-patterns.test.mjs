@@ -102,7 +102,7 @@ describe("browser wait pattern helpers", () => {
 
       expect(response.status).toBe(200);
       expect(body).toMatchObject({
-        backendScopeId: "browser-test-harness",
+        backendScopeId: "/replay/factory::browser-integration",
         checkpointReusable: true,
         factorySessionId: defaultFactorySessionID,
         logicalSessionKeyId: defaultFactorySessionID,
@@ -114,6 +114,7 @@ describe("browser wait pattern helpers", () => {
         requestedSessionId: defaultFactorySessionID,
       });
       expect(body.streamGenerationId).toBeTypeOf("string");
+      expect(body.streamGenerationId).not.toMatch(/^browser-stream-/);
     } finally {
       await server.stop();
     }
