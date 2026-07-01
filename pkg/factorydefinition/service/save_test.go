@@ -35,6 +35,83 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 	validationassert.HasTargetCode(t, topologyErr.Targets, factoryvalidation.CodeDuplicateIdentifier)
 }
 
+func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	currentVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  5,
+		Physical: time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC),
+	}
+	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"5","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	host := &splitLayoutSaveHost{
+		sessionRootDir: rootDir,
+		current: factoryapi.Factory{
+			Name:    apisurface.DefaultCurrentFactoryName,
+			Id:      saveStringPointer("root-runtime"),
+			Version: &currentVersion,
+		},
+	}
+	svc := New(host)
+
+	staleVersion := factoryapi.HybridLogicalTimestamp{
+		Logical:  4,
+		Physical: currentVersion.Physical.Add(time.Second),
+	}
+	replacement := factoryapi.Factory{
+		Name:    apisurface.DefaultCurrentFactoryName,
+		Id:      saveStringPointer("root-runtime"),
+		Version: &staleVersion,
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Name: "planner",
+			Type: saveWorkerTypeModel(),
+			Body: saveStringPointer("You are the planner."),
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "plan-task",
+			Worker: "planner",
+			Type:   saveWorkstationTypeModel(),
+			Body:   saveStringPointer("Plan the story."),
+			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
+			Outputs: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "complete"},
+			},
+			OnFailure: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "failed"},
+			},
+		}},
+	}
+
+	_, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement)
+	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
+		t.Fatalf("SaveReplaceCurrentForSession error = %v, want %v", err, apisurface.ErrFactoryVersionStale)
+	}
+	if host.replaceCalled {
+		t.Fatal("expected stale save to skip split-layout replacement")
+	}
+
+	factoryJSON, err := os.ReadFile(initialPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	if strings.Contains(string(factoryJSON), "You are the planner.") {
+		t.Fatalf("factory.json should remain unchanged after stale save, got %s", factoryJSON)
+	}
+}
+
 func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 	rootDir := t.TempDir()
 	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
@@ -111,6 +188,7 @@ type splitLayoutSaveHost struct {
 	sessionRootDir string
 	current        factoryapi.Factory
 	activateErr    error
+	replaceCalled  bool
 	restoreCalled  bool
 	discardCalled  bool
 }
@@ -158,6 +236,7 @@ func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *f
 }
 
 func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	h.replaceCalled = true
 	if targetDir != h.sessionRootDir {
 		return nil, errors.New("unexpected replace target dir")
 	}

@@ -220,6 +220,66 @@ func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesConfigVersion(t *test
 	}
 }
 
+func TestService_GetCurrentFactoryForSession_IncludesPersistedVersionForNamedPointer(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	versionTime := time.Date(2026, time.June, 1, 10, 0, 0, 0, time.UTC)
+	payload := namedFactoryPayload(t, "alpha")
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("Unmarshal payload: %v", err)
+	}
+	decoded["version"] = map[string]any{
+		"logical":  float64(17),
+		"physical": versionTime.Format(time.RFC3339Nano),
+	}
+	versioned, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("Marshal versioned payload: %v", err)
+	}
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", versioned); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(rootDir, "alpha")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryDir(alpha): %v", err)
+	}
+	runtimeCfg, err := config.LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(alpha): %v", err)
+	}
+
+	const sessionID = "session-alpha"
+	host := stubDefinitionHost{
+		persistRootDir: rootDir,
+		session: &factorysessions.LiveSession{
+			ID: sessionID,
+			SessionState: factorysessions.SessionState{
+				FactoryDir: rootDir,
+				FolderPath: rootDir,
+			},
+			IsDefault: true,
+		},
+		sessionRuntime:     runtimeCfg,
+		sessionPersistRoot: rootDir,
+	}
+	got, err := New(host).GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if got.Name != "alpha" {
+		t.Fatalf("factory name = %q, want alpha", got.Name)
+	}
+	if got.Version == nil || got.Version.Logical != 17 || !got.Version.Physical.Equal(versionTime) {
+		t.Fatalf("factory version = %#v, want logical=17 physical=%s", got.Version, versionTime)
+	}
+}
+
 func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesFileModTimeForDefaultFactory(t *testing.T) {
 	t.Parallel()
 
