@@ -27,14 +27,7 @@ func Initialize(ctx context.Context, cfg *Config) (*Services, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Services{
-		core:              core,
-		Sessions:          core.Sessions(),
-		FactoryDefinition: service.NewFactoryDefinitionServiceFromCore(core),
-		Models:            service.NewModelServiceFromCore(core),
-		Workers:           core.HostedWorkers(),
-		RuntimeHost:       core.RuntimeBuild(),
-	}, nil
+	return servicesFromCore(core), nil
 }
 
 // StartupWorkerConfig returns the named worker from the composed startup runtime.
