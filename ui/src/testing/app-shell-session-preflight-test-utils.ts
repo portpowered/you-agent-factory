@@ -5,6 +5,9 @@ import type {
   FactorySessionSummary,
 } from "../api/factory-sessions/api";
 
+const DEFAULT_LOGICAL_SESSION_KEY_ID =
+  "lsk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
 function jsonResponse(
   body: unknown,
   status = 200,
@@ -52,7 +55,7 @@ export function buildFactorySessionResponse(
       streamIdentity: {
         backendScopeID: `${summary.folderPath}::test-backend`,
         factorySessionID: summary.id,
-        logicalSessionKeyID: `lsk-${summary.id}`,
+        logicalSessionKeyID: DEFAULT_LOGICAL_SESSION_KEY_ID,
         streamGenerationID: lifecycleTimestamp,
       },
       usage: { resources: [] },
@@ -113,7 +116,7 @@ export function handleFactorySessionPreflightRequest({
       backendScopeId: `${sessionSummary.folderPath}::test-backend`,
       checkpointReusable: true,
       factorySessionId: sessionSummary.id,
-      logicalSessionKeyId: `lsk-${sessionSummary.id}`,
+      logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
       reasonCode: "ok",
       reconnectCursor: {
         afterEventId: searchParams.get("after_event_id") ?? undefined,

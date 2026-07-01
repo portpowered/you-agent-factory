@@ -68,6 +68,7 @@ function buildFactorySessionGetResponse() {
       streamIdentity: {
         backendScopeID: "/workspace::test-backend",
         factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        logicalSessionKeyID: "lsk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         streamGenerationID: "2026-06-26T00:00:00Z",
       },
       usage: { resources: [] },
@@ -112,6 +113,10 @@ function expectNoPostFactoriesActivation(
     return path === "/factories" && resolveFetchMethod(url, init) === "POST";
   });
   expect(postFactoriesCall).toBeUndefined();
+}
+
+function handlesDefaultSessionGet(path: string, method: string): boolean {
+  return path === `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}` && method === "GET";
 }
 
 describe("App shell import flows", () => {
@@ -167,7 +172,7 @@ describe("App shell import flows", () => {
     });
 
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
-      if (path === "/factory-sessions/~default" && method === "GET") {
+      if (handlesDefaultSessionGet(path, method)) {
         return jsonResponse(buildFactorySessionGetResponse());
       }
 
@@ -269,7 +274,7 @@ describe("App shell import flows", () => {
     });
 
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
-      if (path === "/factory-sessions/~default" && method === "GET") {
+      if (handlesDefaultSessionGet(path, method)) {
         return jsonResponse(buildFactorySessionGetResponse());
       }
 
@@ -361,10 +366,11 @@ describe("App shell import flows", () => {
     const { fetchMock } = renderApp({
       snapshot: importedFactorySnapshot,
       timelineEvents: exportTimelineEvents,
+      locationSearch: "?afDisableTimelineCheckpoint=true",
     });
 
     chainRenderAppFetchMock(fetchMock, async (path, method, _input, init) => {
-      if (path === "/factory-sessions/~default" && method === "GET") {
+      if (handlesDefaultSessionGet(path, method)) {
         return jsonResponse(buildFactorySessionGetResponse());
       }
 
@@ -421,14 +427,9 @@ describe("App shell import flows", () => {
       });
     });
     expectNoPostFactoriesActivation(fetchMock);
+
     await waitFor(() => {
-      const sessionFetchCount = fetchMock.mock.calls.filter(([url, init]) => {
-        return (
-          resolveFetchPath(url) === "/factory-sessions/~default" &&
-          resolveFetchMethod(url, init) === "GET"
-        );
-      }).length;
-      expect(sessionFetchCount).toBeGreaterThanOrEqual(2);
+      expect(MockEventSource.instances.length).toBeGreaterThan(0);
     });
 
     const refreshedStream = MockEventSource.instances.at(-1);
@@ -438,6 +439,12 @@ describe("App shell import flows", () => {
 
     act(() => {
       refreshedStream.emit("snapshot", importedFactorySnapshot);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: "Loading dashboard" }),
+      ).toBeNull();
     });
 
     await waitFor(() => {

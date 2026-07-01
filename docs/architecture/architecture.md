@@ -63,6 +63,23 @@ flowchart LR
 The important rule is that `FactoryService` routes and coordinates, but does
 not become the canonical owner of per-session runtime state.
 
+### Logical session identity and restart recovery
+
+Dashboard tabs and other long-lived clients can persist logical session intent
+(`backendScopeID`, `logicalSessionKeyID`) separately from the current live
+`factorySessionID` and `streamGenerationID`. After backend restart, sync
+preflight resolves logical identity to the replacement live session before SSE
+reconnect or timeline checkpoint restore.
+
+`logicalSessionKeyID` is derived deterministically from normalized factory
+session targets (default, folder-scoped, named, and provider-backed forms). The
+backend does not allocate or persist a separate logical-session table for this
+identity.
+
+See `docs/architecture/logical-session-identity.md` for target normalization
+rules, remap outcomes, preserved vs dropped client state, and verification
+surfaces.
+
 ## Event Stream
 
 The world is derived from an ordered event stream rather than a collection of opaque mutable objects. This stream is the durable source of truth for replay, synchronization, and historical inspection.
