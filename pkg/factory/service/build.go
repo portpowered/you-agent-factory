@@ -18,9 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/ingest"
-	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"go.uber.org/zap"
 )
 
@@ -34,7 +33,7 @@ func Build(ctx context.Context, input BuildInput) (*Bundle, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger := runtimebuild.NewSessionLogger(
+	logger := newSessionLogger(
 		runtimeSessionBaseLogger(input.BaseLogger, logSink),
 		sessionID,
 		input.FolderPath,
@@ -207,7 +206,7 @@ func buildRuntimeListener(
 	activeFactory factory.Factory,
 	logger *zap.Logger,
 	net *state.Net,
-) (*ingest.FileWatcher, error) {
+) (*factoryingest.FileWatcher, error) {
 	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
 	if !dirExists(inputsDir) {
 		if err := os.MkdirAll(inputsDir, 0o755); err != nil {
@@ -216,12 +215,23 @@ func buildRuntimeListener(
 	} else {
 		logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
 	}
-	return ingest.NewFileWatcher(
+	return factoryingest.NewFileWatcher(
 		inputsDir,
 		activeFactory,
 		logger,
-		ingest.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
+		factoryingest.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
 	), nil
+}
+
+func newSessionLogger(base *zap.Logger, sessionID string, folderPath string, factoryDir string) *zap.Logger {
+	if base == nil {
+		base = zap.NewNop()
+	}
+	return base.With(
+		zap.String("session_id", sessionID),
+		zap.String("folder_path", folderPath),
+		zap.String("factory_dir", factoryDir),
+	)
 }
 
 func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *factory_context.FactoryContext {

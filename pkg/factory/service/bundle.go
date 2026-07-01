@@ -11,8 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +24,7 @@ type Bundle struct {
 	StartedAtUTC         time.Time
 	EventHistory         *factoryevents.FactoryEventHistory
 	Factory              factory.Factory
-	Listener             *ingest.FileWatcher
+	Listener             *factoryingest.FileWatcher
 	Net                  *state.Net
 	RuntimeCfg           *factoryconfig.LoadedFactoryConfig
 	ModelResources       *localmodels.ResourceLimiter

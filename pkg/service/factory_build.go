@@ -6,8 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +22,6 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -32,7 +29,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -459,29 +455,6 @@ func loadRuntimeBundleWorkerOptions(
 	return workerOpts, nil
 }
 
-func editableEventFactorySnapshot(input runtimeBundleBuildInput) (factoryapi.Factory, error) {
-	if input.loadedFactoryCfg == nil || input.loadedFactoryCfg.FactoryConfig() == nil {
-		return factoryapi.Factory{}, fmt.Errorf("loaded factory config is unavailable")
-	}
-	factoryCfg, err := factoryconfig.CloneFactoryConfig(input.loadedFactoryCfg.FactoryConfig())
-	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("clone factory config: %w", err)
-	}
-	if err := factoryconfig.ApplySupportedPortableBundledFiles(input.loadedFactoryCfg.FactoryDir(), factoryCfg, true, false); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("inline portable bundled files: %w", err)
-	}
-	if err := factoryconfig.ApplySharedFactoryStarterWork(input.loadedFactoryCfg.FactoryDir(), factoryCfg); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
-	}
-	return replay.GeneratedFactoryFromRuntimeConfig(
-		input.loadedFactoryCfg.FactoryDir(),
-		factoryCfg,
-		input.loadedFactoryCfg,
-		replay.WithGeneratedFactorySourceDirectory(input.loadedFactoryCfg.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(input.workflowID),
-	)
-}
-
 // localModelDomain is the compatibility alias for extracted local-model wiring.
 type localModelDomain = LocalModelDomain
 
@@ -544,61 +517,6 @@ func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clo
 	return hostedCfg
 }
 
-func buildRuntimeRecorder(
-	cfg *FactoryServiceConfig,
-	factoryDir string,
-	factoryCfg *interfaces.FactoryConfig,
-	runtimeCfg interfaces.RuntimeDefinitionLookup,
-	clock factory.Clock,
-	recordPath string,
-	workflowID string,
-) (*replay.Recorder, error) {
-	recordingArtifact, err := newRecordingArtifact(
-		&FactoryServiceConfig{
-			RecordPath: recordPath,
-			WorkflowID: workflowID,
-		},
-		factoryDir,
-		factoryCfg,
-		runtimeCfg,
-		clock,
-	)
-	if err != nil || recordingArtifact == nil {
-		return nil, err
-	}
-	recording, err := replay.NewRecorder(
-		recordPath,
-		recordingArtifact,
-		replay.WithFlushInterval(cfg.RecordFlushInterval),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create replay recorder: %w", err)
-	}
-	return recording, nil
-}
-
-func buildRuntimeListener(
-	factoryDir string,
-	activeFactory factory.Factory,
-	logger *zap.Logger,
-	net *state.Net,
-) (*ingest.FileWatcher, error) {
-	inputsDir := filepath.Join(factoryDir, interfaces.InputsDir)
-	if !dirExists(inputsDir) {
-		if err := os.MkdirAll(inputsDir, 0o755); err != nil {
-			return nil, fmt.Errorf("create inputs dir: %w", err)
-		}
-	} else {
-		logger.Info("using inputs/ directory", zap.String("dir", inputsDir))
-	}
-	return ingest.NewFileWatcher(
-		inputsDir,
-		activeFactory,
-		logger,
-		ingest.WithKnownWorkStates(state.ValidStatesByType(net.WorkTypes)),
-	), nil
-}
-
 func (fs *FactoryService) dashboardLoop(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -657,12 +575,6 @@ func (fs *FactoryService) simpleDashboardRenderData(
 	renderData := dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState)
 	renderData.ActiveThrottlePauses = projections.ProjectActiveThrottlePauses(worldState.Topology, activeThrottlePauses)
 	return renderData, nil
-}
-
-// dirExists returns true if the path exists and is a directory.
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }
 
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {

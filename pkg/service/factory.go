@@ -24,7 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/service/ingest"
+	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 
@@ -494,7 +494,7 @@ func (fs *FactoryService) startRunRuntime(
 
 func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
 	if !serviceMode {
-		var listener *ingest.FileWatcher
+		var listener *factoryingest.FileWatcher
 		if bundle := fs.currentRuntimeBundle(); bundle != nil {
 			listener = bundle.Listener
 		}
@@ -506,7 +506,7 @@ func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *syn
 func (fs *FactoryService) startListenerSidecar(
 	runCtx context.Context,
 	sidecars *sync.WaitGroup,
-	listener *ingest.FileWatcher,
+	listener *factoryingest.FileWatcher,
 	logger *zap.Logger,
 ) {
 	sidecars.Add(1)
