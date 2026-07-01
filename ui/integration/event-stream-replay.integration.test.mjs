@@ -9,10 +9,10 @@ import {
 import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
-  defaultFactorySessionID,
   expectNoBrowserErrors,
   loadReplayLines,
   openBrowserPage,
+  resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
@@ -353,7 +353,7 @@ describe.sequential("captured event stream replay", () => {
           .poll(
             () =>
               replayServer.requestedEventSessionIDs.includes(
-                defaultFactorySessionID,
+                resolvedDefaultFactorySessionID,
               ),
             { timeout: uiInteractionTimeoutMs },
           )

@@ -8,6 +8,7 @@ import {
   defaultFactorySessionID,
   expectNoBrowserErrors,
   openBrowserPage,
+  resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
@@ -90,7 +91,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
             return urls.some(
               (url) =>
                 url.includes(
-                  `/factory-sessions/${defaultFactorySessionID}/events`,
+                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
                 ) && eventStreamOmitsCursor(url),
             );
           },
@@ -206,7 +207,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
             urls.some(
               (url) =>
                 url.includes(
-                  `/factory-sessions/${defaultFactorySessionID}/events`,
+                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
                 ) && eventStreamOmitsCursor(url),
             )
           ) {

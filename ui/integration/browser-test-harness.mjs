@@ -23,6 +23,48 @@ export const readyTimeoutMs = 90_000;
 export const replayDelayMs = 25;
 export const uiInteractionTimeoutMs = 10_000;
 export const defaultFactorySessionID = "~default";
+export const resolvedDefaultFactorySessionID =
+  "019e0000-0000-7000-8000-000000000042";
+export const timelineCheckpointDBVersion = 3;
+export const timelineCheckpointSchemaVersion = 3;
+
+function isDefaultFactorySessionSelector(sessionID) {
+  return (
+    sessionID === defaultFactorySessionID ||
+    sessionID === resolvedDefaultFactorySessionID
+  );
+}
+
+function resolveRegistrySessionID(sessionID) {
+  return isDefaultFactorySessionSelector(sessionID)
+    ? defaultFactorySessionID
+    : sessionID;
+}
+
+function resolvedFactorySessionIDForSession(session) {
+  return session.isDefault || session.id === defaultFactorySessionID
+    ? resolvedDefaultFactorySessionID
+    : session.id;
+}
+
+function logicalSessionKeyIDForSession(session) {
+  const targetKind = session.target?.kind ?? "default";
+  const targetName = session.target?.name;
+  const nameSuffix =
+    typeof targetName === "string" && targetName.length > 0
+      ? `::${targetName}`
+      : "::";
+  return `${session.folderPath}::${targetKind}${nameSuffix}`;
+}
+
+function buildStreamIdentityForSession(session, streamGenerationID) {
+  return {
+    backendScopeID: `${session.folderPath}::browser-integration`,
+    factorySessionID: resolvedFactorySessionIDForSession(session),
+    logicalSessionKeyID: logicalSessionKeyIDForSession(session),
+    streamGenerationID,
+  };
+}
 
 /**
  * Poll until a durable checkpoint becomes true (API request captured, download
@@ -710,8 +752,8 @@ function buildSessionSyncPreflightResponse(
   return {
     backendScopeId: `${sessionState.session.folderPath}::browser-integration`,
     checkpointReusable: reconnectCursorValid,
-    factorySessionId: sessionState.session.id,
-    logicalSessionKeyId: sessionState.session.id,
+    factorySessionId: resolvedFactorySessionIDForSession(sessionState.session),
+    logicalSessionKeyId: logicalSessionKeyIDForSession(sessionState.session),
     reasonCode: "ok",
     reconnectCursor: {
       provided: reconnectCursorProvided,
@@ -1135,8 +1177,12 @@ export async function startFactoryApiServer({
     sessionRegistry.state.get(defaultFactorySessionID).eventLines = eventLines;
   }
 
+  function sessionStateForRequest(sessionID) {
+    return sessionRegistry.state.get(resolveRegistrySessionID(sessionID));
+  }
+
   function buildCurrentFactoryDocument(sessionID) {
-    const sessionState = sessionRegistry.state.get(sessionID);
+    const sessionState = sessionStateForRequest(sessionID);
     return {
       ...sessionState.currentFactory,
       version: sessionState.version,
@@ -1144,7 +1190,7 @@ export async function startFactoryApiServer({
   }
 
   function buildFactorySessionDocument(sessionID) {
-    const sessionState = sessionRegistry.state.get(sessionID);
+    const sessionState = sessionStateForRequest(sessionID);
     if (!sessionState) {
       return null;
     }
@@ -1177,11 +1223,10 @@ export async function startFactoryApiServer({
           totalTokens: 0,
         },
         status: "IDLE",
-        streamIdentity: {
-          backendScopeID: `${sessionState.session.folderPath}::browser-integration`,
-          factorySessionID: sessionState.session.id,
-          streamGenerationID: lifecycleTimestamp,
-        },
+        streamIdentity: buildStreamIdentityForSession(
+          sessionState.session,
+          lifecycleTimestamp,
+        ),
         usage: {
           resources: [],
         },
@@ -1302,7 +1347,7 @@ export async function startFactoryApiServer({
     const sessionFactoryMatch = request.url?.match(sessionFactoryPathPattern);
     if (sessionFactoryMatch && request.method === "GET") {
       const sessionID = decodeURIComponent(sessionFactoryMatch[1]);
-      const sessionState = sessionRegistry.state.get(sessionID);
+      const sessionState = sessionStateForRequest(sessionID);
       if (!sessionState || sessionState.currentFactory === null) {
         response.writeHead(404, {
           "Access-Control-Allow-Origin": "*",
@@ -1330,7 +1375,7 @@ export async function startFactoryApiServer({
     );
     if (sessionSyncPreflightMatch && request.method === "GET") {
       const sessionID = decodeURIComponent(sessionSyncPreflightMatch[1]);
-      const sessionState = sessionRegistry.state.get(sessionID);
+      const sessionState = sessionStateForRequest(sessionID);
 
       response.writeHead(200, {
         "Access-Control-Allow-Origin": "*",
@@ -1346,7 +1391,7 @@ export async function startFactoryApiServer({
 
     if (sessionFactoryMatch && request.method === "PUT") {
       const sessionID = decodeURIComponent(sessionFactoryMatch[1]);
-      const sessionState = sessionRegistry.state.get(sessionID);
+      const sessionState = sessionStateForRequest(sessionID);
       if (!sessionState) {
         response.writeHead(404, {
           "Access-Control-Allow-Origin": "*",
@@ -1469,7 +1514,7 @@ export async function startFactoryApiServer({
     const sessionEventsMatch = request.url?.match(sessionEventsPathPattern);
     if (sessionEventsMatch && request.method === "GET") {
       const sessionID = decodeURIComponent(sessionEventsMatch[1]);
-      const sessionState = sessionRegistry.state.get(sessionID);
+      const sessionState = sessionStateForRequest(sessionID);
       requestedEventSessionIDs.push(sessionID);
       if (!sessionState) {
         response.writeHead(404, {

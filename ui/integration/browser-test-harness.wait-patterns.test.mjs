@@ -6,6 +6,7 @@ import {
   defaultFactorySessionID,
   expectNoBrowserErrors,
   previewHost,
+  resolvedDefaultFactorySessionID,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
   waitForCapturedDownloadOrDialogError,
@@ -104,8 +105,8 @@ describe("browser wait pattern helpers", () => {
       expect(body).toMatchObject({
         backendScopeId: "/replay/factory::browser-integration",
         checkpointReusable: true,
-        factorySessionId: defaultFactorySessionID,
-        logicalSessionKeyId: defaultFactorySessionID,
+        factorySessionId: resolvedDefaultFactorySessionID,
+        logicalSessionKeyId: "/replay/factory::default::",
         reasonCode: "ok",
         reconnectCursor: {
           provided: true,

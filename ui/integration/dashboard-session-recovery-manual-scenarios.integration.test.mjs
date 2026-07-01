@@ -5,10 +5,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
-  defaultFactorySessionID,
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
   openBrowserPage,
+  resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   waitForDurableCheckpoint,
@@ -85,8 +85,8 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
           },
         );
 
-        const sessionReads = network.captured.factorySessionReads;
-        expect(sessionReads.length).toBeGreaterThan(0);
+        const syncPreflightReads = network.captured.syncPreflightReads;
+        expect(syncPreflightReads.length).toBeGreaterThan(0);
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
@@ -136,7 +136,7 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
             return urls.some(
               (url) =>
                 url.includes(
-                  `/factory-sessions/${defaultFactorySessionID}/events`,
+                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
                 ) && eventStreamOmitsCursor(url),
             );
           },
@@ -168,7 +168,6 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
     "remaps ~default to a resolved factorySessionID without reusing an old cursor",
     async () => {
       const remappedIdentity = buildStreamIdentity({
-        factorySessionID: defaultFactorySessionID,
         streamGenerationID: initialEditableFactoryDefinitionVersion.physical,
       });
       const staleRemapIdentity = buildStreamIdentity({
@@ -204,7 +203,7 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
             return urls.some(
               (url) =>
                 url.includes(
-                  `/factory-sessions/${defaultFactorySessionID}/events`,
+                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
                 ) && eventStreamOmitsCursor(url),
             );
           },
@@ -214,8 +213,8 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
         expect(
           urls.some((url) => eventStreamHasCursor(url, "remap-stale-event-3")),
         ).toBe(false);
-        expect(remappedIdentity.factorySessionID).not.toBe(
-          staleRemapIdentity.factorySessionID,
+        expect(remappedIdentity.streamGenerationID).not.toBe(
+          staleRemapIdentity.streamGenerationID,
         );
         expectNoBrowserErrors(
           browserPage.pageErrors,
@@ -271,7 +270,7 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
             return urls.some(
               (url) =>
                 url.includes(
-                  `/factory-sessions/${defaultFactorySessionID}/events`,
+                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
                 ) && eventStreamOmitsCursor(url),
             );
           },
