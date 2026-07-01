@@ -139,6 +139,7 @@ type FactoryService struct {
 	core           *FactoryCore
 	sessions       *factorysessions.Registry
 	factorySave    factorySaveSaver
+	sessionGateway sessionGateway
 	runtimeBuild   *runtimebuild.Service
 	hostedWorkers  hostedworkers.Config
 	factoryRootDir string
@@ -313,6 +314,10 @@ type FactoryServiceConfig struct {
 	// collaborator. Tests use this to assert SaveFactoryForSession delegates
 	// without running the full save orchestration pipeline.
 	FactorySave factorySaveSaver
+	// SessionGateway, when non-nil, replaces the default
+	// factorysessions/service gateway collaborator. Tests use this to assert
+	// OpenFactorySession delegates without running the full open pipeline.
+	SessionGateway sessionGateway
 	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.
 	// Tests use this to assert model transport methods delegate without running
 	// the full managed-runtime pipeline.
