@@ -151,6 +151,11 @@ primary-result behavior.
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
+  `runFactory` resolves `--named` / `--factory` / `--dir` conflicts and portable
+  `--factory` preflight before loading operator defaults so flag and path failures
+  stay independent of `~/.you-agent-factory/config.json` contents.
+- `pkg/cli/main_test.go` isolates `HOME` for the whole CLI package so `make test`
+  does not depend on the developer's real operator config file.
 -   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`

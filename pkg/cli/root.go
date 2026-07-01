@@ -677,18 +677,18 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cfg.Logger = logger
 	cfg.Verbose = verbose || debug
 
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
-	if err != nil {
-		return err
-	}
-	cfg.OperatorDefaults = resolvedOperatorDefaults
-
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
 	}
 	if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
 		return err
 	}
+
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+	if err != nil {
+		return err
+	}
+	cfg.OperatorDefaults = resolvedOperatorDefaults
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs); err != nil {
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
