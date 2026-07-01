@@ -10,7 +10,7 @@ in this evidence.
 From the repository root:
 
 ```bash
-cd ui && npx vitest run integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs --no-file-parallelism --maxWorkers 1
+cd ui && npx vitest run integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs integration/dashboard-session-recovery-manual-scenarios-switching.integration.test.mjs --no-file-parallelism --maxWorkers 1
 ```
 
 Companion automated recovery proofs from earlier stories:
@@ -147,4 +147,4 @@ invalidated when stream identity changes.
 
 Date: `2026-07-01` (UTC)
 
-- `cd ui && npx vitest run integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs --no-file-parallelism --maxWorkers 1` — records the six restart/switching scenarios above with captured `EventSource` URLs and sanitized identity fields only.
+- `cd ui && npx vitest run integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs integration/dashboard-session-recovery-manual-scenarios-switching.integration.test.mjs --no-file-parallelism --maxWorkers 1` — records the six restart/switching scenarios above with captured `EventSource` URLs and sanitized identity fields only.
