@@ -43,8 +43,12 @@ func DefaultConfigPath(homeDir string) string {
 	return defaultpaths.OperatorConfigPath(homeDir)
 }
 
-// EnsureLocalBackendScope loads backendScopeID from configPath, generates
-// local-<uuid> when missing, and persists a newly generated value before returning.
+// Local backend scope policy:
+//   - blank or whitespace-only values are treated as missing and replaced with
+//     a newly generated local-<uuid> that is persisted before returning;
+//   - valid local-<uuid> values and other explicit non-empty scopes are reused;
+//   - values that start with local- but do not match local-<uuid> are malformed
+//     and fail startup with an actionable config error instead of being replaced.
 func EnsureLocalBackendScope(configPath string) (ResolvedBackendScope, error) {
 	configPath = strings.TrimSpace(configPath)
 	if configPath == "" {
@@ -56,6 +60,9 @@ func EnsureLocalBackendScope(configPath string) (ResolvedBackendScope, error) {
 		return ResolvedBackendScope{}, err
 	}
 	if trimmed := strings.TrimSpace(existing); trimmed != "" {
+		if err := validateConfiguredBackendScopeID(trimmed, configPath); err != nil {
+			return ResolvedBackendScope{}, err
+		}
 		return ResolvedBackendScope{
 			BackendScopeID: trimmed,
 			Outcome:        OutcomeReused,
@@ -104,6 +111,17 @@ func diagnosticsBackendScopeID(value string) string {
 		return "unset"
 	}
 	return trimmed
+}
+
+func validateConfiguredBackendScopeID(value, configPath string) error {
+	if IsLocalBackendScopeID(value) || !strings.HasPrefix(value, LocalBackendScopePrefix) {
+		return nil
+	}
+	return fmt.Errorf(
+		"system config %q has malformed backendScopeID %q: local backends require local-<uuid> or an explicit non-local scope; fix or remove the value before startup",
+		configPath,
+		value,
+	)
 }
 
 func loadBackendScopeID(configPath string) (string, error) {

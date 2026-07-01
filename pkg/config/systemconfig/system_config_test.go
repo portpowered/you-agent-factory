@@ -147,6 +147,79 @@ func TestEnsureLocalBackendScope_PersistFailureReturnsActionableError(t *testing
 	}
 }
 
+func TestEnsureLocalBackendScope_MalformedLocalScopeReturnsConfigError(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":"local-not-a-uuid"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := EnsureLocalBackendScope(configPath)
+	if err == nil {
+		t.Fatal("expected malformed local backend scope error")
+	}
+	if !strings.Contains(err.Error(), configPath) {
+		t.Fatalf("error = %q, want config path %q", err.Error(), configPath)
+	}
+	if !strings.Contains(err.Error(), "malformed backendScopeID") {
+		t.Fatalf("error = %q, want malformed backend scope message", err.Error())
+	}
+}
+
+func TestEnsureLocalBackendScope_BlankConfiguredScopeGeneratesLocalUUID(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":"   "}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	resolved, err := EnsureLocalBackendScope(configPath)
+	if err != nil {
+		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
+	}
+	if resolved.Outcome != OutcomeGenerated {
+		t.Fatalf("outcome = %q, want %q", resolved.Outcome, OutcomeGenerated)
+	}
+	if !IsLocalBackendScopeID(resolved.BackendScopeID) {
+		t.Fatalf("backendScopeID = %q, want local-<uuid>", resolved.BackendScopeID)
+	}
+}
+
+func TestEnsureLocalBackendScope_ReusesExplicitNonLocalScope(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+	existing := "cloud-review-scope"
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":"`+existing+`"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	resolved, err := EnsureLocalBackendScope(configPath)
+	if err != nil {
+		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
+	}
+	if resolved.Outcome != OutcomeReused {
+		t.Fatalf("outcome = %q, want %q", resolved.Outcome, OutcomeReused)
+	}
+	if resolved.BackendScopeID != existing {
+		t.Fatalf("backendScopeID = %q, want %q", resolved.BackendScopeID, existing)
+	}
+}
+
 func TestEnsureLocalBackendScope_MalformedConfigNamesPath(t *testing.T) {
 	t.Parallel()
 

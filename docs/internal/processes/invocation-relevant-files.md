@@ -44,6 +44,10 @@ primary-result behavior.
   logic in `pkg/config/systemconfig`, resolve it during `service.BuildFactoryCore`
   before session identity is exposed, and keep `pkg/config/operatorconfig` tolerant
   of the top-level `backendScopeID` field so operator-default parsing still works.
+  Local backend scope policy: blank values generate `local-<uuid>` once and persist
+  it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
+  restarts; values starting with `local-` that are not valid `local-<uuid>` fail
+  startup with a config error instead of being silently replaced.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
