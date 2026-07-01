@@ -215,8 +215,8 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 		t.Fatal("paths./factory-sessions/{session_id}/sync-preflight.get is missing")
 	}
 	parameters, ok := getOp["parameters"].([]any)
-	if !ok || len(parameters) != 3 {
-		t.Fatalf("sync preflight parameters = %#v, want session_id plus reconnect cursor params", getOp["parameters"])
+	if !ok || len(parameters) != 5 {
+		t.Fatalf("sync preflight parameters = %#v, want session_id plus identity and reconnect cursor params", getOp["parameters"])
 	}
 
 	response := schemaObject(t, schemas, "FactorySessionSyncPreflightResponse")

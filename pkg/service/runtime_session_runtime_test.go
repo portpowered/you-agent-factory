@@ -2941,8 +2941,10 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 		t.Fatal("event history = empty, want initial structure event")
 	}
 
-	valid, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+	valid, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
+		Reconnect: &interfaces.FactoryEventReconnectCursor{
 		AfterEventID: recorded[0].Id,
+	},
 	})
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(valid): %v", err)
@@ -2952,8 +2954,10 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 	assertSyncPreflightCursorState(t, valid, true, true, "valid")
 	assertSyncPreflightDefaultSessionIdentity(t, harness.svc, session, valid)
 
-	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
+		Reconnect: &interfaces.FactoryEventReconnectCursor{
 		AfterEventID: "factory-event/missing-preflight-cursor",
+	},
 	})
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(stale): %v", err)
@@ -2969,7 +2973,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_MissingSessionReturnsType
 	})
 	defer harness.stop(t)
 
-	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", nil)
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", interfaces.FactorySessionSyncPreflightOptions{})
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(missing): %v", err)
 	}
@@ -2998,7 +3002,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 		t.Fatalf("CloseFactorySession(default): %v", err)
 	}
 
-	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil)
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{})
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(remap): %v", err)
 	}
@@ -3021,6 +3025,153 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 	}
 	if response.ReconnectCursor.Provided || response.ReconnectCursor.ValidForStreamGeneration {
 		t.Fatalf("reconnect cursor = %#v, want absent and invalid", response.ReconnectCursor)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_ResolvesCurrentSessionByLogicalSessionKeyID(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(harness.svc, defaultSession)
+	backendScopeID := harness.svc.cfg.RuntimeInstanceID
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
+		BackendScopeID:      &backendScopeID,
+		LogicalSessionKeyID: &wantLogicalSessionKeyID,
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(resolved): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, response, factoryapi.Ok, "resolved")
+	assertSyncPreflightDefaultSessionIdentity(t, harness.svc, defaultSession, response)
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_RemapsStaleFactorySessionIDByLogicalSessionKeyID(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+	betaSession := harness.requireSession(t, betaSessionID)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(harness.svc, betaSession)
+	backendScopeID := harness.svc.cfg.RuntimeInstanceID
+	staleFactorySessionID := "live-session-stale-beta-001"
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), staleFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
+		BackendScopeID:      &backendScopeID,
+		LogicalSessionKeyID: &wantLogicalSessionKeyID,
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(remap-by-logical-key): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, response, factoryapi.LogicalSessionRemap, "remap-by-logical-key")
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false after logical remap")
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != betaSessionID {
+		t.Fatalf("factorySessionId = %#v, want beta session %q", response.FactorySessionId, betaSessionID)
+	}
+	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
+		t.Fatalf("logicalSessionKeyId = %#v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_UnresolvedLogicalTargetReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(harness.svc, defaultSession)
+	backendScopeID := harness.svc.cfg.RuntimeInstanceID
+
+	if err := harness.svc.CloseFactorySession(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("CloseFactorySession(default): %v", err)
+	}
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", interfaces.FactorySessionSyncPreflightOptions{
+		BackendScopeID:      &backendScopeID,
+		LogicalSessionKeyID: &wantLogicalSessionKeyID,
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(unresolved): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, response, factoryapi.SessionNotFound, "unresolved")
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false")
+	}
+	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
+		t.Fatalf("unresolved identity fields = %#v, want nil", response)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_WrongBackendScopeReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(harness.svc, defaultSession)
+	wrongBackendScopeID := "backend-scope-other-001"
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
+		BackendScopeID:      &wrongBackendScopeID,
+		LogicalSessionKeyID: &wantLogicalSessionKeyID,
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(wrong-scope): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, response, factoryapi.SessionNotFound, "wrong-scope")
+	if response.BackendScopeId != nil || response.FactorySessionId != nil {
+		t.Fatalf("wrong-scope identity fields = %#v, want nil", response)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_HTTPRemapsStaleFactorySessionIDByLogicalSessionKeyID(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+	betaSession := harness.requireSession(t, betaSessionID)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(harness.svc, betaSession)
+	backendScopeID := harness.svc.cfg.RuntimeInstanceID
+	staleFactorySessionID := "live-session-stale-beta-http-001"
+
+	server := newLiveSessionStatusTestServer(t, harness.svc)
+	defer server.Close()
+
+	requestURL := server.URL + "/factory-sessions/" + staleFactorySessionID + "/sync-preflight" +
+		"?backend_scope_id=" + backendScopeID +
+		"&logical_session_key_id=" + wantLogicalSessionKeyID
+	resp, err := http.Get(requestURL)
+	if err != nil {
+		t.Fatalf("GET sync-preflight: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET sync-preflight status = %d, want 200", resp.StatusCode)
+	}
+
+	var response factoryapi.FactorySessionSyncPreflightResponse
+	if err := decodeJSONResponse(resp, &response); err != nil {
+		t.Fatalf("decode sync-preflight response: %v", err)
+	}
+	assertSyncPreflightReasonCode(t, response, factoryapi.LogicalSessionRemap, "http-remap-by-logical-key")
+	if response.FactorySessionId == nil || *response.FactorySessionId != betaSessionID {
+		t.Fatalf("factorySessionId = %#v, want beta session %q", response.FactorySessionId, betaSessionID)
 	}
 }
 

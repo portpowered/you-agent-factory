@@ -60,7 +60,7 @@ type FactoryCoordinator interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
-	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor) (factoryapi.FactorySessionSyncPreflightResponse, error)
+	GetFactorySessionSyncPreflight(context.Context, string, interfaces.FactorySessionSyncPreflightOptions) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
@@ -980,9 +980,9 @@ func (fs *FactoryService) GetFactorySession(ctx context.Context, sessionID strin
 func (fs *FactoryService) GetFactorySessionSyncPreflight(
 	ctx context.Context,
 	sessionID string,
-	reconnect *interfaces.FactoryEventReconnectCursor,
+	options interfaces.FactorySessionSyncPreflightOptions,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
-	return fs.requireCoordinator().GetFactorySessionSyncPreflight(ctx, sessionID, reconnect)
+	return fs.requireCoordinator().GetFactorySessionSyncPreflight(ctx, sessionID, options)
 }
 
 func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
@@ -1001,16 +1001,16 @@ func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessi
 func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	_ context.Context,
 	sessionID string,
-	reconnect *interfaces.FactoryEventReconnectCursor,
+	options interfaces.FactorySessionSyncPreflightOptions,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	fs := c.service
-	response := newFactorySessionSyncPreflightResponse(sessionID, reconnect)
+	response := newFactorySessionSyncPreflightResponse(sessionID, options.Reconnect)
 	if strings.HasPrefix(sessionID, "dur-sess-") {
 		response.ReasonCode = factoryapi.SessionNotFound
 		return response, nil
 	}
 
-	resolved, err := fs.resolveSessionSyncPreflightTarget(sessionID)
+	resolved, err := fs.resolveSessionSyncPreflightTarget(sessionID, options)
 	if err != nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, err
 	}
@@ -1042,7 +1042,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	}
 	_, err = events.BuildReconnectReplay(
 		eventsSnapshot,
-		*reconnect,
+		*options.Reconnect,
 		interfaces.FactoryEventReconnectScope{SessionID: session.ID},
 	)
 	if err != nil {
@@ -1064,24 +1064,93 @@ type sessionSyncPreflightTarget struct {
 	remapped bool
 }
 
-func (fs *FactoryService) resolveSessionSyncPreflightTarget(sessionID string) (sessionSyncPreflightTarget, error) {
+func (fs *FactoryService) resolveSessionSyncPreflightTarget(
+	sessionID string,
+	options interfaces.FactorySessionSyncPreflightOptions,
+) (sessionSyncPreflightTarget, error) {
 	if fs == nil {
 		return sessionSyncPreflightTarget{}, fmt.Errorf("factory service is required")
 	}
-	if session, err := fs.requireSession(sessionID); err == nil {
-		return sessionSyncPreflightTarget{session: session}, nil
-	} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-		return sessionSyncPreflightTarget{}, err
-	}
+	requestedID := strings.TrimSpace(sessionID)
+	requestedBackendScopeID := stringPointerValue(options.BackendScopeID)
+	requestedLogicalSessionKeyID := strings.TrimSpace(stringPointerValue(options.LogicalSessionKeyID))
 
-	if strings.TrimSpace(sessionID) != defaultFactorySessionID {
+	if requestedBackendScopeID != "" && !factorySessionBackendScopeMatches(fs, requestedBackendScopeID) {
+		return sessionSyncPreflightTarget{}, nil
+	}
+	if requestedLogicalSessionKeyID != "" && !logicaltarget.IsLogicalSessionKeyID(requestedLogicalSessionKeyID) {
 		return sessionSyncPreflightTarget{}, nil
 	}
 
-	if session := fs.preflightDefaultSessionSuccessor(); session != nil {
-		return sessionSyncPreflightTarget{session: session, remapped: true}, nil
+	var directSession *factorysessions.LiveSession
+	if requestedID != "" {
+		if session, err := fs.requireSession(requestedID); err == nil {
+			directSession = session
+		} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			return sessionSyncPreflightTarget{}, err
+		}
+	}
+
+	var logicalSession *factorysessions.LiveSession
+	if requestedLogicalSessionKeyID != "" {
+		logicalSession = fs.findLiveSessionByLogicalSessionKeyID(requestedLogicalSessionKeyID)
+	}
+
+	switch {
+	case directSession != nil && logicalSession != nil:
+		if directSession.ID == logicalSession.ID {
+			return sessionSyncPreflightTarget{session: directSession}, nil
+		}
+		return sessionSyncPreflightTarget{session: logicalSession, remapped: true}, nil
+	case logicalSession != nil:
+		remapped := requestedID == "" || requestedID != logicalSession.ID
+		return sessionSyncPreflightTarget{session: logicalSession, remapped: remapped}, nil
+	case directSession != nil:
+		return sessionSyncPreflightTarget{session: directSession}, nil
+	}
+
+	if requestedID == defaultFactorySessionID {
+		if session := fs.preflightDefaultSessionSuccessor(); session != nil {
+			return sessionSyncPreflightTarget{session: session, remapped: true}, nil
+		}
 	}
 	return sessionSyncPreflightTarget{}, nil
+}
+
+func (fs *FactoryService) findLiveSessionByLogicalSessionKeyID(logicalSessionKeyID string) *factorysessions.LiveSession {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(logicalSessionKeyID)
+	if !logicaltarget.IsLogicalSessionKeyID(trimmed) {
+		return nil
+	}
+	for _, sessionID := range fs.sessions.IDs() {
+		session := fs.sessions.Get(sessionID)
+		if session == nil {
+			continue
+		}
+		if factorySessionLogicalSessionKeyID(fs, session) == trimmed {
+			return session
+		}
+	}
+	return nil
+}
+
+func factorySessionBackendScopeMatches(fs *FactoryService, requestedBackendScopeID string) bool {
+	if fs == nil {
+		return false
+	}
+	activeScopeID := strings.TrimSpace(factorySessionBackendScopeID(fs, nil))
+	requestedScopeID := strings.TrimSpace(requestedBackendScopeID)
+	return activeScopeID != "" && requestedScopeID == activeScopeID
+}
+
+func stringPointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
 }
 
 func (fs *FactoryService) preflightDefaultSessionSuccessor() *factorysessions.LiveSession {

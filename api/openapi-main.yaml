@@ -305,6 +305,8 @@ paths:
       description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/BackendScopeId'
+        - $ref: '#/components/parameters/LogicalSessionKeyId'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
       responses:
@@ -1423,6 +1425,10 @@ components:
       $ref: './components/parameters/AfterEventId.yaml'
     AfterSequence:
       $ref: './components/parameters/AfterSequence.yaml'
+    BackendScopeId:
+      $ref: './components/parameters/BackendScopeId.yaml'
+    LogicalSessionKeyId:
+      $ref: './components/parameters/LogicalSessionKeyId.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'

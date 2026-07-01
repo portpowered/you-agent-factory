@@ -5344,11 +5344,17 @@ type AfterSequence = int
 // ArtifactID defines model for ArtifactID.
 type ArtifactID = string
 
+// BackendScopeId defines model for BackendScopeId.
+type BackendScopeId = string
+
 // DispatchID defines model for DispatchID.
 type DispatchID = string
 
 // FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
 type FactorySessionResultIncludeArtifacts = bool
+
+// LogicalSessionKeyId defines model for LogicalSessionKeyId.
+type LogicalSessionKeyId = string
 
 // MaxResults defines model for MaxResults.
 type MaxResults = int
@@ -5450,6 +5456,12 @@ type GetFactorySessionResultsParams struct {
 
 // GetFactorySessionSyncPreflightBySessionIdParams defines parameters for GetFactorySessionSyncPreflightBySessionId.
 type GetFactorySessionSyncPreflightBySessionIdParams struct {
+	// BackendScopeId Optional backend scope identifier used with logicalSessionKeyId to resolve the current live Factory Session when the requested session selector is missing or stale. When provided, resolution succeeds only when it matches the active backend scope.
+	BackendScopeId *BackendScopeId `form:"backend_scope_id,omitempty" json:"backend_scope_id,omitempty"`
+
+	// LogicalSessionKeyId Optional canonical logical-session key derived from the normalized factory session target. When the requested session selector is missing or stale, resolution uses backendScopeId plus this key to locate the replacement current live Factory Session.
+	LogicalSessionKeyId *LogicalSessionKeyId `form:"logical_session_key_id,omitempty" json:"logical_session_key_id,omitempty"`
+
 	// AfterEventId Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier.
 	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
 
@@ -7795,6 +7807,22 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionSyncPreflightBySessionId(w h
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetFactorySessionSyncPreflightBySessionIdParams
+
+	// ------------- Optional query parameter "backend_scope_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "backend_scope_id", r.URL.Query(), &params.BackendScopeId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "backend_scope_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "logical_session_key_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "logical_session_key_id", r.URL.Query(), &params.LogicalSessionKeyId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "logical_session_key_id", Err: err})
+		return
+	}
 
 	// ------------- Optional query parameter "after_event_id" -------------
 

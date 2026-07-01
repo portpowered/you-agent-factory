@@ -289,6 +289,8 @@ paths:
       description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/BackendScopeId'
+        - $ref: '#/components/parameters/LogicalSessionKeyId'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
       responses:
@@ -1382,6 +1384,20 @@ components:
       schema:
         type: integer
         minimum: 0
+    BackendScopeId:
+      name: backend_scope_id
+      in: query
+      required: false
+      description: Optional backend scope identifier used with logicalSessionKeyId to resolve the current live Factory Session when the requested session selector is missing or stale. When provided, resolution succeeds only when it matches the active backend scope.
+      schema:
+        type: string
+    LogicalSessionKeyId:
+      name: logical_session_key_id
+      in: query
+      required: false
+      description: Optional canonical logical-session key derived from the normalized factory session target. When the requested session selector is missing or stale, resolution uses backendScopeId plus this key to locate the replacement current live Factory Session.
+      schema:
+        type: string
   responses:
     BadRequest:
       description: Request payload or parameter was invalid.

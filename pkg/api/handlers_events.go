@@ -181,7 +181,11 @@ func (s *Server) GetFactorySessionSyncPreflightBySessionId(
 	response, err := sessionRuntime.GetFactorySessionSyncPreflight(
 		r.Context(),
 		string(sessionID),
-		reconnectCursorFromParams(params.AfterEventId, params.AfterSequence),
+		interfaces.FactorySessionSyncPreflightOptions{
+			Reconnect:           reconnectCursorFromParams(params.AfterEventId, params.AfterSequence),
+			BackendScopeID:      params.BackendScopeId,
+			LogicalSessionKeyID: params.LogicalSessionKeyId,
+		},
 	)
 	if err != nil {
 		s.logger.Error("get factory session sync preflight failed", zap.Error(err))

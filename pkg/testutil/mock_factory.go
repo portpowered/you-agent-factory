@@ -719,7 +719,7 @@ func (m *MockFactory) GetFactorySession(_ context.Context, sessionID string) (fa
 func (m *MockFactory) GetFactorySessionSyncPreflight(
 	_ context.Context,
 	_ string,
-	_ *interfaces.FactoryEventReconnectCursor,
+	_ interfaces.FactorySessionSyncPreflightOptions,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	if m.GetFactorySessionSyncPreflightErr != nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, m.GetFactorySessionSyncPreflightErr
