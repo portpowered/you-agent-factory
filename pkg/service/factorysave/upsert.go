@@ -40,8 +40,8 @@ func (s *Service) saveUpsertNamedAndActivateForSession(
 			return err
 		}
 
-		nextVersion := nextEditableFactoryVersion(currentVersion, s.now().Now().UTC())
-		prepared, err := preparePersistedFactoryPayload(string(request.Name), request, nextVersion)
+		nextVersion := s.host.NextEditableFactoryVersion(currentVersion, s.now().Now().UTC())
+		prepared, err := s.host.PreparePersistedFactoryPayload(string(request.Name), request, nextVersion)
 		if err != nil {
 			return err
 		}
@@ -84,7 +84,7 @@ func (s *Service) upsertCurrentVersionAtSessionRoot(
 	if err != nil {
 		return nil, err
 	}
-	if err := requireFreshEditableFactoryVersionAtRoot(s.host, request.Version, sessionRootDir, request.Name); err != nil {
+	if err := s.host.RequireFreshEditableFactoryVersionAtRoot(sessionRootDir, request.Name, request.Version); err != nil {
 		return nil, err
 	}
 	return &version, nil

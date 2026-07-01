@@ -284,6 +284,33 @@ func (h *splitLayoutDefaultSaveHost) SerializeNamedFactoryUpsertResponse(factory
 	return factoryapi.Factory{}, errors.New("not implemented")
 }
 
+func (h *splitLayoutDefaultSaveHost) RequireFreshEditableFactoryVersionAtRoot(
+	rootDir string,
+	name factoryapi.FactoryName,
+	baseVersion *factoryapi.HybridLogicalTimestamp,
+) error {
+	currentVersion, err := h.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return err
+	}
+	return requireFreshEditableFactoryVersion(baseVersion, currentVersion)
+}
+
+func (h *splitLayoutDefaultSaveHost) NextEditableFactoryVersion(
+	current *factoryapi.HybridLogicalTimestamp,
+	now time.Time,
+) factoryapi.HybridLogicalTimestamp {
+	return nextEditableFactoryVersion(current, now)
+}
+
+func (h *splitLayoutDefaultSaveHost) PreparePersistedFactoryPayload(
+	segment string,
+	factory factoryapi.Factory,
+	version factoryapi.HybridLogicalTimestamp,
+) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
+	return preparePersistedFactoryPayload(segment, factory, version)
+}
+
 func stringPointer(value string) *string {
 	return &value
 }

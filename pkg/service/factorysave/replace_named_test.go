@@ -241,6 +241,33 @@ func (h *splitLayoutNamedSaveHost) SerializeNamedFactoryUpsertResponse(factoryap
 	return factoryapi.Factory{}, nil
 }
 
+func (h *splitLayoutNamedSaveHost) RequireFreshEditableFactoryVersionAtRoot(
+	rootDir string,
+	name factoryapi.FactoryName,
+	baseVersion *factoryapi.HybridLogicalTimestamp,
+) error {
+	currentVersion, err := h.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return err
+	}
+	return requireFreshEditableFactoryVersion(baseVersion, currentVersion)
+}
+
+func (h *splitLayoutNamedSaveHost) NextEditableFactoryVersion(
+	current *factoryapi.HybridLogicalTimestamp,
+	now time.Time,
+) factoryapi.HybridLogicalTimestamp {
+	return nextEditableFactoryVersion(current, now)
+}
+
+func (h *splitLayoutNamedSaveHost) PreparePersistedFactoryPayload(
+	segment string,
+	factory factoryapi.Factory,
+	version factoryapi.HybridLogicalTimestamp,
+) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
+	return preparePersistedFactoryPayload(segment, factory, version)
+}
+
 func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testing.T) {
 	sessionRoot := t.TempDir()
 	host := &upsertNamedSaveHost{
@@ -381,4 +408,31 @@ func (h *upsertNamedSaveHost) SerializeNamedFactoryUpsertResponse(
 	serialized := h.serialized
 	serialized.Name = name
 	return serialized, nil
+}
+
+func (h *upsertNamedSaveHost) RequireFreshEditableFactoryVersionAtRoot(
+	rootDir string,
+	name factoryapi.FactoryName,
+	baseVersion *factoryapi.HybridLogicalTimestamp,
+) error {
+	currentVersion, err := h.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return err
+	}
+	return requireFreshEditableFactoryVersion(baseVersion, currentVersion)
+}
+
+func (h *upsertNamedSaveHost) NextEditableFactoryVersion(
+	current *factoryapi.HybridLogicalTimestamp,
+	now time.Time,
+) factoryapi.HybridLogicalTimestamp {
+	return nextEditableFactoryVersion(current, now)
+}
+
+func (h *upsertNamedSaveHost) PreparePersistedFactoryPayload(
+	segment string,
+	factory factoryapi.Factory,
+	version factoryapi.HybridLogicalTimestamp,
+) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
+	return preparePersistedFactoryPayload(segment, factory, version)
 }

@@ -1,0 +1,173 @@
+package factorydefinition
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/apitypes"
+	generatedapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+func workerTypeModel() *generatedapi.WorkerType {
+	value := generatedapi.WorkerTypeModelWorker
+	return &value
+}
+
+func workstationTypeModel() *generatedapi.WorkstationType {
+	value := generatedapi.WorkstationTypeModelWorkstation
+	return &value
+}
+
+func TestService_PreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanonicalJSON(t *testing.T) {
+	t.Parallel()
+
+	body := "You are the planner."
+	factory := generatedapi.Factory{
+		Name: "alpha",
+		Workers: &[]generatedapi.Worker{{
+			Name: "planner",
+			Type: workerTypeModel(),
+			Body: &body,
+		}},
+	}
+	version := generatedapi.HybridLogicalTimestamp{
+		Logical:  factoryapi.Int64String(3),
+		Physical: time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC),
+	}
+
+	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", factory, version)
+	if err != nil {
+		t.Fatalf("PreparePersistedFactoryPayload: %v", err)
+	}
+	if strings.Contains(string(prepared.Canonical), body) {
+		t.Fatalf("persist payload should omit inlined worker body, got %s", prepared.Canonical)
+	}
+	if prepared.Config == nil || len(prepared.Config.Workers) == 0 || prepared.Config.Workers[0].Body != body {
+		t.Fatalf("expanded config should retain inline body for split layout, got %#v", prepared.Config)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(prepared.Canonical, &decoded); err != nil {
+		t.Fatalf("Unmarshal(payload): %v", err)
+	}
+	versionObj, ok := decoded["version"].(map[string]any)
+	if !ok {
+		t.Fatalf("version = %#v, want object", decoded["version"])
+	}
+	if versionObj["logical"] != "3" {
+		t.Fatalf("version.logical = %#v, want 3", versionObj["logical"])
+	}
+}
+
+func TestService_PrepareEditableFactoryPersistView_UsesSameNormalizationAsPersist(t *testing.T) {
+	t.Parallel()
+
+	body := "inline worker body"
+	factory := generatedapi.Factory{
+		Name: "alpha",
+		WorkTypes: &[]generatedapi.WorkType{{
+			Name: "task",
+			States: []generatedapi.WorkState{
+				{Name: "init", Type: generatedapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: generatedapi.WorkStateTypeTERMINAL},
+			},
+		}},
+		Workers: &[]generatedapi.Worker{{
+			Name: "worker-a",
+			Type: workerTypeModel(),
+			Body: &body,
+		}},
+		Workstations: &[]generatedapi.Workstation{{
+			Name:   "process",
+			Worker: "worker-a",
+			Type:   workstationTypeModel(),
+			Inputs: []generatedapi.WorkstationIO{{WorkType: "task", State: "init"}},
+			Outputs: &[]generatedapi.WorkstationIO{
+				{WorkType: "task", State: "complete"},
+			},
+		}},
+	}
+
+	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("factory", factory)
+	if err != nil {
+		t.Fatalf("PrepareEditableFactoryPersistView: %v", err)
+	}
+	if view.Config == nil || len(view.Config.Workers) == 0 || view.Config.Workers[0].Body != body {
+		t.Fatalf("expanded config should retain inline body for layout, got %#v", view.Config)
+	}
+	if strings.Contains(string(view.Canonical), body) {
+		t.Fatalf("canonical bytes should omit inlined worker body, got %s", view.Canonical)
+	}
+}
+
+func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	factory.Layout = &generatedapi.FactoryLayout{
+		SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+		Nodes: &[]generatedapi.FactoryLayoutNode{{
+			Id:       "workstation:process",
+			Position: generatedapi.FactoryLayoutPoint{X: 10, Y: 20},
+			Size:     &generatedapi.FactoryLayoutSize{Width: 100, Height: 80},
+		}, {
+			Id:       "workstation:stale-node",
+			Position: generatedapi.FactoryLayoutPoint{X: 30, Y: 40},
+			Size:     &generatedapi.FactoryLayoutSize{Width: 100, Height: 80},
+		}},
+		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
+	}
+
+	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", factory, generatedapi.HybridLogicalTimestamp{
+		Logical:  factoryapi.Int64String(2),
+		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("PreparePersistedFactoryPayload: %v", err)
+	}
+	if prepared.Config == nil || prepared.Config.Layout == nil {
+		t.Fatal("expected pruned layout on prepared config")
+	}
+	if len(prepared.Config.Layout.Nodes) != 1 || prepared.Config.Layout.Nodes[0].ID != "workstation:process" {
+		t.Fatalf("pruned layout nodes = %#v", prepared.Config.Layout.Nodes)
+	}
+}
+
+func TestService_PreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	factory.Layout = &generatedapi.FactoryLayout{
+		SchemaVersion: 99,
+		Nodes: &[]generatedapi.FactoryLayoutNode{{
+			Id:       "workstation:process",
+			Position: generatedapi.FactoryLayoutPoint{X: 10, Y: 20},
+			Size:     &generatedapi.FactoryLayoutSize{Width: 100, Height: 80},
+		}},
+		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
+	}
+
+	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", factory, generatedapi.HybridLogicalTimestamp{
+		Logical:  factoryapi.Int64String(2),
+		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("PreparePersistedFactoryPayload: %v", err)
+	}
+	if prepared.Config == nil || prepared.Config.Layout == nil {
+		t.Fatal("expected layout preserved on prepared config")
+	}
+	if prepared.Config.Layout.SchemaVersion != 99 {
+		t.Fatalf("layout schemaVersion = %d, want 99 preserved on save", prepared.Config.Layout.SchemaVersion)
+	}
+}

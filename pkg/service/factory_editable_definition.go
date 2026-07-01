@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -14,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"go.uber.org/zap"
@@ -154,38 +154,15 @@ func (fs *FactoryService) serializeNamedFactory(
 	return svc.SerializeNamedFactory(name, current, inlineBundledFiles)
 }
 
-// serializeNamedFactoryUpsertResponse returns the PUT upsert read model with thin
-// portable DOC/SCRIPT bundled files (disk-backed targets without inline content).
 func (fs *FactoryService) serializeNamedFactoryUpsertResponse(
 	name factoryapi.FactoryName,
 	current *factoryconfig.LoadedFactoryConfig,
 ) (factoryapi.Factory, error) {
-	factoryCfg := current.FactoryConfig()
-	if factoryCfg != nil {
-		clonedFactoryCfg, err := factoryconfig.CloneFactoryConfig(factoryCfg)
-		if err != nil {
-			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
-		}
-		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, false, false); err != nil {
-			return factoryapi.Factory{}, fmt.Errorf("merge named factory portable bundled files: %w", err)
-		}
-		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
-			return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
-		}
-		factoryCfg = clonedFactoryCfg
+	svc := fs.definitionService()
+	if svc == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
-		current.FactoryDir(),
-		factoryCfg,
-		current,
-		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(fs.workflowID()),
-	)
-	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("serialize upsert factory: %w", err)
-	}
-	generatedFactory.Name = factoryapi.FactoryName(name)
-	return generatedFactory, nil
+	return svc.SerializeNamedFactoryUpsertResponse(name, current)
 }
 
 // factorySaveSaver is the injectable factory-save collaborator seam.
@@ -279,6 +256,45 @@ func (h factorySaveHost) SerializeNamedFactoryUpsertResponse(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 ) (factoryapi.Factory, error) {
 	return h.FactoryService.serializeNamedFactoryUpsertResponse(name, runtimeCfg)
+}
+
+func (h factorySaveHost) RequireFreshEditableFactoryVersionAtRoot(
+	rootDir string,
+	name factoryapi.FactoryName,
+	baseVersion *factoryapi.HybridLogicalTimestamp,
+) error {
+	currentVersion, err := h.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return err
+	}
+	svc := h.FactoryService.definitionService()
+	if svc == nil {
+		return fmt.Errorf("factory definition service is required")
+	}
+	return svc.RequireFreshEditableFactoryVersion(baseVersion, currentVersion)
+}
+
+func (h factorySaveHost) NextEditableFactoryVersion(
+	current *factoryapi.HybridLogicalTimestamp,
+	now time.Time,
+) factoryapi.HybridLogicalTimestamp {
+	svc := h.FactoryService.definitionService()
+	if svc == nil {
+		return factoryapi.HybridLogicalTimestamp{}
+	}
+	return svc.NextEditableFactoryVersion(current, now)
+}
+
+func (h factorySaveHost) PreparePersistedFactoryPayload(
+	segment string,
+	factory factoryapi.Factory,
+	version factoryapi.HybridLogicalTimestamp,
+) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
+	svc := h.FactoryService.definitionService()
+	if svc == nil {
+		return nil, fmt.Errorf("factory definition service is required")
+	}
+	return svc.PreparePersistedFactoryPayload(segment, factory, version)
 }
 
 func newFactorySaveService(fs *FactoryService) *factorysave.Service {
