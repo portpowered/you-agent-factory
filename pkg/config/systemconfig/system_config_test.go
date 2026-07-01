@@ -255,3 +255,117 @@ func TestResolvedBackendScope_DiagnosticsLineRedactsNothingForScopeID(t *testing
 		t.Fatalf("line = %q, should not leak unrelated config fields", line)
 	}
 }
+
+func TestEnsureLocalBackendScope_RequiresConfigPath(t *testing.T) {
+	t.Parallel()
+
+	_, err := EnsureLocalBackendScope("   ")
+	if err == nil {
+		t.Fatal("expected missing config path error")
+	}
+	if !strings.Contains(err.Error(), "system config path is required") {
+		t.Fatalf("error = %q, want required path message", err.Error())
+	}
+}
+
+func TestResolvedBackendScope_DiagnosticsLineUnsetScope(t *testing.T) {
+	t.Parallel()
+
+	line := (ResolvedBackendScope{
+		BackendScopeID: "   ",
+		Outcome:        OutcomeReused,
+		ConfigPath:     "/tmp/config.json",
+	}).DiagnosticsLine()
+	if !strings.Contains(line, "backendScopeID=unset") {
+		t.Fatalf("line = %q, want unset backend scope id", line)
+	}
+}
+
+func TestReadConfigMap_EmptyFileReturnsEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte("  \n  "), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	configMap, err := readConfigMap(configPath)
+	if err != nil {
+		t.Fatalf("readConfigMap() error = %v", err)
+	}
+	if len(configMap) != 0 {
+		t.Fatalf("configMap = %#v, want empty map", configMap)
+	}
+}
+
+func TestReadConfigMap_InvalidJSONReturnsError(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := readConfigMap(configPath)
+	if err == nil {
+		t.Fatal("expected invalid JSON error")
+	}
+	if !strings.Contains(err.Error(), configPath) {
+		t.Fatalf("error = %q, want path %q", err.Error(), configPath)
+	}
+}
+
+func TestLoadBackendScopeID_ReadErrorIncludesPath(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0o000); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(configPath, 0o600)
+	})
+
+	_, err := loadBackendScopeID(configPath)
+	if err == nil {
+		t.Fatal("expected read error")
+	}
+	if !strings.Contains(err.Error(), configPath) {
+		t.Fatalf("error = %q, want path %q", err.Error(), configPath)
+	}
+}
+
+func TestPersistBackendScopeID_RejectsEmptyAndInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+
+	if err := persistBackendScopeID(configPath, "   "); err == nil {
+		t.Fatal("expected empty backend scope error")
+	} else if !strings.Contains(err.Error(), "backend scope ID is required") {
+		t.Fatalf("error = %q, want required scope message", err.Error())
+	}
+
+	if err := persistBackendScopeID(configPath, "cloud-review-scope"); err == nil {
+		t.Fatal("expected invalid local backend scope error")
+	} else if !strings.Contains(err.Error(), "not a valid local backend scope") {
+		t.Fatalf("error = %q, want invalid local scope message", err.Error())
+	}
+}
+
+func TestWriteConfigMap_ReplaceFailureWhenPathIsDirectory(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.Mkdir(configPath, 0o755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	err := writeConfigMap(configPath, map[string]json.RawMessage{})
+	if err == nil {
+		t.Fatal("expected replace failure when config path is a directory")
+	}
+	if !strings.Contains(err.Error(), "replace system config") {
+		t.Fatalf("error = %q, want replace failure message", err.Error())
+	}
+}
