@@ -222,3 +222,15 @@ func TestService_SerializeNamedFactory_ReturnsLoadedRuntime(t *testing.T) {
 		t.Fatalf("factory name = %q, want alpha", got.Name)
 	}
 }
+
+func TestService_PersistPayloadFromView_RejectsNilView(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(stubDefinitionHost{}).PersistPayloadFromView(nil, generatedapi.HybridLogicalTimestamp{
+		Logical:  factoryapi.Int64String(1),
+		Physical: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+	})
+	if err == nil {
+		t.Fatal("PersistPayloadFromView: expected error for nil view")
+	}
+}

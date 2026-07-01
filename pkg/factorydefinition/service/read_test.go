@@ -299,3 +299,107 @@ func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesFileModTimeForDefault
 		t.Fatalf("version = %#v, want logical=%d physical=%s", got, modTime.UnixNano(), modTime)
 	}
 }
+
+type activateTrackingHost struct {
+	stubDefinitionHost
+	swappedName string
+	sessionID   string
+}
+
+func (h *activateTrackingHost) RunSessionID() string { return "session-alpha" }
+
+func (h *activateTrackingHost) SessionForActivation(string) *factorysessions.LiveSession {
+	return &factorysessions.LiveSession{
+		ID: "session-alpha",
+		SessionState: factorysessions.SessionState{
+			FactoryDir: h.persistRootDir,
+			FolderPath: h.persistRootDir,
+		},
+	}
+}
+
+func (h *activateTrackingHost) NamedFactoryActivationPaths(*factorysessions.LiveSession) (string, string) {
+	return h.persistRootDir, h.persistRootDir
+}
+
+func (h *activateTrackingHost) SwapPersistedNamedFactoryRuntime(
+	_ context.Context,
+	sessionID string,
+	_ *factorysessions.LiveSession,
+	_, _, _, name string,
+) error {
+	h.sessionID = sessionID
+	h.swappedName = name
+	return nil
+}
+
+func TestService_ActivateNamedFactory_SwapsPersistedNamedFactory(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", namedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+
+	host := &activateTrackingHost{stubDefinitionHost: stubDefinitionHost{persistRootDir: rootDir}}
+	if err := New(host).ActivateNamedFactory(context.Background(), "alpha"); err != nil {
+		t.Fatalf("ActivateNamedFactory: %v", err)
+	}
+	if host.swappedName != "alpha" {
+		t.Fatalf("swapped factory name = %q, want alpha", host.swappedName)
+	}
+	if host.sessionID != "session-alpha" {
+		t.Fatalf("swap session id = %q, want session-alpha", host.sessionID)
+	}
+}
+
+func TestService_ActivateNamedFactory_ReturnsResolveErrorForMissingFactory(t *testing.T) {
+	t.Parallel()
+
+	host := &activateTrackingHost{stubDefinitionHost: stubDefinitionHost{persistRootDir: t.TempDir()}}
+	err := New(host).ActivateNamedFactory(context.Background(), "missing")
+	if err == nil {
+		t.Fatal("ActivateNamedFactory: expected error for missing named factory")
+	}
+	if !factoryconfig.IsNamedFactoryNotFound(err) {
+		t.Fatalf("ActivateNamedFactory error = %v, want named factory not found", err)
+	}
+}
+
+func TestService_GetCurrentFactoryForSession_PropagatesSessionLookupError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("session missing")
+	host := stubDefinitionHost{requireSessionErr: wantErr}
+	_, err := New(host).GetCurrentFactoryForSession(context.Background(), "missing")
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("GetCurrentFactoryForSession error = %v, want %v", err, wantErr)
+	}
+}
+
+func TestService_GetCurrentNamedFactory_PropagatesPointerReadError(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	pointerPath := filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile)
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(pointerPath, []byte("alpha"), 0o000); err != nil {
+		t.Fatalf("WriteFile pointer: %v", err)
+	}
+
+	_, err := New(stubDefinitionHost{persistRootDir: rootDir}).GetCurrentNamedFactory(context.Background())
+	if err == nil {
+		t.Fatal("GetCurrentNamedFactory: expected pointer read error")
+	}
+}
+
+func TestService_CurrentFactoryDefinitionVersionAtRoot_PropagatesNamedResolveError(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(stubDefinitionHost{}).CurrentFactoryDefinitionVersionAtRoot(t.TempDir(), "missing")
+	if !factoryconfig.IsNamedFactoryNotFound(err) {
+		t.Fatalf("CurrentFactoryDefinitionVersionAtRoot error = %v, want named factory not found", err)
+	}
+}
