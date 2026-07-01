@@ -14,6 +14,7 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -417,11 +418,11 @@ func NewFactorySessionsRegistry() *factorysessions.Registry {
 
 // LocalModelDomain wires pkg/localmodels runtime dependencies constructed at
 // service build time and copied onto each factoryRuntimeBundle.
-type LocalModelDomain = localModelDomain
+type LocalModelDomain = factoryservice.LocalModelDomain
 
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
 func NewLocalModelDomain(cfg *FactoryServiceConfig) LocalModelDomain {
-	return newRuntimeLocalModelDependencies(cfg)
+	return factoryservice.NewLocalModelDomain(hostConfigFromService(cfg))
 }
 
 // FactoryServiceCollaborators groups explicit S6 composition collaborators.
@@ -439,7 +440,7 @@ func NewFactoryServiceCollaborators(
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
 ) FactoryServiceCollaborators {
-	startupLocalModels := newRuntimeLocalModelDependencies(cfg)
+	startupLocalModels := NewLocalModelDomain(cfg)
 	return FactoryServiceCollaborators{
 		Sessions:    sessions,
 		LocalModels: startupLocalModels,
@@ -604,7 +605,7 @@ func (core *FactoryCore) ModelHost() modelhost.Host {
 	if core == nil {
 		return nil
 	}
-	return core.collaborators.LocalModels.host
+	return core.collaborators.LocalModels.Host
 }
 
 // LocalModels returns the startup local-model collaborator group.
@@ -650,14 +651,14 @@ func (core *FactoryCore) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapsh
 	snapshot := ComposeCollaboratorSnapshot{
 		SessionsInitialized:      core.Sessions() != nil,
 		RuntimeBuildInitialized:  core.RuntimeBuild() != nil,
-		LocalModelsInitialized:   core.LocalModels().manager != nil,
+		LocalModelsInitialized:   core.LocalModels().Manager != nil,
 		ModelAssetsInitialized:   core.ModelAssetPuller() != nil,
 		DefinitionsInitialized:   true,
 		HostedWorkersLoggerReady: core.HostedWorkers().Logger != nil,
 	}
 	if bundle != nil {
-		snapshot.BundleModelResources = bundle.modelResources != nil
-		snapshot.BundleLocalModels = bundle.localModels != nil
+		snapshot.BundleModelResources = bundle.ModelResources != nil
+		snapshot.BundleLocalModels = bundle.LocalModels != nil
 	}
 	return snapshot
 }
@@ -685,8 +686,8 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 	snapshot.ModelAssetsInitialized = fs.modelAssets != nil
 	snapshot.HostedWorkersLoggerReady = fs.hostedWorkers.Logger != nil
 	if bundle != nil {
-		snapshot.BundleModelResources = bundle.modelResources != nil
-		snapshot.BundleLocalModels = bundle.localModels != nil
+		snapshot.BundleModelResources = bundle.ModelResources != nil
+		snapshot.BundleLocalModels = bundle.LocalModels != nil
 	}
 	return snapshot
 }
@@ -780,7 +781,7 @@ func ComposeFactoryCore(
 	var runtimeBundle *factoryRuntimeBundle
 	defer func() {
 		if !coreBuilt && runtimeBundle != nil {
-			_ = closeRuntimeBundleSinks(runtimeBundle.logSink, runtimeBundle.metricsSink)
+			_ = closeRuntimeBundleSinks(runtimeBundle.LogSink, runtimeBundle.MetricsSink)
 		}
 	}()
 	if cfg.ReplayPath == "" {
@@ -822,13 +823,13 @@ func ComposeFactoryCore(
 	}
 	collaborators.Sessions.Upsert(factorysessions.NewLiveSession(
 		defaultFactorySessionID,
-		runtimeBundle.dir,
-		runtimeBundle.folderPath,
-		runtimeBundle.runtimeCfg.RuntimeBaseDir(),
+		runtimeBundle.Dir,
+		runtimeBundle.FolderPath,
+		runtimeBundle.RuntimeCfg.RuntimeBaseDir(),
 		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 		&liveSessionState{bundle: runtimeBundle, spec: &defaultSessionSpec},
 		true,
-		filepath.Base(runtimeBundle.folderPath),
+		filepath.Base(runtimeBundle.FolderPath),
 	), true)
 
 	coreBuilt = true
@@ -839,8 +840,8 @@ func ComposeFactoryCore(
 		hostedWorkers: hostedWorkers,
 		clock:         clock,
 		startupBundle: runtimeBundle,
-		logger:        runtimeBundle.logger,
-		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.assets),
+		logger:        runtimeBundle.Logger,
+		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
 	}, nil
 }
 

@@ -136,13 +136,13 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 		modelAssets: puller,
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		runtimeCfg:        runtimeCfg,
-		modelAssets:       puller,
-		localModelRuntime: runtime,
-		modelHost:         host,
-		leaseExecution:    leaseExec,
-		modelResources:    newLocalModelResourceLimiter(),
-		localModels:       newManagedLocalModelManager(puller, runtime),
+		RuntimeCfg:        runtimeCfg,
+		ModelAssets:       puller,
+		LocalModelRuntime: runtime,
+		ModelHost:         host,
+		LeaseExecution:    leaseExec,
+		ModelResources:    newLocalModelResourceLimiter(),
+		LocalModels:       newManagedLocalModelManager(puller, runtime),
 	})
 
 	mode := factoryapi.AUDIOSTREAM
@@ -300,11 +300,11 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 		nil,
 		nil,
 		nil,
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets:    staticModelAssetPuller{cache: cache},
-			runtime:   runtime,
-			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets:    staticModelAssetPuller{cache: cache},
+			Runtime:   runtime,
+			Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 		},
 	)
 	if err != nil {
@@ -460,13 +460,13 @@ func localModelManagedRuntimeWorkerExecutor(t *testing.T, provider *providerCall
 		nil,
 		nil,
 		nil,
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets: staticModelAssetPuller{
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets: staticModelAssetPuller{
 				cache: cache,
 			},
-			runtime: runtime,
-			manager: newManagedLocalModelManager(staticModelAssetPuller{
+			Runtime: runtime,
+			Manager: newManagedLocalModelManager(staticModelAssetPuller{
 				cache: cache,
 			}, runtime),
 		},
@@ -516,11 +516,11 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 		},
 	})
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
-	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, nil, history.RecordModelEvent, nil, func() time.Time { return eventTime }, localModelDomain{
-		resources: newLocalModelResourceLimiter(),
-		assets:    staticModelAssetPuller{cache: cache},
-		runtime:   runtime,
-		manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, nil, history.RecordModelEvent, nil, func() time.Time { return eventTime }, LocalModelDomain{
+		Resources: newLocalModelResourceLimiter(),
+		Assets:    staticModelAssetPuller{cache: cache},
+		Runtime:   runtime,
+		Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 	})
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)

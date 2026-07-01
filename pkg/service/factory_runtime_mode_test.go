@@ -170,10 +170,10 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureLifecycleAndStateTr
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
 	session := svc.sessionByID(defaultFactorySessionID)
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.MetricsSink == nil {
 		t.Fatal("default session runtime metrics sink is unavailable")
 	}
-	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	metricsPath := liveSessionHandle(session).Bundle.MetricsSink.Path()
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
 		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStarted, 1)
 	}, "runtime start")
@@ -278,10 +278,10 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t 
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
 	session := svc.sessionByID(defaultFactorySessionID)
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.MetricsSink == nil {
 		t.Fatal("default session runtime metrics sink is unavailable")
 	}
-	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	metricsPath := liveSessionHandle(session).Bundle.MetricsSink.Path()
 	submissions := []struct {
 		workID   string
 		traceID  string
@@ -421,10 +421,10 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
 	session := svc.sessionByID(defaultFactorySessionID)
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.MetricsSink == nil {
 		t.Fatal("default session runtime metrics sink is unavailable")
 	}
-	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	metricsPath := liveSessionHandle(session).Bundle.MetricsSink.Path()
 
 	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
 		WorkID:     "work-provider-metrics",
@@ -551,13 +551,13 @@ func TestBuildFactoryService_ServiceModeContinuesWhenRuntimeMetricsSinkUnavailab
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup without metrics sink")
 	session := svc.sessionByID(defaultFactorySessionID)
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("default session runtime is unavailable")
 	}
-	if liveSessionHandle(session).runtime.metricsSink != nil {
+	if liveSessionHandle(session).Bundle.MetricsSink != nil {
 		t.Fatal("runtime metrics sink should be nil when metrics root is unavailable")
 	}
-	logPath := liveSessionHandle(session).runtime.logSink.Path()
+	logPath := liveSessionHandle(session).Bundle.LogSink.Path()
 	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
 		WorkID:     "work-no-metrics-sink",
 		Name:       "work-no-metrics-sink",
@@ -1050,14 +1050,14 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
-	if replacement.dir != betaDir {
-		t.Fatalf("replacement dir = %q, want %q", replacement.dir, betaDir)
+	if replacement.Dir != betaDir {
+		t.Fatalf("replacement dir = %q, want %q", replacement.Dir, betaDir)
 	}
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- replacement.factory.Run(runCtx)
+		errCh <- replacement.Factory.Run(runCtx)
 	}()
 
 	select {
@@ -1102,19 +1102,19 @@ func TestBuildReplacementFactoryRuntime_WiresLocalModelDelegationSeam(t *testing
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
-	if replacement.localModels == nil {
+	if replacement.LocalModels == nil {
 		t.Fatal("runtime bundle localModels = nil, want managed localmodels.Manager from buildRuntimeBundle seam")
 	}
-	if replacement.modelAssets == nil {
+	if replacement.ModelAssets == nil {
 		t.Fatal("runtime bundle modelAssets = nil, want localmodels.AssetPuller from buildRuntimeBundle seam")
 	}
-	if replacement.modelResources == nil {
+	if replacement.ModelResources == nil {
 		t.Fatal("runtime bundle modelResources = nil, want localmodels.ResourceLimiter from buildRuntimeBundle seam")
 	}
-	if replacement.logSink == nil {
+	if replacement.LogSink == nil {
 		t.Fatal("runtime bundle logSink = nil, want runtime log sink from buildRuntimeBundle seam")
 	}
-	if replacement.logger == nil {
+	if replacement.Logger == nil {
 		t.Fatal("runtime bundle logger = nil, want session logger from buildRuntimeBundle seam")
 	}
 }
@@ -1139,10 +1139,10 @@ func TestBuildFactoryService_StartupRuntimeBundleMatchesLiveHandleShape(t *testi
 	if bundle == nil {
 		t.Fatal("currentRuntimeBundle = nil, want startup bundle before Run")
 	}
-	if bundle.logSink == nil {
+	if bundle.LogSink == nil {
 		t.Fatal("startup bundle logSink = nil, want runtime log sink")
 	}
-	if bundle.factory == nil {
+	if bundle.Factory == nil {
 		t.Fatal("startup bundle factory = nil")
 	}
 	if bundle == nil {
@@ -1169,7 +1169,7 @@ func TestFactoryService_Run_ClearsStartupBundleAfterDefaultRegisters(t *testing.
 	runFactoryServiceWithCleanup(t, svc)
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
 	defaultHandle := liveSessionHandle(svc.defaultSession())
-	if bundle := svc.currentRuntimeBundle(); bundle == nil || defaultHandle == nil || bundle != defaultHandle.runtime {
+	if bundle := svc.currentRuntimeBundle(); bundle == nil || defaultHandle == nil || bundle != defaultHandle.Bundle {
 		t.Fatal("currentRuntimeBundle should resolve only through the default session handle after Run")
 	}
 }
@@ -1814,10 +1814,6 @@ func (s *stubFactoryCoordinator) stopLiveRuntimeSidecars(*liveRuntimeHandle) {
 	s.calls = append(s.calls, "stop-sidecars")
 }
 
-func (s *stubFactoryCoordinator) restoreLiveRuntimeSidecars(*serviceRunState) {
-	s.calls = append(s.calls, "restore-sidecars")
-}
-
 func (s *stubFactoryCoordinator) stopLiveRuntime(*liveRuntimeHandle) error {
 	s.calls = append(s.calls, "stop-runtime")
 	return nil
@@ -2090,11 +2086,11 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 	}
 
 	defaultHandle := liveSessionHandle(defaultSession)
-	if defaultHandle == nil || defaultHandle.runtime == nil {
+	if defaultHandle == nil || defaultHandle.Bundle == nil {
 		t.Fatal("default session live handle is required after Run")
 	}
-	if got := cleanResolvedPath(defaultHandle.runtime.dir); got != cleanResolvedPath(alphaDir) {
-		t.Fatalf("default live handle runtime dir = %q, want %q", defaultHandle.runtime.dir, alphaDir)
+	if got := cleanResolvedPath(defaultHandle.Bundle.Dir); got != cleanResolvedPath(alphaDir) {
+		t.Fatalf("default live handle runtime dir = %q, want %q", defaultHandle.Bundle.Dir, alphaDir)
 	}
 
 	runState := svc.currentRunState()
@@ -2107,7 +2103,7 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 	if current := svc.currentSession(); current == nil || current.ID != defaultFactorySessionID {
 		t.Fatalf("currentSession = %#v, want selected %q", current, defaultFactorySessionID)
 	}
-	if bundle := svc.currentRuntimeBundle(); bundle != defaultHandle.runtime {
+	if bundle := svc.currentRuntimeBundle(); bundle != defaultHandle.Bundle {
 		t.Fatal("currentRuntimeBundle should resolve through the default session registry handle after Run")
 	}
 }
@@ -2167,7 +2163,7 @@ func TestFactoryService_GetEngineStateSnapshot_DelegatesToFactoryAggregateSnapsh
 	}
 	mock := &aggregateSnapshotFactory{engineState: expected}
 	svc := &FactoryService{}
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: mock})
 
 	got, err := svc.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -2637,10 +2633,10 @@ func TestBuildReplacementFactoryRuntime_AppliesOperatorDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
-	if replacement.dir != betaDir {
-		t.Fatalf("replacement dir = %q, want %q", replacement.dir, betaDir)
+	if replacement.Dir != betaDir {
+		t.Fatalf("replacement dir = %q, want %q", replacement.Dir, betaDir)
 	}
-	betaWorker, ok := replacement.runtimeCfg.Worker("executor")
+	betaWorker, ok := replacement.RuntimeCfg.Worker("executor")
 	if !ok {
 		t.Fatal("expected beta executor worker")
 	}
@@ -2712,11 +2708,11 @@ func TestNewLocalModelDomain_WiresProcessWideModelHost(t *testing.T) {
 	domain := newRuntimeLocalModelDependencies(&FactoryServiceConfig{
 		ModelCacheDir: t.TempDir(),
 	})
-	if domain.host == nil {
+	if domain.Host == nil {
 		t.Fatal("local model domain host = nil, want process-wide modelhost.Host")
 	}
-	if _, ok := domain.host.(*modelhost.CatalogHost); !ok {
-		t.Fatalf("host type = %T, want *modelhost.CatalogHost", domain.host)
+	if _, ok := domain.Host.(*modelhost.CatalogHost); !ok {
+		t.Fatalf("host type = %T, want *modelhost.CatalogHost", domain.Host)
 	}
 }
 
@@ -2740,7 +2736,7 @@ func TestBuildFactoryService_StartupModelHostMatchesRuntimeBundle(t *testing.T) 
 	if startupHost == nil {
 		t.Fatal("startup model host = nil")
 	}
-	if svc.startupBundle != nil && svc.startupBundle.modelHost != startupHost {
+	if svc.startupBundle != nil && svc.startupBundle.ModelHost != startupHost {
 		t.Fatal("startup bundle model host does not match service collaborator host")
 	}
 }
