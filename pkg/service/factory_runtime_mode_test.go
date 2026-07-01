@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
@@ -29,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
 
@@ -1263,6 +1265,31 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	}
 }
 
+func TestBuildFactoryService_WiresSessionGatewayCollaborator(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessionGateway == nil {
+		t.Fatal("expected session gateway collaborator on FactoryService")
+	}
+	if _, ok := svc.sessionGateway.(*factorysessionservice.Service); !ok {
+		t.Fatalf("session gateway type = %T, want *factorysessionservice.Service", svc.sessionGateway)
+	}
+}
+
 func TestFactoryService_SaveFactoryForSession_DelegatesToInjectedFactorySave(t *testing.T) {
 	t.Parallel()
 
@@ -1513,6 +1540,159 @@ func (s *stubModelService) InvokeModel(_ context.Context, modelName string, requ
 	return s.invokeResult, s.invokeErr
 }
 
+type stubSessionGateway struct {
+	openResult         factoryapi.OpenFactorySessionResponse
+	openFromFolder     *FactorySessionOpenResult
+	listSessionsResult factoryapi.ListFactorySessionsResponse
+	getSessionResult   factoryapi.FactorySession
+	pauseResult        factoryapi.FactorySessionLifecycleControlResponse
+	resumeResult       factoryapi.FactorySessionLifecycleControlResponse
+	durablePauseResult factoryapi.FactorySessionLifecycleControlResponse
+	durableCancelResult factoryapi.FactorySessionLifecycleControlResponse
+	calls              []string
+	folderPaths        []string
+	sessionIDs           []string
+}
+
+func (s *stubSessionGateway) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	s.calls = append(s.calls, "open-session")
+	if request.FolderPath != "" {
+		s.folderPaths = append(s.folderPaths, request.FolderPath)
+	}
+	return s.openResult, nil
+}
+
+func (s *stubSessionGateway) OpenFactorySessionFromFolder(_ context.Context, folderPath string, _ *FactorySessionTargetRef, _ bool, _ bool) (*FactorySessionOpenResult, error) {
+	s.calls = append(s.calls, "open-session-from-folder")
+	s.folderPaths = append(s.folderPaths, folderPath)
+	if s.openFromFolder != nil {
+		return s.openFromFolder, nil
+	}
+	return &FactorySessionOpenResult{SessionID: "session-from-folder"}, nil
+}
+
+func (s *stubSessionGateway) ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	s.calls = append(s.calls, "list-sessions")
+	return s.listSessionsResult, nil
+}
+
+func (s *stubSessionGateway) GetFactorySession(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	s.calls = append(s.calls, "get-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.getSessionResult, nil
+}
+
+func (s *stubSessionGateway) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	sessionID string,
+	_ *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	s.calls = append(s.calls, "get-session-sync-preflight")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return factoryapi.FactorySessionSyncPreflightResponse{}, nil
+}
+
+func (s *stubSessionGateway) GetFactorySessionResult(_ context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+	s.calls = append(s.calls, "get-session-result")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return factoryapi.FactorySessionLiveResult{}, nil
+}
+
+func (s *stubSessionGateway) GetFactorySessionPartialResult(_ context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+	s.calls = append(s.calls, "get-session-partial-result")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return factoryapi.FactorySessionPartialResult{}, nil
+}
+
+func (s *stubSessionGateway) PauseLiveFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "pause-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.pauseResult, nil
+}
+
+func (s *stubSessionGateway) ResumeLiveFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "resume-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.resumeResult, nil
+}
+
+func (s *stubSessionGateway) CloseFactorySession(_ context.Context, sessionID string) error {
+	s.calls = append(s.calls, "close-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return nil
+}
+
+func (s *stubSessionGateway) PauseDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "pause-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) ResumeDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "resume-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) CancelDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "cancel-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durableCancelResult, nil
+}
+
+func (s *stubSessionGateway) TerminateDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "terminate-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durableCancelResult, nil
+}
+
+func (s *stubSessionGateway) ApproveDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "approve-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) RetryDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "retry-durable-dispatch")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) InterruptDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "interrupt-durable-dispatch")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) SubscribeSessionResponseStream(string, string, int64) (*factorysessions.SessionResponseStreamSubscription, error) {
+	s.calls = append(s.calls, "subscribe-response-stream")
+	return nil, nil
+}
+
+func (s *stubSessionGateway) SessionResponseStreamDispatchIDs(string) ([]string, error) {
+	s.calls = append(s.calls, "response-stream-dispatch-ids")
+	return nil, nil
+}
+
+func (s *stubSessionGateway) CloseSessionResponseStreams(*factorysessions.LiveSession) {
+	s.calls = append(s.calls, "close-response-streams")
+}
+
+func (s *stubSessionGateway) JavaScriptCheckpointStore(*factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
+	s.calls = append(s.calls, "javascript-checkpoint-store")
+	return nil
+}
+
+func (s *stubSessionGateway) InferenceProgressPublisherFactory(*zap.Logger) func(string) workerprovider.InferenceProgressPublisher {
+	s.calls = append(s.calls, "inference-progress-publisher-factory")
+	return nil
+}
+
+func (s *stubSessionGateway) DispatchCompletionObserverFactory() func(string) func(string) {
+	s.calls = append(s.calls, "dispatch-completion-observer-factory")
+	return nil
+}
+
 type stubFactoryCoordinator struct {
 	listSessionsResult factoryapi.ListFactorySessionsResponse
 	getSessionResult   factoryapi.FactorySession
@@ -1719,19 +1899,20 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubFactoryCoordinator{
-		listSessionsResult: factoryapi.ListFactorySessionsResponse{
-			Sessions: []factoryapi.FactorySessionSummary{{Id: "session-a"}},
-		},
-		openResult:       factoryapi.OpenFactorySessionResponse{},
 		workSubmitResult: interfaces.WorkRequestSubmitResult{RequestID: "request-1"},
 		moveResult:       interfaces.OperatorMoveResult{WorkID: "move-1"},
 		eventStream:      &interfaces.FactoryEventStream{},
 		engineSnapshot:   &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusIdle},
 	}
+	gatewayStub := &stubSessionGateway{
+		listSessionsResult: factoryapi.ListFactorySessionsResponse{
+			Sessions: []factoryapi.FactorySessionSummary{{Id: "session-a"}},
+		},
+	}
 	definitions := &recordingFactoryDefinitions{
 		sessionFactory: factoryapi.Factory{Name: "beta"},
 	}
-	svc := &FactoryService{coordinator: stub, definitions: definitions}
+	svc := &FactoryService{coordinator: stub, definitions: definitions, sessionGateway: gatewayStub}
 
 	listed, err := svc.ListFactorySessions(context.Background())
 	if err != nil {
@@ -1746,6 +1927,30 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	}
 	if err := svc.CloseFactorySession(context.Background(), "session-a"); err != nil {
 		t.Fatalf("CloseFactorySession: %v", err)
+	}
+	if _, err := svc.PauseLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+	if _, err := svc.ResumeLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
+	if _, err := svc.PauseDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseDurableFactorySession: %v", err)
+	}
+	if _, err := svc.CancelDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("CancelDurableFactorySession: %v", err)
+	}
+	if _, err := svc.GetFactorySessionSyncPreflight(context.Background(), "session-a", nil); err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
+	}
+	if _, err := svc.GetFactorySessionResult(context.Background(), "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionResult: %v", err)
+	}
+	if _, err := svc.GetFactorySessionPartialResult(context.Background(), "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionPartialResult: %v", err)
+	}
+	if _, err := svc.SubscribeSessionResponseStream("session-a", "dispatch-1", 0); err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
 	}
 	if err := svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
 		t.Fatalf("ActivateNamedFactory: %v", err)
@@ -1777,8 +1982,11 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if snapshot == nil || snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
 		t.Fatalf("GetEngineStateSnapshotForSession result = %#v, want delegated idle snapshot", snapshot)
 	}
-	if strings.Join(stub.calls[:9], ",") != "list-sessions,open-session,open-session-from-folder,close-session,activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
-		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence", stub.calls)
+	if strings.Join(stub.calls, ",") != "activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
+		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence without open, read, or close methods", stub.calls)
+	}
+	if strings.Join(gatewayStub.calls, ",") != "list-sessions,open-session,open-session-from-folder,close-session,pause-session,resume-session,pause-durable-session,cancel-durable-session,get-session-sync-preflight,get-session-result,get-session-partial-result,subscribe-response-stream" {
+		t.Fatalf("session gateway calls = %#v, want delegated read, open, lifecycle, preflight, result, and stream sequence", gatewayStub.calls)
 	}
 	if len(stub.runtimeNames) != 1 || stub.runtimeNames[0] != "gamma" {
 		t.Fatalf("activation targets = %#v, want gamma", stub.runtimeNames)
