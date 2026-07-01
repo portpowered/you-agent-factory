@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  classifyCheckpointIdentityMismatch,
+  identityMismatchDiagnostic,
+  silentReplayRecoveryDiagnostic,
+} from "./diagnostics";
+
+describe("session-persistence-diagnostics", () => {
+  it("classifies backend scope changes separately from stream generation changes", () => {
+    expect(
+      classifyCheckpointIdentityMismatch(
+        {
+          backendScopeID: "backend-a",
+          factorySessionID: "session-a",
+          streamGenerationID: "stream-a",
+        },
+        {
+          backendScopeID: "backend-b",
+          factorySessionID: "session-a",
+          streamGenerationID: "stream-a",
+        },
+      ),
+    ).toBe("backend_scope_changed");
+
+    expect(
+      classifyCheckpointIdentityMismatch(
+        {
+          backendScopeID: "backend-a",
+          factorySessionID: "session-a",
+          streamGenerationID: "stream-a",
+        },
+        {
+          backendScopeID: "backend-a",
+          factorySessionID: "session-a",
+          streamGenerationID: "stream-b",
+        },
+      ),
+    ).toBe("stream_generation_changed");
+  });
+
+  it("builds silent replay diagnostics without a reconnect cursor", () => {
+    expect(
+      silentReplayRecoveryDiagnostic(
+        {
+          backendScopeID: "backend-a",
+          factorySessionID: "session-a",
+          streamGenerationID: "stream-a",
+        },
+        "session-a",
+      ),
+    ).toEqual({
+      reason: "cursor_stale",
+      recoveryAction: "replay_without_cursor",
+      requestedSessionID: "session-a",
+      scope: {
+        backendScopeID: "backend-a",
+        factorySessionID: "session-a",
+        streamGenerationID: "stream-a",
+      },
+    });
+  });
+
+  it("records previous and current scope for identity mismatch diagnostics", () => {
+    expect(
+      identityMismatchDiagnostic(
+        {
+          backendScopeID: "backend-a",
+          factorySessionID: "session-a",
+          streamGenerationID: "stream-a",
+        },
+        {
+          backendScopeID: "backend-a",
+          factorySessionID: "session-b",
+          streamGenerationID: "stream-b",
+        },
+        "~default",
+      ),
+    ).toEqual({
+      reason: "session_remapped",
+      recoveryAction: "clear_stream_derived_state",
+      requestedSessionID: "~default",
+      previousScope: {
+        backendScopeID: "backend-a",
+        factorySessionID: "session-a",
+        streamGenerationID: "stream-a",
+      },
+      scope: {
+        backendScopeID: "backend-a",
+        factorySessionID: "session-b",
+        streamGenerationID: "stream-b",
+      },
+    });
+  });
+});

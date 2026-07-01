@@ -37,6 +37,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -3044,6 +3045,210 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 	}
 	if response.ReconnectCursor.Provided || response.ReconnectCursor.ValidForStreamGeneration {
 		t.Fatalf("reconnect cursor = %#v, want absent and invalid", response.ReconnectCursor)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_EmitsInvalidationDiagnostics(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	core, observed := observer.New(zap.InfoLevel)
+	harness.svc.logger = zap.New(core)
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	eventHistory := liveSessionHandle(session).Bundle.EventHistory
+	recorded := eventHistory.Events()
+	if len(recorded) == 0 {
+		t.Fatal("event history = empty, want initial structure event")
+	}
+
+	_, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+		AfterEventID: "factory-event/missing-preflight-cursor",
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(stale): %v", err)
+	}
+
+	staleReason := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"reason",
+	)
+	if staleReason != string(sessionpersistence.ReasonCursorStale) {
+		t.Fatalf("logged reason = %q, want %q", staleReason, sessionpersistence.ReasonCursorStale)
+	}
+	staleRecovery := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"recovery_action",
+	)
+	if staleRecovery != string(sessionpersistence.RecoveryReplayWithoutCursor) {
+		t.Fatalf("logged recovery_action = %q, want %q", staleRecovery, sessionpersistence.RecoveryReplayWithoutCursor)
+	}
+
+	_, err = harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(missing): %v", err)
+	}
+	missingReason := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"reason",
+	)
+	if missingReason != string(sessionpersistence.ReasonSessionNotFound) {
+		t.Fatalf("latest logged reason = %q, want %q", missingReason, sessionpersistence.ReasonSessionNotFound)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_HTTPReturnsTypedRecoveryOutcomes(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+	server := newLiveSessionStatusTestServer(t, harness.svc)
+	defer server.Close()
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	eventHistory := liveSessionHandle(session).Bundle.EventHistory
+	recorded := eventHistory.Events()
+	if len(recorded) == 0 {
+		t.Fatal("event history = empty, want initial structure event")
+	}
+
+	validURL := server.URL + "/factory-sessions/" + defaultFactorySessionID + "/sync-preflight?after_event_id=" + recorded[0].Id
+	validResp, err := http.Get(validURL)
+	if err != nil {
+		t.Fatalf("GET valid sync preflight: %v", err)
+	}
+	defer validResp.Body.Close()
+	if validResp.StatusCode != http.StatusOK {
+		t.Fatalf("valid sync preflight status = %d, want 200", validResp.StatusCode)
+	}
+	var valid factoryapi.FactorySessionSyncPreflightResponse
+	if err := decodeJSONResponse(validResp, &valid); err != nil {
+		t.Fatalf("decode valid sync preflight: %v", err)
+	}
+	assertSyncPreflightReasonCode(t, valid, factoryapi.Ok, "http-valid")
+	assertSyncPreflightCheckpointReusable(t, valid, true, "http-valid")
+	assertSyncPreflightCursorState(t, valid, true, true, "http-valid")
+
+	staleURL := server.URL + "/factory-sessions/" + defaultFactorySessionID + "/sync-preflight?after_event_id=factory-event/missing-preflight-cursor"
+	staleResp, err := http.Get(staleURL)
+	if err != nil {
+		t.Fatalf("GET stale sync preflight: %v", err)
+	}
+	defer staleResp.Body.Close()
+	if staleResp.StatusCode != http.StatusOK {
+		t.Fatalf("stale sync preflight status = %d, want 200 (typed outcome, not transport failure)", staleResp.StatusCode)
+	}
+	var stale factoryapi.FactorySessionSyncPreflightResponse
+	if err := decodeJSONResponse(staleResp, &stale); err != nil {
+		t.Fatalf("decode stale sync preflight: %v", err)
+	}
+	assertSyncPreflightReasonCode(t, stale, factoryapi.CursorStale, "http-stale")
+	assertSyncPreflightCheckpointReusable(t, stale, false, "http-stale")
+	assertSyncPreflightCursorState(t, stale, true, false, "http-stale")
+
+	missingURL := server.URL + "/factory-sessions/live-session-missing-001/sync-preflight"
+	missingResp, err := http.Get(missingURL)
+	if err != nil {
+		t.Fatalf("GET missing-session sync preflight: %v", err)
+	}
+	defer missingResp.Body.Close()
+	if missingResp.StatusCode != http.StatusOK {
+		t.Fatalf("missing-session sync preflight status = %d, want 200 (typed outcome, not transport failure)", missingResp.StatusCode)
+	}
+	var missing factoryapi.FactorySessionSyncPreflightResponse
+	if err := decodeJSONResponse(missingResp, &missing); err != nil {
+		t.Fatalf("decode missing-session sync preflight: %v", err)
+	}
+	if missing.ReasonCode != factoryapi.SessionNotFound {
+		t.Fatalf("missing-session reasonCode = %q, want %q", missing.ReasonCode, factoryapi.SessionNotFound)
+	}
+	if missing.CheckpointReusable {
+		t.Fatal("missing-session checkpointReusable = true, want false")
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_HTTPDefaultAliasRemapReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+	server := newLiveSessionStatusTestServer(t, harness.svc)
+	defer server.Close()
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+
+	if err := harness.svc.CloseFactorySession(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("CloseFactorySession(default): %v", err)
+	}
+
+	remapURL := server.URL + "/factory-sessions/" + defaultFactorySessionID + "/sync-preflight"
+	remapResp, err := http.Get(remapURL)
+	if err != nil {
+		t.Fatalf("GET remap sync preflight: %v", err)
+	}
+	defer remapResp.Body.Close()
+	if remapResp.StatusCode != http.StatusOK {
+		t.Fatalf("remap sync preflight status = %d, want 200 (typed outcome, not transport failure)", remapResp.StatusCode)
+	}
+	var remap factoryapi.FactorySessionSyncPreflightResponse
+	if err := decodeJSONResponse(remapResp, &remap); err != nil {
+		t.Fatalf("decode remap sync preflight: %v", err)
+	}
+	if remap.ReasonCode != factoryapi.LogicalSessionRemap {
+		t.Fatalf("remap reasonCode = %q, want %q", remap.ReasonCode, factoryapi.LogicalSessionRemap)
+	}
+	if remap.CheckpointReusable {
+		t.Fatal("remap checkpointReusable = true, want false")
+	}
+	if remap.FactorySessionId == nil || *remap.FactorySessionId != betaSessionID {
+		t.Fatalf("remap factorySessionId = %#v, want %q", remap.FactorySessionId, betaSessionID)
+	}
+}
+
+func TestFactoryService_ActivateNamedFactory_EmitsIdentityMismatchInvalidationDiagnostic(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta", "gamma"},
+	})
+	defer harness.stop(t)
+
+	core, observed := observer.New(zap.InfoLevel)
+	harness.svc.logger = zap.New(core)
+
+	harness.waitIdle(t, defaultFactorySessionID, "default runtime")
+	if err := harness.svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory(gamma): %v", err)
+	}
+
+	reason := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"reason",
+	)
+	if reason != string(sessionpersistence.ReasonStreamGenerationChanged) &&
+		reason != string(sessionpersistence.ReasonBackendScopeChanged) {
+		t.Fatalf(
+			"logged reason = %q, want %q or %q",
+			reason,
+			sessionpersistence.ReasonStreamGenerationChanged,
+			sessionpersistence.ReasonBackendScopeChanged,
+		)
+	}
+	recoveryAction := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"recovery_action",
+	)
+	if recoveryAction != string(sessionpersistence.RecoveryClearStreamDerivedState) {
+		t.Fatalf("logged recovery_action = %q, want %q", recoveryAction, sessionpersistence.RecoveryClearStreamDerivedState)
+	}
+	if scopeFactorySessionID := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"scope_factory_session_id",
+	); scopeFactorySessionID != defaultFactorySessionID {
+		t.Fatalf("scope_factory_session_id = %q, want %q", scopeFactorySessionID, defaultFactorySessionID)
 	}
 }
 
