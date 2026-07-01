@@ -329,6 +329,88 @@ func TestBuildFactoryService_MalformedConfiguredScopeFailsStartup(t *testing.T) 
 	}
 }
 
+func TestBuildFactoryService_RestartPreservesBackendScopeThroughSessionIdentityAPI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	homeDir := t.TempDir()
+	configPath := systemconfig.DefaultConfigPath(homeDir)
+	if _, err := os.Stat(configPath); err == nil {
+		t.Fatal("expected missing system config before first startup")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("Stat: %v", err)
+	}
+
+	build := func() *FactoryService {
+		t.Helper()
+		svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+			Dir:                                     dir,
+			RuntimeMode:                             interfaces.RuntimeModeService,
+			Logger:                                  zap.NewNop(),
+			SystemConfigHomeDir:                     homeDir,
+			MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		})
+		if err != nil {
+			t.Fatalf("BuildFactoryService: %v", err)
+		}
+		return svc
+	}
+
+	first := build()
+	if !systemconfig.IsLocalBackendScopeID(first.cfg.BackendScopeID) {
+		t.Fatalf("first BackendScopeID = %q, want local-<uuid>", first.cfg.BackendScopeID)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile after first startup: %v", err)
+	}
+	var persisted struct {
+		BackendScopeID string `json:"backendScopeID"`
+	}
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if persisted.BackendScopeID != first.cfg.BackendScopeID {
+		t.Fatalf("persisted backendScopeID = %q, want %q", persisted.BackendScopeID, first.cfg.BackendScopeID)
+	}
+
+	second := build()
+	if second.cfg.BackendScopeID != first.cfg.BackendScopeID {
+		t.Fatalf("restart backendScopeID = %q, want %q", second.cfg.BackendScopeID, first.cfg.BackendScopeID)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- second.Run(runCtx)
+	}()
+	waitForSessionRuntimeStatus(t, second, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime idle")
+
+	server := httptest.NewServer(api.NewServer(second, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	session := getLiveFactorySessionForBackendScopeTest(t, server.URL, defaultFactorySessionID)
+	if session.Runtime.StreamIdentity == nil {
+		t.Fatal("streamIdentity = nil, want persisted backend scope identity")
+	}
+	if session.Runtime.StreamIdentity.BackendScopeID != first.cfg.BackendScopeID {
+		t.Fatalf(
+			"session streamIdentity.backendScopeID = %q, want persisted %q after restart",
+			session.Runtime.StreamIdentity.BackendScopeID,
+			first.cfg.BackendScopeID,
+		)
+	}
+
+	cancelRun()
+	if err := <-runErrCh; err != nil && err != context.Canceled {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
 func TestBuildFactoryService_ExposesPersistedBackendScopeThroughSessionIdentitySurfaces(t *testing.T) {
 	t.Parallel()
 

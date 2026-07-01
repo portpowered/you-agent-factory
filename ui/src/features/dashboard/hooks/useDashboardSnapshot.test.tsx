@@ -643,9 +643,13 @@ describe("useDashboardSnapshot composer", () => {
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
-    expect(replayHarness.getStreams()[0]?.url).toBe(
+    const streamURL = replayHarness.getStreams()[0]?.url ?? "";
+    expect(streamURL).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
+    expect(streamURL).not.toContain("after_event_id");
+    expect(streamURL).not.toContain("after_sequence");
+    expect(streamURL).not.toContain("checkpoint-event-7");
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
     expect(useDashboardStreamStore.getState().backendRuntimeCacheScope).toBe(
       BACKEND_SCOPE_B,
