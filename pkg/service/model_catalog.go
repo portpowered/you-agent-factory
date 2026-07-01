@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -72,14 +73,21 @@ type modelServiceDependencies struct {
 }
 
 type runtimeModelService struct {
-	deps modelServiceDependencies
+	deps        modelServiceDependencies
+	catalogList *modelsservice.Service
 }
 
 var _ ModelService = (*runtimeModelService)(nil)
 var _ apisurface.ModelAPI = (*runtimeModelService)(nil)
 
 func newModelService(deps modelServiceDependencies) ModelService {
-	return &runtimeModelService{deps: deps}
+	return &runtimeModelService{
+		deps: deps,
+		catalogList: modelsservice.New(modelsservice.Dependencies{
+			RuntimeConfig: deps.runtimeConfig,
+			ModelHost:     deps.modelHost,
+		}),
+	}
 }
 
 func newFactoryModelService(fs *FactoryService) ModelService {
@@ -149,7 +157,10 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 }
 
 func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	return modelhost.ListModelsWithHost(ctx, s.modelHost(), s.currentRuntimeConfig())
+	if s == nil || s.catalogList == nil {
+		return modelsservice.New(modelsservice.Dependencies{}).ListModels(ctx)
+	}
+	return s.catalogList.ListModels(ctx)
 }
 
 func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
