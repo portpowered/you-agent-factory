@@ -488,6 +488,7 @@ func assembleRuntimeBundle(
 		dir:               input.dir,
 		folderPath:        input.folderPath,
 		runtimeInstanceID: input.runtimeInstanceID,
+		backendScopeID:    serviceBackendScopeID(input.cfg),
 		startedAtUTC:      input.clock.Now().UTC(),
 		eventHistory:      eventHistory,
 		net:               net,

@@ -39,6 +39,11 @@ primary-result behavior.
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
   `pkg/config/operatorconfig` and `pkg/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
+- Persisted local `backendScopeID` values live in the same
+  `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
+  logic in `pkg/config/systemconfig`, resolve it during `service.BuildFactoryCore`
+  before session identity is exposed, and keep `pkg/config/operatorconfig` tolerant
+  of the top-level `backendScopeID` field so operator-default parsing still works.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

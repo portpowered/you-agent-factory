@@ -1120,7 +1120,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	projectionCtx := factorysessions.ProjectionContext{
 		Session:          session,
 		FactoryCfg:       factoryCfg,
-		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).runtimeInstanceID),
+		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).backendScopeID),
 		RuntimeStartedAt: liveSessionBundle(session).startedAtUTC,
 		Now:              time.Now().UTC(),
 	}
@@ -1324,10 +1324,14 @@ func newFactorySessionSyncPreflightResponse(
 }
 
 func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.LiveSession) string {
+	_ = session
 	if fs != nil && fs.cfg != nil {
-		if runtimeInstanceID := strings.TrimSpace(fs.cfg.RuntimeInstanceID); runtimeInstanceID != "" {
-			return runtimeInstanceID
+		if backendScopeID := strings.TrimSpace(fs.cfg.BackendScopeID); backendScopeID != "" {
+			return backendScopeID
 		}
+	}
+	if bundle := liveSessionBundle(session); bundle != nil {
+		return strings.TrimSpace(bundle.backendScopeID)
 	}
 	return ""
 }

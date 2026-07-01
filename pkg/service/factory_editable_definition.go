@@ -704,6 +704,9 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 	if err != nil {
 		return nil, err
 	}
+	if err := ensureServiceBackendScope(cfg, root.BaseLogger); err != nil {
+		return nil, err
+	}
 	load, err := LoadFactoryConfigForCompose(cfg, root)
 	if err != nil {
 		return nil, err
