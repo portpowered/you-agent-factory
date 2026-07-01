@@ -210,45 +210,6 @@ func SilentReplayRecoveryDiagnostic(
 	}
 }
 
-func StreamGenerationChangedDiagnostic(
-	scope IdentityScope,
-	previousScope IdentityScope,
-	requestedSessionID string,
-) InvalidationDiagnostic {
-	return InvalidationDiagnostic{
-		Reason:             ReasonStreamGenerationChanged,
-		RecoveryAction:     RecoveryClearStreamDerivedState,
-		Scope:              NormalizeScope(scope),
-		PreviousScope:      scopePointer(NormalizeScope(previousScope)),
-		RequestedSessionID: strings.TrimSpace(requestedSessionID),
-	}
-}
-
-func BackendScopeChangedDiagnostic(
-	scope IdentityScope,
-	previousScope IdentityScope,
-	requestedSessionID string,
-) InvalidationDiagnostic {
-	return InvalidationDiagnostic{
-		Reason:             ReasonBackendScopeChanged,
-		RecoveryAction:     RecoveryClearStreamDerivedState,
-		Scope:              NormalizeScope(scope),
-		PreviousScope:      scopePointer(NormalizeScope(previousScope)),
-		RequestedSessionID: strings.TrimSpace(requestedSessionID),
-	}
-}
-
-func UserClearedSessionsDiagnostic(
-	scope IdentityScope,
-	requestedSessionID string,
-) InvalidationDiagnostic {
-	return InvalidationDiagnostic{
-		Reason:             ReasonUserClearedSessions,
-		RecoveryAction:     RecoveryClearCheckpoint,
-		Scope:              NormalizeScope(scope),
-		RequestedSessionID: strings.TrimSpace(requestedSessionID),
-	}
-}
 
 func IdentityMismatchDiagnostic(
 	previous IdentityScope,
