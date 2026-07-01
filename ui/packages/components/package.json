@@ -1,0 +1,21 @@
+{
+  "name": "youagentfactory/components",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "*.css",
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "test": "vitest run --config vitest.config.ts && bun run check:package-boundary",
+    "typecheck": "tsc -b --noEmit --pretty false"
+  }
+}
