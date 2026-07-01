@@ -824,7 +824,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		}
 	}
 	fs.closeSessionResponseStreams(session)
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
+	replacementSession := factorysessions.NewLiveSession(
 		session.ID,
 		replacement.dir,
 		session.FolderPath,
@@ -833,7 +833,10 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		&liveSessionState{handle: replacementHandle, spec: liveSessionBuildSpec(session)},
 		session.IsDefault,
 		session.Project,
-	), isActiveSession)
+	)
+	replacementSession.RuntimeFactorySessionID = session.RuntimeFactorySessionID
+	factorysessions.EnsureRuntimeFactorySessionID(replacementSession)
+	fs.sessions.Upsert(replacementSession, isActiveSession)
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
@@ -1474,16 +1477,17 @@ func factorySessionNormalizedLogicalTarget(
 }
 
 func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
-	factorySessionID := factorysessions.CanonicalFactorySessionID(session)
-	backendScopeID := factorySessionBackendScopeID(fs, session)
-	switch {
-	case backendScopeID != "" && factorySessionID != "":
-		return backendScopeID + "::" + factorySessionID
-	case factorySessionID != "":
-		return factorySessionID
-	default:
-		return backendScopeID
+	if fs != nil && session != nil {
+		if snapshot, err := fs.GetEngineStateSnapshotForSession(context.Background(), session.ID); err == nil {
+			if streamGenerationID := strings.TrimSpace(snapshot.StreamGenerationID); streamGenerationID != "" {
+				return streamGenerationID
+			}
+		}
 	}
+	if bundle := liveSessionBundle(session); bundle != nil && !bundle.startedAtUTC.IsZero() {
+		return bundle.startedAtUTC.UTC().Format(time.RFC3339Nano)
+	}
+	return ""
 }
 
 func stringPointer(value string) *string {

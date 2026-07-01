@@ -864,10 +864,21 @@ func TestFactoryService_ActivateNamedFactory_RefreshesLiveSessionIdentityAcrossR
 	defer server.Close()
 
 	defaultSessionBefore := getLiveFactorySession(t, server.URL, defaultFactorySessionID)
+	defaultRuntimeUUIDBefore := strings.TrimSpace(defaultSessionBefore.Runtime.StreamIdentity.FactorySessionID)
+	if !factorysessions.IsUUIDFactorySessionID(defaultRuntimeUUIDBefore) {
+		t.Fatalf("default runtime factorySessionID before activation = %q, want UUID", defaultRuntimeUUIDBefore)
+	}
 	defaultIDBefore := requireLiveSessionStreamGenerationID(t, defaultSessionBefore, defaultFactorySessionID, "before activation")
 	defaultHandshakeBefore := getLiveSessionEventStreamGenerationID(t, server.URL, defaultFactorySessionID)
 	if defaultHandshakeBefore != defaultIDBefore {
 		t.Fatalf("default handshake stream generation id before activation = %q, want session read id %q", defaultHandshakeBefore, defaultIDBefore)
+	}
+	preflightBefore, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(default before): %v", err)
+	}
+	if preflightBefore.StreamGenerationId == nil || *preflightBefore.StreamGenerationId != defaultIDBefore {
+		t.Fatalf("default preflight stream generation id before activation = %#v, want session read %q", preflightBefore.StreamGenerationId, defaultIDBefore)
 	}
 
 	betaSessionBefore := getLiveFactorySession(t, server.URL, betaSessionID)
@@ -882,6 +893,10 @@ func TestFactoryService_ActivateNamedFactory_RefreshesLiveSessionIdentityAcrossR
 	}
 
 	defaultSessionAfter := getLiveFactorySession(t, server.URL, defaultFactorySessionID)
+	defaultRuntimeUUIDAfter := strings.TrimSpace(defaultSessionAfter.Runtime.StreamIdentity.FactorySessionID)
+	if defaultRuntimeUUIDAfter != defaultRuntimeUUIDBefore {
+		t.Fatalf("default runtime factorySessionID after activation = %q, want preserved %q", defaultRuntimeUUIDAfter, defaultRuntimeUUIDBefore)
+	}
 	defaultIDAfter := requireLiveSessionStreamGenerationID(t, defaultSessionAfter, defaultFactorySessionID, "after activation")
 	if defaultIDAfter == defaultIDBefore {
 		t.Fatalf("default session stream generation id after activation = %q, want distinct from %q", defaultIDAfter, defaultIDBefore)
@@ -889,6 +904,13 @@ func TestFactoryService_ActivateNamedFactory_RefreshesLiveSessionIdentityAcrossR
 	defaultHandshakeAfter := getLiveSessionEventStreamGenerationID(t, server.URL, defaultFactorySessionID)
 	if defaultHandshakeAfter != defaultIDAfter {
 		t.Fatalf("default handshake stream generation id after activation = %q, want session read id %q", defaultHandshakeAfter, defaultIDAfter)
+	}
+	preflightAfter, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(default after): %v", err)
+	}
+	if preflightAfter.StreamGenerationId == nil || *preflightAfter.StreamGenerationId != defaultIDAfter {
+		t.Fatalf("default preflight stream generation id after activation = %#v, want session read %q", preflightAfter.StreamGenerationId, defaultIDAfter)
 	}
 
 	betaSessionAfter := getLiveFactorySession(t, server.URL, betaSessionID)
@@ -3023,8 +3045,15 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
 		t.Fatalf("logicalSessionKeyId = %v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
 	}
-	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, betaSessionID) {
-		t.Fatalf("streamGenerationId = %#v, want promoted session-scoped generation", response.StreamGenerationId)
+	betaSessionRead, err := harness.svc.GetFactorySession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession(beta): %v", err)
+	}
+	if betaSessionRead.Runtime.StreamIdentity == nil || strings.TrimSpace(betaSessionRead.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("beta session streamIdentity = %#v, want non-empty stream generation", betaSessionRead.Runtime.StreamIdentity)
+	}
+	if response.StreamGenerationId == nil || *response.StreamGenerationId != betaSessionRead.Runtime.StreamIdentity.StreamGenerationID {
+		t.Fatalf("streamGenerationId = %#v, want beta session read %q", response.StreamGenerationId, betaSessionRead.Runtime.StreamIdentity.StreamGenerationID)
 	}
 	if response.ReconnectCursor.Provided || response.ReconnectCursor.ValidForStreamGeneration {
 		t.Fatalf("reconnect cursor = %#v, want absent and invalid", response.ReconnectCursor)
@@ -3279,6 +3308,16 @@ func assertSyncPreflightDefaultSessionIdentity(
 	wantStreamGenerationID := factorySessionStreamGenerationID(fs, session)
 	if response.StreamGenerationId == nil || *response.StreamGenerationId != wantStreamGenerationID {
 		t.Fatalf("streamGenerationId = %#v, want %q", response.StreamGenerationId, wantStreamGenerationID)
+	}
+	sessionRead, err := fs.GetFactorySession(context.Background(), session.ID)
+	if err != nil {
+		t.Fatalf("GetFactorySession(%q): %v", session.ID, err)
+	}
+	if sessionRead.Runtime.StreamIdentity == nil || strings.TrimSpace(sessionRead.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("session streamIdentity = %#v, want non-empty stream generation", sessionRead.Runtime.StreamIdentity)
+	}
+	if *response.StreamGenerationId != sessionRead.Runtime.StreamIdentity.StreamGenerationID {
+		t.Fatalf("streamGenerationId = %#v, want session read %q", response.StreamGenerationId, sessionRead.Runtime.StreamIdentity.StreamGenerationID)
 	}
 	if response.NormalizedTarget == nil || response.NormalizedTarget.Kind != factoryapi.FactorySessionLogicalTargetKindDefault {
 		t.Fatalf("normalizedTarget = %#v, want default logical target", response.NormalizedTarget)
