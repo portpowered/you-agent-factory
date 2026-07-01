@@ -27,7 +27,6 @@ import {
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
-  createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
@@ -405,6 +404,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
+    useDashboardStreamStore.getState().resetStreamState();
     resetCurrentFactoryDocumentMock();
   });
 
@@ -420,9 +420,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useExportDialogStore.setState({
       isExportDialogOpen: false,
     });
-    useDashboardStreamStore.setState({
-      streamState: createDefaultDashboardStreamState(),
-    });
+    useDashboardStreamStore.getState().resetStreamState();
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
