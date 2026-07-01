@@ -2950,7 +2950,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 	assertSyncPreflightReasonCode(t, valid, factoryapi.Ok, "valid")
 	assertSyncPreflightCheckpointReusable(t, valid, true, "valid")
 	assertSyncPreflightCursorState(t, valid, true, true, "valid")
-	assertSyncPreflightDefaultSessionIdentity(t, valid)
+	assertSyncPreflightDefaultSessionIdentity(t, harness.svc, session, valid)
 
 	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
 		AfterEventID: "factory-event/missing-preflight-cursor",
@@ -3012,7 +3012,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 		t.Fatalf("factorySessionId = %#v, want promoted beta session %q", response.FactorySessionId, betaSessionID)
 	}
 	betaSession := harness.requireSession(t, betaSessionID)
-	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(betaSession)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(harness.svc, betaSession)
 	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
 		t.Fatalf("logicalSessionKeyId = %v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
 	}
@@ -3045,7 +3045,12 @@ func assertSyncPreflightCursorState(t *testing.T, response factoryapi.FactorySes
 	}
 }
 
-func assertSyncPreflightDefaultSessionIdentity(t *testing.T, response factoryapi.FactorySessionSyncPreflightResponse) {
+func assertSyncPreflightDefaultSessionIdentity(
+	t *testing.T,
+	fs *FactoryService,
+	session *factorysessions.LiveSession,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
 	t.Helper()
 	if response.BackendScopeId == nil || strings.TrimSpace(*response.BackendScopeId) == "" {
 		t.Fatalf("backendScopeId = %#v, want non-empty", response.BackendScopeId)
@@ -3053,8 +3058,9 @@ func assertSyncPreflightDefaultSessionIdentity(t *testing.T, response factoryapi
 	if response.FactorySessionId == nil || *response.FactorySessionId != defaultFactorySessionID {
 		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, defaultFactorySessionID)
 	}
-	if response.LogicalSessionKeyId == nil || !strings.Contains(*response.LogicalSessionKeyId, "::default::") {
-		t.Fatalf("logicalSessionKeyId = %#v, want default target key", response.LogicalSessionKeyId)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(fs, session)
+	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
+		t.Fatalf("logicalSessionKeyId = %#v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
 	}
 	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, defaultFactorySessionID) {
 		t.Fatalf("streamGenerationId = %#v, want session-scoped generation", response.StreamGenerationId)

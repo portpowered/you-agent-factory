@@ -26,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
@@ -1020,7 +1021,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	session := resolved.session
 
 	response.BackendScopeId = stringPointer(factorySessionBackendScopeID(fs, session))
-	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(session))
+	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(fs, session))
 	response.FactorySessionId = stringPointer(session.ID)
 	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
 	if resolved.remapped {
@@ -1332,20 +1333,23 @@ func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.L
 	return ""
 }
 
-func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) string {
+func factorySessionLogicalSessionKeyID(fs *FactoryService, session *factorysessions.LiveSession) string {
 	if session == nil {
 		return ""
 	}
-	folderPath := filepath.Clean(strings.TrimSpace(session.FolderPath))
-	if folderPath == "." {
-		folderPath = ""
+	backendScopeID := factorySessionBackendScopeID(fs, session)
+	if backendScopeID == "" {
+		return ""
 	}
-	targetKind := strings.TrimSpace(string(session.Target.Kind))
-	targetName := strings.TrimSpace(session.Target.Name)
-	if targetKind == "" {
-		targetKind = string(factorysessions.TargetKindDefault)
+	ref, err := logicaltarget.NormalizeTargetRef(
+		backendScopeID,
+		session.FolderPath,
+		session.Target,
+	)
+	if err != nil {
+		return ""
 	}
-	return strings.Join([]string{folderPath, targetKind, targetName}, "::")
+	return logicaltarget.DeriveLogicalSessionKeyID(ref)
 }
 
 func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
