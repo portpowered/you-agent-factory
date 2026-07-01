@@ -11,10 +11,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/dataplane"
 )
 
-// Service is the canonical Factory Session application gateway for open and read behavior.
+// Service is the canonical Factory Session application gateway for open, read, and live lifecycle behavior.
 type Service struct {
-	host       Host
-	liveOpener *dataplane.LiveOpener
+	host          Host
+	liveOpener    *dataplane.LiveOpener
+	liveLifecycle *dataplane.LiveLifecycle
 }
 
 // New constructs a session gateway with explicit host and dataplane dependencies.
@@ -23,8 +24,9 @@ func New(host Host) *Service {
 		return nil
 	}
 	return &Service{
-		host:       host,
-		liveOpener: dataplane.NewLiveOpener(host),
+		host:          host,
+		liveOpener:    dataplane.NewLiveOpener(host),
+		liveLifecycle: dataplane.NewLiveLifecycle(host),
 	}
 }
 

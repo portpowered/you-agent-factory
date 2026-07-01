@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 )
@@ -68,6 +70,24 @@ func (h *openTestHost) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
 	return factorysessions.ProjectionContext{Session: session}, nil
+}
+
+func (h *openTestHost) SessionFactory(_ string) (factory.Factory, error) {
+	return nil, h.requireSessionE
+}
+
+func (h *openTestHost) StopLiveSession(_ string) error {
+	return h.requireSessionE
+}
+
+func (h *openTestHost) ObserveLiveLifecycleControl(
+	_ string,
+	_ factorysessionexecution.LifecycleControlKind,
+	_ factorysessionexecution.ControlRequest,
+	_ factorysessionexecution.LifecycleControlOutcome,
+	_ factorysessionexecution.LifecycleStatus,
+	_ error,
+) {
 }
 
 func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {

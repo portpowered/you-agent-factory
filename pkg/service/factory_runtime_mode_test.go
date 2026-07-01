@@ -1511,6 +1511,8 @@ type stubSessionGateway struct {
 	openFromFolder     *FactorySessionOpenResult
 	listSessionsResult factoryapi.ListFactorySessionsResponse
 	getSessionResult   factoryapi.FactorySession
+	pauseResult        factoryapi.FactorySessionLifecycleControlResponse
+	resumeResult       factoryapi.FactorySessionLifecycleControlResponse
 	calls              []string
 	folderPaths        []string
 	sessionIDs           []string
@@ -1542,6 +1544,24 @@ func (s *stubSessionGateway) GetFactorySession(_ context.Context, sessionID stri
 	s.calls = append(s.calls, "get-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.getSessionResult, nil
+}
+
+func (s *stubSessionGateway) PauseLiveFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "pause-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.pauseResult, nil
+}
+
+func (s *stubSessionGateway) ResumeLiveFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "resume-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.resumeResult, nil
+}
+
+func (s *stubSessionGateway) CloseFactorySession(_ context.Context, sessionID string) error {
+	s.calls = append(s.calls, "close-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return nil
 }
 
 type stubFactoryCoordinator struct {
@@ -1770,6 +1790,12 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if err := svc.CloseFactorySession(context.Background(), "session-a"); err != nil {
 		t.Fatalf("CloseFactorySession: %v", err)
 	}
+	if _, err := svc.PauseLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+	if _, err := svc.ResumeLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
 	if err := svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
 		t.Fatalf("ActivateNamedFactory: %v", err)
 	}
@@ -1800,11 +1826,11 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if snapshot == nil || snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
 		t.Fatalf("GetEngineStateSnapshotForSession result = %#v, want delegated idle snapshot", snapshot)
 	}
-	if strings.Join(stub.calls, ",") != "close-session,activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
-		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence without open or read methods", stub.calls)
+	if strings.Join(stub.calls, ",") != "activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
+		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence without open, read, or close methods", stub.calls)
 	}
-	if strings.Join(gatewayStub.calls, ",") != "list-sessions,open-session,open-session-from-folder" {
-		t.Fatalf("session gateway calls = %#v, want delegated read and open sequence", gatewayStub.calls)
+	if strings.Join(gatewayStub.calls, ",") != "list-sessions,open-session,open-session-from-folder,close-session,pause-session,resume-session" {
+		t.Fatalf("session gateway calls = %#v, want delegated read, open, and live lifecycle sequence", gatewayStub.calls)
 	}
 	if len(stub.runtimeNames) != 1 || stub.runtimeNames[0] != "gamma" {
 		t.Fatalf("activation targets = %#v, want gamma", stub.runtimeNames)

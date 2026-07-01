@@ -7,6 +7,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 )
@@ -17,6 +19,9 @@ type sessionGateway interface {
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
+	PauseLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	ResumeLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	CloseFactorySession(context.Context, string) error
 }
 
 var _ sessionGateway = (*factorysessionservice.Service)(nil)
@@ -84,6 +89,34 @@ func (h sessionGatewayHost) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, fmt.Errorf("factory service is required")
 	}
 	return h.FactoryService.buildSessionProjectionContext(ctx, session)
+}
+
+func (h sessionGatewayHost) SessionFactory(sessionID string) (factory.Factory, error) {
+	if h.FactoryService == nil {
+		return nil, fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.sessionFactory(sessionID)
+}
+
+func (h sessionGatewayHost) StopLiveSession(sessionID string) error {
+	if h.FactoryService == nil {
+		return fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.stopFactorySession(sessionID)
+}
+
+func (h sessionGatewayHost) ObserveLiveLifecycleControl(
+	sessionID string,
+	operation factorysessionexecution.LifecycleControlKind,
+	control factorysessionexecution.ControlRequest,
+	outcome factorysessionexecution.LifecycleControlOutcome,
+	status factorysessionexecution.LifecycleStatus,
+	err error,
+) {
+	if h.FactoryService == nil {
+		return
+	}
+	h.FactoryService.observeLiveLifecycleControl(sessionID, operation, control, outcome, status, err)
 }
 
 func newSessionGatewayService(fs *FactoryService) *factorysessionservice.Service {

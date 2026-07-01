@@ -10,4 +10,5 @@ type Host interface {
 	controlplane.OpenControlHost
 	controlplane.LiveReadHost
 	dataplane.LiveOpenHost
+	dataplane.LiveLifecycleHost
 }
