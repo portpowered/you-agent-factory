@@ -3,6 +3,7 @@ package agentrun
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -201,6 +202,68 @@ func TestPolicyToolExecutor_FailureDiagnosticsExcludeAbsolutePaths(t *testing.T)
 				t.Fatalf("tool diagnostics = %q, want reason %q", diagnostics, tc.wantReason)
 			}
 		})
+	}
+}
+
+func TestToolFailureReason_ClassifiesStableCodes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "not found", err: fs.ErrNotExist, want: "not_found"},
+		{name: "permission denied", err: fs.ErrPermission, want: "permission_denied"},
+		{name: "path required", err: errors.New("tool path is required"), want: "path_required"},
+		{name: "path must be relative", err: errors.New("tool path must be relative to the agent working directory"), want: "path_must_be_relative"},
+		{name: "path escape", err: errors.New("tool path cannot escape the agent working directory"), want: "path_escape_denied"},
+		{name: "invalid arguments", err: errors.New("read_file arguments must be JSON with path: invalid"), want: "invalid_arguments"},
+		{name: "working directory unavailable", err: errors.New("agent working directory is unavailable"), want: "working_directory_unavailable"},
+		{name: "unsupported tool", err: errors.New("agent tool is not supported: custom"), want: "tool_not_supported"},
+		{name: "generic failure", err: errors.New("unexpected"), want: "operation_failed"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := toolFailureReason(tc.err); got != tc.want {
+				t.Fatalf("toolFailureReason() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestToolFailureDetail_UsesRelativePathAndReason(t *testing.T) {
+	t.Parallel()
+
+	got := toolFailureDetail(ToolNameReadFile, `{"path":"notes/missing.txt"}`, fs.ErrNotExist)
+	want := "path=notes/missing.txt reason=not_found"
+	if got != want {
+		t.Fatalf("toolFailureDetail() = %q, want %q", got, want)
+	}
+}
+
+func TestToolRelativePathFromArguments_ExtractsWritePath(t *testing.T) {
+	t.Parallel()
+
+	got := toolRelativePathFromArguments(`{"path":"nested/out.txt","content":"data"}`)
+	if got != "nested/out.txt" {
+		t.Fatalf("toolRelativePathFromArguments() = %q, want nested/out.txt", got)
+	}
+}
+
+func TestSanitizeToolDiagnosticDetail_TruncatesLongValues(t *testing.T) {
+	t.Parallel()
+
+	longDetail := strings.Repeat("x", toolDiagnosticMaxLen+10)
+	got := sanitizeToolDiagnosticDetail(longDetail)
+	if len(got) <= toolDiagnosticMaxLen {
+		t.Fatalf("sanitizeToolDiagnosticDetail() = %d chars, want truncation beyond %d", len(got), toolDiagnosticMaxLen)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("sanitizeToolDiagnosticDetail() = %q, want ellipsis suffix", got)
 	}
 }
 
