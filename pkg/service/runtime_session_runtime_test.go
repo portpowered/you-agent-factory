@@ -35,6 +35,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -3021,6 +3022,100 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 	}
 	if response.ReconnectCursor.Provided || response.ReconnectCursor.ValidForStreamGeneration {
 		t.Fatalf("reconnect cursor = %#v, want absent and invalid", response.ReconnectCursor)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_EmitsInvalidationDiagnostics(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	core, observed := observer.New(zap.InfoLevel)
+	harness.svc.logger = zap.New(core)
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	eventHistory := liveSessionHandle(session).runtime.eventHistory
+	recorded := eventHistory.Events()
+	if len(recorded) == 0 {
+		t.Fatal("event history = empty, want initial structure event")
+	}
+
+	_, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+		AfterEventID: "factory-event/missing-preflight-cursor",
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(stale): %v", err)
+	}
+
+	staleReason := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"reason",
+	)
+	if staleReason != string(sessionpersistence.ReasonCursorStale) {
+		t.Fatalf("logged reason = %q, want %q", staleReason, sessionpersistence.ReasonCursorStale)
+	}
+	staleRecovery := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"recovery_action",
+	)
+	if staleRecovery != string(sessionpersistence.RecoveryReplayWithoutCursor) {
+		t.Fatalf("logged recovery_action = %q, want %q", staleRecovery, sessionpersistence.RecoveryReplayWithoutCursor)
+	}
+
+	_, err = harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(missing): %v", err)
+	}
+	missingReason := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"reason",
+	)
+	if missingReason != string(sessionpersistence.ReasonSessionNotFound) {
+		t.Fatalf("latest logged reason = %q, want %q", missingReason, sessionpersistence.ReasonSessionNotFound)
+	}
+}
+
+func TestFactoryService_ActivateNamedFactory_EmitsIdentityMismatchInvalidationDiagnostic(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta", "gamma"},
+	})
+	defer harness.stop(t)
+
+	core, observed := observer.New(zap.InfoLevel)
+	harness.svc.logger = zap.New(core)
+
+	harness.waitIdle(t, defaultFactorySessionID, "default runtime")
+	if err := harness.svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory(gamma): %v", err)
+	}
+
+	reason := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"reason",
+	)
+	if reason != string(sessionpersistence.ReasonStreamGenerationChanged) &&
+		reason != string(sessionpersistence.ReasonBackendScopeChanged) {
+		t.Fatalf(
+			"logged reason = %q, want %q or %q",
+			reason,
+			sessionpersistence.ReasonStreamGenerationChanged,
+			sessionpersistence.ReasonBackendScopeChanged,
+		)
+	}
+	recoveryAction := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"recovery_action",
+	)
+	if recoveryAction != string(sessionpersistence.RecoveryClearStreamDerivedState) {
+		t.Fatalf("logged recovery_action = %q, want %q", recoveryAction, sessionpersistence.RecoveryClearStreamDerivedState)
+	}
+	if scopeFactorySessionID := sessionpersistence.FieldValueFromObservedLogs(
+		observed,
+		"scope_factory_session_id",
+	); scopeFactorySessionID != defaultFactorySessionID {
+		t.Fatalf("scope_factory_session_id = %q, want %q", scopeFactorySessionID, defaultFactorySessionID)
 	}
 }
 

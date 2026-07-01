@@ -31,6 +31,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -772,6 +773,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 	if handle == nil {
 		return fmt.Errorf("%w: session handle is unavailable", apisurface.ErrFactorySessionNotFound)
 	}
+	previousScope, previousScopeErr := fs.sessionPersistenceScopeFromSession(ctx, session)
 	runState := fs.currentRunState()
 	serviceCtx := sessionServiceContext(ctx, runState)
 	isActiveSession := runState != nil && runState.sessionID == session.ID
@@ -817,6 +819,19 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 	}
 	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior session runtime shutdown failed", zap.Error(err), zap.String("session_id", session.ID))
+	}
+	if previousScopeErr == nil {
+		if updated := fs.sessionByID(session.ID); updated != nil {
+			if currentScope, err := fs.sessionPersistenceScopeFromSession(ctx, updated); err == nil {
+				if diagnostic, ok := sessionpersistence.IdentityMismatchDiagnostic(
+					previousScope,
+					currentScope,
+					session.ID,
+				); ok {
+					fs.recordSessionPersistenceInvalidation(diagnostic)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -1006,6 +1021,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	response := newFactorySessionSyncPreflightResponse(sessionID, reconnect)
 	if strings.HasPrefix(sessionID, "dur-sess-") {
 		response.ReasonCode = factoryapi.SessionNotFound
+		fs.recordSessionPersistenceInvalidationFromPreflight(response)
 		return response, nil
 	}
 
@@ -1015,6 +1031,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	}
 	if resolved.session == nil {
 		response.ReasonCode = factoryapi.SessionNotFound
+		fs.recordSessionPersistenceInvalidationFromPreflight(response)
 		return response, nil
 	}
 	session := resolved.session
@@ -1025,6 +1042,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
 	if resolved.remapped {
 		response.ReasonCode = factoryapi.LogicalSessionRemap
+		fs.recordSessionPersistenceInvalidationFromPreflight(response)
 		return response, nil
 	}
 
@@ -1047,6 +1065,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	if err != nil {
 		if errors.Is(err, events.ErrReconnectCursorNotFound) {
 			response.ReasonCode = factoryapi.CursorStale
+			fs.recordSessionPersistenceInvalidationFromPreflight(response)
 			return response, nil
 		}
 		return factoryapi.FactorySessionSyncPreflightResponse{}, err
@@ -2060,6 +2079,69 @@ func liveLifecycleControlLogFields(
 		fields = append(fields, zap.String("request_id", requestID))
 	}
 	return fields
+}
+
+func (fs *FactoryService) recordSessionPersistenceInvalidationFromPreflight(
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	if diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response); ok {
+		fs.recordSessionPersistenceInvalidation(diagnostic)
+	}
+}
+
+func (fs *FactoryService) recordSessionPersistenceInvalidation(
+	diagnostic sessionpersistence.InvalidationDiagnostic,
+) {
+	if fs == nil {
+		return
+	}
+	fs.sessionPersistenceObserver().Record(diagnostic)
+}
+
+func (fs *FactoryService) sessionPersistenceObserver() sessionpersistence.Observer {
+	return sessionpersistence.Observer{
+		Logger: sessionPersistenceZapLogger{logger: fs.logger},
+	}
+}
+
+type sessionPersistenceZapLogger struct {
+	logger *zap.Logger
+}
+
+func (l sessionPersistenceZapLogger) Info(msg string, fields map[string]string) {
+	if l.logger == nil {
+		return
+	}
+	zapFields := make([]zap.Field, 0, len(fields))
+	for key, value := range fields {
+		zapFields = append(zapFields, zap.String(key, value))
+	}
+	l.logger.Info(msg, zapFields...)
+}
+
+func (fs *FactoryService) sessionPersistenceScopeFromSession(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+) (sessionpersistence.IdentityScope, error) {
+	if fs == nil || session == nil {
+		return sessionpersistence.IdentityScope{}, fmt.Errorf("factory service is required")
+	}
+	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
+	if err != nil {
+		return sessionpersistence.IdentityScope{}, err
+	}
+	runtime := factorysessions.ProjectRuntime(projectionCtx)
+	scope := sessionpersistence.IdentityScope{
+		BackendScopeID:      factorySessionBackendScopeID(fs, session),
+		LogicalSessionKeyID: factorySessionLogicalSessionKeyID(session),
+		FactorySessionID:    strings.TrimSpace(session.ID),
+	}
+	if runtime.StreamIdentity != nil {
+		scope.BackendScopeID = strings.TrimSpace(runtime.StreamIdentity.BackendScopeID)
+		scope.FactorySessionID = strings.TrimSpace(runtime.StreamIdentity.FactorySessionID)
+		scope.StreamGenerationID = strings.TrimSpace(runtime.StreamIdentity.StreamGenerationID)
+	}
+	return sessionpersistence.NormalizeScope(scope), nil
 }
 
 func (fs *FactoryService) emitLiveLifecycleControlMetric(
