@@ -194,7 +194,9 @@ describe("timeline checkpoint persistence", () => {
       streamGenerationId: "stream-a",
     });
   });
+});
 
+describe("timeline checkpoint persistence diagnostics", () => {
   it("records user-initiated checkpoint clears through session persistence diagnostics", async () => {
     resetSessionPersistenceInvalidationRecords();
     const { indexedDB, records } = createIndexedDBTestDouble();
@@ -252,7 +254,9 @@ describe("timeline checkpoint persistence", () => {
       }),
     ]);
   });
+});
 
+describe("timeline checkpoint persistence resilience", () => {
   it("drops invalid stored checkpoints and ignores missing persistence inputs", async () => {
     const { indexedDB, records } = createIndexedDBTestDouble();
     records.set(checkpointStorageKey(streamIdentityFixture()), {
