@@ -19,6 +19,9 @@ type openTestHost struct {
 	openErr         error
 	requireSession  *factorysessions.LiveSession
 	requireSessionE error
+	sessionIDs      []string
+	sessions        map[string]*factorysessions.LiveSession
+	projectionErr   error
 }
 
 func (h *openTestHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
@@ -44,6 +47,27 @@ func (h *openTestHost) RequireSession(_ string) (*factorysessions.LiveSession, e
 		return nil, h.requireSessionE
 	}
 	return h.requireSession, nil
+}
+
+func (h *openTestHost) ListLiveSessionIDs() []string {
+	return h.sessionIDs
+}
+
+func (h *openTestHost) GetLiveSession(sessionID string) *factorysessions.LiveSession {
+	if h.sessions == nil {
+		return h.requireSession
+	}
+	return h.sessions[sessionID]
+}
+
+func (h *openTestHost) BuildSessionProjectionContext(
+	_ context.Context,
+	session *factorysessions.LiveSession,
+) (factorysessions.ProjectionContext, error) {
+	if h.projectionErr != nil {
+		return factorysessions.ProjectionContext{}, h.projectionErr
+	}
+	return factorysessions.ProjectionContext{Session: session}, nil
 }
 
 func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {

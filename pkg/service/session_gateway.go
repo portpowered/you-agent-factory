@@ -11,13 +11,15 @@ import (
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 )
 
-// sessionGatewayOpener is the injectable session-open collaborator seam.
-type sessionGatewayOpener interface {
+// sessionGateway is the injectable session gateway collaborator seam.
+type sessionGateway interface {
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
+	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
+	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
 }
 
-var _ sessionGatewayOpener = (*factorysessionservice.Service)(nil)
+var _ sessionGateway = (*factorysessionservice.Service)(nil)
 
 type sessionGatewayHost struct {
 	*FactoryService
@@ -60,18 +62,42 @@ func (h sessionGatewayHost) RequireSession(sessionID string) (*factorysessions.L
 	return h.requireSession(sessionID)
 }
 
+func (h sessionGatewayHost) ListLiveSessionIDs() []string {
+	if h.FactoryService == nil || h.FactoryService.sessions == nil {
+		return nil
+	}
+	return h.FactoryService.sessions.IDs()
+}
+
+func (h sessionGatewayHost) GetLiveSession(sessionID string) *factorysessions.LiveSession {
+	if h.FactoryService == nil {
+		return nil
+	}
+	return h.FactoryService.sessionByID(sessionID)
+}
+
+func (h sessionGatewayHost) BuildSessionProjectionContext(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+) (factorysessions.ProjectionContext, error) {
+	if h.FactoryService == nil {
+		return factorysessions.ProjectionContext{}, fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.buildSessionProjectionContext(ctx, session)
+}
+
 func newSessionGatewayService(fs *FactoryService) *factorysessionservice.Service {
 	return factorysessionservice.New(sessionGatewayHost{fs})
 }
 
-func wireSessionGatewayCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) sessionGatewayOpener {
+func wireSessionGatewayCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) sessionGateway {
 	if cfg != nil && cfg.SessionGateway != nil {
 		return cfg.SessionGateway
 	}
 	return newSessionGatewayService(fs)
 }
 
-func (fs *FactoryService) requireSessionGateway() sessionGatewayOpener {
+func (fs *FactoryService) requireSessionGateway() sessionGateway {
 	if fs == nil {
 		return newSessionGatewayService(nil)
 	}
@@ -82,12 +108,12 @@ func (fs *FactoryService) requireSessionGateway() sessionGatewayOpener {
 }
 
 // ProvideSessionGatewayCollaborator constructs the session gateway for a built service shell.
-func ProvideSessionGatewayCollaborator(shell FactoryServiceShell, cfg *FactoryServiceConfig) sessionGatewayOpener {
+func ProvideSessionGatewayCollaborator(shell FactoryServiceShell, cfg *FactoryServiceConfig) sessionGateway {
 	return wireSessionGatewayCollaborator(shell.Service, cfg)
 }
 
 // AttachSessionGatewayCollaborator assigns the session gateway on the service shell.
-func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway sessionGatewayOpener) *FactoryService {
+func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway sessionGateway) *FactoryService {
 	if shell.Service != nil {
 		shell.Service.sessionGateway = gateway
 	}

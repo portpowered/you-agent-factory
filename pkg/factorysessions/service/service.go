@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/dataplane"
 )
 
-// Service is the canonical Factory Session application gateway for open behavior.
+// Service is the canonical Factory Session application gateway for open and read behavior.
 type Service struct {
 	host       Host
 	liveOpener *dataplane.LiveOpener

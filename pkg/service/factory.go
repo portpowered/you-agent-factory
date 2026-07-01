@@ -139,7 +139,7 @@ type FactoryService struct {
 	core           *FactoryCore
 	sessions       *factorysessions.Registry
 	factorySave    factorySaveSaver
-	sessionGateway sessionGatewayOpener
+	sessionGateway sessionGateway
 	runtimeBuild   *runtimebuild.Service
 	hostedWorkers  hostedworkers.Config
 	factoryRootDir string
@@ -317,7 +317,7 @@ type FactoryServiceConfig struct {
 	// SessionGateway, when non-nil, replaces the default
 	// factorysessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
-	SessionGateway sessionGatewayOpener
+	SessionGateway sessionGateway
 	// ModelAssets, when non-nil, replaces the default localmodels.AssetPuller
 	// collaborator wired at service construction. Tests use this to assert
 	// PullModel delegates without running managed asset downloads.

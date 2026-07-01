@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -808,34 +807,25 @@ func startupReadinessError(err error) error {
 }
 
 func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
-	return fs.requireCoordinator().ListFactorySessions(ctx)
+	return fs.requireSessionGateway().ListFactorySessions(ctx)
 }
 
 func (c *runtimeFactoryCoordinator) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
-	fs := c.service
-	if fs == nil || fs.sessions == nil {
-		return factoryapi.ListFactorySessionsResponse{}, nil
+	if c.service == nil {
+		return factoryapi.ListFactorySessionsResponse{}, fmt.Errorf("factory service is required")
 	}
-	sessionIDs := fs.sessions.IDs()
-	summaries := make([]factoryapi.FactorySessionSummary, 0, len(sessionIDs))
-	for _, sessionID := range sessionIDs {
-		session := fs.sessions.Get(sessionID)
-		if session == nil {
-			continue
-		}
-		projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
-		if err != nil {
-			summaries = append(summaries, factorysessions.SummaryResponse(session))
-			continue
-		}
-		summaries = append(summaries, factorysessions.SummaryWithRuntime(projectionCtx))
-	}
-	sortFactorySessionSummaries(summaries)
-	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}, nil
+	return c.service.requireSessionGateway().ListFactorySessions(ctx)
 }
 
 func (fs *FactoryService) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
-	return fs.requireCoordinator().GetFactorySession(ctx, sessionID)
+	return fs.requireSessionGateway().GetFactorySession(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	if c.service == nil {
+		return factoryapi.FactorySession{}, fmt.Errorf("factory service is required")
+	}
+	return c.service.requireSessionGateway().GetFactorySession(ctx, sessionID)
 }
 
 func (fs *FactoryService) GetFactorySessionSyncPreflight(
@@ -844,19 +834,6 @@ func (fs *FactoryService) GetFactorySessionSyncPreflight(
 	reconnect *interfaces.FactoryEventReconnectCursor,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	return fs.requireCoordinator().GetFactorySessionSyncPreflight(ctx, sessionID, reconnect)
-}
-
-func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
-	fs := c.service
-	session, err := fs.requireSession(sessionID)
-	if err != nil {
-		return factoryapi.FactorySession{}, err
-	}
-	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
-	if err != nil {
-		return factoryapi.FactorySession{}, err
-	}
-	return factorysessions.SessionResponse(projectionCtx), nil
 }
 
 func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
@@ -1429,15 +1406,6 @@ func emitSessionResponseStreamMetric(
 			zap.Error(err),
 		)
 	}
-}
-
-func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
-	sort.SliceStable(summaries, func(i, j int) bool {
-		if summaries[i].IsDefault != summaries[j].IsDefault {
-			return summaries[i].IsDefault
-		}
-		return summaries[i].Id < summaries[j].Id
-	})
 }
 
 var _ apisurface.DurableSessionExecutionAPI = (*FactoryService)(nil)
