@@ -63,6 +63,9 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	if shell := transport.Host.CompatibilityServiceShell(); shell == nil {
 		t.Fatal("expected compatibility service shell for legacy harness callbacks")
 	}
+	if transport.Host.RuntimeHost() == nil {
+		t.Fatal("expected authoritative runtime host behind session runtime shell")
+	}
 	surface := transport.SessionAPISurface()
 	if surface == nil {
 		t.Fatal("expected session API surface")

@@ -63,11 +63,6 @@ func newInferenceProgressPublisherFactory(sessions *factorysessions.Registry, lo
 	return runtimehost.NewInferenceProgressPublisherFactory(sessions, logger)
 }
 
-// CoordinatorPolicyFromConfig maps service config to the runtime-host coordinator policy.
-func CoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) runtimehost.CoordinatorPolicy {
-	return runtimehost.CoordinatorPolicyFromConfig(cfg)
-}
-
 // serviceCoordinatorPolicyFromConfig is the legacy test helper name.
 func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) runtimehost.CoordinatorPolicy {
 	return runtimehost.CoordinatorPolicyFromConfig(cfg)
@@ -134,13 +129,6 @@ type (
 
 func liveSessionHandle(session *factorysessions.LiveSession) *liveRuntimeHandle {
 	return runtimehost.LiveSessionHandle(session)
-}
-
-func sessionByID(svc *FactoryService, sessionID string) *factorysessions.LiveSession {
-	if svc == nil {
-		return nil
-	}
-	return svc.SessionByID(sessionID)
 }
 
 const (

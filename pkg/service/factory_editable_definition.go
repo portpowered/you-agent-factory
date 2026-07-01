@@ -283,7 +283,7 @@ func ComposeFactoryCore(
 		runtimeBundle.FolderPath,
 		runtimeBundle.RuntimeCfg.RuntimeBaseDir(),
 		runtimehost.FactorySessionTargetRef{Kind: runtimehost.FactorySessionTargetKindDefault},
-		runtimehost.NewStartupLiveSessionHandle(runtimeBundle, &defaultSessionSpec),
+		NewStartupLiveSessionHandle(runtimeBundle, &defaultSessionSpec),
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
 	), true)

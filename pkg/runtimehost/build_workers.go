@@ -1,10 +1,8 @@
 package runtimehost
 
 import (
-	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -24,85 +22,6 @@ func wrapLocalModelRunner(
 	modelDomain LocalModelDomain,
 ) workers.Runner {
 	return factoryservice.WrapLocalModelRunner(inner, runtimeCfg, factoryCfg, workerDef, modelDomain)
-}
-
-func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
-		return runner
-	}
-	if factoryCfg == nil {
-		return ""
-	}
-	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
-}
-
-// loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
-// Workers missing AGENTS.md keep the existing noop behavior so topology-only tests continue to work.
-func loadWorkersFromConfig(
-	factoryDir string,
-	factoryCfg *interfaces.FactoryConfig,
-	factoryRunnerID string,
-	runtimeCfg interfaces.RuntimeConfigLookup,
-	workflowContext *factory_context.FactoryContext,
-	logger logging.Logger,
-	skipBuiltInRunnerPrerequisiteValidation bool,
-	providerOverride workerprovider.Provider,
-	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	cmdRunner workers.CommandRunner,
-	scriptRecorder workers.ScriptEventRecorder,
-	inferenceRecorder workerprovider.InferenceEventRecorder,
-	modelRecorder modelEventRecorder,
-	agentRunRecorder workeragentrun.AgentRunEventRecorder,
-	now func() time.Time,
-	modelDomain localModelDomain,
-) ([]factory.FactoryOption, error) {
-	var opts []factory.FactoryOption
-	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
-	if factoryCfg == nil {
-		return nil, fmt.Errorf("factory config is required")
-	}
-	preflight := runnerSelectionPreflight{
-		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
-	}
-	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
-		return nil, err
-	}
-	for _, workerCfg := range factoryCfg.Workers {
-		logger.Debug("loading worker", "worker", workerCfg.Name)
-		def, ok := runtimeCfg.Worker(workerCfg.Name)
-		if !ok || def == nil || def.Type == "" {
-			logger.Debug("no AGENTS.md for worker; using noop executor", "worker", workerCfg.Name)
-			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
-			continue
-		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
-		if executor != nil {
-			logger.Info("loaded worker", "worker", workerCfg.Name)
-			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
-		} else {
-			logger.Error("failed to load worker", "worker", workerCfg.Name)
-			return nil, fmt.Errorf("unsupported worker type for worker %q: %s", workerCfg.Name, def.Type)
-		}
-	}
-	for _, workstationCfg := range factoryCfg.Workstations {
-		def, ok := runtimeCfg.Workstation(workstationCfg.Name)
-		if !ok || def == nil {
-			continue
-		}
-		if def.Type != interfaces.WorkstationTypeLogical || def.WorkerTypeName != "" {
-			continue
-		}
-		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
-		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workerexecutor.WorkstationExecutor{
-			RuntimeConfig:   runtimeCfg,
-			DefaultRunnerID: factoryRunnerID,
-			WorkflowContext: workflowContext,
-			Renderer:        &workerprompting.DefaultPromptRenderer{},
-			Logger:          logger,
-		}))
-	}
-	return opts, nil
 }
 
 func configuredWorkstationExecutor(
@@ -335,61 +254,4 @@ func scriptExecutorOptions(
 		scriptOpts = append(scriptOpts, workerexecutor.WithScriptEventRecorder(scriptRecorder))
 	}
 	return scriptOpts
-}
-
-func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, preflight runnerSelectionPreflight) error {
-	if factoryCfg == nil {
-		return nil
-	}
-	for i, workstation := range factoryCfg.Workstations {
-		runtimeWorkstation, ok := runtimeCfg.Workstation(workstation.Name)
-		if ok && runtimeWorkstation != nil {
-			workstation = *runtimeWorkstation
-		}
-
-		worker, _ := runtimeCfg.Worker(workstation.WorkerTypeName)
-		workerModelProvider := ""
-		if worker != nil {
-			workerModelProvider = worker.ModelProvider
-		}
-
-		selection := interfaces.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
-		workerOpenCodeAgent := ""
-		if worker != nil {
-			workerOpenCodeAgent = worker.OpenCodeAgent
-		}
-		if err := interfaces.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
-			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", i, workstation.Name, err)
-		}
-		if !runnerSelectionRequiresValidation(selection) {
-			continue
-		}
-		if err := validateResolvedRunnerSelection(selection, preflight); err != nil {
-			return fmt.Errorf("workstations[%d](%s).runner: %w", i, workstation.Name, err)
-		}
-	}
-	return nil
-}
-
-type runnerSelectionPreflight struct {
-	skipCommandAvailability bool
-}
-
-func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection) bool {
-	return selection.Source != interfaces.RunnerSelectionSourceDefault
-}
-
-func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
-	if _, ok := interfaces.BuiltInRunnerMetadata(selection.RunnerID); !ok {
-		return fmt.Errorf("unknown runner %q", selection.RunnerID)
-	}
-	if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
-		return fmt.Errorf("%s", status.UnavailableReason)
-	}
-	if !preflight.skipCommandAvailability {
-		if err := workers.ValidateBuiltInRunnerPrerequisites(selection.RunnerID); err != nil {
-			return err
-		}
-	}
-	return nil
 }
