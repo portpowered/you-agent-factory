@@ -309,28 +309,11 @@ func (c *runtimeFactoryCoordinator) ActivateNamedFactory(ctx context.Context, na
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	fs.activationMu.Lock()
-	defer fs.activationMu.Unlock()
-
-	sessionID := fs.runSessionID()
-	session := fs.sessionByID(sessionID)
-	persistRoot, folderPath := fs.namedFactoryActivationPaths(session)
-
-	if err := fs.requireIdleBeforeNamedFactoryActivation(ctx, sessionID, session); err != nil {
-		return err
+	svc := fs.definitionService()
+	if svc == nil {
+		return fmt.Errorf("factory definition service is required")
 	}
-
-	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(persistRoot, name)
-	if err != nil {
-		return err
-	}
-
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
-	if err != nil {
-		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
-	}
-
-	return fs.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
+	return svc.ActivateNamedFactory(ctx, name)
 }
 
 func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
