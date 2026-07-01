@@ -29,6 +29,11 @@ func (s *Service) ListModels(ctx context.Context) (factoryapi.ListModelsResponse
 	return modelhost.ListModelsWithHost(ctx, s.modelHost(), s.runtimeConfig())
 }
 
+// GetModel returns inspect detail for one configured model with managed-runtime readiness projection.
+func (s *Service) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	return modelhost.GetModelWithHost(ctx, s.modelHost(), s.runtimeConfig(), modelName)
+}
+
 func (s *Service) runtimeConfig() *factoryconfig.LoadedFactoryConfig {
 	if s == nil || s.deps.RuntimeConfig == nil {
 		return nil

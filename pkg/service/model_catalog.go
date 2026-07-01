@@ -164,7 +164,10 @@ func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListMo
 }
 
 func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	return modelhost.GetModelWithHost(ctx, s.modelHost(), s.currentRuntimeConfig(), modelName)
+	if s == nil || s.catalogList == nil {
+		return modelsservice.New(modelsservice.Dependencies{}).GetModel(ctx, modelName)
+	}
+	return s.catalogList.GetModel(ctx, modelName)
 }
 
 func (s *runtimeModelService) modelHost() modelhost.Host {
