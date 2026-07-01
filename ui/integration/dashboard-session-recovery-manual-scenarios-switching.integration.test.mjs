@@ -208,6 +208,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
                 ) && eventStreamOmitsCursor(url),
             );
           },
+          browserScenarioTimeoutMs,
         );
         await waitForDurableCheckpoint(
           "tab two stale identity reconnect",
@@ -220,6 +221,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
                 ) && eventStreamOmitsCursor(url),
             );
           },
+          browserScenarioTimeoutMs,
         );
 
         const tabOneURLs = await tabOneNetwork.readEventStreamURLs();

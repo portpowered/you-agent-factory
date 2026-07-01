@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestInvalidationFromSyncPreflight(t *testing.T) {
@@ -247,6 +249,105 @@ func TestSilentReplayRecoveryDiagnostic(t *testing.T) {
 	}
 	if diagnostic.RecoveryAction != RecoveryReplayWithoutCursor {
 		t.Fatalf("recoveryAction = %q, want %q", diagnostic.RecoveryAction, RecoveryReplayWithoutCursor)
+	}
+}
+
+func TestIdentityMismatchDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	diagnostic, ok := IdentityMismatchDiagnostic(
+		IdentityScope{
+			BackendScopeID:     "backend-a",
+			FactorySessionID:   "session-a",
+			StreamGenerationID: "stream-a",
+		},
+		IdentityScope{
+			BackendScopeID:     "backend-b",
+			FactorySessionID:   "session-a",
+			StreamGenerationID: "stream-a",
+		},
+		"session-a",
+	)
+	if !ok {
+		t.Fatal("ok = false, want mismatch diagnostic")
+	}
+	if diagnostic.Reason != ReasonBackendScopeChanged {
+		t.Fatalf("reason = %q, want %q", diagnostic.Reason, ReasonBackendScopeChanged)
+	}
+	if diagnostic.RecoveryAction != RecoveryClearStreamDerivedState {
+		t.Fatalf("recovery = %q, want %q", diagnostic.RecoveryAction, RecoveryClearStreamDerivedState)
+	}
+}
+
+func TestRecoveryActionForIdentityMismatch(t *testing.T) {
+	t.Parallel()
+
+	if got := RecoveryActionForIdentityMismatch(ReasonSessionRemapped); got != RecoveryClearStreamDerivedState {
+		t.Fatalf("recovery = %q, want %q", got, RecoveryClearStreamDerivedState)
+	}
+	if got := RecoveryActionForIdentityMismatch(ReasonCursorStale); got != RecoveryClearCheckpoint {
+		t.Fatalf("recovery = %q, want %q", got, RecoveryClearCheckpoint)
+	}
+}
+
+type recordingLogger struct {
+	message string
+	fields  map[string]string
+}
+
+func (l *recordingLogger) Info(msg string, fields map[string]string) {
+	l.message = msg
+	l.fields = fields
+}
+
+type recordingMetrics struct {
+	name   string
+	labels map[string]string
+}
+
+func (m *recordingMetrics) RecordMetric(name string, labels map[string]string) {
+	m.name = name
+	m.labels = labels
+}
+
+func TestObserverRecord(t *testing.T) {
+	t.Parallel()
+
+	logger := &recordingLogger{}
+	metrics := &recordingMetrics{}
+	Observer{Logger: logger, Metrics: metrics}.Record(InvalidationDiagnostic{
+		Reason:         ReasonCursorStale,
+		RecoveryAction: RecoveryReplayWithoutCursor,
+		Scope: IdentityScope{
+			FactorySessionID: "session-a",
+		},
+		RequestedSessionID: "session-a",
+	})
+
+	if logger.message != "session persistence invalidation" {
+		t.Fatalf("message = %q, want invalidation log message", logger.message)
+	}
+	if logger.fields["reason"] != string(ReasonCursorStale) {
+		t.Fatalf("reason = %q, want %q", logger.fields["reason"], ReasonCursorStale)
+	}
+	if metrics.name != MetricSessionPersistenceInvalidation {
+		t.Fatalf("metric = %q, want %q", metrics.name, MetricSessionPersistenceInvalidation)
+	}
+}
+
+func TestFieldValueFromObservedLogs(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	logger.Info(
+		"session persistence invalidation",
+		zap.String("reason", string(ReasonCursorStale)),
+		zap.String("recovery_action", string(RecoveryReplayWithoutCursor)),
+	)
+
+	if got := FieldValueFromObservedLogs(observed, "reason"); got != string(ReasonCursorStale) {
+		t.Fatalf("reason = %q, want %q", got, ReasonCursorStale)
 	}
 }
 
