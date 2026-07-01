@@ -4,7 +4,7 @@ import {
   recordSessionPersistenceInvalidation,
   userClearedSessionsDiagnostic,
   type SessionPersistenceIdentityScope,
-} from "../../dashboard/lib/session-persistence-diagnostics";
+} from "../../dashboard/public";
 import type { FactoryTimelineCheckpoint } from "./timeline/storeState";
 import type { ReplayWorldState } from "./timeline/types";
 

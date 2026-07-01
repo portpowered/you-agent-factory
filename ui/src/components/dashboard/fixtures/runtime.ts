@@ -244,7 +244,7 @@ export function factoryFromDashboardTopology(
           ? [{ capacity: 1, name: place.type_id }]
           : [],
       ),
-      type: "MODEL_WORKSTATION" as const,
+      type: "INFERENCE_RUN" as const,
       worker: workstation.worker_type ?? "",
     };
   });

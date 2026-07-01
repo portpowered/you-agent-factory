@@ -412,10 +412,13 @@ result availability before that terminal marker. Legacy `RUN_REQUEST` and
 POST /factory-sessions/{session_id}/invocations
 ```
 
-The current API contract is text-first. Send top-level `sourceKind: "text"` and
-canonical `content` as ordered `WorkContent` parts. Reserved source kinds such
-as `fileRef` and `audioStream` are named in the contract for future
-compatibility, but current runtimes do not accept them yet.
+The current API contract preserves text-first compatibility and also accepts
+structured `args` for factories that declare `invocationSignature`. Legacy
+requests still send top-level `sourceKind: "text"` and canonical `content` as
+ordered `WorkContent` parts. Structured `args` values must decode as strings or
+arrays of strings keyed by parameter name, external name, or alias. Reserved
+source kinds such as `fileRef` and `audioStream` are named in the contract for
+future compatibility, but current runtimes do not accept them yet.
 
 ### Example request
 
@@ -431,6 +434,25 @@ curl -s \
     ]
   }'
 ```
+
+### Structured args compatibility
+
+When `args` is present, omit compatibility `content` unless you are
+intentionally exercising a source-conflict validation path. Factories without an
+active `invocationSignature` reject `args` before dispatch.
+
+`args` is the structured counterpart to CLI factory arguments:
+
+- Keys may use the parameter `name`, `externalName`, or any declared alias
+- Values must be a string or an array of strings
+- Defaults, required checks, repeated handling, alias resolution, and stdin
+  routing normalize through the same backend path used by `you run`
+- Pre-dispatch argument failures return non-2xx `ErrorResponse` payloads instead
+  of a terminal `InvocationResponse`
+
+Use `you run --named <factory> --help` or `you run --factory <factory.json> --help`
+when you want the selected factory's authored argument descriptions, defaults,
+accepted values, output hints, and examples before constructing an API request.
 
 ### Example success response
 
@@ -467,6 +489,35 @@ that field is omitted, the runtime uses the documented
 The CLI `you run --factory` mode uses the same invocation contract for input
 resolution and primary-result selection; it just writes the successful
 `primaryResult` to stdout instead of returning an HTTP response.
+
+## Agent-run dispatch inspection
+
+Use factory-session dispatch inspection when you need to distinguish final
+agent output from bounded tool diagnostics or transcript metadata after an
+`AGENT_RUN` dispatch.
+
+| Surface | What it shows for agent runs |
+|---------|------------------------------|
+| Dashboard dispatch detail | Final output in the ordinary dispatch result area; separate **Agent run** section with `tool_policy`, `tool_call_count`, bounded `tool_diagnostics`, and transcript summaries when present |
+| Session API / replay projections | `agentRunInspection` on workstation request responses; replay-safe `AGENT_RUN_RESPONSE` events carry the same bounded diagnostic payload |
+| Modelhost (`you models inspect`, `/models`) | Readiness, lifecycle, and lease state only — not agent transcript ownership |
+
+Agent-run inspection uses typed fields rather than mixed log blobs:
+
+- **Final output** — the accepted or failed work result used for routing and
+  downstream payload propagation.
+- **Tool diagnostics** — safe summaries for allowed tool start, success, denial,
+  or failure. Raw process output and secrets are not primary customer results.
+- **Transcript metadata** — bounded per-message role and summary entries when
+  the runtime records them.
+
+When an agent dispatch fails, inspect `failure_class` and optional
+`recovery_action` in the agent-run inspection view. See `you docs workers`
+for the supported agent-run failure classes and tool-policy behavior.
+
+`INFERENCE_RUN` dispatches continue to expose inference-attempt inspection
+separately. Agent-backed dispatches do not substitute inference-attempt views
+for agent-run diagnostics.
 
 ## Dashboard
 

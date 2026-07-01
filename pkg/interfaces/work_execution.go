@@ -90,6 +90,7 @@ type WorkMetrics struct {
 type WorkDiagnostics struct {
 	RenderedPrompt *RenderedPromptDiagnostic `json:"rendered_prompt,omitempty"`
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
+	Invocation     *InvocationDiagnostic     `json:"invocation,omitempty"`
 	Command        *CommandDiagnostic        `json:"command,omitempty"`
 	Panic          *PanicDiagnostic          `json:"panic,omitempty"`
 	Metadata       map[string]string         `json:"metadata,omitempty"`
@@ -108,6 +109,22 @@ type ProviderDiagnostic struct {
 	Model            string            `json:"model,omitempty"`
 	RequestMetadata  map[string]string `json:"request_metadata,omitempty"`
 	ResponseMetadata map[string]string `json:"response_metadata,omitempty"`
+}
+
+// InvocationDiagnostic records replay-safe invocation metadata derived from
+// canonical normalized arguments without exposing raw values.
+type InvocationDiagnostic struct {
+	SignatureHash string                          `json:"signature_hash,omitempty"`
+	Parameters    []InvocationParameterDiagnostic `json:"parameters,omitempty"`
+}
+
+// InvocationParameterDiagnostic records one normalized invocation parameter in
+// a replay-safe form.
+type InvocationParameterDiagnostic struct {
+	Name        string   `json:"name,omitempty"`
+	SourceKinds []string `json:"source_kinds,omitempty"`
+	ValueCount  int      `json:"value_count,omitempty"`
+	Redacted    bool     `json:"redacted,omitempty"`
 }
 
 // CommandDiagnostic records script and provider command execution details.

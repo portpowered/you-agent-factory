@@ -29,6 +29,7 @@ type FactoryWorldState struct {
 	InferenceAttemptsByDispatchID map[string]map[string]FactoryWorldInferenceAttempt `json:"inference_attempts_by_dispatch_id,omitempty"`
 	ScriptRequestsByDispatchID    map[string]map[string]FactoryWorldScriptRequest    `json:"script_requests_by_dispatch_id,omitempty"`
 	ScriptResponsesByDispatchID   map[string]map[string]FactoryWorldScriptResponse   `json:"script_responses_by_dispatch_id,omitempty"`
+	AgentRunResponsesByDispatchID map[string]map[string]FactoryWorldAgentRunResponse `json:"agent_run_responses_by_dispatch_id,omitempty"`
 	TracesByID                    map[string]FactoryWorldTrace                       `json:"traces_by_id,omitempty"`
 	ProviderSessions              []FactoryWorldProviderSessionRecord                `json:"provider_sessions,omitempty"`
 	WorkStateChangesByWorkID      map[string][]FactoryWorldWorkStateChangeRecord     `json:"work_state_changes_by_work_id,omitempty"`
@@ -189,6 +190,17 @@ type FactoryWorldScriptResponse struct {
 	ExitCode        *int      `json:"exit_code,omitempty"`
 	FailureType     string    `json:"failure_type,omitempty"`
 	ResponseTime    time.Time `json:"response_time,omitempty"`
+}
+
+// FactoryWorldAgentRunResponse records one agent-run boundary response
+// reconstructed from canonical agent-run response events.
+type FactoryWorldAgentRunResponse struct {
+	DispatchID     string               `json:"dispatch_id"`
+	AgentRunID     string               `json:"agent_run_id"`
+	Outcome        string               `json:"outcome,omitempty"`
+	DurationMillis int64                `json:"duration_millis,omitempty"`
+	Diagnostics    *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+	ResponseTime   time.Time            `json:"response_time,omitempty"`
 }
 
 // FactoryWorldFailureDetail associates failed terminal work with the dispatch

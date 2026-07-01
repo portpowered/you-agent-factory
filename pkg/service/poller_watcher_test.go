@@ -196,10 +196,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunW
 			pollerWorker: newCanonicalScriptPollerWorker("--mode", "watch"),
 		},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:    &aggregateSnapshotFactory{},
-			runtimeCfg: runtimeCfg,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory:    &aggregateSnapshotFactory{},
+			RuntimeCfg: runtimeCfg,
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -251,10 +250,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 			additionalWorkstations: []interfaces.FactoryWorkstationConfig{standard},
 		},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:    &aggregateSnapshotFactory{},
-			runtimeCfg: runtimeCfg,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory:    &aggregateSnapshotFactory{},
+			RuntimeCfg: runtimeCfg,
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -308,10 +306,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 			poller: poller,
 		},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:    &aggregateSnapshotFactory{},
-			runtimeCfg: runtimeCfg,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory:    &aggregateSnapshotFactory{},
+			RuntimeCfg: runtimeCfg,
 		},
 	}
 
@@ -400,10 +397,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			runtimeCfg: runtimeCfg,
-			factory:    submitted,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			RuntimeCfg: runtimeCfg,
+			Factory:    submitted,
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -524,10 +520,9 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			runtimeCfg: runtimeCfg,
-			factory:    &aggregateSnapshotFactory{},
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			RuntimeCfg: runtimeCfg,
+			Factory:    &aggregateSnapshotFactory{},
 		},
 	}
 
@@ -576,10 +571,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			runtimeCfg: runtimeCfg,
-			factory:    &aggregateSnapshotFactory{},
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			RuntimeCfg: runtimeCfg,
+			Factory:    &aggregateSnapshotFactory{},
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -629,10 +623,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 			poller: poller,
 		},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:    &aggregateSnapshotFactory{},
-			runtimeCfg: runtimeCfg,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory:    &aggregateSnapshotFactory{},
+			RuntimeCfg: runtimeCfg,
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -674,10 +667,9 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 			poller: poller,
 		},
 	)
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:    &aggregateSnapshotFactory{},
-			runtimeCfg: runtimeCfg,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory:    &aggregateSnapshotFactory{},
+			RuntimeCfg: runtimeCfg,
 		},
 	}
 
@@ -847,10 +839,9 @@ func newScriptPollerRuntimeHandleForWorkstation(
 ) *liveRuntimeHandle {
 	t.Helper()
 
-	return &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory: activeFactory,
-			runtimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
+	return &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory: activeFactory,
+			RuntimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
 				t,
 				t.TempDir(),
 				scriptPollerRuntimeConfigOptions{
@@ -1215,10 +1206,9 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 
 func startHostedLinearPollerSidecars(t *testing.T, fixture hostedLinearPollerServiceFixture) func() {
 	t.Helper()
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			runtimeCfg: fixture.runtimeCfg,
-			factory:    fixture.submitted,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			RuntimeCfg: fixture.runtimeCfg,
+			Factory:    fixture.submitted,
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -1380,8 +1370,8 @@ func TestFactoryService_CronTickTimeoutFailureIsClassifiedAndBounded(t *testing.
 	}
 	svc := &FactoryService{logger: zap.New(logCore)}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		factory:    mock,
-		runtimeCfg: newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{Workstations: []interfaces.FactoryWorkstationConfig{{Name: "poll-for-work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "1ms"}}}}, nil, nil),
+		Factory:    mock,
+		RuntimeCfg: newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{Workstations: []interfaces.FactoryWorkstationConfig{{Name: "poll-for-work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "1ms"}}}}, nil, nil),
 	})
 
 	err := svc.submitCronTick(context.Background(), cronWorkstationConfigForTest("poll-for-work"), time.Now())
@@ -1468,7 +1458,7 @@ func TestFactoryService_CronTickRetryableFailureRetriesBeforeSuccess(t *testing.
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	svc := &FactoryService{logger: zap.New(logCore)}
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: mock})
 
 	if err := svc.submitCronTick(context.Background(), cronWorkstationConfigForTest("poll-for-work"), time.Now()); err != nil {
 		t.Fatalf("cron tick should succeed after retryable failures: %v", err)
@@ -1748,10 +1738,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:    replacementFactory,
-			runtimeCfg: runtimeCfg,
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory:    replacementFactory,
+			RuntimeCfg: runtimeCfg,
 		},
 	}
 	sidecarCtx, cancelSidecars := context.WithCancel(context.Background())
@@ -2008,10 +1997,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 		logger: zap.NewNop(),
 		clock:  fakeClock,
 	}
-	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:    replacementFactory,
-			runtimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+			Factory:    replacementFactory,
+			RuntimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())

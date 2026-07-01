@@ -39,7 +39,7 @@ export interface paths {
     put?: never;
     /**
      * Invoke one factory session and return its primary result
-     * @description Live-session compatibility API for text-first invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+     * @description Live-session compatibility API for invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Requests may use legacy text-first compatibility content or structured invocationSignature args. Structured args normalize through the shared backend argument resolver, while content preserves the legacy compatibility carrier. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
      */
     post: operations["invokeFactorySessionBySessionId"];
     delete?: never;
@@ -873,10 +873,14 @@ export interface components {
      */
     InvocationInputSourceKind: InvocationInputSourceKind;
     InvocationRequest: {
-      /** @description Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
-      sourceKind: components["schemas"]["InvocationInputSourceKind"];
-      /** @description Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. */
-      content: components["schemas"]["WorkContent"];
+      /** @description Compatibility input source category selected by the API caller when `content` is supplied. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
+      sourceKind?: components["schemas"]["InvocationInputSourceKind"];
+      /** @description Canonical text-first compatibility invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. When `args` is omitted, `content` and `sourceKind: text` preserve the legacy invocation contract. */
+      content?: components["schemas"]["WorkContent"];
+      /** @description Optional structured invocation arguments keyed by parameter name, externalName, or alias. Values must decode as a string or an array of strings. Signature-backed runtimes normalize these values through the shared backend argument resolver. Compatibility `content` requests should omit `args`. */
+      args?: {
+        [key: string]: unknown;
+      };
       /** @description Optional caller-supplied idempotency key for the invocation request. */
       requestId?: string;
       /**
@@ -2808,9 +2812,22 @@ export interface components {
       requestMetadata?: components["schemas"]["StringMap"];
       responseMetadata?: components["schemas"]["StringMap"];
     };
+    FactoryWorldInvocationDiagnostic: {
+      signatureHash?: string;
+      parameters?: components["schemas"]["FactoryWorldInvocationParameterDiagnostic"][];
+    };
+    FactoryWorldInvocationParameterDiagnostic: {
+      name?: string;
+      sourceKinds?: string[];
+      /** Format: int64 */
+      valueCount?: number;
+      redacted?: boolean;
+    };
     FactoryWorldWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
       provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
+      invocation?: components["schemas"]["FactoryWorldInvocationDiagnostic"];
     };
     FactoryWorldWorkItemRef: {
       workId: string;
@@ -2869,6 +2886,26 @@ export interface components {
       exitCode?: number;
       failureType?: string;
     };
+    /** @description Customer-visible agent-run inspection for one workstation dispatch response. */
+    FactoryWorldAgentRunInspectionView: {
+      /** @description Stable execution behavior marker for agent-loop runs. */
+      executionBehavior?: string;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
     FactoryWorldSelectedRunnerView: {
       runnerId?: components["schemas"]["RunnerID"];
       displayName?: string;
@@ -2915,6 +2952,7 @@ export interface components {
       failureReason?: string;
       failureMessage?: string;
       scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
+      agentRunInspection?: components["schemas"]["FactoryWorldAgentRunInspectionView"];
       /** Format: date-time */
       endTime?: string;
       /** Format: int64 */
@@ -2954,6 +2992,7 @@ export interface components {
         | components["schemas"]["InferenceResponseEventPayload"]
         | components["schemas"]["ScriptRequestEventPayload"]
         | components["schemas"]["ScriptResponseEventPayload"]
+        | components["schemas"]["AgentRunResponseEventPayload"]
         | components["schemas"]["DispatchResponseEventPayload"]
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
@@ -3220,6 +3259,18 @@ export interface components {
       exitCode?: number;
       failureType?: components["schemas"]["ScriptFailureType"];
     };
+    /** @description Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces. */
+    AgentRunResponseEventPayload: {
+      /** @description Stable identifier for this agent-run boundary event. */
+      agentRunId: string;
+      outcome: components["schemas"]["WorkOutcome"];
+      /**
+       * Format: int64
+       * @description Agent-loop execution duration in milliseconds.
+       */
+      durationMillis: number;
+      diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+    };
     /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
     DispatchResponseEventPayload: {
       completionId?: string;
@@ -3332,6 +3383,7 @@ export interface components {
     WorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      invocation?: components["schemas"]["InvocationDiagnostic"];
       command?: components["schemas"]["CommandDiagnostic"];
       panic?: components["schemas"]["PanicDiagnostic"];
       metadata?: components["schemas"]["StringMap"];
@@ -3346,6 +3398,17 @@ export interface components {
       model?: string;
       requestMetadata?: components["schemas"]["StringMap"];
       responseMetadata?: components["schemas"]["StringMap"];
+    };
+    InvocationDiagnostic: {
+      signatureHash?: string;
+      parameters?: components["schemas"]["InvocationParameterDiagnostic"][];
+    };
+    InvocationParameterDiagnostic: {
+      name?: string;
+      sourceKinds?: string[];
+      /** Format: int64 */
+      valueCount?: number;
+      redacted?: boolean;
     };
     CommandDiagnostic: {
       command?: string;
@@ -3374,6 +3437,47 @@ export interface components {
     SafeWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
+      invocation?: components["schemas"]["InvocationDiagnostic"];
+    };
+    /** @description Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership. */
+    SafeAgentRunDiagnostic: {
+      /**
+       * @description Stable execution behavior marker for agent-loop runs.
+       * @enum {string}
+       */
+      executionBehavior?: SafeAgentRunDiagnosticExecutionBehavior;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
+    /** @description Bounded summary for one agent tool lifecycle event. */
+    AgentRunToolDiagnosticEntry: {
+      /** @description Tool name invoked by the agent loop. */
+      toolName?: string;
+      /** @description Tool lifecycle phase such as start, success, failure, or denied. */
+      phase?: string;
+      /** @description Safe diagnostic detail without raw process output or secrets. */
+      detail?: string;
+    };
+    /** @description Bounded transcript metadata for one agent-loop message without exposing full prompt bodies. */
+    AgentRunTranscriptEntry: {
+      /** @description Message role such as system, user, assistant, or tool. */
+      role?: string;
+      /** @description Bounded summary of the message content for inspection. */
+      summary?: string;
     };
     WallClock: {
       /** Format: date-time */
@@ -3633,6 +3737,8 @@ export interface components {
       inputTypes?: components["schemas"]["InputType"][];
       /** @description Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation. */
       invocationReturn?: components["schemas"]["InvocationReturn"];
+      /** @description Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior. */
+      invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -3695,6 +3801,100 @@ export interface components {
       encoding: FactoryOrchestratorJavaScriptInlineSourceEncoding;
       /** @description Inline JavaScript workflow source text. */
       inline: string;
+    };
+    /** @description Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions. */
+    FactoryInvocationSignature: {
+      /** @description Declared invocation parameters keyed by canonical parameter name. */
+      parameters?: components["schemas"]["FactoryInvocationParameter"][];
+      /** @description Policy for named inputs that do not match any declared parameter binding. */
+      unknownNamedArgumentPolicy?: components["schemas"]["FactoryInvocationUnknownNamedArgumentPolicy"];
+      /** @description Optional customer-facing hint for the factory's primary output shape. */
+      outputContract?: components["schemas"]["FactoryInvocationOutputContract"];
+      /** @description Example invocations rendered in docs, help, and inspection surfaces. */
+      examples?: components["schemas"]["FactoryInvocationExample"][];
+    };
+    /** @description One canonical invocation parameter declared on a factory. */
+    FactoryInvocationParameter: {
+      /** @description Internal canonical parameter name used for normalized argument maps and interpolation. */
+      name: string;
+      /** @description Customer-facing description rendered in help, docs, and form controls. */
+      description?: string;
+      /** @description Preferred named-argument key shown to callers, such as `output`. */
+      externalName?: string;
+      /** @description Additional accepted named-argument keys that normalize to this parameter. */
+      aliases?: string[];
+      /** @description String-first hint that guides parsing, docs, and dashboard form selection. */
+      typeHint?: components["schemas"]["FactoryInvocationParameterTypeHint"];
+      /** @description Declares whether the parameter consumes one value, repeated values, variadic values, or file contents. */
+      valueMode?: components["schemas"]["FactoryInvocationParameterValueMode"];
+      /** @description When true, invocation normalization must reject requests that omit this parameter. */
+      required?: boolean;
+      /** @description When true, diagnostics must preserve names and source metadata but redact concrete values. */
+      sensitive?: boolean;
+      /** @description Optional allowed string values for this parameter. */
+      choices?: string[];
+      /** @description Default string value used when an omitted parameter resolves to one effective value. */
+      defaultValue?: string;
+      /** @description Default string values used when an omitted parameter resolves to multiple effective values. */
+      defaultValues?: string[];
+      /** @description Accepted invocation bindings for this parameter across positional, named, and stdin sources. */
+      bindings?: components["schemas"]["FactoryInvocationParameterBinding"][];
+    };
+    /** @description One public binding that exposes a parameter to callers. */
+    FactoryInvocationParameterBinding: {
+      /** @description Binding kind used to route invocation input into the parameter. */
+      kind: components["schemas"]["FactoryInvocationParameterBindingKind"];
+      /** @description 1-based positional slot used when kind is POSITIONAL. */
+      position?: number;
+    };
+    /**
+     * @description Public invocation binding kinds supported by factory signatures.
+     * @enum {string}
+     */
+    FactoryInvocationParameterBindingKind: FactoryInvocationParameterBindingKind;
+    /**
+     * @description String-first parsing and UI hint for one factory invocation parameter.
+     * @enum {string}
+     */
+    FactoryInvocationParameterTypeHint: FactoryInvocationParameterTypeHint;
+    /**
+     * @description Declares how one invocation parameter consumes one or more string values.
+     * @enum {string}
+     */
+    FactoryInvocationParameterValueMode: FactoryInvocationParameterValueMode;
+    /**
+     * @description Policy for named inputs that do not match any declared parameter binding.
+     * @enum {string}
+     */
+    FactoryInvocationUnknownNamedArgumentPolicy: FactoryInvocationUnknownNamedArgumentPolicy;
+    /** @description Customer-facing output hint for a factory invocation signature. */
+    FactoryInvocationOutputContract: {
+      /** @description High-level output contract mode exposed to callers. */
+      mode?: components["schemas"]["FactoryInvocationOutputContractMode"];
+      /** @description Parameter name that controls the destination path when the factory writes output to disk. */
+      pathParameter?: string;
+      /** @description Output media type hint for docs, API consumers, and dashboard affordances. */
+      contentType?: string;
+      /** @description Suggested file extension when the output mode writes a file. */
+      fileExtension?: string;
+      /** @description Human-readable summary of the primary output contract. */
+      description?: string;
+    };
+    /**
+     * @description High-level output shape hint exposed by a factory invocation signature.
+     * @enum {string}
+     */
+    FactoryInvocationOutputContractMode: FactoryInvocationOutputContractMode;
+    /** @description One example invocation for docs, help, and packaged-factory inspection. */
+    FactoryInvocationExample: {
+      /** @description Stable example name. */
+      name: string;
+      /** @description Customer-facing explanation of what the example does. */
+      description?: string;
+      /** @description CLI-style argument vector rendered after factory selection. */
+      argv?: string[];
+      /** @description Example stdin payload when the signature routes stdin into one parameter. */
+      stdin?: string;
     };
     /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
     InvocationReturn: {
@@ -3862,9 +4062,21 @@ export interface components {
       auth?: components["schemas"]["HostedWorkerAuth"];
       /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
       linear?: components["schemas"]["HostedLinearWorkerConfig"];
+      /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools. */
+      agentTools?: components["schemas"]["AgentWorkerToolsConfig"];
       /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
       body?: string;
     };
+    /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy. */
+    AgentWorkerToolsConfig: {
+      /** @description Required executor policy for agent-loop tool use on this worker. */
+      policy: components["schemas"]["AgentWorkerToolPolicy"];
+    };
+    /**
+     * @description Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+     * @enum {string}
+     */
+    AgentWorkerToolPolicy: AgentWorkerToolPolicy;
     /**
      * @description Worker implementation families supported by the public factory-config contract.
      * @enum {string}
@@ -6669,6 +6881,8 @@ export const FactoryEventType = {
   FactoryEventTypeScriptRequest: "SCRIPT_REQUEST",
   // A script-backed worker command attempt returned or failed before a normal exit.
   FactoryEventTypeScriptResponse: "SCRIPT_RESPONSE",
+  // An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
+  FactoryEventTypeAgentRunResponse: "AGENT_RUN_RESPONSE",
   // A workstation response finished processing and produced an outcome.
   FactoryEventTypeDispatchResponse: "DISPATCH_RESPONSE",
   // A work item moved between authored marking states.
@@ -6799,6 +7013,12 @@ export const WorkFailureType = {
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const SafeAgentRunDiagnosticExecutionBehavior = {
+  // Agent-loop execution through AGENT_RUN workstations.
+  agent_run: "agent_run",
+} as const;
+export type SafeAgentRunDiagnosticExecutionBehavior =
+  (typeof SafeAgentRunDiagnosticExecutionBehavior)[keyof typeof SafeAgentRunDiagnosticExecutionBehavior];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",
@@ -6820,6 +7040,66 @@ export const FactoryOrchestratorJavaScriptInlineSourceEncoding = {
 } as const;
 export type FactoryOrchestratorJavaScriptInlineSourceEncoding =
   (typeof FactoryOrchestratorJavaScriptInlineSourceEncoding)[keyof typeof FactoryOrchestratorJavaScriptInlineSourceEncoding];
+export const FactoryInvocationParameterBindingKind = {
+  // Consume a positional CLI-style argument at a declared 1-based slot.
+  FactoryInvocationParameterBindingKindPositional: "POSITIONAL",
+  // Consume one named argument key matched through the parameter's externalName or aliases.
+  FactoryInvocationParameterBindingKindNamed: "NAMED",
+  // Consume invocation stdin routed into one declared parameter.
+  FactoryInvocationParameterBindingKindStdin: "STDIN",
+  // Collect otherwise-unbound named arguments into one rest-style parameter.
+  FactoryInvocationParameterBindingKindNamedRest: "NAMED_REST",
+} as const;
+export type FactoryInvocationParameterBindingKind =
+  (typeof FactoryInvocationParameterBindingKind)[keyof typeof FactoryInvocationParameterBindingKind];
+export const FactoryInvocationParameterTypeHint = {
+  // Generic free-form string input.
+  FactoryInvocationParameterTypeHintString: "STRING",
+  // Path-like string input with no stronger file or directory guarantee.
+  FactoryInvocationParameterTypeHintPath: "PATH",
+  // File path string input.
+  FactoryInvocationParameterTypeHintFilePath: "FILE_PATH",
+  // Directory path string input.
+  FactoryInvocationParameterTypeHintDirectoryPath: "DIRECTORY_PATH",
+  // Numeric value encoded as a string for transport parity.
+  FactoryInvocationParameterTypeHintNumberString: "NUMBER_STRING",
+  // Boolean value encoded as a string with CLI-friendly flag behavior.
+  FactoryInvocationParameterTypeHintBooleanString: "BOOLEAN_STRING",
+} as const;
+export type FactoryInvocationParameterTypeHint =
+  (typeof FactoryInvocationParameterTypeHint)[keyof typeof FactoryInvocationParameterTypeHint];
+export const FactoryInvocationParameterValueMode = {
+  // Consume exactly one effective string value.
+  FactoryInvocationParameterValueModeExact: "EXACT",
+  // Consume zero or more repeated effective string values.
+  FactoryInvocationParameterValueModeRepeated: "REPEATED",
+  // Consume positional overflow values as one variadic parameter.
+  FactoryInvocationParameterValueModeVariadic: "VARIADIC",
+  // Resolve supplied path values to file contents before interpolation.
+  FactoryInvocationParameterValueModeFileContents: "FILE_CONTENTS",
+} as const;
+export type FactoryInvocationParameterValueMode =
+  (typeof FactoryInvocationParameterValueMode)[keyof typeof FactoryInvocationParameterValueMode];
+export const FactoryInvocationUnknownNamedArgumentPolicy = {
+  // Reject unknown named arguments during normalization.
+  FactoryInvocationUnknownNamedArgumentPolicyReject: "REJECT",
+  // Preserve unknown named arguments for compatibility handling.
+  FactoryInvocationUnknownNamedArgumentPolicyAllow: "ALLOW",
+  // Route unknown named arguments into one declared NAMED_REST parameter.
+  FactoryInvocationUnknownNamedArgumentPolicyCollect: "COLLECT",
+} as const;
+export type FactoryInvocationUnknownNamedArgumentPolicy =
+  (typeof FactoryInvocationUnknownNamedArgumentPolicy)[keyof typeof FactoryInvocationUnknownNamedArgumentPolicy];
+export const FactoryInvocationOutputContractMode = {
+  // The primary result is expected inline in the invocation response.
+  FactoryInvocationOutputContractModeInline: "INLINE",
+  // The primary result is expected to be written to a caller-supplied file path.
+  FactoryInvocationOutputContractModeFile: "FILE",
+  // The primary result is expected to be structured JSON-like content.
+  FactoryInvocationOutputContractModeJson: "JSON",
+} as const;
+export type FactoryInvocationOutputContractMode =
+  (typeof FactoryInvocationOutputContractMode)[keyof typeof FactoryInvocationOutputContractMode];
 export const InvocationReturnPolicy = {
   // Use the invocation-submitted work item terminal content as the primary result.
   InvocationReturnPolicySubmittedWorkTerminal: "SUBMITTED_WORK_TERMINAL",
@@ -6866,10 +7146,17 @@ export const ResourceType = {
   ResourceTypeInvocationSlot: "INVOCATION_SLOT",
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
+export const AgentWorkerToolPolicy = {
+  AgentWorkerToolPolicyDISABLED: "DISABLED",
+  AgentWorkerToolPolicyREADONLY: "READ_ONLY",
+  AgentWorkerToolPolicyENABLED: "ENABLED",
+} as const;
+export type AgentWorkerToolPolicy =
+  (typeof AgentWorkerToolPolicy)[keyof typeof AgentWorkerToolPolicy];
 export const WorkerType = {
   // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
   WorkerTypeInferenceWorker: "INFERENCE_WORKER",
-  // Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
+  // Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
   WorkerTypeAgentWorker: "AGENT_WORKER",
   // Script-backed worker that executes a configured command instead of calling a model provider.
   WorkerTypeScriptWorker: "SCRIPT_WORKER",
@@ -6971,7 +7258,7 @@ export type WorkstationKind =
 export const WorkstationType = {
   // One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
   WorkstationTypeInferenceRun: "INFERENCE_RUN",
-  // Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+  // Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
   WorkstationTypeAgentRun: "AGENT_RUN",
   // Script-run workstation that executes deterministic command or script behavior through a script worker.
   WorkstationTypeScriptRun: "SCRIPT_RUN",

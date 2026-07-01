@@ -37,7 +37,7 @@ func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(
 		t.Fatalf("pre-resume lifecycle = %#v, want interruptedAt", before.Lifecycle)
 	}
 
-	resumeResponse := mcpControlResume(t, client, sessionID)
+	resumeResponse := mcpControlResumeWhenInterrupted(t, client, sessionID, 5*time.Second)
 	if resumeResponse.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
 		t.Fatalf("resume operation = %q, want RESUME", resumeResponse.Operation)
 	}
@@ -99,7 +99,7 @@ func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDi
 		t.Fatalf("pre-resume dispatch count = %d, want 2", len(beforeDispatches.Dispatches))
 	}
 
-	resumeResponse := mcpControlResume(t, client, sessionID)
+	resumeResponse := mcpControlResumeWhenInterrupted(t, client, sessionID, 5*time.Second)
 	if resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("resume outcome = %q, want ACCEPTED", resumeResponse.Outcome)
 	}
@@ -529,6 +529,47 @@ func mcpControlResume(
 ) factoryapi.FactorySessionLifecycleControlResponse {
 	t.Helper()
 	return mcpControlResumeExpectingOutcome(t, client, sessionID, factoryapi.FactorySessionLifecycleControlOutcomeAccepted)
+}
+
+func mcpControlResumeWhenInterrupted(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	timeout time.Duration,
+) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
+	waitForMCPSessionStatus(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
+		timeout,
+	)
+
+	deadline := time.Now().Add(timeout)
+	var last factoryapi.FactorySessionLifecycleControlResponse
+	for time.Now().Before(deadline) {
+		response := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
+			t,
+			client.callTool(mcpfactorysession.ToolControl, map[string]any{
+				"sessionId": sessionID,
+				"operation": factoryapi.FactorySessionLifecycleControlKindResume,
+			}),
+		)
+		if response.Error != nil || response.Result == nil {
+			t.Fatalf("resume = %#v, want success", response)
+		}
+		last = *response.Result
+		if last.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+			return last
+		}
+		if last.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+			t.Fatalf("resume outcome = %q, want ACCEPTED", last.Outcome)
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	t.Fatalf("resume outcome = %q, want ACCEPTED within %s", last.Outcome, timeout)
+	return last
 }
 
 func mcpControlResumeExpectingOutcome(

@@ -436,6 +436,7 @@ func cloneRuntimeTokenColors(colors []interfaces.TokenColor) []interfaces.TokenC
 		cloned[i].Relations = factory.CloneRuntimeRelations(colors[i].Relations)
 		cloned[i].Content = interfaces.CloneWorkContentParts(colors[i].Content)
 		cloned[i].Payload = factory.CloneRuntimePayload(colors[i].Payload)
+		cloned[i].InvocationArguments = interfaces.CloneInvocationArguments(colors[i].InvocationArguments)
 	}
 	return cloned
 }

@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+properties:
+  name:
+    type: string
+  sourceKinds:
+    type: array
+    items:
+      type: string
+  valueCount:
+    type: integer
+    format: int64
+    minimum: 0
+  redacted:
+    type: boolean

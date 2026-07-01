@@ -23,6 +23,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeInferenceResponse,
 	factoryapi.FactoryEventTypeScriptRequest,
 	factoryapi.FactoryEventTypeScriptResponse,
+	factoryapi.FactoryEventTypeAgentRunResponse,
 	factoryapi.FactoryEventTypeDispatchResponse,
 	factoryapi.FactoryEventTypeWorkStateChange,
 	factoryapi.FactoryEventTypeFactoryStateResponse,
@@ -100,6 +101,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeScriptResponse: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsScriptResponseEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeAgentRunResponse: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsAgentRunResponseEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeDispatchResponse: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -213,6 +218,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	reflect.TypeOf(factoryapi.ScriptResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromScriptResponseEventPayload(value.(factoryapi.ScriptResponseEventPayload))
 	},
+	reflect.TypeOf(factoryapi.AgentRunResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromAgentRunResponseEventPayload(value.(factoryapi.AgentRunResponseEventPayload))
+	},
 	reflect.TypeOf(factoryapi.DispatchResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromDispatchResponseEventPayload(value.(factoryapi.DispatchResponseEventPayload))
 	},
@@ -270,8 +278,33 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 }
 
 func generatedNamedFactoryFixture() factoryapi.Factory {
+	unknownNamedPolicy := factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject
+	parameterTypeHint := factoryapi.FactoryInvocationParameterTypeHintString
+	parameterValueMode := factoryapi.FactoryInvocationParameterValueModeExact
+	bindingKind := factoryapi.FactoryInvocationParameterBindingKindPositional
+	outputContractMode := factoryapi.FactoryInvocationOutputContractModeInline
 	return factoryapi.Factory{
 		Name: "customer-support-triage",
+		InvocationSignature: &factoryapi.FactoryInvocationSignature{
+			UnknownNamedArgumentPolicy: &unknownNamedPolicy,
+			Parameters: &[]factoryapi.FactoryInvocationParameter{{
+				Name:         "input",
+				ExternalName: stringPtr("input"),
+				TypeHint:     &parameterTypeHint,
+				ValueMode:    &parameterValueMode,
+				Bindings: &[]factoryapi.FactoryInvocationParameterBinding{{
+					Kind:     bindingKind,
+					Position: intPtr(1),
+				}},
+			}},
+			OutputContract: &factoryapi.FactoryInvocationOutputContract{
+				Mode: &outputContractMode,
+			},
+			Examples: &[]factoryapi.FactoryInvocationExample{{
+				Name: "basic",
+				Argv: &[]string{"brief.md"},
+			}},
+		},
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "task",
 			States: []factoryapi.WorkState{
@@ -726,6 +759,46 @@ func generatedSessionLifecycleDispatchEvents(
 				ReconciliationSource: factoryapi.PROVIDERSESSION,
 				Replayed:             true,
 				ArtifactIds:          &[]string{"artifact-result-1"},
+			}),
+		},
+	}
+}
+
+func generatedFactoryAgentRunEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	eventTime := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	traceIDs := []string{"trace-1"}
+	workIDs := []string{"work-1"}
+	agentDispatchID := "dispatch-agent-1"
+	toolPolicy := "DISABLED"
+	executionBehavior := factoryapi.AgentRun
+	toolCallCount := int32(0)
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-agent-run-response",
+			Type:          factoryapi.FactoryEventTypeAgentRunResponse,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:   11,
+				Tick:       2,
+				EventTime:  eventTime,
+				TraceIds:   &traceIDs,
+				WorkIds:    &workIDs,
+				DispatchId: &agentDispatchID,
+			},
+			Payload: factoryEventPayload(t, factoryapi.AgentRunResponseEventPayload{
+				AgentRunId:     "agent-run-1",
+				Outcome:        factoryapi.WorkOutcomeAccepted,
+				DurationMillis: 420,
+				Diagnostics: &factoryapi.SafeWorkDiagnostics{
+					AgentRun: &factoryapi.SafeAgentRunDiagnostic{
+						ExecutionBehavior: &executionBehavior,
+						ToolPolicy:        &toolPolicy,
+						ToolCallCount:     &toolCallCount,
+						ToolDiagnostics:   &[]factoryapi.AgentRunToolDiagnosticEntry{},
+						Transcript:        &[]factoryapi.AgentRunTranscriptEntry{},
+					},
+				},
 			}),
 		},
 	}

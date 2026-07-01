@@ -1,0 +1,17 @@
+type: string
+description: Declares how one invocation parameter consumes one or more string values.
+x-enum-varnames:
+  - FactoryInvocationParameterValueModeExact
+  - FactoryInvocationParameterValueModeRepeated
+  - FactoryInvocationParameterValueModeVariadic
+  - FactoryInvocationParameterValueModeFileContents
+enum:
+  - EXACT
+  - REPEATED
+  - VARIADIC
+  - FILE_CONTENTS
+x-enum-descriptions:
+  - Consume exactly one effective string value.
+  - Consume zero or more repeated effective string values.
+  - Consume positional overflow values as one variadic parameter.
+  - Resolve supplied path values to file contents before interpolation.
