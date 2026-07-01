@@ -59,8 +59,12 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	if result.DashboardRenderEvidence.MetaDescription != "Standalone live dashboard shell for You Agent Factory." {
 		t.Fatalf("meta description = %q, want renamed dashboard description", result.DashboardRenderEvidence.MetaDescription)
 	}
-	if !strings.HasSuffix(result.DashboardRenderEvidence.StreamStatusName, "/events") {
-		t.Fatalf("stream status evidence = %q, want event stream request path", result.DashboardRenderEvidence.StreamStatusName)
+	if !strings.Contains(result.DashboardRenderEvidence.StreamStatusName, "/factory-sessions/") ||
+		!strings.HasSuffix(result.DashboardRenderEvidence.StreamStatusName, "/events") {
+		t.Fatalf(
+			"stream status evidence = %q, want session-scoped event stream request path",
+			result.DashboardRenderEvidence.StreamStatusName,
+		)
 	}
 	if len(result.DashboardRenderEvidence.AssetRequestPaths) == 0 || len(result.DashboardRenderEvidence.LiveRequestPaths) == 0 {
 		t.Fatalf("dashboard render evidence = %#v, want asset and live request paths", result.DashboardRenderEvidence)

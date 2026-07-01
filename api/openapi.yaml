@@ -228,8 +228,8 @@ paths:
       tags:
         - Runtime
       operationId: getEvents
-      summary: Stream factory events
-      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+      summary: Stream process-global factory events (compatibility-only)
+      description: Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. New dashboard, Factory Session, and durable replay consumers should use GET /factory-sessions/{session_id}/events so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
       parameters:
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
@@ -252,7 +252,7 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Canonical event stream for dashboard, Factory Session, and durable replay traffic. Streams factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/AfterEventId'

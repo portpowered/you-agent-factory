@@ -50,6 +50,7 @@ const proxiedAPIPaths = [
   "^/factory-sessions/[^/]+/work-requests/[^/]+$",
   "^/work/[^/]+$",
   "^/factory-sessions/[^/]+/work/[^/]+$",
+  // Compatibility-only: retain process-global /events proxying for legacy tooling.
   "/events",
   "^/factory-sessions/[^/]+/events$",
   "/status",

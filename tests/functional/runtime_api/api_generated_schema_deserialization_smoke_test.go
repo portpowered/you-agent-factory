@@ -111,7 +111,7 @@ func generatedSchemaTransportSummaryFromHTTPBoundary(t *testing.T, dir string) g
 	t.Helper()
 
 	server := startFunctionalServer(t, dir, false, factory.WithServiceMode())
-	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	_, first := requireFunctionalEventStreamPrelude(t, stream)
 	initialStructurePayload, err := first.Payload.AsInitialStructureRequestEventPayload()
 	if err != nil {

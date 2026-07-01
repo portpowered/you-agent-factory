@@ -135,6 +135,9 @@ describe("useFactoryEventStream stale cursor recovery", () => {
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
+    );
     const initialStream = replayHarness.getStreams()[0];
     if (!initialStream) {
       throw new Error("expected initial reconnect stream to be opened");

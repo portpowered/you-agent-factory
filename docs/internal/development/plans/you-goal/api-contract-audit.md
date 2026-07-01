@@ -178,7 +178,7 @@ internal progress** (response-stream plumbing inside the session runtime).
 | Concern | Durable public history | Ephemeral internal progress |
 |---------|------------------------|-----------------------------|
 | Purpose | Replay-safe, customer-visible factory and session facts | Live provider/model output chunks, partial assistant text, and in-flight response assembly before terminal selection |
-| Transport | `GET /events`, `GET /factory-sessions/{session_id}/events` (SSE `FactoryEvent`) | In-process session/runtime subscribers only |
+| Transport | `GET /factory-sessions/{session_id}/events` (canonical SSE `FactoryEvent`); `GET /events` (compatibility-only process-global SSE) | In-process session/runtime subscribers only |
 | Persistence | Canonical event history (`pkg/factory/events/`, durable session replay in `pkg/factorysessionexecution/`) | Session-scoped runtime state; not a public REST resource |
 | `@you/goal` posture | **Reuse as-is** — observe progress through existing event types and lifecycle vocabulary | **Internal-only** — implement as `SessionResponseStream` / `SessionResponseStreamEvent`; never publish to OpenAPI |
 
@@ -192,8 +192,8 @@ payloads for goal-mode partial output.
 
 | Surface | Ownership | Public / internal | @you/goal posture | Follow-on verification |
 |---------|-----------|-------------------|--------------------|------------------------|
-| `GET /events` | Runtime SSE (`getEvents`) | **Public** | **Reuse as-is** — process-wide canonical `FactoryEvent` history + live tail | `pkg/api/servertests/server_dashboard_events_test.go`; reconnect cursors in `pkg/factory/events/event_reconnect_test.go` |
-| `GET /factory-sessions/{session_id}/events` | Session-scoped SSE (`getEventsBySessionId`) | **Public** | **Reuse as-is** — same `FactoryEvent` vocabulary filtered to one live or durable session | `pkg/api/servertests/server_durable_session_events_test.go`; `FilterEventsAfterReconnect` in `pkg/factorysessionexecution/listing.go` |
+| `GET /events` | Runtime SSE (`getEvents`) | **Public** | **Compatibility-only** — process-wide `FactoryEvent` history + live tail retained for legacy tooling and diagnostics; new session-aware consumers should use `GET /factory-sessions/{session_id}/events` | `pkg/api/servertests/server_dashboard_events_test.go`; reconnect cursors in `pkg/factory/events/event_reconnect_test.go` |
+| `GET /factory-sessions/{session_id}/events` | Session-scoped SSE (`getEventsBySessionId`) | **Public** | **Canonical** — same `FactoryEvent` vocabulary filtered to one live or durable session | `pkg/api/servertests/server_durable_session_events_test.go`; `FilterEventsAfterReconnect` in `pkg/factorysessionexecution/listing.go` |
 | `FactoryEventType` / event payloads | OpenAPI `api/components/schemas/events/` | **Public** | **Reuse as-is** — no new types for response-stream chunks | `pkg/api/contracttests/openapi_contract_common_test.go`; `ui/src/api/events/types.test.ts` |
 | `after_event_id` / `after_sequence` reconnect filters | OpenAPI parameters + `pkg/api/handlers_events.go` | **Public** | **Reuse as-is** — cursor filters apply only to canonical `FactoryEvent` replay | `pkg/factory/projections/projectiontests/session_reconnect_replay_test.go` |
 | `POST /factory-sessions/{session_id}/pause` / `/resume` | Durable lifecycle control API | **Public** | **Reuse routes** — behavioral repair may extend live `~default` sessions through the same routes; no `/goal/.../pause` family | `pkg/api/servertests/server_durable_session_lifecycle_control_test.go`; `pkg/factorysessionexecution/control.go` |
@@ -205,14 +205,16 @@ payloads for goal-mode partial output.
 
 ### Public factory event stream (durable history)
 
-The canonical factory event stream is the **only** public progress and lifecycle
-history transport for this slice:
+The canonical factory event stream is the **only** normal progress and lifecycle
+history transport for new dashboard and Factory Session consumers:
 
-- **Process-wide:** `GET /events` streams historical then live `FactoryEvent`
-  records for the current runtime process.
-- **Session-scoped:** `GET /factory-sessions/{session_id}/events` streams the
-  same vocabulary for one session (`~default` live sessions and `dur-sess-*`
-  durable sessions).
+- **Session-scoped (canonical):** `GET /factory-sessions/{session_id}/events`
+  streams the same vocabulary for one session (`~default` live sessions and
+  `dur-sess-*` durable sessions). Reconnect with `after_event_id` or
+  `after_sequence` on this route.
+- **Process-wide (compatibility-only):** `GET /events` streams historical then
+  live `FactoryEvent` records across the current runtime process. Retained for
+  legacy tooling and operator diagnostics—not for new session-aware integrations.
 
 Reconnect clients use `after_event_id` or `after_sequence` (preferring
 `FactoryEvent.context.sessionSequence` for session-scoped lifecycle events) to

@@ -310,7 +310,8 @@ While a live Factory Session is paused:
   results; resume re-signals the runtime so that work can drain.
 
 After a successful resume, inspect progress with `you session show`,
-`GET /factory-sessions/{session_id}`, or the event stream. Canonical
+`GET /factory-sessions/{session_id}`, or
+`GET /factory-sessions/{session_id}/events`. Canonical
 `SESSION_LIFECYCLE_CONTROL` events record pause and resume for replay and
 historical status reads.
 
@@ -585,14 +586,25 @@ pre-submit checklist.
 ## Event stream lifecycle and reconnect
 
 API, CLI, dashboard, and future MCP tools observe the same canonical
-`FactoryEvent` stream for one live session.
+`FactoryEvent` stream for one selected Factory Session. Open the session-scoped
+route so reconnect cursors and stream recovery always carry the explicit session
+id:
+
+`GET /factory-sessions/{session_id}/events`
+
+Historical events are sent first in ascending tick order, followed by live
+events on the same connection. Reconnect clients pass `after_event_id` or
+`after_sequence` on that session-scoped URL to receive only events newer than
+the acknowledged point. For live dashboard traffic, probe reconnect recovery
+with `Accept: application/json` on the same route when the UI needs structured
+`cursor_stale` or unknown-session outcomes before reopening Server-Sent Events.
 
 | Surface | How lifecycle is observed |
 |---------|---------------------------|
 | Validate-first setup | `you workflow validate` and `POST /factories/preview` confirm source and policy readiness before a durable session exists. |
-| API | `GET /events` and `GET /factory-sessions/{session_id}/events` stream canonical lifecycle variants; reconnect with `after_event_id` or `after_sequence`. |
+| API | `GET /factory-sessions/{session_id}/events` is the normal event stream for dashboard, Factory Session, durable replay, and reconnect traffic; pass `after_event_id` or `after_sequence` on that route. `GET /events` remains a **compatibility-only** process-global stream for legacy tooling and operator diagnostics—new session-aware consumers should migrate to the session-scoped route. |
 | CLI | `you session show` prints live-session lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API; `you workflow status`, `result`, `dispatches`, `artifacts`, and `events` do the same for durable JavaScript session inspection. |
-| Dashboard | Replays lifecycle events into the timeline projection and shows reconnecting/stale, partial, and terminal states in the session lifecycle banner. |
+| Dashboard | Opens the selected session's `GET /factory-sessions/{session_id}/events` stream, replays lifecycle events into the timeline projection, and shows reconnecting/stale, partial, and terminal states in the session lifecycle banner. |
 | MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
 
 Lifecycle brackets use `SESSION_STARTED`, `SESSION_RESULT_UPDATED`, and

@@ -7226,7 +7226,7 @@ func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Stream factory events
+	// Stream process-global factory events (compatibility-only)
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams)
 	// Preview JavaScript orchestrator factory source
