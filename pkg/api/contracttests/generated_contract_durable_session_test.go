@@ -151,8 +151,47 @@ func assertDurableSessionScenarioFixture(t *testing.T, doc *openapi3.T, scenario
 	}
 
 	assertDurableSessionScenarioEventFixtures(t, doc, scenario)
+	assertDurableSessionFixtureInspectionEventLinksAreSessionScoped(t, scenario)
 
 	assertDurableSessionFixtureOmitsHostPaths(t, scenario)
+}
+
+func assertDurableSessionFixtureInspectionEventLinksAreSessionScoped(t *testing.T, scenario durableSessionContractScenario) {
+	t.Helper()
+
+	sessionID, _ := scenario.Session["sessionId"].(string)
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
+	wantEventsLink := "/factory-sessions/" + sessionID + "/events"
+
+	for _, container := range []map[string]any{
+		scenario.AsyncResponse,
+		scenario.SyncResponse,
+		scenario.Session,
+		scenario.LifecycleControl,
+	} {
+		if container == nil {
+			continue
+		}
+		links, ok := container["links"].(map[string]any)
+		if !ok {
+			continue
+		}
+		eventsLink, ok := links["events"].(string)
+		if !ok || strings.TrimSpace(eventsLink) == "" {
+			continue
+		}
+		if eventsLink != wantEventsLink {
+			t.Fatalf(
+				"%s fixture links.events = %q, want session-scoped %q (not compatibility-only GET /events)",
+				scenario.ID,
+				eventsLink,
+				wantEventsLink,
+			)
+		}
+	}
 }
 
 func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {

@@ -39,7 +39,8 @@ func TestReconnectCursorFromParams(t *testing.T) {
 	}
 }
 
-func TestGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
+// TestCompatibilityGetEvents_* exercises handler regressions for compatibility-only GET /events.
+func TestCompatibilityGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 	liveEvents := make(chan factoryapi.FactoryEvent, 1)
 	liveEvents <- factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest}
@@ -75,7 +76,7 @@ func TestGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 	}
 }
 
-func TestGetEvents_ErrorResponses(t *testing.T) {
+func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
 	tests := []struct {
@@ -151,7 +152,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 	}
 }
 
-func TestGetEvents_SessionHandshakeWritesStreamGenerationHeader(t *testing.T) {
+func TestSessionScopedGetEvents_SessionHandshakeWritesStreamGenerationHeader(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 	liveEvents := make(chan factoryapi.FactoryEvent)
 	close(liveEvents)
