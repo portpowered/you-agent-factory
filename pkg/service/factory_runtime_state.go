@@ -834,36 +834,6 @@ func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *fa
 	}
 }
 
-func newRecordingArtifact(
-	cfg *FactoryServiceConfig,
-	factoryDir string,
-	factoryCfg *interfaces.FactoryConfig,
-	runtimeCfg interfaces.RuntimeDefinitionLookup,
-	clock factory.Clock,
-) (*interfaces.ReplayArtifact, error) {
-	if cfg.RecordPath == "" {
-		return nil, nil
-	}
-	now := factory.EnsureClock(clock).Now().UTC()
-	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
-		factoryDir,
-		factoryCfg,
-		runtimeCfg,
-		replay.WithGeneratedFactorySourceDirectory(factoryDir),
-		replay.WithGeneratedFactoryWorkflowID(cfg.WorkflowID),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build replay artifact config: %w", err)
-	}
-	return replay.NewEventLogArtifactFromFactory(now, generatedFactory, &interfaces.ReplayWallClockMetadata{
-		StartedAt: now,
-	}, interfaces.ReplayDiagnostics{})
-}
-
-func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntimeBundle) error {
-	return factoryservice.FinalizeArtifacts(runtimeBundle, fs.clock)
-}
-
 func sessionScopedRecordPath(basePath string, sessionID string) string {
 	return runtimebuild.SessionScopedRecordPath(basePath, sessionID)
 }

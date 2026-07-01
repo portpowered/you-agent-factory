@@ -132,11 +132,6 @@ func (h *Handle) LifecycleMetricsOnce() *sync.Once {
 	return &h.lifecycleMetricsOnce
 }
 
-// CanceledRun reports whether the hosted run result is context cancellation.
-func CanceledRun(err error) bool {
-	return errors.Is(err, context.Canceled)
-}
-
 const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
 
 type runtimeMetricsObservation struct {

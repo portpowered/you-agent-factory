@@ -1627,10 +1627,6 @@ func (s *stubFactoryCoordinator) stopLiveRuntimeSidecars(*liveRuntimeHandle) {
 	s.calls = append(s.calls, "stop-sidecars")
 }
 
-func (s *stubFactoryCoordinator) restoreLiveRuntimeSidecars(*serviceRunState) {
-	s.calls = append(s.calls, "restore-sidecars")
-}
-
 func (s *stubFactoryCoordinator) stopLiveRuntime(*liveRuntimeHandle) error {
 	s.calls = append(s.calls, "stop-runtime")
 	return nil

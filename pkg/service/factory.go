@@ -795,20 +795,6 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntimeSidecars(handle *liveRuntimeH
 	factoryservice.StopSidecars(handle)
 }
 
-func (fs *FactoryService) restoreLiveRuntimeSidecars(runState *serviceRunState) {
-	fs.requireCoordinator().restoreLiveRuntimeSidecars(runState)
-}
-
-func (c *runtimeFactoryCoordinator) restoreLiveRuntimeSidecars(runState *serviceRunState) {
-	fs := c.service
-	if runState == nil || runState.ctx == nil || runState.runtime == nil {
-		return
-	}
-	if err := fs.startLiveRuntimeSidecars(runState.ctx, runState.runtime); err != nil {
-		fs.logger.Error("restore prior runtime sidecars failed", zap.Error(err))
-	}
-}
-
 func (fs *FactoryService) stopLiveRuntime(handle *liveRuntimeHandle) error {
 	return fs.requireCoordinator().stopLiveRuntime(handle)
 }

@@ -75,7 +75,6 @@ type FactoryCoordinator interface {
 	startBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error
 	startLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error
 	stopLiveRuntimeSidecars(*liveRuntimeHandle)
-	restoreLiveRuntimeSidecars(*serviceRunState)
 	stopLiveRuntime(*liveRuntimeHandle) error
 	shutdownOtherLiveSessions(*liveRuntimeHandle) error
 	replaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error
