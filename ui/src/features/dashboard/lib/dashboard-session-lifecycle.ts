@@ -10,7 +10,6 @@ import {
   FACTORY_SESSION_DETAIL_QUERY_KEY,
   factorySessionDetailQueryKey,
 } from "../../factory-session-detail/public";
-import { backendRuntimeCacheScopeKey } from "./backend-runtime-cache-scope";
 
 export function dashboardSessionKey(
   sessionID: string | null,
@@ -80,16 +79,5 @@ export function recoverDashboardSessionScopedState(
   queryClient.removeQueries({
     queryKey: currentFactoryDocumentQueryKey(sessionID, backendScopeID),
     exact: true,
-  });
-}
-
-export function clearDashboardRuntimeQueriesForScope(
-  queryClient: QueryClient,
-  backendScopeID: string,
-): void {
-  const scopeKey = backendRuntimeCacheScopeKey(backendScopeID);
-  queryClient.removeQueries({
-    predicate: (query) =>
-      Array.isArray(query.queryKey) && query.queryKey.includes(scopeKey),
   });
 }
