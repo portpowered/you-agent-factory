@@ -97,7 +97,7 @@ export function useDashboardSessionLifecycle({
       return;
     }
 
-    resetLocalizedSessionState();
+    resetLocalizedSessionState("remove");
   }, [backendRuntimeCacheScope, resetLocalizedSessionState]);
 
   return useMemo(
