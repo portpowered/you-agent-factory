@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file consolidated run invocation tests remain together until dedicated CLI invocation test seams split.
+// pkgmaintcheck:ignore-file-lines consolidated run invocation tests remain together until dedicated CLI invocation test seams split.
 package run
 
 import (
