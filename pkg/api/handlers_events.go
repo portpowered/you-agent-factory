@@ -56,7 +56,7 @@ func (s *Server) getStatus(
 	s.writeJSON(w, http.StatusOK, statusFromEngineStateSnapshot(*snapshot))
 }
 
-// GetEvents handles GET /events as a canonical factory event SSE stream.
+// GetEvents handles compatibility-only process-global GET /events.
 func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factoryapi.GetEventsParams) {
 	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
 	s.getEvents(w, r, false, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {

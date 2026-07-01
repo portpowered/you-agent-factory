@@ -165,6 +165,12 @@ provider calls.
 loops. Use `you docs models` and `you docs packaged-tts` for OmniVoice TTS and
 other typed inference authoring.
 
+`AGENT_RUN` workstations execute prompt-rendered agent loops through an
+`AGENT_WORKER` backend. Configure explicit `agentTools.policy` on the worker,
+keep tool execution disabled unless you intend filesystem tools, and inspect
+bounded agent diagnostics separately from final output (`you docs workers`,
+`you docs workstations`, `you docs sessions`).
+
 Planners should read factory-local overview docs and `you docs config` before submitting.
 Executors should read the workstation and worker `AGENTS.md` for the active step before
 changing repository files. Prompt composition rules live in `docs/reference/authoring-agents-md.md`
@@ -189,6 +195,9 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 | Worker types and providers | `you docs workers` |
 | Resource capacity | `you docs resources` |
 | Harnessless model operations (`INFERENCE_WORKER`, `INFERENCE_RUN`, TTS) | `you docs models` |
+| Agent-loop workers, tool policy, and failure classes | `you docs workers` |
+| `AGENT_RUN` workstations and agent-loop routing | `you docs workstations` |
+| Agent-run dispatch inspection | `you docs sessions` |
 | Packaged OmniVoice TTS (`@you/tts`) | `you docs packaged-tts` |
 | Batch ingress and inbox layout | `you docs batch-inputs` (alias: `you docs batch-work`) |
 | Prompt template variables | `you docs templates` |

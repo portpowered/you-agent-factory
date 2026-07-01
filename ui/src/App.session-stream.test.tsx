@@ -110,6 +110,7 @@ describe("App dashboard session stream tab switch", () => {
     expect(defaultStream.url).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
+    expect(defaultStream.url).not.toBe("/events");
 
     const defaultSlider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",

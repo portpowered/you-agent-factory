@@ -96,6 +96,12 @@ func IsProviderBackedWorkerType(workerType string) bool {
 	return IsInferenceWorkerType(workerType) || IsAgentWorkerType(workerType)
 }
 
+// UsesModelhostLease reports whether local model calls for this worker should
+// acquire and release modelhost inferencer leases.
+func UsesModelhostLease(workerType string, locality string) bool {
+	return IsProviderBackedWorkerType(workerType) && locality == ModelLocalityLocal
+}
+
 // IsScriptWorkerType reports whether workerType is an accepted script-worker taxonomy value.
 func IsScriptWorkerType(workerType string) bool {
 	return StrictPublicFactoryWorkerType(workerType) == WorkerTypeScript

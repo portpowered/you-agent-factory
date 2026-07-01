@@ -666,7 +666,7 @@ func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fs.URL()+"/events", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionEventsURL(fs.URL()), nil)
 	if err != nil {
 		cancel()
 		t.Fatalf("build events stream request: %v", err)
@@ -675,15 +675,15 @@ func (fs *FunctionalServer) OpenDashboardStream(t *testing.T) *DashboardStream {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		cancel()
-		t.Fatalf("GET /events: %v", err)
+		t.Fatalf("GET session-scoped event stream: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
-		t.Fatalf("GET /events: expected 200 OK, got %d", resp.StatusCode)
+		t.Fatalf("GET session-scoped event stream: expected 200 OK, got %d", resp.StatusCode)
 	}
 	if !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 		defer resp.Body.Close()
-		t.Fatalf("GET /events: unexpected content type %q", resp.Header.Get("Content-Type"))
+		t.Fatalf("GET session-scoped event stream: unexpected content type %q", resp.Header.Get("Content-Type"))
 	}
 
 	stream := &DashboardStream{

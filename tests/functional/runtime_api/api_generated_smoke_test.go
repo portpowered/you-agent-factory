@@ -539,7 +539,7 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 
 func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string) {
 	t.Helper()
-	stream := openFactoryEventHTTPStream(t, baseURL+"/events")
+	stream := openDefaultSessionFactoryEventHTTPStream(t, baseURL)
 	runRequest, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
 	assertFunctionalEventsUseCanonicalVocabulary(t, []factoryapi.FactoryEvent{runRequest, initialStructure},
 		factoryapi.FactoryEventTypeRunRequest,

@@ -552,12 +552,13 @@ func generatedFactoryWorkEvents(t *testing.T) []factoryapi.FactoryEvent {
 
 func generatedFactoryExecutionEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
-	events := make([]factoryapi.FactoryEvent, 0, 9)
+	events := make([]factoryapi.FactoryEvent, 0, 10)
 	events = append(events, generatedFactoryDispatchEvents(t)...)
 	events = append(events, generatedFactoryWorkStateChangeEvents(t)...)
 	events = append(events, generatedFactoryModelEvents(t)...)
 	events = append(events, generatedFactoryInferenceEvents(t)...)
 	events = append(events, generatedFactoryScriptEvents(t)...)
+	events = append(events, generatedFactoryAgentRunEvents(t)...)
 	return events
 }
 

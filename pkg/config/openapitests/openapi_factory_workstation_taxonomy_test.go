@@ -144,6 +144,50 @@ func TestMarshalCanonicalFactoryConfig_PrefersPollerRunOnRoundTrip(t *testing.T)
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_PreservesExplicitAgentRunOnSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cfgJSON := []byte(`{
+		"name":"explicit-agent-run",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"executor","type":"AGENT_WORKER","model":"claude-sonnet","modelProvider":"CLAUDE"}],
+		"workstations":[{"name":"execute-story","type":"AGENT_RUN","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	workstation := (*generated.Workstations)[0]
+	if workstation.Type == nil || string(*workstation.Type) != interfaces.WorkstationTypeAgent {
+		t.Fatalf("generated workstation type = %#v, want %s", workstation.Type, interfaces.WorkstationTypeAgent)
+	}
+
+	runtimeCfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(&runtimeCfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	if strings.Contains(string(canonical), `"type":"MODEL_WORKSTATION"`) {
+		t.Fatalf("canonical save output downgraded explicit agent run, got %s", string(canonical))
+	}
+	if !strings.Contains(string(canonical), `"type":"AGENT_RUN"`) {
+		t.Fatalf("canonical save output missing AGENT_RUN, got %s", string(canonical))
+	}
+
+	regenerated, err := GeneratedFactoryFromOpenAPIJSON(canonical)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON round trip: %v", err)
+	}
+	regeneratedWorkstation := (*regenerated.Workstations)[0]
+	if regeneratedWorkstation.Type == nil || string(*regeneratedWorkstation.Type) != interfaces.WorkstationTypeAgent {
+		t.Fatalf("round-tripped workstation type = %#v, want %s", regeneratedWorkstation.Type, interfaces.WorkstationTypeAgent)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_PreservesExplicitInferenceRunOnSaveRoundTrip(t *testing.T) {
 	t.Parallel()
 

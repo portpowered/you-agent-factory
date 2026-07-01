@@ -189,74 +189,8 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 }
 
 func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing.T) {
-	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	provider := &providerCallRecorder{}
-	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
-			Content: mustMarshalAudioContentResponse(t, audioPath),
-		},
-	}
-	factoryCfg := localModelFactoryConfig()
-	cache := localModelTestCacheLayout(t)
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, localModelRuntimeWorkers(), map[string]*interfaces.FactoryWorkstationConfig{
-		"speak": {
-			Name:           "speak",
-			Type:           interfaces.WorkstationTypeInvoke,
-			WorkerTypeName: "tts-worker",
-			Operation:      "TTS",
-			OperationBindings: []interfaces.ModelOperationBinding{{
-				Slot: "text",
-				Selector: &interfaces.ModelOperationBindingSelector{
-					Label: "utterance",
-					Type:  interfaces.ModelOperationContentTypeText,
-				},
-			}},
-		},
-	})
-
-	opts, err := loadWorkersFromConfig(
-		"",
-		factoryCfg,
-		"",
-		runtimeCfg,
-		nil,
-		logging.NoopLogger{},
-		true,
-		provider,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		LocalModelDomain{
-			Resources: newLocalModelResourceLimiter(),
-			Assets: staticModelAssetPuller{
-				cache: cache,
-			},
-			Runtime: runtime,
-			Manager: newManagedLocalModelManager(staticModelAssetPuller{
-				cache: cache,
-			}, runtime),
-		},
-	)
-	if err != nil {
-		t.Fatalf("loadWorkersFromConfig: %v", err)
-	}
-
-	fc := &factory.FactoryConfig{}
-	for _, opt := range opts {
-		opt(fc)
-	}
-	exec, ok := fc.WorkerExecutors["tts-worker"]
-	if !ok {
-		t.Fatal("expected tts-worker executor to be registered")
-	}
-	wsExec, ok := exec.(*workers.WorkstationExecutor)
-	if !ok {
-		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
-	}
+	wsExec, runtime := localModelManagedRuntimeWorkerExecutor(t, provider)
 
 	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
 		DispatchID:      "dispatch-tts",
@@ -357,6 +291,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -483,6 +418,78 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 	}
 }
 
+func localModelManagedRuntimeWorkerExecutor(t *testing.T, provider *providerCallRecorder) (*workers.WorkstationExecutor, *fakeLocalModelRuntime) {
+	t.Helper()
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	runtime := &fakeLocalModelRuntime{
+		response: interfaces.InferenceResponse{
+			Content: mustMarshalAudioContentResponse(t, audioPath),
+		},
+	}
+	factoryCfg := localModelFactoryConfig()
+	cache := localModelTestCacheLayout(t)
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, localModelRuntimeWorkers(), map[string]*interfaces.FactoryWorkstationConfig{
+		"speak": {
+			Name:           "speak",
+			Type:           interfaces.WorkstationTypeInvoke,
+			WorkerTypeName: "tts-worker",
+			Operation:      "TTS",
+			OperationBindings: []interfaces.ModelOperationBinding{{
+				Slot: "text",
+				Selector: &interfaces.ModelOperationBindingSelector{
+					Label: "utterance",
+					Type:  interfaces.ModelOperationContentTypeText,
+				},
+			}},
+		},
+	})
+	opts, err := loadWorkersFromConfig(
+		"",
+		factoryCfg,
+		"",
+		runtimeCfg,
+		nil,
+		logging.NoopLogger{},
+		true,
+		provider,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets: staticModelAssetPuller{
+				cache: cache,
+			},
+			Runtime: runtime,
+			Manager: newManagedLocalModelManager(staticModelAssetPuller{
+				cache: cache,
+			}, runtime),
+		},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+	exec, ok := fc.WorkerExecutors["tts-worker"]
+	if !ok {
+		t.Fatal("expected tts-worker executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+	return wsExec, runtime
+}
+
 func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*workers.WorkstationExecutor, *factoryevents.FactoryEventHistory, string) {
 	t.Helper()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
@@ -509,7 +516,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 		},
 	})
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
-	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, LocalModelDomain{
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, nil, history.RecordModelEvent, nil, func() time.Time { return eventTime }, LocalModelDomain{
 		Resources: newLocalModelResourceLimiter(),
 		Assets:    staticModelAssetPuller{cache: cache},
 		Runtime:   runtime,

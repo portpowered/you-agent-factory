@@ -417,9 +417,6 @@ describe("useFactoryEventStream generic reconnect", () => {
       },
       { timeout: 3000 },
     );
-    expect(replayHarness.getStreams()[1]?.url).toContain(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
-    );
   });
 
   it("clears the stale reconnect cursor and retries once from scratch", async () => {

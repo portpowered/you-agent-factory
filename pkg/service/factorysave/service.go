@@ -49,17 +49,3 @@ func (s *Service) Save(
 		return s.saveReplaceCurrentForSession(ctx, sessionID, request)
 	}
 }
-
-func (s *Service) workstationLoader() factoryconfig.WorkstationLoader {
-	if s == nil || s.loader == nil {
-		return nil
-	}
-	return s.loader()
-}
-
-func (s *Service) now() factory.Clock {
-	if s == nil || s.clock == nil {
-		return factory.EnsureClock(nil)
-	}
-	return factory.EnsureClock(s.clock)
-}
