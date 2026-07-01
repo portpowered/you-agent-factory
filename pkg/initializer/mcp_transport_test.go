@@ -160,8 +160,6 @@ func TestInitializeMCPTransport_RuntimeBackedSelectsJavaScriptRuntimeService(t *
 }
 
 func TestInitializeMCPTransport_NilConfigUsesFixtureDefaults(t *testing.T) {
-	t.Parallel()
-
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
 	t.Chdir(repoRoot)
 
@@ -195,8 +193,6 @@ func TestInitializeMCPTransport_RuntimeBackedDiscoversFactoryConfig(t *testing.T
 }
 
 func TestInitializeMCPTransport_ResolvesFixtureCatalogFromRepoRoot(t *testing.T) {
-	t.Parallel()
-
 	repoRoot := filepath.Clean(filepath.Join("..", ".."))
 	t.Chdir(repoRoot)
 
