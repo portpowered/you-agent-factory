@@ -1,6 +1,7 @@
 package factorysave
 
 import (
+	"context"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -32,6 +33,30 @@ func (stubDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession
 	return ""
 }
 
+func (stubDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
+}
+
+func (stubDefinitionHost) WithActivationLock(fn func() error) error {
+	return fn()
+}
+
+func (stubDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error {
+	return nil
+}
+
+func (stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+	return nil
+}
+
+func (stubDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return nil, nil
+}
+
+func (stubDefinitionHost) SaveNow() time.Time {
+	return time.Time{}
+}
+
 func requireFreshEditableFactoryVersion(
 	baseVersion *factoryapi.HybridLogicalTimestamp,
 	currentVersion factoryapi.HybridLogicalTimestamp,
@@ -59,4 +84,78 @@ func prepareEditableFactoryPersistView(
 	factory factoryapi.Factory,
 ) (*configpersist.PreparedFactoryLayoutPayload, error) {
 	return testDefinitionService.PrepareEditableFactoryPersistView(segment, factory)
+}
+
+type saveDefinitionHostAdapter struct {
+	saveHost Host
+	rootDir  string
+}
+
+func saveReplaceCurrentThroughDefinition(
+	rootDir string,
+	saveHost Host,
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return factorydefinition.New(saveDefinitionHostAdapter{
+		saveHost: saveHost,
+		rootDir:  rootDir,
+	}).SaveReplaceCurrentForSession(ctx, sessionID, request)
+}
+
+func (h saveDefinitionHostAdapter) PersistRootDir() string { return h.rootDir }
+
+func (h saveDefinitionHostAdapter) WorkstationLoader() factoryconfig.WorkstationLoader {
+	return nil
+}
+
+func (h saveDefinitionHostAdapter) CurrentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
+	return nil
+}
+
+func (h saveDefinitionHostAdapter) WorkflowID() string { return "" }
+
+func (h saveDefinitionHostAdapter) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
+	return h.saveHost.RequireSession(sessionID)
+}
+
+func (h saveDefinitionHostAdapter) SessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error) {
+	return h.saveHost.SessionRuntimeConfig(sessionID)
+}
+
+func (h saveDefinitionHostAdapter) SessionFactoryPersistRoot(session *factorysessions.LiveSession) string {
+	return SessionFactoryPersistRoot(h.rootDir, session)
+}
+
+func (h saveDefinitionHostAdapter) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+	return h.saveHost.GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (h saveDefinitionHostAdapter) WithActivationLock(fn func() error) error {
+	return h.saveHost.WithActivationLock(fn)
+}
+
+func (h saveDefinitionHostAdapter) RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error {
+	return h.saveHost.RequireIdleRuntimeForSession(ctx, sessionID)
+}
+
+func (h saveDefinitionHostAdapter) ActivateSessionEditableFactory(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+	sessionID string,
+	sessionRootDir string,
+	factoryDir string,
+	name factoryapi.FactoryName,
+	runtimeName string,
+) error {
+	return h.saveHost.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+}
+
+func (h saveDefinitionHostAdapter) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return h.saveHost.ReplaceFactoryLayoutAtDir(targetDir, prepared)
+}
+
+func (h saveDefinitionHostAdapter) SaveNow() time.Time {
+	return time.Now().UTC()
 }

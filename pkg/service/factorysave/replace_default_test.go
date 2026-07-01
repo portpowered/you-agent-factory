@@ -30,7 +30,7 @@ func workstationTypeModel() *factoryapi.WorkstationType {
 func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 	rootDir := t.TempDir()
 	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
-	initial := []byte(`{"name":"root","id":"root-runtime","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
@@ -123,7 +123,7 @@ func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 func TestSaveDefaultCurrentFactoryForSession_RestoresTreeOnActivationFailure(t *testing.T) {
 	rootDir := t.TempDir()
 	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
-	initial := []byte(`{"name":"root","id":"root-runtime","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
@@ -309,6 +309,14 @@ func (h *splitLayoutDefaultSaveHost) PreparePersistedFactoryPayload(
 	version factoryapi.HybridLogicalTimestamp,
 ) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
 	return preparePersistedFactoryPayload(segment, factory, version)
+}
+
+func (h *splitLayoutDefaultSaveHost) SaveReplaceCurrentForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
 }
 
 func stringPointer(value string) *string {

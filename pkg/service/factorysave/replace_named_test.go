@@ -18,7 +18,7 @@ import (
 
 func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 	sessionRoot := t.TempDir()
-	payload := []byte(`{"name":"alpha","id":"alpha-runtime","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	payload := []byte(`{"name":"alpha","id":"alpha-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if _, err := configpersist.PersistNamedFactory(sessionRoot, "alpha", payload); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
@@ -104,7 +104,7 @@ func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 
 func TestSaveNamedCurrentFactoryForSession_CoercesDriftedPayloadName(t *testing.T) {
 	sessionRoot := t.TempDir()
-	payload := []byte(`{"name":"alpha","id":"alpha-runtime","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	payload := []byte(`{"name":"alpha","id":"alpha-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if _, err := configpersist.PersistNamedFactory(sessionRoot, "alpha", payload); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
@@ -266,6 +266,14 @@ func (h *splitLayoutNamedSaveHost) PreparePersistedFactoryPayload(
 	version factoryapi.HybridLogicalTimestamp,
 ) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
 	return preparePersistedFactoryPayload(segment, factory, version)
+}
+
+func (h *splitLayoutNamedSaveHost) SaveReplaceCurrentForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
 }
 
 func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testing.T) {
@@ -435,4 +443,12 @@ func (h *upsertNamedSaveHost) PreparePersistedFactoryPayload(
 	version factoryapi.HybridLogicalTimestamp,
 ) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
 	return preparePersistedFactoryPayload(segment, factory, version)
+}
+
+func (h *upsertNamedSaveHost) SaveReplaceCurrentForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
 }

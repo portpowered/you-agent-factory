@@ -45,4 +45,9 @@ type Host interface {
 		factory factoryapi.Factory,
 		version factoryapi.HybridLogicalTimestamp,
 	) (*factoryconfig.PreparedFactoryLayoutPayload, error)
+	SaveReplaceCurrentForSession(
+		ctx context.Context,
+		sessionID string,
+		request factoryapi.Factory,
+	) (factoryapi.Factory, error)
 }

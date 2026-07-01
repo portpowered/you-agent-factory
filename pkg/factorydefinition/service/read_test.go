@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -51,6 +52,30 @@ func (h stubDefinitionHost) SessionRuntimeConfig(string) (*factoryconfig.LoadedF
 }
 func (h stubDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession) string {
 	return h.sessionPersistRoot
+}
+
+func (h stubDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
+}
+
+func (h stubDefinitionHost) WithActivationLock(fn func() error) error {
+	return fn()
+}
+
+func (h stubDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error {
+	return nil
+}
+
+func (h stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+	return nil
+}
+
+func (h stubDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return nil, nil
+}
+
+func (h stubDefinitionHost) SaveNow() time.Time {
+	return time.Time{}
 }
 
 func namedFactoryPayload(t *testing.T, project string) []byte {

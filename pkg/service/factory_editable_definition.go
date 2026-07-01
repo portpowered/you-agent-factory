@@ -112,6 +112,56 @@ func (h factoryDefinitionHost) SessionFactoryPersistRoot(session *factorysession
 	return sessionFactoryPersistRoot(h.FactoryService.factoryRootDir, session)
 }
 
+func (h factoryDefinitionHost) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+	if h.FactoryService == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (h factoryDefinitionHost) WithActivationLock(fn func() error) error {
+	if h.FactoryService == nil {
+		return fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.withActivationLock(fn)
+}
+
+func (h factoryDefinitionHost) RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error {
+	if h.FactoryService == nil {
+		return fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.requireIdleRuntimeForSession(ctx, sessionID)
+}
+
+func (h factoryDefinitionHost) ActivateSessionEditableFactory(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+	sessionID string,
+	sessionRootDir string,
+	factoryDir string,
+	name factoryapi.FactoryName,
+	runtimeName string,
+) error {
+	if h.FactoryService == nil {
+		return fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+}
+
+func (h factoryDefinitionHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	if h.FactoryService == nil {
+		return nil, fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.replaceFactoryLayoutAtDir(targetDir, prepared)
+}
+
+func (h factoryDefinitionHost) SaveNow() time.Time {
+	if h.FactoryService == nil || h.FactoryService.clock == nil {
+		return time.Now().UTC()
+	}
+	return h.FactoryService.clock.Now().UTC()
+}
+
 var _ FactoryDefinitionService = (*factorydefinition.Service)(nil)
 
 func newFactoryDefinitionService(fs *FactoryService) FactoryDefinitionService {
@@ -295,6 +345,18 @@ func (h factorySaveHost) PreparePersistedFactoryPayload(
 		return nil, fmt.Errorf("factory definition service is required")
 	}
 	return svc.PreparePersistedFactoryPayload(segment, factory, version)
+}
+
+func (h factorySaveHost) SaveReplaceCurrentForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	svc := h.FactoryService.definitionService()
+	if svc == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
+	}
+	return svc.SaveReplaceCurrentForSession(ctx, sessionID, request)
 }
 
 func newFactorySaveService(fs *FactoryService) *factorysave.Service {
