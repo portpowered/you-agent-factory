@@ -23,6 +23,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -4027,4 +4028,200 @@ func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegraded
 	assertLogField(t, entry, "session_id", defaultFactorySessionID)
 	assertLogField(t, entry, "dispatch_id", "dispatch-unavailable")
 	assertLogField(t, entry, "reason", "STREAM_UNAVAILABLE")
+}
+
+func TestFactoryService_DefaultSessionAliasResolvesToUUIDIdentity(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	if defaultSession.ID == factorysessions.DefaultSessionID {
+		t.Fatalf("default live session id = %q, want resolved uuid", defaultSession.ID)
+	}
+	if _, err := uuid.Parse(defaultSession.ID); err != nil {
+		t.Fatalf("default live session id = %q, want uuid: %v", defaultSession.ID, err)
+	}
+	if !defaultSession.IsDefault {
+		t.Fatal("default live session IsDefault = false, want true")
+	}
+
+	session, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession(~default): %v", err)
+	}
+	if session.Id != defaultSession.ID {
+		t.Fatalf("session.Id = %q, want resolved uuid %q", session.Id, defaultSession.ID)
+	}
+	if session.Id == factorysessions.DefaultSessionID {
+		t.Fatalf("session.Id = %q, want concrete uuid not alias", session.Id)
+	}
+	if session.Runtime.StreamIdentity == nil || session.Runtime.StreamIdentity.FactorySessionID != defaultSession.ID {
+		t.Fatalf("streamIdentity = %#v, want factorySessionId %q", session.Runtime.StreamIdentity, defaultSession.ID)
+	}
+
+	preflight, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil, nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(~default): %v", err)
+	}
+	if preflight.RequestedSessionId != factorysessions.DefaultSessionID {
+		t.Fatalf("requestedSessionId = %q, want %q", preflight.RequestedSessionId, factorysessions.DefaultSessionID)
+	}
+	if preflight.FactorySessionId == nil || *preflight.FactorySessionId != defaultSession.ID {
+		t.Fatalf("factorySessionId = %#v, want %q", preflight.FactorySessionId, defaultSession.ID)
+	}
+	if preflight.ReasonCode != factoryapi.Ok {
+		t.Fatalf("reasonCode = %q, want %q", preflight.ReasonCode, factoryapi.Ok)
+	}
+}
+
+func TestFactoryService_DefaultSessionAliasAcceptedByUUIDSessionRead(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+
+	byUUID, err := harness.svc.GetFactorySession(context.Background(), defaultSession.ID)
+	if err != nil {
+		t.Fatalf("GetFactorySession(uuid): %v", err)
+	}
+	byAlias, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession(~default): %v", err)
+	}
+	if byUUID.Id != byAlias.Id {
+		t.Fatalf("uuid read id = %q, alias read id = %q, want same session", byUUID.Id, byAlias.Id)
+	}
+}
+
+func TestFactoryService_ListFactorySessions_ExposesResolvedDefaultUUID(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	response, err := harness.svc.ListFactorySessions(context.Background())
+	if err != nil {
+		t.Fatalf("ListFactorySessions: %v", err)
+	}
+	if len(response.Sessions) != 1 {
+		t.Fatalf("sessions = %d, want 1", len(response.Sessions))
+	}
+	summary := response.Sessions[0]
+	if summary.Id != defaultSession.ID {
+		t.Fatalf("summary.Id = %q, want %q", summary.Id, defaultSession.ID)
+	}
+	if !summary.IsDefault {
+		t.Fatal("summary.IsDefault = false, want true")
+	}
+	if strings.Contains(summary.Id, factorysessions.DefaultSessionID) {
+		t.Fatalf("summary.Id = %q, must not contain alias token", summary.Id)
+	}
+}
+
+func TestEnsureServiceBackendScope_GeneratesAndPersistsBeforeServiceBuild(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+
+	homeDir := t.TempDir()
+	configPath := systemconfig.DefaultConfigPath(homeDir)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:                                     dir,
+		Logger:                                  zap.NewNop(),
+		SystemConfigHomeDir:                     homeDir,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if !systemconfig.IsLocalBackendScopeID(svc.cfg.BackendScopeID) {
+		t.Fatalf("BackendScopeID = %q, want local-<uuid>", svc.cfg.BackendScopeID)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var persisted struct {
+		BackendScopeID string `json:"backendScopeID"`
+	}
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if persisted.BackendScopeID != svc.cfg.BackendScopeID {
+		t.Fatalf("persisted backendScopeID = %q, want %q", persisted.BackendScopeID, svc.cfg.BackendScopeID)
+	}
+}
+
+func TestEnsureServiceBackendScope_ExplicitScopeSkipsPersistence(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := systemconfig.DefaultConfigPath(homeDir)
+	existing := "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+
+	cfg := &FactoryServiceConfig{
+		BackendScopeID:      existing,
+		SystemConfigHomeDir: homeDir,
+		Logger:              zap.NewNop(),
+	}
+	if err := ensureServiceBackendScope(cfg, cfg.Logger); err != nil {
+		t.Fatalf("ensureServiceBackendScope: %v", err)
+	}
+	if cfg.BackendScopeID != existing {
+		t.Fatalf("BackendScopeID = %q, want %q", cfg.BackendScopeID, existing)
+	}
+	if _, err := os.Stat(configPath); err == nil {
+		t.Fatalf("expected no system config write when backend scope is explicit")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("Stat: %v", err)
+	}
+}
+
+func TestEnsureServiceBackendScope_ReplayModeSkipsPersistence(t *testing.T) {
+	t.Parallel()
+
+	cfg := &FactoryServiceConfig{
+		ReplayPath: filepath.Join(t.TempDir(), "replay.json"),
+		Logger:     zap.NewNop(),
+	}
+	if err := ensureServiceBackendScope(cfg, cfg.Logger); err != nil {
+		t.Fatalf("ensureServiceBackendScope: %v", err)
+	}
+	if cfg.BackendScopeID != "" {
+		t.Fatalf("BackendScopeID = %q, want empty in replay mode", cfg.BackendScopeID)
+	}
+}
+
+func TestBuildFactoryService_ResolvesBackendScopeBeforeSessionIdentity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	homeDir := t.TempDir()
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		Port:                                    1,
+		Logger:                                  zap.NewNop(),
+		SystemConfigHomeDir:                     homeDir,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.cfg.BackendScopeID == "" {
+		t.Fatal("expected backend scope to be resolved before service build completes")
+	}
+	if got := factorySessionBackendScopeID(svc, nil); got != svc.cfg.BackendScopeID {
+		t.Fatalf("factorySessionBackendScopeID = %q, want %q", got, svc.cfg.BackendScopeID)
+	}
 }
