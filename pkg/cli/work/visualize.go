@@ -9,7 +9,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workgraph"
 )
 
-const visualizeFormatMermaid = "mermaid"
+const (
+	visualizeFormatMermaid         = "mermaid"
+	visualizeFormatMarkdownMermaid = "markdown-mermaid"
+)
+
+var supportedVisualizeFormats = []string{
+	visualizeFormatMermaid,
+	visualizeFormatMarkdownMermaid,
+}
 
 // VisualizeConfig holds parameters for the work visualize command.
 type VisualizeConfig struct {
@@ -28,8 +36,8 @@ func Visualize(cfg VisualizeConfig) error {
 	if err != nil {
 		return err
 	}
-	if format != visualizeFormatMermaid {
-		return fmt.Errorf("unsupported format %q (supported: %s)", format, visualizeFormatMermaid)
+	if !isSupportedVisualizeFormat(format) {
+		return fmt.Errorf("unsupported format %q (supported: %s)", format, strings.Join(supportedVisualizeFormats, ", "))
 	}
 
 	path := strings.TrimSpace(cfg.BatchFile)
@@ -50,8 +58,26 @@ func Visualize(cfg VisualizeConfig) error {
 		return err
 	}
 
-	_, err = io.WriteString(cfg.Output, workgraph.RenderMermaidFlowchart(graph))
+	var output string
+	switch format {
+	case visualizeFormatMermaid:
+		output = workgraph.RenderMermaidFlowchart(graph)
+	case visualizeFormatMarkdownMermaid:
+		output = workgraph.RenderMarkdownMermaid(graph)
+	default:
+		return fmt.Errorf("unsupported format %q (supported: %s)", format, strings.Join(supportedVisualizeFormats, ", "))
+	}
+	_, err = io.WriteString(cfg.Output, output)
 	return err
+}
+
+func isSupportedVisualizeFormat(format string) bool {
+	for _, supported := range supportedVisualizeFormats {
+		if format == supported {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeVisualizeFormat(format string) (string, error) {
