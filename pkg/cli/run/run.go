@@ -145,6 +145,9 @@ type factoryServiceRunner interface {
 	Run(ctx context.Context) error
 }
 
+// RuntimeRunner is the local in-process runtime seam used by CLI startup.
+type RuntimeRunner = factoryServiceRunner
+
 type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
 }

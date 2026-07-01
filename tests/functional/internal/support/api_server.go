@@ -78,7 +78,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		cancel()
 		t.Fatalf("InjectAPITransport: %v", err)
 	}
-	svc := transport.Host.FactoryService()
+	svc := transport.Host.CompatibilityServiceShell()
 	if svc == nil {
 		cancel()
 		t.Fatal("InjectAPITransport: missing session runtime host")

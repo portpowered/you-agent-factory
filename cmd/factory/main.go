@@ -14,11 +14,11 @@ import (
 var executeCLI = cli.Execute
 
 func main() {
-	run.SetBuildFactoryService(run.FactoryServiceBuilderFromService(buildCLIRuntimeRunner))
+	run.SetBuildFactoryService(buildCLIRuntimeRunner)
 	executeCLI()
 }
 
-func buildCLIRuntimeRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (*service.FactoryService, error) {
+func buildCLIRuntimeRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (run.RuntimeRunner, error) {
 	transport, err := compose.InjectCLITransport(ctx, cfg)
 	if err != nil {
 		return nil, err

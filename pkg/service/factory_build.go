@@ -95,6 +95,42 @@ func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller
 	return production
 }
 
+// WireModelAssetPullerForCompose selects the model asset collaborator used by
+// pkg/factorycore startup composition.
+func WireModelAssetPullerForCompose(cfg *FactoryServiceConfig, production localmodels.AssetPuller) localmodels.AssetPuller {
+	return wireModelAssetPuller(cfg, production)
+}
+
+// CloseRuntimeBundleSinksForCompose closes startup bundle sinks when core
+// composition fails before the runtime graph is fully wired.
+func CloseRuntimeBundleSinksForCompose(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+	return closeRuntimeBundleSinks(logSink, metricsSink)
+}
+
+// ReplayFactoryModeOptionsForCompose builds replay side-effect options for core
+// composition.
+func ReplayFactoryModeOptionsForCompose(
+	replayArtifact *interfaces.ReplayArtifact,
+) (*replay.SideEffects, []factory.FactoryOption, error) {
+	return replayFactoryModeOptions(replayArtifact)
+}
+
+// AsRuntimeBundleForCompose converts a runtime-build product into the startup
+// bundle used by core composition.
+func AsRuntimeBundleForCompose(bundle any) *factoryservice.Bundle {
+	return asRuntimeBundle(bundle)
+}
+
+// NewStartupLiveSessionHandle constructs the default session handle attached
+// during startup core composition.
+func NewStartupLiveSessionHandle(bundle *factoryservice.Bundle, spec *runtimebuild.SessionBuildSpec) any {
+	if spec == nil {
+		return &liveSessionState{bundle: bundle}
+	}
+	copied := *spec
+	return &liveSessionState{bundle: bundle, spec: &copied}
+}
+
 type serviceCoordinatorPolicy struct {
 	dir                           string
 	executionBaseDir              string

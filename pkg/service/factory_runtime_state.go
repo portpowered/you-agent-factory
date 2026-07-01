@@ -761,6 +761,11 @@ func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
 	return nil
 }
 
+// ValidateReplayModeConfig validates record/replay startup inputs for core composition.
+func ValidateReplayModeConfig(cfg *FactoryServiceConfig) error {
+	return validateReplayModeConfig(cfg)
+}
+
 func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
 	if cfg.ReplayPath == "" {
 		loaded, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)

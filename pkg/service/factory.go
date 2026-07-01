@@ -8,8 +8,8 @@
 // composition root. Root FactoryService and BuildFactoryService remain a
 // temporary compatibility shell for in-process runtime hosting and wire
 // equivalence tests; they are not the primary application shell for new
-// transport wiring. Delete this compatibility layer once SessionRuntimeHost
-// and domain services fully replace the monolithic facade.
+// transport wiring. Delete this compatibility layer once domain services fully
+// replace the monolithic facade.
 package service
 
 import (
@@ -875,43 +875,4 @@ func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
 		}
 		return handle.Result()
 	}
-}
-
-// SessionRuntimeHost is the transport-facing session/runtime shell composed from
-// a FactoryCore without exposing root FactoryService at initializer boundaries.
-type SessionRuntimeHost FactoryService
-
-// NewSessionRuntimeHostFromCore composes the API/CLI session runtime host from a
-// built FactoryCore and attaches factory-save collaborators from cfg.
-func NewSessionRuntimeHostFromCore(core *FactoryCore, cfg *FactoryServiceConfig) *SessionRuntimeHost {
-	if core == nil {
-		return nil
-	}
-	shell := FactoryServiceShell{Service: NewFactoryServiceFromCore(core)}
-	service := AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg))
-	return (*SessionRuntimeHost)(service)
-}
-
-// SessionAPISurface returns the host as the API handler dependency seam.
-func (h *SessionRuntimeHost) SessionAPISurface() apisurface.SessionAPISurface {
-	if h == nil {
-		return nil
-	}
-	return (*FactoryService)(h)
-}
-
-// Run starts service-mode sidecars and the default session runtime loop.
-func (h *SessionRuntimeHost) Run(ctx context.Context) error {
-	if h == nil {
-		return nil
-	}
-	return (*FactoryService)(h).Run(ctx)
-}
-
-// FactoryService returns the compatibility shell view of this host.
-func (h *SessionRuntimeHost) FactoryService() *FactoryService {
-	if h == nil {
-		return nil
-	}
-	return (*FactoryService)(h)
 }

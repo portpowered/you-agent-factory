@@ -3,7 +3,6 @@ package initializer
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 // CLITransport bundles initializer-produced domain services with the session
@@ -11,26 +10,26 @@ import (
 // FactoryService at the composition boundary.
 type CLITransport struct {
 	Services *Services
-	Host     *service.SessionRuntimeHost
+	Host     *SessionRuntimeHost
 }
 
 // InitializeCLITransport loads factory configuration, composes domain services,
 // and returns the transport bundle used by local in-process CLI startup.
 func InitializeCLITransport(ctx context.Context, cfg *Config) (*CLITransport, error) {
-	core, err := service.BuildFactoryCore(ctx, cfg)
+	core, err := BuildCore(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &CLITransport{
 		Services: servicesFromCore(core),
-		Host:     service.NewSessionRuntimeHostFromCore(core, cfg),
+		Host:     NewSessionRuntimeHostFromCore(core, cfg),
 	}, nil
 }
 
-// Runner returns the session runtime shell used by pkg/cli/run local paths.
-func (t *CLITransport) Runner() *service.FactoryService {
+// Runner returns the local in-process runtime seam used by pkg/cli/run.
+func (t *CLITransport) Runner() LocalRuntimeRunner {
 	if t == nil || t.Host == nil {
 		return nil
 	}
-	return t.Host.FactoryService()
+	return t.Host.LocalRuntimeRunner()
 }

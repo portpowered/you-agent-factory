@@ -12,19 +12,19 @@ import (
 // the composition boundary.
 type APITransport struct {
 	Services *Services
-	Host     *service.SessionRuntimeHost
+	Host     *SessionRuntimeHost
 }
 
 // InitializeAPITransport loads factory configuration, composes domain services,
 // and returns the transport bundle used to wire API handler dependencies.
 func InitializeAPITransport(ctx context.Context, cfg *Config) (*APITransport, error) {
-	core, err := service.BuildFactoryCore(ctx, cfg)
+	core, err := BuildCore(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 	return &APITransport{
 		Services: servicesFromCore(core),
-		Host:     service.NewSessionRuntimeHostFromCore(core, cfg),
+		Host:     NewSessionRuntimeHostFromCore(core, cfg),
 	}, nil
 }
 
@@ -44,7 +44,7 @@ func (t *APITransport) Run(ctx context.Context) error {
 	return t.Host.Run(ctx)
 }
 
-func servicesFromCore(core *service.FactoryCore) *Services {
+func servicesFromCore(core *Core) *Services {
 	if core == nil {
 		return nil
 	}

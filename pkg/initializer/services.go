@@ -12,7 +12,7 @@ import (
 
 // Services exposes initializer-produced domain collaborators for in-process callers.
 type Services struct {
-	core              *service.FactoryCore
+	core              *Core
 	Sessions          *factorysessions.Registry
 	FactoryDefinition service.FactoryDefinitionService
 	Models            service.ModelService
@@ -23,7 +23,7 @@ type Services struct {
 // Initialize loads factory configuration and composes runnable domain services
 // without constructing root pkg/service.FactoryService.
 func Initialize(ctx context.Context, cfg *Config) (*Services, error) {
-	core, err := service.BuildFactoryCore(ctx, cfg)
+	core, err := BuildCore(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}

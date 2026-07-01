@@ -57,7 +57,7 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	if transport.Services == nil || transport.Host == nil {
 		t.Fatal("expected initializer transport bundle")
 	}
-	if transport.Host.FactoryService() == nil {
+	if transport.Host.SessionAPISurface() == nil {
 		t.Fatal("expected session runtime host with attached collaborators")
 	}
 	surface := transport.SessionAPISurface()

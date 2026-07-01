@@ -160,7 +160,7 @@ func startFactoryService(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	svc := transport.Host.FactoryService()
+	svc := transport.Host.CompatibilityServiceShell()
 	if svc == nil {
 		return nil, nil, nil, fmt.Errorf("initializer API transport missing session runtime host")
 	}
