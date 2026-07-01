@@ -2,6 +2,7 @@ package responsestream
 
 import (
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -15,12 +16,14 @@ type SessionResponseStream struct {
 	clock  factory.Clock
 	limits RetentionLimits
 
-	nextSequence int64
-	events       []Event
-	totalBytes   int
-	closed       bool
-	nextSubID    int64
-	subscribers  map[int64]*streamSubscriber
+	nextSequence      int64
+	events            []Event
+	totalBytes        int
+	closed            bool
+	dispatchCompleted bool
+	completedAt       time.Time
+	nextSubID         int64
+	subscribers       map[int64]*streamSubscriber
 }
 
 // NewSessionResponseStream allocates an empty internal response stream with
@@ -71,6 +74,42 @@ func (s *SessionResponseStream) retentionAccountingLocked() RetentionAccounting 
 	return accounting
 }
 
+// EnforceRetention re-applies bounded retention controls to the retained event
+// window without appending new events. Completed dispatch streams rely on this
+// path because Append is disabled after dispatch completion.
+func (s *SessionResponseStream) EnforceRetention() *CompactionSummary {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	return s.enforceRetentionLocked()
+}
+
+// DispatchCompleted reports whether the dispatch has finished publication.
+func (s *SessionResponseStream) DispatchCompleted() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dispatchCompleted
+}
+
+// DispatchCompletedAt returns when the dispatch completed, or zero when the
+// dispatch is still live.
+func (s *SessionResponseStream) DispatchCompletedAt() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.completedAt
+}
+
 // Append records one internal response-stream event, enforces bounded
 // retention, and returns the stored envelope with assigned ordering metadata.
 // When retention pressure drops retained events, the second return value
@@ -80,7 +119,7 @@ func (s *SessionResponseStream) Append(event Event) (Event, *CompactionSummary) 
 		return event, nil
 	}
 	s.mu.Lock()
-	if s.closed {
+	if s.closed || s.dispatchCompleted {
 		s.mu.Unlock()
 		return event, nil
 	}

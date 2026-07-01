@@ -75,6 +75,12 @@ func DefaultRetentionLimits() RetentionLimits {
 	}
 }
 
+// DefaultCompletedDispatchRetention returns how long a completed dispatch stream
+// remains discoverable for late subscribers before the stream set evicts it.
+func DefaultCompletedDispatchRetention() time.Duration {
+	return DefaultRetentionLimits().MaxAge
+}
+
 // RetentionAccounting summarizes the current retained window for byte-size,
 // event-count, and age-based retention decisions.
 type RetentionAccounting struct {

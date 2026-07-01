@@ -191,6 +191,11 @@ type sessionInvocationRunner interface {
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 }
 
+type sessionResponseStreamInvocationRunner interface {
+	sessionInvocationRunner
+	sessionResponseStreamAttachable
+}
+
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
 	if strings.TrimSpace(cfg.WorkFile) != "" {
 		return nil, false, nil
@@ -313,7 +318,27 @@ func runFactoryInvocation(
 		return err
 	}
 
+	var streamAttachment *responseStreamAttachment
+	var streamRenderer responseStreamRenderer
+	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		streamRenderer = newResponseStreamRenderer(cfg.Output, cfg.JSONOutput)
+		if streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner); ok {
+			streamAttachment = startResponseStreamAttachment(
+				ctx,
+				streamInvoker,
+				factorysessions.DefaultSessionID,
+				streamRenderer,
+			)
+		}
+	}
+
 	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
+	if streamAttachment != nil {
+		streamAttachment.stop()
+	}
+	if streamRenderer != nil {
+		streamRenderer.stopProgressRendering()
+	}
 	cancel()
 	runErr := <-runErrCh
 	if err != nil {
@@ -323,9 +348,9 @@ func runFactoryInvocation(
 		return runErr
 	}
 	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
-		return writeInvocationFailure(cfg, result)
+		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
-	return writeInvocationSuccess(cfg, result)
+	return writeInvocationSuccess(cfg, result, streamRenderer)
 }
 
 func waitForInvocationSessionReady(
@@ -408,8 +433,16 @@ func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 	}
 }
 
-func writeInvocationFailure(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	if cfg.JSONOutput {
+func writeInvocationFailure(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer responseStreamRenderer,
+) error {
+	if streamRenderer != nil {
+		if err := streamRenderer.writeFinalInvocationResult(result); err != nil {
+			return err
+		}
+	} else if cfg.JSONOutput {
 		if err := writeInvocationJSON(cfg, result); err != nil {
 			return err
 		}
@@ -417,7 +450,14 @@ func writeInvocationFailure(cfg RunConfig, result apisurface.FactoryInvocationRe
 	return invocationResultFailure(result)
 }
 
-func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
+func writeInvocationSuccess(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer responseStreamRenderer,
+) error {
+	if streamRenderer != nil {
+		return streamRenderer.writeFinalInvocationResult(result)
+	}
 	if cfg.JSONOutput {
 		return writeInvocationJSON(cfg, result)
 	}
