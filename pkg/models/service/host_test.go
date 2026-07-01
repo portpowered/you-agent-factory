@@ -70,3 +70,17 @@ func (h stubModelServiceHost) ModelInvocationExecutor() ModelInvocationExecutor 
 func (h stubModelServiceHost) FactoryRunnerID() func() string {
 	return func() string { return "" }
 }
+
+func TestNewFromHost_NilHostReturnsEmptyService(t *testing.T) {
+	t.Parallel()
+
+	svc := NewFromHost(nil)
+	if svc == nil {
+		t.Fatal("NewFromHost(nil) = nil, want empty service")
+	}
+
+	_, err := svc.ListModels(context.Background())
+	if err == nil {
+		t.Fatal("ListModels: nil error, want runtime unavailable")
+	}
+}

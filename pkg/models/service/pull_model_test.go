@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestService_PullModel_ReportsSuccessfulAlreadyPresentOutcome(t *testing.T) {
@@ -109,6 +111,43 @@ func TestService_PullModel_ReturnsCanceledWhenContextCanceled(t *testing.T) {
 	_, err := svc.PullModel(ctx, "OMNIVOICE_Q4_K_M")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("PullModel error = %v, want context.Canceled", err)
+	}
+}
+
+func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	logger := zaptest.NewLogger(t)
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		Logger:        func() *zap.Logger { return logger },
+		ModelAssetPuller: func() localmodels.AssetPuller {
+			return &stubPullAssetPuller{
+				result: apisurface.ModelPullResult{
+					ModelName:          "OMNIVOICE_Q4_K_M",
+					ManagedPullOutcome: "ALREADY_READY",
+					ReadinessState:     "READY",
+					LifecycleState:     "READY",
+					SourceKind:         "MANAGED_RUNTIME",
+				},
+			}
+		},
+	})
+
+	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
+		t.Fatalf("PullModel success path: %v", err)
+	}
+
+	svc = modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		Logger:        func() *zap.Logger { return logger },
+		ModelAssetPuller: func() localmodels.AssetPuller {
+			return &stubPullAssetPuller{err: errors.New("pull failed")}
+		},
+	})
+	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err == nil {
+		t.Fatal("PullModel failure path: nil error, want pull failure")
 	}
 }
 

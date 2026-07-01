@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -14,6 +15,8 @@ import (
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
@@ -89,6 +92,119 @@ func TestService_InvokeModel_ReturnsManagedRuntimeMissingWhenCacheNotReady(t *te
 	}
 }
 
+func TestService_InvokeModel_ReturnsUnavailableWhenRuntimeMissing(t *testing.T) {
+	t.Parallel()
+
+	svc := modelsservice.New(modelsservice.Dependencies{})
+
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	if err == nil || !strings.Contains(err.Error(), "runtime is not available") {
+		t.Fatalf("InvokeModel error = %v, want runtime unavailable", err)
+	}
+}
+
+func TestService_InvokeModel_ReturnsErrorWhenExecutorMissing(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+	})
+
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+		Operation: "TTS",
+		Content: &factoryapi.WorkContent{
+			mustGeneratedInvokeTextPart(t, "hello world"),
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "model invocation executor is not configured") {
+		t.Fatalf("InvokeModel error = %v, want executor missing", err)
+	}
+}
+
+func TestService_InvokeModel_LogsInvocationReadiness(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	logger := zaptest.NewLogger(t)
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return missingCacheInspectHost{} },
+		Logger:        func() *zap.Logger { return logger },
+	})
+
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+		Operation: "TTS",
+		Content: &factoryapi.WorkContent{
+			mustGeneratedInvokeTextPart(t, "hello world"),
+		},
+	})
+	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
+		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
+	}
+}
+
+func TestService_InvokeModel_ReturnsUnsupportedModeWhenAudioStreamMissingOutput(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	mode := factoryapi.AUDIOSTREAM
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
+			return stubInvocationExecutor{
+				workerName: workerName,
+				output:     `[]`,
+			}, nil
+		},
+	})
+
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+		Operation: "TTS",
+		Content: &factoryapi.WorkContent{
+			mustGeneratedInvokeTextPart(t, "hello world"),
+		},
+		Options: &factoryapi.ModelInvocationOptions{ResponseMode: &mode},
+	})
+	if err == nil || !errors.Is(err, apisurface.ErrModelInvocationUnsupportedMode) {
+		t.Fatalf("InvokeModel error = %v, want unsupported audio stream mode", err)
+	}
+}
+
+func TestService_InvokeModel_UsesFactoryRunnerID(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	var capturedRunnerID string
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+		FactoryRunnerID: func() string { return "runner-42" },
+		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
+			return capturingInvocationExecutor{
+				workerName:       workerName,
+				capturedRunnerID: &capturedRunnerID,
+				output:           mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav")),
+			}, nil
+		},
+	})
+
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+		Operation: "TTS",
+		Content: &factoryapi.WorkContent{
+			mustGeneratedInvokeTextPart(t, "hello world"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("InvokeModel: %v", err)
+	}
+	if capturedRunnerID != "runner-42" {
+		t.Fatalf("runner id = %q, want runner-42", capturedRunnerID)
+	}
+}
+
 type readyInvokeHost struct{}
 
 func (readyInvokeHost) ResolveIdentity(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.Identity, error) {
@@ -128,6 +244,23 @@ func (s stubInvocationExecutor) Execute(_ context.Context, request interfaces.Wo
 	if request.WorkerType != s.workerName {
 		return interfaces.WorkResult{}, errors.New("unexpected worker")
 	}
+	return interfaces.WorkResult{
+		Outcome: interfaces.OutcomeAccepted,
+		Output:  s.output,
+	}, nil
+}
+
+type capturingInvocationExecutor struct {
+	workerName       string
+	capturedRunnerID *string
+	output           string
+}
+
+func (s capturingInvocationExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+	if request.WorkerType != s.workerName {
+		return interfaces.WorkResult{}, errors.New("unexpected worker")
+	}
+	*s.capturedRunnerID = request.RunnerID
 	return interfaces.WorkResult{
 		Outcome: interfaces.OutcomeAccepted,
 		Output:  s.output,
