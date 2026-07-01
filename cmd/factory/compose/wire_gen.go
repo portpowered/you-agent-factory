@@ -28,8 +28,9 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 	clock := provideServiceClock(cfg, factoryConfigLoadResult)
 	logger := provideBaseLogger(factoryServiceRoot)
 	runtimebuildService := provideRuntimeBuildService(cfg, clock, logger, v)
-	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService)
 	config := provideHostedWorkersConfig(cfg, logger, clock)
+	serviceService := provideWorkersSchedulerService(cfg, clock, logger, config)
+	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService, serviceService)
 	factoryCore, err := provideFactoryCore(ctx, cfg, factoryServiceRoot, factoryServiceCollaborators, factoryConfigLoadResult, clock, config)
 	if err != nil {
 		return nil, err

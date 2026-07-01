@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -32,138 +33,6 @@ const (
 	canonicalScriptPollerWorkerName      = "poller-script"
 	canonicalScriptPollerCommand         = "factory/scripts/poller.sh"
 )
-
-func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdoutToFactoryService(t *testing.T) {
-	factoryDir := t.TempDir()
-	workRequestJSON := []byte(`{
-		"requestId":"linear-issue-batch-1",
-		"type":"FACTORY_REQUEST_BATCH",
-		"works":[{"name":"issue-123","workTypeName":"task","payload":{"id":"ISSUE-123"}}]
-	}`)
-	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
-	}
-	submitted := &aggregateSnapshotFactory{}
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{CommandRunnerOverride: runner}),
-		logger: zap.NewNop(),
-	}
-	poller := newCanonicalScriptPollerWorkstation()
-	worker := newCanonicalScriptPollerWorker()
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(
-		t,
-		factoryDir,
-		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: canonicalScriptPollerWorkerName}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
-		map[string]*interfaces.WorkerConfig{canonicalScriptPollerWorkerName: worker},
-		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
-	)
-
-	err := svc.runScriptPoller(
-		context.Background(),
-		runner,
-		runtimeCfg,
-		poller,
-		worker,
-		submitWorkRequestWithFactory(submitted),
-	)
-	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
-		t.Fatalf("runScriptPoller error = %v, want unexpected exit after successful submit", err)
-	}
-	if submitted.submitCalls != 1 {
-		t.Fatalf("submit calls = %d, want 1", submitted.submitCalls)
-	}
-	if len(submitted.submissions) != 1 {
-		t.Fatalf("submitted requests = %d, want 1", len(submitted.submissions))
-	}
-	if submitted.submissions[0].RequestID != "linear-issue-batch-1" {
-		t.Fatalf("submitted request ID = %q, want linear-issue-batch-1", submitted.submissions[0].RequestID)
-	}
-	if submitted.submissions[0].Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("submitted request type = %q, want FACTORY_REQUEST_BATCH", submitted.submissions[0].Type)
-	}
-}
-
-func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdoutToFactoryService(t *testing.T) {
-	factoryDir := t.TempDir()
-	envelopeJSON := []byte(`{
-		"submissions":[
-			{
-				"requestId":"linear-issue-batch-2",
-				"workId":"linear-issue-124",
-				"name":"issue-124",
-				"workTypeName":"task",
-				"traceId":"trace-124"
-			}
-		]
-	}`)
-	runner := &pollerSequenceCommandRunner{
-		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: envelopeJSON}}},
-	}
-	submitted := &aggregateSnapshotFactory{}
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{CommandRunnerOverride: runner}),
-		logger: zap.NewNop(),
-	}
-	poller := newCanonicalScriptPollerWorkstation()
-	worker := newCanonicalScriptPollerWorker()
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(
-		t,
-		factoryDir,
-		&interfaces.FactoryConfig{Workers: []interfaces.WorkerConfig{{Name: canonicalScriptPollerWorkerName}}, Workstations: []interfaces.FactoryWorkstationConfig{poller}},
-		map[string]*interfaces.WorkerConfig{canonicalScriptPollerWorkerName: worker},
-		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
-	)
-
-	err := svc.runScriptPoller(
-		context.Background(),
-		runner,
-		runtimeCfg,
-		poller,
-		worker,
-		submitWorkRequestWithFactory(submitted),
-	)
-	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
-		t.Fatalf("runScriptPoller error = %v, want unexpected exit after successful submit", err)
-	}
-	if len(submitted.submissions) != 1 {
-		t.Fatalf("submitted requests = %d, want 1", len(submitted.submissions))
-	}
-	workRequest := submitted.submissions[0]
-	if workRequest.RequestID != "linear-issue-batch-2" {
-		t.Fatalf("submitted request ID = %q, want linear-issue-batch-2", workRequest.RequestID)
-	}
-	if workRequest.Works == nil || len(workRequest.Works) != 1 {
-		t.Fatalf("submitted works = %#v, want one canonical work item", workRequest.Works)
-	}
-	if workRequest.Works[0].WorkID != "linear-issue-124" {
-		t.Fatalf("submitted work ID = %q, want linear-issue-124", workRequest.Works[0].WorkID)
-	}
-}
-
-func TestScriptPollerCommandRequest_DefaultsEmptyWorkingDirectoryToRuntimeBaseDirectory(t *testing.T) {
-	factoryDir := t.TempDir()
-	runtimeBaseDir := t.TempDir()
-	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
-		t,
-		factoryDir,
-		scriptPollerRuntimeConfigOptions{
-			poller: newCanonicalScriptPollerWorkstation(),
-		},
-	)
-	runtimeCfg.SetRuntimeBaseDir(runtimeBaseDir)
-
-	req, err := scriptPollerCommandRequest(
-		runtimeCfg,
-		newCanonicalScriptPollerWorkstation(),
-		newCanonicalScriptPollerWorker("--mode", "watch"),
-	)
-	if err != nil {
-		t.Fatalf("scriptPollerCommandRequest: %v", err)
-	}
-	if req.WorkDir != runtimeBaseDir {
-		t.Fatalf("poller workdir = %q, want %q", req.WorkDir, runtimeBaseDir)
-	}
-}
 
 func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunWorkstationType(t *testing.T) {
 	start := time.Date(2026, time.June, 16, 9, 0, 0, 0, time.UTC)
@@ -265,7 +134,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 	waitForFakeClockWaiters(t, fakeClock, 1)
-	fakeClock.Advance(pollerRestartBackoffMin)
+	fakeClock.Advance(workersservice.ScriptPollerRestartBackoffMin)
 	waitForPollerRunnerCalls(t, runner, 2, time.Second)
 
 	reqs := runner.requests()
@@ -638,7 +507,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 	waitForFakeClockWaiters(t, fakeClock, 1)
-	fakeClock.Advance(pollerRestartBackoffMin)
+	fakeClock.Advance(workersservice.ScriptPollerRestartBackoffMin)
 	waitForPollerRunnerCalls(t, runner, 2, time.Second)
 
 	if observedLogs.FilterMessage("script poller restarting").Len() == 0 {
@@ -849,25 +718,6 @@ func newScriptPollerRuntimeHandleForWorkstation(
 				},
 			),
 		},
-	}
-}
-
-func TestParseScriptPollerOutput_RejectsUnsupportedRawFactoryEvents(t *testing.T) {
-	rawEventJSON, err := json.Marshal(map[string]any{
-		"events": []map[string]any{{
-			"type": "WORK_REQUEST",
-		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal raw event payload: %v", err)
-	}
-
-	_, hasOutput, parseErr := parseScriptPollerOutput(rawEventJSON)
-	if !hasOutput {
-		t.Fatal("expected raw event payload to count as poller output")
-	}
-	if parseErr == nil || !strings.Contains(parseErr.Error(), "unsupported raw factory events") {
-		t.Fatalf("parse error = %v, want unsupported raw factory events", parseErr)
 	}
 }
 
@@ -1289,19 +1139,6 @@ func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, messag
 	t.Fatalf("timed out waiting for log message %q", message)
 }
 
-func TestParseScriptPollerOutput_RejectsMalformedStdout(t *testing.T) {
-	_, hasOutput, err := parseScriptPollerOutput([]byte("submitted work\n"))
-	if !hasOutput {
-		t.Fatal("expected non-empty stdout to count as poller output")
-	}
-	if err == nil {
-		t.Fatal("expected malformed stdout error")
-	}
-	if !strings.Contains(err.Error(), "malformed stdout") {
-		t.Fatalf("error = %v, want malformed stdout", err)
-	}
-}
-
 func TestFactoryService_RequiredInputCronKeepsTimeWorkPendingWhenInputMissing(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
@@ -1323,8 +1160,8 @@ func TestFactoryService_RequiredInputCronKeepsTimeWorkPendingWhenInputMissing(t 
 	if firstRecord.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID {
 		t.Fatalf("required-input cron submission work type = %q, want %q", firstRecord.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
 	}
-	if firstRecord.Request.Tags[cronWorkstationTag] != "poll-with-input" {
-		t.Fatalf("required-input cron workstation tag = %q, want poll-with-input", firstRecord.Request.Tags[cronWorkstationTag])
+	if firstRecord.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != "poll-with-input" {
+		t.Fatalf("required-input cron workstation tag = %q, want poll-with-input", firstRecord.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation])
 	}
 
 	pendingSnap := waitForPendingCronTimeToken(t, svc, firstRecord.Request.WorkID)
@@ -1358,131 +1195,6 @@ func waitForPendingCronTimeToken(
 	}
 	t.Fatalf("timed out waiting for required-input cron time token in %s", interfaces.SystemTimePendingPlaceID)
 	return nil
-}
-
-func TestFactoryService_CronTickTimeoutFailureIsClassifiedAndBounded(t *testing.T) {
-	logCore, observedLogs := observer.New(zap.InfoLevel)
-	mock := &aggregateSnapshotFactory{
-		submitFunc: func(ctx context.Context, _ interfaces.WorkRequest) error {
-			<-ctx.Done()
-			return ctx.Err()
-		},
-	}
-	svc := &FactoryService{logger: zap.New(logCore)}
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		Factory:    mock,
-		RuntimeCfg: newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{Workstations: []interfaces.FactoryWorkstationConfig{{Name: "poll-for-work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "1ms"}}}}, nil, nil),
-	})
-
-	err := svc.submitCronTick(context.Background(), cronWorkstationConfigForTest("poll-for-work"), time.Now())
-	if err == nil {
-		t.Fatal("expected timed-out cron tick to fail after bounded retries")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("cron tick error = %v, want deadline exceeded classification", err)
-	}
-	if mock.submitCalls != cronMaxRetries+1 {
-		t.Fatalf("cron submit attempts = %d, want %d", mock.submitCalls, cronMaxRetries+1)
-	}
-	if len(mock.submissions) != cronMaxRetries+1 {
-		t.Fatalf("recorded cron work requests = %d, want %d", len(mock.submissions), cronMaxRetries+1)
-	}
-	submitted := mock.submissions[len(mock.submissions)-1]
-	if submitted.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("cron submitted request type = %q, want %q", submitted.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
-	}
-	if len(submitted.Works) != 1 || submitted.Works[0].WorkTypeID != interfaces.SystemTimeWorkTypeID {
-		t.Fatalf("cron submitted works = %#v, want one internal time work item", submitted.Works)
-	}
-	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != cronMaxRetries {
-		t.Fatalf("retry log count = %d, want %d", observedLogs.FilterMessage("cron watcher trigger retrying").Len(), cronMaxRetries)
-	}
-	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 1 {
-		t.Fatal("expected exhausted timeout log after bounded cron retries")
-	}
-
-	failure := classifyCronTriggerFailure(err)
-	if !failure.retryable || failure.Family != interfaces.WorkFailureFamilyRetryable || failure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("cron timeout classification = %#v, want retryable timeout", failure)
-	}
-}
-
-func TestFactoryService_CronExecutionTimeoutUsesCanonicalWorkstationLimit(t *testing.T) {
-	svc := &FactoryService{}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name:   "poll-for-work",
-			Limits: interfaces.WorkstationLimits{MaxExecutionTime: "75ms"},
-		}},
-	}, nil, nil)
-
-	timeout, err := svc.cronExecutionTimeout(runtimeCfg, cronWorkstationConfigForTest("poll-for-work"))
-	if err != nil {
-		t.Fatalf("cronExecutionTimeout: %v", err)
-	}
-	if timeout != 75*time.Millisecond {
-		t.Fatalf("timeout = %v, want %v", timeout, 75*time.Millisecond)
-	}
-}
-
-func TestFactoryService_CronExecutionTimeoutReturnsCanonicalLimitError(t *testing.T) {
-	svc := &FactoryService{}
-	runtimeCfg := serviceTestRuntimeConfig{
-		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			"poll-for-work": {
-				Name:   "poll-for-work",
-				Limits: interfaces.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
-			},
-		},
-	}
-
-	_, err := svc.cronExecutionTimeout(runtimeCfg, cronWorkstationConfigForTest("poll-for-work"))
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if got, want := err.Error(), `cron workstation "poll-for-work": invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`; got != want {
-		t.Fatalf("error = %q, want %q", got, want)
-	}
-}
-
-func TestFactoryService_CronTickRetryableFailureRetriesBeforeSuccess(t *testing.T) {
-	retryErr := errors.New("temporary submission ingress failure")
-	mock := &aggregateSnapshotFactory{}
-	attempt := 0
-	mock.submitFunc = func(_ context.Context, _ interfaces.WorkRequest) error {
-		attempt++
-		if attempt <= cronMaxRetries {
-			return retryErr
-		}
-		return nil
-	}
-	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svc := &FactoryService{logger: zap.New(logCore)}
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: mock})
-
-	if err := svc.submitCronTick(context.Background(), cronWorkstationConfigForTest("poll-for-work"), time.Now()); err != nil {
-		t.Fatalf("cron tick should succeed after retryable failures: %v", err)
-	}
-	if mock.submitCalls != cronMaxRetries+1 {
-		t.Fatalf("cron submit attempts = %d, want %d", mock.submitCalls, cronMaxRetries+1)
-	}
-	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != cronMaxRetries {
-		t.Fatalf("retry log count = %d, want %d", observedLogs.FilterMessage("cron watcher trigger retrying").Len(), cronMaxRetries)
-	}
-	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 0 {
-		t.Fatal("cron retry success should not log exhaustion")
-	}
-}
-
-func cronWorkstationConfigForTest(name string) interfaces.FactoryWorkstationConfig {
-	return interfaces.FactoryWorkstationConfig{
-		Name: name,
-		Kind: interfaces.WorkstationKindCron,
-		Cron: &interfaces.CronConfig{Schedule: "* * * * *"},
-		Outputs: []interfaces.IOConfig{
-			{WorkTypeName: "task", StateName: "init"},
-		},
-	}
 }
 
 func TestFactoryService_BatchModeDoesNotStartCronWatchers(t *testing.T) {
@@ -1753,7 +1465,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 
 	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
 	assertCronWorkRequestNominalAt(t, startupRequest, start)
-	if got := startupRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+	if got := startupRequest.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation]; got != "valid-cron" {
 		t.Fatalf("startup cron workstation tag = %q, want valid-cron", got)
 	}
 
@@ -1762,7 +1474,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 	fakeClock.Advance(time.Minute)
 	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
 	assertCronWorkRequestNominalAt(t, scheduledRequest, start.Add(time.Minute))
-	if got := scheduledRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+	if got := scheduledRequest.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation]; got != "valid-cron" {
 		t.Fatalf("scheduled cron workstation tag = %q, want valid-cron", got)
 	}
 	assertNoCronWorkRequestQueued(t, observedRequests)
@@ -1775,103 +1487,6 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 	}
 	assertCronWatcherRegistrationLog(t, observedLogs, "valid-cron")
 	assertCronSchedulerStartedLog(t, observedLogs, 1)
-}
-
-func TestFactoryService_StartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingValidCronJobs(t *testing.T) {
-	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
-	fakeClock := clockwork.NewFakeClockAt(start)
-	logCore, observedLogs := observer.New(zap.InfoLevel)
-	observedRequests := make(chan interfaces.WorkRequest, 8)
-	validCron := interfaces.FactoryWorkstationConfig{
-		Name: "valid-cron",
-		Kind: interfaces.WorkstationKindCron,
-		Cron: &interfaces.CronConfig{
-			Schedule:       "* * * * *",
-			TriggerAtStart: true,
-		},
-		Outputs: []interfaces.IOConfig{{
-			WorkTypeName: "task",
-			StateName:    "init",
-		}},
-	}
-	invalidCron := interfaces.FactoryWorkstationConfig{
-		Name: "invalid-cron",
-		Kind: interfaces.WorkstationKindCron,
-		Cron: &interfaces.CronConfig{
-			Schedule:       "not-a-cron",
-			TriggerAtStart: true,
-		},
-		Outputs: []interfaces.IOConfig{{
-			WorkTypeName: "task",
-			StateName:    "init",
-		}},
-	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(
-		t,
-		"factory-alpha",
-		&interfaces.FactoryConfig{
-			WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{validCron, invalidCron},
-		},
-		nil,
-		map[string]*interfaces.FactoryWorkstationConfig{
-			validCron.Name:   &validCron,
-			invalidCron.Name: &invalidCron,
-		},
-	)
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
-		logger: zap.New(logCore),
-		clock:  fakeClock,
-	}
-
-	runCtx, cancelRun := context.WithCancel(context.Background())
-	var sidecars sync.WaitGroup
-	svc.startCronWatchersForRuntime(
-		runCtx,
-		&sidecars,
-		"factory-alpha",
-		runtimeCfg.FactoryConfig(),
-		runtimeCfg,
-		func(_ context.Context, request interfaces.WorkRequest) error {
-			select {
-			case observedRequests <- request:
-			default:
-				t.Fatalf("cron request channel overflow")
-			}
-			return nil
-		},
-	)
-	t.Cleanup(func() {
-		cancelRun()
-		sidecars.Wait()
-	})
-
-	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
-	assertCronWorkRequestForWorkstation(t, startupRequest, start, "valid-cron")
-
-	waitForFakeClockWaiters(t, fakeClock, 1)
-	assertNoCronWorkRequestQueued(t, observedRequests)
-	fakeClock.Advance(time.Minute)
-	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
-	assertCronWorkRequestForWorkstation(t, scheduledRequest, start.Add(time.Minute), "valid-cron")
-	assertNoCronWorkRequestQueued(t, observedRequests)
-
-	cancelRun()
-	sidecars.Wait()
-	assertCronWatcherRegistrationLog(t, observedLogs, "valid-cron")
-	assertCronWatcherDisabledLog(t, observedLogs, "invalid-cron")
-	assertCronSchedulerStartedLog(t, observedLogs, 1)
-	if observedLogs.FilterMessage("cron watcher trigger retrying").Len() != 0 {
-		t.Fatalf("retry log count = %d, want 0", observedLogs.FilterMessage("cron watcher trigger retrying").Len())
-	}
-	if observedLogs.FilterMessage("cron watcher trigger exhausted").Len() != 0 {
-		t.Fatalf("exhausted log count = %d, want 0", observedLogs.FilterMessage("cron watcher trigger exhausted").Len())
-	}
-	stopped := observedLogs.FilterMessage("cron scheduler stopped").All()
-	if len(stopped) != 1 {
-		t.Fatalf("cron scheduler stopped log count = %d, want 1", len(stopped))
-	}
 }
 
 func TestFactoryService_ServiceModeCronSchedulerUsesFakeClockAndStopsOnCancel(t *testing.T) {
@@ -1914,9 +1529,9 @@ func TestFactoryService_ServiceModeCronSchedulerUsesFakeClockAndStopsOnCancel(t 
 		cancelRun()
 		t.Fatalf("cron nominal_at tag = %q, want %q", record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt], wantNominalAt)
 	}
-	if record.Request.Tags[cronWorkstationTag] != "poll-for-work" {
+	if record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != "poll-for-work" {
 		cancelRun()
-		t.Fatalf("cron workstation tag = %q, want poll-for-work", record.Request.Tags[cronWorkstationTag])
+		t.Fatalf("cron workstation tag = %q, want poll-for-work", record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation])
 	}
 
 	cancelRun()
@@ -2050,17 +1665,6 @@ func assertCronWatcherRegistrationLog(t *testing.T, observedLogs *observer.Obser
 	}
 }
 
-func assertCronWatcherDisabledLog(t *testing.T, observedLogs *observer.ObservedLogs, workstation string) {
-	t.Helper()
-	disabled := observedLogs.FilterMessage("cron watcher disabled").All()
-	if len(disabled) != 1 {
-		t.Fatalf("disabled cron watcher count = %d, want 1", len(disabled))
-	}
-	if got := disabled[0].ContextMap()["workstation"]; got != workstation {
-		t.Fatalf("disabled cron watcher workstation = %#v, want %s", got, workstation)
-	}
-}
-
 func assertCronSchedulerStartedLog(t *testing.T, observedLogs *observer.ObservedLogs, jobs int64) {
 	t.Helper()
 	started := observedLogs.FilterMessage("cron scheduler started").All()
@@ -2134,11 +1738,11 @@ func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissio
 	if record.Request.TargetState != interfaces.SystemTimePendingState {
 		t.Fatalf("cron submission target state = %q, want %q", record.Request.TargetState, interfaces.SystemTimePendingState)
 	}
-	if record.Request.Tags[cronSourceTag] != "cron" {
-		t.Fatalf("cron submission source tag = %q, want cron", record.Request.Tags[cronSourceTag])
+	if record.Request.Tags[interfaces.TimeWorkTagKeySource] != "cron" {
+		t.Fatalf("cron submission source tag = %q, want cron", record.Request.Tags[interfaces.TimeWorkTagKeySource])
 	}
-	if record.Request.Tags[cronWorkstationTag] != workstation {
-		t.Fatalf("cron submission workstation tag = %q, want %q", record.Request.Tags[cronWorkstationTag], workstation)
+	if record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != workstation {
+		t.Fatalf("cron submission workstation tag = %q, want %q", record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation], workstation)
 	}
 }
 
@@ -2155,11 +1759,11 @@ func assertCronDispatchAndOutput(t *testing.T, svc *FactoryService, workID, outp
 	if matched.Color.TraceID == "" {
 		t.Fatal("expected cron token to receive a trace ID")
 	}
-	if matched.Color.Name != cronSubmissionNamePref+"poll-for-work" {
-		t.Fatalf("cron token name = %q, want %q", matched.Color.Name, cronSubmissionNamePref+"poll-for-work")
+	if matched.Color.Name != "cron:poll-for-work" {
+		t.Fatalf("cron token name = %q, want %q", matched.Color.Name, "cron:poll-for-work")
 	}
-	if matched.Color.Tags[cronSourceTag] != "cron" {
-		t.Fatalf("cron token source tag = %q, want cron", matched.Color.Tags[cronSourceTag])
+	if matched.Color.Tags[interfaces.TimeWorkTagKeySource] != "cron" {
+		t.Fatalf("cron token source tag = %q, want cron", matched.Color.Tags[interfaces.TimeWorkTagKeySource])
 	}
 
 	var payload map[string]string
@@ -2217,8 +1821,8 @@ func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces
 	if got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
 	}
-	if record.Request.Tags[cronWorkstationTag] != workstation {
-		t.Fatalf("cron workstation tag = %q, want %s", record.Request.Tags[cronWorkstationTag], workstation)
+	if record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != workstation {
+		t.Fatalf("cron workstation tag = %q, want %s", record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation], workstation)
 	}
 }
 
@@ -2249,20 +1853,6 @@ func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest
 	t.Helper()
 	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]; got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
-	}
-}
-
-func assertCronWorkRequestForWorkstation(t *testing.T, request interfaces.WorkRequest, want time.Time, workstation string) {
-	t.Helper()
-	if request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("cron work request type = %q, want %q", request.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
-	}
-	assertCronWorkRequestNominalAt(t, request, want)
-	if got := request.Works[0].Tags[cronWorkstationTag]; got != workstation {
-		t.Fatalf("cron workstation tag = %q, want %q", got, workstation)
-	}
-	if got := request.Works[0].Tags[cronSourceTag]; got != "cron" {
-		t.Fatalf("cron source tag = %q, want cron", got)
 	}
 }
 

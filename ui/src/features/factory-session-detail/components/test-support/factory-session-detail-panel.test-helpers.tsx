@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react";
+import { render, type RenderResult } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-export function renderWithQueryClient(children: ReactNode) {
+export function renderWithQueryClient(children: ReactNode): RenderResult {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {

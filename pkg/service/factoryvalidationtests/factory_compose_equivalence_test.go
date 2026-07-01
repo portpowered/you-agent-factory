@@ -108,7 +108,7 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("core compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())
 	}
-	if built.Sessions() == nil || built.RuntimeBuild() == nil || built.StartupBundle() == nil {
+	if built.Sessions() == nil || built.RuntimeBuild() == nil || built.WorkersScheduler() == nil || built.StartupBundle() == nil {
 		t.Fatalf("BuildFactoryCore omitted required collaborators: snapshot=%+v", built.ComposeCollaboratorSnapshot())
 	}
 }

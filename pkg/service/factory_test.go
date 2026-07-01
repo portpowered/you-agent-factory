@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -4779,9 +4780,10 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 
 	core := &FactoryCore{
 		collaborators: FactoryServiceCollaborators{
-			Sessions:     factorysessions.NewRegistry(),
-			LocalModels:  localModelDomain{Manager: &managedLocalModelManager{}},
-			RuntimeBuild: &runtimebuild.Service{},
+			Sessions:         factorysessions.NewRegistry(),
+			LocalModels:      localModelDomain{Manager: &managedLocalModelManager{}},
+			RuntimeBuild:     &runtimebuild.Service{},
+			WorkersScheduler: workersservice.New(workersservice.Config{}),
 		},
 		hostedWorkers: hostedworkers.Config{Logger: zap.NewNop()},
 		startupBundle: &factoryRuntimeBundle{
@@ -4797,7 +4799,7 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 	svc.factorySave = &recordingFactorySaveSaver{}
 
 	snapshot := svc.ComposeCollaboratorSnapshot()
-	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.LocalModelsInitialized {
+	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.WorkersSchedulerInitialized || !snapshot.LocalModelsInitialized {
 		t.Fatalf("snapshot missing core collaborators: %+v", snapshot)
 	}
 	if !snapshot.ModelAssetsInitialized || !snapshot.ModelServiceInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {

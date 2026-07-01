@@ -1,5 +1,5 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: graph view-model composes projection, selection bridge, and React Flow presentation in one hook module.
-import type { FitViewOptions, NodeChange } from "@xyflow/react";
+import type { FitViewOptions, NodeChange, OnSelectionChangeFunc, EdgeChange } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 
 import type {
@@ -353,6 +353,21 @@ function useInitialFitViewOptions(graphLayout: GraphLayout) {
   );
 }
 
+export type CurrentActivityGraphViewModelResult = {
+  canonicalLayoutViewport: CurrentActivityGraphRenderProjection["canonicalLayoutViewport"];
+  clearGraphSelection: () => void;
+  edges: FactoryGraphReactFlowEdge[];
+  graphKey: string;
+  graphSelection: FactoryGraphEditorSelectionController;
+  handleEdgesChange: (changes: EdgeChange[]) => void;
+  handleGraphSelectionChange: OnSelectionChangeFunc;
+  handleGraphSelectionStart: (event: { shiftKey: boolean }) => void;
+  handleNodesChange: (changes: NodeChange[]) => void;
+  initialFitViewKey: string;
+  initialFitViewOptions: FitViewOptions;
+  nodes: CurrentActivityNode[];
+};
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes graph projection, editor-local selection, and React Flow presentation wiring.
 export function useCurrentActivityGraphViewModel({
   editor,
@@ -367,7 +382,7 @@ export function useCurrentActivityGraphViewModel({
   onSelectWorkstation,
   selection,
   snapshot,
-}: CurrentActivityGraphViewModelInput) {
+}: CurrentActivityGraphViewModelInput): CurrentActivityGraphViewModelResult {
   const activeExecutions = useActiveExecutions(snapshot);
   const activeExecutionsByWorkstationNodeID = useMemo(
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -70,7 +71,14 @@ func SubscribeFactoryEventsForSession(
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
 ) (*interfaces.FactoryEventStream, error) {
-	return SubscribeFactoryEvents(ctx, bundle, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
+	stream, err := SubscribeFactoryEvents(ctx, bundle, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
+	if err != nil {
+		return nil, err
+	}
+	if stream != nil && bundle != nil {
+		stream.BackendScopeID = strings.TrimSpace(bundle.BackendScopeID)
+	}
+	return stream, nil
 }
 
 // GetEngineStateSnapshot returns the hosted runtime's aggregate observability snapshot.

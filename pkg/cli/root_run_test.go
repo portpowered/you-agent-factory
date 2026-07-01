@@ -1351,6 +1351,9 @@ func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 }
 
 func TestRootCommand_NoArgsHonorsDefaultWorkerModelFlags(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -1565,6 +1568,9 @@ func assertLoadedGoalWorkerBody(t *testing.T, factoryDir, editedBody string) {
 }
 
 func TestRunCommand_VerboseDiagnosticsIncludeOperatorDefaultPrecedence(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI

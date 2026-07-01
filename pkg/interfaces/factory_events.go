@@ -28,6 +28,7 @@ type FactoryEventReconnectScope struct {
 
 // FactoryEventStream carries replayed history and then live canonical events.
 type FactoryEventStream struct {
+	BackendScopeID     string
 	StreamGenerationID string
 	History            []factoryapi.FactoryEvent
 	Events             <-chan factoryapi.FactoryEvent
