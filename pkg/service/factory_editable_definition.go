@@ -859,6 +859,9 @@ func ComposeFactoryCore(
 	if err := validateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
+	if err := ensureServiceBackendScope(cfg, root.BaseLogger); err != nil {
+		return nil, err
+	}
 	coreBuilt := false
 	var runtimeBundle *factoryRuntimeBundle
 	defer func() {

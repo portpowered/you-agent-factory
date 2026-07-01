@@ -114,6 +114,9 @@ func loadBackendScopeID(configPath string) (string, error) {
 		}
 		return "", fmt.Errorf("read system config %q: %w", configPath, err)
 	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return "", nil
+	}
 	var cfg struct {
 		BackendScopeID string `json:"backendScopeID"`
 	}
