@@ -11,6 +11,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 )
 
+// ValidateUpsertNamedFactoryRequest rejects named-factory upsert payloads whose
+// name or topology fail pre-persist validation.
+func (s *Service) ValidateUpsertNamedFactoryRequest(request factoryapi.Factory) error {
+	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
+		return err
+	}
+	return s.ValidateEditableFactoryTopology(request)
+}
+
 // ValidateEditableFactoryTopology rejects editable factory definitions whose
 // topology fails pre-persist validation.
 func (s *Service) ValidateEditableFactoryTopology(submitted factoryapi.Factory) error {

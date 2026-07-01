@@ -162,6 +162,57 @@ func (h factoryDefinitionHost) SaveNow() time.Time {
 	return h.FactoryService.clock.Now().UTC()
 }
 
+func (h factoryDefinitionHost) RunSessionID() string {
+	if h.FactoryService == nil {
+		return ""
+	}
+	return h.FactoryService.runSessionID()
+}
+
+func (h factoryDefinitionHost) SessionForActivation(sessionID string) *factorysessions.LiveSession {
+	if h.FactoryService == nil {
+		return nil
+	}
+	return h.FactoryService.sessionByID(sessionID)
+}
+
+func (h factoryDefinitionHost) NamedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
+	if h.FactoryService == nil {
+		return "", ""
+	}
+	return h.FactoryService.namedFactoryActivationPaths(session)
+}
+
+func (h factoryDefinitionHost) RequireIdleBeforeNamedFactoryActivation(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+) error {
+	if h.FactoryService == nil {
+		return fmt.Errorf("factory service is required")
+	}
+	return h.FactoryService.requireIdleBeforeNamedFactoryActivation(ctx, sessionID, session)
+}
+
+func (h factoryDefinitionHost) SwapPersistedNamedFactoryRuntime(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+	persistRoot string,
+	folderPath string,
+	factoryDir string,
+	name string,
+) error {
+	if h.FactoryService == nil {
+		return fmt.Errorf("factory service is required")
+	}
+	replacement, err := h.FactoryService.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
+	if err != nil {
+		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
+	}
+	return h.FactoryService.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
+}
+
 var _ FactoryDefinitionService = (*factorydefinition.Service)(nil)
 
 func newFactoryDefinitionService(fs *FactoryService) FactoryDefinitionService {
@@ -357,6 +408,18 @@ func (h factorySaveHost) SaveReplaceCurrentForSession(
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
 	return svc.SaveReplaceCurrentForSession(ctx, sessionID, request)
+}
+
+func (h factorySaveHost) SaveUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	svc := h.FactoryService.definitionService()
+	if svc == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
+	}
+	return svc.SaveUpsertNamedAndActivateForSession(ctx, sessionID, request)
 }
 
 func newFactorySaveService(fs *FactoryService) *factorysave.Service {

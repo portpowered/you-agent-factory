@@ -50,4 +50,9 @@ type Host interface {
 		sessionID string,
 		request factoryapi.Factory,
 	) (factoryapi.Factory, error)
+	SaveUpsertNamedAndActivateForSession(
+		ctx context.Context,
+		sessionID string,
+		request factoryapi.Factory,
+	) (factoryapi.Factory, error)
 }

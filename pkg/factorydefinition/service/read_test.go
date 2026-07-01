@@ -78,6 +78,24 @@ func (h stubDefinitionHost) SaveNow() time.Time {
 	return time.Time{}
 }
 
+func (h stubDefinitionHost) RunSessionID() string { return "" }
+
+func (h stubDefinitionHost) SessionForActivation(string) *factorysessions.LiveSession {
+	return nil
+}
+
+func (h stubDefinitionHost) NamedFactoryActivationPaths(*factorysessions.LiveSession) (string, string) {
+	return "", ""
+}
+
+func (h stubDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorysessions.LiveSession) error {
+	return nil
+}
+
+func (h stubDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorysessions.LiveSession, string, string, string, string) error {
+	return nil
+}
+
 func namedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{

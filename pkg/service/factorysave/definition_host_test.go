@@ -57,6 +57,24 @@ func (stubDefinitionHost) SaveNow() time.Time {
 	return time.Time{}
 }
 
+func (stubDefinitionHost) RunSessionID() string { return "" }
+
+func (stubDefinitionHost) SessionForActivation(string) *factorysessions.LiveSession {
+	return nil
+}
+
+func (stubDefinitionHost) NamedFactoryActivationPaths(*factorysessions.LiveSession) (string, string) {
+	return "", ""
+}
+
+func (stubDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorysessions.LiveSession) error {
+	return nil
+}
+
+func (stubDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorysessions.LiveSession, string, string, string, string) error {
+	return nil
+}
+
 func requireFreshEditableFactoryVersion(
 	baseVersion *factoryapi.HybridLogicalTimestamp,
 	currentVersion factoryapi.HybridLogicalTimestamp,
@@ -102,6 +120,19 @@ func saveReplaceCurrentThroughDefinition(
 		saveHost: saveHost,
 		rootDir:  rootDir,
 	}).SaveReplaceCurrentForSession(ctx, sessionID, request)
+}
+
+func saveUpsertNamedThroughDefinition(
+	rootDir string,
+	saveHost Host,
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return factorydefinition.New(saveDefinitionHostAdapter{
+		saveHost: saveHost,
+		rootDir:  rootDir,
+	}).SaveUpsertNamedAndActivateForSession(ctx, sessionID, request)
 }
 
 func (h saveDefinitionHostAdapter) PersistRootDir() string { return h.rootDir }
@@ -158,4 +189,22 @@ func (h saveDefinitionHostAdapter) ReplaceFactoryLayoutAtDir(targetDir string, p
 
 func (h saveDefinitionHostAdapter) SaveNow() time.Time {
 	return time.Now().UTC()
+}
+
+func (h saveDefinitionHostAdapter) RunSessionID() string { return "" }
+
+func (h saveDefinitionHostAdapter) SessionForActivation(string) *factorysessions.LiveSession {
+	return nil
+}
+
+func (h saveDefinitionHostAdapter) NamedFactoryActivationPaths(*factorysessions.LiveSession) (string, string) {
+	return h.rootDir, h.rootDir
+}
+
+func (h saveDefinitionHostAdapter) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorysessions.LiveSession) error {
+	return nil
+}
+
+func (h saveDefinitionHostAdapter) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorysessions.LiveSession, string, string, string, string) error {
+	return nil
 }

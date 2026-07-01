@@ -10,6 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -276,6 +277,14 @@ func (h *splitLayoutNamedSaveHost) SaveReplaceCurrentForSession(
 	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
 }
 
+func (h *splitLayoutNamedSaveHost) SaveUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+}
+
 func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testing.T) {
 	sessionRoot := t.TempDir()
 	host := &upsertNamedSaveHost{
@@ -406,7 +415,11 @@ func (h *upsertNamedSaveHost) CurrentFactoryDefinitionVersionAtRoot(string, fact
 }
 
 func (h *upsertNamedSaveHost) SessionRuntimeConfig(string) (*factoryconfig.LoadedFactoryConfig, error) {
-	return nil, nil
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(h.sessionRootDir, "imported-target")
+	if err != nil {
+		return nil, err
+	}
+	return configload.LoadRuntimeConfig(factoryDir, nil)
 }
 
 func (h *upsertNamedSaveHost) SerializeNamedFactoryUpsertResponse(
@@ -451,4 +464,12 @@ func (h *upsertNamedSaveHost) SaveReplaceCurrentForSession(
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
 	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+}
+
+func (h *upsertNamedSaveHost) SaveUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
 }

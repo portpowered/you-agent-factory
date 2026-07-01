@@ -5,7 +5,6 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -59,6 +58,24 @@ func (validationDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factoryconfig
 
 func (validationDefinitionHost) SaveNow() time.Time { return time.Time{} }
 
+func (validationDefinitionHost) RunSessionID() string { return "" }
+
+func (validationDefinitionHost) SessionForActivation(string) *factorysessions.LiveSession {
+	return nil
+}
+
+func (validationDefinitionHost) NamedFactoryActivationPaths(*factorysessions.LiveSession) (string, string) {
+	return "", ""
+}
+
+func (validationDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorysessions.LiveSession) error {
+	return nil
+}
+
+func (validationDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorysessions.LiveSession, string, string, string, string) error {
+	return nil
+}
+
 func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLoader factoryconfig.WorkstationLoader) error {
 	return factorydefinition.New(validationDefinitionHost{
 		workstationLoader: workstationLoader,
@@ -69,8 +86,7 @@ func validateUpsertNamedFactoryRequest(
 	request factoryapi.Factory,
 	workstationLoader factoryconfig.WorkstationLoader,
 ) error {
-	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
-		return err
-	}
-	return validateEditableFactoryTopology(request, workstationLoader)
+	return factorydefinition.New(validationDefinitionHost{
+		workstationLoader: workstationLoader,
+	}).ValidateUpsertNamedFactoryRequest(request)
 }

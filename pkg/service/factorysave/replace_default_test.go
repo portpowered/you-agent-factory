@@ -319,6 +319,14 @@ func (h *splitLayoutDefaultSaveHost) SaveReplaceCurrentForSession(
 	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
 }
 
+func (h *splitLayoutDefaultSaveHost) SaveUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+}
+
 func stringPointer(value string) *string {
 	return &value
 }

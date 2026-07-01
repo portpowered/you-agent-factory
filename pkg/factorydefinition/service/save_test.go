@@ -185,6 +185,24 @@ func (h *splitLayoutSaveHost) SaveNow() time.Time {
 	return time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC)
 }
 
+func (h *splitLayoutSaveHost) RunSessionID() string { return factorysessions.DefaultSessionID }
+
+func (h *splitLayoutSaveHost) SessionForActivation(string) *factorysessions.LiveSession {
+	return nil
+}
+
+func (h *splitLayoutSaveHost) NamedFactoryActivationPaths(*factorysessions.LiveSession) (string, string) {
+	return "", ""
+}
+
+func (h *splitLayoutSaveHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorysessions.LiveSession) error {
+	return nil
+}
+
+func (h *splitLayoutSaveHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorysessions.LiveSession, string, string, string, string) error {
+	return nil
+}
+
 func saveWorkerTypeModel() *factoryapi.WorkerType {
 	value := factoryapi.WorkerTypeModelWorker
 	return &value

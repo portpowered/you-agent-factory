@@ -35,4 +35,18 @@ type Host interface {
 	) error
 	ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error)
 	SaveNow() time.Time
+
+	RunSessionID() string
+	SessionForActivation(sessionID string) *factorysessions.LiveSession
+	NamedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string)
+	RequireIdleBeforeNamedFactoryActivation(ctx context.Context, sessionID string, session *factorysessions.LiveSession) error
+	SwapPersistedNamedFactoryRuntime(
+		ctx context.Context,
+		sessionID string,
+		session *factorysessions.LiveSession,
+		persistRoot string,
+		folderPath string,
+		factoryDir string,
+		name string,
+	) error
 }
