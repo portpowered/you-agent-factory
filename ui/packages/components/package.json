@@ -12,7 +12,63 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./styles.css": "./src/styles.css"
+    "./styles.css": "./src/styles.css",
+    "./primitives": {
+      "types": "./src/primitives/index.ts",
+      "default": "./src/primitives/index.ts"
+    },
+    "./forms": {
+      "types": "./src/forms/index.ts",
+      "default": "./src/forms/index.ts"
+    },
+    "./layout": {
+      "types": "./src/layout/index.ts",
+      "default": "./src/layout/index.ts"
+    },
+    "./feedback": {
+      "types": "./src/feedback/index.ts",
+      "default": "./src/feedback/index.ts"
+    },
+    "./data-display": {
+      "types": "./src/data-display/index.ts",
+      "default": "./src/data-display/index.ts"
+    },
+    "./navigation": {
+      "types": "./src/navigation/index.ts",
+      "default": "./src/navigation/index.ts"
+    },
+    "./overlays": {
+      "types": "./src/overlays/index.ts",
+      "default": "./src/overlays/index.ts"
+    },
+    "./charts": {
+      "types": "./src/charts/index.ts",
+      "default": "./src/charts/index.ts"
+    },
+    "./graphs": {
+      "types": "./src/graphs/index.ts",
+      "default": "./src/graphs/index.ts"
+    },
+    "./recipes": {
+      "types": "./src/recipes/index.ts",
+      "default": "./src/recipes/index.ts"
+    },
+    "./icons": {
+      "types": "./src/icons/index.ts",
+      "default": "./src/icons/index.ts"
+    },
+    "./utilities": {
+      "types": "./src/utilities/index.ts",
+      "default": "./src/utilities/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./src/testing/index.ts"
+    },
+    "./tokens": {
+      "types": "./src/tokens/index.ts",
+      "default": "./src/tokens/index.ts"
+    }
   },
   "scripts": {
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
