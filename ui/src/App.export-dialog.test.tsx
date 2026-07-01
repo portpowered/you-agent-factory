@@ -30,6 +30,7 @@ import {
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
   renderApp,
+  waitForDashboardShell,
 } from "./testing/app-shell-test-utils";
 
 describe("App shell export dialog flows", () => {
@@ -120,6 +121,7 @@ describe("App shell export dialog flows", () => {
       version: currentSessionFactoryExportAPIResponse.version,
     };
     const refreshedCurrentFactoryResponse = createDeferredPromise<Response>();
+    let serveDeferredFactoryResponse = false;
     const writeFactoryExportPngSpy = vi
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockResolvedValue({
@@ -142,33 +144,25 @@ describe("App shell export dialog flows", () => {
     const { fetchMock } = renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
-    });
-    let currentFactoryFetchCount = 0;
+      fetchOverride: async (path, method) => {
+        if (
+          method !== "GET" ||
+          path !== `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`
+        ) {
+          return undefined;
+        }
 
-    chainRenderAppFetchMock(fetchMock, async (path, method) => {
-      if (
-        method !== "GET" ||
-        path !== `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`
-      ) {
-        return undefined;
-      }
+        if (serveDeferredFactoryResponse) {
+          serveDeferredFactoryResponse = false;
+          return refreshedCurrentFactoryResponse.promise;
+        }
 
-      currentFactoryFetchCount += 1;
-
-      if (currentFactoryFetchCount === 1) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
-      }
-
-      if (currentFactoryFetchCount === 2) {
-        return refreshedCurrentFactoryResponse.promise;
-      }
-
-      throw new Error(
-        `unexpected current factory fetch #${currentFactoryFetchCount}`,
-      );
+      },
     });
 
     try {
+      await waitForDashboardShell();
       fireEvent.click(
         await screen.findByRole("button", { name: "Export PNG" }),
       );
@@ -190,6 +184,7 @@ describe("App shell export dialog flows", () => {
         ).toBeNull();
       });
 
+      serveDeferredFactoryResponse = true;
       fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
 
       const secondDialog = await screen.findByRole("dialog", {

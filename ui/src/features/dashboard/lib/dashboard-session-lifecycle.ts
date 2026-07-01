@@ -6,7 +6,10 @@ import {
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../../current-selection/base/public";
-import { FACTORY_SESSION_DETAIL_QUERY_KEY } from "../../factory-session-detail/public";
+import {
+  FACTORY_SESSION_DETAIL_QUERY_KEY,
+  factorySessionDetailQueryKey,
+} from "../../factory-session-detail/public";
 
 export type FactoryDefinitionQueryResetMode = "invalidate" | "remove";
 
@@ -79,18 +82,23 @@ export function resetDashboardSessionScopedState(
     return;
   }
   queryClient.removeQueries(queryFilter);
+  queryClient.removeQueries({
+    queryKey: FACTORY_SESSION_DETAIL_QUERY_KEY,
+    exact: false,
+  });
 }
 
 export function clearDashboardSessionRuntimeQueries(
   queryClient: QueryClient,
   sessionID: string,
+  backendScopeID?: string | null,
 ): void {
   queryClient.removeQueries({
-    queryKey: currentFactoryDefinitionQueryKey(sessionID),
+    queryKey: currentFactoryDefinitionQueryKey(sessionID, backendScopeID),
     exact: false,
   });
   queryClient.removeQueries({
-    queryKey: [...FACTORY_SESSION_DETAIL_QUERY_KEY, sessionID],
+    queryKey: factorySessionDetailQueryKey(sessionID, backendScopeID),
     exact: false,
   });
 }
@@ -99,12 +107,13 @@ export function recoverDashboardSessionScopedState(
   queryClient: QueryClient,
   sessionID: string,
   resetTimeline: () => void,
+  backendScopeID?: string | null,
 ): void {
   resetTimeline();
   resetSelectionHistoryStore();
-  clearDashboardSessionRuntimeQueries(queryClient, sessionID);
+  clearDashboardSessionRuntimeQueries(queryClient, sessionID, backendScopeID);
   queryClient.removeQueries({
-    queryKey: currentFactoryDocumentQueryKey(sessionID),
+    queryKey: currentFactoryDocumentQueryKey(sessionID, backendScopeID),
     exact: true,
   });
 }

@@ -36,6 +36,7 @@ type BuildInput struct {
 	LoadedFactoryCfg              *factoryconfig.LoadedFactoryConfig
 	BaseLogger                    *zap.Logger
 	RuntimeInstanceID             string
+	BackendScopeID                string
 	Clock                         factory.Clock
 	RecordPath                    string
 	WorkflowID                    string
@@ -174,6 +175,7 @@ func assembleRuntimeBundle(
 		Dir:               input.Dir,
 		FolderPath:        input.FolderPath,
 		RuntimeInstanceID: input.RuntimeInstanceID,
+		BackendScopeID:    strings.TrimSpace(input.BackendScopeID),
 		StartedAtUTC:      input.Clock.Now().UTC(),
 		EventHistory:      eventHistory,
 		Net:               net,

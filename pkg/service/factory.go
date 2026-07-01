@@ -169,6 +169,12 @@ type FactoryServiceConfig struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
+	// BackendScopeID is the stable session/cache namespace; empty local backends persist local-<uuid> during construction.
+	BackendScopeID string
+	// SystemConfigHomeDir overrides the home directory for backendScopeID system config resolution.
+	SystemConfigHomeDir string
+	// SystemConfigPath overrides the system config file path for backendScopeID persistence.
+	SystemConfigPath string
 	// RuntimeLogDir optionally overrides the default
 	// ~/.you-agent-factory/logs directory. Tests use this to keep file-backed
 	// logs isolated.
@@ -832,35 +838,4 @@ func (c *runtimeFactoryCoordinator) shutdownOtherLiveSessions(except *liveRuntim
 
 func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *liveRuntimeHandle) error {
 	return factoryservice.WaitForStart(ctx, handle)
-}
-
-func isCanceledServiceStartup(ctx context.Context, err error) bool {
-	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
-}
-
-func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
-	for {
-		handle := fs.currentLiveRuntime()
-		if handle == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(25 * time.Millisecond):
-				continue
-			}
-		}
-		select {
-		case <-ctx.Done():
-			_ = handle.Wait()
-		case <-handle.RunDone:
-		}
-		if fs.currentLiveRuntime() != handle {
-			continue
-		}
-		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
-			fs.sessions != nil && fs.sessions.Count() == 0 {
-			continue
-		}
-		return handle.Result()
-	}
 }

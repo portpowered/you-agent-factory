@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -843,4 +844,35 @@ func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 		return interfaces.RuntimeModeBatch
 	}
 	return mode
+}
+
+func isCanceledServiceStartup(ctx context.Context, err error) bool {
+	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
+}
+
+func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
+	for {
+		handle := fs.currentLiveRuntime()
+		if handle == nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(25 * time.Millisecond):
+				continue
+			}
+		}
+		select {
+		case <-ctx.Done():
+			_ = handle.Wait()
+		case <-handle.RunDone:
+		}
+		if fs.currentLiveRuntime() != handle {
+			continue
+		}
+		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
+			fs.sessions != nil && fs.sessions.Count() == 0 {
+			continue
+		}
+		return handle.Result()
+	}
 }
