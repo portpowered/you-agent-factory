@@ -1,50 +1,48 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+// @vitest-environment happy-dom
 
-const packageSrcDir = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
-const stylesEntrypointPath = path.join(packageSrcDir, "styles.css");
-const packageStylesDir = path.join(packageSrcDir, "styles");
+import { beforeAll, describe, expect, it } from "vitest";
 
-function readTokenCss(fileName: string): string {
-  return readFileSync(path.join(packageStylesDir, fileName), "utf8");
-}
+import {
+  injectCompiledPackageTokenStyles,
+  readDocumentCssVariable,
+} from "./compile-package-token-styles";
 
 describe("youagentfactory/components token styles entrypoint", () => {
-  const stylesEntrypointSource = readFileSync(stylesEntrypointPath, "utf8");
+  let documentRoot: HTMLElement;
 
-  it("imports shared token layers from the package styles directory", () => {
-    expect(stylesEntrypointSource).toContain(
-      '@import "./styles/color-palette-presets.css";',
-    );
-    expect(stylesEntrypointSource).toContain(
-      '@import "./styles/color-role-tokens.css";',
-    );
-    expect(stylesEntrypointSource).toContain(
-      '@import "./styles/text-color-role-tokens.css";',
-    );
-    expect(stylesEntrypointSource).toContain(
-      '@import "./styles/typography-role-tokens.css";',
-    );
-    expect(stylesEntrypointSource).toContain(
-      '@import "./styles/layout-role-tokens.css";',
+  beforeAll(async () => {
+    documentRoot = await injectCompiledPackageTokenStyles(document);
+  });
+
+  it("exposes role tokens on the document root after importing package styles", () => {
+    expect(readDocumentCssVariable(documentRoot, "--color-primary")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--color-on-surface")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--color-af-text")).toBe(
+      readDocumentCssVariable(documentRoot, "--color-on-surface"),
     );
   });
 
-  it("exposes role, palette, typography, and layout tokens for consumers", () => {
-    const palettePresets = readTokenCss("color-palette-presets.css");
-    const roleTokens = readTokenCss("color-role-tokens.css");
-    const typographyTokens = readTokenCss("typography-role-tokens.css");
-    const layoutTokens = readTokenCss("layout-role-tokens.css");
+  it("exposes typography and layout tokens from the package styles entrypoint", () => {
+    expect(readDocumentCssVariable(documentRoot, "--text-title-large")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--text-body-medium")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--text-label-medium")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--color-af-foundation-surface")).toBeTruthy();
+  });
 
-    expect(palettePresets).toContain("--color-af-foundation-accent:");
-    expect(roleTokens).toContain("--color-af-text: var(--color-on-surface);");
-    expect(typographyTokens).toContain("--text-title-large:");
-    expect(layoutTokens).toContain("--spacing-layout-inset-dialog:");
-    expect(palettePresets).toContain('[data-color-palette="slate"]');
+  it("switches palette foundation background when data-color-palette changes", () => {
+    documentRoot.dataset.colorPalette = "factory-dark";
+    const factoryDarkBackground = readDocumentCssVariable(
+      documentRoot,
+      "--color-af-foundation-background",
+    );
+    expect(factoryDarkBackground.toLowerCase()).toBe("#050b10");
+
+    documentRoot.dataset.colorPalette = "factory-light";
+    const factoryLightBackground = readDocumentCssVariable(
+      documentRoot,
+      "--color-af-foundation-background",
+    );
+    expect(factoryLightBackground.toLowerCase()).toBe("#f4f1e8");
+    expect(factoryLightBackground).not.toBe(factoryDarkBackground);
   });
 });

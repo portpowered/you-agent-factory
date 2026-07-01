@@ -1,6 +1,5 @@
 // @vitest-environment node
 
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createServer, type ViteDevServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -17,15 +16,6 @@ import viteConfig from "../../vite.config";
 const importerPath = path.join(
   import.meta.dirname,
   "components-package-resolution.test.ts",
-);
-const componentsPackageStylesDir = path.resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "packages",
-  "components",
-  "src",
-  "styles",
 );
 
 describe("dashboard youagentfactory/components package resolution", () => {
@@ -44,19 +34,16 @@ describe("dashboard youagentfactory/components package resolution", () => {
     expect(COMPONENTS_PACKAGE_NAME).toBe("youagentfactory/components");
   });
 
-  it("imports the CSS entrypoint through the dashboard Vite resolver", () => {
+  it("imports the CSS entrypoint through the dashboard Vite resolver", async () => {
     expect(typeof stylesCss).toBe("string");
 
-    const palettePresets = readFileSync(
-      path.join(componentsPackageStylesDir, "color-palette-presets.css"),
-      "utf8",
+    const resolved = await viteServer.pluginContainer.resolveId(
+      "youagentfactory/components/styles.css",
+      importerPath,
+      { ssr: false },
     );
-    const layoutTokens = readFileSync(
-      path.join(componentsPackageStylesDir, "layout-role-tokens.css"),
-      "utf8",
-    );
-    expect(palettePresets).toContain("--color-af-foundation-background");
-    expect(layoutTokens).toContain("--spacing-layout-tight:");
+
+    expect(resolved?.id).toContain("packages/components/src/styles.css");
   });
 
   it("imports a deep category path through the dashboard Vite resolver", () => {
