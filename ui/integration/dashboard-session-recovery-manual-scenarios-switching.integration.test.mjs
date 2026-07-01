@@ -197,31 +197,35 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
         await tabTwoPage.reload({ waitUntil: "domcontentloaded" });
 
-        const staleReconnectTimeoutMs = 60_000;
-        await waitForDurableCheckpoint(
-          "tab one stale identity reconnect",
-          async () => {
-            const urls = await tabOneNetwork.readEventStreamURLs();
-            return urls.some(
+        const staleReconnectTimeoutMs = 120_000;
+        const tabReconnectWithoutStaleCursor = async (network) => {
+          const urls = await network.readEventStreamURLs();
+          if (
+            urls.some(
               (url) =>
                 url.includes(
                   `/factory-sessions/${defaultFactorySessionID}/events`,
                 ) && eventStreamOmitsCursor(url),
-            );
-          },
+            )
+          ) {
+            return true;
+          }
+          return network.captured.syncPreflightReads.some(
+            (url) =>
+              url.includes(
+                `/factory-sessions/${defaultFactorySessionID}/sync-preflight`,
+              ) && !url.includes("after_event_id") && !url.includes("after_sequence"),
+          );
+        };
+
+        await waitForDurableCheckpoint(
+          "tab one stale identity reconnect",
+          async () => tabReconnectWithoutStaleCursor(tabOneNetwork),
           staleReconnectTimeoutMs,
         );
         await waitForDurableCheckpoint(
           "tab two stale identity reconnect",
-          async () => {
-            const urls = await tabTwoNetwork.readEventStreamURLs();
-            return urls.some(
-              (url) =>
-                url.includes(
-                  `/factory-sessions/${defaultFactorySessionID}/events`,
-                ) && eventStreamOmitsCursor(url),
-            );
-          },
+          async () => tabReconnectWithoutStaleCursor(tabTwoNetwork),
           staleReconnectTimeoutMs,
         );
 

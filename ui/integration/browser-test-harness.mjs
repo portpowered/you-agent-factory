@@ -708,7 +708,7 @@ function buildSessionSyncPreflightResponse(
   }
 
   return {
-    backendScopeId: "browser-test-harness",
+    backendScopeId: `${sessionState.session.folderPath}::browser-integration`,
     checkpointReusable: reconnectCursorValid,
     factorySessionId: sessionState.session.id,
     logicalSessionKeyId: sessionState.session.id,
@@ -718,7 +718,7 @@ function buildSessionSyncPreflightResponse(
       validForStreamGeneration: reconnectCursorValid,
     },
     requestedSessionId,
-    streamGenerationId: `browser-stream-${sessionState.version.logical}`,
+    streamGenerationId: sessionState.version.physical,
   };
 }
 
