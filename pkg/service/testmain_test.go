@@ -254,7 +254,11 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	svc := AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg))
+	svc := AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	svc = AttachFactorySaveCollaborator(
+		FactoryServiceShell{Service: svc},
+		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
+	)
 
 	runErrCh := make(chan error, 1)
 	go func() { runErrCh <- svc.Run(ctx) }()

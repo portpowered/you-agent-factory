@@ -4437,6 +4437,8 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 	}
 
 	svc := NewFactoryServiceFromCore(core)
+	shell := FactoryServiceShell{Service: svc}
+	svc = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, core.cfg))
 	svc.factorySave = &recordingFactorySaveSaver{}
 
 	snapshot := svc.ComposeCollaboratorSnapshot()

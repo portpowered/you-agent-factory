@@ -864,7 +864,6 @@ func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
 		clock:          core.Clock(),
 		runtimeBuild:   core.RuntimeBuild(),
 	}
-	svc.modelService = wireModelServiceCollaborator(svc, core.cfg)
 	svc.coordinator = newFactoryCoordinator(svc)
 	svc.definitions = newFactoryDefinitionService(svc)
 	return svc
