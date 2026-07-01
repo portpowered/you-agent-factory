@@ -380,6 +380,39 @@ func TestWorkMoveCommand_HelpDocumentsOperatorMove(t *testing.T) {
 	}
 }
 
+func TestWorkVisualizeCommand_HelpDocumentsReadOnlyFormatsAndRedirection(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "visualize", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work visualize --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"visualize <batch-file.json>",
+		"read-only",
+		"does not submit work",
+		"contact a running factory",
+		"render diagram images",
+		"default: mermaid",
+		"markdown-mermaid",
+		"work items",
+		"dependency relations",
+		"> my-graph.mermaid",
+		"> graph.md",
+		"--format",
+		"mermaid or markdown-mermaid",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("work visualize help missing %q:\n%s", want, help)
+		}
+	}
+}
+
 func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()

@@ -182,12 +182,20 @@ func newWorkVisualizeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "visualize <batch-file.json>",
 		Short: "Render a work batch dependency graph as Mermaid",
-		Long: "Read a local FACTORY_REQUEST_BATCH JSON file and render its declared work dependencies as a Mermaid flowchart.\n\n" +
-			"This command is read-only: it does not submit work or contact a running factory.\n\n" +
-			"Redirect stdout to save the diagram, for example:\n" +
-			cliBinaryName + " work visualize batch.json > my-graph.mermaid",
-		Example: "  # Emit raw Mermaid flowchart syntax to stdout.\n" +
-			"  " + cliBinaryName + " work visualize batch.json > my-graph.mermaid",
+		Long: "Read a local FACTORY_REQUEST_BATCH JSON file from disk and render its declared work dependencies as a diagram.\n\n" +
+			"The required <batch-file.json> argument is a path to any readable batch file. " +
+			"Graph nodes represent work items; directed edges represent declared dependency relations from the batch.\n\n" +
+			"Output format (default: mermaid):\n" +
+			"  mermaid           Raw Mermaid flowchart syntax written to stdout.\n" +
+			"  markdown-mermaid  Markdown with a title and one fenced mermaid code block.\n\n" +
+			"This command is read-only. It does not submit work, contact a running factory, or render diagram images.\n\n" +
+			"Redirect stdout to save output, for example:\n" +
+			"  " + cliBinaryName + " work visualize batch.json > my-graph.mermaid\n" +
+			"  " + cliBinaryName + " work visualize --format markdown-mermaid batch.json > graph.md",
+		Example: "  # Default: raw Mermaid flowchart to stdout.\n" +
+			"  " + cliBinaryName + " work visualize batch.json > my-graph.mermaid\n\n" +
+			"  # Markdown with embedded Mermaid diagram.\n" +
+			"  " + cliBinaryName + " work visualize --format markdown-mermaid batch.json > graph.md",
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -200,7 +208,7 @@ func newWorkVisualizeCommand() *cobra.Command {
 	}
 
 	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&format, "format", "mermaid", "output format (mermaid)")
+	cmd.Flags().StringVar(&format, "format", "mermaid", "output format: mermaid or markdown-mermaid")
 	return cmd
 }
 
