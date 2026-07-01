@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import { shouldResetDashboardRuntimeScopedState } from "../lib/backend-runtime-cache-scope";
+import { shouldResetDashboardRuntimeScopedState } from "../lib/backend-scope/backend-runtime-cache-scope";
 import {
   dashboardSessionKey,
   type FactoryDefinitionQueryResetMode,

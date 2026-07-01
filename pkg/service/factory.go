@@ -27,6 +27,7 @@ import (
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
@@ -105,8 +106,9 @@ type FactoryService struct {
 	sessions       *factorysessions.Registry
 	factorySave    factorySaveSaver
 	sessionGateway sessionGateway
-	runtimeBuild   *runtimebuild.Service
-	hostedWorkers  hostedworkers.Config
+	runtimeBuild      *runtimebuild.Service
+	workersScheduler  *workersservice.Service
+	hostedWorkers     hostedworkers.Config
 	factoryRootDir string
 	policy         serviceCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
@@ -765,17 +767,10 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 		}()
 	}
 
-	fs.startCronWatchersForRuntime(
+	fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
 		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryDir(),
-		handle.Bundle.RuntimeCfg.FactoryConfig(),
-		handle.Bundle.RuntimeCfg,
-		submitWorkRequestWithFactory(handle.Bundle.Factory),
-	)
-	fs.startPollerWatchersForRuntime(
-		sidecarCtx,
-		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryConfig(),
 		handle.Bundle.RuntimeCfg,
 		submitWorkRequestWithFactory(handle.Bundle.Factory),
@@ -844,35 +839,4 @@ func (c *runtimeFactoryCoordinator) shutdownOtherLiveSessions(except *liveRuntim
 
 func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *liveRuntimeHandle) error {
 	return factoryservice.WaitForStart(ctx, handle)
-}
-
-func isCanceledServiceStartup(ctx context.Context, err error) bool {
-	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
-}
-
-func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
-	for {
-		handle := fs.currentLiveRuntime()
-		if handle == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(25 * time.Millisecond):
-				continue
-			}
-		}
-		select {
-		case <-ctx.Done():
-			_ = handle.Wait()
-		case <-handle.RunDone:
-		}
-		if fs.currentLiveRuntime() != handle {
-			continue
-		}
-		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
-			fs.sessions != nil && fs.sessions.Count() == 0 {
-			continue
-		}
-		return handle.Result()
-	}
 }
