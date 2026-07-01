@@ -4,23 +4,17 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
@@ -29,13 +23,23 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
+)
+
+type (
+	factoryRuntimeBundle      = factoryservice.Bundle
+	liveRuntimeHandle         = factoryservice.Handle
+	modelAssetPuller          = localmodels.AssetPuller
+	localModelRuntime         = localmodels.Runtime
+	localModelResourceLimiter = localmodels.ResourceLimiter
+	managedLocalModelManager  = localmodels.Manager
 )
 
 type runtimeBundleBuildInput struct {
@@ -59,33 +63,10 @@ type runtimeBundleBuildInput struct {
 	dispatchCompleted             func(string)
 }
 
-type liveSessionState struct {
-	bundle                *factoryRuntimeBundle
-	handle                *liveRuntimeHandle
-	spec                  *runtimebuild.SessionBuildSpec
-	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
-	responseStreamsOnce   sync.Once
-	responseStreams       *factorysessions.SessionResponseStreamSet
-}
-
-// BuildFactoryService loads factory.json from the config directory, constructs
-// the petri net, factory runtime, file watcher, and session metrics.
-func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
-	core, err := BuildFactoryCore(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	service := NewFactoryServiceFromCore(core)
-	shell := FactoryServiceShell{Service: service}
-	service = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
-	service = AttachFactorySaveCollaborator(
-		FactoryServiceShell{Service: service},
-		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: service}, cfg),
-	)
-	return AttachSessionGatewayCollaborator(
-		FactoryServiceShell{Service: service},
-		ProvideSessionGatewayCollaborator(FactoryServiceShell{Service: service}, cfg),
-	), nil
+// NewStartupLiveSessionHandle constructs the default session handle attached
+// during startup core composition.
+func NewStartupLiveSessionHandle(bundle *factoryservice.Bundle, spec *runtimebuild.SessionBuildSpec) any {
+	return runtimehost.NewStartupLiveSessionHandle(bundle, spec)
 }
 
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
@@ -121,129 +102,6 @@ func AsRuntimeBundleForCompose(bundle any) *factoryservice.Bundle {
 	return asRuntimeBundle(bundle)
 }
 
-// NewStartupLiveSessionHandle constructs the default session handle attached
-// during startup core composition.
-func NewStartupLiveSessionHandle(bundle *factoryservice.Bundle, spec *runtimebuild.SessionBuildSpec) any {
-	if spec == nil {
-		return &liveSessionState{bundle: bundle}
-	}
-	copied := *spec
-	return &liveSessionState{bundle: bundle, spec: &copied}
-}
-
-type serviceCoordinatorPolicy struct {
-	dir                           string
-	executionBaseDir              string
-	runtimeMode                   interfaces.RuntimeMode
-	port                          int
-	verbose                       bool
-	runtimeInstanceID             string
-	workFile                      string
-	workflowID                    string
-	mockWorkersConfig             *factoryconfig.MockWorkersConfig
-	simpleDashboardRenderer       SimpleDashboardRenderer
-	apiServerStarter              APIServerStarter
-	apiServerReady                <-chan struct{}
-	workstationLoader             factoryconfig.WorkstationLoader
-	modelCacheDir                 string
-	runnerID                      string
-	providerOverride              workers.Provider
-	providerCommandRunnerOverride workers.CommandRunner
-	commandRunnerOverride         workers.CommandRunner
-}
-
-const (
-	runtimeMetricLifecycleStarted     = "runtime.lifecycle.started"
-	runtimeMetricLifecycleStopped     = "runtime.lifecycle.stopped"
-	runtimeMetricStateActive          = "runtime.state.active"
-	runtimeMetricStateIdle            = "runtime.state.idle"
-	runtimeMetricStatePaused          = "runtime.state.paused"
-	runtimeMetricStateFailed          = "runtime.state.failed"
-	runtimeMetricQueueInFlight        = "runtime.queue.in_flight"
-	runtimeMetricQueueSubmissionCount = "queue.submission_count"
-	runtimeMetricDispatchStarted      = "dispatch.started"
-	runtimeMetricDispatchComplete     = "dispatch.completed"
-	runtimeMetricDispatchDuration     = "dispatch.duration"
-	runtimeMetricDispatchRetries      = "dispatch.retry_count"
-	runtimeMetricDispatchCost         = "dispatch.cost"
-	runtimeMetricProviderRequest      = "provider.requested"
-	runtimeMetricProviderComplete     = "provider.completed"
-	runtimeMetricProviderFailed       = "provider.failed"
-	runtimeMetricProviderDuration     = "provider.duration"
-	runtimeMetricProviderInputTok     = "provider.input_tokens"
-	runtimeMetricProviderOutputTok    = "provider.output_tokens"
-	runtimeMetricProviderCost         = "provider.cost"
-	runtimeMetricScriptStarted        = "script.started"
-	runtimeMetricScriptComplete       = "script.completed"
-	runtimeMetricScriptDuration       = "script.duration"
-	runtimeMetricScriptTimedOut       = "script.timed_out"
-	runtimeMetricScriptFailed         = "script.failed"
-)
-
-func (fs *FactoryService) coordinatorPolicy() serviceCoordinatorPolicy {
-	if fs == nil {
-		return serviceCoordinatorPolicy{}
-	}
-	if hasExplicitServiceCoordinatorPolicy(fs.policy) {
-		return fs.policy
-	}
-	return serviceCoordinatorPolicyFromConfig(fs.cfg)
-}
-
-func hasExplicitServiceCoordinatorPolicy(policy serviceCoordinatorPolicy) bool {
-	return hasExplicitServiceCoordinatorValuePolicy(policy) || hasExplicitServiceCoordinatorReferencePolicy(policy)
-}
-
-func hasExplicitServiceCoordinatorValuePolicy(policy serviceCoordinatorPolicy) bool {
-	return policy.dir != "" ||
-		policy.executionBaseDir != "" ||
-		policy.runtimeMode != "" ||
-		policy.port != 0 ||
-		policy.verbose ||
-		policy.runtimeInstanceID != "" ||
-		policy.workFile != "" ||
-		policy.workflowID != "" ||
-		policy.modelCacheDir != "" ||
-		policy.runnerID != ""
-}
-
-func hasExplicitServiceCoordinatorReferencePolicy(policy serviceCoordinatorPolicy) bool {
-	return policy.mockWorkersConfig != nil ||
-		policy.simpleDashboardRenderer != nil ||
-		policy.apiServerStarter != nil ||
-		policy.apiServerReady != nil ||
-		policy.workstationLoader != nil ||
-		policy.providerOverride != nil ||
-		policy.providerCommandRunnerOverride != nil ||
-		policy.commandRunnerOverride != nil
-}
-
-func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordinatorPolicy {
-	if cfg == nil {
-		return serviceCoordinatorPolicy{}
-	}
-	return serviceCoordinatorPolicy{
-		dir:                           cfg.Dir,
-		executionBaseDir:              cfg.ExecutionBaseDir,
-		runtimeMode:                   cfg.RuntimeMode,
-		port:                          cfg.Port,
-		verbose:                       cfg.Verbose,
-		runtimeInstanceID:             cfg.RuntimeInstanceID,
-		workFile:                      cfg.WorkFile,
-		workflowID:                    cfg.WorkflowID,
-		mockWorkersConfig:             cfg.MockWorkersConfig,
-		simpleDashboardRenderer:       cfg.SimpleDashboardRenderer,
-		apiServerStarter:              cfg.APIServerStarter,
-		apiServerReady:                cfg.APIServerReady,
-		workstationLoader:             cfg.WorkstationLoader,
-		modelCacheDir:                 cfg.ModelCacheDir,
-		runnerID:                      cfg.RunnerID,
-		providerOverride:              cfg.ProviderOverride,
-		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
-		commandRunnerOverride:         cfg.CommandRunnerOverride,
-	}
-}
-
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
 	factoryRootDir, err := factorysessions.AbsolutizeFactoryDirectory(cfg.Dir)
 	if err != nil {
@@ -261,74 +119,18 @@ func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, 
 	return factoryRootDir, baseLogger, nil
 }
 
-// RuntimeLogDiagnostics describes the active runtime log selected during
-// service construction.
-type RuntimeLogDiagnostics struct {
-	Path                string
-	RootDir             string
-	StartTimeUTC        time.Time
-	MetricsPath         string
-	MetricsRootDir      string
-	MetricsStartTimeUTC time.Time
-}
-
-// RuntimeLogDiagnostics returns the selected runtime log metadata for startup
-// diagnostics without exposing the sink writer.
-func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
-	bundle := fs.currentRuntimeBundle()
-	if bundle == nil || bundle.LogSink == nil {
-		return RuntimeLogDiagnostics{}
-	}
-	return RuntimeLogDiagnostics{
-		Path:                bundle.LogSink.Path(),
-		RootDir:             bundle.LogSink.RootDir(),
-		StartTimeUTC:        bundle.LogSink.StartTimeUTC(),
-		MetricsPath:         runtimeMetricsPath(bundle.MetricsSink),
-		MetricsRootDir:      runtimeMetricsRootDir(bundle.MetricsSink),
-		MetricsStartTimeUTC: runtimeMetricsStartTime(bundle.MetricsSink),
-	}
-}
-
-func runtimeMetricsPath(sink *logging.RuntimeMetricsSink) string {
-	if sink == nil {
-		return ""
-	}
-	return sink.Path()
-}
-
-func runtimeMetricsRootDir(sink *logging.RuntimeMetricsSink) string {
-	if sink == nil {
-		return ""
-	}
-	return sink.RootDir()
-}
-
-func runtimeMetricsStartTime(sink *logging.RuntimeMetricsSink) time.Time {
-	if sink == nil {
-		return time.Time{}
-	}
-	return sink.StartTimeUTC()
-}
-
-func runtimeLogStartTimeString(value time.Time) string {
-	if value.IsZero() {
-		return ""
-	}
-	return value.UTC().Format(time.RFC3339Nano)
-}
-
 func loadFactoryConfigForService(
 	cfg *FactoryServiceConfig,
 	logger *zap.Logger,
 ) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
 	logger.Info("loading factory config", zap.String("dir", cfg.Dir))
-	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForMode(cfg)
+	loadedFactoryCfg, replayArtifact, err := runtimehost.LoadFactoryConfigForMode(cfg)
 	if err != nil {
 		logger.Error("failed to load factory config", zap.Error(err))
 		return nil, nil, fmt.Errorf("load factory config: %w", err)
 	}
 	runtimebuild.WarnPortableBundledReplacementReport(logger, "runtime config load replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
-	warnReplayMetadataMismatches(cfg, replayArtifact, logger)
+	runtimehost.WarnReplayMetadataMismatches(cfg, replayArtifact, logger)
 	return loadedFactoryCfg, replayArtifact, nil
 }
 
@@ -377,7 +179,7 @@ func buildRuntimeBundle(
 ) (*factoryRuntimeBundle, error) {
 	sessionID := strings.TrimSpace(input.sessionID)
 	if sessionID == "" {
-		sessionID = defaultFactorySessionID
+		sessionID = runtimehost.DefaultFactorySessionID
 	}
 	localModels := input.prefetchedLocalModels
 	if localModels.Manager == nil {
@@ -477,7 +279,7 @@ func loadRuntimeBundleWorkerOptions(
 		input.loadedFactoryCfg.FactoryConfig(),
 		effectiveFactoryRunnerID,
 		input.loadedFactoryCfg,
-		runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
+		runtimehost.RuntimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
@@ -515,11 +317,11 @@ func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localMode
 
 func localModelHooks() localmodels.Hooks {
 	return localmodels.Hooks{
-		MarkResourceWaitStarted:  markModelExecutionResourceWaitStarted,
-		MarkResourceWaitFinished: markModelExecutionResourceWaitFinished,
-		MarkLoadRequested:        markModelExecutionLoadRequested,
-		MarkLoadFinished:         markModelExecutionLoadFinished,
-		MarkLoadReused:           markModelExecutionLoadReused,
+		MarkResourceWaitStarted:  runtimehost.MarkModelExecutionResourceWaitStarted,
+		MarkResourceWaitFinished: runtimehost.MarkModelExecutionResourceWaitFinished,
+		MarkLoadRequested:        runtimehost.MarkModelExecutionLoadRequested,
+		MarkLoadFinished:         runtimehost.MarkModelExecutionLoadFinished,
+		MarkLoadReused:           runtimehost.MarkModelExecutionLoadReused,
 	}
 }
 
@@ -560,66 +362,6 @@ func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clo
 	return hostedCfg
 }
 
-func (fs *FactoryService) dashboardLoop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			fs.renderDashboard(ctx)
-		}
-	}
-}
-
-func (fs *FactoryService) renderDashboard(ctx context.Context) {
-	now := factory.EnsureClock(fs.clock).Now()
-	input, err := fs.buildSimpleDashboardRenderInput(ctx, now)
-	if err != nil {
-		if fs.logger != nil {
-			fs.logger.Error("simple dashboard render failed", zap.Error(err))
-		}
-		return
-	}
-	fs.cfg.SimpleDashboardRenderer(input)
-}
-
-func (fs *FactoryService) buildSimpleDashboardRenderInput(ctx context.Context, now time.Time) (SimpleDashboardRenderInput, error) {
-	es, err := fs.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return SimpleDashboardRenderInput{}, err
-	}
-	renderData, err := fs.simpleDashboardRenderData(ctx, es.TickCount, es.ActiveThrottlePauses)
-	if err != nil {
-		return SimpleDashboardRenderInput{}, err
-	}
-	return SimpleDashboardRenderInput{
-		EngineState: *es,
-		RenderData:  renderData,
-		Now:         now,
-	}, nil
-}
-
-func (fs *FactoryService) simpleDashboardRenderData(
-	ctx context.Context,
-	selectedTick int,
-	activeThrottlePauses []interfaces.ActiveThrottlePause,
-) (dashboardrender.SimpleDashboardRenderData, error) {
-	events, err := fs.GetFactoryEvents(ctx)
-	if err != nil {
-		return dashboardrender.SimpleDashboardRenderData{}, err
-	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
-	if err != nil {
-		return dashboardrender.SimpleDashboardRenderData{}, err
-	}
-	renderData := dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState)
-	renderData.ActiveThrottlePauses = projections.ProjectActiveThrottlePauses(worldState.Topology, activeThrottlePauses)
-	return renderData, nil
-}
-
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
 	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
 		return runner
@@ -646,7 +388,7 @@ func loadWorkersFromConfig(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
-	modelRecorder modelEventRecorder,
+	modelRecorder runtimehost.ModelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
@@ -731,7 +473,7 @@ func buildWorkerExecutor(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
-	modelRecorder modelEventRecorder,
+	modelRecorder runtimehost.ModelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
@@ -787,7 +529,7 @@ func buildProviderBackedWorkerExecutor(
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
-	modelRecorder modelEventRecorder,
+	modelRecorder runtimehost.ModelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
@@ -803,7 +545,7 @@ func buildProviderBackedWorkerExecutor(
 	)
 	runner = wrapLocalModelRunner(runner, runtimeCfg, factoryCfg, def, modelDomain)
 	runner = modelDomain.Resources.WrapRunner(runner, factoryCfg, def)
-	runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
+	runner = runtimehost.NewRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 	inferenceExecutor := workerexecutor.NewAgentExecutorWithRunner(
 		runtimeCfg,
 		runner,
@@ -1029,8 +771,8 @@ func newRuntimeBuildService(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
-	progressPublisherFactory inferenceProgressPublisherFactory,
-	dispatchCompletionFactory dispatchCompletionObserverFactory,
+	progressPublisherFactory runtimehost.InferenceProgressPublisherFactory,
+	dispatchCompletionFactory runtimehost.DispatchCompletionObserverFactory,
 ) *runtimebuild.Service {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
@@ -1097,78 +839,6 @@ func asRuntimeBundle(bundle any) *factoryRuntimeBundle {
 	return bundle.(*factoryRuntimeBundle)
 }
 
-func (fs *FactoryService) defaultSessionClosedDuringStartup() bool {
-	if fs == nil || runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService {
-		return false
-	}
-	return fs.sessionByID(defaultFactorySessionID) == nil
-}
-
-func (fs *FactoryService) handleDefaultRuntimeStartFailure(
-	ctx context.Context,
-	currentRuntime *liveRuntimeHandle,
-	startErr error,
-) error {
-	if fs.defaultSessionClosedDuringStartup() {
-		fs.clearRunState()
-		_ = fs.stopLiveRuntime(currentRuntime)
-		return nil
-	}
-	fs.clearRunState()
-	fs.unregisterLiveSession(defaultFactorySessionID)
-	stopErr := fs.stopLiveRuntime(currentRuntime)
-	if isCanceledServiceStartup(ctx, startErr) {
-		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-			return stopErr
-		}
-		return nil
-	}
-	if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
-	}
-	return fmt.Errorf("start runtime: %w", startErr)
-}
-
-const (
-	modelPullMetricAttempts      = "managed_runtime.pull.attempts"
-	modelPullMetricSuccess       = "managed_runtime.pull.success"
-	modelPullMetricFailure       = "managed_runtime.pull.failure"
-	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
-)
-
-func (fs *FactoryService) modelPullMetricsRecorder() ModelPullMetricsRecorder {
-	if fs == nil || fs.cfg == nil {
-		return nil
-	}
-	return fs.cfg.ModelPullMetricsRecorder
-}
-
-func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
-	if success != nil {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
-	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
-	}
-	return nil
-}
-
-func modelEventErrorClass(err error) string {
-	var readinessErr *apisurface.ManagedRuntimeInvocationError
-	if errors.As(err, &readinessErr) && readinessErr.ReadinessState != "" {
-		return "MANAGED_RUNTIME_" + string(readinessErr.ReadinessState)
-	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) && providerErr.Type != "" {
-		return string(providerErr.Type)
-	}
-	if err == nil {
-		return ""
-	}
-	return "MODEL_EXECUTION_FAILED"
-}
-
 type zapModelHostLogger struct {
 	logger *zap.Logger
 }
@@ -1216,7 +886,7 @@ func (a invocationMetricsRecorderAdapter) RecordMetric(name string, labels map[s
 	}
 	a.recorder.RecordInvocationMetric(InvocationMetric{
 		Name:   name,
-		Labels: cloneMetricLabels(labels),
+		Labels: runtimehost.CloneMetricLabels(labels),
 	})
 }
 

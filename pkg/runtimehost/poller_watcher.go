@@ -1,4 +1,4 @@
-package service
+package runtimehost
 
 import (
 	"bytes"
@@ -29,7 +29,7 @@ const (
 	pollerRestartBackoffMax = 250 * time.Millisecond
 )
 
-func (fs *FactoryService) startPollerWatchersForRuntime(
+func (fs *Host) startPollerWatchersForRuntime(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	factoryCfg *interfaces.FactoryConfig,
@@ -88,7 +88,7 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 	}
 }
 
-func (fs *FactoryService) superviseScriptPoller(
+func (fs *Host) superviseScriptPoller(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
@@ -130,7 +130,7 @@ func (fs *FactoryService) superviseScriptPoller(
 	}
 }
 
-func (fs *FactoryService) runScriptPoller(
+func (fs *Host) runScriptPoller(
 	ctx context.Context,
 	runner workers.CommandRunner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
@@ -182,14 +182,14 @@ func (fs *FactoryService) runScriptPoller(
 	return fmt.Errorf("script poller exited unexpectedly")
 }
 
-func (fs *FactoryService) pollerCommandRunner() workers.CommandRunner {
+func (fs *Host) pollerCommandRunner() workers.CommandRunner {
 	if fs != nil && fs.coordinatorPolicy().commandRunnerOverride != nil {
 		return fs.coordinatorPolicy().commandRunnerOverride
 	}
 	return workers.ExecCommandRunner{}
 }
 
-func (fs *FactoryService) pollerSupervisorClock() clockwork.Clock {
+func (fs *Host) pollerSupervisorClock() clockwork.Clock {
 	if fs != nil {
 		if supervisorClock, ok := fs.clock.(clockwork.Clock); ok && supervisorClock != nil {
 			return supervisorClock
@@ -198,7 +198,7 @@ func (fs *FactoryService) pollerSupervisorClock() clockwork.Clock {
 	return clockwork.NewRealClock()
 }
 
-func (fs *FactoryService) pollerLogger(workstation interfaces.FactoryWorkstationConfig, workerDef *interfaces.WorkerConfig) *zap.Logger {
+func (fs *Host) pollerLogger(workstation interfaces.FactoryWorkstationConfig, workerDef *interfaces.WorkerConfig) *zap.Logger {
 	if fs == nil || fs.logger == nil {
 		return zap.NewNop()
 	}
@@ -455,7 +455,7 @@ const (
 
 type workRequestSubmitter func(context.Context, interfaces.WorkRequest) error
 
-func (fs *FactoryService) startCronWatchersForRuntime(
+func (fs *Host) startCronWatchersForRuntime(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	factoryDir string,
@@ -496,7 +496,7 @@ func (fs *FactoryService) startCronWatchersForRuntime(
 	}()
 }
 
-func (fs *FactoryService) registerCronJobs(
+func (fs *Host) registerCronJobs(
 	ctx context.Context,
 	scheduler gocron.Scheduler,
 	schedulerClock clockwork.Clock,
@@ -535,7 +535,7 @@ func (fs *FactoryService) registerCronJobs(
 	return registered
 }
 
-func (fs *FactoryService) registerCronJob(
+func (fs *Host) registerCronJob(
 	ctx context.Context,
 	scheduler gocron.Scheduler,
 	schedulerClock clockwork.Clock,
@@ -561,7 +561,7 @@ func (fs *FactoryService) registerCronJob(
 	return nil
 }
 
-func (fs *FactoryService) triggerCronAtStart(
+func (fs *Host) triggerCronAtStart(
 	ctx context.Context,
 	schedulerClock clockwork.Clock,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
@@ -575,7 +575,7 @@ func (fs *FactoryService) triggerCronAtStart(
 	fs.runCronJob(ctx, runtimeCfg, workflowIdentity, ws, schedulerClock.Now().UTC(), submitter)
 }
 
-func (fs *FactoryService) runCronJob(
+func (fs *Host) runCronJob(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
@@ -594,7 +594,7 @@ func (fs *FactoryService) runCronJob(
 	}
 }
 
-func (fs *FactoryService) cronSchedulerClock() clockwork.Clock {
+func (fs *Host) cronSchedulerClock() clockwork.Clock {
 	if fs != nil {
 		if schedulerClock, ok := fs.clock.(clockwork.Clock); ok && schedulerClock != nil {
 			return schedulerClock
@@ -614,7 +614,7 @@ func cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	return schedule, nil
 }
 
-func (fs *FactoryService) submitCronTick(
+func (fs *Host) submitCronTick(
 	ctx context.Context,
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
@@ -629,7 +629,7 @@ func (fs *FactoryService) submitCronTick(
 	return fs.submitCronTickForRuntime(ctx, runtimeLookup, workflowIdentity, fs.currentRuntimeSubmitter(), ws, firedAt)
 }
 
-func (fs *FactoryService) submitCronTickForRuntime(
+func (fs *Host) submitCronTickForRuntime(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
@@ -671,7 +671,7 @@ func (fs *FactoryService) submitCronTickForRuntime(
 	return nil
 }
 
-func (fs *FactoryService) submitCronTickAttempt(
+func (fs *Host) submitCronTickAttempt(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	workflowIdentity string,
@@ -711,7 +711,7 @@ func (fs *FactoryService) submitCronTickAttempt(
 	return nil
 }
 
-func (fs *FactoryService) cronWorkflowIdentity(factoryDir string) string {
+func (fs *Host) cronWorkflowIdentity(factoryDir string) string {
 	if fs == nil {
 		return ""
 	}
@@ -727,7 +727,7 @@ func (fs *FactoryService) cronWorkflowIdentity(factoryDir string) string {
 	return ""
 }
 
-func (fs *FactoryService) cronAttemptContext(
+func (fs *Host) cronAttemptContext(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	ws interfaces.FactoryWorkstationConfig,
@@ -743,7 +743,7 @@ func (fs *FactoryService) cronAttemptContext(
 	return attemptCtx, cancel, nil
 }
 
-func (fs *FactoryService) cronExecutionTimeout(
+func (fs *Host) cronExecutionTimeout(
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	ws interfaces.FactoryWorkstationConfig,
 ) (time.Duration, error) {

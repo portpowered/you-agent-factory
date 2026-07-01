@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 )
 
@@ -16,7 +17,7 @@ type LocalRuntimeRunner interface {
 // SessionRuntimeHost is the transport-facing session/runtime shell composed from
 // a Core without exposing root FactoryService at transport boundaries.
 type SessionRuntimeHost struct {
-	shell *service.FactoryService
+	host *runtimehost.Host
 }
 
 // NewSessionRuntimeHostFromCore composes the API/CLI session runtime host from a
@@ -25,34 +26,37 @@ func NewSessionRuntimeHostFromCore(core *Core, cfg *Config) *SessionRuntimeHost 
 	if core == nil {
 		return nil
 	}
-	shell := service.FactoryServiceShell{Service: service.NewFactoryServiceFromCore(core)}
-	serviceShell := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, cfg))
-	return &SessionRuntimeHost{shell: serviceShell}
+	shell := runtimehost.HostShell{Host: runtimehost.NewHostFromCore(core)}
+	host := service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell(shell),
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell(shell), cfg),
+	)
+	return &SessionRuntimeHost{host: host}
 }
 
 // SessionAPISurface returns handler dependencies for api.NewServer.
 func (h *SessionRuntimeHost) SessionAPISurface() apisurface.SessionAPISurface {
-	if h == nil || h.shell == nil {
+	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.shell
+	return h.host
 }
 
 // Run starts service-mode sidecars and the default session runtime loop.
 func (h *SessionRuntimeHost) Run(ctx context.Context) error {
-	if h == nil || h.shell == nil {
+	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.shell.Run(ctx)
+	return h.host.Run(ctx)
 }
 
 // LocalRuntimeRunner returns the local in-process CLI runtime seam implemented
 // by this host without exposing the root FactoryService compatibility shell.
 func (h *SessionRuntimeHost) LocalRuntimeRunner() LocalRuntimeRunner {
-	if h == nil || h.shell == nil {
+	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.shell
+	return h.host
 }
 
 // CompatibilityServiceShell exposes the temporary FactoryService shell for
@@ -61,5 +65,13 @@ func (h *SessionRuntimeHost) CompatibilityServiceShell() *service.FactoryService
 	if h == nil {
 		return nil
 	}
-	return h.shell
+	return h.host
+}
+
+// RuntimeHost returns the authoritative runtime/session host owned by pkg/runtimehost.
+func (h *SessionRuntimeHost) RuntimeHost() *runtimehost.Host {
+	if h == nil {
+		return nil
+	}
+	return h.host
 }

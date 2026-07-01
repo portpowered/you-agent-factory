@@ -1,16 +1,16 @@
-// backendsizecheck:ignore-file compatibility-shell package doc and SessionRuntimeHost remain with FactoryService until dedicated transport host seam splits.
-// pkgmaintcheck:ignore-file-lines compatibility-shell package doc and SessionRuntimeHost remain with FactoryService until dedicated transport host seam splits.
+// backendsizecheck:ignore-file compatibility-shell package doc and SessionRuntimeHost remain with Host until dedicated transport host seam splits.
+// pkgmaintcheck:ignore-file-lines compatibility-shell package doc and SessionRuntimeHost remain with Host until dedicated transport host seam splits.
 // Package service provides factory runtime coordination, session hosting, and
 // domain service implementations used by pkg/initializer and legacy callers.
 //
 // Transport composition (API startup, CLI local in-process startup, and MCP or
 // tool-facing entrypoints) must use pkg/initializer as the canonical
-// composition root. Root FactoryService and BuildFactoryService remain a
+// composition root. Root Host and BuildHost remain a
 // temporary compatibility shell for in-process runtime hosting and wire
 // equivalence tests; they are not the primary application shell for new
 // transport wiring. Delete this compatibility layer once domain services fully
 // replace the monolithic facade.
-package service
+package runtimehost
 
 import (
 	"context"
@@ -81,6 +81,7 @@ var ErrInvalidNamedFactory = apisurface.ErrInvalidNamedFactory
 var ErrCurrentFactoryNotFound = apisurface.ErrCurrentFactoryNotFound
 
 type localModelCacheLayout = localmodels.CacheLayout
+type localModelDomain = LocalModelDomain
 type localModelLoadRequest = localmodels.LoadRequest
 type localModelInvocationRequest = localmodels.InvocationRequest
 type localModelHandle = localmodels.Handle
@@ -94,36 +95,36 @@ type factoryRuntimeBundle = factoryservice.Bundle
 // liveRuntimeHandle is the single-runtime host handle owned by pkg/factory/service.
 type liveRuntimeHandle = factoryservice.Handle
 
-type serviceRunState struct {
+type hostRunState struct {
 	ctx       context.Context
 	sessionID string
 	runtime   *liveRuntimeHandle
 }
 
-// FactoryService is an instantiation of a factory along with its runtime
+// Host is an instantiation of a factory along with its runtime
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
 //
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
 // session registry, pkg/localmodels owns managed model runtime wiring, and
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
-type FactoryService struct {
+type Host struct {
 	runtimeMu      sync.RWMutex
 	activationMu   sync.RWMutex
 	runMu          sync.RWMutex
-	runState       *serviceRunState
+	runState       *hostRunState
 	apiServerExit  <-chan error
-	core           *FactoryCore
+	core           *Core
 	sessions       *factorysessions.Registry
-	factorySave    factorySaveSaver
-	sessionGateway sessionGateway
+	factorySave    FactorySaveSaver
+	SessionGateway SessionGateway
 	runtimeBuild   *runtimebuild.Service
 	hostedWorkers  hostedworkers.Config
 	factoryRootDir string
-	policy         serviceCoordinatorPolicy
+	policy         hostCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
 	startupBundle            *factoryRuntimeBundle
-	cfg                      *FactoryServiceConfig
+	cfg                      *Config
 	baseLogger               *zap.Logger
 	logger                   *zap.Logger
 	startTime                time.Time
@@ -138,14 +139,14 @@ type FactoryService struct {
 	durableExecution         factorysessionexecution.Service
 }
 
-var _ factory.APIFactory = (*FactoryService)(nil)
-var _ factory.WorkMover = (*FactoryService)(nil)
-var _ apisurface.ModelAPI = (*FactoryService)(nil)
-var _ apisurface.FactorySaveAPI = (*FactoryService)(nil)
-var _ apisurface.SessionAPI = (*FactoryService)(nil)
-var _ apisurface.WorkAPI = (*FactoryService)(nil)
-var _ apisurface.APISurface = (*FactoryService)(nil)
-var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
+var _ factory.APIFactory = (*Host)(nil)
+var _ factory.WorkMover = (*Host)(nil)
+var _ apisurface.ModelAPI = (*Host)(nil)
+var _ apisurface.FactorySaveAPI = (*Host)(nil)
+var _ apisurface.SessionAPI = (*Host)(nil)
+var _ apisurface.WorkAPI = (*Host)(nil)
+var _ apisurface.APISurface = (*Host)(nil)
+var _ apisurface.SessionAPISurface = (*Host)(nil)
 
 type RuntimeFileLoggingPolicy string
 
@@ -154,8 +155,8 @@ const (
 	RuntimeFileLoggingPolicyDisabled RuntimeFileLoggingPolicy = "disabled"
 )
 
-// FactoryServiceConfig holds all parameters needed to build and run a factory.
-type FactoryServiceConfig struct {
+// Config holds all parameters needed to build and run a factory.
+type Config struct {
 	// Dir is the factory root directory containing factory.json and inputs/.
 	Dir string
 	// RunnerID sets the factory-level runner override used when a workstation
@@ -290,11 +291,11 @@ type FactoryServiceConfig struct {
 	// FactorySave, when non-nil, replaces the default factorysave.Service
 	// collaborator. Tests use this to assert SaveFactoryForSession delegates
 	// without running the full save orchestration pipeline.
-	FactorySave factorySaveSaver
+	FactorySave FactorySaveSaver
 	// SessionGateway, when non-nil, replaces the default
 	// factorysessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
-	SessionGateway sessionGateway
+	SessionGateway SessionGateway
 	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.
 	// Tests use this to assert model transport methods delegate without running
 	// the full managed-runtime pipeline.
@@ -305,19 +306,19 @@ type FactoryServiceConfig struct {
 	ModelAssets modelAssetPuller
 }
 
-const serviceModeStartupWorkReadabilityDelay = 250 * time.Millisecond
+const hostModeStartupWorkReadabilityDelay = 250 * time.Millisecond
 
 // ActivateNamedFactory builds a replacement runtime from a persisted named
 // factory directory and swaps it in only after the current runtime is idle.
-func (fs *FactoryService) ActivateNamedFactory(ctx context.Context, name string) error {
+func (fs *Host) ActivateNamedFactory(ctx context.Context, name string) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
 	return fs.requireCoordinator().ActivateNamedFactory(ctx, name)
 }
 
-func (c *runtimeFactoryCoordinator) ActivateNamedFactory(ctx context.Context, name string) error {
-	fs := c.service
+func (c *runtimeCoordinator) ActivateNamedFactory(ctx context.Context, name string) error {
+	fs := c.host
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
@@ -328,7 +329,7 @@ func (c *runtimeFactoryCoordinator) ActivateNamedFactory(ctx context.Context, na
 	return svc.ActivateNamedFactory(ctx, name)
 }
 
-func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
+func (fs *Host) namedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
 	persistRoot = fs.factoryRootDir
 	if persistRoot == "" && fs.cfg != nil {
 		persistRoot = fs.cfg.Dir
@@ -346,7 +347,7 @@ func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.L
 	return persistRoot, folderPath
 }
 
-func (fs *FactoryService) requireIdleBeforeNamedFactoryActivation(
+func (fs *Host) requireIdleBeforeNamedFactoryActivation(
 	ctx context.Context,
 	sessionID string,
 	session *factorysessions.LiveSession,
@@ -357,7 +358,7 @@ func (fs *FactoryService) requireIdleBeforeNamedFactoryActivation(
 	return fs.requireIdleRuntime(ctx)
 }
 
-func (fs *FactoryService) applyNamedFactoryReplacement(
+func (fs *Host) applyNamedFactoryReplacement(
 	ctx context.Context,
 	sessionID string,
 	session *factorysessions.LiveSession,
@@ -380,7 +381,7 @@ func (fs *FactoryService) applyNamedFactoryReplacement(
 	return fs.activateReplacementWithoutLiveRuntime(persistRoot, name, replacement)
 }
 
-func (fs *FactoryService) buildReplacementFactoryRuntime(
+func (fs *Host) buildReplacementFactoryRuntime(
 	ctx context.Context,
 	folderPath string,
 	factoryDir string,
@@ -402,7 +403,7 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	return asRuntimeBundle(bundle), nil
 }
 
-func (fs *FactoryService) replacementExecutionBaseDir(folderPath string, factoryDir string, sessionID string) string {
+func (fs *Host) replacementExecutionBaseDir(folderPath string, factoryDir string, sessionID string) string {
 	if session := fs.sessionByID(sessionID); session != nil {
 		if executionBaseDir := strings.TrimSpace(session.ExecutionBaseDir); executionBaseDir != "" {
 			return executionBaseDir
@@ -423,7 +424,7 @@ func (fs *FactoryService) replacementExecutionBaseDir(folderPath string, factory
 // Run starts the file watcher, dashboard, API server, and factory engine.
 // It blocks until ctx is cancelled or the factory reaches a terminal state.
 // portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
-func (fs *FactoryService) Run(ctx context.Context) error {
+func (fs *Host) Run(ctx context.Context) error {
 	runCtx, cancelRunSidecars := context.WithCancel(ctx)
 	var sidecars sync.WaitGroup
 	var currentRuntime *liveRuntimeHandle
@@ -475,7 +476,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	return nil
 }
 
-func (fs *FactoryService) startRunRuntime(
+func (fs *Host) startRunRuntime(
 	ctx context.Context,
 	runCtx context.Context,
 	sidecars *sync.WaitGroup,
@@ -496,7 +497,7 @@ func (fs *FactoryService) startRunRuntime(
 	return currentRuntime, nil
 }
 
-func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
+func (fs *Host) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
 	if !serviceMode {
 		var listener *factoryingest.FileWatcher
 		if bundle := fs.currentRuntimeBundle(); bundle != nil {
@@ -507,7 +508,7 @@ func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *syn
 	fs.startDashboardSidecar(runCtx, sidecars)
 }
 
-func (fs *FactoryService) startListenerSidecar(
+func (fs *Host) startListenerSidecar(
 	runCtx context.Context,
 	sidecars *sync.WaitGroup,
 	listener *factoryingest.FileWatcher,
@@ -525,7 +526,7 @@ func (fs *FactoryService) startListenerSidecar(
 	}()
 }
 
-func (fs *FactoryService) startDashboardSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
+func (fs *Host) startDashboardSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
 	fs.startTime = fs.clock.Now()
 	if fs.cfg.SimpleDashboardRenderer == nil {
 		return
@@ -537,7 +538,7 @@ func (fs *FactoryService) startDashboardSidecar(runCtx context.Context, sidecars
 	}()
 }
 
-func (fs *FactoryService) prepareRunInputs(ctx context.Context, serviceMode bool) error {
+func (fs *Host) prepareRunInputs(ctx context.Context, serviceMode bool) error {
 	if !serviceMode {
 		if err := fs.preseedCurrentRuntimeInputs(ctx); err != nil {
 			return err
@@ -551,7 +552,7 @@ func (fs *FactoryService) prepareRunInputs(ctx context.Context, serviceMode bool
 	return nil
 }
 
-func (fs *FactoryService) submitServiceModeWorkFile(
+func (fs *Host) submitServiceModeWorkFile(
 	ctx context.Context,
 	currentRuntime *liveRuntimeHandle,
 	serviceMode bool,
@@ -565,7 +566,7 @@ func (fs *FactoryService) submitServiceModeWorkFile(
 	return nil
 }
 
-func (fs *FactoryService) startDefaultRuntime(
+func (fs *Host) startDefaultRuntime(
 	ctx context.Context,
 	runCtx context.Context,
 	serviceMode bool,
@@ -573,22 +574,22 @@ func (fs *FactoryService) startDefaultRuntime(
 	return fs.requireCoordinator().startDefaultRuntime(ctx, runCtx, serviceMode)
 }
 
-func (c *runtimeFactoryCoordinator) startDefaultRuntime(
+func (c *runtimeCoordinator) startDefaultRuntime(
 	ctx context.Context,
 	runCtx context.Context,
 	serviceMode bool,
 ) (*liveRuntimeHandle, error) {
-	fs := c.service
+	fs := c.host
 	runtimeBundle := fs.currentRuntimeBundle()
 	currentRuntime := fs.startLiveRuntime(runCtx, runtimeBundle)
 	fs.registerLiveSession(
-		defaultFactorySessionID,
+		DefaultFactorySessionID,
 		currentRuntime,
 		defaultSessionTargetFromRuntimeBundle(runtimeBundle, fs.factoryRootDir),
 		true,
 	)
 	fs.clearStartupBundle()
-	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
+	fs.setRunState(runCtx, DefaultFactorySessionID, currentRuntime)
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
 	}
@@ -598,7 +599,7 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 				return nil, nil
 			}
 			fs.clearRunState()
-			fs.unregisterLiveSession(defaultFactorySessionID)
+			fs.unregisterLiveSession(DefaultFactorySessionID)
 			_ = fs.stopLiveRuntime(currentRuntime)
 			return nil, err
 		}
@@ -606,7 +607,7 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 	return currentRuntime, nil
 }
 
-func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
+func (fs *Host) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
 	if fs.cfg.APIServerStarter == nil || fs.cfg.Port <= 0 {
 		fs.apiServerExit = nil
 		return
@@ -625,7 +626,7 @@ func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars
 	}()
 }
 
-func (fs *FactoryService) logServiceStartup() {
+func (fs *Host) logServiceStartup() {
 	bundle := fs.currentRuntimeBundle()
 	if bundle == nil || bundle.LogSink == nil {
 		return
@@ -652,7 +653,7 @@ func (fs *FactoryService) logServiceStartup() {
 	)
 }
 
-func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
+func (fs *Host) activateReplacementWithoutLiveRuntime(
 	rootDir string,
 	name string,
 	replacement *factoryRuntimeBundle,
@@ -665,7 +666,7 @@ func (fs *FactoryService) activateReplacementWithoutLiveRuntime(
 	return nil
 }
 
-func (fs *FactoryService) requireIdleRuntime(ctx context.Context) error {
+func (fs *Host) requireIdleRuntime(ctx context.Context) error {
 	sessionID := fs.runSessionID()
 	if session := fs.sessionByID(sessionID); session != nil && liveSessionHandle(session) != nil {
 		return fs.requireIdleRuntimeForSession(ctx, sessionID)
@@ -684,7 +685,7 @@ func (fs *FactoryService) requireIdleRuntime(ctx context.Context) error {
 	return nil
 }
 
-func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
+func (fs *Host) currentRuntimeBundle() *factoryRuntimeBundle {
 	if fs == nil {
 		return nil
 	}
@@ -699,7 +700,7 @@ func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 	return fs.startupRuntimeBundle()
 }
 
-func (fs *FactoryService) publishFactoryChangeEvent(
+func (fs *Host) publishFactoryChangeEvent(
 	ctx context.Context,
 	currentRuntime *liveRuntimeHandle,
 	replacement *factoryRuntimeBundle,
@@ -728,16 +729,16 @@ func (fs *FactoryService) publishFactoryChangeEvent(
 	currentRuntime.Bundle.EventHistory.RecordFactoryChange(snapshot.TickCount+1, payload, eventTime)
 }
 
-func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *factoryRuntimeBundle) *liveRuntimeHandle {
+func (fs *Host) startLiveRuntime(ctx context.Context, runtimeBundle *factoryRuntimeBundle) *liveRuntimeHandle {
 	return factoryservice.Start(ctx, runtimeBundle)
 }
 
-func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
+func (fs *Host) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
 	return fs.requireCoordinator().startLiveRuntimeSidecars(ctx, handle)
 }
 
-func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
-	fs := c.service
+func (c *runtimeCoordinator) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
+	fs := c.host
 	if handle == nil || handle.Bundle == nil {
 		return fmt.Errorf("runtime handle is required")
 	}
@@ -791,20 +792,20 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 	return nil
 }
 
-func (fs *FactoryService) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
+func (fs *Host) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
 	fs.requireCoordinator().stopLiveRuntimeSidecars(handle)
 }
 
-func (c *runtimeFactoryCoordinator) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
+func (c *runtimeCoordinator) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
 	factoryservice.StopSidecars(handle)
 }
 
-func (fs *FactoryService) stopLiveRuntime(handle *liveRuntimeHandle) error {
+func (fs *Host) stopLiveRuntime(handle *liveRuntimeHandle) error {
 	return fs.requireCoordinator().stopLiveRuntime(handle)
 }
 
-func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) error {
-	fs := c.service
+func (c *runtimeCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) error {
+	fs := c.host
 	if handle == nil {
 		return nil
 	}
@@ -813,12 +814,12 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 	return err
 }
 
-func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
+func (fs *Host) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
 	return fs.requireCoordinator().shutdownOtherLiveSessions(except)
 }
 
-func (c *runtimeFactoryCoordinator) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
-	fs := c.service
+func (c *runtimeCoordinator) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
+	fs := c.host
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
@@ -842,7 +843,7 @@ func (c *runtimeFactoryCoordinator) shutdownOtherLiveSessions(except *liveRuntim
 	return errors.Join(errs...)
 }
 
-func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *liveRuntimeHandle) error {
+func (fs *Host) waitForLiveRuntimeStart(ctx context.Context, handle *liveRuntimeHandle) error {
 	return factoryservice.WaitForStart(ctx, handle)
 }
 
@@ -850,7 +851,7 @@ func isCanceledServiceStartup(ctx context.Context, err error) bool {
 	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
 }
 
-func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
+func (fs *Host) waitForActiveRuntime(ctx context.Context) error {
 	for {
 		handle := fs.currentLiveRuntime()
 		if handle == nil {

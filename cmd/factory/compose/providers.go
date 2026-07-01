@@ -71,11 +71,11 @@ func provideFactoryService(
 	core *service.FactoryCore,
 	cfg *service.FactoryServiceConfig,
 ) *service.FactoryService {
-	serviceShell := service.FactoryServiceShell{Service: service.NewFactoryServiceFromCore(core)}
+	serviceShell := service.FactoryServiceShell{Host: service.NewFactoryServiceFromCore(core)}
 	svc := service.AttachModelServiceCollaborator(serviceShell, service.ProvideModelServiceCollaborator(serviceShell, cfg))
 	return service.AttachFactorySaveCollaborator(
-		service.FactoryServiceShell{Service: svc},
-		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: svc}, cfg),
+		service.FactoryServiceShell{Host: svc},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Host: svc}, cfg),
 	)
 }
 

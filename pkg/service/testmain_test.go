@@ -257,8 +257,8 @@ func startLocalModelInferenceTestServer(
 	}
 	svc := AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
 	svc = AttachFactorySaveCollaborator(
-		FactoryServiceShell{Service: svc},
-		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
+		FactoryServiceShell{Host: svc},
+		ProvideFactorySaveCollaborator(FactoryServiceShell{Host: svc}, cfg),
 	)
 
 	runErrCh := make(chan error, 1)
