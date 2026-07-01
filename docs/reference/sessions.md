@@ -412,10 +412,13 @@ result availability before that terminal marker. Legacy `RUN_REQUEST` and
 POST /factory-sessions/{session_id}/invocations
 ```
 
-The current API contract is text-first. Send top-level `sourceKind: "text"` and
-canonical `content` as ordered `WorkContent` parts. Reserved source kinds such
-as `fileRef` and `audioStream` are named in the contract for future
-compatibility, but current runtimes do not accept them yet.
+The current API contract preserves text-first compatibility and also accepts
+structured `args` for factories that declare `invocationSignature`. Legacy
+requests still send top-level `sourceKind: "text"` and canonical `content` as
+ordered `WorkContent` parts. Structured `args` values must decode as strings or
+arrays of strings keyed by parameter name, external name, or alias. Reserved
+source kinds such as `fileRef` and `audioStream` are named in the contract for
+future compatibility, but current runtimes do not accept them yet.
 
 ### Example request
 
@@ -431,6 +434,25 @@ curl -s \
     ]
   }'
 ```
+
+### Structured args compatibility
+
+When `args` is present, omit compatibility `content` unless you are
+intentionally exercising a source-conflict validation path. Factories without an
+active `invocationSignature` reject `args` before dispatch.
+
+`args` is the structured counterpart to CLI factory arguments:
+
+- Keys may use the parameter `name`, `externalName`, or any declared alias
+- Values must be a string or an array of strings
+- Defaults, required checks, repeated handling, alias resolution, and stdin
+  routing normalize through the same backend path used by `you run`
+- Pre-dispatch argument failures return non-2xx `ErrorResponse` payloads instead
+  of a terminal `InvocationResponse`
+
+Use `you run --named <factory> --help` or `you run --factory <factory.json> --help`
+when you want the selected factory's authored argument descriptions, defaults,
+accepted values, output hints, and examples before constructing an API request.
 
 ### Example success response
 

@@ -2,6 +2,8 @@ package agentrun
 
 import (
 	"errors"
+	"io/fs"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -114,6 +116,33 @@ func TestRecoveryActionForReadiness_ReturnsActionableGuidance(t *testing.T) {
 	}
 	if got := recoveryActionForReadiness(factoryapi.ManagedRuntimeReadinessStateLOADING); got == "" {
 		t.Fatal("expected recovery action for loading runtime")
+	}
+}
+
+func TestFormatAgentRunError_ToolRuntimeUsesSafeSummary(t *testing.T) {
+	t.Parallel()
+
+	err := newToolRuntimeError(ToolNameReadFile, `{"path":"missing.txt"}`, fs.ErrNotExist)
+	got := formatAgentRunError(err)
+	want := "agent run tool failure: read_file: path=missing.txt reason=not_found"
+	if got != want {
+		t.Fatalf("formatAgentRunError() = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "open /") {
+		t.Fatalf("formatAgentRunError() leaked absolute path details: %q", got)
+	}
+}
+
+func TestFormatAgentRunError_LegacyToolRuntimeMessageFallsBackToSafeSummary(t *testing.T) {
+	t.Parallel()
+
+	err := errors.New("read_file failed: open /tmp/agent/workdir/missing.txt: no such file or directory")
+	got := formatAgentRunError(err)
+	if got != "agent run tool failure: tool execution failed" {
+		t.Fatalf("formatAgentRunError() = %q, want safe fallback summary", got)
+	}
+	if strings.Contains(got, "/tmp/agent/workdir") {
+		t.Fatalf("formatAgentRunError() leaked absolute path: %q", got)
 	}
 }
 

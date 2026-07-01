@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -52,58 +53,13 @@ type ModelPullMetricsRecorder interface {
 	RecordModelPullMetric(InvocationMetric)
 }
 
-// ModelService owns direct model catalog, pull, and invocation operations.
-// FactoryService keeps these methods only as a phase-one compatibility facade.
-type ModelService interface {
-	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
-	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
-	PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error)
-	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error)
-}
-
-type modelServiceDependencies struct {
-	runtimeConfig           func() *factoryconfig.LoadedFactoryConfig
-	modelAssetPuller        func() modelAssetPuller
-	modelHost               func() modelhost.Host
-	modelInvocationExecutor func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error)
-	factoryRunnerID         func() string
-	logger                  *zap.Logger
-	modelPullMetrics        func() ModelPullMetricsRecorder
-}
-
-type runtimeModelService struct {
-	deps modelServiceDependencies
-}
-
-var _ ModelService = (*runtimeModelService)(nil)
-var _ apisurface.ModelAPI = (*runtimeModelService)(nil)
-
-func newModelService(deps modelServiceDependencies) ModelService {
-	return &runtimeModelService{deps: deps}
-}
-
-func newFactoryModelService(fs *FactoryService) ModelService {
+func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
 	if fs == nil {
-		return newModelService(modelServiceDependencies{})
-	}
-	return newModelService(modelServiceDependencies{
-		runtimeConfig:           fs.currentRuntimeConfig,
-		modelAssetPuller:        fs.modelAssetPuller,
-		modelHost:               fs.modelHost,
-		modelInvocationExecutor: fs.modelInvocationExecutor,
-		factoryRunnerID:         fs.factoryRunnerID,
-		logger:                  fs.logger,
-		modelPullMetrics:        fs.modelPullMetricsRecorder,
-	})
-}
-
-func (fs *FactoryService) requireModelService() ModelService {
-	if fs == nil {
-		return newFactoryModelService(nil)
+		return wireModelServiceCollaborator(nil, nil)
 	}
 	fs.modelInitOnce.Do(func() {
 		if fs.modelService == nil {
-			fs.modelService = newFactoryModelService(fs)
+			fs.modelService = wireModelServiceCollaborator(fs, fs.cfg)
 		}
 	})
 	return fs.modelService
@@ -142,25 +98,109 @@ func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
 	return puller
 }
 
-const directModelInvocationTransitionID = "direct-model-invocation"
-
 func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
-func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	return modelhost.ListModelsWithHost(ctx, s.modelHost(), s.currentRuntimeConfig())
+// modelServiceHost adapts FactoryService runtime seams for pkg/models/service wiring.
+type modelServiceHost struct {
+	*FactoryService
 }
 
-func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	return modelhost.GetModelWithHost(ctx, s.modelHost(), s.currentRuntimeConfig(), modelName)
+var _ modelsservice.Host = modelServiceHost{}
+
+func (h modelServiceHost) RuntimeConfig() func() *factoryconfig.LoadedFactoryConfig {
+	if h.FactoryService == nil {
+		return func() *factoryconfig.LoadedFactoryConfig { return nil }
+	}
+	return h.FactoryService.currentRuntimeConfig
 }
 
-func (s *runtimeModelService) modelHost() modelhost.Host {
-	if s == nil || s.deps.modelHost == nil {
+func (h modelServiceHost) ModelHost() func() modelhost.Host {
+	if h.FactoryService == nil {
+		return func() modelhost.Host { return nil }
+	}
+	return h.FactoryService.modelHost
+}
+
+func (h modelServiceHost) ModelAssetPuller() func() localmodels.AssetPuller {
+	if h.FactoryService == nil {
+		return func() localmodels.AssetPuller { return nil }
+	}
+	return h.FactoryService.modelAssetPuller
+}
+
+func (h modelServiceHost) Logger() func() *zap.Logger {
+	if h.FactoryService == nil {
+		return func() *zap.Logger { return nil }
+	}
+	return func() *zap.Logger { return h.FactoryService.logger }
+}
+
+func (h modelServiceHost) ModelPullMetrics() func() modelsservice.PullMetricsRecorder {
+	if h.FactoryService == nil {
+		return func() modelsservice.PullMetricsRecorder { return nil }
+	}
+	return func() modelsservice.PullMetricsRecorder {
+		recorder := h.FactoryService.modelPullMetricsRecorder()
+		if recorder == nil {
+			return nil
+		}
+		return modelPullMetricsHostAdapter{inner: recorder}
+	}
+}
+
+func (h modelServiceHost) ModelInvocationExecutor() modelsservice.ModelInvocationExecutor {
+	if h.FactoryService == nil {
 		return nil
 	}
-	return s.deps.modelHost()
+	return h.FactoryService.modelInvocationExecutor
+}
+
+func (h modelServiceHost) FactoryRunnerID() func() string {
+	if h.FactoryService == nil {
+		return func() string { return "" }
+	}
+	return h.FactoryService.factoryRunnerID
+}
+
+type modelPullMetricsHostAdapter struct {
+	inner ModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsHostAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(InvocationMetric{
+		Name:   metric.Name,
+		Labels: metric.Labels,
+	})
+}
+
+func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) apisurface.ModelAPI {
+	if cfg != nil && cfg.ModelAPI != nil {
+		return cfg.ModelAPI
+	}
+	return modelsservice.NewFromHost(modelServiceHost{FactoryService: fs})
+}
+
+// ProvideModelServiceCollaborator constructs the model-domain collaborator for a
+// built FactoryService shell.
+func ProvideModelServiceCollaborator(
+	shell FactoryServiceShell,
+	cfg *FactoryServiceConfig,
+) apisurface.ModelAPI {
+	return wireModelServiceCollaborator(shell.Service, cfg)
+}
+
+// AttachModelServiceCollaborator assigns the model-domain collaborator on the
+// service shell and returns the assembled FactoryService.
+func AttachModelServiceCollaborator(
+	shell FactoryServiceShell,
+	modelAPI apisurface.ModelAPI,
+) *FactoryService {
+	if shell.Service != nil {
+		shell.Service.modelService = modelAPI
+	}
+	return shell.Service
 }
 
 func (fs *FactoryService) modelHost() modelhost.Host {
@@ -178,148 +218,21 @@ func (fs *FactoryService) modelHost() modelhost.Host {
 	return nil
 }
 
-func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	started := time.Now()
-	host := s.modelHost()
-	if host == nil {
-		puller := s.modelAssetPuller()
-		opts := localmodels.PullOptions{
-			RuntimeCacheInspector: puller,
-			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
-		}
-		result, err := localmodels.PullModelWithOptions(puller, ctx, s.currentRuntimeConfig(), modelName, opts)
-		s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
-		return result, err
-	}
-	result, err := modelhost.PullWithHost(ctx, host, s.currentRuntimeConfig(), modelName)
-	s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
-	return result, err
-}
-
-func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
-	runtimeCfg := s.currentRuntimeConfig()
-	if runtimeCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	factoryCfg := runtimeCfg.FactoryConfig()
-	if factoryCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory config is not available")
-	}
-
-	workerDef, operation, err := localmodels.SelectInvocationWorker(runtimeCfg, modelName, request.Operation)
-	failureContext := apisurface.InferenceFailureContext{
-		ModelName: strings.TrimSpace(modelName),
-		Operation: strings.TrimSpace(request.Operation),
-	}
-	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
-	}
-	failureContext.WorkerName = workerDef.Name
-	failureContext.ModelName = workerDef.Model
-	managed, readinessErr := modelhost.EnsureInvocationReady(ctx, s.modelHost(), runtimeCfg, workerDef.Model)
-	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
-	if readinessErr != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(readinessErr, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, readinessErr
-	}
-
-	inputContent := workcontent.PartsFromGenerated(request.Content)
-	inputTokens := []interfaces.Token{{
-		ID: "direct-model-invocation-input",
-		Color: interfaces.TokenColor{
-			Content: inputContent,
-		},
-	}}
-	workstationDef := invocations.DirectInferenceWorkstationConfig(
-		request.Operation,
-		invocations.OperationBindingsFromGenerated(request.Bindings),
-	)
-	resolvedBindings, err := invocations.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-
-	executor, err := s.modelInvocationExecutor(runtimeCfg, factoryCfg, workerDef.Name)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-	workstationRequest := directModelInvocationWorkstationRequest(workerDef, request, inputTokens, resolvedBindings, s.factoryRunnerID())
-
-	result, err := executor.Execute(ctx, workstationRequest)
-	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
-	}
-	if result.Outcome == interfaces.OutcomeFailed {
-		if failure, ok := apisurface.ClassifyInferenceWorkResultFailure(result, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
-	}
-
-	outputContent, err := invocations.WorkContentFromInferenceOutput(result.Output, operation)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-	streamFile, streamContentType, err := directModelInvocationStream(outputContent, request.Options)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-
-	return apisurface.ModelInvocationResult{
-		ModelName:         workerDef.Model,
-		Worker:            workerDef.Name,
-		Operation:         strings.TrimSpace(request.Operation),
-		ProviderLocality:  workerDef.ModelLocality,
-		Content:           outputContent,
-		Bindings:          interfaces.CloneResolvedModelOperationBindings(resolvedBindings),
-		StreamFile:        streamFile,
-		StreamContentType: streamContentType,
-	}, nil
-}
-
-func directModelInvocationWorkstationRequest(
-	workerDef *interfaces.WorkerConfig,
-	request factoryapi.ModelInvocationRequest,
-	inputTokens []interfaces.Token,
-	resolvedBindings []interfaces.ResolvedModelOperationBinding,
-	factoryRunnerID string,
-) interfaces.WorkstationExecutionRequest {
-	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
-	inputContent := workcontent.PartsFromGenerated(request.Content)
-	return interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
-			DispatchID:      directModelInvocationTransitionID,
-			TransitionID:    directModelInvocationTransitionID,
-			WorkerType:      workerDef.Name,
-			WorkstationName: directModelInvocationTransitionID,
-			InputTokens:     workers.InputTokens(inputTokens...),
-		},
-		WorkerType:            workerDef.Name,
-		WorkstationType:       directModelInvocationTransitionID,
-		RunnerID:              selection.RunnerID,
-		RunnerSelectionSource: selection.Source,
-		InputTokens:           workers.InputTokens(inputTokens...),
-		ModelOperation:        strings.TrimSpace(request.Operation),
-		ModelBindings:         resolvedBindings,
-		SystemPrompt:          workerDef.Body,
-		UserMessage:           invocations.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
-	}
-}
-
 type sessionInvocationWaitInput struct {
 	RequestID        string
 	TraceID          string
 	InputSource      invocations.InputSourceLabel
 	InvocationReturn *interfaces.InvocationReturnConfig
+	FactoryConfig    *interfaces.FactoryConfig
 	TimeoutMillis    *int64
+}
+
+const invocationInputSourceStructuredArgs invocations.InputSourceLabel = "signature_args"
+
+type resolvedSessionInvocationInput struct {
+	Source              invocations.InputSourceLabel
+	Content             []interfaces.WorkContentPart
+	NormalizedArguments *invocations.NormalizedArguments
 }
 
 func (fs *FactoryService) InvokeFactorySession(
@@ -334,51 +247,114 @@ func (fs *FactoryService) InvokeFactorySession(
 	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
 		return apisurface.FactoryInvocationResult{}, fmt.Errorf("factory session runtime config is unavailable")
 	}
+	factoryCfg := runtimeCfg.FactoryConfig()
+	sourceHint := sessionInvocationSourceHint(request)
+	fs.recordInvocationMetric(invocationMetricNormalizationAttempts, invocationMetricLabels(factoryCfg, sourceHint))
 
-	resolved, err := resolveSessionInvocationInput(request)
+	resolved, err := resolveSessionInvocationInput(factoryCfg, request)
 	if err != nil {
+		fs.recordInvocationMetric(
+			invocationMetricNormalizationFailure,
+			mergeMetricLabels(invocationMetricLabels(factoryCfg, sourceHint), invocationErrorMetricLabels(err)),
+		)
+		fs.logInvocationArgumentFailure(sessionID, sourceHint, factoryCfg, nil, err, "normalization_failure")
 		return apisurface.FactoryInvocationResult{}, err
 	}
-
-	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(runtimeCfg.FactoryConfig())
-	if err != nil {
-		return apisurface.FactoryInvocationResult{}, fmt.Errorf("resolve invocation work type: %w", err)
+	fs.recordInvocationMetric(invocationMetricNormalizationSuccess, invocationMetricLabels(factoryCfg, resolved.Source))
+	if err := validateSessionInvocationInterpolation(factoryCfg, resolved.NormalizedArguments); err != nil {
+		return apisurface.FactoryInvocationResult{}, fs.handleSessionInvocationInterpolationFailure(
+			sessionID,
+			factoryCfg,
+			resolved,
+			err,
+		)
 	}
 
-	requestID := strings.TrimSpace(stringValue(request.RequestId))
-	submitRequest := interfaces.SubmitRequest{
-		RequestID:  requestID,
-		WorkTypeID: workTypeName,
-		Content:    resolved.Content,
-	}
-	submitResult, err := fs.SubmitWorkRequestForSession(
-		ctx,
-		sessionID,
-		factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitRequest}),
-	)
+	submitResult, err := fs.submitSessionInvocationRequest(ctx, sessionID, request, factoryCfg, resolved)
 	if err != nil {
 		fs.logInvocationFailure(
 			sessionID,
 			resolved.Source,
-			runtimeCfg.FactoryConfig().InvocationReturn,
-			inputMetricLabels(resolved.Source),
+			factoryCfg.InvocationReturn,
+			invocationMetricLabels(factoryCfg, resolved.Source),
 			"runtime_failure",
 			err,
 		)
 		return apisurface.FactoryInvocationResult{}, err
 	}
-	fs.recordInvocationMetric(invocationMetricAttempts, inputMetricLabels(resolved.Source))
-	if policyModeForInvocation(runtimeCfg.FactoryConfig().InvocationReturn) == invocationPolicyModeFallback {
-		fs.recordInvocationMetric(invocationMetricFallbackPolicyUsed, inputMetricLabels(resolved.Source))
+	fs.recordSuccessfulSessionInvocation(sessionID, factoryCfg, resolved.Source, submitResult)
+	return fs.waitForSessionInvocationResult(
+		ctx,
+		sessionID,
+		sessionInvocationWaitInput{
+			RequestID:        submitResult.RequestID,
+			TraceID:          submitResult.TraceID,
+			InputSource:      resolved.Source,
+			InvocationReturn: factoryCfg.InvocationReturn,
+			FactoryConfig:    factoryCfg,
+			TimeoutMillis:    request.TimeoutMillis,
+		},
+	)
+}
+
+func (fs *FactoryService) handleSessionInvocationInterpolationFailure(
+	sessionID string,
+	factoryCfg *interfaces.FactoryConfig,
+	resolved resolvedSessionInvocationInput,
+	err error,
+) error {
+	fs.recordInvocationMetric(
+		invocationMetricInterpolationFailure,
+		mergeMetricLabels(invocationMetricLabels(factoryCfg, resolved.Source), invocationErrorMetricLabels(err)),
+	)
+	fs.logInvocationArgumentFailure(sessionID, resolved.Source, factoryCfg, resolved.NormalizedArguments, err, "interpolation_failure")
+	return normalizeSessionInvocationError(err)
+}
+
+func (fs *FactoryService) submitSessionInvocationRequest(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+	factoryCfg *interfaces.FactoryConfig,
+	resolved resolvedSessionInvocationInput,
+) (interfaces.WorkRequestSubmitResult, error) {
+	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(factoryCfg)
+	if err != nil {
+		return interfaces.WorkRequestSubmitResult{}, fmt.Errorf("resolve invocation work type: %w", err)
 	}
-	if tts.IsPackagedFactory(runtimeCfg.FactoryConfig()) {
-		fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryAttempts, resolved.Source, nil)
+	requestID := strings.TrimSpace(stringValue(request.RequestId))
+	submitRequest := interfaces.SubmitRequest{
+		RequestID:           requestID,
+		WorkTypeID:          workTypeName,
+		Content:             resolved.Content,
+		InvocationArguments: invocationArgumentsForSession(factoryCfg, resolved.NormalizedArguments),
+	}
+	return fs.SubmitWorkRequestForSession(
+		ctx,
+		sessionID,
+		factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitRequest}),
+	)
+}
+
+func (fs *FactoryService) recordSuccessfulSessionInvocation(
+	sessionID string,
+	factoryCfg *interfaces.FactoryConfig,
+	source invocations.InputSourceLabel,
+	submitResult interfaces.WorkRequestSubmitResult,
+) {
+	fs.recordInvocationMetric(invocationMetricAttempts, invocationMetricLabels(factoryCfg, source))
+	if policyModeForInvocation(factoryCfg.InvocationReturn) == invocationPolicyModeFallback {
+		fs.recordInvocationMetric(invocationMetricFallbackPolicyUsed, invocationMetricLabels(factoryCfg, source))
+	}
+	if tts.IsPackagedFactory(factoryCfg) {
+		fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryAttempts, source, nil)
 		fs.logger.Info(
 			"packaged tts invocation submitted",
 			packagedTTSInvocationLogFields(
 				sessionID,
-				resolved.Source,
-				runtimeCfg.FactoryConfig().InvocationReturn,
+				source,
+				factoryCfg.InvocationReturn,
+				factoryCfg,
 				zap.String("request_id", submitResult.RequestID),
 				zap.String("trace_id", submitResult.TraceID),
 				zap.String("readiness_outcome", tts.FailureClassLoading),
@@ -389,44 +365,157 @@ func (fs *FactoryService) InvokeFactorySession(
 		"factory session invocation submitted",
 		invocationLogFields(
 			sessionID,
-			resolved.Source,
-			runtimeCfg.FactoryConfig().InvocationReturn,
+			source,
+			factoryCfg.InvocationReturn,
+			factoryCfg,
 			zap.String("request_id", submitResult.RequestID),
 			zap.String("trace_id", submitResult.TraceID),
 		)...,
 	)
-	return fs.waitForSessionInvocationResult(
-		ctx,
-		sessionID,
-		sessionInvocationWaitInput{
-			RequestID:        submitResult.RequestID,
-			TraceID:          submitResult.TraceID,
-			InputSource:      resolved.Source,
-			InvocationReturn: runtimeCfg.FactoryConfig().InvocationReturn,
-			TimeoutMillis:    request.TimeoutMillis,
-		},
-	)
 }
 
-func resolveSessionInvocationInput(request factoryapi.InvocationRequest) (invocations.ResolvedInput, error) {
-	if request.SourceKind != factoryapi.InvocationInputSourceKindText {
-		return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
-			Message: "sourceKind must be text",
+func resolveSessionInvocationInput(
+	cfg *interfaces.FactoryConfig,
+	request factoryapi.InvocationRequest,
+) (resolvedSessionInvocationInput, error) {
+	content, err := sessionInvocationCompatibilityContent(request)
+	if err != nil {
+		return resolvedSessionInvocationInput{}, err
+	}
+	directArgs, err := sessionInvocationStructuredArgs(request)
+	if err != nil {
+		return resolvedSessionInvocationInput{}, err
+	}
+	argsProvided := request.Args != nil
+	signature := invocationSignatureFromFactoryConfig(cfg)
+
+	if !argsProvided {
+		return resolveCompatibilitySessionInvocationInput(content)
+	}
+	return resolveStructuredSessionInvocationInput(signature, directArgs, content)
+}
+
+func resolveCompatibilitySessionInvocationInput(
+	content []interfaces.WorkContentPart,
+) (resolvedSessionInvocationInput, error) {
+	if len(content) == 0 {
+		return resolvedSessionInvocationInput{}, &apisurface.RequestValidationError{
+			Message: "content is required when args are omitted",
+		}
+	}
+	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		CompatibilityContent: content,
+	})
+	if err != nil {
+		return resolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
+	}
+	if normalized.CompatibilityInput == nil {
+		return resolvedSessionInvocationInput{}, &apisurface.RequestValidationError{
+			Message: "content did not resolve to one logical invocation input",
+		}
+	}
+	return resolvedSessionInvocationInput{
+		Source:              normalized.CompatibilityInput.Source,
+		Content:             normalized.CompatibilityInput.Content,
+		NormalizedArguments: &normalized,
+	}, nil
+}
+
+func resolveStructuredSessionInvocationInput(
+	signature *interfaces.InvocationSignatureConfig,
+	directArgs []invocations.NamedArgumentInput,
+	content []interfaces.WorkContentPart,
+) (resolvedSessionInvocationInput, error) {
+	if signature == nil {
+		return resolvedSessionInvocationInput{}, &invocations.ArgumentError{
+			Code:     invocations.ArgumentErrorCodeInvalidActiveSignature,
+			Message:  "named arguments require a factory invocationSignature",
+			Argument: firstStructuredArgumentKey(directArgs),
 		}
 	}
 
-	content := workcontent.PartsFromGenerated(&request.Content)
-	resolved, err := invocations.ResolveAPITextInputContent(content)
+	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:            signature,
+		DirectArgs:           directArgs,
+		CompatibilityContent: content,
+	})
 	if err != nil {
-		var validationErr *invocations.TextContentValidationError
-		if errors.As(err, &validationErr) {
-			return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
-				Message: validationErr.Message,
-			}
-		}
-		return invocations.ResolvedInput{}, err
+		return resolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
 	}
-	return resolved, nil
+	source := invocationInputSourceStructuredArgs
+	if normalized.CompatibilityInput != nil {
+		source = normalized.CompatibilityInput.Source
+	}
+	return resolvedSessionInvocationInput{
+		Source:              source,
+		Content:             nil,
+		NormalizedArguments: &normalized,
+	}, nil
+}
+
+func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest) ([]interfaces.WorkContentPart, error) {
+	if request.Content == nil {
+		if request.SourceKind != nil && *request.SourceKind != factoryapi.InvocationInputSourceKindText {
+			return nil, &apisurface.RequestValidationError{Message: "sourceKind must be text"}
+		}
+		return nil, nil
+	}
+	if request.SourceKind == nil || *request.SourceKind != factoryapi.InvocationInputSourceKindText {
+		return nil, &apisurface.RequestValidationError{Message: "sourceKind must be text"}
+	}
+	return workcontent.PartsFromGenerated(request.Content), nil
+}
+
+func sessionInvocationStructuredArgs(request factoryapi.InvocationRequest) ([]invocations.NamedArgumentInput, error) {
+	if request.Args == nil {
+		return nil, nil
+	}
+	directArgs, err := invocations.NamedArgumentInputsFromAnyMap(*request.Args)
+	if err != nil {
+		return nil, &apisurface.RequestValidationError{Message: err.Error()}
+	}
+	return directArgs, nil
+}
+
+func firstStructuredArgumentKey(arguments []invocations.NamedArgumentInput) string {
+	if len(arguments) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(arguments[0].Key)
+}
+
+func normalizeSessionInvocationError(err error) error {
+	var validationErr *invocations.TextContentValidationError
+	if errors.As(err, &validationErr) {
+		return &apisurface.RequestValidationError{
+			Message: validationErr.Message,
+		}
+	}
+	return err
+}
+
+func validateSessionInvocationInterpolation(
+	cfg *interfaces.FactoryConfig,
+	normalized *invocations.NormalizedArguments,
+) error {
+	return invocations.ValidateInvocationInterpolation(cfg, invocationArgumentsForSession(cfg, normalized))
+}
+
+func invocationArgumentsForSession(
+	cfg *interfaces.FactoryConfig,
+	normalized *invocations.NormalizedArguments,
+) *interfaces.InvocationArguments {
+	if cfg == nil {
+		return nil
+	}
+	return invocations.RuntimeInvocationArguments(cfg.InvocationSignature, normalized)
+}
+
+func invocationSignatureFromFactoryConfig(cfg *interfaces.FactoryConfig) *interfaces.InvocationSignatureConfig {
+	if cfg == nil {
+		return nil
+	}
+	return cfg.InvocationSignature
 }
 
 func (fs *FactoryService) waitForSessionInvocationResult(
@@ -491,11 +580,11 @@ func (fs *FactoryService) handleInvocationSelectionSuccess(
 		Status:        factoryapi.InvocationTerminalStatusCompleted,
 		PrimaryResult: selection.PrimaryResult,
 	}
-	fs.recordInvocationMetric(invocationMetricSuccess, inputMetricLabels(input.InputSource))
+	fs.recordInvocationMetric(invocationMetricSuccess, invocationMetricLabels(input.FactoryConfig, input.InputSource))
 	fs.recordInvocationMetric(
 		invocationMetricResultType,
 		mergeMetricLabels(
-			inputMetricLabels(input.InputSource),
+			invocationMetricLabels(input.FactoryConfig, input.InputSource),
 			map[string]string{"result_type": resultType},
 		),
 	)
@@ -505,6 +594,7 @@ func (fs *FactoryService) handleInvocationSelectionSuccess(
 			sessionID,
 			input.InputSource,
 			input.InvocationReturn,
+			input.FactoryConfig,
 			zap.String("request_id", input.RequestID),
 			zap.String("trace_id", input.TraceID),
 			zap.String("status", string(result.Status)),
@@ -534,10 +624,10 @@ func (fs *FactoryService) handleInvocationPrimaryResultFailure(
 		WorkName:  primaryErr.Context.WorkName,
 		WorkState: primaryErr.Context.WorkState,
 	}
-	fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
 	failureClass := invocationFailureClassForPrimaryResultError(primaryErr.Code)
+	fs.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(input.FactoryConfig, input.InputSource))
 	if primaryErr.Code == invocations.PrimaryResultErrorCodeUnresolved {
-		fs.recordInvocationMetric(invocationMetricUnresolvedPrimary, inputMetricLabels(input.InputSource))
+		fs.recordInvocationMetric(invocationMetricUnresolvedPrimary, invocationMetricLabels(input.FactoryConfig, input.InputSource))
 	}
 	fs.logger.Warn(
 		"factory session invocation failed",
@@ -545,6 +635,7 @@ func (fs *FactoryService) handleInvocationPrimaryResultFailure(
 			sessionID,
 			input.InputSource,
 			input.InvocationReturn,
+			input.FactoryConfig,
 			zap.String("request_id", input.RequestID),
 			zap.String("trace_id", input.TraceID),
 			zap.String("status", string(result.Status)),
@@ -623,12 +714,16 @@ const (
 	invocationPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
 	invocationPolicyExplicit              = "EXPLICIT"
 
-	invocationMetricAttempts           = "invocation.attempts"
-	invocationMetricSuccess            = "invocation.success"
-	invocationMetricFailure            = "invocation.failure"
-	invocationMetricUnresolvedPrimary  = "invocation.unresolved_primary"
-	invocationMetricFallbackPolicyUsed = "invocation.fallback_policy_used"
-	invocationMetricResultType         = "invocation.result_type"
+	invocationMetricNormalizationAttempts = "invocation.normalization_attempts"
+	invocationMetricNormalizationSuccess  = "invocation.normalization_success"
+	invocationMetricNormalizationFailure  = "invocation.normalization_failure"
+	invocationMetricInterpolationFailure  = "invocation.interpolation_failure"
+	invocationMetricAttempts              = "invocation.attempts"
+	invocationMetricSuccess               = "invocation.success"
+	invocationMetricFailure               = "invocation.failure"
+	invocationMetricUnresolvedPrimary     = "invocation.unresolved_primary"
+	invocationMetricFallbackPolicyUsed    = "invocation.fallback_policy_used"
+	invocationMetricResultType            = "invocation.result_type"
 
 	invocationPolicyModeAuthored = "authored"
 	invocationPolicyModeFallback = "fallback"
@@ -663,6 +758,7 @@ func (fs *FactoryService) logInvocationTerminalResult(
 			sessionID,
 			input.InputSource,
 			input.InvocationReturn,
+			input.FactoryConfig,
 			zap.String("request_id", input.RequestID),
 			zap.String("trace_id", input.TraceID),
 			zap.String("status", string(result.Status)),
@@ -687,11 +783,54 @@ func (fs *FactoryService) logInvocationFailure(
 			sessionID,
 			source,
 			cfg,
+			nil,
 			zap.String("status", string(factoryapi.InvocationTerminalStatusFailed)),
 			zap.String("error_code", string(factoryapi.INVOCATIONRUNTIMEFAILURE)),
 			zap.String("failure_class", failureClass),
 			zap.Error(err),
 		)...,
+	)
+}
+
+func (fs *FactoryService) logInvocationArgumentFailure(
+	sessionID string,
+	source invocations.InputSourceLabel,
+	factoryCfg *interfaces.FactoryConfig,
+	normalized *invocations.NormalizedArguments,
+	err error,
+	failureClass string,
+) {
+	fields := []zap.Field{
+		zap.String("status", string(factoryapi.InvocationTerminalStatusFailed)),
+		zap.String("failure_class", failureClass),
+		zap.Error(err),
+	}
+	var argumentErr *invocations.ArgumentError
+	if errors.As(err, &argumentErr) {
+		if code := strings.TrimSpace(string(argumentErr.Code)); code != "" {
+			fields = append(fields, zap.String("error_code", code))
+		}
+		if parameter := strings.TrimSpace(argumentErr.Parameter); parameter != "" {
+			fields = append(fields, zap.String("argument_name", parameter))
+		}
+		if argument := strings.TrimSpace(argumentErr.Argument); argument != "" {
+			fields = append(fields, zap.String("argument_key", argument))
+		}
+		if sourceKind := strings.TrimSpace(string(argumentErr.SourceKind)); sourceKind != "" {
+			fields = append(fields, zap.String("argument_source_kind", sourceKind))
+		} else if kinds := invocationArgumentSourceKinds(normalized, argumentErr.Parameter); kinds != "" {
+			fields = append(fields, zap.String("argument_source_kind", kinds))
+		}
+		if redacted, valueCount := invocationArgumentRedactionState(normalized, argumentErr.Parameter); redacted || valueCount > 0 {
+			fields = append(fields,
+				zap.Bool("argument_value_redacted", redacted),
+				zap.Int("argument_value_count", valueCount),
+			)
+		}
+	}
+	fs.logger.Warn(
+		"factory session invocation argument failure",
+		invocationLogFields(sessionID, source, factoryCfg.InvocationReturn, factoryCfg, fields...)...,
 	)
 }
 
@@ -705,10 +844,59 @@ func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]
 	})
 }
 
+func invocationArgumentSourceKinds(normalized *invocations.NormalizedArguments, parameter string) string {
+	argument := invocationNormalizedArgument(normalized, parameter)
+	if argument == nil || len(argument.Sources) == 0 {
+		return ""
+	}
+	kinds := make([]string, 0, len(argument.Sources))
+	seen := map[string]struct{}{}
+	for _, source := range argument.Sources {
+		kind := strings.TrimSpace(string(source.Kind))
+		if kind == "" {
+			continue
+		}
+		if _, exists := seen[kind]; exists {
+			continue
+		}
+		seen[kind] = struct{}{}
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return strings.Join(kinds, ",")
+}
+
+func invocationArgumentRedactionState(normalized *invocations.NormalizedArguments, parameter string) (bool, int) {
+	argument := invocationNormalizedArgument(normalized, parameter)
+	if argument == nil {
+		return false, 0
+	}
+	redacted := argument.Sensitive
+	for _, source := range argument.Sources {
+		if source.Redact {
+			redacted = true
+			break
+		}
+	}
+	return redacted, len(argument.Values)
+}
+
+func invocationNormalizedArgument(normalized *invocations.NormalizedArguments, parameter string) *invocations.NormalizedArgument {
+	if normalized == nil || strings.TrimSpace(parameter) == "" {
+		return nil
+	}
+	argument, ok := normalized.Arguments[strings.TrimSpace(parameter)]
+	if !ok {
+		return nil
+	}
+	return &argument
+}
+
 func invocationLogFields(
 	sessionID string,
 	source invocations.InputSourceLabel,
 	cfg *interfaces.InvocationReturnConfig,
+	factoryCfg *interfaces.FactoryConfig,
 	extra ...zap.Field,
 ) []zap.Field {
 	fields := []zap.Field{
@@ -718,11 +906,16 @@ func invocationLogFields(
 		zap.String("invocation_return_policy_mode", policyModeForInvocation(cfg)),
 		zap.String("policy_resolution_path", invocationPolicyResolutionPath(cfg)),
 	}
+	fields = append(fields, invocationFactoryLogFields(factoryCfg)...)
 	return append(fields, extra...)
 }
 
-func inputMetricLabels(source invocations.InputSourceLabel) map[string]string {
-	return map[string]string{"input_source": string(source)}
+func invocationMetricLabels(factoryCfg *interfaces.FactoryConfig, source invocations.InputSourceLabel) map[string]string {
+	labels := map[string]string{"input_source": string(source)}
+	for key, value := range invocationFactoryMetricLabels(factoryCfg) {
+		labels[key] = value
+	}
+	return labels
 }
 
 func mergeMetricLabels(parts ...map[string]string) map[string]string {
@@ -744,6 +937,61 @@ func cloneMetricLabels(labels map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func sessionInvocationSourceHint(request factoryapi.InvocationRequest) invocations.InputSourceLabel {
+	if request.Args != nil {
+		return invocationInputSourceStructuredArgs
+	}
+	return invocations.InputSourceLabel(invocations.ArgumentSourceKindCompatibilityContent)
+}
+
+func invocationFactoryMetricLabels(factoryCfg *interfaces.FactoryConfig) map[string]string {
+	if factoryCfg == nil {
+		return nil
+	}
+	labels := map[string]string{}
+	if factoryName := strings.TrimSpace(factoryCfg.Name); factoryName != "" {
+		labels["factory_name"] = factoryName
+	}
+	if factoryProject := strings.TrimSpace(factoryCfg.Project); factoryProject != "" {
+		labels["factory_project"] = factoryProject
+	}
+	if signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature); signatureHash != "" {
+		labels["signature_hash"] = signatureHash
+	}
+	if len(labels) == 0 {
+		return nil
+	}
+	return labels
+}
+
+func invocationFactoryLogFields(factoryCfg *interfaces.FactoryConfig) []zap.Field {
+	if factoryCfg == nil {
+		return nil
+	}
+	fields := []zap.Field{}
+	if factoryName := strings.TrimSpace(factoryCfg.Name); factoryName != "" {
+		fields = append(fields, zap.String("factory_name", factoryName))
+	}
+	if factoryProject := strings.TrimSpace(factoryCfg.Project); factoryProject != "" {
+		fields = append(fields, zap.String("factory_project", factoryProject))
+	}
+	if signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature); signatureHash != "" {
+		fields = append(fields, zap.String("signature_hash", signatureHash))
+	}
+	return fields
+}
+
+func invocationErrorMetricLabels(err error) map[string]string {
+	var argumentErr *invocations.ArgumentError
+	if !errors.As(err, &argumentErr) {
+		return nil
+	}
+	if code := strings.TrimSpace(string(argumentErr.Code)); code != "" {
+		return map[string]string{"error_code": code}
+	}
+	return nil
 }
 
 func invocationPolicyName(cfg *interfaces.InvocationReturnConfig) string {
@@ -798,38 +1046,6 @@ func primaryResultMetricType(parts []interfaces.WorkContentPart) string {
 	}
 	sort.Strings(names)
 	return "mixed:" + strings.Join(names, "+")
-}
-
-func (s *runtimeModelService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
-	if s == nil || s.deps.runtimeConfig == nil {
-		return nil
-	}
-	return s.deps.runtimeConfig()
-}
-
-func (s *runtimeModelService) modelAssetPuller() modelAssetPuller {
-	if s == nil || s.deps.modelAssetPuller == nil {
-		return newModelAssetPuller("")
-	}
-	return s.deps.modelAssetPuller()
-}
-
-func (s *runtimeModelService) modelInvocationExecutor(
-	runtimeCfg *factoryconfig.LoadedFactoryConfig,
-	factoryCfg *interfaces.FactoryConfig,
-	workerName string,
-) (workers.WorkstationRequestExecutor, error) {
-	if s == nil || s.deps.modelInvocationExecutor == nil {
-		return nil, fmt.Errorf("model invocation executor is not configured")
-	}
-	return s.deps.modelInvocationExecutor(runtimeCfg, factoryCfg, workerName)
-}
-
-func (s *runtimeModelService) factoryRunnerID() string {
-	if s == nil || s.deps.factoryRunnerID == nil {
-		return ""
-	}
-	return s.deps.factoryRunnerID()
 }
 
 func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
@@ -902,23 +1118,6 @@ func (fs *FactoryService) commandRunnerOverride() workers.CommandRunner {
 		return nil
 	}
 	return fs.coordinatorPolicy().commandRunnerOverride
-}
-
-func directModelInvocationStream(content []interfaces.WorkContentPart, options *factoryapi.ModelInvocationOptions) (string, string, error) {
-	if options == nil || options.ResponseMode == nil || *options.ResponseMode != factoryapi.AUDIOSTREAM {
-		return "", "", nil
-	}
-	for _, part := range content {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeAudio || strings.TrimSpace(part.File) == "" {
-			continue
-		}
-		contentType := strings.TrimSpace(part.ContentType)
-		if contentType == "" {
-			contentType = "application/octet-stream"
-		}
-		return part.File, contentType, nil
-	}
-	return "", "", fmt.Errorf("%w: invocation did not produce audio output", apisurface.ErrModelInvocationUnsupportedMode)
 }
 
 func stringValue[T ~string](value *T) string {
@@ -1143,7 +1342,7 @@ func (fs *FactoryService) invocationWaitTimedOut(
 	waitErr error,
 ) apisurface.FactoryInvocationResult {
 	terminalResult := invocationContextTerminalResult(result, waitErr)
-	fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
+	fs.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(input.FactoryConfig, input.InputSource))
 	fs.logInvocationTerminalResult(sessionID, input, terminalResult)
 	return terminalResult
 }
@@ -1154,7 +1353,7 @@ func (fs *FactoryService) recordPackagedTTSInvocationMetric(
 	extra map[string]string,
 ) {
 	labels := mergeMetricLabels(
-		inputMetricLabels(source),
+		invocationMetricLabels(nil, source),
 		map[string]string{"packaged_factory": tts.PackagedFactoryName},
 		extra,
 	)
@@ -1173,7 +1372,7 @@ func (fs *FactoryService) handlePackagedTTSInvocationFailure(
 		ErrorCode: failure.ErrorCode,
 		Message:   failure.Message,
 	}
-	fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
+	fs.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(input.FactoryConfig, input.InputSource))
 	fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryFailure, input.InputSource, map[string]string{
 		"failure_class": failure.FailureClass,
 	})
@@ -1186,6 +1385,7 @@ func (fs *FactoryService) handlePackagedTTSInvocationFailure(
 			sessionID,
 			input.InputSource,
 			input.InvocationReturn,
+			input.FactoryConfig,
 			zap.String("request_id", input.RequestID),
 			zap.String("trace_id", input.TraceID),
 			zap.String("status", string(result.Status)),
@@ -1207,6 +1407,7 @@ func (fs *FactoryService) logPackagedTTSInvocationLoading(
 			sessionID,
 			input.InputSource,
 			input.InvocationReturn,
+			input.FactoryConfig,
 			zap.String("request_id", input.RequestID),
 			zap.String("trace_id", input.TraceID),
 			zap.String("readiness_outcome", tts.FailureClassLoading),
@@ -1228,6 +1429,7 @@ func (fs *FactoryService) logPackagedTTSInvocationCompleted(
 			sessionID,
 			input.InputSource,
 			input.InvocationReturn,
+			input.FactoryConfig,
 			zap.String("request_id", input.RequestID),
 			zap.String("trace_id", input.TraceID),
 			zap.String("status", string(factoryapi.InvocationTerminalStatusCompleted)),
@@ -1242,9 +1444,10 @@ func packagedTTSInvocationLogFields(
 	sessionID string,
 	source invocations.InputSourceLabel,
 	cfg *interfaces.InvocationReturnConfig,
+	factoryCfg *interfaces.FactoryConfig,
 	extra ...zap.Field,
 ) []zap.Field {
-	fields := invocationLogFields(sessionID, source, cfg,
+	fields := invocationLogFields(sessionID, source, cfg, factoryCfg,
 		zap.String("packaged_factory_name", tts.PackagedFactoryName),
 		zap.String("tts_backend", tts.BackendRuntimeLabel()),
 	)

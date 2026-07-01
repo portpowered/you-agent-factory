@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -1229,6 +1230,12 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if svc.runtimeBuild == nil {
 		t.Fatal("expected explicit runtimebuild.Service collaborator")
 	}
+	if svc.modelService == nil {
+		t.Fatal("expected explicit model service collaborator")
+	}
+	if _, ok := svc.modelService.(*modelsservice.Service); !ok {
+		t.Fatalf("modelService type = %T, want *modelsservice.Service for production wiring", svc.modelService)
+	}
 	if svc.factorySave == nil {
 		t.Fatal("expected explicit factorysave collaborator")
 	}
@@ -1695,6 +1702,15 @@ func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 	}
 	if len(stub.requests) != 1 || stub.requests[0].Operation != "TTS" {
 		t.Fatalf("invoke requests = %#v, want delegated TTS request", stub.requests)
+	}
+}
+
+func TestWireModelServiceCollaborator_UsesModelsServiceByDefault(t *testing.T) {
+	t.Parallel()
+
+	api := wireModelServiceCollaborator(nil, nil)
+	if _, ok := api.(*modelsservice.Service); !ok {
+		t.Fatalf("wireModelServiceCollaborator(nil) type = %T, want *modelsservice.Service", api)
 	}
 }
 

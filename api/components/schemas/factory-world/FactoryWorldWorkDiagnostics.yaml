@@ -7,3 +7,5 @@ properties:
     $ref: './FactoryWorldProviderDiagnostic.yaml'
   agentRun:
     $ref: '../events/SafeAgentRunDiagnostic.yaml'
+  invocation:
+    $ref: './FactoryWorldInvocationDiagnostic.yaml'

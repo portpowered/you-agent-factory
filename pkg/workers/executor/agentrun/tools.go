@@ -80,12 +80,38 @@ func toolFailureDetail(toolName, arguments string, err error) string {
 	if err == nil {
 		return ""
 	}
+	return toolFailureDetailFromReason(toolName, arguments, toolFailureReason(err))
+}
+
+func toolFailureDetailFromReason(toolName, arguments, reason string) string {
 	relativePath := toolRelativePathFromArguments(arguments)
-	reason := toolFailureReason(err)
 	if relativePath != "" {
 		return fmt.Sprintf("path=%s reason=%s", relativePath, reason)
 	}
 	return fmt.Sprintf("reason=%s", reason)
+}
+
+// toolRuntimeError is the bounded error returned from filesystem tool execution.
+// Its message is safe for dispatch failureMessage and dashboard inspection surfaces.
+type toolRuntimeError struct {
+	toolName  string
+	arguments string
+	reason    string
+}
+
+func newToolRuntimeError(toolName, arguments string, err error) *toolRuntimeError {
+	return &toolRuntimeError{
+		toolName:  strings.TrimSpace(toolName),
+		arguments: arguments,
+		reason:    toolFailureReason(err),
+	}
+}
+
+func (err *toolRuntimeError) Error() string {
+	if err == nil {
+		return ""
+	}
+	return err.toolName + ": " + toolFailureDetailFromReason(err.toolName, err.arguments, err.reason)
 }
 
 func toolRelativePathFromArguments(arguments string) string {
@@ -224,8 +250,9 @@ func (executor *PolicyToolExecutor) Execute(ctx context.Context, call messages.T
 
 	content, err := executor.executeBoundedTool(toolName, call.Arguments)
 	if err != nil {
-		executor.recorder.Record(toolName, "failure", toolFailureDetail(toolName, call.Arguments, err))
-		return messages.ToolCallResponse{}, err
+		safeErr := newToolRuntimeError(toolName, call.Arguments, err)
+		executor.recorder.Record(toolName, "failure", toolFailureDetailFromReason(toolName, call.Arguments, safeErr.reason))
+		return messages.ToolCallResponse{}, safeErr
 	}
 	executor.recorder.Record(toolName, "success", contentSummary(content))
 	return messages.ToolCallResponse{
@@ -371,6 +398,10 @@ func isToolPolicyError(err error) bool {
 func isToolRuntimeError(err error) bool {
 	if err == nil || isToolPolicyError(err) {
 		return false
+	}
+	var toolErr *toolRuntimeError
+	if errors.As(err, &toolErr) {
+		return true
 	}
 	message := err.Error()
 	return strings.Contains(message, "read_file failed") ||

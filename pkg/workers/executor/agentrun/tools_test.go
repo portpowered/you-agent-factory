@@ -8,9 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/api/workstationprojection"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -320,10 +323,106 @@ func TestLibraryHarnessAdapter_DisabledRunsNoToolsMode(t *testing.T) {
 	}
 }
 
+func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t *testing.T) {
+	t.Parallel()
+
+	caseDir := t.TempDir()
+	recorder := NewToolDiagnosticRecorder()
+	toolExecutor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyEnabled, caseDir, recorder)
+	_, toolErr := toolExecutor.Execute(context.Background(), messages.ToolCall{
+		ID:        "tc1",
+		Name:      ToolNameReadFile,
+		Arguments: `{"path":"missing.txt"}`,
+	})
+	if toolErr == nil {
+		t.Fatal("expected tool failure")
+	}
+
+	dispatch := interfaces.WorkDispatch{
+		DispatchID:      "dispatch-tool-fail",
+		TransitionID:    "execute",
+		WorkstationName: "Execute",
+	}
+	result := agentRunFailureWorkResult(
+		dispatch,
+		toolErr,
+		time.Second,
+		interfaces.AgentWorkerToolPolicyEnabled,
+		recorder,
+	)
+	if strings.Contains(result.Error, caseDir) {
+		t.Fatalf("work result error leaks absolute working directory %q: %q", caseDir, result.Error)
+	}
+
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordWorkstationResponse(1, result, interfaces.CompletedDispatch{
+		DispatchID:      dispatch.DispatchID,
+		TransitionID:    dispatch.TransitionID,
+		WorkstationName: dispatch.WorkstationName,
+		Outcome:         interfaces.OutcomeFailed,
+		Reason:          result.Error,
+		Duration:        time.Second,
+	})
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if payload.FailureMessage == nil {
+		t.Fatal("expected failure message on dispatch response")
+	}
+	if strings.Contains(*payload.FailureMessage, caseDir) {
+		t.Fatalf("dispatch failure message leaks absolute working directory %q: %q", caseDir, *payload.FailureMessage)
+	}
+
+	workItem := interfaces.FactoryWorkItem{
+		ID:          "work-tool-fail",
+		WorkTypeID:  "task",
+		DisplayName: "Tool failure story",
+		TraceID:     "trace-tool-fail",
+		PlaceID:     "task:init",
+	}
+	completedAt := time.Unix(1, 0).UTC()
+	state := interfaces.FactoryWorldState{
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			workItem.ID: workItem,
+		},
+		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
+			DispatchID:      dispatch.DispatchID,
+			TransitionID:    dispatch.TransitionID,
+			Workstation:     interfaces.FactoryWorkstationRef{ID: "execute", Name: "Execute"},
+			WorkItemIDs:     []string{workItem.ID},
+			TraceIDs:        []string{workItem.TraceID},
+			StartedAt:       time.Unix(0, 0).UTC(),
+			CompletedAt:     completedAt,
+			DurationMillis:  1000,
+			Result: interfaces.WorkstationResult{
+				Outcome:        string(interfaces.OutcomeFailed),
+				Error:          result.Error,
+				FailureMessage: result.Error,
+			},
+		}},
+	}
+	projection := workstationprojection.BuildFactoryWorldWorkstationRequestProjectionSlice(state)
+	if projection.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("expected workstation request projection")
+	}
+	view := (*projection.WorkstationRequestsByDispatchId)[dispatch.DispatchID]
+	if view.Response == nil || view.Response.FailureMessage == nil {
+		t.Fatalf("projected response = %#v, want failure message", view.Response)
+	}
+	if strings.Contains(*view.Response.FailureMessage, caseDir) {
+		t.Fatalf("projected failure message leaks absolute working directory %q: %q", caseDir, *view.Response.FailureMessage)
+	}
+}
+
 func TestFailureClassForError_ToolRuntimeFailure(t *testing.T) {
 	t.Parallel()
 
-	err := errors.New("read_file failed: open missing.txt: no such file or directory")
+	err := newToolRuntimeError(ToolNameReadFile, `{"path":"missing.txt"}`, fs.ErrNotExist)
 	if got := failureClassForError(err); got != FailureClassToolRuntime {
 		t.Fatalf("failureClassForError = %q, want %q", got, FailureClassToolRuntime)
 	}
@@ -332,7 +431,7 @@ func TestFailureClassForError_ToolRuntimeFailure(t *testing.T) {
 func TestAgentRunExecutor_ToolRuntimeFailureSurfacesFailureClass(t *testing.T) {
 	t.Parallel()
 
-	harness := &recordingHarnessAdapter{err: errors.New("read_file failed: open missing.txt: no such file or directory")}
+	harness := &recordingHarnessAdapter{err: newToolRuntimeError(ToolNameReadFile, `{"path":"missing.txt"}`, fs.ErrNotExist)}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
 			Workers: map[string]*interfaces.WorkerConfig{
@@ -354,6 +453,9 @@ func TestAgentRunExecutor_ToolRuntimeFailureSurfacesFailureClass(t *testing.T) {
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassToolRuntime {
 		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassToolRuntime)
+	}
+	if strings.Contains(result.Error, "open /") {
+		t.Fatalf("work result error leaks absolute path details: %q", result.Error)
 	}
 }
 

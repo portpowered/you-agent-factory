@@ -514,11 +514,10 @@ func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths 
 	assertResponseRef(t, invokeOperation, "404", "#/components/responses/NotFound")
 
 	requestSchema := schemaObject(t, schemas, "InvocationRequest")
-	assertRequiredFields(t, requestSchema, "sourceKind", "content")
 	requestProperties := schemaProperties(t, requestSchema, "InvocationRequest")
 	assertPropertyRef(t, requestProperties, "sourceKind", "#/components/schemas/InvocationInputSourceKind")
 	assertPropertyRef(t, requestProperties, "content", "#/components/schemas/WorkContent")
-	assertSchemaPropertiesPresent(t, requestProperties, "InvocationRequest", "sourceKind", "content", "requestId", "timeoutMillis")
+	assertSchemaPropertiesPresent(t, requestProperties, "InvocationRequest", "sourceKind", "content", "args", "requestId", "timeoutMillis")
 
 	assertEnumValues(t, schemaObject(t, schemas, "InvocationInputSourceKind"), "InvocationInputSourceKind", []string{"text", "fileRef", "audioStream"})
 	assertEnumValues(t, schemaObject(t, schemas, "InvocationTerminalStatus"), "InvocationTerminalStatus", []string{"COMPLETED", "FAILED", "CANCELED", "TIMED_OUT"})

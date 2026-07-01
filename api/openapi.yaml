@@ -87,7 +87,7 @@ paths:
         - Work
       operationId: invokeFactorySessionBySessionId
       summary: Invoke one factory session and return its primary result
-      description: Live-session compatibility API for text-first invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+      description: Live-session compatibility API for invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Requests may use legacy text-first compatibility content or structured invocationSignature args. Structured args normalize through the shared backend argument resolver, while content preserves the legacy compatibility carrier. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -1683,16 +1683,17 @@ components:
     InvocationRequest:
       type: object
       additionalProperties: false
-      required:
-        - sourceKind
-        - content
       properties:
         sourceKind:
           $ref: '#/components/schemas/InvocationInputSourceKind'
-          description: Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice.
+          description: Compatibility input source category selected by the API caller when `content` is supplied. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice.
         content:
           $ref: '#/components/schemas/WorkContent'
-          description: Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions.
+          description: 'Canonical text-first compatibility invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. When `args` is omitted, `content` and `sourceKind: text` preserve the legacy invocation contract.'
+        args:
+          type: object
+          additionalProperties: true
+          description: Optional structured invocation arguments keyed by parameter name, externalName, or alias. Values must decode as a string or an array of strings. Signature-backed runtimes normalize these values through the shared backend argument resolver. Compatibility `content` requests should omit `args`.
         requestId:
           type: string
           description: Optional caller-supplied idempotency key for the invocation request.
@@ -5560,6 +5561,32 @@ components:
           $ref: '#/components/schemas/StringMap'
         responseMetadata:
           $ref: '#/components/schemas/StringMap'
+    FactoryWorldInvocationDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        signatureHash:
+          type: string
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryWorldInvocationParameterDiagnostic'
+    FactoryWorldInvocationParameterDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        sourceKinds:
+          type: array
+          items:
+            type: string
+        valueCount:
+          type: integer
+          format: int64
+          minimum: 0
+        redacted:
+          type: boolean
     FactoryWorldWorkDiagnostics:
       type: object
       additionalProperties: false
@@ -5570,6 +5597,8 @@ components:
           $ref: '#/components/schemas/FactoryWorldProviderDiagnostic'
         agentRun:
           $ref: '#/components/schemas/SafeAgentRunDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/FactoryWorldInvocationDiagnostic'
     FactoryWorldWorkItemRef:
       type: object
       additionalProperties: false
@@ -6833,6 +6862,8 @@ components:
           $ref: '#/components/schemas/RenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/ProviderDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/InvocationDiagnostic'
         command:
           $ref: '#/components/schemas/CommandDiagnostic'
         panic:
@@ -6861,6 +6892,32 @@ components:
           $ref: '#/components/schemas/StringMap'
         responseMetadata:
           $ref: '#/components/schemas/StringMap'
+    InvocationDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        signatureHash:
+          type: string
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvocationParameterDiagnostic'
+    InvocationParameterDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        sourceKinds:
+          type: array
+          items:
+            type: string
+        valueCount:
+          type: integer
+          format: int64
+          minimum: 0
+        redacted:
+          type: boolean
     CommandDiagnostic:
       type: object
       additionalProperties: false
@@ -6919,6 +6976,8 @@ components:
           $ref: '#/components/schemas/ProviderDiagnostic'
         agentRun:
           $ref: '#/components/schemas/SafeAgentRunDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/InvocationDiagnostic'
     SafeAgentRunDiagnostic:
       type: object
       additionalProperties: false
@@ -7179,6 +7238,9 @@ components:
         invocationReturn:
           $ref: '#/components/schemas/InvocationReturn'
           description: Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
+        invocationSignature:
+          $ref: '#/components/schemas/FactoryInvocationSignature'
+          description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -7285,6 +7347,223 @@ components:
         inline:
           type: string
           description: Inline JavaScript workflow source text.
+    FactoryInvocationSignature:
+      type: object
+      additionalProperties: false
+      description: Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+      properties:
+        parameters:
+          type: array
+          description: Declared invocation parameters keyed by canonical parameter name.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationParameter'
+        unknownNamedArgumentPolicy:
+          $ref: '#/components/schemas/FactoryInvocationUnknownNamedArgumentPolicy'
+          description: Policy for named inputs that do not match any declared parameter binding.
+        outputContract:
+          $ref: '#/components/schemas/FactoryInvocationOutputContract'
+          description: Optional customer-facing hint for the factory's primary output shape.
+        examples:
+          type: array
+          description: Example invocations rendered in docs, help, and inspection surfaces.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationExample'
+    FactoryInvocationParameter:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One canonical invocation parameter declared on a factory.
+      properties:
+        name:
+          type: string
+          description: Internal canonical parameter name used for normalized argument maps and interpolation.
+        description:
+          type: string
+          description: Customer-facing description rendered in help, docs, and form controls.
+        externalName:
+          type: string
+          description: Preferred named-argument key shown to callers, such as `output`.
+        aliases:
+          type: array
+          description: Additional accepted named-argument keys that normalize to this parameter.
+          items:
+            type: string
+        typeHint:
+          $ref: '#/components/schemas/FactoryInvocationParameterTypeHint'
+          description: String-first hint that guides parsing, docs, and dashboard form selection.
+        valueMode:
+          $ref: '#/components/schemas/FactoryInvocationParameterValueMode'
+          description: Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
+        required:
+          type: boolean
+          description: When true, invocation normalization must reject requests that omit this parameter.
+        sensitive:
+          type: boolean
+          description: When true, diagnostics must preserve names and source metadata but redact concrete values.
+        choices:
+          type: array
+          description: Optional allowed string values for this parameter.
+          items:
+            type: string
+        defaultValue:
+          type: string
+          description: Default string value used when an omitted parameter resolves to one effective value.
+        defaultValues:
+          type: array
+          description: Default string values used when an omitted parameter resolves to multiple effective values.
+          items:
+            type: string
+        bindings:
+          type: array
+          description: Accepted invocation bindings for this parameter across positional, named, and stdin sources.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationParameterBinding'
+    FactoryInvocationParameterBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      description: One public binding that exposes a parameter to callers.
+      properties:
+        kind:
+          $ref: '#/components/schemas/FactoryInvocationParameterBindingKind'
+          description: Binding kind used to route invocation input into the parameter.
+        position:
+          type: integer
+          minimum: 1
+          description: 1-based positional slot used when kind is POSITIONAL.
+    FactoryInvocationParameterBindingKind:
+      type: string
+      description: Public invocation binding kinds supported by factory signatures.
+      x-enum-varnames:
+        - FactoryInvocationParameterBindingKindPositional
+        - FactoryInvocationParameterBindingKindNamed
+        - FactoryInvocationParameterBindingKindStdin
+        - FactoryInvocationParameterBindingKindNamedRest
+      enum:
+        - POSITIONAL
+        - NAMED
+        - STDIN
+        - NAMED_REST
+      x-enum-descriptions:
+        - Consume a positional CLI-style argument at a declared 1-based slot.
+        - Consume one named argument key matched through the parameter's externalName or aliases.
+        - Consume invocation stdin routed into one declared parameter.
+        - Collect otherwise-unbound named arguments into one rest-style parameter.
+    FactoryInvocationParameterTypeHint:
+      type: string
+      description: String-first parsing and UI hint for one factory invocation parameter.
+      x-enum-varnames:
+        - FactoryInvocationParameterTypeHintString
+        - FactoryInvocationParameterTypeHintPath
+        - FactoryInvocationParameterTypeHintFilePath
+        - FactoryInvocationParameterTypeHintDirectoryPath
+        - FactoryInvocationParameterTypeHintNumberString
+        - FactoryInvocationParameterTypeHintBooleanString
+      enum:
+        - STRING
+        - PATH
+        - FILE_PATH
+        - DIRECTORY_PATH
+        - NUMBER_STRING
+        - BOOLEAN_STRING
+      x-enum-descriptions:
+        - Generic free-form string input.
+        - Path-like string input with no stronger file or directory guarantee.
+        - File path string input.
+        - Directory path string input.
+        - Numeric value encoded as a string for transport parity.
+        - Boolean value encoded as a string with CLI-friendly flag behavior.
+    FactoryInvocationParameterValueMode:
+      type: string
+      description: Declares how one invocation parameter consumes one or more string values.
+      x-enum-varnames:
+        - FactoryInvocationParameterValueModeExact
+        - FactoryInvocationParameterValueModeRepeated
+        - FactoryInvocationParameterValueModeVariadic
+        - FactoryInvocationParameterValueModeFileContents
+      enum:
+        - EXACT
+        - REPEATED
+        - VARIADIC
+        - FILE_CONTENTS
+      x-enum-descriptions:
+        - Consume exactly one effective string value.
+        - Consume zero or more repeated effective string values.
+        - Consume positional overflow values as one variadic parameter.
+        - Resolve supplied path values to file contents before interpolation.
+    FactoryInvocationUnknownNamedArgumentPolicy:
+      type: string
+      description: Policy for named inputs that do not match any declared parameter binding.
+      x-enum-varnames:
+        - FactoryInvocationUnknownNamedArgumentPolicyReject
+        - FactoryInvocationUnknownNamedArgumentPolicyAllow
+        - FactoryInvocationUnknownNamedArgumentPolicyCollect
+      enum:
+        - REJECT
+        - ALLOW
+        - COLLECT
+      x-enum-descriptions:
+        - Reject unknown named arguments during normalization.
+        - Preserve unknown named arguments for compatibility handling.
+        - Route unknown named arguments into one declared NAMED_REST parameter.
+    FactoryInvocationOutputContract:
+      type: object
+      additionalProperties: false
+      description: Customer-facing output hint for a factory invocation signature.
+      properties:
+        mode:
+          $ref: '#/components/schemas/FactoryInvocationOutputContractMode'
+          description: High-level output contract mode exposed to callers.
+        pathParameter:
+          type: string
+          description: Parameter name that controls the destination path when the factory writes output to disk.
+        contentType:
+          type: string
+          description: Output media type hint for docs, API consumers, and dashboard affordances.
+        fileExtension:
+          type: string
+          description: Suggested file extension when the output mode writes a file.
+        description:
+          type: string
+          description: Human-readable summary of the primary output contract.
+    FactoryInvocationOutputContractMode:
+      type: string
+      description: High-level output shape hint exposed by a factory invocation signature.
+      x-enum-varnames:
+        - FactoryInvocationOutputContractModeInline
+        - FactoryInvocationOutputContractModeFile
+        - FactoryInvocationOutputContractModeJson
+      enum:
+        - INLINE
+        - FILE
+        - JSON
+      x-enum-descriptions:
+        - The primary result is expected inline in the invocation response.
+        - The primary result is expected to be written to a caller-supplied file path.
+        - The primary result is expected to be structured JSON-like content.
+    FactoryInvocationExample:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One example invocation for docs, help, and packaged-factory inspection.
+      properties:
+        name:
+          type: string
+          description: Stable example name.
+        description:
+          type: string
+          description: Customer-facing explanation of what the example does.
+        argv:
+          type: array
+          description: CLI-style argument vector rendered after factory selection.
+          items:
+            type: string
+        stdin:
+          type: string
+          description: Example stdin payload when the signature routes stdin into one parameter.
     InvocationReturn:
       type: object
       additionalProperties: false

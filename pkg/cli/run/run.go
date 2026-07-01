@@ -30,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -58,7 +59,10 @@ type RunConfig struct {
 	// InvocationStdinText carries stdin text resolved before Run when root
 	// already consumed the stdin stream for one-shot factory invocation.
 	InvocationStdinText *string
-	RunnerID            string
+	// InvocationNormalizedArguments carries CLI-normalized signature-backed
+	// invocation inputs for factories that declare invocationSignature.
+	InvocationNormalizedArguments *invocations.NormalizedArguments
+	RunnerID                      string
 	// OperatorDefaults carries resolved operator-level default worker model
 	// settings loaded at the CLI boundary.
 	OperatorDefaults operatorconfig.ResolvedDefaults

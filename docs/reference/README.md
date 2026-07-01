@@ -36,6 +36,7 @@ concept owners below when you need the complete customer-facing contract.
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
+| `packaged-fusion` | Packaged `@you/fusion` invocation, signature-aware help, materialization, and editability | [Packaged Fusion](packaged-fusion.md) |
 | `packaged-goal` | Packaged `@you/goal` batch invocation, stdout primary result, materialization, and headless operator-interaction scope | [Packaged Goal](packaged-goal.md) |
 | `packaged-tts` | Packaged `@you/tts` invocation, materialization, metadata result, and editability | [Packaged TTS](packaged-tts.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |

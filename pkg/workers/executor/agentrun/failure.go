@@ -99,9 +99,9 @@ func formatAgentRunError(err error) string {
 	case FailureClassModelRuntime:
 		return "agent run model runtime failure: " + err.Error()
 	case FailureClassToolDenied, FailureClassToolPolicy:
-		return "agent run tool policy violation: " + err.Error()
+		return "agent run tool policy violation: " + safeToolPolicyFailureSummary(err)
 	case FailureClassToolRuntime:
-		return "agent run tool failure: " + err.Error()
+		return "agent run tool failure: " + safeToolRuntimeFailureSummary(err)
 	default:
 		return "agent run harness failure: " + err.Error()
 	}
@@ -206,6 +206,25 @@ func modelhostOperationalFailureClass(err error) string {
 	default:
 		return FailureClassModelRuntime
 	}
+}
+
+func safeToolPolicyFailureSummary(err error) string {
+	if err == nil {
+		return "tool policy violation"
+	}
+	message := strings.TrimSpace(err.Error())
+	if message == "" {
+		return "tool policy violation"
+	}
+	return message
+}
+
+func safeToolRuntimeFailureSummary(err error) string {
+	var toolErr *toolRuntimeError
+	if errors.As(err, &toolErr) {
+		return toolErr.Error()
+	}
+	return "tool execution failed"
 }
 
 func toolFailureClass(err error) (string, bool) {
