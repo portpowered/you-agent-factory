@@ -7,6 +7,7 @@ import {
   recoverDashboardSessionScopedState,
   resetDashboardSessionScopedState,
   shouldResetDashboardSessionScopedState,
+  shouldResumeFromPersistedCheckpoint,
 } from "./dashboard-session-lifecycle";
 
 describe("dashboardSessionKey", () => {
@@ -55,6 +56,38 @@ describe("shouldResetDashboardSessionScopedState", () => {
       shouldResetDashboardSessionScopedState({
         previousSessionKey: "~default::0",
         refreshToken: 0,
+        sessionID: "session-beta",
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("shouldResumeFromPersistedCheckpoint", () => {
+  it("resumes from persisted checkpoints on first mount", () => {
+    expect(
+      shouldResumeFromPersistedCheckpoint({
+        previousSessionKey: null,
+        refreshToken: 0,
+        sessionID: "~default",
+      }),
+    ).toBe(true);
+  });
+
+  it("skips persisted checkpoints after same-session refresh", () => {
+    expect(
+      shouldResumeFromPersistedCheckpoint({
+        previousSessionKey: "~default::0",
+        refreshToken: 1,
+        sessionID: "~default",
+      }),
+    ).toBe(false);
+  });
+
+  it("resumes persisted checkpoints when switching sessions after refresh", () => {
+    expect(
+      shouldResumeFromPersistedCheckpoint({
+        previousSessionKey: "~default::1",
+        refreshToken: 1,
         sessionID: "session-beta",
       }),
     ).toBe(true);

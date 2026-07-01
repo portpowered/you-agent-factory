@@ -5,17 +5,10 @@ import {
   dashboardSessionKey,
   type FactoryDefinitionQueryResetMode,
   resetDashboardSessionScopedState,
+  sessionIDFromDashboardSessionKey,
   shouldResetDashboardSessionScopedState,
 } from "../lib/dashboard-session-lifecycle";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
-
-function sessionIDFromDashboardSessionKey(sessionKey: string | null): string | null {
-  if (sessionKey == null) {
-    return null;
-  }
-  const separatorIndex = sessionKey.lastIndexOf("::");
-  return separatorIndex === -1 ? sessionKey : sessionKey.slice(0, separatorIndex);
-}
 
 export interface UseDashboardSessionLifecycleOptions {
   locale?: string | null;
