@@ -290,7 +290,7 @@ func (fs *FactoryService) resolveLiveSessionSelector(sessionID string) (*factory
 			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, selector)
 		}
 		handle := liveSessionHandle(session)
-		if handle == nil || handle.runtime == nil {
+		if handle == nil || handle.Bundle == nil {
 			selector := strings.TrimSpace(sessionID)
 			if selector == "" {
 				selector = defaultFactorySessionID
