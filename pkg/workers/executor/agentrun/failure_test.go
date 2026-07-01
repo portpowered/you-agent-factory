@@ -2,6 +2,7 @@ package agentrun
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"strings"
 	"testing"
@@ -130,6 +131,25 @@ func TestFormatAgentRunError_ToolRuntimeUsesSafeSummary(t *testing.T) {
 	}
 	if strings.Contains(got, "open /") {
 		t.Fatalf("formatAgentRunError() leaked absolute path details: %q", got)
+	}
+}
+
+func TestFormatAgentRunError_AbsolutePathArgumentOmitsPath(t *testing.T) {
+	t.Parallel()
+
+	absolutePath := "/Users/test/secret.txt"
+	err := newToolRuntimeError(
+		ToolNameReadFile,
+		fmt.Sprintf(`{"path":%q}`, absolutePath),
+		errors.New("tool path must be relative to the agent working directory"),
+	)
+	got := formatAgentRunError(err)
+	want := "agent run tool failure: read_file: reason=path_must_be_relative"
+	if got != want {
+		t.Fatalf("formatAgentRunError() = %q, want %q", got, want)
+	}
+	if strings.Contains(got, absolutePath) {
+		t.Fatalf("formatAgentRunError() leaked absolute path argument: %q", got)
 	}
 }
 

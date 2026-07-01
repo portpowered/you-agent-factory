@@ -28,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -3012,7 +3013,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 		t.Fatalf("factorySessionId = %#v, want promoted beta session %q", response.FactorySessionId, betaSessionID)
 	}
 	betaSession := harness.requireSession(t, betaSessionID)
-	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(betaSession)
+	wantLogicalSessionKeyID := controlplane.LogicalSessionKeyID(betaSession)
 	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
 		t.Fatalf("logicalSessionKeyId = %v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
 	}

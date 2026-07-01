@@ -115,6 +115,14 @@ func (err *toolRuntimeError) Error() string {
 }
 
 func toolRelativePathFromArguments(arguments string) string {
+	rawPath := extractPathFromArguments(arguments)
+	if !isSafeRelativePathForDiagnostics(rawPath) {
+		return ""
+	}
+	return rawPath
+}
+
+func extractPathFromArguments(arguments string) string {
 	trimmed := strings.TrimSpace(arguments)
 	if trimmed == "" {
 		return ""
@@ -128,6 +136,21 @@ func toolRelativePathFromArguments(arguments string) string {
 		return strings.TrimSpace(writeArgs.Path)
 	}
 	return ""
+}
+
+func isSafeRelativePathForDiagnostics(path string) bool {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return false
+	}
+	if filepath.IsAbs(trimmed) {
+		return false
+	}
+	cleaned := filepath.Clean(trimmed)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(os.PathSeparator)) {
+		return false
+	}
+	return true
 }
 
 func toolFailureReason(err error) string {

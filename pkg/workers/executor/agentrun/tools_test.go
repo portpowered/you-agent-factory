@@ -3,6 +3,7 @@ package agentrun
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -254,6 +255,62 @@ func TestToolRelativePathFromArguments_ExtractsWritePath(t *testing.T) {
 	got := toolRelativePathFromArguments(`{"path":"nested/out.txt","content":"data"}`)
 	if got != "nested/out.txt" {
 		t.Fatalf("toolRelativePathFromArguments() = %q, want nested/out.txt", got)
+	}
+}
+
+func TestToolRelativePathFromArguments_OmitsUnsafePaths(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		arguments string
+	}{
+		{name: "absolute path", arguments: `{"path":"/Users/test/secret.txt"}`},
+		{name: "path escape", arguments: `{"path":"../secret.txt"}`},
+		{name: "empty path", arguments: `{"path":""}`},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := toolRelativePathFromArguments(tc.arguments); got != "" {
+				t.Fatalf("toolRelativePathFromArguments() = %q, want empty for unsafe path", got)
+			}
+		})
+	}
+}
+
+func TestPolicyToolExecutor_AbsolutePathArgumentOmitsPathFromDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	absolutePath := filepath.Join(t.TempDir(), "secret.txt")
+	recorder := NewToolDiagnosticRecorder()
+	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyReadOnly, t.TempDir(), recorder)
+	_, err := executor.Execute(context.Background(), messages.ToolCall{
+		ID:        "tc1",
+		Name:      ToolNameReadFile,
+		Arguments: fmt.Sprintf(`{"path":%q}`, absolutePath),
+	})
+	if err == nil {
+		t.Fatal("expected absolute path rejection")
+	}
+
+	metadata := toolDiagnosticsMetadata(interfaces.AgentWorkerToolPolicyReadOnly, recorder)
+	diagnostics := metadata[DiagnosticToolDiagnostics]
+	if diagnostics == "" {
+		t.Fatalf("tool diagnostics = %#v, want failure summary", metadata)
+	}
+	if strings.Contains(diagnostics, absolutePath) {
+		t.Fatalf("tool diagnostics leak absolute path argument %q: %q", absolutePath, diagnostics)
+	}
+	if strings.Contains(diagnostics, "path=") {
+		t.Fatalf("tool diagnostics should omit path for rejected absolute argument: %q", diagnostics)
+	}
+	if !strings.Contains(diagnostics, "reason=path_must_be_relative") {
+		t.Fatalf("tool diagnostics = %q, want path_must_be_relative reason", diagnostics)
+	}
+	if strings.Contains(err.Error(), absolutePath) {
+		t.Fatalf("tool runtime error leaks absolute path argument %q: %q", absolutePath, err.Error())
 	}
 }
 
