@@ -624,52 +624,26 @@ func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfa
 	fs.activationMu.RLock()
 	defer fs.activationMu.RUnlock()
 
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		return interfaces.WorkRequestSubmitResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	return activeFactory.SubmitWorkRequest(ctx, request)
+	return factoryservice.SubmitWorkRequest(ctx, fs.currentRuntimeBundle(), request)
 }
 
 // SubscribeFactoryEvents returns canonical factory event history followed by
 // live events from the current service-owned runtime.
 func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		return nil, fmt.Errorf("factory service runtime is not available")
-	}
-	stream, err := activeFactory.SubscribeFactoryEvents(ctx, reconnect, scope)
-	if err != nil {
-		return nil, fmt.Errorf("subscribe factory events: %w", err)
-	}
-	return stream, nil
+	return factoryservice.SubscribeFactoryEvents(ctx, fs.currentRuntimeBundle(), reconnect, scope)
 }
 
 // WaitToComplete returns a channel that is closed when all tokens reach
 // terminal or failed places and no dispatches are in flight. Delegates to
 // the underlying factory's termination signal.
 func (fs *FactoryService) WaitToComplete() <-chan struct{} {
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	return activeFactory.WaitToComplete()
+	return factoryservice.WaitToComplete(fs.currentRuntimeBundle())
 }
 
 // GetEngineStateSnapshot returns the factory boundary's aggregate
 // observability snapshot.
 func (fs *FactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		return nil, fmt.Errorf("factory service runtime is not available")
-	}
-	snap, err := activeFactory.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get engine state snapshot: %w", err)
-	}
-	return snap, nil
+	return factoryservice.GetEngineStateSnapshot(ctx, fs.currentRuntimeBundle())
 }
 
 // Pause pauses the current runtime instance.

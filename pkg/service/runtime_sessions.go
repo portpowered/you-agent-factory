@@ -298,11 +298,11 @@ func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessi
 
 func (c *runtimeFactoryCoordinator) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	fs := c.service
-	activeFactory, err := fs.sessionFactory(sessionID)
+	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return interfaces.WorkRequestSubmitResult{}, err
 	}
-	return activeFactory.SubmitWorkRequest(ctx, request)
+	return factoryservice.SubmitWorkRequest(ctx, liveSessionHandle(session).Bundle, request)
 }
 
 func (fs *FactoryService) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
@@ -311,11 +311,11 @@ func (fs *FactoryService) MoveWorkForSession(ctx context.Context, sessionID, wor
 
 func (c *runtimeFactoryCoordinator) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
 	fs := c.service
-	activeFactory, err := fs.sessionFactory(sessionID)
+	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return interfaces.OperatorMoveResult{}, err
 	}
-	return activeFactory.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+	return factoryservice.MoveWork(ctx, liveSessionHandle(session).Bundle, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
 }
 
 // MoveWork applies a synchronous operator relocation on the current service-owned runtime.
@@ -323,11 +323,7 @@ func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string
 	fs.activationMu.RLock()
 	defer fs.activationMu.RUnlock()
 
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		return interfaces.OperatorMoveResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	return activeFactory.MoveWork(ctx, workID, stateName, source, requestID)
+	return factoryservice.MoveWork(ctx, fs.currentRuntimeBundle(), workID, stateName, source, requestID)
 }
 
 func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
@@ -336,15 +332,11 @@ func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, 
 
 func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	fs := c.service
-	activeFactory, err := fs.sessionFactory(sessionID)
+	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	stream, err := activeFactory.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
-	if err != nil {
-		return nil, fmt.Errorf("subscribe factory events: %w", err)
-	}
-	return stream, nil
+	return factoryservice.SubscribeFactoryEventsForSession(ctx, liveSessionHandle(session).Bundle, sessionID, reconnect)
 }
 
 func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
@@ -353,15 +345,11 @@ func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, 
 
 func (c *runtimeFactoryCoordinator) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	fs := c.service
-	activeFactory, err := fs.sessionFactory(sessionID)
+	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := activeFactory.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get engine state snapshot: %w", err)
-	}
-	return snapshot, nil
+	return factoryservice.GetEngineStateSnapshot(ctx, liveSessionHandle(session).Bundle)
 }
 
 func (fs *FactoryService) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
