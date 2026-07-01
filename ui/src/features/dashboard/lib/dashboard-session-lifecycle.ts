@@ -6,12 +6,11 @@ import {
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../../current-selection/base/public";
-import { FACTORY_SESSION_DETAIL_QUERY_KEY } from "../../factory-session-detail/public";
-import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import {
-  normalizeStreamDerivedCacheIdentity,
-  streamDerivedCacheKeyPrefix,
-} from "../../timeline/public";
+  FACTORY_SESSION_DETAIL_QUERY_KEY,
+  factorySessionDetailQueryKey,
+} from "../../factory-session-detail/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export type FactoryDefinitionQueryResetMode = "invalidate" | "remove";
@@ -85,22 +84,24 @@ export function resetDashboardSessionScopedState(
     return;
   }
   queryClient.removeQueries(queryFilter);
+  queryClient.removeQueries({
+    queryKey: FACTORY_SESSION_DETAIL_QUERY_KEY,
+    exact: false,
+  });
 }
 
-export function factorySessionDetailQueryKey(
-  sessionID: string,
+function resolveSessionRuntimeCacheScope(
   streamIdentity?: StreamDerivedCacheIdentity | null,
-) {
-  const normalizedStreamIdentity =
-    normalizeStreamDerivedCacheIdentity(streamIdentity);
-  if (normalizedStreamIdentity) {
-    return [
-      ...FACTORY_SESSION_DETAIL_QUERY_KEY,
-      ...streamDerivedCacheKeyPrefix(normalizedStreamIdentity),
-    ] as const;
-  }
-  return [...FACTORY_SESSION_DETAIL_QUERY_KEY, sessionID] as const;
+): string | null {
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
+  return (
+    resolvedStreamIdentity?.backendScopeID ??
+    useDashboardStreamStore.getState().backendRuntimeCacheScope
+  );
 }
+
+export { factorySessionDetailQueryKey } from "../../factory-session-detail/public";
 
 export function clearDashboardSessionRuntimeQueries(
   queryClient: QueryClient,
@@ -109,12 +110,13 @@ export function clearDashboardSessionRuntimeQueries(
 ): void {
   const resolvedStreamIdentity =
     streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
+  const backendScopeID = resolveSessionRuntimeCacheScope(resolvedStreamIdentity);
   queryClient.removeQueries({
     queryKey: currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
     exact: false,
   });
   queryClient.removeQueries({
-    queryKey: factorySessionDetailQueryKey(sessionID, resolvedStreamIdentity),
+    queryKey: factorySessionDetailQueryKey(sessionID, backendScopeID),
     exact: false,
   });
 }

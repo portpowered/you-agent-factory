@@ -90,7 +90,10 @@ function seedStreamScopedQueryCaches(
     },
   );
   queryClient.setQueryData(
-    factorySessionDetailQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    factorySessionDetailQueryKey(
+      RESOLVED_DEFAULT_SESSION_UUID,
+      streamIdentity.backendScopeID,
+    ),
     { status: "success" },
   );
   queryClient.setQueryData(["current-factory-definition", "session-beta"], {
@@ -114,7 +117,10 @@ function expectClearedStreamScopedQueries(
   ).toBeUndefined();
   expect(
     queryClient.getQueryData(
-      factorySessionDetailQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+      factorySessionDetailQueryKey(
+        RESOLVED_DEFAULT_SESSION_UUID,
+        streamIdentity.backendScopeID,
+      ),
     ),
   ).toBeUndefined();
   expect(
