@@ -141,6 +141,23 @@ func TestInitializeMCPTransport_SessionOperationsMatchFixtureBehavior(t *testing
 	}
 }
 
+func TestInitializeMCPTransport_RuntimeBackedResolvesProjectRootFromCWD(t *testing.T) {
+	projectRoot := t.TempDir()
+	t.Chdir(projectRoot)
+
+	transport, err := initializer.InitializeMCPTransport(context.Background(), &initializer.MCPConfig{
+		Options: initializer.MCPOptions{
+			RuntimeBacked: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitializeMCPTransport: %v", err)
+	}
+	if _, ok := transport.SessionExecution.(*factorysessionexecution.JavaScriptRuntimeService); !ok {
+		t.Fatalf("session execution type = %T, want *factorysessionexecution.JavaScriptRuntimeService", transport.SessionExecution)
+	}
+}
+
 func TestInitializeMCPTransport_RuntimeBackedSelectsJavaScriptRuntimeService(t *testing.T) {
 	t.Parallel()
 

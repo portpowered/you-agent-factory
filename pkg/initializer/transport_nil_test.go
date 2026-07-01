@@ -45,3 +45,21 @@ func TestServices_NilStartupWorkerConfig(t *testing.T) {
 		t.Fatalf("StartupWorkerConfig(nil) = (%v, %v), want (nil, false)", worker, ok)
 	}
 }
+
+func TestSessionRuntimeHost_NilReceiverMethodsAreSafe(t *testing.T) {
+	t.Parallel()
+
+	var host *initializer.SessionRuntimeHost
+	if host.SessionAPISurface() != nil {
+		t.Fatal("expected nil session API surface for nil host")
+	}
+	if err := host.Run(context.Background()); err != nil {
+		t.Fatalf("Run on nil host: %v", err)
+	}
+	if host.LocalRuntimeRunner() != nil {
+		t.Fatal("expected nil local runtime runner for nil host")
+	}
+	if host.CompatibilityServiceShell() != nil {
+		t.Fatal("expected nil compatibility shell for nil host")
+	}
+}

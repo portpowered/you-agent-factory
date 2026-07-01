@@ -60,6 +60,9 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	if transport.Host.SessionAPISurface() == nil {
 		t.Fatal("expected session runtime host with attached collaborators")
 	}
+	if shell := transport.Host.CompatibilityServiceShell(); shell == nil {
+		t.Fatal("expected compatibility service shell for legacy harness callbacks")
+	}
 	surface := transport.SessionAPISurface()
 	if surface == nil {
 		t.Fatal("expected session API surface")
