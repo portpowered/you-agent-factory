@@ -21,6 +21,7 @@ import {
   eventStreamHasCursor,
   eventStreamOmitsCursor,
   installNetworkCapture,
+  replayWorldStateWithProviderSessionRef,
   resolvedFactorySessionID,
   seedTimelineCheckpoint,
 } from "./dashboard-session-recovery-manual-scenarios-harness.mjs";
@@ -284,6 +285,98 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
         ).toBe(false);
         expect(cloudScopeIdentity.backendScopeID).not.toBe(
           localScopeIdentity.backendScopeID,
+        );
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await browserPage.close();
+        await server.stop();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
+    "never sends a stale cursor or prior provider-session detail after switching provider account scope",
+    async () => {
+      const priorProviderScopeIdentity = buildStreamIdentity({
+        backendScopeID:
+          "/provider/local-account/factory::browser-integration",
+      });
+      const nextProviderScopeIdentity = buildStreamIdentity({
+        backendScopeID:
+          "/provider/remote-account/factory::browser-integration",
+      });
+      const priorProviderSessionRef =
+        "provider-session/local-account/browser-integration";
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: {
+          ...defaultFactoryDefinition,
+          sourceDirectory: "/provider/remote-account/factory",
+        },
+        eventLines: [],
+      });
+      const browserPage = await openBrowserPage({
+        artifactLabel: "manual-provider-account-scope-switch",
+      });
+
+      try {
+        const network = await installNetworkCapture(browserPage.page);
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await clearTimelineCheckpoints(browserPage.page);
+        await seedTimelineCheckpoint(
+          browserPage.page,
+          priorProviderScopeIdentity,
+          {
+            afterEventId: "provider-scope-event-6",
+            afterSequence: 6,
+            selectedTick: 6,
+            replayState: replayWorldStateWithProviderSessionRef(
+              6,
+              priorProviderSessionRef,
+            ),
+          },
+        );
+        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+
+        await waitForDurableCheckpoint(
+          "provider account scope switch reconnect",
+          async () => {
+            const urls = await network.readEventStreamURLs();
+            return urls.some(
+              (url) =>
+                url.includes(
+                  `/factory-sessions/${defaultFactorySessionID}/events`,
+                ) && eventStreamOmitsCursor(url),
+            );
+          },
+        );
+
+        const urls = await network.readEventStreamURLs();
+        const syncPreflightReads = network.captured.syncPreflightReads;
+        const allCapturedRequests = [
+          ...urls,
+          ...network.captured.factorySessionReads,
+          ...syncPreflightReads,
+        ];
+        expect(
+          urls.some((url) =>
+            eventStreamHasCursor(url, "provider-scope-event-6"),
+          ),
+        ).toBe(false);
+        expect(
+          allCapturedRequests.some((url) =>
+            url.includes(priorProviderSessionRef),
+          ),
+        ).toBe(false);
+        expect(nextProviderScopeIdentity.backendScopeID).not.toBe(
+          priorProviderScopeIdentity.backendScopeID,
         );
         expectNoBrowserErrors(
           browserPage.pageErrors,

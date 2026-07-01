@@ -104,7 +104,27 @@ previous scope.
 - Local-scope cursor `local-scope-event-8` is not sent after the scope switch
 - Dashboard loads against the cloud-scope `GET /factory-sessions/~default` identity
 
-## Scenario 5: Multi-Tab Isolation With Shared Checkpoint Invalidation
+## Scenario 5: Provider/Account Scope Switch
+
+**Goal:** Switching provider or account scope never sends a cursor, query cache, or
+provider-session detail from the previous scope.
+
+| Field | Value |
+| --- | --- |
+| Command | Seed prior-provider checkpoint with provider-session replay detail, reload against remote-provider server identity |
+| Prior `backendScopeID` | `/provider/local-account/factory::browser-integration` |
+| Current `backendScopeID` | `/provider/remote-account/factory::browser-integration` |
+| Prior provider session ref (sanitized) | `provider-session/local-account/browser-integration` |
+| Stale cursor | `after_event_id=provider-scope-event-6` |
+
+**Observed outcome:**
+
+- Event stream reconnect omits `after_event_id` and `after_sequence`
+- Prior-scope cursor `provider-scope-event-6` is not sent
+- Captured session reads, sync-preflight reads, and stream URLs omit the prior provider-session ref
+- Dashboard loads against the remote-provider `GET /factory-sessions/~default` identity
+
+## Scenario 6: Multi-Tab Isolation With Shared Checkpoint Invalidation
 
 **Goal:** Two tabs keep independent reload behavior while shared stream checkpoints are
 invalidated when stream identity changes.
@@ -127,4 +147,4 @@ invalidated when stream identity changes.
 
 Date: `2026-07-01` (UTC)
 
-- `cd ui && npx vitest run integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs --no-file-parallelism --maxWorkers 1` — records the five restart/switching scenarios above with captured `EventSource` URLs and sanitized identity fields only.
+- `cd ui && npx vitest run integration/dashboard-session-recovery-manual-scenarios.integration.test.mjs --no-file-parallelism --maxWorkers 1` — records the six restart/switching scenarios above with captured `EventSource` URLs and sanitized identity fields only.

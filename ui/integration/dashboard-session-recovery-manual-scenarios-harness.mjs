@@ -79,10 +79,23 @@ export function emptyReplayWorldState(tick) {
   };
 }
 
+export function replayWorldStateWithProviderSessionRef(tick, providerSessionRef) {
+  return {
+    ...emptyReplayWorldState(tick),
+    providerSessions: [
+      {
+        providerSessionRef,
+        status: "ACTIVE",
+      },
+    ],
+  };
+}
+
 export async function installNetworkCapture(page) {
   const captured = {
     eventStreamURLs: [],
     factorySessionReads: [],
+    syncPreflightReads: [],
   };
 
   await page.addInitScript(() => {
@@ -103,6 +116,12 @@ export async function installNetworkCapture(page) {
       /\/factory-sessions\/[^/]+$/.test(new URL(url).pathname)
     ) {
       captured.factorySessionReads.push(url);
+    }
+    if (
+      request.method() === "GET" &&
+      /\/factory-sessions\/[^/]+\/sync-preflight/.test(new URL(url).pathname)
+    ) {
+      captured.syncPreflightReads.push(url);
     }
     await route.continue();
   });
@@ -144,6 +163,9 @@ export async function clearTimelineCheckpoints(page) {
 
 export async function seedTimelineCheckpoint(page, identity, cursor) {
   const storageKey = checkpointStorageKey(identity);
+  const replayState =
+    cursor.replayState ??
+    emptyReplayWorldState(cursor.selectedTick ?? cursor.afterSequence ?? 0);
   await page.evaluate(
     async ({ envelope }) => {
       const openRequest = indexedDB.open(
@@ -174,7 +196,7 @@ export async function seedTimelineCheckpoint(page, identity, cursor) {
         checkpoint: {
           afterEventId: cursor.afterEventId,
           afterSequence: cursor.afterSequence,
-          replayState: emptyReplayWorldState(cursor.selectedTick),
+          replayState,
           selectedTick: cursor.selectedTick,
         },
         schemaVersion: 2,

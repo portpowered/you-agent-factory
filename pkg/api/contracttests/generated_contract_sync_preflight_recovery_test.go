@@ -116,52 +116,102 @@ func assertSyncPreflightRecoveryOutcome(
 
 	switch response.ReasonCode {
 	case factoryapi.Ok:
-		if !response.CheckpointReusable {
-			t.Fatalf("%s checkpointReusable = false, want true", scenario.ID)
-		}
-		if !response.ReconnectCursor.ValidForStreamGeneration {
-			t.Fatalf("%s reconnect cursor validForStreamGeneration = false, want true", scenario.ID)
-		}
-		if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
-			t.Fatalf("%s identity fields = %#v, want full identity set", scenario.ID, response)
-		}
+		assertSyncPreflightOkOutcome(t, scenario.ID, response)
 	case factoryapi.CursorStale:
-		if response.CheckpointReusable {
-			t.Fatalf("%s checkpointReusable = true, want false", scenario.ID)
-		}
-		if response.ReconnectCursor.ValidForStreamGeneration {
-			t.Fatalf("%s reconnect cursor validForStreamGeneration = true, want false", scenario.ID)
-		}
-		if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
-			t.Fatalf("%s identity fields = %#v, want full identity set for stale cursor", scenario.ID, response)
-		}
+		assertSyncPreflightCursorStaleOutcome(t, scenario.ID, response)
 	case factoryapi.SessionNotFound:
-		if response.CheckpointReusable {
-			t.Fatalf("%s checkpointReusable = true, want false", scenario.ID)
-		}
-		if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
-			t.Fatalf("%s identity fields = %#v, want nil for missing session", scenario.ID, response)
-		}
+		assertSyncPreflightSessionNotFoundOutcome(t, scenario.ID, response)
 	case factoryapi.LogicalSessionRemap:
-		if response.CheckpointReusable {
-			t.Fatalf("%s checkpointReusable = true, want false", scenario.ID)
-		}
-		if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
-			t.Fatalf("%s identity fields = %#v, want full identity set for remap", scenario.ID, response)
-		}
+		assertSyncPreflightLogicalSessionRemapOutcome(t, scenario.ID, response)
 	default:
 		t.Fatalf("%s reasonCode = %q, want supported recovery outcome", scenario.ID, response.ReasonCode)
 	}
+
+	assertSyncPreflightInvalidationDiagnostic(t, scenario.ID, response)
+}
+
+func assertSyncPreflightOkOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if !response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = false, want true", scenarioID)
+	}
+	if !response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("%s reconnect cursor validForStreamGeneration = false, want true", scenarioID)
+	}
+	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
+		t.Fatalf("%s identity fields = %#v, want full identity set", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightCursorStaleOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
+	}
+	if response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("%s reconnect cursor validForStreamGeneration = true, want false", scenarioID)
+	}
+	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
+		t.Fatalf("%s identity fields = %#v, want full identity set for stale cursor", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightSessionNotFoundOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
+	}
+	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
+		t.Fatalf("%s identity fields = %#v, want nil for missing session", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightLogicalSessionRemapOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
+	}
+	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
+		t.Fatalf("%s identity fields = %#v, want full identity set for remap", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightInvalidationDiagnostic(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
 
 	diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response)
 	switch response.ReasonCode {
 	case factoryapi.Ok:
 		if ok {
-			t.Fatalf("%s invalidation diagnostic = %#v, want none for ok", scenario.ID, diagnostic)
+			t.Fatalf("%s invalidation diagnostic = %#v, want none for ok", scenarioID, diagnostic)
 		}
 	default:
 		if !ok {
-			t.Fatalf("%s invalidation diagnostic missing for %q", scenario.ID, response.ReasonCode)
+			t.Fatalf("%s invalidation diagnostic missing for %q", scenarioID, response.ReasonCode)
 		}
 	}
 }
