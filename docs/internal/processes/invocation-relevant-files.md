@@ -282,7 +282,10 @@ primary-result behavior.
   invocation triggers a same-session dashboard refresh, invalidate the
   current-factory query instead of removing it so the signature-backed widget
   can preserve visible success state while still refetching the current factory
-  contract.
+  contract, and skip resuming the event stream from a persisted reconnect cursor
+  on that same-session refresh via `shouldResumeFromPersistedCheckpoint` in
+  `ui/src/features/dashboard/lib/dashboard-session-lifecycle.ts` plus
+  `useDashboardInitialReconnectCursor`.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.
