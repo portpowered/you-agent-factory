@@ -45,6 +45,7 @@ const currentFactoryPromptTemplateProxyPaths = [
 const proxiedAPIPaths = [
   "/work",
   "^/factory-sessions/[^/]+/work$",
+  "^/factory-sessions/[^/]+/invocations$",
   "^/work-requests/[^/]+$",
   "^/factory-sessions/[^/]+/work-requests/[^/]+$",
   "^/work/[^/]+$",

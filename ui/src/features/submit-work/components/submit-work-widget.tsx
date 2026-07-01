@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
+import { FactoryInvocationWidget } from "./invocation/factory-invocation-widget";
 import { SubmitWorkCard } from "./submit-work-card";
 
 export interface SubmitWorkWidgetProps {
@@ -19,6 +21,7 @@ export function SubmitWorkWidget({
 }: SubmitWorkWidgetProps) {
   const { sessionID } = useDashboardSession();
   const messages = getSubmitWorkMessages(locale);
+  const currentFactory = useCurrentFactoryDefinition();
   const {
     draft,
     isSubmitting,
@@ -33,6 +36,16 @@ export function SubmitWorkWidget({
     submitWorkTypeNames,
     validationErrors,
   } = useSubmitWorkWidget(sessionID, submitWorkTypes, messages);
+
+  if (currentFactory.data?.invocationSignature) {
+    return (
+      <FactoryInvocationWidget
+        headerAction={headerAction}
+        locale={locale}
+        sessionID={sessionID}
+      />
+    );
+  }
 
   return (
     <SubmitWorkCard

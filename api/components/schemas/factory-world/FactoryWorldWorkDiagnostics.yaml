@@ -5,3 +5,5 @@ properties:
     $ref: './FactoryWorldRenderedPromptDiagnostic.yaml'
   provider:
     $ref: './FactoryWorldProviderDiagnostic.yaml'
+  invocation:
+    $ref: './FactoryWorldInvocationDiagnostic.yaml'

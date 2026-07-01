@@ -48,6 +48,7 @@ func Validate(cfg *interfaces.FactoryConfig) Result {
 	result.Targets = append(result.Targets, PollerRunWorkstationKindTargets(cfg)...)
 	result.Targets = append(result.Targets, WorkerWorkstationBehaviorCompatibilityTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationReturnTargets(cfg)...)
+	result.Targets = append(result.Targets, InvocationSignatureTargets(cfg)...)
 	result.Targets = append(result.Targets, WorkPropagationTargets(cfg)...)
 	result.Targets = append(result.Targets, missingWorkTypeOutcomeStateTargets(cfg)...)
 	result.Targets = append(result.Targets, missingTerminalCompletionPathTargets(cfg)...)
@@ -187,7 +188,6 @@ func WorkPropagationTargets(cfg *interfaces.FactoryConfig) []Target {
 
 	return targets
 }
-
 
 func OrchestratorTargets(cfg *interfaces.FactoryConfig) []Target {
 	if cfg == nil {

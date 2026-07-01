@@ -50,8 +50,8 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 		t.Fatalf("submitted invocation log count = %d, want 1", len(submitted))
 	}
 	submittedFields := submitted[0].ContextMap()
-	if got := submittedFields["input_source"]; got != "positional_text" {
-		t.Fatalf("submitted input_source = %#v, want positional_text", got)
+	if got := submittedFields["input_source"]; got != "COMPATIBILITY_CONTENT" {
+		t.Fatalf("submitted input_source = %#v, want COMPATIBILITY_CONTENT", got)
 	}
 	if got := submittedFields["invocation_return_policy_mode"]; got != "fallback" {
 		t.Fatalf("submitted invocation_return_policy_mode = %#v, want fallback", got)
@@ -75,10 +75,10 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 		t.Fatal("expected resolved_work_id field in completed invocation log")
 	}
 
-	recorder.assertContainsMetric(t, "invocation.attempts", map[string]string{"input_source": "positional_text"})
-	recorder.assertContainsMetric(t, "invocation.fallback_policy_used", map[string]string{"input_source": "positional_text"})
-	recorder.assertContainsMetric(t, "invocation.success", map[string]string{"input_source": "positional_text"})
-	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "positional_text", "result_type": "text"})
+	recorder.assertContainsMetric(t, "invocation.attempts", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
+	recorder.assertContainsMetric(t, "invocation.fallback_policy_used", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
+	recorder.assertContainsMetric(t, "invocation.success", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
+	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "COMPATIBILITY_CONTENT", "result_type": "text"})
 }
 
 func TestSessionInvocationAPI_RejectsWhitespaceOnlyText(t *testing.T) {
@@ -96,6 +96,46 @@ func TestSessionInvocationAPI_RejectsWhitespaceOnlyText(t *testing.T) {
 	)
 	if string(response.Code) != "INVOCATION_INPUT_EMPTY" {
 		t.Fatalf("invocation error code = %q, want INVOCATION_INPUT_EMPTY", response.Code)
+	}
+}
+
+func TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature(t *testing.T) {
+	dir := scaffoldInvocationFactory(t, nil)
+	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+	})
+
+	response := postInvocationExpectStatus(
+		t,
+		server.URL(),
+		factoryapi.InvocationRequest{
+			Args: &map[string]any{"input": "hello"},
+		},
+		http.StatusBadRequest,
+	)
+	if string(response.Code) != "INVOCATION_ARGUMENT_INVALID_ACTIVE_SIGNATURE" {
+		t.Fatalf("invocation error code = %q, want INVOCATION_ARGUMENT_INVALID_ACTIVE_SIGNATURE", response.Code)
+	}
+}
+
+func TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape(t *testing.T) {
+	dir := scaffoldInvocationFactory(t, nil)
+	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+	})
+
+	response := postInvocationExpectStatus(
+		t,
+		server.URL(),
+		factoryapi.InvocationRequest{
+			Args: &map[string]any{"input": 7},
+		},
+		http.StatusBadRequest,
+	)
+	if string(response.Code) != "BAD_REQUEST" {
+		t.Fatalf("invocation error code = %q, want BAD_REQUEST", response.Code)
 	}
 }
 
@@ -300,9 +340,11 @@ func textInvocationRequest(t *testing.T, text string, timeoutMillis *int64) fact
 	}); err != nil {
 		t.Fatalf("build invocation text content: %v", err)
 	}
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{part}
 	return factoryapi.InvocationRequest{
-		SourceKind:    factoryapi.InvocationInputSourceKindText,
-		Content:       factoryapi.WorkContent{part},
+		SourceKind:    &sourceKind,
+		Content:       &content,
 		TimeoutMillis: timeoutMillis,
 	}
 }

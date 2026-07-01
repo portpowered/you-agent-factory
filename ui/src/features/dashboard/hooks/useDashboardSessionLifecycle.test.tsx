@@ -224,6 +224,7 @@ describe("useDashboardSessionLifecycle", () => {
     });
 
     it("does not remove factory-definition queries again when session key is unchanged", () => {
+      const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
       const removeQueries = vi.spyOn(queryClient, "removeQueries");
 
       const { rerender } = renderHook(
@@ -242,12 +243,17 @@ describe("useDashboardSessionLifecycle", () => {
         rerender({ refreshToken: 1 });
       });
 
+      expect(invalidateQueries).toHaveBeenCalledTimes(1);
+      expect(removeQueries).not.toHaveBeenCalled();
+
+      invalidateQueries.mockClear();
       removeQueries.mockClear();
 
       act(() => {
         rerender({ refreshToken: 1 });
       });
 
+      expect(invalidateQueries).not.toHaveBeenCalled();
       expect(removeQueries).not.toHaveBeenCalled();
     });
   });
