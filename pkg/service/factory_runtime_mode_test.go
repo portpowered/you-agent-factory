@@ -1705,6 +1705,15 @@ func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 	}
 }
 
+func TestWireModelServiceCollaborator_UsesModelsServiceByDefault(t *testing.T) {
+	t.Parallel()
+
+	api := wireModelServiceCollaborator(nil, nil)
+	if _, ok := api.(*modelsservice.Service); !ok {
+		t.Fatalf("wireModelServiceCollaborator(nil) type = %T, want *modelsservice.Service", api)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this delegation test keeps the session-lifecycle facade sequence and collaborator assertions together on one compatibility seam.
 func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	t.Parallel()
