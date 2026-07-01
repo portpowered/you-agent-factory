@@ -73,8 +73,8 @@ type modelServiceDependencies struct {
 }
 
 type runtimeModelService struct {
-	deps        modelServiceDependencies
-	catalogList *modelsservice.Service
+	deps         modelServiceDependencies
+	modelService *modelsservice.Service
 }
 
 var _ ModelService = (*runtimeModelService)(nil)
@@ -83,11 +83,39 @@ var _ apisurface.ModelAPI = (*runtimeModelService)(nil)
 func newModelService(deps modelServiceDependencies) ModelService {
 	return &runtimeModelService{
 		deps: deps,
-		catalogList: modelsservice.New(modelsservice.Dependencies{
+		modelService: modelsservice.New(modelsservice.Dependencies{
 			RuntimeConfig: deps.runtimeConfig,
 			ModelHost:     deps.modelHost,
+			ModelAssetPuller: func() localmodels.AssetPuller {
+				if deps.modelAssetPuller == nil {
+					return nil
+				}
+				return deps.modelAssetPuller()
+			},
+			Logger: func() *zap.Logger { return deps.logger },
+			ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+				if deps.modelPullMetrics == nil {
+					return nil
+				}
+				recorder := deps.modelPullMetrics()
+				if recorder == nil {
+					return nil
+				}
+				return modelPullMetricsAdapter{inner: recorder}
+			},
 		}),
 	}
+}
+
+type modelPullMetricsAdapter struct {
+	inner ModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(InvocationMetric{
+		Name:   metric.Name,
+		Labels: metric.Labels,
+	})
 }
 
 func newFactoryModelService(fs *FactoryService) ModelService {
@@ -157,17 +185,17 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 }
 
 func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	if s == nil || s.catalogList == nil {
+	if s == nil || s.modelService == nil {
 		return modelsservice.New(modelsservice.Dependencies{}).ListModels(ctx)
 	}
-	return s.catalogList.ListModels(ctx)
+	return s.modelService.ListModels(ctx)
 }
 
 func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	if s == nil || s.catalogList == nil {
+	if s == nil || s.modelService == nil {
 		return modelsservice.New(modelsservice.Dependencies{}).GetModel(ctx, modelName)
 	}
-	return s.catalogList.GetModel(ctx, modelName)
+	return s.modelService.GetModel(ctx, modelName)
 }
 
 func (s *runtimeModelService) modelHost() modelhost.Host {
@@ -193,21 +221,10 @@ func (fs *FactoryService) modelHost() modelhost.Host {
 }
 
 func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	started := time.Now()
-	host := s.modelHost()
-	if host == nil {
-		puller := s.modelAssetPuller()
-		opts := localmodels.PullOptions{
-			RuntimeCacheInspector: puller,
-			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
-		}
-		result, err := localmodels.PullModelWithOptions(puller, ctx, s.currentRuntimeConfig(), modelName, opts)
-		s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
-		return result, err
+	if s == nil || s.modelService == nil {
+		return modelsservice.New(modelsservice.Dependencies{}).PullModel(ctx, modelName)
 	}
-	result, err := modelhost.PullWithHost(ctx, host, s.currentRuntimeConfig(), modelName)
-	s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
-	return result, err
+	return s.modelService.PullModel(ctx, modelName)
 }
 
 func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
