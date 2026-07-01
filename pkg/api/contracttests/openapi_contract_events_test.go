@@ -695,6 +695,8 @@ type syncPreflightIdentityScopeScenario struct {
 	WantClassification string         `json:"wantClassification"`
 }
 
+// TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip keeps
+// sync-preflight recovery contract coverage in this file to satisfy pkg-file-count.
 func TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
