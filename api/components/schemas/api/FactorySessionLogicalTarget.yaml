@@ -1,0 +1,20 @@
+type: object
+description: |
+  Client-safe normalized factory session target metadata derived from canonical
+  logical target references. This shape is safe to persist for remap and does not
+  expose secrets or internal runtime identifiers.
+additionalProperties: false
+required:
+  - kind
+  - folderPath
+properties:
+  kind:
+    $ref: './FactorySessionLogicalTargetKind.yaml'
+  folderPath:
+    type: string
+    description: Canonical absolute folder path for the normalized factory session target within the backend scope.
+  namedTarget:
+    type: string
+    description: Canonical named target identifier when kind is named.
+  providerBoundary:
+    $ref: './FactorySessionLogicalProviderBoundary.yaml'

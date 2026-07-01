@@ -25,6 +25,8 @@ type ProjectionContext struct {
 	Snapshot               *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	LifecycleControlStatus string
 	BackendScopeID         string
+	LogicalSessionKeyID    string
+	NormalizedTarget       *factoryapi.FactorySessionLogicalTarget
 	RuntimeStartedAt       time.Time
 	Enabled                []interfaces.EnabledTransition
 	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
@@ -123,10 +125,17 @@ func projectedSessionStreamIdentity(
 		}
 		streamGenerationID = lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
 	}
+	logicalSessionKeyID := strings.TrimSpace(ctx.LogicalSessionKeyID)
+	normalizedTarget := ctx.NormalizedTarget
+	if logicalSessionKeyID == "" {
+		return nil
+	}
 	return &factoryapi.FactorySessionStreamIdentity{
-		BackendScopeID:     backendScopeID,
-		FactorySessionID:   sessionID,
-		StreamGenerationID: streamGenerationID,
+		BackendScopeID:      backendScopeID,
+		LogicalSessionKeyID: logicalSessionKeyID,
+		FactorySessionID:    sessionID,
+		StreamGenerationID:  streamGenerationID,
+		NormalizedTarget:    normalizedTarget,
 	}
 }
 

@@ -1,0 +1,17 @@
+type: object
+description: Stable provider workspace or account boundary for a provider-backed logical session target. Values must not contain secret material.
+additionalProperties: false
+required:
+  - provider
+  - kind
+  - boundary
+properties:
+  provider:
+    type: string
+    description: Provider identifier for the normalized target.
+  kind:
+    type: string
+    description: Provider session kind for the normalized target.
+  boundary:
+    type: string
+    description: Stable provider workspace or account boundary without secret material.

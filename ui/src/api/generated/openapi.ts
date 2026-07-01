@@ -1394,10 +1394,40 @@ export interface components {
     FactorySessionStreamIdentity: {
       /** @description Stable backend process or scope identity for the current live session stream. */
       backendScopeID: string;
+      /** @description Canonical logical-session key derived from the normalized factory session target. This remains stable across live-session remaps for the same target. */
+      logicalSessionKeyID: string;
       /** @description Stable live Factory Session identifier for the current stream. */
       factorySessionID: string;
       /** @description Stable generation identifier for the current live session stream incarnation. */
       streamGenerationID: string;
+      normalizedTarget?: components["schemas"]["FactorySessionLogicalTarget"];
+    };
+    /**
+     * @description Client-safe normalized factory session target metadata derived from canonical
+     *     logical target references. This shape is safe to persist for remap and does not
+     *     expose secrets or internal runtime identifiers.
+     */
+    FactorySessionLogicalTarget: {
+      kind: components["schemas"]["FactorySessionLogicalTargetKind"];
+      /** @description Canonical absolute folder path for the normalized factory session target within the backend scope. */
+      folderPath: string;
+      /** @description Canonical named target identifier when kind is named. */
+      namedTarget?: string;
+      providerBoundary?: components["schemas"]["FactorySessionLogicalProviderBoundary"];
+    };
+    /**
+     * @description Canonical normalized factory session target kind used for logical identity.
+     * @enum {string}
+     */
+    FactorySessionLogicalTargetKind: FactorySessionLogicalTargetKind;
+    /** @description Stable provider workspace or account boundary for a provider-backed logical session target. Values must not contain secret material. */
+    FactorySessionLogicalProviderBoundary: {
+      /** @description Provider identifier for the normalized target. */
+      provider: string;
+      /** @description Provider session kind for the normalized target. */
+      kind: string;
+      /** @description Stable provider workspace or account boundary without secret material. */
+      boundary: string;
     };
     /**
      * @description Canonical lifecycle status for one live factory session runtime.
@@ -1507,6 +1537,7 @@ export interface components {
       factorySessionId?: string;
       /** @description Canonical event-stream generation identifier for the resolved live Factory Session. */
       streamGenerationId?: string;
+      normalizedTarget?: components["schemas"]["FactorySessionLogicalTarget"];
       /** @description True when cached stream-derived checkpoint state is safe to restore for the resolved identity set. */
       checkpointReusable: boolean;
       reconnectCursor: components["schemas"]["FactorySessionSyncPreflightReconnectCursor"];
@@ -4772,6 +4803,10 @@ export interface components {
     AfterEventId: string;
     /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
     AfterSequence: number;
+    /** @description Optional backend scope identifier used with logicalSessionKeyId to resolve the current live Factory Session when the requested session selector is missing or stale. When provided, resolution succeeds only when it matches the active backend scope. */
+    BackendScopeId: string;
+    /** @description Optional canonical logical-session key derived from the normalized factory session target. When the requested session selector is missing or stale, resolution uses backendScopeId plus this key to locate the replacement current live Factory Session. */
+    LogicalSessionKeyId: string;
   };
   requestBodies: never;
   headers: never;
@@ -5067,6 +5102,10 @@ export interface operations {
   getFactorySessionSyncPreflightBySessionId: {
     parameters: {
       query?: {
+        /** @description Optional backend scope identifier used with logicalSessionKeyId to resolve the current live Factory Session when the requested session selector is missing or stale. When provided, resolution succeeds only when it matches the active backend scope. */
+        backend_scope_id?: components["parameters"]["BackendScopeId"];
+        /** @description Optional canonical logical-session key derived from the normalized factory session target. When the requested session selector is missing or stale, resolution uses backendScopeId plus this key to locate the replacement current live Factory Session. */
+        logical_session_key_id?: components["parameters"]["LogicalSessionKeyId"];
         /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
         after_event_id?: components["parameters"]["AfterEventId"];
         /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
@@ -6285,6 +6324,13 @@ export const FactoryStopKind = {
 } as const;
 export type FactoryStopKind =
   (typeof FactoryStopKind)[keyof typeof FactoryStopKind];
+export const FactorySessionLogicalTargetKind = {
+  default: "default",
+  named: "named",
+  provider: "provider",
+} as const;
+export type FactorySessionLogicalTargetKind =
+  (typeof FactorySessionLogicalTargetKind)[keyof typeof FactorySessionLogicalTargetKind];
 export const FactorySessionStatus = {
   // The session runtime is actively processing work.
   ACTIVE: "ACTIVE",
@@ -6314,6 +6360,7 @@ export const FactorySessionSyncPreflightReasonCode = {
   cursor_stale: "cursor_stale",
   session_not_found: "session_not_found",
   logical_session_remap: "logical_session_remap",
+  invalid_target_reference: "invalid_target_reference",
 } as const;
 export type FactorySessionSyncPreflightReasonCode =
   (typeof FactorySessionSyncPreflightReasonCode)[keyof typeof FactorySessionSyncPreflightReasonCode];

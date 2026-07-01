@@ -2924,18 +2924,70 @@ components:
       additionalProperties: false
       required:
         - backendScopeID
+        - logicalSessionKeyID
         - factorySessionID
         - streamGenerationID
       properties:
         backendScopeID:
           type: string
           description: Stable backend process or scope identity for the current live session stream.
+        logicalSessionKeyID:
+          type: string
+          description: Canonical logical-session key derived from the normalized factory session target. This remains stable across live-session remaps for the same target.
         factorySessionID:
           type: string
           description: Stable live Factory Session identifier for the current stream.
         streamGenerationID:
           type: string
           description: Stable generation identifier for the current live session stream incarnation.
+        normalizedTarget:
+          $ref: '#/components/schemas/FactorySessionLogicalTarget'
+    FactorySessionLogicalTarget:
+      type: object
+      description: |
+        Client-safe normalized factory session target metadata derived from canonical
+        logical target references. This shape is safe to persist for remap and does not
+        expose secrets or internal runtime identifiers.
+      additionalProperties: false
+      required:
+        - kind
+        - folderPath
+      properties:
+        kind:
+          $ref: '#/components/schemas/FactorySessionLogicalTargetKind'
+        folderPath:
+          type: string
+          description: Canonical absolute folder path for the normalized factory session target within the backend scope.
+        namedTarget:
+          type: string
+          description: Canonical named target identifier when kind is named.
+        providerBoundary:
+          $ref: '#/components/schemas/FactorySessionLogicalProviderBoundary'
+    FactorySessionLogicalTargetKind:
+      type: string
+      description: Canonical normalized factory session target kind used for logical identity.
+      enum:
+        - default
+        - named
+        - provider
+    FactorySessionLogicalProviderBoundary:
+      type: object
+      description: Stable provider workspace or account boundary for a provider-backed logical session target. Values must not contain secret material.
+      additionalProperties: false
+      required:
+        - provider
+        - kind
+        - boundary
+      properties:
+        provider:
+          type: string
+          description: Provider identifier for the normalized target.
+        kind:
+          type: string
+          description: Provider session kind for the normalized target.
+        boundary:
+          type: string
+          description: Stable provider workspace or account boundary without secret material.
     FactorySessionStatus:
       type: string
       description: Canonical lifecycle status for one live factory session runtime.
@@ -3152,6 +3204,8 @@ components:
         streamGenerationId:
           type: string
           description: Canonical event-stream generation identifier for the resolved live Factory Session.
+        normalizedTarget:
+          $ref: '#/components/schemas/FactorySessionLogicalTarget'
         checkpointReusable:
           type: boolean
           description: True when cached stream-derived checkpoint state is safe to restore for the resolved identity set.
@@ -3165,6 +3219,7 @@ components:
         - cursor_stale
         - session_not_found
         - logical_session_remap
+        - invalid_target_reference
     FactorySessionSyncPreflightReconnectCursor:
       type: object
       additionalProperties: false

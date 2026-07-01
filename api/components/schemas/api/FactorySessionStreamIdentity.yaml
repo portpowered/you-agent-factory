@@ -2,15 +2,21 @@ type: object
 additionalProperties: false
 required:
   - backendScopeID
+  - logicalSessionKeyID
   - factorySessionID
   - streamGenerationID
 properties:
   backendScopeID:
     type: string
     description: Stable backend process or scope identity for the current live session stream.
+  logicalSessionKeyID:
+    type: string
+    description: Canonical logical-session key derived from the normalized factory session target. This remains stable across live-session remaps for the same target.
   factorySessionID:
     type: string
     description: Stable live Factory Session identifier for the current stream.
   streamGenerationID:
     type: string
     description: Stable generation identifier for the current live session stream incarnation.
+  normalizedTarget:
+    $ref: './FactorySessionLogicalTarget.yaml'

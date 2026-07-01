@@ -1014,6 +1014,10 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	if err != nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, err
 	}
+	if resolved.invalidTarget {
+		response.ReasonCode = factoryapi.InvalidTargetReference
+		return response, nil
+	}
 	if resolved.session == nil {
 		response.ReasonCode = factoryapi.SessionNotFound
 		return response, nil
@@ -1024,6 +1028,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(fs, session))
 	response.FactorySessionId = stringPointer(session.ID)
 	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
+	response.NormalizedTarget = factorySessionNormalizedLogicalTarget(fs, session)
 	if resolved.remapped {
 		response.ReasonCode = factoryapi.LogicalSessionRemap
 		return response, nil
@@ -1060,8 +1065,9 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 }
 
 type sessionSyncPreflightTarget struct {
-	session  *factorysessions.LiveSession
-	remapped bool
+	session       *factorysessions.LiveSession
+	remapped      bool
+	invalidTarget bool
 }
 
 func (fs *FactoryService) resolveSessionSyncPreflightTarget(
@@ -1079,7 +1085,7 @@ func (fs *FactoryService) resolveSessionSyncPreflightTarget(
 		return sessionSyncPreflightTarget{}, nil
 	}
 	if requestedLogicalSessionKeyID != "" && !logicaltarget.IsLogicalSessionKeyID(requestedLogicalSessionKeyID) {
-		return sessionSyncPreflightTarget{}, nil
+		return sessionSyncPreflightTarget{invalidTarget: true}, nil
 	}
 
 	var directSession *factorysessions.LiveSession
@@ -1190,7 +1196,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	projectionCtx := factorysessions.ProjectionContext{
 		Session:          session,
 		FactoryCfg:       factoryCfg,
-		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).runtimeInstanceID),
+		BackendScopeID:   factorySessionBackendScopeID(fs, session),
 		RuntimeStartedAt: liveSessionBundle(session).startedAtUTC,
 		Now:              time.Now().UTC(),
 	}
@@ -1210,6 +1216,8 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, err
 	}
 	projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
+	projectionCtx.LogicalSessionKeyID = factorySessionLogicalSessionKeyID(fs, session)
+	projectionCtx.NormalizedTarget = factorySessionNormalizedLogicalTarget(fs, session)
 	return projectionCtx, nil
 }
 
@@ -1399,6 +1407,11 @@ func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.L
 			return runtimeInstanceID
 		}
 	}
+	if session != nil {
+		if runtimeInstanceID := strings.TrimSpace(liveSessionBundle(session).runtimeInstanceID); runtimeInstanceID != "" {
+			return runtimeInstanceID
+		}
+	}
 	return ""
 }
 
@@ -1419,6 +1432,24 @@ func factorySessionLogicalSessionKeyID(fs *FactoryService, session *factorysessi
 		return ""
 	}
 	return logicaltarget.DeriveLogicalSessionKeyID(ref)
+}
+
+func factorySessionNormalizedLogicalTarget(
+	fs *FactoryService,
+	session *factorysessions.LiveSession,
+) *factoryapi.FactorySessionLogicalTarget {
+	if session == nil {
+		return nil
+	}
+	backendScopeID := factorySessionBackendScopeID(fs, session)
+	if backendScopeID == "" {
+		return nil
+	}
+	target, err := logicaltarget.APILogicalTargetFromSession(backendScopeID, session)
+	if err != nil || target == nil {
+		return nil
+	}
+	return target
 }
 
 func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {

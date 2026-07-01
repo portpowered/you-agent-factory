@@ -1539,7 +1539,10 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableA
 	if first.Runtime.StreamIdentity == nil || second.Runtime.StreamIdentity == nil {
 		t.Fatalf("stream identity missing across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
 	}
-	if *first.Runtime.StreamIdentity != *second.Runtime.StreamIdentity {
+	if first.Runtime.StreamIdentity.BackendScopeID != second.Runtime.StreamIdentity.BackendScopeID ||
+		first.Runtime.StreamIdentity.FactorySessionID != second.Runtime.StreamIdentity.FactorySessionID ||
+		first.Runtime.StreamIdentity.LogicalSessionKeyID != second.Runtime.StreamIdentity.LogicalSessionKeyID ||
+		first.Runtime.StreamIdentity.StreamGenerationID != second.Runtime.StreamIdentity.StreamGenerationID {
 		t.Fatalf("stream identity changed across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
 	}
 	if first.Runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
@@ -3113,6 +3116,28 @@ func TestFactoryService_GetFactorySessionSyncPreflight_UnresolvedLogicalTargetRe
 	}
 }
 
+func TestFactoryService_GetFactorySessionSyncPreflight_InvalidLogicalSessionKeyIDReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	invalidLogicalSessionKeyID := "not-a-logical-session-key"
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
+		LogicalSessionKeyID: &invalidLogicalSessionKeyID,
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(invalid-key): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, response, factoryapi.InvalidTargetReference, "invalid-key")
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false")
+	}
+	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.NormalizedTarget != nil {
+		t.Fatalf("invalid-target identity fields = %#v, want nil", response)
+	}
+}
+
 func TestFactoryService_GetFactorySessionSyncPreflight_WrongBackendScopeReturnsTypedOutcome(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		rootConfig: minimalFactoryConfig(),
@@ -3215,6 +3240,9 @@ func assertSyncPreflightDefaultSessionIdentity(
 	}
 	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, defaultFactorySessionID) {
 		t.Fatalf("streamGenerationId = %#v, want session-scoped generation", response.StreamGenerationId)
+	}
+	if response.NormalizedTarget == nil || response.NormalizedTarget.Kind != factoryapi.FactorySessionLogicalTargetKindDefault {
+		t.Fatalf("normalizedTarget = %#v, want default logical target", response.NormalizedTarget)
 	}
 }
 

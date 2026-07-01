@@ -1583,6 +1583,12 @@ components:
       $ref: './components/schemas/api/FactoryStopSummary.yaml'
     FactorySessionStreamIdentity:
       $ref: './components/schemas/api/FactorySessionStreamIdentity.yaml'
+    FactorySessionLogicalTarget:
+      $ref: './components/schemas/api/FactorySessionLogicalTarget.yaml'
+    FactorySessionLogicalTargetKind:
+      $ref: './components/schemas/api/FactorySessionLogicalTargetKind.yaml'
+    FactorySessionLogicalProviderBoundary:
+      $ref: './components/schemas/api/FactorySessionLogicalProviderBoundary.yaml'
     FactorySessionStatus:
       $ref: './components/schemas/api/FactorySessionStatus.yaml'
     FactorySessionProgress:

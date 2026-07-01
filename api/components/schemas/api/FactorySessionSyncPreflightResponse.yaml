@@ -26,6 +26,8 @@ properties:
   streamGenerationId:
     type: string
     description: Canonical event-stream generation identifier for the resolved live Factory Session.
+  normalizedTarget:
+    $ref: './FactorySessionLogicalTarget.yaml'
   checkpointReusable:
     type: boolean
     description: True when cached stream-derived checkpoint state is safe to restore for the resolved identity set.

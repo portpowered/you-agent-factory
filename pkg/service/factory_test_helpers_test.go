@@ -44,9 +44,18 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 		svc.sessions = factorysessions.NewRegistry()
 	}
 	handle := &liveRuntimeHandle{runtime: bundle, runDone: make(chan struct{})}
-	svc.registerLiveSession(defaultFactorySessionID, handle, FactorySessionTarget{
+	target := FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
-	}, true)
+	}
+	if svc.cfg != nil {
+		if folderPath := strings.TrimSpace(svc.cfg.Dir); folderPath != "" {
+			target.FolderPath = folderPath
+		}
+	}
+	if strings.TrimSpace(target.FolderPath) == "" && strings.TrimSpace(svc.factoryRootDir) != "" {
+		target.FolderPath = svc.factoryRootDir
+	}
+	svc.registerLiveSession(defaultFactorySessionID, handle, target, true)
 	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
 }
 

@@ -277,6 +277,13 @@ const (
 	FactorySessionListScopePersisted FactorySessionListScope = "persisted"
 )
 
+// Defines values for FactorySessionLogicalTargetKind.
+const (
+	FactorySessionLogicalTargetKindDefault  FactorySessionLogicalTargetKind = "default"
+	FactorySessionLogicalTargetKindNamed    FactorySessionLogicalTargetKind = "named"
+	FactorySessionLogicalTargetKindProvider FactorySessionLogicalTargetKind = "provider"
+)
+
 // Defines values for FactorySessionResultMode.
 const (
 	FactorySessionResultModeFinal   FactorySessionResultMode = "final"
@@ -308,10 +315,11 @@ const (
 
 // Defines values for FactorySessionSyncPreflightReasonCode.
 const (
-	CursorStale         FactorySessionSyncPreflightReasonCode = "cursor_stale"
-	LogicalSessionRemap FactorySessionSyncPreflightReasonCode = "logical_session_remap"
-	Ok                  FactorySessionSyncPreflightReasonCode = "ok"
-	SessionNotFound     FactorySessionSyncPreflightReasonCode = "session_not_found"
+	CursorStale            FactorySessionSyncPreflightReasonCode = "cursor_stale"
+	InvalidTargetReference FactorySessionSyncPreflightReasonCode = "invalid_target_reference"
+	LogicalSessionRemap    FactorySessionSyncPreflightReasonCode = "logical_session_remap"
+	Ok                     FactorySessionSyncPreflightReasonCode = "ok"
+	SessionNotFound        FactorySessionSyncPreflightReasonCode = "session_not_found"
 )
 
 // Defines values for FactorySessionTargetRefKind.
@@ -2330,6 +2338,38 @@ type FactorySessionLiveResult struct {
 	Status FactorySessionStatus `json:"status"`
 }
 
+// FactorySessionLogicalProviderBoundary Stable provider workspace or account boundary for a provider-backed logical session target. Values must not contain secret material.
+type FactorySessionLogicalProviderBoundary struct {
+	// Boundary Stable provider workspace or account boundary without secret material.
+	Boundary string `json:"boundary"`
+
+	// Kind Provider session kind for the normalized target.
+	Kind string `json:"kind"`
+
+	// Provider Provider identifier for the normalized target.
+	Provider string `json:"provider"`
+}
+
+// FactorySessionLogicalTarget Client-safe normalized factory session target metadata derived from canonical
+// logical target references. This shape is safe to persist for remap and does not
+// expose secrets or internal runtime identifiers.
+type FactorySessionLogicalTarget struct {
+	// FolderPath Canonical absolute folder path for the normalized factory session target within the backend scope.
+	FolderPath string `json:"folderPath"`
+
+	// Kind Canonical normalized factory session target kind used for logical identity.
+	Kind FactorySessionLogicalTargetKind `json:"kind"`
+
+	// NamedTarget Canonical named target identifier when kind is named.
+	NamedTarget *string `json:"namedTarget,omitempty"`
+
+	// ProviderBoundary Stable provider workspace or account boundary for a provider-backed logical session target. Values must not contain secret material.
+	ProviderBoundary *FactorySessionLogicalProviderBoundary `json:"providerBoundary,omitempty"`
+}
+
+// FactorySessionLogicalTargetKind Canonical normalized factory session target kind used for logical identity.
+type FactorySessionLogicalTargetKind string
+
 // FactorySessionPartialResult defines model for FactorySessionPartialResult.
 type FactorySessionPartialResult struct {
 	// CheckpointRefs Checkpoint refs associated with the current partial result.
@@ -2517,6 +2557,14 @@ type FactorySessionStreamIdentity struct {
 	// FactorySessionID Stable live Factory Session identifier for the current stream.
 	FactorySessionID string `json:"factorySessionID"`
 
+	// LogicalSessionKeyID Canonical logical-session key derived from the normalized factory session target. This remains stable across live-session remaps for the same target.
+	LogicalSessionKeyID string `json:"logicalSessionKeyID"`
+
+	// NormalizedTarget Client-safe normalized factory session target metadata derived from canonical
+	// logical target references. This shape is safe to persist for remap and does not
+	// expose secrets or internal runtime identifiers.
+	NormalizedTarget *FactorySessionLogicalTarget `json:"normalizedTarget,omitempty"`
+
 	// StreamGenerationID Stable generation identifier for the current live session stream incarnation.
 	StreamGenerationID string `json:"streamGenerationID"`
 }
@@ -2612,6 +2660,11 @@ type FactorySessionSyncPreflightResponse struct {
 
 	// LogicalSessionKeyId Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
 	LogicalSessionKeyId *string `json:"logicalSessionKeyId,omitempty"`
+
+	// NormalizedTarget Client-safe normalized factory session target metadata derived from canonical
+	// logical target references. This shape is safe to persist for remap and does not
+	// expose secrets or internal runtime identifiers.
+	NormalizedTarget *FactorySessionLogicalTarget `json:"normalizedTarget,omitempty"`
 
 	// ReasonCode Stable backend-owned session sync preflight outcome code.
 	ReasonCode      FactorySessionSyncPreflightReasonCode      `json:"reasonCode"`

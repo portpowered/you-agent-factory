@@ -5,3 +5,4 @@ enum:
   - cursor_stale
   - session_not_found
   - logical_session_remap
+  - invalid_target_reference
