@@ -21,6 +21,7 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -733,19 +734,15 @@ func (fs *FactoryService) startReplacementSessionRuntime(
 	serviceCtx context.Context,
 	replacement *factoryRuntimeBundle,
 ) (*liveRuntimeHandle, error) {
-	replacementHandle := fs.startLiveRuntime(serviceCtx, replacement)
-	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return nil, fmt.Errorf("start replacement Runtime: %w", err)
-	}
-	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) != interfaces.RuntimeModeService {
-		return replacementHandle, nil
-	}
-	if err := fs.startLiveRuntimeSidecars(serviceCtx, replacementHandle); err != nil {
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return nil, fmt.Errorf("start replacement runtime sidecars: %w", err)
-	}
-	return replacementHandle, nil
+	serviceMode := runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) == interfaces.RuntimeModeService
+	return factoryservice.StartReplacement(factoryservice.StartReplacementInput{
+		ReadinessCtx:                ctx,
+		ServiceCtx:                  serviceCtx,
+		Bundle:                      replacement,
+		Clock:                       fs.clock,
+		AttachSidecars:              fs.startLiveRuntimeSidecars,
+		AttachSidecarsInServiceMode: serviceMode,
+	})
 }
 
 //nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.
@@ -776,17 +773,15 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 	serviceCtx := sessionServiceContext(ctx, runState)
 	isActiveSession := runState != nil && runState.sessionID == session.ID
 
-	restoreCurrentSidecars := false
 	serviceMode := runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) == interfaces.RuntimeModeService
-	if serviceMode {
-		fs.stopLiveRuntimeSidecars(handle)
-		restoreCurrentSidecars = true
-		defer func() {
-			if restoreCurrentSidecars {
-				fs.restoreLiveRuntimeSidecars(runState)
-			}
-		}()
+	attempt := &factoryservice.ReplacementAttempt{
+		Current:         handle,
+		ServiceCtx:      serviceCtx,
+		ServiceMode:     serviceMode,
+		RestoreSidecars: fs.startLiveRuntimeSidecars,
 	}
+	attempt.Begin()
+	defer attempt.End()
 
 	replacementHandle, err := fs.startReplacementSessionRuntime(ctx, serviceCtx, replacement)
 	if err != nil {
@@ -794,7 +789,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 	}
 
 	fs.publishFactoryChangeEvent(ctx, handle, replacement)
-	restoreCurrentSidecars = false
+	attempt.Commit()
 	executionBaseDir := strings.TrimSpace(session.ExecutionBaseDir)
 	if replacement.RuntimeCfg != nil {
 		if runtimeBaseDir := strings.TrimSpace(replacement.RuntimeCfg.RuntimeBaseDir()); runtimeBaseDir != "" {

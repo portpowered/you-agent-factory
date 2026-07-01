@@ -792,18 +792,7 @@ func (fs *FactoryService) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
 }
 
 func (c *runtimeFactoryCoordinator) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
-	if handle == nil {
-		return
-	}
-	handle.SidecarMu.Lock()
-	cancel := handle.SidecarCancel
-	handle.SidecarCancel = nil
-	handle.SidecarMu.Unlock()
-	if cancel == nil {
-		return
-	}
-	cancel()
-	handle.Sidecars.Wait()
+	factoryservice.StopSidecars(handle)
 }
 
 func (fs *FactoryService) restoreLiveRuntimeSidecars(runState *serviceRunState) {
