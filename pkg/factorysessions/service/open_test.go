@@ -10,7 +10,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	"go.uber.org/zap"
 )
 
 type openTestHost struct {
@@ -92,6 +94,45 @@ func (h *openTestHost) ObserveLiveLifecycleControl(
 
 func (h *openTestHost) DurableExecution() factorysessionexecution.Service {
 	return nil
+}
+
+func (h *openTestHost) ResponseStreams(*factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+	return nil
+}
+
+func (h *openTestHost) NewResponseStream() *factorysessions.SessionResponseStream {
+	return factorysessions.NewSessionResponseStream()
+}
+
+func (h *openTestHost) CloseResponseStreams(*factorysessions.LiveSession) {}
+
+func (h *openTestHost) CloseResponseStreamDispatch(*factorysessions.LiveSession, string) bool {
+	return false
+}
+
+func (h *openTestHost) JavaScriptCheckpointStore(*factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
+	return nil
+}
+
+func (h *openTestHost) ObserveResponseStreamPublished(*factorysessions.LiveSession, string, responsestream.Event) {
+}
+
+func (h *openTestHost) ObserveResponseStreamCompaction(
+	*factorysessions.LiveSession,
+	string,
+	string,
+	responsestream.CompactionSummary,
+) {
+}
+
+func (h *openTestHost) ObserveResponseStreamDegraded(
+	*factorysessions.LiveSession,
+	string,
+	string,
+	string,
+	*zap.Logger,
+	error,
+) {
 }
 
 func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {

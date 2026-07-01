@@ -11,6 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	"go.uber.org/zap"
 )
 
 // sessionGateway is the injectable session gateway collaborator seam.
@@ -29,6 +32,12 @@ type sessionGateway interface {
 	ApproveDurableFactorySession(context.Context, string, factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	RetryDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	InterruptDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	SubscribeSessionResponseStream(sessionID string, dispatchID string, afterSequence int64) (*factorysessions.SessionResponseStreamSubscription, error)
+	SessionResponseStreamDispatchIDs(sessionID string) ([]string, error)
+	CloseSessionResponseStreams(session *factorysessions.LiveSession)
+	JavaScriptCheckpointStore(session *factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore
+	InferenceProgressPublisherFactory(logger *zap.Logger) func(sessionID string) workerprovider.InferenceProgressPublisher
+	DispatchCompletionObserverFactory() func(sessionID string) func(string)
 }
 
 var _ sessionGateway = (*factorysessionservice.Service)(nil)
@@ -131,6 +140,74 @@ func (h sessionGatewayHost) DurableExecution() factorysessionexecution.Service {
 		return nil
 	}
 	return h.FactoryService.durableExecutionService()
+}
+
+func (h sessionGatewayHost) ResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+	if h.FactoryService == nil {
+		return nil
+	}
+	return h.FactoryService.sessionResponseStreams(session)
+}
+
+func (h sessionGatewayHost) NewResponseStream() *factorysessions.SessionResponseStream {
+	if h.FactoryService == nil {
+		return factorysessions.NewSessionResponseStream()
+	}
+	return h.FactoryService.newSessionResponseStreamInstance()
+}
+
+func (h sessionGatewayHost) CloseResponseStreams(session *factorysessions.LiveSession) {
+	if h.FactoryService == nil {
+		return
+	}
+	h.FactoryService.closeSessionResponseStreamsDirect(session)
+}
+
+func (h sessionGatewayHost) CloseResponseStreamDispatch(session *factorysessions.LiveSession, dispatchID string) bool {
+	if h.FactoryService == nil {
+		return false
+	}
+	return h.FactoryService.closeSessionResponseStreamDispatchDirect(session, dispatchID)
+}
+
+func (h sessionGatewayHost) JavaScriptCheckpointStore(session *factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
+	if h.FactoryService == nil {
+		return nil
+	}
+	return h.FactoryService.javascriptCheckpointStoreDirect(session)
+}
+
+func (h sessionGatewayHost) ObserveResponseStreamPublished(session *factorysessions.LiveSession, sessionID string, event responsestream.Event) {
+	if h.FactoryService == nil {
+		return
+	}
+	h.FactoryService.observeResponseStreamPublished(session, sessionID, event)
+}
+
+func (h sessionGatewayHost) ObserveResponseStreamCompaction(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	dispatchID string,
+	summary responsestream.CompactionSummary,
+) {
+	if h.FactoryService == nil {
+		return
+	}
+	h.FactoryService.observeResponseStreamCompaction(session, sessionID, dispatchID, summary)
+}
+
+func (h sessionGatewayHost) ObserveResponseStreamDegraded(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	dispatchID string,
+	reason string,
+	fallbackLogger *zap.Logger,
+	err error,
+) {
+	if h.FactoryService == nil {
+		return
+	}
+	h.FactoryService.observeResponseStreamDegraded(session, sessionID, dispatchID, reason, fallbackLogger, err)
 }
 
 func newSessionGatewayService(fs *FactoryService) *factorysessionservice.Service {

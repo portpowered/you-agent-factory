@@ -28,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
 
@@ -1606,6 +1607,35 @@ func (s *stubSessionGateway) InterruptDurableFactorySessionDispatch(_ context.Co
 	s.calls = append(s.calls, "interrupt-durable-dispatch")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) SubscribeSessionResponseStream(string, string, int64) (*factorysessions.SessionResponseStreamSubscription, error) {
+	s.calls = append(s.calls, "subscribe-response-stream")
+	return nil, nil
+}
+
+func (s *stubSessionGateway) SessionResponseStreamDispatchIDs(string) ([]string, error) {
+	s.calls = append(s.calls, "response-stream-dispatch-ids")
+	return nil, nil
+}
+
+func (s *stubSessionGateway) CloseSessionResponseStreams(*factorysessions.LiveSession) {
+	s.calls = append(s.calls, "close-response-streams")
+}
+
+func (s *stubSessionGateway) JavaScriptCheckpointStore(*factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
+	s.calls = append(s.calls, "javascript-checkpoint-store")
+	return nil
+}
+
+func (s *stubSessionGateway) InferenceProgressPublisherFactory(*zap.Logger) func(string) workerprovider.InferenceProgressPublisher {
+	s.calls = append(s.calls, "inference-progress-publisher-factory")
+	return nil
+}
+
+func (s *stubSessionGateway) DispatchCompletionObserverFactory() func(string) func(string) {
+	s.calls = append(s.calls, "dispatch-completion-observer-factory")
+	return nil
 }
 
 type stubFactoryCoordinator struct {
