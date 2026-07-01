@@ -6,6 +6,7 @@ import type {
   probeFactoryEventStreamRecovery,
 } from "../../../../api/events";
 import { deleteTimelineCheckpoint } from "../../../timeline/public";
+import type { StreamDerivedCacheIdentity } from "../../../timeline/lib/stream-derived-cache-identity";
 import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
 import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
 import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";
@@ -111,6 +112,7 @@ async function recoverStaleCursor({
   resetTimeline,
   setStreamState,
   staleCursorRecoveryAttemptedRef,
+  streamIdentity,
   streamSessionID,
 }: {
   cursor: FactoryEventReconnectCursor;
@@ -130,6 +132,7 @@ async function recoverStaleCursor({
     >["streamState"],
   ) => void;
   staleCursorRecoveryAttemptedRef: RefObject<boolean>;
+  streamIdentity: StreamDerivedCacheIdentity | null;
   streamSessionID: string;
 }): Promise<boolean> {
   try {
@@ -151,9 +154,10 @@ async function recoverStaleCursor({
       queryClient,
       streamSessionID,
       resetTimeline,
+      streamIdentity,
     );
     if (typeof window !== "undefined") {
-      await deleteTimelineCheckpoint(window.indexedDB, streamSessionID);
+      await deleteTimelineCheckpoint(window.indexedDB, streamIdentity);
     }
     setStreamState(reconnectingStreamState(locale));
     openDashboardStream(undefined);
@@ -175,6 +179,7 @@ export async function reconnectAfterStreamError({
   refs,
   resetTimeline,
   setStreamState,
+  streamIdentity,
   streamSessionID,
 }: {
   cursor: FactoryEventReconnectCursor;
@@ -192,6 +197,7 @@ export async function reconnectAfterStreamError({
       typeof useDashboardStreamStore.getState
     >["streamState"],
   ) => void;
+  streamIdentity: StreamDerivedCacheIdentity | null;
   streamSessionID: string;
 }): Promise<void> {
   if (!refs.staleCursorRecoveryAttemptedRef.current) {
@@ -211,6 +217,7 @@ export async function reconnectAfterStreamError({
         resetTimeline,
         setStreamState,
         staleCursorRecoveryAttemptedRef: refs.staleCursorRecoveryAttemptedRef,
+        streamIdentity,
         streamSessionID,
       });
       if (recovered) {

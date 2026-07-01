@@ -8,7 +8,13 @@ export {
   deleteTimelineCheckpoint,
   clearTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
+  purgeLegacyTimelineCheckpoints,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,
 } from "../state/timelineCheckpointPersistence";
+export {
+  normalizeStreamDerivedCacheIdentity,
+  streamDerivedCacheKeyPrefix,
+  type StreamDerivedCacheIdentity,
+} from "../lib/stream-derived-cache-identity";

@@ -67,7 +67,8 @@ function buildFactorySessionGetResponse() {
       status: "IDLE",
       streamIdentity: {
         backendScopeID: "/workspace::test-backend",
-        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        factorySessionID: "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+        logicalSessionKeyID: "/workspace::default::",
         streamGenerationID: "2026-06-26T00:00:00Z",
       },
       usage: { resources: [] },

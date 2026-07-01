@@ -6,7 +6,7 @@ import {
   clearTimelineCheckpoint,
   type FactoryTimelineCheckpoint,
   persistTimelineCheckpoint,
-  readFactoryTimelineDebugOptions,
+  purgeLegacyTimelineCheckpoints,
   readTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
@@ -18,6 +18,7 @@ import { useDashboardInitialReconnectCursor } from "./useDashboardInitialReconne
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
+import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
@@ -36,11 +37,15 @@ function useGuardedTimelineCheckpointBootstrap({
   checkpointsDisabled,
   rawSessionID,
   restoreCheckpoint,
+  setResolvedStreamIdentity,
 }: {
   checkpointHydrationKey: string | null;
   checkpointsDisabled: boolean;
   rawSessionID: string | null;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  setResolvedStreamIdentity: (
+    streamIdentity: TimelineCheckpointStreamIdentity | null,
+  ) => void;
 }) {
   const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
   const [checkpointHydratedKey, setCheckpointHydratedKey] =
@@ -65,6 +70,7 @@ function useGuardedTimelineCheckpointBootstrap({
     setPreflightError(null);
     setPreflightReadyKey(null);
     setStreamIdentity(null);
+    setResolvedStreamIdentity(null);
 
     if (
       checkpointHydrationKey == null ||
@@ -86,10 +92,11 @@ function useGuardedTimelineCheckpointBootstrap({
           response.session,
         );
         setStreamIdentity(checkpointStreamIdentity);
+        setResolvedStreamIdentity(checkpointStreamIdentity);
+        await purgeLegacyTimelineCheckpoints(window.indexedDB);
         setPreflightReadyKey(checkpointHydrationKey);
         const checkpoint = await readTimelineCheckpoint(
           window.indexedDB,
-          rawSessionID,
           checkpointStreamIdentity,
         );
         if (cancelled) {
@@ -125,6 +132,7 @@ function useGuardedTimelineCheckpointBootstrap({
     checkpointsDisabled,
     rawSessionID,
     restoreCheckpoint,
+    setResolvedStreamIdentity,
     setStreamState,
   ]);
 
@@ -140,12 +148,10 @@ function useGuardedTimelineCheckpointBootstrap({
 function usePersistedTimelineCheckpoint({
   checkpoint,
   checkpointsDisabled,
-  rawSessionID,
   streamIdentity,
 }: {
   checkpoint: FactoryTimelineCheckpoint | undefined;
   checkpointsDisabled: boolean;
-  rawSessionID: string | null;
   streamIdentity: TimelineCheckpointStreamIdentity | null;
 }) {
   useEffect(() => {
@@ -155,7 +161,6 @@ function usePersistedTimelineCheckpoint({
     const persistHandle = window.setTimeout(() => {
       void persistTimelineCheckpoint(
         window.indexedDB,
-        rawSessionID,
         checkpoint,
         streamIdentity,
       );
@@ -163,18 +168,15 @@ function usePersistedTimelineCheckpoint({
     return () => {
       window.clearTimeout(persistHandle);
     };
-  }, [checkpoint, checkpointsDisabled, rawSessionID, streamIdentity]);
+  }, [checkpoint, checkpointsDisabled, streamIdentity]);
 }
 
 function streamIdentityFromSessionResponse(session: {
-  id: string;
   runtime?: {
-    lifecycle?: {
-      startedAt?: string;
-    };
     streamIdentity?: {
       backendScopeID?: string;
       factorySessionID?: string;
+      logicalSessionKeyID?: string;
       streamGenerationID?: string;
     };
   };
@@ -183,6 +185,7 @@ function streamIdentityFromSessionResponse(session: {
   if (
     typeof identity?.backendScopeID !== "string" ||
     typeof identity.factorySessionID !== "string" ||
+    typeof identity.logicalSessionKeyID !== "string" ||
     typeof identity.streamGenerationID !== "string"
   ) {
     return null;
@@ -190,6 +193,7 @@ function streamIdentityFromSessionResponse(session: {
   return {
     backendScopeID: identity.backendScopeID,
     factorySessionID: identity.factorySessionID,
+    logicalSessionKeyID: identity.logicalSessionKeyID,
     streamGenerationID: identity.streamGenerationID,
   };
 }
@@ -208,6 +212,9 @@ export function useDashboardSnapshot({
     (state) => state.restoreCheckpoint,
   );
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
+  const setResolvedStreamIdentity = useDashboardStreamStore(
+    (state) => state.setResolvedStreamIdentity,
+  );
   const { error, isInitialLoading, snapshot, streamState } =
     useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
@@ -219,7 +226,7 @@ export function useDashboardSnapshot({
   const invalidatedReconnectCursorRef = useRef(false);
   const lastPersistedCheckpointRef =
     useRef<FactoryTimelineCheckpoint | null>(null);
-  const lastSessionIDRef = useRef<string | null>(null);
+  const lastSessionKeyRef = useRef<string | null>(null);
   const queuedAppendRef =
     useRef<(events: FactoryEvent[]) => void>(appendEvents);
 
@@ -242,6 +249,7 @@ export function useDashboardSnapshot({
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
     rawSessionID,
     restoreCheckpoint,
+    setResolvedStreamIdentity,
   });
 
   const resumedReconnectCursor = useDashboardInitialReconnectCursor({
@@ -252,11 +260,11 @@ export function useDashboardSnapshot({
 
   if (
     lastPersistedCheckpointRef.current !== persistedCheckpoint ||
-    lastSessionIDRef.current !== rawSessionID
+    lastSessionKeyRef.current !== checkpointHydrationKey
   ) {
     invalidatedReconnectCursorRef.current = false;
     lastPersistedCheckpointRef.current = persistedCheckpoint;
-    lastSessionIDRef.current = rawSessionID;
+    lastSessionKeyRef.current = checkpointHydrationKey;
   }
 
   const initialReconnectCursor = useMemo(
@@ -276,7 +284,6 @@ export function useDashboardSnapshot({
   usePersistedTimelineCheckpoint({
     checkpoint: currentReplayCheckpoint,
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
-    rawSessionID,
     streamIdentity,
   });
 
@@ -293,7 +300,8 @@ export function useDashboardSnapshot({
       checkpointHydrated &&
       preflightReady &&
       rawSessionID != null &&
-      !isPaused,
+      !isPaused &&
+      streamIdentity != null,
     initialReconnectCursor,
     locale,
     onEvent: handleStreamEvent,
@@ -301,6 +309,7 @@ export function useDashboardSnapshot({
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
     sessionID: rawSessionID,
+    streamIdentity,
   });
 
   useDashboardTimelineMemoryDebug({ debugOptions, eventCount });

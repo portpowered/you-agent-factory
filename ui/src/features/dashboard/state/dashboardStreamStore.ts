@@ -1,10 +1,15 @@
 import { create } from "zustand";
 
 import type { DashboardStreamState } from "../../../api/dashboard/types";
+import type { StreamDerivedCacheIdentity } from "../../timeline/lib/stream-derived-cache-identity";
 import { getDashboardStreamMessages } from "../messages/dashboard-stream";
 
 interface DashboardStreamStoreState {
   resetStreamState: (locale?: string | null) => void;
+  resolvedStreamIdentity: StreamDerivedCacheIdentity | null;
+  setResolvedStreamIdentity: (
+    streamIdentity: StreamDerivedCacheIdentity | null,
+  ) => void;
   setStreamState: (streamState: DashboardStreamState) => void;
   streamState: DashboardStreamState;
 }
@@ -21,7 +26,14 @@ export function createDefaultDashboardStreamState(
 export const useDashboardStreamStore = create<DashboardStreamStoreState>(
   (set) => ({
     resetStreamState: (locale) => {
-      set({ streamState: createDefaultDashboardStreamState(locale) });
+      set({
+        resolvedStreamIdentity: null,
+        streamState: createDefaultDashboardStreamState(locale),
+      });
+    },
+    resolvedStreamIdentity: null,
+    setResolvedStreamIdentity: (streamIdentity) => {
+      set({ resolvedStreamIdentity: streamIdentity });
     },
     setStreamState: (streamState) => {
       set({ streamState });

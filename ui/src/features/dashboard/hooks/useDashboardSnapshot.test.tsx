@@ -128,11 +128,23 @@ function timelineSnapshot(snapshot: DashboardSnapshot): WorldState {
   };
 }
 
+const RESOLVED_DEFAULT_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function resolvedDefaultStreamIdentity() {
+  return {
+    backendScopeID: "backend-scope-a",
+    factorySessionID: RESOLVED_DEFAULT_SESSION_UUID,
+    logicalSessionKeyID: "logical-default",
+    streamGenerationID: "2026-06-26T00:00:00Z",
+  };
+}
+
 function checkpointStorageKey(): string {
+  const identity = resolvedDefaultStreamIdentity();
   return [
-    "backend-scope-a",
-    DEFAULT_FACTORY_SESSION_ID,
-    "2026-06-26T00:00:00Z",
+    identity.backendScopeID,
+    identity.factorySessionID,
+    identity.streamGenerationID,
   ].join("::");
 }
 
@@ -165,11 +177,7 @@ describe("useDashboardSnapshot composer", () => {
               inFlightCount: 0,
               totalTokens: 0,
             },
-            streamIdentity: {
-              backendScopeID: "backend-scope-a",
-              factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-              streamGenerationID: "2026-06-26T00:00:00Z",
-            },
+            streamIdentity: resolvedDefaultStreamIdentity(),
             status: "IDLE",
             usage: { resources: [] },
           },
@@ -184,6 +192,7 @@ describe("useDashboardSnapshot composer", () => {
       },
     });
     useDashboardStreamStore.setState({
+      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useDashboardSessionStore.setState({
@@ -208,6 +217,7 @@ describe("useDashboardSnapshot composer", () => {
     replayHarness.reset();
     window.sessionStorage.clear();
     useDashboardStreamStore.setState({
+      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useDashboardSessionStore.setState({
@@ -297,11 +307,7 @@ describe("useDashboardSnapshot composer", () => {
                     inFlightCount: 0,
                     totalTokens: 0,
                   },
-                  streamIdentity: {
-                    backendScopeID: "backend-scope-a",
-                    factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-                    streamGenerationID: "2026-06-26T00:00:00Z",
-                  },
+                  streamIdentity: resolvedDefaultStreamIdentity(),
                   status: "IDLE",
                   usage: { resources: [] },
                 },
@@ -326,12 +332,7 @@ describe("useDashboardSnapshot composer", () => {
     await waitFor(() => {
       expect(readCheckpointSpy).toHaveBeenCalledWith(
         window.indexedDB,
-        DEFAULT_FACTORY_SESSION_ID,
-        {
-          backendScopeID: "backend-scope-a",
-          factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-          streamGenerationID: "2026-06-26T00:00:00Z",
-        },
+        resolvedDefaultStreamIdentity(),
       );
     });
     await waitFor(() => {
@@ -488,11 +489,7 @@ describe("useDashboardSnapshot composer", () => {
     });
     await waitFor(async () => {
       await expect(
-        readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
-          backendScopeID: "backend-scope-a",
-          factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-          streamGenerationID: "2026-06-26T00:00:00Z",
-        }),
+        readTimelineCheckpoint(window.indexedDB, resolvedDefaultStreamIdentity()),
       ).resolves.toEqual(
         expect.objectContaining({
           afterEventId: "checkpoint-event-7",
@@ -544,11 +541,7 @@ describe("useDashboardSnapshot composer", () => {
     );
     expect(useFactoryTimelineStore.getState().selectedTick).not.toBe(7);
     await expect(
-      readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
-        backendScopeID: "backend-scope-a",
-        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-        streamGenerationID: "2026-06-26T00:00:00Z",
-      }),
+      readTimelineCheckpoint(window.indexedDB, resolvedDefaultStreamIdentity()),
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
@@ -561,14 +554,9 @@ describe("useDashboardSnapshot composer", () => {
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },
-      schemaVersion: 2,
-      sessionID: DEFAULT_FACTORY_SESSION_ID,
+      schemaVersion: 3,
       storageKey: checkpointStorageKey(),
-      streamIdentity: {
-        backendScopeID: "backend-scope-a",
-        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-        streamGenerationID: "2026-06-26T00:00:00Z",
-      },
+      streamIdentity: resolvedDefaultStreamIdentity(),
     });
     vi.stubGlobal(
       "fetch",
@@ -593,11 +581,7 @@ describe("useDashboardSnapshot composer", () => {
     );
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
     await expect(
-      readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
-        backendScopeID: "backend-scope-a",
-        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-        streamGenerationID: "2026-06-26T00:00:00Z",
-      }),
+      readTimelineCheckpoint(window.indexedDB, resolvedDefaultStreamIdentity()),
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });

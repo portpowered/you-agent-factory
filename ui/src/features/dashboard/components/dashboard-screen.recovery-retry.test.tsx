@@ -20,6 +20,16 @@ import {
 import { DashboardScreen } from "./dashboard-screen";
 
 const replayHarness = createReplayHarness();
+const RESOLVED_DEFAULT_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function resolvedDefaultStreamIdentity() {
+  return {
+    backendScopeID: "backend-scope-a",
+    factorySessionID: RESOLVED_DEFAULT_SESSION_UUID,
+    logicalSessionKeyID: "logical-default",
+    streamGenerationID: "2026-06-26T00:00:00Z",
+  };
+}
 
 function StatusPanelProbe({
   detail,
@@ -175,11 +185,7 @@ describe("DashboardScreen stale-cursor retry", () => {
                 inFlightCount: 0,
                 totalTokens: 0,
               },
-              streamIdentity: {
-                backendScopeID: "backend-scope-a",
-                factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-                streamGenerationID: "2026-06-26T00:00:00Z",
-              },
+              streamIdentity: resolvedDefaultStreamIdentity(),
               status: "IDLE",
               usage: { resources: [] },
             },
@@ -215,11 +221,7 @@ describe("DashboardScreen stale-cursor retry", () => {
               inFlightCount: 0,
               totalTokens: 0,
             },
-            streamIdentity: {
-              backendScopeID: "backend-scope-a",
-              factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-              streamGenerationID: "2026-06-26T00:00:00Z",
-            },
+            streamIdentity: resolvedDefaultStreamIdentity(),
             status: "IDLE",
             usage: { resources: [] },
           },
@@ -236,6 +238,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       sessionTabOrder: [],
     });
     useDashboardStreamStore.setState({
+      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useFactoryTimelineStore.getState().reset();
@@ -255,6 +258,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       sessionTabOrder: [],
     });
     useDashboardStreamStore.setState({
+      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useFactoryTimelineStore.getState().reset();
@@ -263,16 +267,16 @@ describe("DashboardScreen stale-cursor retry", () => {
   it("retries a recovery-failed session stream without replaying the stale checkpoint cursor", async () => {
     const user = userEvent.setup();
 
-    await persistTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
-      afterEventId: "checkpoint-event-7",
-      afterSequence: 7,
-      replayState: emptyReplayWorldState(7),
-      selectedTick: 7,
-    }, {
-      backendScopeID: "backend-scope-a",
-      factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-      streamGenerationID: "2026-06-26T00:00:00Z",
-    });
+    await persistTimelineCheckpoint(
+      window.indexedDB,
+      {
+        afterEventId: "checkpoint-event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+      },
+      resolvedDefaultStreamIdentity(),
+    );
 
     render(<DashboardScreen />, {
       wrapper: createWrapper(queryClient),

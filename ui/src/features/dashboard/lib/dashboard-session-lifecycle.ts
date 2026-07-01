@@ -7,6 +7,12 @@ import {
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../../current-selection/base/public";
 import { FACTORY_SESSION_DETAIL_QUERY_KEY } from "../../factory-session-detail/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/lib/stream-derived-cache-identity";
+import {
+  normalizeStreamDerivedCacheIdentity,
+  streamDerivedCacheKeyPrefix,
+} from "../../timeline/lib/stream-derived-cache-identity";
+import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export type FactoryDefinitionQueryResetMode = "invalidate" | "remove";
 
@@ -81,16 +87,34 @@ export function resetDashboardSessionScopedState(
   queryClient.removeQueries(queryFilter);
 }
 
+export function factorySessionDetailQueryKey(
+  sessionID: string,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+) {
+  const normalizedStreamIdentity =
+    normalizeStreamDerivedCacheIdentity(streamIdentity);
+  if (normalizedStreamIdentity) {
+    return [
+      ...FACTORY_SESSION_DETAIL_QUERY_KEY,
+      ...streamDerivedCacheKeyPrefix(normalizedStreamIdentity),
+    ] as const;
+  }
+  return [...FACTORY_SESSION_DETAIL_QUERY_KEY, sessionID] as const;
+}
+
 export function clearDashboardSessionRuntimeQueries(
   queryClient: QueryClient,
   sessionID: string,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): void {
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
   queryClient.removeQueries({
-    queryKey: currentFactoryDefinitionQueryKey(sessionID),
+    queryKey: currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
     exact: false,
   });
   queryClient.removeQueries({
-    queryKey: [...FACTORY_SESSION_DETAIL_QUERY_KEY, sessionID],
+    queryKey: factorySessionDetailQueryKey(sessionID, resolvedStreamIdentity),
     exact: false,
   });
 }
@@ -99,12 +123,15 @@ export function recoverDashboardSessionScopedState(
   queryClient: QueryClient,
   sessionID: string,
   resetTimeline: () => void,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): void {
   resetTimeline();
   resetSelectionHistoryStore();
-  clearDashboardSessionRuntimeQueries(queryClient, sessionID);
+  clearDashboardSessionRuntimeQueries(queryClient, sessionID, streamIdentity);
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
   queryClient.removeQueries({
-    queryKey: currentFactoryDocumentQueryKey(sessionID),
+    queryKey: currentFactoryDocumentQueryKey(sessionID, resolvedStreamIdentity),
     exact: true,
   });
 }

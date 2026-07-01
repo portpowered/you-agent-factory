@@ -14,6 +14,7 @@ import {
   isDefaultFactorySessionID,
 } from "../../../../api/session-routing";
 import { useFactoryTimelineStore } from "../../../timeline/public";
+import type { StreamDerivedCacheIdentity } from "../../../timeline/lib/stream-derived-cache-identity";
 import {
   compactFactoryEventForTimeline,
   readFactoryTimelineDebugOptions,
@@ -44,6 +45,7 @@ export interface UseFactoryEventStreamOptions {
   probeRecovery?: typeof probeFactoryEventStreamRecovery;
   refreshToken?: number;
   sessionID: string | null;
+  streamIdentity?: StreamDerivedCacheIdentity | null;
   validateReconnectCursor?: (
     sessionID?: string | null,
     reconnect?: FactoryEventReconnectCursor,
@@ -71,6 +73,7 @@ interface DashboardStreamConnectionOptions {
       typeof useDashboardStreamStore.getState
     >["streamState"],
   ) => void;
+  streamIdentity: StreamDerivedCacheIdentity | null;
   streamSessionID: string;
   validateReconnectCursor: (
     sessionID?: string | null,
@@ -165,6 +168,7 @@ function useDashboardStreamConnection({
   scheduleQueuedFlush,
   sessionID,
   setStreamState,
+  streamIdentity,
   streamSessionID,
   validateReconnectCursor,
 }: DashboardStreamConnectionOptions) {
@@ -198,7 +202,12 @@ function useDashboardStreamConnection({
       refs.staleCursorRecoveryAttemptedRef.current = false;
       invalidReconnectRecoveryUsedRef.current = false;
       refs.reconnectCursorRef.current = reconnectCursorFromEvent(event);
-      syncCurrentFactoryDefinition(queryClient, event, streamSessionID);
+      syncCurrentFactoryDefinition(
+        queryClient,
+        event,
+        streamSessionID,
+        streamIdentity,
+      );
       queuedEventsRef.current.push(
         compactFactoryEventForTimeline(event, debugOptions),
       );
@@ -283,6 +292,7 @@ function useDashboardStreamConnection({
             refs,
             resetTimeline,
             setStreamState,
+            streamIdentity,
             streamSessionID,
           });
         };
@@ -321,6 +331,7 @@ function useDashboardStreamConnection({
     scheduleQueuedFlush,
     sessionID,
     setStreamState,
+    streamIdentity,
     streamSessionID,
     validateReconnectCursor,
   ]);
@@ -337,6 +348,7 @@ export function useFactoryEventStream({
   probeRecovery = probeFactoryEventStreamRecovery,
   refreshToken = 0,
   sessionID,
+  streamIdentity = null,
   validateReconnectCursor = validateFactoryEventReconnectCursor,
 }: UseFactoryEventStreamOptions) {
   const queryClient = useQueryClient();
@@ -406,6 +418,7 @@ export function useFactoryEventStream({
     scheduleQueuedFlush,
     sessionID,
     setStreamState,
+    streamIdentity,
     streamSessionID,
     validateReconnectCursor,
   });
