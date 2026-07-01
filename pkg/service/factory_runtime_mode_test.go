@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -1228,6 +1229,12 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	}
 	if svc.runtimeBuild == nil {
 		t.Fatal("expected explicit runtimebuild.Service collaborator")
+	}
+	if svc.modelService == nil {
+		t.Fatal("expected explicit model service collaborator")
+	}
+	if _, ok := svc.modelService.(*modelsservice.Service); !ok {
+		t.Fatalf("modelService type = %T, want *modelsservice.Service for production wiring", svc.modelService)
 	}
 	if svc.factorySave == nil {
 		t.Fatal("expected explicit factorysave collaborator")

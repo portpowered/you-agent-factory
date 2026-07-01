@@ -23,7 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -53,95 +52,13 @@ type ModelPullMetricsRecorder interface {
 	RecordModelPullMetric(InvocationMetric)
 }
 
-// ModelService owns direct model catalog, pull, and invocation operations.
-// FactoryService keeps these methods only as a phase-one compatibility facade.
-type ModelService interface {
-	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
-	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
-	PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error)
-	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error)
-}
-
-type modelServiceDependencies struct {
-	runtimeConfig           func() *factoryconfig.LoadedFactoryConfig
-	modelAssetPuller        func() modelAssetPuller
-	modelHost               func() modelhost.Host
-	modelInvocationExecutor func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error)
-	factoryRunnerID         func() string
-	logger                  *zap.Logger
-	modelPullMetrics        func() ModelPullMetricsRecorder
-}
-
-type runtimeModelService struct {
-	deps         modelServiceDependencies
-	modelService *modelsservice.Service
-}
-
-var _ ModelService = (*runtimeModelService)(nil)
-var _ apisurface.ModelAPI = (*runtimeModelService)(nil)
-
-func newModelService(deps modelServiceDependencies) ModelService {
-	return &runtimeModelService{
-		deps: deps,
-		modelService: modelsservice.New(modelsservice.Dependencies{
-			RuntimeConfig: deps.runtimeConfig,
-			ModelHost:     deps.modelHost,
-			ModelAssetPuller: func() localmodels.AssetPuller {
-				if deps.modelAssetPuller == nil {
-					return nil
-				}
-				return deps.modelAssetPuller()
-			},
-			Logger: func() *zap.Logger { return deps.logger },
-			ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
-				if deps.modelPullMetrics == nil {
-					return nil
-				}
-				recorder := deps.modelPullMetrics()
-				if recorder == nil {
-					return nil
-				}
-				return modelPullMetricsAdapter{inner: recorder}
-			},
-			ModelInvocationExecutor: deps.modelInvocationExecutor,
-			FactoryRunnerID:         deps.factoryRunnerID,
-		}),
-	}
-}
-
-type modelPullMetricsAdapter struct {
-	inner ModelPullMetricsRecorder
-}
-
-func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
-	a.inner.RecordModelPullMetric(InvocationMetric{
-		Name:   metric.Name,
-		Labels: metric.Labels,
-	})
-}
-
-func newFactoryModelService(fs *FactoryService) ModelService {
+func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
 	if fs == nil {
-		return newModelService(modelServiceDependencies{})
-	}
-	return newModelService(modelServiceDependencies{
-		runtimeConfig:           fs.currentRuntimeConfig,
-		modelAssetPuller:        fs.modelAssetPuller,
-		modelHost:               fs.modelHost,
-		modelInvocationExecutor: fs.modelInvocationExecutor,
-		factoryRunnerID:         fs.factoryRunnerID,
-		logger:                  fs.logger,
-		modelPullMetrics:        fs.modelPullMetricsRecorder,
-	})
-}
-
-func (fs *FactoryService) requireModelService() ModelService {
-	if fs == nil {
-		return newFactoryModelService(nil)
+		return wireModelServiceCollaborator(nil, nil)
 	}
 	fs.modelInitOnce.Do(func() {
 		if fs.modelService == nil {
-			fs.modelService = newFactoryModelService(fs)
+			fs.modelService = wireModelServiceCollaborator(fs, fs.cfg)
 		}
 	})
 	return fs.modelService
@@ -184,27 +101,6 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
-func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	if s == nil || s.modelService == nil {
-		return modelsservice.New(modelsservice.Dependencies{}).ListModels(ctx)
-	}
-	return s.modelService.ListModels(ctx)
-}
-
-func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	if s == nil || s.modelService == nil {
-		return modelsservice.New(modelsservice.Dependencies{}).GetModel(ctx, modelName)
-	}
-	return s.modelService.GetModel(ctx, modelName)
-}
-
-func (s *runtimeModelService) modelHost() modelhost.Host {
-	if s == nil || s.deps.modelHost == nil {
-		return nil
-	}
-	return s.deps.modelHost()
-}
-
 func (fs *FactoryService) modelHost() modelhost.Host {
 	if fs == nil {
 		return nil
@@ -218,20 +114,6 @@ func (fs *FactoryService) modelHost() modelhost.Host {
 		return bundle.modelHost
 	}
 	return nil
-}
-
-func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	if s == nil || s.modelService == nil {
-		return modelsservice.New(modelsservice.Dependencies{}).PullModel(ctx, modelName)
-	}
-	return s.modelService.PullModel(ctx, modelName)
-}
-
-func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
-	if s == nil || s.modelService == nil {
-		return modelsservice.New(modelsservice.Dependencies{}).InvokeModel(ctx, modelName, request)
-	}
-	return s.modelService.InvokeModel(ctx, modelName, request)
 }
 
 type sessionInvocationWaitInput struct {
@@ -718,13 +600,6 @@ func primaryResultMetricType(parts []interfaces.WorkContentPart) string {
 	}
 	sort.Strings(names)
 	return "mixed:" + strings.Join(names, "+")
-}
-
-func (s *runtimeModelService) modelAssetPuller() modelAssetPuller {
-	if s == nil || s.deps.modelAssetPuller == nil {
-		return newModelAssetPuller("")
-	}
-	return s.deps.modelAssetPuller()
 }
 
 func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
