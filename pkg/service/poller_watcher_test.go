@@ -1207,17 +1207,6 @@ func waitForPendingCronTimeToken(
 	return nil
 }
 
-func cronWorkstationConfigForTest(name string) interfaces.FactoryWorkstationConfig {
-	return interfaces.FactoryWorkstationConfig{
-		Name: name,
-		Kind: interfaces.WorkstationKindCron,
-		Cron: &interfaces.CronConfig{Schedule: "* * * * *"},
-		Outputs: []interfaces.IOConfig{
-			{WorkTypeName: "task", StateName: "init"},
-		},
-	}
-}
-
 func TestFactoryService_BatchModeDoesNotStartCronWatchers(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, cronFactoryConfig("* * * * *"))
@@ -1688,17 +1677,6 @@ func assertCronWatcherRegistrationLog(t *testing.T, observedLogs *observer.Obser
 	}
 }
 
-func assertCronWatcherDisabledLog(t *testing.T, observedLogs *observer.ObservedLogs, workstation string) {
-	t.Helper()
-	disabled := observedLogs.FilterMessage("cron watcher disabled").All()
-	if len(disabled) != 1 {
-		t.Fatalf("disabled cron watcher count = %d, want 1", len(disabled))
-	}
-	if got := disabled[0].ContextMap()["workstation"]; got != workstation {
-		t.Fatalf("disabled cron watcher workstation = %#v, want %s", got, workstation)
-	}
-}
-
 func assertCronSchedulerStartedLog(t *testing.T, observedLogs *observer.ObservedLogs, jobs int64) {
 	t.Helper()
 	started := observedLogs.FilterMessage("cron scheduler started").All()
@@ -1887,20 +1865,6 @@ func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest
 	t.Helper()
 	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]; got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
-	}
-}
-
-func assertCronWorkRequestForWorkstation(t *testing.T, request interfaces.WorkRequest, want time.Time, workstation string) {
-	t.Helper()
-	if request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("cron work request type = %q, want %q", request.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
-	}
-	assertCronWorkRequestNominalAt(t, request, want)
-	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation]; got != workstation {
-		t.Fatalf("cron workstation tag = %q, want %q", got, workstation)
-	}
-	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeySource]; got != "cron" {
-		t.Fatalf("cron source tag = %q, want cron", got)
 	}
 }
 
