@@ -1,4 +1,10 @@
 /*
  * youagentfactory/components package styles entrypoint.
- * Token and component styles migrate here in later component packets.
+ * Shared role, palette, typography, and layout tokens for component consumers.
  */
+
+@import "./styles/color-palette-presets.css";
+@import "./styles/color-role-tokens.css";
+@import "./styles/text-color-role-tokens.css";
+@import "./styles/typography-role-tokens.css";
+@import "./styles/layout-role-tokens.css";

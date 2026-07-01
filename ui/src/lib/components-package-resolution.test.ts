@@ -34,9 +34,16 @@ describe("dashboard youagentfactory/components package resolution", () => {
     expect(COMPONENTS_PACKAGE_NAME).toBe("youagentfactory/components");
   });
 
-  it("imports the CSS entrypoint through the dashboard Vite resolver", () => {
+  it("imports the CSS entrypoint through the dashboard Vite resolver", async () => {
     expect(typeof stylesCss).toBe("string");
-    // Comment-only placeholder CSS may inline as an empty string before token migration.
+
+    const resolved = await viteServer.pluginContainer.resolveId(
+      "youagentfactory/components/styles.css",
+      importerPath,
+      { ssr: false },
+    );
+
+    expect(resolved?.id).toContain("packages/components/src/styles.css");
   });
 
   it("imports a deep category path through the dashboard Vite resolver", () => {

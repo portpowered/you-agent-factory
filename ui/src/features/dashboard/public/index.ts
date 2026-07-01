@@ -8,3 +8,5 @@ export {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
+export * from "../lib/session-persistence/diagnostics";
+export * from "./runtime-cache-scope";

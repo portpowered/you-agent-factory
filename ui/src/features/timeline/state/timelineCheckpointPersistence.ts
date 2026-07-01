@@ -4,6 +4,12 @@ import {
   isDefaultFactorySessionID,
 } from "../../../api/session-routing";
 import {
+  identityMismatchDiagnostic,
+  recordSessionPersistenceInvalidation,
+  userClearedSessionsDiagnostic,
+  type SessionPersistenceIdentityScope,
+} from "../../dashboard/public";
+import {
   normalizeStreamDerivedCacheIdentity,
   streamDerivedCheckpointStorageKey,
   type StreamDerivedCacheIdentity,
@@ -142,10 +148,19 @@ async function deleteIndexedCheckpoint(
 export async function clearTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   streamIdentity: TimelineCheckpointStreamIdentity | null,
+  options: { requestedSessionID?: string; userInitiated?: boolean } = {},
 ): Promise<void> {
   const storageKey = checkpointStorageKey(streamIdentity);
   if (!indexedDB || !storageKey) {
     return;
+  }
+  if (options.userInitiated && streamIdentity && options.requestedSessionID) {
+    recordSessionPersistenceInvalidation(
+      userClearedSessionsDiagnostic(
+        persistenceScopeFromTimelineIdentity(streamIdentity),
+        options.requestedSessionID,
+      ),
+    );
   }
   await deleteIndexedCheckpoint(indexedDB, storageKey).catch(() => {});
 }
@@ -198,12 +213,47 @@ function parseStoredCheckpoint(
 ): FactoryTimelineCheckpoint | null {
   if (
     envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
-    !matchesStreamIdentity(envelope.streamIdentity, expectedIdentity) ||
     !envelope.checkpoint?.replayState
   ) {
     return null;
   }
+  if (!matchesStreamIdentity(envelope.streamIdentity, expectedIdentity)) {
+    recordCheckpointIdentityMismatch(
+      envelope.streamIdentity,
+      expectedIdentity,
+      envelope.streamIdentity?.factorySessionID ?? null,
+    );
+    return null;
+  }
   return hydrateCheckpoint(envelope.checkpoint);
+}
+
+function recordCheckpointIdentityMismatch(
+  actual: TimelineCheckpointStreamIdentity | null | undefined,
+  expected: TimelineCheckpointStreamIdentity | null,
+  sessionID: string | null,
+): void {
+  if (!actual || !expected || !sessionID) {
+    return;
+  }
+  const diagnostic = identityMismatchDiagnostic(
+    persistenceScopeFromTimelineIdentity(actual),
+    persistenceScopeFromTimelineIdentity(expected),
+    sessionID,
+  );
+  if (diagnostic) {
+    recordSessionPersistenceInvalidation(diagnostic);
+  }
+}
+
+function persistenceScopeFromTimelineIdentity(
+  identity: TimelineCheckpointStreamIdentity,
+): SessionPersistenceIdentityScope {
+  return {
+    backendScopeID: identity.backendScopeID,
+    factorySessionID: identity.factorySessionID,
+    streamGenerationID: identity.streamGenerationID,
+  };
 }
 
 function checkpointStorageKey(

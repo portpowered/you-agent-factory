@@ -4,7 +4,16 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
-const roleTokensSourcePath = path.join(stylesDir, "color-role-tokens.css");
+const packageStylesDir = path.resolve(
+  stylesDir,
+  "..",
+  "..",
+  "packages",
+  "components",
+  "src",
+  "styles",
+);
+const roleTokensSourcePath = path.join(packageStylesDir, "color-role-tokens.css");
 const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
 
 const PRODUCT_AF_ROLE_PAIRS: ReadonlyArray<

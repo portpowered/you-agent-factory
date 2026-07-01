@@ -240,7 +240,8 @@ export const initialEditableFactoryDefinitionVersion = {
 const sessionFactoryPathPattern = /^\/factory-sessions\/([^/]+)\/factory$/;
 const sessionSyncPreflightPathPattern =
   /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
-const sessionEventsPathPattern = /^\/factory-sessions\/([^/]+)\/events$/;
+const sessionEventsPathPattern =
+  /^\/factory-sessions\/([^/]+)\/events(?:\?.*)?$/;
 const factorySessionReadPathPattern = /^\/factory-sessions\/([^/]+)$/;
 const promptTemplateContractPathPattern =
   /^\/factory-sessions\/([^/]+)\/factory\/workstations\/[^/]+\/prompt-template-contract$/;
@@ -707,7 +708,7 @@ function buildSessionSyncPreflightResponse(
   }
 
   return {
-    backendScopeId: "browser-test-harness",
+    backendScopeId: `${sessionState.session.folderPath}::browser-integration`,
     checkpointReusable: reconnectCursorValid,
     factorySessionId: sessionState.session.id,
     logicalSessionKeyId: sessionState.session.id,
@@ -717,7 +718,7 @@ function buildSessionSyncPreflightResponse(
       validForStreamGeneration: reconnectCursorValid,
     },
     requestedSessionId,
-    streamGenerationId: `browser-stream-${sessionState.version.logical}`,
+    streamGenerationId: sessionState.version.physical,
   };
 }
 

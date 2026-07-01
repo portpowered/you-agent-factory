@@ -10,6 +10,10 @@ import {
   useFactoryTimelineStore,
 } from "../../timeline/public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
+import {
+  recordSessionPersistenceInvalidation,
+  silentReplayRecoveryDiagnostic,
+} from "../lib/session-persistence/diagnostics";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useGuardedTimelineCheckpointBootstrap } from "./snapshot/useDashboardSnapshot.bootstrap";
@@ -130,9 +134,21 @@ export function useDashboardSnapshot({
 
   const handleInvalidReconnectCursor = useCallback(() => {
     invalidatedReconnectCursorRef.current = true;
+    if (streamIdentity && rawSessionID) {
+      recordSessionPersistenceInvalidation(
+        silentReplayRecoveryDiagnostic(
+          {
+            backendScopeID: streamIdentity.backendScopeID,
+            factorySessionID: streamIdentity.factorySessionID,
+            streamGenerationID: streamIdentity.streamGenerationID,
+          },
+          rawSessionID,
+        ),
+      );
+    }
     resetTimeline();
     void clearTimelineCheckpoint(window.indexedDB, streamIdentity);
-  }, [resetTimeline, streamIdentity]);
+  }, [rawSessionID, resetTimeline, streamIdentity]);
 
   usePersistedTimelineCheckpoint({
     checkpoint: currentReplayCheckpoint,

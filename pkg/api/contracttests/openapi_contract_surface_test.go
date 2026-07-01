@@ -235,6 +235,21 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 
 	reconnectCursor := schemaObject(t, schemas, "FactorySessionSyncPreflightReconnectCursor")
 	assertRequiredFields(t, reconnectCursor, "provided", "validForStreamGeneration")
+
+	for _, identityField := range []string{
+		"backendScopeId",
+		"logicalSessionKeyId",
+		"factorySessionId",
+		"streamGenerationId",
+	} {
+		property, ok := properties[identityField].(map[string]any)
+		if !ok {
+			t.Fatalf("FactorySessionSyncPreflightResponse.properties.%s is missing", identityField)
+		}
+		if property["type"] != "string" {
+			t.Fatalf("FactorySessionSyncPreflightResponse.properties.%s.type = %v, want string", identityField, property["type"])
+		}
+	}
 }
 
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {
