@@ -179,10 +179,19 @@ func TestBarrierZeroChildren(t *testing.T) {
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
+	availCtx, availCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer availCancel()
+	if err := h.WaitForRuntimeAvailability(availCtx, errCh); err != nil {
+		t.Fatalf("wait for runtime availability: %v", err)
+	}
+	// WaitToComplete returns an already-closed channel when no runtime is hosted.
+	// Capture it once after the run loop is live to avoid a startup race.
+	done := h.WaitToComplete()
+
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		select {
-		case <-h.WaitToComplete():
+		case <-done:
 			t.Fatal("expected zero-child barrier to remain incomplete")
 		default:
 		}
