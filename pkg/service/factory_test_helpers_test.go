@@ -43,7 +43,7 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 	if svc.sessions == nil {
 		svc.sessions = factorysessions.NewRegistry()
 	}
-	handle := &liveRuntimeHandle{runtime: bundle, runDone: make(chan struct{})}
+	handle := &liveRuntimeHandle{Bundle: bundle, RunDone: make(chan struct{})}
 	svc.registerLiveSession(defaultFactorySessionID, handle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}, true)
@@ -1161,14 +1161,14 @@ func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch interfaces.
 
 func pauseSessionFactory(t *testing.T, session *liveFactorySession) {
 	t.Helper()
-	if err := liveSessionHandle(session).runtime.Factory.Pause(context.Background()); err != nil {
+	if err := liveSessionHandle(session).Bundle.Factory.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause(%s): %v", session.ID, err)
 	}
 }
 
 func resumeSessionFactory(t *testing.T, session *liveFactorySession) {
 	t.Helper()
-	if err := liveSessionHandle(session).runtime.Factory.Resume(context.Background()); err != nil {
+	if err := liveSessionHandle(session).Bundle.Factory.Resume(context.Background()); err != nil {
 		t.Fatalf("Resume(%s): %v", session.ID, err)
 	}
 }
@@ -1184,10 +1184,10 @@ func requireLiveSession(t *testing.T, svc *FactoryService, sessionID string) *li
 
 func sessionEngineSnapshot(t *testing.T, session *liveFactorySession) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("live session runtime is required")
 	}
-	snap, err := liveSessionHandle(session).runtime.Factory.GetEngineStateSnapshot(context.Background())
+	snap, err := liveSessionHandle(session).Bundle.Factory.GetEngineStateSnapshot(context.Background())
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot(%s): %v", session.ID, err)
 	}

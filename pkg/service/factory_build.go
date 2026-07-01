@@ -31,7 +31,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
-	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -141,15 +140,6 @@ const (
 	runtimeMetricScriptTimedOut       = "script.timed_out"
 	runtimeMetricScriptFailed         = "script.failed"
 )
-
-const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
-
-type runtimeMetricsObservation struct {
-	runtimeStatus interfaces.RuntimeStatus
-	factoryState  interfaces.FactoryState
-	inFlightCount int
-	initialized   bool
-}
 
 func (fs *FactoryService) coordinatorPolicy() serviceCoordinatorPolicy {
 	if fs == nil {
@@ -1166,98 +1156,6 @@ func (fs *FactoryService) handleDefaultRuntimeStartFailure(
 		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
 	}
 	return fmt.Errorf("start runtime: %w", startErr)
-}
-
-func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], err error, forcedCancel bool) (string, string) {
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			return "canceled", ""
-		}
-		return "failed", err.Error()
-	}
-	if snapshot != nil && snapshot.FactoryState == string(interfaces.FactoryStateFailed) {
-		return "failed", ""
-	}
-	if snapshot != nil && snapshot.RuntimeStatus == interfaces.RuntimeStatusFinished {
-		return "completed", ""
-	}
-	if forcedCancel {
-		return "canceled", ""
-	}
-	return "completed", ""
-}
-
-func metricsObservationFromSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) runtimeMetricsObservation {
-	observation := runtimeMetricsObservation{initialized: snapshot != nil}
-	if snapshot == nil {
-		return observation
-	}
-	observation.runtimeStatus = snapshot.RuntimeStatus
-	observation.factoryState = interfaces.FactoryState(snapshot.FactoryState)
-	observation.inFlightCount = snapshot.InFlightCount
-	return observation
-}
-
-func (o runtimeMetricsObservation) changedFrom(previous runtimeMetricsObservation) bool {
-	if !previous.initialized {
-		return o.initialized
-	}
-	if !o.initialized {
-		return false
-	}
-	return o.runtimeStatus != previous.runtimeStatus ||
-		o.factoryState != previous.factoryState ||
-		o.inFlightCount != previous.inFlightCount
-}
-
-func (fs *FactoryService) finalizeRuntimeLifecycleMetrics(handle *liveRuntimeHandle, last runtimeMetricsObservation) {
-	if handle == nil || handle.runtime == nil || handle.runtime.Factory == nil {
-		return
-	}
-	handle.lifecycleMetricsOnce.Do(func() {
-		snapshot, err := handle.runtime.Factory.GetEngineStateSnapshot(context.Background())
-		if err == nil {
-			current := metricsObservationFromSnapshot(snapshot)
-			if current.changedFrom(last) {
-				handle.runtime.EmitRuntimeStateMetrics(snapshot)
-			}
-			outcome, reason := runtimeStopOutcome(snapshot, handle.result(), false)
-			handle.runtime.EmitRuntimeLifecycleStop(outcome, reason)
-			return
-		}
-		outcome, reason := runtimeStopOutcome(nil, handle.result(), false)
-		handle.runtime.EmitRuntimeLifecycleStop(outcome, reason)
-	})
-}
-
-func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liveRuntimeHandle) {
-	if handle == nil || handle.runtime == nil || handle.runtime.Factory == nil {
-		return
-	}
-	ticker := time.NewTicker(runtimeMetricsObserverPollInterval)
-	defer ticker.Stop()
-	var last runtimeMetricsObservation
-	for {
-		snapshot, err := handle.runtime.Factory.GetEngineStateSnapshot(context.Background())
-		if err == nil {
-			current := metricsObservationFromSnapshot(snapshot)
-			if current.changedFrom(last) {
-				handle.runtime.EmitRuntimeStateMetrics(snapshot)
-				last = current
-			}
-		}
-		select {
-		case <-handle.runDone:
-			fs.finalizeRuntimeLifecycleMetrics(handle, last)
-			return
-		case <-ctx.Done():
-			// Temporary sidecar shutdown (for example during session runtime replacement)
-			// must not block on runDone or emit lifecycle stop metrics; stopLiveRuntime
-			// finalizes lifecycle telemetry after the runtime actually exits.
-			return
-		case <-ticker.C:
-		}
-	}
 }
 
 const (

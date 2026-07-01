@@ -109,7 +109,7 @@ func liveSessionBundle(session *factorysessions.LiveSession) *factoryRuntimeBund
 		return nil
 	}
 	if state.handle != nil {
-		return state.handle.runtime
+		return state.handle.Bundle
 	}
 	return state.bundle
 }
@@ -142,8 +142,8 @@ func (fs *FactoryService) buildLiveSessionRegistration(
 		targetRef:  target.Ref,
 		project:    strings.TrimSpace(target.Project),
 	}
-	if registration.factoryDir == "" && handle.runtime != nil {
-		registration.factoryDir = handle.runtime.Dir
+	if registration.factoryDir == "" && handle.Bundle != nil {
+		registration.factoryDir = handle.Bundle.Dir
 	}
 	if registration.folderPath == "" {
 		registration.folderPath = fs.factoryRootDir
@@ -166,8 +166,8 @@ func (fs *FactoryService) buildLiveSessionRegistration(
 
 func liveSessionExecutionBaseDir(handle *liveRuntimeHandle, folderPath string, factoryDir string) string {
 	executionBaseDir := ""
-	if handle != nil && handle.runtime != nil && handle.runtime.RuntimeCfg != nil {
-		executionBaseDir = strings.TrimSpace(handle.runtime.RuntimeCfg.RuntimeBaseDir())
+	if handle != nil && handle.Bundle != nil && handle.Bundle.RuntimeCfg != nil {
+		executionBaseDir = strings.TrimSpace(handle.Bundle.RuntimeCfg.RuntimeBaseDir())
 	}
 	if executionBaseDir == "" {
 		executionBaseDir = folderPath
@@ -208,7 +208,7 @@ func (fs *FactoryService) registerLiveSession(
 		registration.folderPath,
 		registration.executionBaseDir,
 		registration.targetRef,
-		&liveSessionState{bundle: handle.runtime, handle: handle, spec: registration.preparedSpec},
+		&liveSessionState{bundle: handle.Bundle, handle: handle, spec: registration.preparedSpec},
 		sessionID == defaultFactorySessionID,
 		registration.project,
 	), selectSession)
@@ -269,7 +269,7 @@ func (fs *FactoryService) requireSession(sessionID string) (*factorysessions.Liv
 	}
 	session := fs.sessionByID(sessionID)
 	handle := liveSessionHandle(session)
-	if session == nil || handle == nil || handle.runtime == nil {
+	if session == nil || handle == nil || handle.Bundle == nil {
 		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 	}
 	return session, nil
@@ -280,7 +280,7 @@ func (fs *FactoryService) sessionFactory(sessionID string) (factory.Factory, err
 	if err != nil {
 		return nil, err
 	}
-	return liveSessionHandle(session).runtime.Factory, nil
+	return liveSessionHandle(session).Bundle.Factory, nil
 }
 
 func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error) {
@@ -288,7 +288,7 @@ func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig
 	if err != nil {
 		return nil, err
 	}
-	return liveSessionHandle(session).runtime.RuntimeCfg, nil
+	return liveSessionHandle(session).Bundle.RuntimeCfg, nil
 }
 
 func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
@@ -1034,7 +1034,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 		return response, nil
 	}
 
-	eventHistory := liveSessionHandle(session).runtime.EventHistory
+	eventHistory := liveSessionHandle(session).Bundle.EventHistory
 	eventsSnapshot := []factoryapi.FactoryEvent(nil)
 	if eventHistory != nil {
 		eventsSnapshot = eventHistory.Events()
@@ -1150,8 +1150,8 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 ) (*interfaces.FactorySessionJavaScriptRuntimeState, error) {
 	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
 	handle := liveSessionHandle(session)
-	if handle != nil && handle.runtime != nil && handle.runtime.EventHistory != nil {
-		worldState, err := projections.ReconstructFactoryWorldState(handle.runtime.EventHistory.Events(), selectedTick)
+	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
+		worldState, err := projections.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
 		if err != nil {
 			return nil, err
 		}
@@ -1503,8 +1503,8 @@ func emitSessionResponseStreamCompaction(
 		Reason:     string(summary.Reason),
 	}
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
-	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.Logger != nil {
-		handle.runtime.Logger.Warn("session response stream compacted internal provider progress",
+	if handle := liveSessionHandle(session); handle != nil && handle.Bundle != nil && handle.Bundle.Logger != nil {
+		handle.Bundle.Logger.Warn("session response stream compacted internal provider progress",
 			zap.String("session_id", sessionID),
 			zap.String("dispatch_id", dispatchID),
 			zap.String("compaction_reason", string(summary.Reason)),
@@ -1530,8 +1530,8 @@ func emitSessionResponseStreamDegraded(
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamDegraded, fields)
 
 	log := fallbackLogger
-	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.Logger != nil {
-		log = handle.runtime.Logger
+	if handle := liveSessionHandle(session); handle != nil && handle.Bundle != nil && handle.Bundle.Logger != nil {
+		log = handle.Bundle.Logger
 	}
 	if log == nil {
 		return
@@ -1554,14 +1554,14 @@ func emitSessionResponseStreamMetric(
 	fields metrics.Fields,
 ) {
 	handle := liveSessionHandle(session)
-	if handle == nil || handle.runtime == nil {
+	if handle == nil || handle.Bundle == nil {
 		return
 	}
 	if fields.DispatchID == "" {
 		fields.DispatchID = sessionID
 	}
-	if err := handle.runtime.MetricsEmitter().Counter(context.Background(), name, 1, fields); err != nil {
-		handle.runtime.RuntimeLogger().Warn("session response stream metric emission failed",
+	if err := handle.Bundle.MetricsEmitter().Counter(context.Background(), name, 1, fields); err != nil {
+		handle.Bundle.RuntimeLogger().Warn("session response stream metric emission failed",
 			zap.String("metric_name", name),
 			zap.String("session_id", sessionID),
 			zap.Error(err),
@@ -2074,7 +2074,7 @@ func (fs *FactoryService) emitLiveLifecycleControlMetric(
 	if err != nil {
 		return
 	}
-	bundle := liveSessionHandle(session).runtime
+	bundle := liveSessionHandle(session).Bundle
 	if bundle == nil {
 		return
 	}

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -619,42 +619,6 @@ func (fs *FactoryService) clearRunState() {
 	fs.runState = nil
 }
 
-func (h *liveRuntimeHandle) completed() bool {
-	if h == nil {
-		return true
-	}
-	select {
-	case <-h.runDone:
-		return true
-	default:
-		return false
-	}
-}
-
-func (h *liveRuntimeHandle) result() error {
-	if h == nil {
-		return nil
-	}
-	h.runErrMu.RLock()
-	defer h.runErrMu.RUnlock()
-	return h.runErr
-}
-
-func (h *liveRuntimeHandle) setRunResult(err error) {
-	h.runErrMu.Lock()
-	h.runErr = err
-	h.runErrMu.Unlock()
-	close(h.runDone)
-}
-
-func (h *liveRuntimeHandle) wait() error {
-	if h == nil {
-		return nil
-	}
-	<-h.runDone
-	return h.result()
-}
-
 // SubmitWorkRequest submits a canonical work request batch to the factory.
 func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	fs.activationMu.RLock()
@@ -923,30 +887,7 @@ func newRecordingArtifact(
 }
 
 func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntimeBundle) error {
-	if runtimeBundle == nil {
-		return nil
-	}
-	var errs []error
-	if runtimeBundle.Recording != nil {
-		runtimeBundle.Recording.Finish(factory.EnsureClock(fs.clock).Now().UTC())
-		if err := runtimeBundle.Recording.Flush(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := runtimeBundle.Recording.Err(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if runtimeBundle.LogSink != nil {
-		if err := runtimeBundle.LogSink.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if runtimeBundle.MetricsSink != nil {
-		if err := runtimeBundle.MetricsSink.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+	return factoryservice.FinalizeArtifacts(runtimeBundle, fs.clock)
 }
 
 func sessionScopedRecordPath(basePath string, sessionID string) string {

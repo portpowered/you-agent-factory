@@ -196,7 +196,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunW
 			pollerWorker: newCanonicalScriptPollerWorker("--mode", "watch"),
 		},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    &aggregateSnapshotFactory{},
 			RuntimeCfg: runtimeCfg,
 		},
@@ -250,7 +250,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 			additionalWorkstations: []interfaces.FactoryWorkstationConfig{standard},
 		},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    &aggregateSnapshotFactory{},
 			RuntimeCfg: runtimeCfg,
 		},
@@ -306,7 +306,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 			poller: poller,
 		},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    &aggregateSnapshotFactory{},
 			RuntimeCfg: runtimeCfg,
 		},
@@ -397,7 +397,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			RuntimeCfg: runtimeCfg,
 			Factory:    submitted,
 		},
@@ -520,7 +520,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			RuntimeCfg: runtimeCfg,
 			Factory:    &aggregateSnapshotFactory{},
 		},
@@ -571,7 +571,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			RuntimeCfg: runtimeCfg,
 			Factory:    &aggregateSnapshotFactory{},
 		},
@@ -623,7 +623,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 			poller: poller,
 		},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    &aggregateSnapshotFactory{},
 			RuntimeCfg: runtimeCfg,
 		},
@@ -667,7 +667,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 			poller: poller,
 		},
 	)
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    &aggregateSnapshotFactory{},
 			RuntimeCfg: runtimeCfg,
 		},
@@ -839,7 +839,7 @@ func newScriptPollerRuntimeHandleForWorkstation(
 ) *liveRuntimeHandle {
 	t.Helper()
 
-	return &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	return &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory: activeFactory,
 			RuntimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
 				t,
@@ -1206,7 +1206,7 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 
 func startHostedLinearPollerSidecars(t *testing.T, fixture hostedLinearPollerServiceFixture) func() {
 	t.Helper()
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			RuntimeCfg: fixture.runtimeCfg,
 			Factory:    fixture.submitted,
 		},
@@ -1738,7 +1738,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    replacementFactory,
 			RuntimeCfg: runtimeCfg,
 		},
@@ -1997,7 +1997,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 		logger: zap.NewNop(),
 		clock:  fakeClock,
 	}
-	handle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    replacementFactory,
 			RuntimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
 		},
