@@ -884,7 +884,7 @@ func ComposeFactoryCore(
 	var runtimeBundle *factoryRuntimeBundle
 	defer func() {
 		if !coreBuilt && runtimeBundle != nil {
-			_ = closeRuntimeBundleSinks(runtimeBundle.LogSink, runtimeBundle.MetricsSink)
+			_ = CloseRuntimeBundleSinksForCompose(runtimeBundle.LogSink, runtimeBundle.MetricsSink)
 		}
 	}()
 	if cfg.ReplayPath == "" {
@@ -899,7 +899,7 @@ func ComposeFactoryCore(
 		cfg.Dir = resolvedDir
 	}
 
-	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(load.ReplayArtifact)
+	replaySideEffects, replayFactoryOpts, err := ReplayFactoryModeOptionsForCompose(load.ReplayArtifact)
 	if err != nil {
 		return nil, err
 	}
@@ -920,7 +920,7 @@ func ComposeFactoryCore(
 	if err != nil {
 		return nil, err
 	}
-	runtimeBundle = asRuntimeBundle(runtimeBundleAny)
+	runtimeBundle = AsRuntimeBundleForCompose(runtimeBundleAny)
 	if runtimeBundle == nil {
 		return nil, fmt.Errorf("default runtime bundle is required")
 	}
@@ -930,7 +930,7 @@ func ComposeFactoryCore(
 		runtimeBundle.FolderPath,
 		runtimeBundle.RuntimeCfg.RuntimeBaseDir(),
 		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
-		&liveSessionState{bundle: runtimeBundle, spec: &defaultSessionSpec},
+		NewStartupLiveSessionHandle(runtimeBundle, &defaultSessionSpec),
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
 	), true)
@@ -944,7 +944,7 @@ func ComposeFactoryCore(
 		clock:         clock,
 		startupBundle: runtimeBundle,
 		logger:        runtimeBundle.Logger,
-		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
+		modelAssets:   WireModelAssetPullerForCompose(cfg, collaborators.LocalModels.Assets),
 	}, nil
 }
 
