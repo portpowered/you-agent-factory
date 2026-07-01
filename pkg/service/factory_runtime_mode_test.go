@@ -1506,6 +1506,30 @@ func (s *stubModelService) InvokeModel(_ context.Context, modelName string, requ
 	return s.invokeResult, s.invokeErr
 }
 
+type stubSessionGateway struct {
+	openResult       factoryapi.OpenFactorySessionResponse
+	openFromFolder   *FactorySessionOpenResult
+	calls            []string
+	folderPaths      []string
+}
+
+func (s *stubSessionGateway) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	s.calls = append(s.calls, "open-session")
+	if request.FolderPath != "" {
+		s.folderPaths = append(s.folderPaths, request.FolderPath)
+	}
+	return s.openResult, nil
+}
+
+func (s *stubSessionGateway) OpenFactorySessionFromFolder(_ context.Context, folderPath string, _ *FactorySessionTargetRef, _ bool, _ bool) (*FactorySessionOpenResult, error) {
+	s.calls = append(s.calls, "open-session-from-folder")
+	s.folderPaths = append(s.folderPaths, folderPath)
+	if s.openFromFolder != nil {
+		return s.openFromFolder, nil
+	}
+	return &FactorySessionOpenResult{SessionID: "session-from-folder"}, nil
+}
+
 type stubFactoryCoordinator struct {
 	listSessionsResult factoryapi.ListFactorySessionsResponse
 	getSessionResult   factoryapi.FactorySession
@@ -1706,16 +1730,16 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 		listSessionsResult: factoryapi.ListFactorySessionsResponse{
 			Sessions: []factoryapi.FactorySessionSummary{{Id: "session-a"}},
 		},
-		openResult:       factoryapi.OpenFactorySessionResponse{},
 		workSubmitResult: interfaces.WorkRequestSubmitResult{RequestID: "request-1"},
 		moveResult:       interfaces.OperatorMoveResult{WorkID: "move-1"},
 		eventStream:      &interfaces.FactoryEventStream{},
 		engineSnapshot:   &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusIdle},
 	}
+	gatewayStub := &stubSessionGateway{}
 	definitions := &recordingFactoryDefinitions{
 		sessionFactory: factoryapi.Factory{Name: "beta"},
 	}
-	svc := &FactoryService{coordinator: stub, definitions: definitions}
+	svc := &FactoryService{coordinator: stub, definitions: definitions, sessionGateway: gatewayStub}
 
 	listed, err := svc.ListFactorySessions(context.Background())
 	if err != nil {
@@ -1761,8 +1785,11 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if snapshot == nil || snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
 		t.Fatalf("GetEngineStateSnapshotForSession result = %#v, want delegated idle snapshot", snapshot)
 	}
-	if strings.Join(stub.calls[:9], ",") != "list-sessions,open-session,open-session-from-folder,close-session,activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
-		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence", stub.calls)
+	if strings.Join(stub.calls[:7], ",") != "list-sessions,close-session,activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
+		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence without open methods", stub.calls)
+	}
+	if strings.Join(gatewayStub.calls, ",") != "open-session,open-session-from-folder" {
+		t.Fatalf("session gateway calls = %#v, want delegated open sequence", gatewayStub.calls)
 	}
 	if len(stub.runtimeNames) != 1 || stub.runtimeNames[0] != "gamma" {
 		t.Fatalf("activation targets = %#v, want gamma", stub.runtimeNames)

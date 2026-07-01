@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,7 +15,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
@@ -403,56 +401,14 @@ func (s *runtimeFactoryDefinitionService) GetCurrentFactoryForSession(_ context.
 }
 
 func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-	return fs.requireCoordinator().OpenFactorySession(ctx, request)
+	return fs.requireSessionGateway().OpenFactorySession(ctx, request)
 }
 
 func (c *runtimeFactoryCoordinator) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-	fs := c.service
-	var target *FactorySessionTargetRef
-	if request.Target != nil {
-		targetName := ""
-		if request.Target.Name != nil {
-			targetName = strings.TrimSpace(*request.Target.Name)
-		}
-		target = &FactorySessionTargetRef{
-			Kind: FactorySessionTargetKind(request.Target.Kind),
-			Name: targetName,
-		}
+	if c.service == nil {
+		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("factory service is required")
 	}
-	validateOnly := request.ValidateOnly != nil && *request.ValidateOnly
-	initNewFactory := request.InitNewFactory != nil && *request.InitNewFactory
-	if validateOnly && initNewFactory {
-		return factoryapi.OpenFactorySessionResponse{}, factorysessions.NewValidationError(
-			factorysessions.ValidationReasonRequired,
-			"initNewFactory",
-			fmt.Errorf("initNewFactory cannot be combined with validateOnly"),
-		)
-	}
-	result, err := fs.OpenFactorySessionFromFolder(ctx, request.FolderPath, target, validateOnly, initNewFactory)
-	if err != nil {
-		return factoryapi.OpenFactorySessionResponse{}, err
-	}
-	response := factoryapi.OpenFactorySessionResponse{}
-	if result.InitsNewFactory {
-		initsNewFactory := true
-		response.InitsNewFactory = &initsNewFactory
-		if folderPath := strings.TrimSpace(result.FolderPath); folderPath != "" {
-			response.FolderPath = &folderPath
-		}
-	}
-	if len(result.Targets) > 0 {
-		targets := factorysessions.TargetsResponse(result.Targets)
-		response.Targets = &targets
-	}
-	if result.SessionID != "" {
-		session, err := fs.requireSession(result.SessionID)
-		if err != nil {
-			return factoryapi.OpenFactorySessionResponse{}, err
-		}
-		summary := factorysessions.SummaryResponse(session)
-		response.Session = &summary
-	}
-	return response, nil
+	return c.service.requireSessionGateway().OpenFactorySession(ctx, request)
 }
 
 func (fs *FactoryService) CloseFactorySession(ctx context.Context, sessionID string) error {
@@ -489,7 +445,7 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 	validateOnly bool,
 	initNewFactory bool,
 ) (*FactorySessionOpenResult, error) {
-	return fs.requireCoordinator().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
+	return fs.requireSessionGateway().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
 }
 
 func (c *runtimeFactoryCoordinator) OpenFactorySessionFromFolder(
@@ -499,104 +455,10 @@ func (c *runtimeFactoryCoordinator) OpenFactorySessionFromFolder(
 	validateOnly bool,
 	initNewFactory bool,
 ) (*FactorySessionOpenResult, error) {
-	fs := c.service
-	if fs == nil {
+	if c.service == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
-	if initNewFactory {
-		return fs.initNewFactoryAndOpenSession(ctx, folderPath)
-	}
-
-	targets, err := fs.discoverFactorySessionTargets(folderPath)
-	if err != nil {
-		if validateOnly {
-			if reason, _, ok := factorysessions.ValidationReasonFromError(err); ok && reason == factorysessions.ValidationReasonNotRunnable {
-				resolved, resolveErr := factorysessions.ResolveSessionFolder(folderPath)
-				if resolveErr != nil {
-					return nil, resolveErr
-				}
-				return &FactorySessionOpenResult{
-					InitsNewFactory: true,
-					FolderPath:      resolved,
-				}, nil
-			}
-		}
-		return nil, err
-	}
-
-	selectedTarget, err := factorysessions.SelectTarget(targets, target)
-	if err != nil {
-		return nil, err
-	}
-	if selectedTarget == nil {
-		return &FactorySessionOpenResult{Targets: factorysessions.CloneTargets(targets)}, nil
-	}
-	if validateOnly {
-		return &FactorySessionOpenResult{Targets: factorysessions.CloneTargets(targets)}, nil
-	}
-
-	sessionID, err := fs.openFactorySessionForTarget(ctx, *selectedTarget)
-	if err != nil {
-		return nil, err
-	}
-	return &FactorySessionOpenResult{SessionID: sessionID}, nil
-}
-
-func (fs *FactoryService) initNewFactoryAndOpenSession(
-	ctx context.Context,
-	folderPath string,
-) (*FactorySessionOpenResult, error) {
-	resolvedFolder, err := factorysessions.ResolveSessionFolder(folderPath)
-	if err != nil {
-		return nil, err
-	}
-
-	targets, discoverErr := fs.discoverFactorySessionTargets(folderPath)
-	if discoverErr == nil {
-		return nil, factorysessions.NewValidationError(
-			factorysessions.ValidationReasonNotRunnable,
-			"folderPath",
-			fmt.Errorf("folder %q already exposes runnable factory targets", resolvedFolder),
-		)
-	}
-	reason, _, ok := factorysessions.ValidationReasonFromError(discoverErr)
-	if !ok || reason != factorysessions.ValidationReasonNotRunnable {
-		return nil, discoverErr
-	}
-
-	if err := factorysessions.ValidateInitNewFactoryNestedDir(resolvedFolder); err != nil {
-		return nil, err
-	}
-
-	nestedFactoryDir := filepath.Join(resolvedFolder, interfaces.FactoryDir)
-	if err := initcmd.Init(initcmd.InitConfig{
-		Dir:         nestedFactoryDir,
-		Diagnostics: io.Discard,
-	}); err != nil {
-		return nil, factorysessions.NewValidationError(
-			factorysessions.ValidationReasonUnreadable,
-			"folderPath",
-			fmt.Errorf("initialize factory scaffold: %w", err),
-		)
-	}
-
-	targets, err = fs.discoverFactorySessionTargets(resolvedFolder)
-	if err != nil {
-		return nil, fmt.Errorf("discover initialized factory targets: %w", err)
-	}
-	selectedTarget, err := factorysessions.SelectTarget(targets, nil)
-	if err != nil {
-		return nil, err
-	}
-	if selectedTarget == nil {
-		return nil, fmt.Errorf("initialized factory folder %q did not resolve to a runnable target", resolvedFolder)
-	}
-
-	sessionID, err := fs.openFactorySessionForTarget(ctx, *selectedTarget)
-	if err != nil {
-		return nil, err
-	}
-	return &FactorySessionOpenResult{SessionID: sessionID}, nil
+	return c.service.requireSessionGateway().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
 }
 
 func (fs *FactoryService) openFactorySessionForTarget(ctx context.Context, target FactorySessionTarget) (string, error) {

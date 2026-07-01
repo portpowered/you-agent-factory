@@ -83,9 +83,14 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		return nil, err
 	}
 	service := NewFactoryServiceFromCore(core)
-	return AttachFactorySaveCollaborator(
+	shell := FactoryServiceShell{Service: service}
+	service = AttachFactorySaveCollaborator(
+		shell,
+		ProvideFactorySaveCollaborator(shell, cfg),
+	)
+	return AttachSessionGatewayCollaborator(
 		FactoryServiceShell{Service: service},
-		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: service}, cfg),
+		ProvideSessionGatewayCollaborator(FactoryServiceShell{Service: service}, cfg),
 	), nil
 }
 
