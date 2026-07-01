@@ -21,6 +21,7 @@ import * as primitives from "youagentfactory/components/primitives";
 import * as recipes from "youagentfactory/components/recipes";
 import * as testing from "youagentfactory/components/testing";
 import * as tokens from "youagentfactory/components/tokens";
+import { cn, COMPONENTS_CATEGORY as utilitiesCategory } from "youagentfactory/components/utilities";
 import * as utilities from "youagentfactory/components/utilities";
 
 const categoryModules = {
@@ -84,4 +85,10 @@ describe("youagentfactory/components package import resolution", () => {
       expect(categoryModule.COMPONENTS_CATEGORY).toBe(categoryPath);
     },
   );
+
+  it("imports cn from the utilities category surface", () => {
+    expect(utilitiesCategory).toBe("utilities");
+    expect(cn("alpha", false, "beta")).toBe("alpha beta");
+    expect(typeof utilities.cn).toBe("function");
+  });
 });
