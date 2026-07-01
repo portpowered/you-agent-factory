@@ -11,8 +11,14 @@ import {
 export type FactorySessionSyncPreflightResponse =
   components["schemas"]["FactorySessionSyncPreflightResponse"];
 
+export interface FactorySessionLogicalResolveHint {
+  backendScopeID: string;
+  logicalSessionKeyID: string;
+}
+
 export interface GetFactorySessionSyncPreflightOptions {
   fetch?: typeof globalThis.fetch;
+  logicalResolve?: FactorySessionLogicalResolveHint;
 }
 
 export async function getFactorySessionSyncPreflight(
@@ -30,7 +36,7 @@ export async function getFactorySessionSyncPreflight(
     );
   }
 
-  const query = buildSyncPreflightQuery(reconnectCursor);
+  const query = buildSyncPreflightQuery(reconnectCursor, options.logicalResolve);
 
   let response: Response;
   try {
@@ -78,6 +84,7 @@ export async function getFactorySessionSyncPreflight(
 
 function buildSyncPreflightQuery(
   reconnectCursor?: FactoryEventReconnectCursor,
+  logicalResolve?: FactorySessionLogicalResolveHint,
 ): string {
   const params = new URLSearchParams();
   if (reconnectCursor?.afterEventId) {
@@ -85,6 +92,15 @@ function buildSyncPreflightQuery(
   }
   if (reconnectCursor?.afterSequence != null) {
     params.set("after_sequence", String(reconnectCursor.afterSequence));
+  }
+  if (logicalResolve?.backendScopeID.trim()) {
+    params.set("backend_scope_id", logicalResolve.backendScopeID.trim());
+  }
+  if (logicalResolve?.logicalSessionKeyID.trim()) {
+    params.set(
+      "logical_session_key_id",
+      logicalResolve.logicalSessionKeyID.trim(),
+    );
   }
   const query = params.toString();
   return query ? `?${query}` : "";

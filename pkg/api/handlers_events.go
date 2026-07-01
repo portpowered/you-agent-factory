@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	sessionEventStreamBackendScopeHeader   = "X-Factory-Session-Backend-Scope-Id"
-	sessionEventStreamGenerationHeader     = "X-Factory-Session-Stream-Generation-Id"
+	sessionEventStreamBackendScopeHeader      = "X-Factory-Session-Backend-Scope-Id"
+	sessionEventStreamLogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
+	sessionEventStreamFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
+	sessionEventStreamGenerationHeader        = "X-Factory-Session-Stream-Generation-Id"
 )
 
 // GetStatus handles GET /status as the supported runtime status read model.
@@ -185,6 +187,7 @@ func (s *Server) GetFactorySessionSyncPreflightBySessionId(
 		r.Context(),
 		string(sessionID),
 		reconnectCursorFromParams(params.AfterEventId, params.AfterSequence),
+		logicalResolveHintFromParams(params.BackendScopeId, params.LogicalSessionKeyId),
 	)
 	if err != nil {
 		s.logger.Error("get factory session sync preflight failed", zap.Error(err))
@@ -209,6 +212,23 @@ func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSeque
 	return cursor
 }
 
+func logicalResolveHintFromParams(
+	backendScopeID *factoryapi.BackendScopeId,
+	logicalSessionKeyID *factoryapi.LogicalSessionKeyId,
+) *interfaces.FactorySessionLogicalResolveHint {
+	if backendScopeID == nil && logicalSessionKeyID == nil {
+		return nil
+	}
+	hint := &interfaces.FactorySessionLogicalResolveHint{}
+	if backendScopeID != nil {
+		hint.BackendScopeID = string(*backendScopeID)
+	}
+	if logicalSessionKeyID != nil {
+		hint.LogicalSessionKeyID = string(*logicalSessionKeyID)
+	}
+	return hint
+}
+
 func afterEventIDParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterEventId {
 	if cursor == nil || strings.TrimSpace(cursor.AfterEventID) == "" {
 		return nil
@@ -231,6 +251,12 @@ func writeSessionEventStreamHandshakeHeaders(
 ) {
 	if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
 		w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
+	}
+	if logicalSessionKeyID := strings.TrimSpace(stream.LogicalSessionKeyID); logicalSessionKeyID != "" {
+		w.Header().Set(sessionEventStreamLogicalSessionKeyHeader, logicalSessionKeyID)
+	}
+	if factorySessionID := strings.TrimSpace(stream.FactorySessionID); factorySessionID != "" {
+		w.Header().Set(sessionEventStreamFactorySessionHeader, factorySessionID)
 	}
 	if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
 		w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)

@@ -215,8 +215,8 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 		t.Fatal("paths./factory-sessions/{session_id}/sync-preflight.get is missing")
 	}
 	parameters, ok := getOp["parameters"].([]any)
-	if !ok || len(parameters) != 3 {
-		t.Fatalf("sync preflight parameters = %#v, want session_id plus reconnect cursor params", getOp["parameters"])
+	if !ok || len(parameters) != 5 {
+		t.Fatalf("sync preflight parameters = %#v, want session_id plus reconnect and logical resolve params", getOp["parameters"])
 	}
 
 	response := schemaObject(t, schemas, "FactorySessionSyncPreflightResponse")
@@ -224,9 +224,14 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 	properties := schemaProperties(t, response, "FactorySessionSyncPreflightResponse")
 	assertPropertyRef(t, properties, "reasonCode", "#/components/schemas/FactorySessionSyncPreflightReasonCode")
 	assertPropertyRef(t, properties, "reconnectCursor", "#/components/schemas/FactorySessionSyncPreflightReconnectCursor")
+	for _, field := range []string{"backendScopeId", "logicalSessionKeyId", "factorySessionId", "streamGenerationId"} {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("FactorySessionSyncPreflightResponse.properties.%s is missing", field)
+		}
+	}
 
 	reasonCode := schemaObject(t, schemas, "FactorySessionSyncPreflightReasonCode")
-	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap"})
+	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap", "logical_session_unresolved"})
 
 	reconnectCursor := schemaObject(t, schemas, "FactorySessionSyncPreflightReconnectCursor")
 	assertRequiredFields(t, reconnectCursor, "provided", "validForStreamGeneration")

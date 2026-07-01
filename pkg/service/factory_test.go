@@ -1067,6 +1067,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		RuntimeMetricsDir: runtimeMetricsDir,
 		RecordPath:        options.recordPath,
 		ExtraOptions:      options.extraOptions,
+		SystemConfigHomeDir: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
@@ -1199,9 +1200,9 @@ func (h *runningSessionService) openFactorySession(t *testing.T, factoryName str
 func (h *runningSessionService) requireSession(t *testing.T, sessionID string) *liveFactorySession {
 	t.Helper()
 
-	session := h.svc.sessionByID(sessionID)
-	if session == nil {
-		t.Fatalf("expected session %q to be registered; got ids %v", sessionID, h.svc.sessions.IDs())
+	session, err := h.svc.requireSession(sessionID)
+	if err != nil {
+		t.Fatalf("expected session %q to be registered; got ids %v: %v", sessionID, h.svc.sessions.IDs(), err)
 	}
 	return session
 }
@@ -1336,7 +1337,12 @@ func assertSessionRuntimeMetricsPathsAreDistinct(t *testing.T, metricsRoot strin
 		if sessionComponent == "" {
 			sessionComponent = "unknown"
 		}
-		if !strings.Contains(filepath.Base(path), "-"+sessionComponent+"-") {
+		baseName := filepath.Base(path)
+		if session.IsDefault {
+			if !strings.Contains(baseName, "-default-") && !strings.Contains(baseName, "-"+sessionComponent+"-") {
+				t.Fatalf("session %s runtime metrics path %q does not include default session marker", session.ID, path)
+			}
+		} else if !strings.Contains(baseName, "-"+sessionComponent+"-") {
 			t.Fatalf("session %s runtime metrics path %q does not include session ID", session.ID, path)
 		}
 		seenPaths[path] = session.ID

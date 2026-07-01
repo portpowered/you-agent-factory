@@ -6,8 +6,8 @@ import type {
   probeFactoryEventStreamRecovery,
 } from "../../../../api/events";
 import {
-  clearTimelineCheckpoint,
-  type TimelineCheckpointStreamIdentity,
+  deleteTimelineCheckpoint,
+  type StreamDerivedCacheIdentity,
 } from "../../../timeline/public";
 import {
   recordSessionPersistenceInvalidation,
@@ -138,7 +138,7 @@ async function recoverStaleCursor({
     >["streamState"],
   ) => void;
   staleCursorRecoveryAttemptedRef: RefObject<boolean>;
-  streamIdentity?: TimelineCheckpointStreamIdentity | null;
+  streamIdentity: StreamDerivedCacheIdentity | null;
   streamSessionID: string;
 }): Promise<boolean> {
   try {
@@ -166,10 +166,10 @@ async function recoverStaleCursor({
       queryClient,
       streamSessionID,
       resetTimeline,
-      streamIdentity?.backendScopeID,
+      streamIdentity,
     );
     if (typeof window !== "undefined") {
-      await clearTimelineCheckpoint(window.indexedDB, streamIdentity ?? null);
+      await deleteTimelineCheckpoint(window.indexedDB, streamIdentity);
     }
     setStreamState(reconnectingStreamState(locale));
     openDashboardStream(undefined);
@@ -209,7 +209,7 @@ export async function reconnectAfterStreamError({
       typeof useDashboardStreamStore.getState
     >["streamState"],
   ) => void;
-  streamIdentity?: TimelineCheckpointStreamIdentity | null;
+  streamIdentity: StreamDerivedCacheIdentity | null;
   streamSessionID: string;
 }): Promise<void> {
   if (!refs.staleCursorRecoveryAttemptedRef.current) {

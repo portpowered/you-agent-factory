@@ -26,8 +26,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
@@ -95,7 +95,7 @@ type serviceRunState struct {
 //
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
 // session registry, pkg/localmodels owns managed model runtime wiring, and
-// pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
+// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu      sync.RWMutex
 	activationMu   sync.RWMutex
@@ -105,7 +105,7 @@ type FactoryService struct {
 	core           *FactoryCore
 	sessions       *factorysessions.Registry
 	factorySave    factorySaveSaver
-	sessionGateway    sessionGateway
+	sessionGateway sessionGateway
 	runtimeBuild      *runtimebuild.Service
 	workersScheduler  *workersservice.Service
 	hostedWorkers     hostedworkers.Config
@@ -171,11 +171,17 @@ type FactoryServiceConfig struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
-	// BackendScopeID is the stable session/cache namespace; empty local backends persist local-<uuid> during construction.
+	// BackendScopeID is the stable backend namespace used for session identity
+	// and client cache isolation. Empty local backends load or generate and
+	// persist local-<uuid> in system config during service construction.
 	BackendScopeID string
-	// SystemConfigHomeDir overrides the home directory for backendScopeID system config resolution.
+	// SystemConfigHomeDir overrides the home directory used to resolve the
+	// shared system config path for backendScopeID persistence. Empty uses
+	// os.UserHomeDir().
 	SystemConfigHomeDir string
-	// SystemConfigPath overrides the system config file path for backendScopeID persistence.
+	// SystemConfigPath overrides the system config file path used for
+	// backendScopeID persistence. Empty derives the path from
+	// SystemConfigHomeDir or os.UserHomeDir().
 	SystemConfigPath string
 	// RuntimeLogDir optionally overrides the default
 	// ~/.you-agent-factory/logs directory. Tests use this to keep file-backed
@@ -577,14 +583,14 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 	fs := c.service
 	runtimeBundle := fs.currentRuntimeBundle()
 	currentRuntime := fs.startLiveRuntime(runCtx, runtimeBundle)
-	fs.registerLiveSession(
+	registeredSessionID := fs.registerLiveSession(
 		defaultFactorySessionID,
 		currentRuntime,
 		defaultSessionTargetFromRuntimeBundle(runtimeBundle, fs.factoryRootDir),
 		true,
 	)
 	fs.clearStartupBundle()
-	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
+	fs.setRunState(runCtx, registeredSessionID, currentRuntime)
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
 	}

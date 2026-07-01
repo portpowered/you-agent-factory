@@ -12,6 +12,7 @@ import {
   currentFactoryDefinitionQueryKey,
   useCurrentFactoryDefinition,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useDashboardSessionLifecycle } from "../hooks/useDashboardSessionLifecycle";
@@ -29,6 +30,18 @@ vi.mock("../../../api/current-factory-definition", async () => {
 
 const BACKEND_SCOPE_A = "backend-scope-a";
 const BACKEND_SCOPE_B = "backend-scope-b";
+const RESOLVED_DEFAULT_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function streamIdentityForScope(
+  backendScopeID: string,
+): StreamDerivedCacheIdentity {
+  return {
+    backendScopeID,
+    factorySessionID: RESOLVED_DEFAULT_SESSION_UUID,
+    logicalSessionKeyID: "logical-default",
+    streamGenerationID: "2026-06-26T00:00:00Z",
+  };
+}
 
 function factoryDocumentForScope(scopeLabel: string): CurrentFactoryDocument {
   return {
@@ -61,18 +74,20 @@ describe("backend scope isolation integration", () => {
         queries: { retry: false },
       },
     });
-    useDashboardStreamStore.setState({
-      backendRuntimeCacheScope: null,
-    });
+    useDashboardStreamStore.getState().resetStreamState();
   });
 
   it("resolves runtime queries from separate namespaces per backendScopeID", async () => {
+    const streamIdentityA = streamIdentityForScope(BACKEND_SCOPE_A);
+    const streamIdentityB = streamIdentityForScope(BACKEND_SCOPE_B);
+
     vi.mocked(getCurrentFactoryDocument)
       .mockResolvedValueOnce(factoryDocumentForScope(BACKEND_SCOPE_A))
       .mockResolvedValueOnce(factoryDocumentForScope(BACKEND_SCOPE_B));
 
     useDashboardStreamStore.setState({
       backendRuntimeCacheScope: BACKEND_SCOPE_A,
+      resolvedStreamIdentity: streamIdentityA,
     });
 
     const { result, rerender } = renderHook(() => useCurrentFactoryDefinition(), {
@@ -88,7 +103,7 @@ describe("backend scope isolation integration", () => {
       queryClient.getQueryData(
         currentFactoryDefinitionQueryKey(
           DEFAULT_FACTORY_SESSION_ID,
-          BACKEND_SCOPE_A,
+          streamIdentityA,
         ),
       ),
     ).toEqual(factoryDocumentForScope(BACKEND_SCOPE_A));
@@ -96,6 +111,7 @@ describe("backend scope isolation integration", () => {
     act(() => {
       useDashboardStreamStore.setState({
         backendRuntimeCacheScope: BACKEND_SCOPE_B,
+        resolvedStreamIdentity: streamIdentityB,
       });
     });
     rerender();
@@ -113,24 +129,34 @@ describe("backend scope isolation integration", () => {
       queryClient.getQueryData(
         currentFactoryDefinitionQueryKey(
           DEFAULT_FACTORY_SESSION_ID,
-          BACKEND_SCOPE_B,
+          streamIdentityB,
         ),
       ),
     ).toEqual(factoryDocumentForScope(BACKEND_SCOPE_B));
   });
 
   it("clears runtime-derived queries when backendRuntimeCacheScope changes", () => {
+    const streamIdentityA = streamIdentityForScope(BACKEND_SCOPE_A);
+    const streamIdentityB = streamIdentityForScope(BACKEND_SCOPE_B);
+
     queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID, BACKEND_SCOPE_A),
+      currentFactoryDefinitionQueryKey(
+        DEFAULT_FACTORY_SESSION_ID,
+        streamIdentityA,
+      ),
       { workers: [{ name: "scope-a-only" }] },
     );
     queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID, BACKEND_SCOPE_B),
+      currentFactoryDefinitionQueryKey(
+        DEFAULT_FACTORY_SESSION_ID,
+        streamIdentityB,
+      ),
       { workers: [{ name: "scope-b-only" }] },
     );
 
     useDashboardStreamStore.setState({
       backendRuntimeCacheScope: BACKEND_SCOPE_A,
+      resolvedStreamIdentity: streamIdentityA,
     });
 
     renderHook(
@@ -145,6 +171,7 @@ describe("backend scope isolation integration", () => {
     act(() => {
       useDashboardStreamStore.setState({
         backendRuntimeCacheScope: BACKEND_SCOPE_B,
+        resolvedStreamIdentity: streamIdentityB,
       });
     });
 
@@ -152,7 +179,7 @@ describe("backend scope isolation integration", () => {
       queryClient.getQueryData(
         currentFactoryDefinitionQueryKey(
           DEFAULT_FACTORY_SESSION_ID,
-          BACKEND_SCOPE_A,
+          streamIdentityA,
         ),
       ),
     ).toBeUndefined();
@@ -160,7 +187,7 @@ describe("backend scope isolation integration", () => {
       queryClient.getQueryData(
         currentFactoryDefinitionQueryKey(
           DEFAULT_FACTORY_SESSION_ID,
-          BACKEND_SCOPE_B,
+          streamIdentityB,
         ),
       ),
     ).toBeUndefined();

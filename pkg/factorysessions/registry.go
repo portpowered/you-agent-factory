@@ -1,7 +1,9 @@
 package factorysessions
 
 import (
+	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -62,7 +64,14 @@ func (m *Registry) Current() *LiveSession {
 
 // Get returns the live session for id when registered.
 func (m *Registry) Get(id string) *LiveSession {
-	if m == nil || id == "" {
+	if m == nil {
+		return nil
+	}
+	if IsDefaultSessionSelector(id) {
+		return m.DefaultSession()
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
 		return nil
 	}
 	m.mu.RLock()
@@ -74,6 +83,13 @@ func (m *Registry) Get(id string) *LiveSession {
 func (m *Registry) Remove(id string) {
 	if m == nil || id == "" {
 		return
+	}
+	if IsDefaultSessionSelector(id) {
+		if session := m.DefaultSession(); session != nil {
+			id = session.ID
+		} else {
+			return
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -116,4 +132,68 @@ func (m *Registry) IDs() []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// IsDefaultSessionSelector reports whether sessionID is the compatibility default alias.
+func IsDefaultSessionSelector(sessionID string) bool {
+	id := strings.TrimSpace(sessionID)
+	return id == "" || id == DefaultSessionID
+}
+
+// LogicalSessionKeyID returns the stable logical-session key for one live session target.
+func LogicalSessionKeyID(session *LiveSession) string {
+	if session == nil {
+		return ""
+	}
+	folderPath := filepath.Clean(strings.TrimSpace(session.FolderPath))
+	if folderPath == "." {
+		folderPath = ""
+	}
+	targetKind := strings.TrimSpace(string(session.Target.Kind))
+	targetName := strings.TrimSpace(session.Target.Name)
+	if targetKind == "" {
+		targetKind = string(TargetKindDefault)
+	}
+	return strings.Join([]string{folderPath, targetKind, targetName}, "::")
+}
+
+// DefaultSession returns the live session marked as the default compatibility session.
+func (m *Registry) DefaultSession() *LiveSession {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.defaultSessionLocked()
+}
+
+func (m *Registry) defaultSessionLocked() *LiveSession {
+	for _, session := range m.sessions {
+		if session != nil && session.IsDefault {
+			return session
+		}
+	}
+	return nil
+}
+
+// FindByLogicalSessionKeyID returns the live session registered for logicalSessionKeyID.
+func (m *Registry) FindByLogicalSessionKeyID(logicalSessionKeyID string) *LiveSession {
+	if m == nil {
+		return nil
+	}
+	logicalSessionKeyID = strings.TrimSpace(logicalSessionKeyID)
+	if logicalSessionKeyID == "" {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, session := range m.sessions {
+		if session == nil {
+			continue
+		}
+		if LogicalSessionKeyID(session) == logicalSessionKeyID {
+			return session
+		}
+	}
+	return nil
 }

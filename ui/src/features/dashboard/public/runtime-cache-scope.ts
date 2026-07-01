@@ -5,7 +5,7 @@ export {
   scopedRuntimeQueryKey,
   shouldResetDashboardRuntimeScopedState,
   UNSAFE_BACKEND_RUNTIME_CACHE_SCOPE,
-} from "../lib/backend-runtime-cache-scope";
+} from "../lib/backend-scope/backend-runtime-cache-scope";
 export {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,

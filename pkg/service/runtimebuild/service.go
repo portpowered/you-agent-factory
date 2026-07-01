@@ -89,7 +89,11 @@ func (s *Service) BuildSpec(
 		}
 	}
 	clock := factory.EnsureClock(s.clock)
-	recordPath := SessionScopedRecordPath(s.cfg.RecordPath, input.SessionID)
+	recordSessionID := input.SessionID
+	if input.PreserveCompatibilityDefaultRecordPath {
+		recordSessionID = "~default"
+	}
+	recordPath := SessionScopedRecordPath(s.cfg.RecordPath, recordSessionID)
 	runtimeInstanceID := strings.TrimSpace(input.RuntimeInstanceID)
 	if runtimeInstanceID == "" {
 		runtimeInstanceID = uuid.NewString()

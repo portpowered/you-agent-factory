@@ -4,6 +4,8 @@ import {
 } from "../../../i18n";
 
 export interface DashboardRecoveryMessages {
+  logicalSessionUnresolvedDetail: string;
+  logicalSessionUnresolvedTitle: string;
   recoveryFailedDetail: string;
   recoveryFailedRefreshLabel: string;
   recoveryFailedRetryLabel: string;
@@ -23,6 +25,9 @@ const dashboardRecoveryMessagesByLocale = {
     recoveryFailedRetryLabel: "Retry session stream",
     recoveryFailedTitle: "Session replay needs attention",
     preflightRetryAction: "Retry clean replay",
+    logicalSessionUnresolvedDetail:
+      "The backend could not remap this tab to a live session for the saved logical target. Cached dashboard state was cleared. Reopen the default session or clear local state, then retry a clean replay.",
+    logicalSessionUnresolvedTitle: "Session remap failed",
     sessionNotFoundDetailTemplate:
       'The backend could not resolve the live session for "{{sessionId}}". Cached dashboard state was cleared. Reopen the session, then retry a clean replay.',
     sessionNotFoundTitle: "Session recovery required",
@@ -32,6 +37,9 @@ const dashboardRecoveryMessagesByLocale = {
   },
   ja: {
     preflightRetryAction: "クリーンな再生を再試行",
+    logicalSessionUnresolvedDetail:
+      "バックエンドは保存された論理ターゲットのライブセッションへこのタブを再マップできませんでした。キャッシュされたダッシュボード状態は消去されました。デフォルトセッションを再度開くかローカル状態を消去してから、クリーンな再生を再試行してください。",
+    logicalSessionUnresolvedTitle: "セッションの再マップに失敗しました",
     recoveryFailedDetail:
       "イベントカーソルの期限切れ後に、このセッションをダッシュボードで自動復元できませんでした。セッションストリームを再試行するか、ページを再読み込みしてください。",
     recoveryFailedRefreshLabel: "ページを再読み込み",
@@ -46,6 +54,9 @@ const dashboardRecoveryMessagesByLocale = {
   },
   ko: {
     preflightRetryAction: "클린 리플레이 다시 시도",
+    logicalSessionUnresolvedDetail:
+      "백엔드가 저장된 논리 대상에 대한 라이브 세션으로 이 탭을 다시 매핑하지 못했습니다. 캐시된 대시보드 상태를 지웠습니다. 기본 세션을 다시 열거나 로컬 상태를 지운 뒤 클린 리플레이를 다시 시도하세요.",
+    logicalSessionUnresolvedTitle: "세션 재매핑 실패",
     recoveryFailedDetail:
       "이벤트 커서가 만료된 뒤 이 세션을 대시보드에서 자동으로 복원하지 못했습니다. 세션 스트림을 다시 시도하거나 페이지를 새로고침하세요.",
     recoveryFailedRefreshLabel: "페이지 새로고침",
@@ -60,6 +71,9 @@ const dashboardRecoveryMessagesByLocale = {
   },
   "zh-CN": {
     preflightRetryAction: "重试干净回放",
+    logicalSessionUnresolvedDetail:
+      "后端无法将此标签页重新映射到已保存逻辑目标的活动会话。缓存的仪表板状态已清除。请重新打开默认会话或清除本地状态，然后重试干净回放。",
+    logicalSessionUnresolvedTitle: "会话重映射失败",
     recoveryFailedDetail:
       "事件游标过期后，仪表板无法自动恢复此会话。请重试会话事件流，或刷新页面。",
     recoveryFailedRefreshLabel: "刷新页面",

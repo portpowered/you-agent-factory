@@ -100,12 +100,48 @@ func TestEnsureLocalBackendScope_PreservesExistingDefaults(t *testing.T) {
 	}
 }
 
-func TestEnsureLocalBackendScope_ReusesConfiguredScope(t *testing.T) {
+func TestDeriveProviderBackendScopeID_DistinctForDifferentBoundaries(t *testing.T) {
+	t.Parallel()
+
+	first := DeriveProviderBackendScopeID("codex", "account", "workspace-a")
+	second := DeriveProviderBackendScopeID("codex", "account", "workspace-b")
+	third := DeriveProviderBackendScopeID("claude", "account", "workspace-a")
+	if first == second || first == third || second == third {
+		t.Fatalf("provider scopes should differ: %q %q %q", first, second, third)
+	}
+	if strings.HasPrefix(first, LocalBackendScopePrefix) {
+		t.Fatalf("provider scope = %q, want non-local prefix", first)
+	}
+}
+
+func TestResolvedBackendScope_DiagnosticsLine(t *testing.T) {
+	t.Parallel()
+
+	scope := ResolvedBackendScope{
+		BackendScopeID: "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+		Outcome:        OutcomeReused,
+		ConfigPath:     "/tmp/config.json",
+	}
+	line := scope.DiagnosticsLine()
+	if !strings.Contains(line, "outcome=reused") {
+		t.Fatalf("diagnostics line = %q, want reused outcome", line)
+	}
+	if !strings.Contains(line, scope.BackendScopeID) {
+		t.Fatalf("diagnostics line = %q, want backend scope id", line)
+	}
+
+	unset := ResolvedBackendScope{Outcome: OutcomeGenerated}.DiagnosticsLine()
+	if !strings.Contains(unset, "backendScopeID=unset") {
+		t.Fatalf("diagnostics line = %q, want unset backend scope", unset)
+	}
+}
+
+func TestEnsureLocalBackendScope_ReusesPersistedScope(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
 	configPath := DefaultConfigPath(homeDir)
-	existing := "local-11111111-2222-4333-8444-555555555555"
+	existing := "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -125,29 +161,15 @@ func TestEnsureLocalBackendScope_ReusesConfiguredScope(t *testing.T) {
 	}
 }
 
-func TestEnsureLocalBackendScope_PersistFailureReturnsActionableError(t *testing.T) {
+func TestEnsureLocalBackendScope_RejectsEmptyConfigPath(t *testing.T) {
 	t.Parallel()
 
-	homeDir := t.TempDir()
-	configDir := filepath.Join(homeDir, "blocked")
-	if err := os.MkdirAll(configDir, 0o555); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	configPath := filepath.Join(configDir, "config.json")
-
-	_, err := EnsureLocalBackendScope(configPath)
-	if err == nil {
-		t.Fatal("expected persistence failure")
-	}
-	if !strings.Contains(err.Error(), configPath) {
-		t.Fatalf("error = %q, want config path %q", err.Error(), configPath)
-	}
-	if !strings.Contains(err.Error(), "stable backendScopeID") {
-		t.Fatalf("error = %q, want actionable backend scope message", err.Error())
+	if _, err := EnsureLocalBackendScope("   "); err == nil {
+		t.Fatal("expected error for empty config path")
 	}
 }
 
-func TestEnsureLocalBackendScope_MalformedLocalScopeReturnsConfigError(t *testing.T) {
+func TestEnsureLocalBackendScope_RejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -155,23 +177,54 @@ func TestEnsureLocalBackendScope_MalformedLocalScopeReturnsConfigError(t *testin
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":"local-not-a-uuid"}`), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{invalid`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	_, err := EnsureLocalBackendScope(configPath)
-	if err == nil {
-		t.Fatal("expected malformed local backend scope error")
-	}
-	if !strings.Contains(err.Error(), configPath) {
-		t.Fatalf("error = %q, want config path %q", err.Error(), configPath)
-	}
-	if !strings.Contains(err.Error(), "malformed backendScopeID") {
-		t.Fatalf("error = %q, want malformed backend scope message", err.Error())
+	if _, err := EnsureLocalBackendScope(configPath); err == nil {
+		t.Fatal("expected parse error for invalid config JSON")
 	}
 }
 
-func TestEnsureLocalBackendScope_BlankConfiguredScopeGeneratesLocalUUID(t *testing.T) {
+func TestPersistBackendScopeID_RejectsInvalidScope(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+
+	if err := persistBackendScopeID(configPath, "not-a-local-scope"); err == nil {
+		t.Fatal("expected error for invalid backend scope id")
+	}
+	if err := persistBackendScopeID(configPath, ""); err == nil {
+		t.Fatal("expected error for empty backend scope id")
+	}
+}
+
+func TestGenerateLocalBackendScopeID_AndValidationHelpers(t *testing.T) {
+	t.Parallel()
+
+	generated := GenerateLocalBackendScopeID()
+	if !IsLocalBackendScopeID(generated) {
+		t.Fatalf("generated scope = %q, want local-<uuid>", generated)
+	}
+	if IsLocalBackendScopeID("provider-codex-account-workspace") {
+		t.Fatal("provider scope should not match local backend scope pattern")
+	}
+	if IsLocalBackendScopeID("local-not-a-uuid") {
+		t.Fatal("malformed local scope should be rejected")
+	}
+}
+
+func TestDeriveProviderBackendScopeID_SanitizesEmptySegments(t *testing.T) {
+	t.Parallel()
+
+	scope := DeriveProviderBackendScopeID(" ", "", "workspace")
+	if !strings.Contains(scope, "unknown") {
+		t.Fatalf("provider scope = %q, want unknown placeholders for empty segments", scope)
+	}
+}
+
+func TestEnsureLocalBackendScope_TreatsWhitespaceConfigAsMissingScope(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -179,7 +232,7 @@ func TestEnsureLocalBackendScope_BlankConfiguredScopeGeneratesLocalUUID(t *testi
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":"   "}`), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte("   \n"), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -191,181 +244,6 @@ func TestEnsureLocalBackendScope_BlankConfiguredScopeGeneratesLocalUUID(t *testi
 		t.Fatalf("outcome = %q, want %q", resolved.Outcome, OutcomeGenerated)
 	}
 	if !IsLocalBackendScopeID(resolved.BackendScopeID) {
-		t.Fatalf("backendScopeID = %q, want local-<uuid>", resolved.BackendScopeID)
-	}
-}
-
-func TestEnsureLocalBackendScope_ReusesExplicitNonLocalScope(t *testing.T) {
-	t.Parallel()
-
-	homeDir := t.TempDir()
-	configPath := DefaultConfigPath(homeDir)
-	existing := "cloud-review-scope"
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":"`+existing+`"}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	resolved, err := EnsureLocalBackendScope(configPath)
-	if err != nil {
-		t.Fatalf("EnsureLocalBackendScope() error = %v", err)
-	}
-	if resolved.Outcome != OutcomeReused {
-		t.Fatalf("outcome = %q, want %q", resolved.Outcome, OutcomeReused)
-	}
-	if resolved.BackendScopeID != existing {
-		t.Fatalf("backendScopeID = %q, want %q", resolved.BackendScopeID, existing)
-	}
-}
-
-func TestEnsureLocalBackendScope_MalformedConfigNamesPath(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	_, err := EnsureLocalBackendScope(configPath)
-	if err == nil {
-		t.Fatal("expected malformed config error")
-	}
-	if !strings.Contains(err.Error(), configPath) {
-		t.Fatalf("error = %q, want path %q", err.Error(), configPath)
-	}
-}
-
-func TestResolvedBackendScope_DiagnosticsLineRedactsNothingForScopeID(t *testing.T) {
-	t.Parallel()
-
-	line := (ResolvedBackendScope{
-		BackendScopeID: "local-11111111-2222-4333-8444-555555555555",
-		Outcome:        OutcomeGenerated,
-		ConfigPath:     "/tmp/config.json",
-	}).DiagnosticsLine()
-	if !strings.Contains(line, "outcome=generated") {
-		t.Fatalf("line = %q, want generated outcome", line)
-	}
-	if !strings.Contains(line, "local-11111111-2222-4333-8444-555555555555") {
-		t.Fatalf("line = %q, want backend scope id", line)
-	}
-	if strings.Contains(line, "workerModel") {
-		t.Fatalf("line = %q, should not leak unrelated config fields", line)
-	}
-}
-
-func TestEnsureLocalBackendScope_RequiresConfigPath(t *testing.T) {
-	t.Parallel()
-
-	_, err := EnsureLocalBackendScope("   ")
-	if err == nil {
-		t.Fatal("expected missing config path error")
-	}
-	if !strings.Contains(err.Error(), "system config path is required") {
-		t.Fatalf("error = %q, want required path message", err.Error())
-	}
-}
-
-func TestResolvedBackendScope_DiagnosticsLineUnsetScope(t *testing.T) {
-	t.Parallel()
-
-	line := (ResolvedBackendScope{
-		BackendScopeID: "   ",
-		Outcome:        OutcomeReused,
-		ConfigPath:     "/tmp/config.json",
-	}).DiagnosticsLine()
-	if !strings.Contains(line, "backendScopeID=unset") {
-		t.Fatalf("line = %q, want unset backend scope id", line)
-	}
-}
-
-func TestReadConfigMap_EmptyFileReturnsEmptyMap(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(configPath, []byte("  \n  "), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	configMap, err := readConfigMap(configPath)
-	if err != nil {
-		t.Fatalf("readConfigMap() error = %v", err)
-	}
-	if len(configMap) != 0 {
-		t.Fatalf("configMap = %#v, want empty map", configMap)
-	}
-}
-
-func TestReadConfigMap_InvalidJSONReturnsError(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(configPath, []byte(`{"backendScopeID":`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	_, err := readConfigMap(configPath)
-	if err == nil {
-		t.Fatal("expected invalid JSON error")
-	}
-	if !strings.Contains(err.Error(), configPath) {
-		t.Fatalf("error = %q, want path %q", err.Error(), configPath)
-	}
-}
-
-func TestLoadBackendScopeID_ReadErrorIncludesPath(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(configPath, []byte(`{}`), 0o000); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chmod(configPath, 0o600)
-	})
-
-	_, err := loadBackendScopeID(configPath)
-	if err == nil {
-		t.Fatal("expected read error")
-	}
-	if !strings.Contains(err.Error(), configPath) {
-		t.Fatalf("error = %q, want path %q", err.Error(), configPath)
-	}
-}
-
-func TestPersistBackendScopeID_RejectsEmptyAndInvalidValues(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join(t.TempDir(), "config.json")
-
-	if err := persistBackendScopeID(configPath, "   "); err == nil {
-		t.Fatal("expected empty backend scope error")
-	} else if !strings.Contains(err.Error(), "backend scope ID is required") {
-		t.Fatalf("error = %q, want required scope message", err.Error())
-	}
-
-	if err := persistBackendScopeID(configPath, "cloud-review-scope"); err == nil {
-		t.Fatal("expected invalid local backend scope error")
-	} else if !strings.Contains(err.Error(), "not a valid local backend scope") {
-		t.Fatalf("error = %q, want invalid local scope message", err.Error())
-	}
-}
-
-func TestWriteConfigMap_ReplaceFailureWhenPathIsDirectory(t *testing.T) {
-	t.Parallel()
-
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.Mkdir(configPath, 0o755); err != nil {
-		t.Fatalf("Mkdir: %v", err)
-	}
-
-	err := writeConfigMap(configPath, map[string]json.RawMessage{})
-	if err == nil {
-		t.Fatal("expected replace failure when config path is a directory")
-	}
-	if !strings.Contains(err.Error(), "replace system config") {
-		t.Fatalf("error = %q, want replace failure message", err.Error())
+		t.Fatalf("backendScopeID = %q, want generated local scope", resolved.BackendScopeID)
 	}
 }

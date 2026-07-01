@@ -137,7 +137,7 @@ export interface paths {
     };
     /**
      * Stream process-global factory events (compatibility-only)
-     * @description Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. New dashboard, Factory Session, and durable replay consumers should use GET /factory-sessions/{session_id}/events so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+     * @description Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. Dashboard clients must open GET /factory-sessions/{session_id}/events with the resolved UUID factorySessionID instead; this route does not carry session identity handshakes and must not govern default-session dashboard recovery. New Factory Session and durable replay consumers should use the session-scoped route so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
      */
     get: operations["getEvents"];
     put?: never;
@@ -1398,6 +1398,8 @@ export interface components {
     FactorySessionStreamIdentity: {
       /** @description Stable backend process or scope identity for the current live session stream. */
       backendScopeID: string;
+      /** @description Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector. */
+      logicalSessionKeyID: string;
       /** @description Stable live Factory Session identifier for the current stream. */
       factorySessionID: string;
       /** @description Stable generation identifier for the current live session stream incarnation. */
@@ -4984,6 +4986,10 @@ export interface components {
     AfterEventId: string;
     /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
     AfterSequence: number;
+    /** @description Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target. */
+    BackendScopeId: string;
+    /** @description Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector. */
+    LogicalSessionKeyId: string;
   };
   requestBodies: never;
   headers: never;
@@ -5264,6 +5270,10 @@ export interface operations {
         headers: {
           /** @description Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Backend-Scope-Id"?: string;
+          /** @description Stable logical session key for the resolved Factory Session target within the current backend scope. Compare this handshake header with session-sync or preflight `logicalSessionKeyId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Logical-Session-Key-Id"?: string;
+          /** @description Resolved UUID Factory Session identifier for the current live event history. Compare this handshake header with session-sync or preflight `factorySessionId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Factory-Session-Id"?: string;
           /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Stream-Generation-Id"?: string;
           [name: string]: unknown;
@@ -5285,6 +5295,10 @@ export interface operations {
         after_event_id?: components["parameters"]["AfterEventId"];
         /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
         after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target. */
+        backend_scope_id?: components["parameters"]["BackendScopeId"];
+        /** @description Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector. */
+        logical_session_key_id?: components["parameters"]["LogicalSessionKeyId"];
       };
       header?: never;
       path: {
@@ -6528,6 +6542,7 @@ export const FactorySessionSyncPreflightReasonCode = {
   cursor_stale: "cursor_stale",
   session_not_found: "session_not_found",
   logical_session_remap: "logical_session_remap",
+  logical_session_unresolved: "logical_session_unresolved",
 } as const;
 export type FactorySessionSyncPreflightReasonCode =
   (typeof FactorySessionSyncPreflightReasonCode)[keyof typeof FactorySessionSyncPreflightReasonCode];
