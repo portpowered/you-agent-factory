@@ -71,6 +71,57 @@ function resetFactoryEventStreamStores(): void {
   useFactoryTimelineStore.getState().reset();
 }
 
+function seedStreamScopedQueryCaches(
+  queryClient: QueryClient,
+  streamIdentity: ReturnType<typeof resolvedDefaultStreamIdentity>,
+) {
+  queryClient.setQueryData(
+    currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    { workers: [], workstations: [], workTypes: [] },
+  );
+  queryClient.setQueryData(
+    currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    {
+      name: "default",
+      version: { logical: "1", physical: "2026-06-26T00:00:00Z" },
+      workers: [],
+      workstations: [],
+      workTypes: [],
+    },
+  );
+  queryClient.setQueryData(
+    factorySessionDetailQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    { status: "success" },
+  );
+  queryClient.setQueryData(["current-factory-definition", "session-beta"], {
+    workers: [{ name: "kept" }],
+  });
+}
+
+function expectClearedStreamScopedQueries(
+  queryClient: QueryClient,
+  streamIdentity: ReturnType<typeof resolvedDefaultStreamIdentity>,
+) {
+  expect(
+    queryClient.getQueryData(
+      currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    ),
+  ).toBeUndefined();
+  expect(
+    queryClient.getQueryData(
+      currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    ),
+  ).toBeUndefined();
+  expect(
+    queryClient.getQueryData(
+      factorySessionDetailQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    ),
+  ).toBeUndefined();
+  expect(
+    queryClient.getQueryData(["current-factory-definition", "session-beta"]),
+  ).toEqual({ workers: [{ name: "kept" }] });
+}
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: stale-cursor scenarios share one store harness and query client setup.
 describe("useFactoryEventStream stale cursor recovery", () => {
   let queryClient = createFactoryEventStreamQueryClient();
@@ -109,34 +160,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
       "deleteTimelineCheckpoint",
     );
 
-    queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey(
-        DEFAULT_FACTORY_SESSION_ID,
-        streamIdentity,
-      ),
-      {
-        workers: [],
-        workstations: [],
-        workTypes: [],
-      },
-    );
-    queryClient.setQueryData(
-      currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
-      {
-        name: "default",
-        version: { logical: "1", physical: "2026-06-26T00:00:00Z" },
-        workers: [],
-        workstations: [],
-        workTypes: [],
-      },
-    );
-    queryClient.setQueryData(
-      factorySessionDetailQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
-      { status: "success" },
-    );
-    queryClient.setQueryData(["current-factory-definition", "session-beta"], {
-      workers: [{ name: "kept" }],
-    });
+    seedStreamScopedQueryCaches(queryClient, streamIdentity);
 
     renderHook(
       () =>
@@ -191,33 +215,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
       window.indexedDB,
       streamIdentity,
     );
-    expect(
-      queryClient.getQueryData(
-        currentFactoryDefinitionQueryKey(
-          DEFAULT_FACTORY_SESSION_ID,
-          streamIdentity,
-        ),
-      ),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(
-        currentFactoryDocumentQueryKey(
-          DEFAULT_FACTORY_SESSION_ID,
-          streamIdentity,
-        ),
-      ),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(
-        factorySessionDetailQueryKey(
-          DEFAULT_FACTORY_SESSION_ID,
-          streamIdentity,
-        ),
-      ),
-    ).toBeUndefined();
-    expect(
-      queryClient.getQueryData(["current-factory-definition", "session-beta"]),
-    ).toEqual({ workers: [{ name: "kept" }] });
+    expectClearedStreamScopedQueries(queryClient, streamIdentity);
     expect(useDashboardStreamStore.getState().streamState.status).not.toBe(
       "recovery_failed",
     );
