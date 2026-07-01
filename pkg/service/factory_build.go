@@ -357,8 +357,7 @@ func buildRuntimeBundle(
 		AdditionalFactoryOpts: input.additionalFactoryOpts,
 		PrefetchedLocalModels: localModels,
 		DispatchCompleted:     input.dispatchCompleted,
-		LoadWorkerOpts: func(eventHistory *factoryevents.FactoryEventHistory) ([]factory.FactoryOption, error) {
-			logger := runtimebuild.NewSessionLogger(input.baseLogger, sessionID, input.folderPath, input.dir)
+		LoadWorkerOpts: func(eventHistory *factoryevents.FactoryEventHistory, logger *zap.Logger) ([]factory.FactoryOption, error) {
 			effectiveRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 			return loadRuntimeBundleWorkerOptions(input, logger, effectiveRunnerID, eventHistory, localModels)
 		},

@@ -20,8 +20,35 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
+
+const defaultSessionID = "~default"
+
+// BuildInput is the immutable input for constructing one hosted runtime bundle.
+type BuildInput struct {
+	Dir                           string
+	FolderPath                    string
+	SessionID                     string
+	Config                        Config
+	LoadedFactoryCfg              *factoryconfig.LoadedFactoryConfig
+	BaseLogger                    *zap.Logger
+	RuntimeInstanceID             string
+	Clock                         factory.Clock
+	RecordPath                    string
+	WorkflowID                    string
+	ProviderOverride              workers.Provider
+	ProviderCommandRunner         workers.CommandRunner
+	CommandRunnerOverride         workers.CommandRunner
+	AdditionalFactoryOpts         []factory.FactoryOption
+	LoadWorkerOpts                func(*factoryevents.FactoryEventHistory, *zap.Logger) ([]factory.FactoryOption, error)
+	PrefetchedLocalModels         LocalModelDomain
+	InferenceProgressPublisher    workerprovider.InferenceProgressPublisher
+	InferenceProgressPublisherSet bool
+	DispatchCompleted             func(string)
+}
 
 // Build constructs one hosted runtime bundle from an explicit build input.
 func Build(ctx context.Context, input BuildInput) (*Bundle, error) {
@@ -87,7 +114,7 @@ func Build(ctx context.Context, input BuildInput) (*Bundle, error) {
 
 	var workerOpts []factory.FactoryOption
 	if input.LoadWorkerOpts != nil {
-		workerOpts, err = input.LoadWorkerOpts(eventHistory)
+		workerOpts, err = input.LoadWorkerOpts(eventHistory, logger)
 		if err != nil {
 			return nil, err
 		}

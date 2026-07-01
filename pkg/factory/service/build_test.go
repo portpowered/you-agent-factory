@@ -31,7 +31,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		LoadedFactoryCfg: loaded,
 		BaseLogger:       zap.NewNop(),
 		Clock:              factory.EnsureClock(clockwork.NewFakeClock()),
-		LoadWorkerOpts: func(*factoryevents.FactoryEventHistory) ([]factory.FactoryOption, error) {
+		LoadWorkerOpts: func(*factoryevents.FactoryEventHistory, *zap.Logger) ([]factory.FactoryOption, error) {
 			return nil, nil
 		},
 	})
