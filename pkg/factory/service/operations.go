@@ -1,0 +1,99 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
+)
+
+// ErrRuntimeNotAvailable reports that no hosted runtime bundle is available for an operation.
+var ErrRuntimeNotAvailable = fmt.Errorf("factory service runtime is not available")
+
+func hostedFactory(bundle *Bundle) (factory.Factory, error) {
+	if bundle == nil || bundle.Factory == nil {
+		return nil, ErrRuntimeNotAvailable
+	}
+	return bundle.Factory, nil
+}
+
+// SubmitWorkRequest submits a canonical work request batch to the hosted runtime.
+func SubmitWorkRequest(ctx context.Context, bundle *Bundle, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	activeFactory, err := hostedFactory(bundle)
+	if err != nil {
+		return interfaces.WorkRequestSubmitResult{}, err
+	}
+	return activeFactory.SubmitWorkRequest(ctx, request)
+}
+
+// MoveWork applies a synchronous operator relocation on the hosted runtime.
+func MoveWork(
+	ctx context.Context,
+	bundle *Bundle,
+	workID, stateName string,
+	source interfaces.WorkStateChangeSource,
+	requestID string,
+) (interfaces.OperatorMoveResult, error) {
+	activeFactory, err := hostedFactory(bundle)
+	if err != nil {
+		return interfaces.OperatorMoveResult{}, err
+	}
+	return activeFactory.MoveWork(ctx, workID, stateName, source, requestID)
+}
+
+// SubscribeFactoryEvents returns canonical factory event history followed by live events
+// from the hosted runtime.
+func SubscribeFactoryEvents(
+	ctx context.Context,
+	bundle *Bundle,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) (*interfaces.FactoryEventStream, error) {
+	activeFactory, err := hostedFactory(bundle)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := activeFactory.SubscribeFactoryEvents(ctx, reconnect, scope)
+	if err != nil {
+		return nil, fmt.Errorf("subscribe factory events: %w", err)
+	}
+	return stream, nil
+}
+
+// SubscribeFactoryEventsForSession scopes event subscription to one factory session.
+func SubscribeFactoryEventsForSession(
+	ctx context.Context,
+	bundle *Bundle,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) (*interfaces.FactoryEventStream, error) {
+	return SubscribeFactoryEvents(ctx, bundle, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
+}
+
+// GetEngineStateSnapshot returns the hosted runtime's aggregate observability snapshot.
+func GetEngineStateSnapshot(ctx context.Context, bundle *Bundle) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	activeFactory, err := hostedFactory(bundle)
+	if err != nil {
+		return nil, err
+	}
+	snap, err := activeFactory.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get engine state snapshot: %w", err)
+	}
+	return snap, nil
+}
+
+// WaitToComplete returns a channel that closes when the hosted runtime reaches a terminal
+// completion state. When no runtime is available, the returned channel is already closed.
+func WaitToComplete(bundle *Bundle) <-chan struct{} {
+	activeFactory, err := hostedFactory(bundle)
+	if err != nil {
+		ch := make(chan struct{})
+		close(ch)
+		return ch
+	}
+	return activeFactory.WaitToComplete()
+}

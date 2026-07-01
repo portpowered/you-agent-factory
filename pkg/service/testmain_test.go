@@ -148,10 +148,10 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if bundle == nil {
 		t.Fatal("expected startup runtime bundle")
 	}
-	if bundle.modelResources == nil {
+	if bundle.ModelResources == nil {
 		t.Fatal("expected startup bundle to initialize modelResources")
 	}
-	if bundle.localModels == nil {
+	if bundle.LocalModels == nil {
 		t.Fatal("expected startup bundle to initialize localModels")
 	}
 	if svc.sessions == nil {
@@ -254,7 +254,11 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	svc := AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg))
+	svc := AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	svc = AttachFactorySaveCollaborator(
+		FactoryServiceShell{Service: svc},
+		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
+	)
 
 	runErrCh := make(chan error, 1)
 	go func() { runErrCh <- svc.Run(ctx) }()
@@ -1458,7 +1462,7 @@ func executeModelWorkerProgressPublisherServiceTest(
 		recorder,
 		nil,
 		nil,
-		localModelDomain{},
+		LocalModelDomain{},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
@@ -1644,11 +1648,11 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		nil,
 		nil,
 		nil,
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets:    staticModelAssetPuller{cache: cache},
-			runtime:   runtime,
-			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets:    staticModelAssetPuller{cache: cache},
+			Runtime:   runtime,
+			Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 		},
 	)
 	if err != nil {
@@ -2305,7 +2309,7 @@ func loadWorkersFromConfigForServiceTest(
 		inferenceRecorder,
 		nil,
 		nil,
-		localModelDomain{},
+		LocalModelDomain{},
 	)
 }
 
@@ -2624,11 +2628,11 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		history.RecordModelEvent,
 		func() time.Time { return eventTime },
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets:    staticModelAssetPuller{cache: cache},
-			runtime:   runtime,
-			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets:    staticModelAssetPuller{cache: cache},
+			Runtime:   runtime,
+			Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 		},
 	)
 	if err != nil {
@@ -2877,11 +2881,14 @@ func TestFactorySessionInvocation_LocalLlamaCppInferenceUsesModelHostLeases(t *t
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{
+		mustGeneratedLocalModelHTTPTextPart(t, "hello factory session inference"),
+	}
+
 	result, err := svc.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, factoryapi.InvocationRequest{
-		SourceKind: factoryapi.InvocationInputSourceKindText,
-		Content: factoryapi.WorkContent{
-			mustGeneratedLocalModelHTTPTextPart(t, "hello factory session inference"),
-		},
+		SourceKind: &sourceKind,
+		Content:    &content,
 	})
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
@@ -2956,13 +2963,13 @@ func modelHostBackedLocalModelDomain(
 	t.Helper()
 	host := newServiceTestSupervisedModelHost(t, puller, launcher)
 	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
-	return localModelDomain{
-		resources:      newLocalModelResourceLimiter(),
-		assets:         puller,
-		runtime:        runtime,
-		manager:        newManagedLocalModelManager(puller, runtime),
-		host:           host,
-		leaseExecution: leaseExec,
+	return LocalModelDomain{
+		Resources:      newLocalModelResourceLimiter(),
+		Assets:         puller,
+		Runtime:        runtime,
+		Manager:        newManagedLocalModelManager(puller, runtime),
+		Host:           host,
+		LeaseExecution: leaseExec,
 	}
 }
 

@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import {
   dashboardSessionKey,
+  type FactoryDefinitionQueryResetMode,
   resetDashboardSessionScopedState,
+  sessionIDFromDashboardSessionKey,
   shouldResetDashboardSessionScopedState,
 } from "../lib/dashboard-session-lifecycle";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
@@ -31,14 +33,18 @@ export function useDashboardSessionLifecycle({
     [refreshToken, sessionID],
   );
 
-  const resetLocalizedSessionState = useCallback(() => {
-    resetDashboardSessionScopedState(
-      queryClient,
-      resetStreamState,
-      resetTimeline,
-      locale,
-    );
-  }, [locale, queryClient, resetStreamState, resetTimeline]);
+  const resetLocalizedSessionState = useCallback(
+    (factoryDefinitionQueryResetMode: FactoryDefinitionQueryResetMode) => {
+      resetDashboardSessionScopedState(
+        queryClient,
+        resetStreamState,
+        resetTimeline,
+        locale,
+        factoryDefinitionQueryResetMode,
+      );
+    },
+    [locale, queryClient, resetStreamState, resetTimeline],
+  );
 
   useEffect(() => {
     const previousSessionKey = lastSessionKeyRef.current;
@@ -59,7 +65,12 @@ export function useDashboardSessionLifecycle({
       return;
     }
 
-    resetLocalizedSessionState();
+    const previousSessionID = sessionIDFromDashboardSessionKey(previousSessionKey);
+    resetLocalizedSessionState(
+      previousSessionID !== null && previousSessionID === sessionID
+        ? "invalidate"
+        : "remove",
+    );
   }, [refreshToken, resetLocalizedSessionState, sessionID, sessionKey]);
 
   return useMemo(

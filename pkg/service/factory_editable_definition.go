@@ -20,10 +20,13 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
@@ -426,11 +429,11 @@ func NewFactorySessionsRegistry() *factorysessions.Registry {
 
 // LocalModelDomain wires pkg/localmodels runtime dependencies constructed at
 // service build time and copied onto each factoryRuntimeBundle.
-type LocalModelDomain = localModelDomain
+type LocalModelDomain = factoryservice.LocalModelDomain
 
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
 func NewLocalModelDomain(cfg *FactoryServiceConfig) LocalModelDomain {
-	return newRuntimeLocalModelDependencies(cfg)
+	return factoryservice.NewLocalModelDomain(hostConfigFromService(cfg))
 }
 
 // FactoryServiceCollaborators groups explicit S6 composition collaborators.
@@ -448,7 +451,7 @@ func NewFactoryServiceCollaborators(
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
 ) FactoryServiceCollaborators {
-	startupLocalModels := newRuntimeLocalModelDependencies(cfg)
+	startupLocalModels := NewLocalModelDomain(cfg)
 	return FactoryServiceCollaborators{
 		Sessions:    sessions,
 		LocalModels: startupLocalModels,
@@ -539,6 +542,7 @@ type ComposeCollaboratorSnapshot struct {
 	RuntimeBuildInitialized  bool
 	LocalModelsInitialized   bool
 	ModelAssetsInitialized   bool
+	ModelServiceInitialized  bool
 	FactorySaveInitialized   bool
 	DefinitionsInitialized   bool
 	HostedWorkersLoggerReady bool
@@ -620,7 +624,7 @@ func (core *FactoryCore) ModelHost() modelhost.Host {
 	if core == nil {
 		return nil
 	}
-	return core.collaborators.LocalModels.host
+	return core.collaborators.LocalModels.Host
 }
 
 // LocalModels returns the startup local-model collaborator group.
@@ -666,14 +670,14 @@ func (core *FactoryCore) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapsh
 	snapshot := ComposeCollaboratorSnapshot{
 		SessionsInitialized:      core.Sessions() != nil,
 		RuntimeBuildInitialized:  core.RuntimeBuild() != nil,
-		LocalModelsInitialized:   core.LocalModels().manager != nil,
+		LocalModelsInitialized:   core.LocalModels().Manager != nil,
 		ModelAssetsInitialized:   core.ModelAssetPuller() != nil,
 		DefinitionsInitialized:   true,
 		HostedWorkersLoggerReady: core.HostedWorkers().Logger != nil,
 	}
 	if bundle != nil {
-		snapshot.BundleModelResources = bundle.modelResources != nil
-		snapshot.BundleLocalModels = bundle.localModels != nil
+		snapshot.BundleModelResources = bundle.ModelResources != nil
+		snapshot.BundleLocalModels = bundle.LocalModels != nil
 	}
 	return snapshot
 }
@@ -684,11 +688,13 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 		return ComposeCollaboratorSnapshot{}
 	}
 	snapshot := ComposeCollaboratorSnapshot{
-		FactorySaveInitialized: fs.factorySave != nil,
-		DefinitionsInitialized: fs.definitions != nil,
+		ModelServiceInitialized: fs.modelService != nil,
+		FactorySaveInitialized:  fs.factorySave != nil,
+		DefinitionsInitialized:  fs.definitions != nil,
 	}
 	if fs.core != nil {
 		coreSnapshot := fs.core.ComposeCollaboratorSnapshot()
+		coreSnapshot.ModelServiceInitialized = snapshot.ModelServiceInitialized
 		coreSnapshot.FactorySaveInitialized = snapshot.FactorySaveInitialized
 		coreSnapshot.DefinitionsInitialized = snapshot.DefinitionsInitialized
 		return coreSnapshot
@@ -699,8 +705,8 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 	snapshot.ModelAssetsInitialized = fs.modelAssets != nil
 	snapshot.HostedWorkersLoggerReady = fs.hostedWorkers.Logger != nil
 	if bundle != nil {
-		snapshot.BundleModelResources = bundle.modelResources != nil
-		snapshot.BundleLocalModels = bundle.localModels != nil
+		snapshot.BundleModelResources = bundle.ModelResources != nil
+		snapshot.BundleLocalModels = bundle.LocalModels != nil
 	}
 	return snapshot
 }
@@ -794,7 +800,7 @@ func ComposeFactoryCore(
 	var runtimeBundle *factoryRuntimeBundle
 	defer func() {
 		if !coreBuilt && runtimeBundle != nil {
-			_ = closeRuntimeBundleSinks(runtimeBundle.logSink, runtimeBundle.metricsSink)
+			_ = closeRuntimeBundleSinks(runtimeBundle.LogSink, runtimeBundle.MetricsSink)
 		}
 	}()
 	if cfg.ReplayPath == "" {
@@ -836,13 +842,13 @@ func ComposeFactoryCore(
 	}
 	collaborators.Sessions.Upsert(factorysessions.NewLiveSession(
 		defaultFactorySessionID,
-		runtimeBundle.dir,
-		runtimeBundle.folderPath,
-		runtimeBundle.runtimeCfg.RuntimeBaseDir(),
+		runtimeBundle.Dir,
+		runtimeBundle.FolderPath,
+		runtimeBundle.RuntimeCfg.RuntimeBaseDir(),
 		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 		&liveSessionState{bundle: runtimeBundle, spec: &defaultSessionSpec},
 		true,
-		filepath.Base(runtimeBundle.folderPath),
+		filepath.Base(runtimeBundle.FolderPath),
 	), true)
 
 	coreBuilt = true
@@ -853,8 +859,8 @@ func ComposeFactoryCore(
 		hostedWorkers: hostedWorkers,
 		clock:         clock,
 		startupBundle: runtimeBundle,
-		logger:        runtimeBundle.logger,
-		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.assets),
+		logger:        runtimeBundle.Logger,
+		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
 	}, nil
 }
 
@@ -878,47 +884,51 @@ func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
 		clock:          core.Clock(),
 		runtimeBuild:   core.RuntimeBuild(),
 	}
-	svc.modelService = newFactoryModelService(svc)
 	svc.coordinator = newFactoryCoordinator(svc)
 	svc.definitions = newFactoryDefinitionService(svc)
 	return svc
 }
 
+// ModelService is the transport-facing model catalog seam after pkg/models/service extraction.
+type ModelService = apisurface.ModelAPI
+
 // NewModelServiceFromCore constructs a ModelService from a composed FactoryCore
 // without building the root FactoryService compatibility facade.
 func NewModelServiceFromCore(core *FactoryCore) ModelService {
 	if core == nil {
-		return newModelService(modelServiceDependencies{})
+		return modelsservice.New(modelsservice.Dependencies{})
 	}
 	cfg := core.ServiceConfig()
 	policy := serviceCoordinatorPolicyFromConfig(cfg)
-	return newModelService(modelServiceDependencies{
-		runtimeConfig: func() *factoryconfig.LoadedFactoryConfig {
+	return modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig {
 			return coreStartupRuntimeConfig(core)
 		},
-		modelAssetPuller: func() modelAssetPuller {
-			return core.ModelAssetPuller()
-		},
-		modelHost: func() modelhost.Host {
+		ModelHost: func() modelhost.Host {
 			return core.ModelHost()
 		},
-		modelInvocationExecutor: func(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
+		ModelAssetPuller: func() localmodels.AssetPuller {
+			return core.ModelAssetPuller()
+		},
+		Logger: func() *zap.Logger {
+			return core.Logger()
+		},
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			if cfg == nil || cfg.ModelPullMetricsRecorder == nil {
+				return nil
+			}
+			return modelPullMetricsHostAdapter{inner: cfg.ModelPullMetricsRecorder}
+		},
+		ModelInvocationExecutor: func(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
 			return modelInvocationExecutorFromCore(core, policy, runtimeCfg, factoryCfg, workerName)
 		},
-		factoryRunnerID: func() string {
+		FactoryRunnerID: func() string {
 			runtimeCfg := coreStartupRuntimeConfig(core)
 			factoryCfg := (*interfaces.FactoryConfig)(nil)
 			if runtimeCfg != nil {
 				factoryCfg = runtimeCfg.FactoryConfig()
 			}
 			return effectiveFactoryRunnerID(policy.runnerID, factoryCfg)
-		},
-		logger: core.Logger(),
-		modelPullMetrics: func() ModelPullMetricsRecorder {
-			if cfg == nil {
-				return nil
-			}
-			return cfg.ModelPullMetricsRecorder
 		},
 	})
 }
@@ -1018,7 +1028,7 @@ func coreStartupRuntimeConfig(core *FactoryCore) *factoryconfig.LoadedFactoryCon
 		return nil
 	}
 	if bundle := core.StartupBundle(); bundle != nil {
-		return bundle.runtimeCfg
+		return bundle.RuntimeCfg
 	}
 	return nil
 }
@@ -1032,10 +1042,10 @@ func sessionRuntimeConfigFromCore(core *FactoryCore, sessionID string) (*factory
 		return nil, fmt.Errorf("factory session %q not found", sessionID)
 	}
 	bundle := liveSessionBundle(session)
-	if bundle == nil || bundle.runtimeCfg == nil {
+	if bundle == nil || bundle.RuntimeCfg == nil {
 		return nil, fmt.Errorf("factory session runtime is not available")
 	}
-	return bundle.runtimeCfg, nil
+	return bundle.RuntimeCfg, nil
 }
 
 func factorysaveSessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
@@ -1153,16 +1163,16 @@ func modelInvocationExecutorFromCore(
 	var modelDomain localModelDomain
 	var workflowContext *factory_context.FactoryContext
 	if bundle != nil {
-		modelDomain = localModelDomain{
-			resources:      bundle.modelResources,
-			assets:         bundle.modelAssets,
-			runtime:        bundle.localModelRuntime,
-			host:           bundle.modelHost,
-			manager:        bundle.localModels,
-			leaseExecution: bundle.leaseExecution,
+		modelDomain = LocalModelDomain{
+			Resources:      bundle.ModelResources,
+			Assets:         bundle.ModelAssets,
+			Runtime:        bundle.LocalModelRuntime,
+			Manager:        bundle.LocalModels,
+			Host:           bundle.ModelHost,
+			LeaseExecution: bundle.LeaseExecution,
 		}
-		if bundle.factory != nil {
-			workflowContext = runtime.WorkflowContext(bundle.factory)
+		if bundle.Factory != nil {
+			workflowContext = runtime.WorkflowContext(bundle.Factory)
 		}
 	}
 	executor := buildWorkerExecutor(

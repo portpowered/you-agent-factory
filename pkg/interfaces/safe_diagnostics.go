@@ -12,6 +12,7 @@ import (
 type SafeWorkDiagnostics struct {
 	RenderedPrompt *SafeRenderedPromptDiagnostic `json:"rendered_prompt,omitempty"`
 	Provider       *SafeProviderDiagnostic       `json:"provider,omitempty"`
+	Invocation     *InvocationDiagnostic         `json:"invocation,omitempty"`
 }
 
 // SafeRenderedPromptDiagnostic carries prompt hashes and allowlisted variables.
@@ -38,8 +39,9 @@ func SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeW
 	out := &SafeWorkDiagnostics{
 		RenderedPrompt: safeRenderedPromptDiagnosticFromWorkDiagnostics(diagnostics.RenderedPrompt),
 		Provider:       safeProviderDiagnosticFromWorkDiagnostics(diagnostics.Provider),
+		Invocation:     cloneInvocationDiagnostic(diagnostics.Invocation),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if out.RenderedPrompt == nil && out.Provider == nil && out.Invocation == nil {
 		return nil
 	}
 	return out
@@ -54,8 +56,9 @@ func SafeWorkDiagnosticsFromGenerated(diagnostics *factoryapi.SafeWorkDiagnostic
 	out := &SafeWorkDiagnostics{
 		RenderedPrompt: safeRenderedPromptDiagnosticFromGenerated(diagnostics.RenderedPrompt),
 		Provider:       safeProviderDiagnosticFromGenerated(diagnostics.Provider),
+		Invocation:     invocationDiagnosticFromGenerated(diagnostics.Invocation),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if out.RenderedPrompt == nil && out.Provider == nil && out.Invocation == nil {
 		return nil
 	}
 	return out
@@ -70,8 +73,9 @@ func GeneratedSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *factoryapi.
 	out := &factoryapi.SafeWorkDiagnostics{
 		RenderedPrompt: generatedSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
 		Provider:       generatedSafeProviderDiagnostic(diagnostics.Provider),
+		Invocation:     generatedInvocationDiagnostic(diagnostics.Invocation),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if out.RenderedPrompt == nil && out.Provider == nil && out.Invocation == nil {
 		return nil
 	}
 	return out
@@ -93,8 +97,9 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *W
 	out := &WorkDiagnostics{
 		RenderedPrompt: renderedPromptDiagnosticFromSafeWorkDiagnostics(diagnostics.RenderedPrompt),
 		Provider:       providerDiagnosticFromSafeWorkDiagnostics(diagnostics.Provider),
+		Invocation:     cloneInvocationDiagnostic(diagnostics.Invocation),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if out.RenderedPrompt == nil && out.Provider == nil && out.Invocation == nil {
 		return nil
 	}
 	return out
@@ -244,6 +249,55 @@ func providerDiagnosticFromSafeWorkDiagnostics(diagnostic *SafeProviderDiagnosti
 	}
 }
 
+func invocationDiagnosticFromGenerated(diagnostic *factoryapi.InvocationDiagnostic) *InvocationDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	out := &InvocationDiagnostic{
+		SignatureHash: safeDiagnosticsStringValue(diagnostic.SignatureHash),
+	}
+	if diagnostic.Parameters != nil && len(*diagnostic.Parameters) > 0 {
+		out.Parameters = make([]InvocationParameterDiagnostic, 0, len(*diagnostic.Parameters))
+		for _, parameter := range *diagnostic.Parameters {
+			out.Parameters = append(out.Parameters, InvocationParameterDiagnostic{
+				Name:        safeDiagnosticsStringValue(parameter.Name),
+				SourceKinds: cloneStringSlice(stringSlicePtrValue(parameter.SourceKinds)),
+				ValueCount:  int(int64PtrValue(parameter.ValueCount)),
+				Redacted:    boolPtrValue(parameter.Redacted),
+			})
+		}
+	}
+	if out.SignatureHash == "" && len(out.Parameters) == 0 {
+		return nil
+	}
+	return out
+}
+
+func generatedInvocationDiagnostic(diagnostic *InvocationDiagnostic) *factoryapi.InvocationDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	out := &factoryapi.InvocationDiagnostic{
+		SignatureHash: safeDiagnosticsStringPtrIfNotEmpty(diagnostic.SignatureHash),
+	}
+	if len(diagnostic.Parameters) > 0 {
+		parameters := make([]factoryapi.InvocationParameterDiagnostic, 0, len(diagnostic.Parameters))
+		for _, parameter := range diagnostic.Parameters {
+			parameters = append(parameters, factoryapi.InvocationParameterDiagnostic{
+				Name:        safeDiagnosticsStringPtrIfNotEmpty(parameter.Name),
+				SourceKinds: stringSlicePtr(parameter.SourceKinds),
+				ValueCount:  int64Ptr(int64(parameter.ValueCount)),
+				Redacted:    boolPtr(parameter.Redacted),
+			})
+		}
+		out.Parameters = &parameters
+	}
+	if out.SignatureHash == nil && out.Parameters == nil {
+		return nil
+	}
+	return out
+}
+
 func safeRenderedPromptVariables(input map[string]string) map[string]string {
 	if len(input) == 0 {
 		return nil
@@ -350,6 +404,43 @@ func safeDiagnosticsEnumStringValue[T ~string](value *T) string {
 	return string(*value)
 }
 
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func boolPtrValue(value *bool) bool {
+	if value == nil {
+		return false
+	}
+	return *value
+}
+
+func int64Ptr(value int64) *int64 {
+	return &value
+}
+
+func int64PtrValue(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func stringSlicePtr(values []string) *[]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := cloneStringSlice(values)
+	return &cloned
+}
+
+func stringSlicePtrValue(values *[]string) []string {
+	if values == nil {
+		return nil
+	}
+	return append([]string(nil), (*values)...)
+}
+
 // CloneWorkDiagnostics returns a detached copy of canonical worker-facing
 // diagnostics.
 func CloneWorkDiagnostics(diagnostics *WorkDiagnostics) *WorkDiagnostics {
@@ -360,6 +451,7 @@ func CloneWorkDiagnostics(diagnostics *WorkDiagnostics) *WorkDiagnostics {
 	clone := &WorkDiagnostics{
 		RenderedPrompt: cloneRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
 		Provider:       cloneProviderDiagnostic(diagnostics.Provider),
+		Invocation:     cloneInvocationDiagnostic(diagnostics.Invocation),
 		Command:        cloneCommandDiagnostic(diagnostics.Command),
 		Metadata:       cloneStringMap(diagnostics.Metadata),
 	}
@@ -393,6 +485,27 @@ func cloneProviderDiagnostic(diagnostic *ProviderDiagnostic) *ProviderDiagnostic
 		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
 		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
 	}
+}
+
+func cloneInvocationDiagnostic(diagnostic *InvocationDiagnostic) *InvocationDiagnostic {
+	if diagnostic == nil {
+		return nil
+	}
+	clone := &InvocationDiagnostic{
+		SignatureHash: diagnostic.SignatureHash,
+	}
+	if len(diagnostic.Parameters) > 0 {
+		clone.Parameters = make([]InvocationParameterDiagnostic, len(diagnostic.Parameters))
+		for i, parameter := range diagnostic.Parameters {
+			clone.Parameters[i] = InvocationParameterDiagnostic{
+				Name:        parameter.Name,
+				SourceKinds: cloneStringSlice(parameter.SourceKinds),
+				ValueCount:  parameter.ValueCount,
+				Redacted:    parameter.Redacted,
+			}
+		}
+	}
+	return clone
 }
 
 func cloneCommandDiagnostic(diagnostic *CommandDiagnostic) *CommandDiagnostic {

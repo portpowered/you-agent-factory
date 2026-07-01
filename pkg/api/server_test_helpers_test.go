@@ -301,10 +301,13 @@ func extractInvocationRequestText(t *testing.T, request *factoryapi.InvocationRe
 	if request == nil {
 		t.Fatal("invocation request = nil")
 	}
-	if len(request.Content) != 1 {
-		t.Fatalf("content parts = %d, want 1", len(request.Content))
+	if request.Content == nil {
+		t.Fatal("content = nil, want one text part")
 	}
-	part, err := request.Content[0].AsWorkTextContentPart()
+	if len(*request.Content) != 1 {
+		t.Fatalf("content parts = %d, want 1", len(*request.Content))
+	}
+	part, err := (*request.Content)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("AsWorkTextContentPart: %v", err)
 	}

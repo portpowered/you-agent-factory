@@ -138,20 +138,21 @@ const (
 
 // FactoryConfig is the specification of a factory as a JSON file.
 type FactoryConfig struct {
-	Name             string                          `json:"name"`
-	Project          string                          `json:"project,omitempty"`
-	Version          *FactoryVersion                 `json:"version,omitempty"`
-	Runner           string                          `json:"runner,omitempty"`
-	Guards           []FactoryGuardConfig            `json:"guards,omitempty"`
-	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
-	InvocationReturn *InvocationReturnConfig         `json:"invocation_return,omitempty"`
-	Orchestrator     *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
-	WorkTypes        []WorkTypeConfig                `json:"work_types"`
-	Resources        []ResourceConfig                `json:"resources"`
-	ResourceManifest *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
-	Layout           *FactoryLayoutConfig            `json:"layout,omitempty"`
-	Workers          []WorkerConfig                  `json:"workers"`
-	Workstations     []FactoryWorkstationConfig      `json:"workstations"`
+	Name                string                          `json:"name"`
+	Project             string                          `json:"project,omitempty"`
+	Version             *FactoryVersion                 `json:"version,omitempty"`
+	Runner              string                          `json:"runner,omitempty"`
+	Guards              []FactoryGuardConfig            `json:"guards,omitempty"`
+	InputTypes          []InputTypeConfig               `json:"input_types,omitempty"`
+	InvocationReturn    *InvocationReturnConfig         `json:"invocation_return,omitempty"`
+	InvocationSignature *InvocationSignatureConfig      `json:"invocationSignature,omitempty"`
+	Orchestrator        *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
+	WorkTypes           []WorkTypeConfig                `json:"work_types"`
+	Resources           []ResourceConfig                `json:"resources"`
+	ResourceManifest    *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
+	Layout              *FactoryLayoutConfig            `json:"layout,omitempty"`
+	Workers             []WorkerConfig                  `json:"workers"`
+	Workstations        []FactoryWorkstationConfig      `json:"workstations"`
 }
 
 // FactoryVersion is the durable optimistic-concurrency metadata stored with a
@@ -245,6 +246,48 @@ type InvocationReturnConfig struct {
 	WorkTypeName  string `json:"workTypeName,omitempty"`
 	TerminalState string `json:"terminalState,omitempty"`
 	WorkName      string `json:"workName,omitempty"`
+}
+
+type InvocationSignatureConfig struct {
+	Parameters                 []InvocationParameterConfig     `json:"parameters,omitempty"`
+	UnknownNamedArgumentPolicy string                          `json:"unknownNamedArgumentPolicy,omitempty"`
+	OutputContract             *InvocationOutputContractConfig `json:"outputContract,omitempty"`
+	Examples                   []InvocationExampleConfig       `json:"examples,omitempty"`
+}
+
+type InvocationParameterConfig struct {
+	Name          string                             `json:"name"`
+	Description   string                             `json:"description,omitempty"`
+	ExternalName  string                             `json:"externalName,omitempty"`
+	Aliases       []string                           `json:"aliases,omitempty"`
+	TypeHint      string                             `json:"typeHint,omitempty"`
+	ValueMode     string                             `json:"valueMode,omitempty"`
+	Required      bool                               `json:"required,omitempty"`
+	Sensitive     bool                               `json:"sensitive,omitempty"`
+	Choices       []string                           `json:"choices,omitempty"`
+	DefaultValue  string                             `json:"defaultValue,omitempty"`
+	DefaultValues []string                           `json:"defaultValues,omitempty"`
+	Bindings      []InvocationParameterBindingConfig `json:"bindings,omitempty"`
+}
+
+type InvocationParameterBindingConfig struct {
+	Kind     string `json:"kind"`
+	Position int    `json:"position,omitempty"`
+}
+
+type InvocationOutputContractConfig struct {
+	Mode          string `json:"mode,omitempty"`
+	PathParameter string `json:"pathParameter,omitempty"`
+	ContentType   string `json:"contentType,omitempty"`
+	FileExtension string `json:"fileExtension,omitempty"`
+	Description   string `json:"description,omitempty"`
+}
+
+type InvocationExampleConfig struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Argv        []string `json:"argv,omitempty"`
+	Stdin       string   `json:"stdin,omitempty"`
 }
 
 type WorkTypeConfig struct {

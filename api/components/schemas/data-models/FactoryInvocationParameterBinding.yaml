@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+description: One public binding that exposes a parameter to callers.
+properties:
+  kind:
+    $ref: './FactoryInvocationParameterBindingKind.yaml'
+    description: Binding kind used to route invocation input into the parameter.
+  position:
+    type: integer
+    minimum: 1
+    description: 1-based positional slot used when kind is POSITIONAL.
