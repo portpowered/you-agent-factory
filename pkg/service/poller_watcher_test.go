@@ -1170,8 +1170,8 @@ func TestFactoryService_RequiredInputCronKeepsTimeWorkPendingWhenInputMissing(t 
 	if firstRecord.Request.WorkTypeID != interfaces.SystemTimeWorkTypeID {
 		t.Fatalf("required-input cron submission work type = %q, want %q", firstRecord.Request.WorkTypeID, interfaces.SystemTimeWorkTypeID)
 	}
-	if firstRecord.Request.Tags[cronWorkstationTag] != "poll-with-input" {
-		t.Fatalf("required-input cron workstation tag = %q, want poll-with-input", firstRecord.Request.Tags[cronWorkstationTag])
+	if firstRecord.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != "poll-with-input" {
+		t.Fatalf("required-input cron workstation tag = %q, want poll-with-input", firstRecord.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation])
 	}
 
 	pendingSnap := waitForPendingCronTimeToken(t, svc, firstRecord.Request.WorkID)
@@ -1487,7 +1487,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 
 	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
 	assertCronWorkRequestNominalAt(t, startupRequest, start)
-	if got := startupRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+	if got := startupRequest.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation]; got != "valid-cron" {
 		t.Fatalf("startup cron workstation tag = %q, want valid-cron", got)
 	}
 
@@ -1496,7 +1496,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 	fakeClock.Advance(time.Minute)
 	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
 	assertCronWorkRequestNominalAt(t, scheduledRequest, start.Add(time.Minute))
-	if got := scheduledRequest.Works[0].Tags[cronWorkstationTag]; got != "valid-cron" {
+	if got := scheduledRequest.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation]; got != "valid-cron" {
 		t.Fatalf("scheduled cron workstation tag = %q, want valid-cron", got)
 	}
 	assertNoCronWorkRequestQueued(t, observedRequests)
@@ -1551,9 +1551,9 @@ func TestFactoryService_ServiceModeCronSchedulerUsesFakeClockAndStopsOnCancel(t 
 		cancelRun()
 		t.Fatalf("cron nominal_at tag = %q, want %q", record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt], wantNominalAt)
 	}
-	if record.Request.Tags[cronWorkstationTag] != "poll-for-work" {
+	if record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != "poll-for-work" {
 		cancelRun()
-		t.Fatalf("cron workstation tag = %q, want poll-for-work", record.Request.Tags[cronWorkstationTag])
+		t.Fatalf("cron workstation tag = %q, want poll-for-work", record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation])
 	}
 
 	cancelRun()
@@ -1772,11 +1772,11 @@ func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissio
 	if record.Request.TargetState != interfaces.SystemTimePendingState {
 		t.Fatalf("cron submission target state = %q, want %q", record.Request.TargetState, interfaces.SystemTimePendingState)
 	}
-	if record.Request.Tags[cronSourceTag] != "cron" {
-		t.Fatalf("cron submission source tag = %q, want cron", record.Request.Tags[cronSourceTag])
+	if record.Request.Tags[interfaces.TimeWorkTagKeySource] != "cron" {
+		t.Fatalf("cron submission source tag = %q, want cron", record.Request.Tags[interfaces.TimeWorkTagKeySource])
 	}
-	if record.Request.Tags[cronWorkstationTag] != workstation {
-		t.Fatalf("cron submission workstation tag = %q, want %q", record.Request.Tags[cronWorkstationTag], workstation)
+	if record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != workstation {
+		t.Fatalf("cron submission workstation tag = %q, want %q", record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation], workstation)
 	}
 }
 
@@ -1793,11 +1793,11 @@ func assertCronDispatchAndOutput(t *testing.T, svc *FactoryService, workID, outp
 	if matched.Color.TraceID == "" {
 		t.Fatal("expected cron token to receive a trace ID")
 	}
-	if matched.Color.Name != cronSubmissionNamePref+"poll-for-work" {
-		t.Fatalf("cron token name = %q, want %q", matched.Color.Name, cronSubmissionNamePref+"poll-for-work")
+	if matched.Color.Name != "cron:poll-for-work" {
+		t.Fatalf("cron token name = %q, want %q", matched.Color.Name, "cron:poll-for-work")
 	}
-	if matched.Color.Tags[cronSourceTag] != "cron" {
-		t.Fatalf("cron token source tag = %q, want cron", matched.Color.Tags[cronSourceTag])
+	if matched.Color.Tags[interfaces.TimeWorkTagKeySource] != "cron" {
+		t.Fatalf("cron token source tag = %q, want cron", matched.Color.Tags[interfaces.TimeWorkTagKeySource])
 	}
 
 	var payload map[string]string
@@ -1855,8 +1855,8 @@ func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces
 	if got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
 	}
-	if record.Request.Tags[cronWorkstationTag] != workstation {
-		t.Fatalf("cron workstation tag = %q, want %s", record.Request.Tags[cronWorkstationTag], workstation)
+	if record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation] != workstation {
+		t.Fatalf("cron workstation tag = %q, want %s", record.Request.Tags[interfaces.TimeWorkTagKeyCronWorkstation], workstation)
 	}
 }
 
@@ -1896,10 +1896,10 @@ func assertCronWorkRequestForWorkstation(t *testing.T, request interfaces.WorkRe
 		t.Fatalf("cron work request type = %q, want %q", request.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
 	}
 	assertCronWorkRequestNominalAt(t, request, want)
-	if got := request.Works[0].Tags[cronWorkstationTag]; got != workstation {
+	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation]; got != workstation {
 		t.Fatalf("cron workstation tag = %q, want %q", got, workstation)
 	}
-	if got := request.Works[0].Tags[cronSourceTag]; got != "cron" {
+	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeySource]; got != "cron" {
 		t.Fatalf("cron source tag = %q, want cron", got)
 	}
 }

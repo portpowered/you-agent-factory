@@ -1,0 +1,97 @@
+package service_test
+
+import (
+	"context"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
+	"go.uber.org/zap"
+)
+
+func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	factoryDir := t.TempDir()
+
+	cronWS := cronWorkstationConfigForTest("scheduled-task")
+	cronWS.Cron.TriggerAtStart = true
+	scriptPoller := newCanonicalScriptPollerWorkstation()
+	scriptWorker := newCanonicalScriptPollerWorker()
+
+	factoryCfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task"}},
+		Workers:   []interfaces.WorkerConfig{{Name: scriptWorker.Name}},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			cronWS,
+			scriptPoller,
+		},
+	}
+	loaded, err := config.NewLoadedFactoryConfig(factoryDir, factoryCfg, runtimefixtures.RuntimeDefinitionLookupFixture{
+		Workers: map[string]*interfaces.WorkerConfig{
+			scriptWorker.Name: scriptWorker,
+		},
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			cronWS.Name:      &cronWS,
+			scriptPoller.Name: &scriptPoller,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	workRequestJSON := []byte(`{
+		"requestId":"script-batch-1",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-script","workTypeName":"task","payload":{"id":"SCRIPT-1"}}]
+	}`)
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+	}
+	submitted := &recordingSubmitter{}
+
+	svc := workersservice.New(workersservice.Config{
+		Logger:        zap.NewNop(),
+		Clock:         fakeClock,
+		CommandRunner: runner,
+	})
+
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var sidecars sync.WaitGroup
+	svc.StartSchedulerSidecarsForRuntime(
+		sidecarCtx,
+		&sidecars,
+		workersservice.RuntimeSidecarsInput{
+			FactoryDir: factoryDir,
+			FactoryCfg: factoryCfg,
+			RuntimeCfg: loaded,
+			Submitter:  submitted.submit,
+		},
+	)
+
+	waitForPollerSubmission(t, submitted, 1, 2*time.Second)
+
+	var cronRequest interfaces.WorkRequest
+	var foundCron bool
+	for _, request := range submitted.submissions {
+		if len(request.Works) > 0 && request.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation] == cronWS.Name {
+			cronRequest = request
+			foundCron = true
+			break
+		}
+	}
+	if !foundCron {
+		t.Fatal("expected cron trigger-at-start submission")
+	}
+	assertCronWorkRequestForWorkstation(t, cronRequest, start, cronWS.Name)
+
+	cancel()
+	sidecars.Wait()
+}

@@ -28,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
 
 	"go.uber.org/zap"
@@ -129,7 +130,7 @@ type serviceRunState struct {
 //
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
 // session registry, pkg/localmodels owns managed model runtime wiring, and
-// pkg/workers/service owns poller supervision invoked from poller_watcher.
+// pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu      sync.RWMutex
 	activationMu   sync.RWMutex
@@ -139,8 +140,9 @@ type FactoryService struct {
 	core           *FactoryCore
 	sessions       *factorysessions.Registry
 	factorySave    factorySaveSaver
-	runtimeBuild   *runtimebuild.Service
-	hostedWorkers  hostedworkers.Config
+	runtimeBuild      *runtimebuild.Service
+	workersScheduler  *workersservice.Service
+	hostedWorkers     hostedworkers.Config
 	factoryRootDir string
 	policy         serviceCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
@@ -820,17 +822,10 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 		}()
 	}
 
-	fs.startCronWatchersForRuntime(
+	fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
 		&handle.sidecars,
 		handle.runtime.runtimeCfg.FactoryDir(),
-		handle.runtime.runtimeCfg.FactoryConfig(),
-		handle.runtime.runtimeCfg,
-		submitWorkRequestWithFactory(handle.runtime.factory),
-	)
-	fs.startPollerWatchersForRuntime(
-		sidecarCtx,
-		&handle.sidecars,
 		handle.runtime.runtimeCfg.FactoryConfig(),
 		handle.runtime.runtimeCfg,
 		submitWorkRequestWithFactory(handle.runtime.factory),

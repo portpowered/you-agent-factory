@@ -6,16 +6,18 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
 
-func (fs *FactoryService) startPollerWatchersForRuntime(
+type workRequestSubmitter func(context.Context, interfaces.WorkRequest) error
+
+func (fs *FactoryService) startSchedulerSidecarsForRuntime(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
+	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	submitter workRequestSubmitter,
@@ -24,74 +26,51 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 		return
 	}
 
-	fs.workersSchedulerService().StartPollersForRuntime(
+	fs.requireWorkersScheduler().StartSchedulerSidecarsForRuntime(
 		ctx,
 		sidecars,
-		factoryCfg,
-		runtimeCfg,
-		workersservice.WorkRequestSubmitter(submitter),
+		workersservice.RuntimeSidecarsInput{
+			FactoryDir: factoryDir,
+			FactoryCfg: factoryCfg,
+			RuntimeCfg: runtimeCfg,
+			Submitter:  workersservice.WorkRequestSubmitter(submitter),
+		},
 	)
 }
 
-func (fs *FactoryService) workersSchedulerService() *workersservice.Service {
-	clock := clockwork.NewRealClock()
-	if fs != nil {
-		if supervisorClock, ok := fs.clock.(clockwork.Clock); ok && supervisorClock != nil {
-			clock = supervisorClock
-		}
+func (fs *FactoryService) requireWorkersScheduler() *workersservice.Service {
+	if fs == nil {
+		return workersservice.New(workersservice.Config{})
 	}
-	var runner workers.CommandRunner = workers.ExecCommandRunner{}
-	if fs != nil && fs.coordinatorPolicy().commandRunnerOverride != nil {
+	if fs.workersScheduler != nil {
+		return fs.workersScheduler
+	}
+	if fs.cfg != nil {
+		return NewWorkersSchedulerService(fs.cfg, fs.clock, fs.logger, fs.hostedWorkers)
+	}
+	clock := clockwork.NewRealClock()
+	if supervisorClock, ok := fs.clock.(clockwork.Clock); ok && supervisorClock != nil {
+		clock = supervisorClock
+	}
+	runner := workers.CommandRunner(workers.ExecCommandRunner{})
+	if fs.coordinatorPolicy().commandRunnerOverride != nil {
 		runner = fs.coordinatorPolicy().commandRunnerOverride
 	}
 	logger := zap.NewNop()
-	if fs != nil && fs.logger != nil {
+	if fs.logger != nil {
 		logger = fs.logger
 	}
-	hosted := hostedworkers.Config{}
-	if fs != nil {
-		hosted = fs.hostedWorkers
-	}
+	hosted := fs.hostedWorkers
 	return workersservice.New(workersservice.Config{
 		Logger:               logger,
 		Clock:                clock,
 		CommandRunner:        runner,
-		WorkflowID:             fs.coordinatorPolicy().workflowID,
-		DefaultFactoryDir:      fs.coordinatorPolicy().dir,
-		HostedHTTPClient:       hosted.HTTPClient,
-		HostedSecretResolver:   hosted.SecretResolver,
-		HostedLinearEndpoint:   hosted.LinearEndpoint,
+		WorkflowID:           fs.coordinatorPolicy().workflowID,
+		DefaultFactoryDir:    fs.coordinatorPolicy().dir,
+		HostedHTTPClient:     hosted.HTTPClient,
+		HostedSecretResolver: hosted.SecretResolver,
+		HostedLinearEndpoint: hosted.LinearEndpoint,
 	})
-}
-
-const (
-	cronSourceTag          = interfaces.TimeWorkTagKeySource
-	cronWorkstationTag     = interfaces.TimeWorkTagKeyCronWorkstation
-	cronSubmissionNamePref = "cron:"
-)
-
-type workRequestSubmitter func(context.Context, interfaces.WorkRequest) error
-
-func (fs *FactoryService) startCronWatchersForRuntime(
-	ctx context.Context,
-	sidecars *sync.WaitGroup,
-	factoryDir string,
-	factoryCfg *interfaces.FactoryConfig,
-	runtimeCfg interfaces.RuntimeWorkstationLookup,
-	submitter workRequestSubmitter,
-) {
-	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || submitter == nil {
-		return
-	}
-
-	fs.workersSchedulerService().StartCronWatchersForRuntime(
-		ctx,
-		sidecars,
-		factoryDir,
-		factoryCfg,
-		runtimeCfg,
-		workersservice.WorkRequestSubmitter(submitter),
-	)
 }
 
 func (fs *FactoryService) submitCronTick(
@@ -106,7 +85,7 @@ func (fs *FactoryService) submitCronTick(
 	if runtimeCfg != nil {
 		workflowIdentity = fs.cronWorkflowIdentity(runtimeCfg.FactoryDir())
 	}
-	return fs.workersSchedulerService().SubmitCronTick(
+	return fs.requireWorkersScheduler().SubmitCronTick(
 		ctx,
 		runtimeLookup,
 		workflowIdentity,
@@ -117,5 +96,5 @@ func (fs *FactoryService) submitCronTick(
 }
 
 func (fs *FactoryService) cronWorkflowIdentity(factoryDir string) string {
-	return fs.workersSchedulerService().WorkflowIdentityForFactoryDir(factoryDir)
+	return fs.requireWorkersScheduler().WorkflowIdentityForFactoryDir(factoryDir)
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
 
@@ -426,9 +427,10 @@ func NewLocalModelDomain(cfg *FactoryServiceConfig) LocalModelDomain {
 
 // FactoryServiceCollaborators groups explicit S6 composition collaborators.
 type FactoryServiceCollaborators struct {
-	Sessions     *factorysessions.Registry
-	LocalModels  LocalModelDomain
-	RuntimeBuild *runtimebuild.Service
+	Sessions         *factorysessions.Registry
+	LocalModels      LocalModelDomain
+	RuntimeBuild     *runtimebuild.Service
+	WorkersScheduler *workersservice.Service
 }
 
 // NewFactoryServiceCollaborators builds S6 collaborators using the provided
@@ -440,6 +442,7 @@ func NewFactoryServiceCollaborators(
 	sessions *factorysessions.Registry,
 ) FactoryServiceCollaborators {
 	startupLocalModels := newRuntimeLocalModelDependencies(cfg)
+	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
 	return FactoryServiceCollaborators{
 		Sessions:    sessions,
 		LocalModels: startupLocalModels,
@@ -451,6 +454,7 @@ func NewFactoryServiceCollaborators(
 			newInferenceProgressPublisherFactory(sessions, baseLogger),
 			newSessionDispatchCompletionObserverFactory(sessions),
 		),
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
 	}
 }
 
@@ -460,11 +464,13 @@ func NewFactoryServiceCollaboratorsFromParts(
 	sessions *factorysessions.Registry,
 	localModels LocalModelDomain,
 	runtimeBuild *runtimebuild.Service,
+	workersScheduler *workersservice.Service,
 ) FactoryServiceCollaborators {
 	return FactoryServiceCollaborators{
-		Sessions:     sessions,
-		LocalModels:  localModels,
-		RuntimeBuild: runtimeBuild,
+		Sessions:         sessions,
+		LocalModels:      localModels,
+		RuntimeBuild:     runtimeBuild,
+		WorkersScheduler: workersScheduler,
 	}
 }
 
@@ -526,9 +532,10 @@ func NewHostedWorkersConfig(
 // ComposeCollaboratorSnapshot records whether S6 collaborators were initialized
 // on a built FactoryService. Tests compare snapshots across wire and direct build paths.
 type ComposeCollaboratorSnapshot struct {
-	SessionsInitialized      bool
-	RuntimeBuildInitialized  bool
-	LocalModelsInitialized   bool
+	SessionsInitialized          bool
+	RuntimeBuildInitialized      bool
+	WorkersSchedulerInitialized  bool
+	LocalModelsInitialized       bool
 	ModelAssetsInitialized   bool
 	FactorySaveInitialized   bool
 	DefinitionsInitialized   bool
@@ -590,6 +597,14 @@ func (core *FactoryCore) Sessions() *factorysessions.Registry {
 	return core.collaborators.Sessions
 }
 
+// WorkersScheduler returns the workers scheduling collaborator owned by the core.
+func (core *FactoryCore) WorkersScheduler() *workersservice.Service {
+	if core == nil {
+		return nil
+	}
+	return core.collaborators.WorkersScheduler
+}
+
 // RuntimeBuild returns the runtime-build collaborator owned by the core.
 func (core *FactoryCore) RuntimeBuild() *runtimebuild.Service {
 	if core == nil {
@@ -647,9 +662,10 @@ func (core *FactoryCore) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapsh
 	}
 	bundle := core.StartupBundle()
 	snapshot := ComposeCollaboratorSnapshot{
-		SessionsInitialized:      core.Sessions() != nil,
-		RuntimeBuildInitialized:  core.RuntimeBuild() != nil,
-		LocalModelsInitialized:   core.LocalModels().manager != nil,
+		SessionsInitialized:         core.Sessions() != nil,
+		RuntimeBuildInitialized:     core.RuntimeBuild() != nil,
+		WorkersSchedulerInitialized: core.WorkersScheduler() != nil,
+		LocalModelsInitialized:      core.LocalModels().manager != nil,
 		ModelAssetsInitialized:   core.ModelAssetPuller() != nil,
 		DefinitionsInitialized:   true,
 		HostedWorkersLoggerReady: core.HostedWorkers().Logger != nil,
@@ -679,6 +695,7 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 	bundle := fs.currentRuntimeBundle()
 	snapshot.SessionsInitialized = fs.sessions != nil
 	snapshot.RuntimeBuildInitialized = fs.runtimeBuild != nil
+	snapshot.WorkersSchedulerInitialized = fs.workersScheduler != nil
 	snapshot.ModelAssetsInitialized = fs.modelAssets != nil
 	snapshot.HostedWorkersLoggerReady = fs.hostedWorkers.Logger != nil
 	if bundle != nil {
@@ -859,7 +876,8 @@ func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
 		baseLogger:     core.BaseLogger(),
 		logger:         core.Logger(),
 		clock:          core.Clock(),
-		runtimeBuild:   core.RuntimeBuild(),
+		runtimeBuild:     core.RuntimeBuild(),
+		workersScheduler: core.WorkersScheduler(),
 	}
 	svc.modelService = newFactoryModelService(svc)
 	svc.coordinator = newFactoryCoordinator(svc)
