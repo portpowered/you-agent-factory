@@ -109,7 +109,7 @@ func projectedSessionStreamIdentity(
 ) *factoryapi.FactorySessionStreamIdentity {
 	sessionID := ""
 	if ctx.Session != nil {
-		sessionID = strings.TrimSpace(ctx.Session.ID)
+		sessionID = CanonicalFactorySessionID(ctx.Session)
 	}
 	backendScopeID := strings.TrimSpace(ctx.BackendScopeID)
 	if backendScopeID == "" || sessionID == "" {

@@ -203,7 +203,7 @@ func (fs *FactoryService) registerLiveSession(
 		return
 	}
 	registration := fs.buildLiveSessionRegistration(sessionID, handle, target)
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
+	session := factorysessions.NewLiveSession(
 		sessionID,
 		registration.factoryDir,
 		registration.folderPath,
@@ -212,7 +212,9 @@ func (fs *FactoryService) registerLiveSession(
 		&liveSessionState{bundle: handle.runtime, handle: handle, spec: registration.preparedSpec},
 		sessionID == defaultFactorySessionID,
 		registration.project,
-	), selectSession)
+	)
+	factorysessions.EnsureRuntimeFactorySessionID(session)
+	fs.sessions.Upsert(session, selectSession)
 }
 
 func defaultSessionTargetFromRuntimeBundle(
@@ -261,7 +263,26 @@ func (fs *FactoryService) sessionByID(sessionID string) *factorysessions.LiveSes
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
-	return fs.sessions.Get(sessionID)
+	trimmed := strings.TrimSpace(sessionID)
+	if trimmed == "" {
+		return nil
+	}
+	if session := fs.sessions.Get(trimmed); session != nil {
+		return session
+	}
+	if logicaltarget.IsDefaultSessionSelector(trimmed) {
+		return fs.defaultSession()
+	}
+	for _, id := range fs.sessions.IDs() {
+		session := fs.sessions.Get(id)
+		if session == nil {
+			continue
+		}
+		if factorysessions.CanonicalFactorySessionID(session) == trimmed {
+			return session
+		}
+	}
+	return nil
 }
 
 func (fs *FactoryService) requireSession(sessionID string) (*factorysessions.LiveSession, error) {
@@ -1026,7 +1047,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 
 	response.BackendScopeId = stringPointer(factorySessionBackendScopeID(fs, session))
 	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(fs, session))
-	response.FactorySessionId = stringPointer(session.ID)
+	response.FactorySessionId = stringPointer(factorysessions.CanonicalFactorySessionID(session))
 	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
 	response.NormalizedTarget = factorySessionNormalizedLogicalTarget(fs, session)
 	if resolved.remapped {
@@ -1453,10 +1474,7 @@ func factorySessionNormalizedLogicalTarget(
 }
 
 func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
-	factorySessionID := ""
-	if session != nil {
-		factorySessionID = strings.TrimSpace(session.ID)
-	}
+	factorySessionID := factorysessions.CanonicalFactorySessionID(session)
 	backendScopeID := factorySessionBackendScopeID(fs, session)
 	switch {
 	case backendScopeID != "" && factorySessionID != "":

@@ -53,10 +53,11 @@ type SessionState struct {
 type LiveSession struct {
 	ID string
 	SessionState
-	Handle    any
-	IsDefault bool
-	Project   string
-	Target    TargetRef
+	Handle                  any
+	IsDefault               bool
+	Project                 string
+	Target                  TargetRef
+	RuntimeFactorySessionID string
 }
 
 // NewSessionID allocates a unique live session identifier.

@@ -3031,6 +3031,40 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 	}
 }
 
+func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasResolvesToRuntimeUUID(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	wantRuntimeSessionID := factorysessions.CanonicalFactorySessionID(defaultSession)
+	if !factorysessions.IsUUIDFactorySessionID(wantRuntimeSessionID) {
+		t.Fatalf("default runtime session id = %q, want UUID", wantRuntimeSessionID)
+	}
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(default alias): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, response, factoryapi.Ok, "default alias")
+	if !response.CheckpointReusable {
+		t.Fatal("checkpointReusable = false, want true for default alias resolution")
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != wantRuntimeSessionID {
+		t.Fatalf("factorySessionId = %#v, want runtime UUID %q", response.FactorySessionId, wantRuntimeSessionID)
+	}
+	assertSyncPreflightDefaultSessionIdentity(t, harness.svc, defaultSession, response)
+
+	runtimeResponse, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), wantRuntimeSessionID, interfaces.FactorySessionSyncPreflightOptions{})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(runtime uuid): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, runtimeResponse, factoryapi.Ok, "runtime uuid")
+	assertSyncPreflightDefaultSessionIdentity(t, harness.svc, defaultSession, runtimeResponse)
+}
+
 func TestFactoryService_GetFactorySessionSyncPreflight_ResolvesCurrentSessionByLogicalSessionKeyID(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
@@ -3231,15 +3265,20 @@ func assertSyncPreflightDefaultSessionIdentity(
 	if response.BackendScopeId == nil || strings.TrimSpace(*response.BackendScopeId) == "" {
 		t.Fatalf("backendScopeId = %#v, want non-empty", response.BackendScopeId)
 	}
-	if response.FactorySessionId == nil || *response.FactorySessionId != defaultFactorySessionID {
-		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, defaultFactorySessionID)
+	wantFactorySessionID := factorysessions.CanonicalFactorySessionID(session)
+	if response.FactorySessionId == nil || *response.FactorySessionId != wantFactorySessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, wantFactorySessionID)
+	}
+	if !factorysessions.IsUUIDFactorySessionID(wantFactorySessionID) {
+		t.Fatalf("factorySessionId = %q, want UUID runtime identity", wantFactorySessionID)
 	}
 	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(fs, session)
 	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
 		t.Fatalf("logicalSessionKeyId = %#v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
 	}
-	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, defaultFactorySessionID) {
-		t.Fatalf("streamGenerationId = %#v, want session-scoped generation", response.StreamGenerationId)
+	wantStreamGenerationID := factorySessionStreamGenerationID(fs, session)
+	if response.StreamGenerationId == nil || *response.StreamGenerationId != wantStreamGenerationID {
+		t.Fatalf("streamGenerationId = %#v, want %q", response.StreamGenerationId, wantStreamGenerationID)
 	}
 	if response.NormalizedTarget == nil || response.NormalizedTarget.Kind != factoryapi.FactorySessionLogicalTargetKindDefault {
 		t.Fatalf("normalizedTarget = %#v, want default logical target", response.NormalizedTarget)

@@ -32,6 +32,8 @@ const replayHarness = createReplayHarness();
 const DEFAULT_STREAM_GENERATION_ID = "2026-06-26T00:00:00Z";
 const DEFAULT_BACKEND_SCOPE_ID = "backend-scope-a";
 const DEFAULT_LOGICAL_SESSION_KEY_ID = "lsk-default-folder";
+const DEFAULT_RUNTIME_FACTORY_SESSION_ID =
+  "550e8400-e29b-41d4-a716-446655440000";
 
 function buildSyncPreflightResponse(
   overrides: Partial<factorySessionsAPI.FactorySessionSyncPreflightResponse> = {},
@@ -597,6 +599,38 @@ describe("useDashboardSnapshot composer", () => {
       }),
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
+  });
+
+  it("remaps the ~default alias to the resolved UUID runtime identity", async () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: true,
+        factorySessionId: DEFAULT_RUNTIME_FACTORY_SESSION_ID,
+        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationId: `${DEFAULT_BACKEND_SCOPE_ID}::${DEFAULT_RUNTIME_FACTORY_SESSION_ID}`,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_RUNTIME_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      DEFAULT_RUNTIME_FACTORY_SESSION_ID,
+    );
+    expect(indexedDBRecords.has(checkpointStorageKey(DEFAULT_FACTORY_SESSION_ID))).toBe(
+      false,
+    );
   });
 
   it("remaps a stale factory session id through logical identity without reusing the reconnect cursor", async () => {
