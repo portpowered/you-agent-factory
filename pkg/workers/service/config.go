@@ -14,6 +14,10 @@ type Config struct {
 	Logger        *zap.Logger
 	Clock         clockwork.Clock
 	CommandRunner workers.CommandRunner
+	// WorkflowID overrides factory-dir workflow identity for cron ticks when non-empty.
+	WorkflowID string
+	// DefaultFactoryDir is the coordinator factory directory used when runtime factoryDir is empty.
+	DefaultFactoryDir string
 	// HostedHTTPClient overrides the default HTTP client for repository-owned hosted pollers.
 	HostedHTTPClient *http.Client
 	// HostedSecretResolver resolves hosted-worker auth.secretRef values at runtime.
