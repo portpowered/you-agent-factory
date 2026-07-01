@@ -143,7 +143,7 @@ func (fs *FactoryService) buildLiveSessionRegistration(
 		project:    strings.TrimSpace(target.Project),
 	}
 	if registration.factoryDir == "" && handle.runtime != nil {
-		registration.factoryDir = handle.runtime.dir
+		registration.factoryDir = handle.runtime.Dir
 	}
 	if registration.folderPath == "" {
 		registration.folderPath = fs.factoryRootDir
@@ -166,8 +166,8 @@ func (fs *FactoryService) buildLiveSessionRegistration(
 
 func liveSessionExecutionBaseDir(handle *liveRuntimeHandle, folderPath string, factoryDir string) string {
 	executionBaseDir := ""
-	if handle != nil && handle.runtime != nil && handle.runtime.runtimeCfg != nil {
-		executionBaseDir = strings.TrimSpace(handle.runtime.runtimeCfg.RuntimeBaseDir())
+	if handle != nil && handle.runtime != nil && handle.runtime.RuntimeCfg != nil {
+		executionBaseDir = strings.TrimSpace(handle.runtime.RuntimeCfg.RuntimeBaseDir())
 	}
 	if executionBaseDir == "" {
 		executionBaseDir = folderPath
@@ -222,8 +222,8 @@ func defaultSessionTargetFromRuntimeBundle(
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}
 	if runtimeBundle != nil {
-		target.FactoryDir = runtimeBundle.dir
-		target.FolderPath = runtimeBundle.folderPath
+		target.FactoryDir = runtimeBundle.Dir
+		target.FolderPath = runtimeBundle.FolderPath
 	}
 	if strings.TrimSpace(target.FolderPath) == "" {
 		target.FolderPath = factoryRootDir
@@ -280,7 +280,7 @@ func (fs *FactoryService) sessionFactory(sessionID string) (factory.Factory, err
 	if err != nil {
 		return nil, err
 	}
-	return liveSessionHandle(session).runtime.factory, nil
+	return liveSessionHandle(session).runtime.Factory, nil
 }
 
 func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error) {
@@ -288,7 +288,7 @@ func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig
 	if err != nil {
 		return nil, err
 	}
-	return liveSessionHandle(session).runtime.runtimeCfg, nil
+	return liveSessionHandle(session).runtime.RuntimeCfg, nil
 }
 
 func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
@@ -619,9 +619,9 @@ func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID 
 		Ref: FactorySessionTargetRef{
 			Kind: FactorySessionTargetKindDefault,
 		},
-		FactoryDir: runtimeBundle.dir,
-		FolderPath: runtimeBundle.dir,
-		Project:    filepath.Base(runtimeBundle.dir),
+		FactoryDir: runtimeBundle.Dir,
+		FolderPath: runtimeBundle.Dir,
+		Project:    filepath.Base(runtimeBundle.Dir),
 	})
 }
 
@@ -736,7 +736,7 @@ func (fs *FactoryService) startReplacementSessionRuntime(
 	replacementHandle := fs.startLiveRuntime(serviceCtx, replacement)
 	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
 		_ = fs.stopLiveRuntime(replacementHandle)
-		return nil, fmt.Errorf("start replacement runtime: %w", err)
+		return nil, fmt.Errorf("start replacement Runtime: %w", err)
 	}
 	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) != interfaces.RuntimeModeService {
 		return replacementHandle, nil
@@ -796,15 +796,15 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 	fs.publishFactoryChangeEvent(ctx, handle, replacement)
 	restoreCurrentSidecars = false
 	executionBaseDir := strings.TrimSpace(session.ExecutionBaseDir)
-	if replacement.runtimeCfg != nil {
-		if runtimeBaseDir := strings.TrimSpace(replacement.runtimeCfg.RuntimeBaseDir()); runtimeBaseDir != "" {
+	if replacement.RuntimeCfg != nil {
+		if runtimeBaseDir := strings.TrimSpace(replacement.RuntimeCfg.RuntimeBaseDir()); runtimeBaseDir != "" {
 			executionBaseDir = runtimeBaseDir
 		}
 	}
 	fs.closeSessionResponseStreams(session)
 	fs.sessions.Upsert(factorysessions.NewLiveSession(
 		session.ID,
-		replacement.dir,
+		replacement.Dir,
 		session.FolderPath,
 		executionBaseDir,
 		session.Target,
@@ -1034,7 +1034,7 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 		return response, nil
 	}
 
-	eventHistory := liveSessionHandle(session).runtime.eventHistory
+	eventHistory := liveSessionHandle(session).runtime.EventHistory
 	eventsSnapshot := []factoryapi.FactoryEvent(nil)
 	if eventHistory != nil {
 		eventsSnapshot = eventHistory.Events()
@@ -1120,8 +1120,8 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	projectionCtx := factorysessions.ProjectionContext{
 		Session:          session,
 		FactoryCfg:       factoryCfg,
-		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).runtimeInstanceID),
-		RuntimeStartedAt: liveSessionBundle(session).startedAtUTC,
+		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).RuntimeInstanceID),
+		RuntimeStartedAt: liveSessionBundle(session).StartedAtUTC,
 		Now:              time.Now().UTC(),
 	}
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
@@ -1150,8 +1150,8 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 ) (*interfaces.FactorySessionJavaScriptRuntimeState, error) {
 	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
 	handle := liveSessionHandle(session)
-	if handle != nil && handle.runtime != nil && handle.runtime.eventHistory != nil {
-		worldState, err := projections.ReconstructFactoryWorldState(handle.runtime.eventHistory.Events(), selectedTick)
+	if handle != nil && handle.runtime != nil && handle.runtime.EventHistory != nil {
+		worldState, err := projections.ReconstructFactoryWorldState(handle.runtime.EventHistory.Events(), selectedTick)
 		if err != nil {
 			return nil, err
 		}
@@ -1503,8 +1503,8 @@ func emitSessionResponseStreamCompaction(
 		Reason:     string(summary.Reason),
 	}
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
-	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.logger != nil {
-		handle.runtime.logger.Warn("session response stream compacted internal provider progress",
+	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.Logger != nil {
+		handle.runtime.Logger.Warn("session response stream compacted internal provider progress",
 			zap.String("session_id", sessionID),
 			zap.String("dispatch_id", dispatchID),
 			zap.String("compaction_reason", string(summary.Reason)),
@@ -1530,8 +1530,8 @@ func emitSessionResponseStreamDegraded(
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamDegraded, fields)
 
 	log := fallbackLogger
-	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.logger != nil {
-		log = handle.runtime.logger
+	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.Logger != nil {
+		log = handle.runtime.Logger
 	}
 	if log == nil {
 		return
@@ -1560,8 +1560,8 @@ func emitSessionResponseStreamMetric(
 	if fields.DispatchID == "" {
 		fields.DispatchID = sessionID
 	}
-	if err := handle.runtime.metricsEmitter().Counter(context.Background(), name, 1, fields); err != nil {
-		handle.runtime.runtimeLogger().Warn("session response stream metric emission failed",
+	if err := handle.runtime.MetricsEmitter().Counter(context.Background(), name, 1, fields); err != nil {
+		handle.runtime.RuntimeLogger().Warn("session response stream metric emission failed",
 			zap.String("metric_name", name),
 			zap.String("session_id", sessionID),
 			zap.Error(err),
@@ -2078,7 +2078,7 @@ func (fs *FactoryService) emitLiveLifecycleControlMetric(
 	if bundle == nil {
 		return
 	}
-	bundle.emitMetricCounter(runtimeMetricLifecycleControl, 1, metrics.Fields{
+	bundle.EmitMetricCounter(runtimeMetricLifecycleControl, 1, metrics.Fields{
 		Outcome: outcomeClass,
 		Reason:  string(operation),
 	})

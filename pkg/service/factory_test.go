@@ -494,7 +494,7 @@ func TestFactoryService_WaitToComplete_DelegatesToActiveRuntime(t *testing.T) {
 	waitCh := make(chan struct{})
 	svc := &FactoryService{}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		factory: &aggregateSnapshotFactory{
+		Factory: &aggregateSnapshotFactory{
 			waitToComplete: waitCh,
 		},
 	})
@@ -527,9 +527,9 @@ func TestFactoryService_ObserveRuntimeMetrics_EmitsFailedLifecycleMetric(t *test
 
 	handle := &liveRuntimeHandle{
 		runtime: &factoryRuntimeBundle{
-			factory:     factoryStub,
-			metricsSink: metricsSink,
-			logger:      zap.NewNop(),
+			Factory:     factoryStub,
+			MetricsSink: metricsSink,
+			Logger:      zap.NewNop(),
 		},
 		runDone: make(chan struct{}),
 	}
@@ -611,9 +611,9 @@ func startRuntimeMetricsShutdownTestHandle(
 
 	handle := &liveRuntimeHandle{
 		runtime: &factoryRuntimeBundle{
-			factory:     factoryStub,
-			metricsSink: metricsSink,
-			logger:      zap.NewNop(),
+			Factory:     factoryStub,
+			MetricsSink: metricsSink,
+			Logger:      zap.NewNop(),
 		},
 		runDone:   make(chan struct{}),
 		runCancel: runCancel,
@@ -747,13 +747,13 @@ func TestFactoryService_Pause_RequiresActiveRuntimeAndWrapsPauseErrors(t *testin
 		t.Fatalf("Pause without runtime error = %v, want runtime unavailable", err)
 	}
 
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}})
 	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "pause factory: pause failed") {
 		t.Fatalf("Pause wrapped error = %v, want wrapped pause failure", err)
 	}
 
 	svc = &FactoryService{}
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: &aggregateSnapshotFactory{}})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: &aggregateSnapshotFactory{}})
 	if err := svc.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause success error = %v", err)
 	}
@@ -773,15 +773,15 @@ func TestFactoryService_CurrentRuntimeBundleAndDirComparisonHelpers(t *testing.T
 	mockFactory := &aggregateSnapshotFactory{}
 	runtimeCfg := &config.LoadedFactoryConfig{}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		dir:        "C:/factory",
-		factory:    mockFactory,
-		runtimeCfg: runtimeCfg,
+		Dir:        "C:/factory",
+		Factory:    mockFactory,
+		RuntimeCfg: runtimeCfg,
 	})
 	bundle := svc.currentRuntimeBundle()
 	if bundle == nil {
 		t.Fatal("expected populated currentRuntimeBundle")
 	}
-	if bundle.dir != svc.coordinatorPolicy().dir || bundle.factory != mockFactory || bundle.runtimeCfg != runtimeCfg {
+	if bundle.Dir != svc.coordinatorPolicy().dir || bundle.Factory != mockFactory || bundle.RuntimeCfg != runtimeCfg {
 		t.Fatalf("currentRuntimeBundle = %#v, want startup bundle fields", bundle)
 	}
 
@@ -962,18 +962,18 @@ func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
 		if bundle == nil {
 			return
 		}
-		if bundle.logSink != nil {
-			if _, seen := closed[bundle.logSink]; !seen {
-				closed[bundle.logSink] = struct{}{}
-				if err := bundle.logSink.Close(); err != nil {
+		if bundle.LogSink != nil {
+			if _, seen := closed[bundle.LogSink]; !seen {
+				closed[bundle.LogSink] = struct{}{}
+				if err := bundle.LogSink.Close(); err != nil {
 					t.Fatalf("logSink.Close: %v", err)
 				}
 			}
 		}
-		if bundle.metricsSink != nil {
-			if _, seen := closedMetrics[bundle.metricsSink]; !seen {
-				closedMetrics[bundle.metricsSink] = struct{}{}
-				if err := bundle.metricsSink.Close(); err != nil {
+		if bundle.MetricsSink != nil {
+			if _, seen := closedMetrics[bundle.MetricsSink]; !seen {
+				closedMetrics[bundle.MetricsSink] = struct{}{}
+				if err := bundle.MetricsSink.Close(); err != nil {
 					t.Fatalf("metricsSink.Close: %v", err)
 				}
 			}
@@ -1042,23 +1042,23 @@ func assertSessionArtifactIsolation(t *testing.T, session *liveFactorySession, w
 	}
 
 	runtimeBundle := liveSessionHandle(session).runtime
-	artifact, err := replay.Load(runtimeBundle.recordPath)
+	artifact, err := replay.Load(runtimeBundle.RecordPath)
 	if err != nil {
-		t.Fatalf("Load(%s): %v", runtimeBundle.recordPath, err)
+		t.Fatalf("Load(%s): %v", runtimeBundle.RecordPath, err)
 	}
 	payload, err := json.Marshal(artifact.Events)
 	if err != nil {
-		t.Fatalf("Marshal(%s events): %v", runtimeBundle.recordPath, err)
+		t.Fatalf("Marshal(%s events): %v", runtimeBundle.RecordPath, err)
 	}
 	if !strings.Contains(string(payload), wantWork) {
-		t.Fatalf("artifact %s did not contain session work %q: %s", runtimeBundle.recordPath, wantWork, string(payload))
+		t.Fatalf("artifact %s did not contain session work %q: %s", runtimeBundle.RecordPath, wantWork, string(payload))
 	}
 	for otherSessionID, otherWork := range forbiddenWork {
 		if otherSessionID == session.ID {
 			continue
 		}
 		if strings.Contains(string(payload), otherWork) {
-			t.Fatalf("artifact %s leaked work %q from session %s: %s", runtimeBundle.recordPath, otherWork, otherSessionID, string(payload))
+			t.Fatalf("artifact %s leaked work %q from session %s: %s", runtimeBundle.RecordPath, otherWork, otherSessionID, string(payload))
 		}
 	}
 }
@@ -1071,7 +1071,7 @@ func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 	}
 
 	runtimeBundle := liveSessionHandle(session).runtime
-	logPath := runtimeBundle.logSink.Path()
+	logPath := runtimeBundle.LogSink.Path()
 	if logPath == "" {
 		t.Fatalf("session %s runtime log path is empty", session.ID)
 	}
@@ -1086,11 +1086,11 @@ func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 			t.Fatalf("runtime log %s contained record for session %#v, want only %q in %#v", logPath, record["session_id"], session.ID, record)
 		}
 		foundSessionRecord = true
-		if record["folder_path"] != runtimeBundle.folderPath {
-			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.ID, record["folder_path"], runtimeBundle.folderPath, record)
+		if record["folder_path"] != runtimeBundle.FolderPath {
+			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.ID, record["folder_path"], runtimeBundle.FolderPath, record)
 		}
-		if record["factory_dir"] != runtimeBundle.dir {
-			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.ID, record["factory_dir"], runtimeBundle.dir, record)
+		if record["factory_dir"] != runtimeBundle.Dir {
+			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.ID, record["factory_dir"], runtimeBundle.Dir, record)
 		}
 		if record["runtime_instance_id"] == "" {
 			t.Fatalf("session %s runtime_instance_id missing in %#v", session.ID, record)
@@ -1106,15 +1106,15 @@ func assertSessionRuntimeLogPathsAreDistinct(t *testing.T, runtimeLogRoot string
 
 	seenPaths := make(map[string]string, len(sessions))
 	for _, session := range sessions {
-		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.logSink == nil {
+		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.LogSink == nil {
 			t.Fatal("expected live session runtime log sink")
 		}
-		path := liveSessionHandle(session).runtime.logSink.Path()
+		path := liveSessionHandle(session).runtime.LogSink.Path()
 		if path == "" {
 			t.Fatalf("session %s runtime log path is empty", session.ID)
 		}
-		if liveSessionHandle(session).runtime.logSink.RootDir() != runtimeLogRoot {
-			t.Fatalf("session %s runtime log root = %q, want %q", session.ID, liveSessionHandle(session).runtime.logSink.RootDir(), runtimeLogRoot)
+		if liveSessionHandle(session).runtime.LogSink.RootDir() != runtimeLogRoot {
+			t.Fatalf("session %s runtime log root = %q, want %q", session.ID, liveSessionHandle(session).runtime.LogSink.RootDir(), runtimeLogRoot)
 		}
 		if otherSessionID, ok := seenPaths[path]; ok {
 			t.Fatalf("sessions %s and %s shared runtime log path %q", otherSessionID, session.ID, path)
@@ -1128,15 +1128,15 @@ func assertSessionRuntimeMetricsPathsAreDistinct(t *testing.T, metricsRoot strin
 
 	seenPaths := make(map[string]string, len(sessions))
 	for _, session := range sessions {
-		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.MetricsSink == nil {
 			t.Fatal("expected live session runtime metrics sink")
 		}
-		path := liveSessionHandle(session).runtime.metricsSink.Path()
+		path := liveSessionHandle(session).runtime.MetricsSink.Path()
 		if path == "" {
 			t.Fatalf("session %s runtime metrics path is empty", session.ID)
 		}
-		if liveSessionHandle(session).runtime.metricsSink.RootDir() != metricsRoot {
-			t.Fatalf("session %s runtime metrics root = %q, want %q", session.ID, liveSessionHandle(session).runtime.metricsSink.RootDir(), metricsRoot)
+		if liveSessionHandle(session).runtime.MetricsSink.RootDir() != metricsRoot {
+			t.Fatalf("session %s runtime metrics root = %q, want %q", session.ID, liveSessionHandle(session).runtime.MetricsSink.RootDir(), metricsRoot)
 		}
 		if otherSessionID, ok := seenPaths[path]; ok {
 			t.Fatalf("sessions %s and %s shared runtime metrics path %q", otherSessionID, session.ID, path)
@@ -1190,7 +1190,7 @@ func waitForSessionRuntimeStatus(
 	for time.Now().Before(deadline) {
 		session := svc.sessionByID(sessionID)
 		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).runtime != nil {
-			snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+			snap, err := liveSessionHandle(session).runtime.Factory.GetEngineStateSnapshot(context.Background())
 			if err == nil && snap.RuntimeStatus == want {
 				return
 			}
@@ -1214,7 +1214,7 @@ func waitForSessionFactoryState(
 	for time.Now().Before(deadline) {
 		session := svc.sessionByID(sessionID)
 		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).runtime != nil {
-			snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+			snap, err := liveSessionHandle(session).runtime.Factory.GetEngineStateSnapshot(context.Background())
 			if err == nil && snap.FactoryState == string(want) {
 				return
 			}
@@ -1319,7 +1319,7 @@ func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workTy
 		TraceID:    traceID,
 		Payload:    []byte(`{"title":"` + workID + `"}`),
 	}})
-	if _, err := liveSessionHandle(session).runtime.factory.SubmitWorkRequest(context.Background(), request); err != nil {
+	if _, err := liveSessionHandle(session).runtime.Factory.SubmitWorkRequest(context.Background(), request); err != nil {
 		t.Fatalf("SubmitWorkRequest(%s): %v", workID, err)
 	}
 }
@@ -1390,7 +1390,7 @@ func sessionEventsContain(t *testing.T, session *liveFactorySession, want string
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
 		t.Fatal("live session runtime is required")
 	}
-	events, err := liveSessionHandle(session).runtime.factory.GetFactoryEvents(context.Background())
+	events, err := liveSessionHandle(session).runtime.Factory.GetFactoryEvents(context.Background())
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
@@ -1425,13 +1425,13 @@ func TestBuildFactoryService_LoadsFromFactoryJSON(t *testing.T) {
 	if bundle == nil {
 		t.Fatal("expected startup runtime bundle")
 	}
-	if bundle.net == nil {
+	if bundle.Net == nil {
 		t.Fatal("expected non-nil net")
 	}
-	if _, ok := bundle.net.WorkTypes["task"]; !ok {
+	if _, ok := bundle.Net.WorkTypes["task"]; !ok {
 		t.Error("expected 'task' work type in net topology")
 	}
-	if bundle.factory == nil {
+	if bundle.Factory == nil {
 		t.Fatal("expected non-nil factory")
 	}
 
@@ -1656,7 +1656,7 @@ func TestFactoryService_ActivateNamedFactory_RejectsNonIdleRuntime(t *testing.T)
 		logger: zap.NewNop(),
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		factory: &aggregateSnapshotFactory{
+		Factory: &aggregateSnapshotFactory{
 			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 				RuntimeStatus: interfaces.RuntimeStatusActive,
 			},
@@ -1688,8 +1688,8 @@ func TestFactoryService_RequireIdleRuntime_TargetsActiveRunSession(t *testing.T)
 		sessions: factorysessions.NewRegistry(),
 		logger:   zap.NewNop(),
 	}
-	defaultHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{factory: idleFactory}}
-	betaHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{factory: activeFactory}}
+	defaultHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{Factory: idleFactory}}
+	betaHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{Factory: activeFactory}}
 	svc.registerLiveSession(defaultFactorySessionID, defaultHandle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}, false)
@@ -1943,7 +1943,7 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 	}
 	if bundle := svc.currentRuntimeBundle(); bundle != nil {
 		defer func() {
-			if err := closeRuntimeBundleSinks(bundle.logSink, bundle.metricsSink); err != nil {
+			if err := closeRuntimeBundleSinks(bundle.LogSink, bundle.MetricsSink); err != nil {
 				t.Fatalf("Close(runtime artifact sinks): %v", err)
 			}
 		}()
@@ -3444,8 +3444,8 @@ func assertNestedInitSessionMetadata(t *testing.T, session *factorysessions.Live
 	if session.FactoryDir != nestedFactoryDir {
 		t.Fatalf("session factory dir = %q, want %q", session.FactoryDir, nestedFactoryDir)
 	}
-	if liveSessionHandle(session).runtime.dir != nestedFactoryDir {
-		t.Fatalf("session runtime dir = %q, want %q", liveSessionHandle(session).runtime.dir, nestedFactoryDir)
+	if liveSessionHandle(session).runtime.Dir != nestedFactoryDir {
+		t.Fatalf("session runtime dir = %q, want %q", liveSessionHandle(session).runtime.Dir, nestedFactoryDir)
 	}
 }
 
@@ -4106,9 +4106,9 @@ func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testi
 		modelAssets: puller,
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		runtimeCfg:  runtimeCfg,
-		modelAssets: puller,
-		localModels: newManagedLocalModelManager(puller, runtime),
+		RuntimeCfg:  runtimeCfg,
+		ModelAssets: puller,
+		LocalModels: newManagedLocalModelManager(puller, runtime),
 	})
 
 	pullResult, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -4351,9 +4351,9 @@ func TestFactoryService_GetCurrentNamedFactory_FallsBackToLiveRuntimeWhenPointer
 		cfg:            &FactoryServiceConfig{Dir: rootDir},
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		dir:        rootDir,
-		folderPath: rootDir,
-		runtimeCfg: runtimeCfg,
+		Dir:        rootDir,
+		FolderPath: rootDir,
+		RuntimeCfg: runtimeCfg,
 	})
 
 	current, err := svc.GetCurrentNamedFactory(context.Background())
@@ -4412,13 +4412,13 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 	core := &FactoryCore{
 		collaborators: FactoryServiceCollaborators{
 			Sessions:     factorysessions.NewRegistry(),
-			LocalModels:  localModelDomain{manager: &managedLocalModelManager{}},
+			LocalModels:  localModelDomain{Manager: &managedLocalModelManager{}},
 			RuntimeBuild: &runtimebuild.Service{},
 		},
 		hostedWorkers: hostedworkers.Config{Logger: zap.NewNop()},
 		startupBundle: &factoryRuntimeBundle{
-			modelResources: newLocalModelResourceLimiter(),
-			localModels:    &managedLocalModelManager{},
+			ModelResources: newLocalModelResourceLimiter(),
+			LocalModels:    &managedLocalModelManager{},
 		},
 		modelAssets: staticModelAssetPuller{},
 	}
@@ -4464,8 +4464,8 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 
 	svc := &FactoryService{
 		startupBundle: &factoryRuntimeBundle{
-			logSink:     logSink,
-			metricsSink: metricsSink,
+			LogSink:     logSink,
+			MetricsSink: metricsSink,
 		},
 	}
 
@@ -4602,46 +4602,5 @@ func testModelHostMetricsAndDiagnosticsBranches(t *testing.T) {
 	diagnostics := modelHostDiagnostics(&FactoryServiceConfig{InvocationMetricsRecorder: recorder}, zap.NewNop())
 	if diagnostics.Logger == nil || diagnostics.Metrics == nil {
 		t.Fatalf("modelHostDiagnostics = %#v, want logger and metrics", diagnostics)
-	}
-}
-
-func TestScriptMetricHelpers_PreferFailureMetadataAndDiagnostics(t *testing.T) {
-	t.Parallel()
-
-	timeoutResult := interfaces.WorkResult{
-		FailureMetadata: &interfaces.WorkFailureMetadata{Type: interfaces.WorkFailureTypeTimeout},
-	}
-	if !scriptMetricTimedOut(timeoutResult) {
-		t.Fatal("expected timeout result to report timed out")
-	}
-	if got := scriptMetricFailureReason(timeoutResult); got != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("failure reason = %q, want %q", got, interfaces.WorkFailureTypeTimeout)
-	}
-
-	commandResult := interfaces.WorkResult{
-		Outcome: interfaces.OutcomeRejected,
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Command: &interfaces.CommandDiagnostic{
-				ExitCode: 7,
-				Duration: 250 * time.Millisecond,
-			},
-		},
-	}
-	if got := scriptMetricFailureReason(commandResult); got != "exit_code" {
-		t.Fatalf("failure reason = %q, want exit_code", got)
-	}
-	if duration, ok := scriptMetricDurationMilliseconds(commandResult); !ok || duration != 250 {
-		t.Fatalf("command duration = %v, %v want 250, true", duration, ok)
-	}
-
-	outcomeResult := interfaces.WorkResult{
-		Outcome: interfaces.OutcomeContinue,
-		Metrics: interfaces.WorkMetrics{Duration: 125 * time.Millisecond},
-	}
-	if duration, ok := scriptMetricDurationMilliseconds(outcomeResult); !ok || duration != 125 {
-		t.Fatalf("metrics duration = %v, %v want 125, true", duration, ok)
-	}
-	if got := scriptMetricFailureReason(outcomeResult); got != string(interfaces.OutcomeContinue) {
-		t.Fatalf("fallback failure reason = %q, want %q", got, interfaces.OutcomeContinue)
 	}
 }

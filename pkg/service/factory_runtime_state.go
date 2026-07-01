@@ -533,10 +533,10 @@ func (fs *FactoryService) currentRuntimeSubmitter() workRequestSubmitter {
 
 func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error {
 	runtimeBundle := fs.currentRuntimeBundle()
-	if runtimeBundle == nil || runtimeBundle.listener == nil {
+	if runtimeBundle == nil || runtimeBundle.Listener == nil {
 		return nil
 	}
-	if err := runtimeBundle.listener.PreseedInputs(ctx); err != nil {
+	if err := runtimeBundle.Listener.PreseedInputs(ctx); err != nil {
 		return fmt.Errorf("preseed inputs: %w", err)
 	}
 	return nil
@@ -575,13 +575,13 @@ func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBund
 	}
 	fs.runtimeMu.Lock()
 	defer fs.runtimeMu.Unlock()
-	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.dir) == "" {
+	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.Dir) == "" {
 		if strings.TrimSpace(fs.factoryRootDir) != "" {
 			fs.cfg.Dir = fs.factoryRootDir
 		}
 		return
 	}
-	fs.cfg.Dir = runtimeBundle.dir
+	fs.cfg.Dir = runtimeBundle.Dir
 }
 
 func (fs *FactoryService) currentRunState() *serviceRunState {
@@ -768,14 +768,14 @@ func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
 
 func (fs *FactoryService) currentFactory() factory.Factory {
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
-		return bundle.factory
+		return bundle.Factory
 	}
 	return nil
 }
 
 func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
-		return bundle.runtimeCfg
+		return bundle.RuntimeCfg
 	}
 	if session := fs.defaultSession(); session != nil {
 		if spec := liveSessionBuildSpec(session); spec != nil {
@@ -927,22 +927,22 @@ func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntime
 		return nil
 	}
 	var errs []error
-	if runtimeBundle.recording != nil {
-		runtimeBundle.recording.Finish(factory.EnsureClock(fs.clock).Now().UTC())
-		if err := runtimeBundle.recording.Flush(); err != nil {
+	if runtimeBundle.Recording != nil {
+		runtimeBundle.Recording.Finish(factory.EnsureClock(fs.clock).Now().UTC())
+		if err := runtimeBundle.Recording.Flush(); err != nil {
 			errs = append(errs, err)
 		}
-		if err := runtimeBundle.recording.Err(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if runtimeBundle.logSink != nil {
-		if err := runtimeBundle.logSink.Close(); err != nil {
+		if err := runtimeBundle.Recording.Err(); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	if runtimeBundle.metricsSink != nil {
-		if err := runtimeBundle.metricsSink.Close(); err != nil {
+	if runtimeBundle.LogSink != nil {
+		if err := runtimeBundle.LogSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if runtimeBundle.MetricsSink != nil {
+		if err := runtimeBundle.MetricsSink.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -951,13 +951,6 @@ func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntime
 
 func sessionScopedRecordPath(basePath string, sessionID string) string {
 	return runtimebuild.SessionScopedRecordPath(basePath, sessionID)
-}
-
-func (r *factoryRuntimeBundle) runtimeLogger() *zap.Logger {
-	if r == nil || r.logger == nil {
-		return zap.NewNop()
-	}
-	return r.logger
 }
 
 func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {

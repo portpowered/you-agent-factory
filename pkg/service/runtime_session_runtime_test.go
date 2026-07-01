@@ -87,11 +87,11 @@ func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *tes
 	if liveSessionHandle(defaultSession) == liveSessionHandle(firstBeta) || liveSessionHandle(firstBeta) == liveSessionHandle(secondBeta) {
 		t.Fatal("expected each live session to own a distinct runtime handle")
 	}
-	if liveSessionHandle(defaultSession).runtime.dir != harness.factoryDirs["alpha"] {
-		t.Fatalf("default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.dir, harness.factoryDirs["alpha"])
+	if liveSessionHandle(defaultSession).runtime.Dir != harness.factoryDirs["alpha"] {
+		t.Fatalf("default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.Dir, harness.factoryDirs["alpha"])
 	}
-	if liveSessionHandle(firstBeta).runtime.dir != harness.factoryDirs["beta"] || liveSessionHandle(secondBeta).runtime.dir != harness.factoryDirs["beta"] {
-		t.Fatalf("beta runtime dirs = %q and %q, want %q", liveSessionHandle(firstBeta).runtime.dir, liveSessionHandle(secondBeta).runtime.dir, harness.factoryDirs["beta"])
+	if liveSessionHandle(firstBeta).runtime.Dir != harness.factoryDirs["beta"] || liveSessionHandle(secondBeta).runtime.Dir != harness.factoryDirs["beta"] {
+		t.Fatalf("beta runtime dirs = %q and %q, want %q", liveSessionHandle(firstBeta).runtime.Dir, liveSessionHandle(secondBeta).runtime.Dir, harness.factoryDirs["beta"])
 	}
 
 	assertSessionWorkIsolation(t, []sessionWorkExpectation{
@@ -171,11 +171,11 @@ func TestFactoryService_OpenFactorySessionFromFolder_KeepsSessionWorkingDirector
 	if secondSession.FolderPath != rootTwo {
 		t.Fatalf("second session folder path = %q, want %q", secondSession.FolderPath, rootTwo)
 	}
-	if liveSessionHandle(defaultSession).runtime.dir != rootOne {
-		t.Fatalf("default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.dir, rootOne)
+	if liveSessionHandle(defaultSession).runtime.Dir != rootOne {
+		t.Fatalf("default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.Dir, rootOne)
 	}
-	if liveSessionHandle(secondSession).runtime.dir != rootTwo {
-		t.Fatalf("second runtime dir = %q, want %q", liveSessionHandle(secondSession).runtime.dir, rootTwo)
+	if liveSessionHandle(secondSession).runtime.Dir != rootTwo {
+		t.Fatalf("second runtime dir = %q, want %q", liveSessionHandle(secondSession).runtime.Dir, rootTwo)
 	}
 
 	submitSessionWork(t, defaultSession, "alpha-work", "trace-alpha-work")
@@ -348,14 +348,14 @@ func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts
 
 	harness.stop(t)
 
-	if liveSessionHandle(defaultSession).runtime.recordPath != recordPath {
-		t.Fatalf("default record path = %q, want %q", liveSessionHandle(defaultSession).runtime.recordPath, recordPath)
+	if liveSessionHandle(defaultSession).runtime.RecordPath != recordPath {
+		t.Fatalf("default record path = %q, want %q", liveSessionHandle(defaultSession).runtime.RecordPath, recordPath)
 	}
-	if liveSessionHandle(firstBeta).runtime.recordPath == "" || liveSessionHandle(secondBeta).runtime.recordPath == "" {
-		t.Fatalf("background record paths must be set, got %q and %q", liveSessionHandle(firstBeta).runtime.recordPath, liveSessionHandle(secondBeta).runtime.recordPath)
+	if liveSessionHandle(firstBeta).runtime.RecordPath == "" || liveSessionHandle(secondBeta).runtime.RecordPath == "" {
+		t.Fatalf("background record paths must be set, got %q and %q", liveSessionHandle(firstBeta).runtime.RecordPath, liveSessionHandle(secondBeta).runtime.RecordPath)
 	}
-	if liveSessionHandle(firstBeta).runtime.recordPath == liveSessionHandle(secondBeta).runtime.recordPath {
-		t.Fatalf("background sessions shared record path %q", liveSessionHandle(firstBeta).runtime.recordPath)
+	if liveSessionHandle(firstBeta).runtime.RecordPath == liveSessionHandle(secondBeta).runtime.RecordPath {
+		t.Fatalf("background sessions shared record path %q", liveSessionHandle(firstBeta).runtime.RecordPath)
 	}
 
 	for _, session := range []*liveFactorySession{defaultSession, firstBeta, secondBeta} {
@@ -562,8 +562,8 @@ func TestFactoryService_OpenFactorySession_ReopenedSessionGetsDistinctReplayArti
 	if firstBetaSessionID == secondBetaSessionID {
 		t.Fatalf("reopened beta session id = %q, want a new session identity", secondBetaSessionID)
 	}
-	if liveSessionHandle(firstBeta).runtime.recordPath == liveSessionHandle(secondBeta).runtime.recordPath {
-		t.Fatalf("reopened beta sessions shared record path %q", liveSessionHandle(secondBeta).runtime.recordPath)
+	if liveSessionHandle(firstBeta).runtime.RecordPath == liveSessionHandle(secondBeta).runtime.RecordPath {
+		t.Fatalf("reopened beta sessions shared record path %q", liveSessionHandle(secondBeta).runtime.RecordPath)
 	}
 
 	submitSessionWork(t, secondBeta, "beta-session-two-work", "trace-beta-session-two")
@@ -738,8 +738,8 @@ func TestFactoryService_Run_RestartsOnlyDefaultSession(t *testing.T) {
 		t.Fatalf("restarted session ids = %v, want [%s]", got, defaultFactorySessionID)
 	}
 	defaultSession := restarted.requireSession(t, defaultFactorySessionID)
-	if liveSessionHandle(defaultSession).runtime.dir != harness.factoryDirs["alpha"] {
-		t.Fatalf("restarted default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.dir, harness.factoryDirs["alpha"])
+	if liveSessionHandle(defaultSession).runtime.Dir != harness.factoryDirs["alpha"] {
+		t.Fatalf("restarted default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.Dir, harness.factoryDirs["alpha"])
 	}
 }
 
@@ -960,7 +960,7 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	betaSession := harness.requireSession(t, betaSessionID)
 	submitSessionWorkWithType(t, betaSession, "story", "beta-after-replace-work", "trace-beta-after-replace")
 	waitForSessionEventsToContain(t, betaSession, "beta-after-replace-work", time.Second)
-	stream, err := liveSessionHandle(betaSession).runtime.factory.SubscribeFactoryEvents(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
+	stream, err := liveSessionHandle(betaSession).runtime.Factory.SubscribeFactoryEvents(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
 	if err != nil {
 		t.Fatalf("SubscribeFactoryEvents after replace save: %v", err)
 	}
@@ -992,10 +992,10 @@ func TestFactoryService_OpenFactorySession_SubmitsWorkAndServesModelCatalogReads
 	submitSessionWork(t, betaSession, "beta-open-session-work", "trace-beta-open-session")
 	waitForSessionEventsToContain(t, betaSession, "beta-open-session-work", time.Second)
 
-	if liveSessionHandle(betaSession).runtime.localModels == nil {
+	if liveSessionHandle(betaSession).runtime.LocalModels == nil {
 		t.Fatal("opened session runtime localModels = nil, want model catalog seam")
 	}
-	if _, err := localmodels.ListModels(liveSessionHandle(betaSession).runtime.runtimeCfg); err != nil {
+	if _, err := localmodels.ListModels(liveSessionHandle(betaSession).runtime.RuntimeCfg); err != nil {
 		t.Fatalf("ListModels on opened session runtime config: %v", err)
 	}
 }
@@ -1049,8 +1049,8 @@ func TestFactoryService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *te
 		t.Fatalf("single-target open returned picker targets = %#v, want none", result.Targets)
 	}
 	session := harness.requireSession(t, result.SessionID)
-	if liveSessionHandle(session).runtime.dir != harness.factoryDirs["alpha"] {
-		t.Fatalf("opened session runtime dir = %q, want %q", liveSessionHandle(session).runtime.dir, harness.factoryDirs["alpha"])
+	if liveSessionHandle(session).runtime.Dir != harness.factoryDirs["alpha"] {
+		t.Fatalf("opened session runtime dir = %q, want %q", liveSessionHandle(session).runtime.Dir, harness.factoryDirs["alpha"])
 	}
 	if got := harness.svc.sessions.Count(); got != 2 {
 		t.Fatalf("live session count = %d, want 2", got)
@@ -1120,11 +1120,11 @@ func TestFactoryService_OpenFactorySessionFromFolder_OpensExplicitDefaultAndName
 	defaultSession := harness.requireSession(t, defaultOpen.SessionID)
 	betaSessionOne := harness.requireSession(t, betaOpenOne.SessionID)
 	betaSessionTwo := harness.requireSession(t, betaOpenTwo.SessionID)
-	if liveSessionHandle(defaultSession).runtime.dir != harness.rootDir {
-		t.Fatalf("default target runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.dir, harness.rootDir)
+	if liveSessionHandle(defaultSession).runtime.Dir != harness.rootDir {
+		t.Fatalf("default target runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.Dir, harness.rootDir)
 	}
-	if liveSessionHandle(betaSessionOne).runtime.dir != harness.factoryDirs["beta"] || liveSessionHandle(betaSessionTwo).runtime.dir != harness.factoryDirs["beta"] {
-		t.Fatalf("beta target runtime dirs = %q and %q, want %q", liveSessionHandle(betaSessionOne).runtime.dir, liveSessionHandle(betaSessionTwo).runtime.dir, harness.factoryDirs["beta"])
+	if liveSessionHandle(betaSessionOne).runtime.Dir != harness.factoryDirs["beta"] || liveSessionHandle(betaSessionTwo).runtime.Dir != harness.factoryDirs["beta"] {
+		t.Fatalf("beta target runtime dirs = %q and %q, want %q", liveSessionHandle(betaSessionOne).runtime.Dir, liveSessionHandle(betaSessionTwo).runtime.Dir, harness.factoryDirs["beta"])
 	}
 	if got := harness.svc.sessions.Count(); got != 4 {
 		t.Fatalf("live session count = %d, want 4", got)
@@ -1305,8 +1305,8 @@ func TestFactoryService_OpenFactorySessionFromFolder_ExpandsLeadingTildeForValid
 	if session.FolderPath != harness.rootDir {
 		t.Fatalf("opened session folder path = %q, want %q", session.FolderPath, harness.rootDir)
 	}
-	if liveSessionHandle(session).runtime.dir != harness.factoryDirs["alpha"] {
-		t.Fatalf("opened session runtime dir = %q, want %q", liveSessionHandle(session).runtime.dir, harness.factoryDirs["alpha"])
+	if liveSessionHandle(session).runtime.Dir != harness.factoryDirs["alpha"] {
+		t.Fatalf("opened session runtime dir = %q, want %q", liveSessionHandle(session).runtime.Dir, harness.factoryDirs["alpha"])
 	}
 }
 
@@ -1430,7 +1430,7 @@ func TestBuildReplacementFactoryRuntime_WiresWorkflowContextSessionID(t *testing
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime(default): %v", err)
 	}
-	defaultCtx := runtime.WorkflowContext(defaultBundle.factory)
+	defaultCtx := runtime.WorkflowContext(defaultBundle.Factory)
 	if defaultCtx == nil || defaultCtx.SessionID != factorysessions.DefaultSessionID {
 		t.Fatalf("default workflow context = %#v, want SessionID %q", defaultCtx, factorysessions.DefaultSessionID)
 	}
@@ -1439,7 +1439,7 @@ func TestBuildReplacementFactoryRuntime_WiresWorkflowContextSessionID(t *testing
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime(named): %v", err)
 	}
-	namedCtx := runtime.WorkflowContext(namedBundle.factory)
+	namedCtx := runtime.WorkflowContext(namedBundle.Factory)
 	if namedCtx == nil || namedCtx.SessionID != "session-beta" {
 		t.Fatalf("named workflow context = %#v, want SessionID %q", namedCtx, "session-beta")
 	}
@@ -1518,10 +1518,10 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableA
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
 	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		runtimeInstanceID: "backend-scope-js",
-		startedAtUTC:      startedAt,
-		runtimeCfg:        runtimeCfg,
-		factory: &aggregateSnapshotFactory{
+		RuntimeInstanceID: "backend-scope-js",
+		StartedAtUTC:      startedAt,
+		RuntimeCfg:        runtimeCfg,
+		Factory: &aggregateSnapshotFactory{
 			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
 			},
@@ -1562,10 +1562,10 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHa
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
 	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		runtimeInstanceID: "backend-scope-js",
-		startedAtUTC:      startedAt,
-		runtimeCfg:        runtimeCfg,
-		factory: &aggregateSnapshotFactory{
+		RuntimeInstanceID: "backend-scope-js",
+		StartedAtUTC:      startedAt,
+		RuntimeCfg:        runtimeCfg,
+		Factory: &aggregateSnapshotFactory{
 			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
 				StreamGenerationID:     "snapshot-stream-token",
@@ -2642,10 +2642,10 @@ func TestObserveLiveLifecycleControl_EmitsAcceptedPauseMetric(t *testing.T) {
 	defer harness.stop(t)
 
 	session := harness.svc.sessionByID(defaultFactorySessionID)
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.MetricsSink == nil {
 		t.Fatal("live session runtime metrics sink is required")
 	}
-	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	metricsPath := liveSessionHandle(session).runtime.MetricsSink.Path()
 
 	if _, err := harness.svc.PauseLiveFactorySession(
 		context.Background(),
@@ -2935,7 +2935,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 	defer harness.stop(t)
 
 	session := harness.requireSession(t, defaultFactorySessionID)
-	eventHistory := liveSessionHandle(session).runtime.eventHistory
+	eventHistory := liveSessionHandle(session).runtime.EventHistory
 	recorded := eventHistory.Events()
 	if len(recorded) == 0 {
 		t.Fatal("event history = empty, want initial structure event")
@@ -3172,7 +3172,7 @@ func TestFactoryService_InferenceProgressPublisher_DoesNotEmitCanonicalFactoryEv
 	})
 
 	session := harness.requireSession(t, defaultFactorySessionID)
-	runtimeFactory := liveSessionHandle(session).runtime.factory
+	runtimeFactory := liveSessionHandle(session).runtime.Factory
 	before, err := runtimeFactory.GetFactoryEvents(context.Background())
 	if err != nil {
 		t.Fatalf("GetFactoryEvents(before): %v", err)
@@ -3622,8 +3622,8 @@ func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, work
 		"/factory",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
 		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
-			logger:      logger,
-			metricsSink: metricsSink,
+			Logger:      logger,
+			MetricsSink: metricsSink,
 		}}},
 		false,
 		"factory",
@@ -3895,10 +3895,10 @@ func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegraded
 	defer harness.stop(t)
 
 	session := harness.svc.sessionByID(defaultFactorySessionID)
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.MetricsSink == nil {
 		t.Fatal("live session runtime metrics sink is required")
 	}
-	liveSessionHandle(session).runtime.logger = zap.New(core)
+	liveSessionHandle(session).runtime.Logger = zap.New(core)
 	harness.svc.newSessionResponseStream = func() *factorysessions.SessionResponseStream {
 		return nil
 	}
@@ -3909,7 +3909,7 @@ func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegraded
 	}
 	publisher(workerprovider.ProgressFragment("dispatch-unavailable", nil, "phase"))
 
-	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	metricsPath := liveSessionHandle(session).runtime.MetricsSink.Path()
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
 		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamDegraded, 1) &&
 			metricRecordString(record, "dispatch_id") == "dispatch-unavailable" &&

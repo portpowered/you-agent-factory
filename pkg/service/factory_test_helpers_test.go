@@ -1161,14 +1161,14 @@ func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch interfaces.
 
 func pauseSessionFactory(t *testing.T, session *liveFactorySession) {
 	t.Helper()
-	if err := liveSessionHandle(session).runtime.factory.Pause(context.Background()); err != nil {
+	if err := liveSessionHandle(session).runtime.Factory.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause(%s): %v", session.ID, err)
 	}
 }
 
 func resumeSessionFactory(t *testing.T, session *liveFactorySession) {
 	t.Helper()
-	if err := liveSessionHandle(session).runtime.factory.Resume(context.Background()); err != nil {
+	if err := liveSessionHandle(session).runtime.Factory.Resume(context.Background()); err != nil {
 		t.Fatalf("Resume(%s): %v", session.ID, err)
 	}
 }
@@ -1187,7 +1187,7 @@ func sessionEngineSnapshot(t *testing.T, session *liveFactorySession) *interface
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
 		t.Fatal("live session runtime is required")
 	}
-	snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+	snap, err := liveSessionHandle(session).runtime.Factory.GetEngineStateSnapshot(context.Background())
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot(%s): %v", session.ID, err)
 	}
