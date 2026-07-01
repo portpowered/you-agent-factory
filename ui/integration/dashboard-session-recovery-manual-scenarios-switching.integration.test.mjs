@@ -185,6 +185,10 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
           uiInteractionTimeoutMs,
         );
 
+        // Close tab two before mutating shared IndexedDB so its checkpoint persist
+        // timer cannot rewrite the matching-identity envelope after we clear it.
+        await tabTwoPage.close();
+
         await clearTimelineCheckpoints(browserPage.page);
         await seedTimelineCheckpoint(browserPage.page, staleIdentity, {
           afterEventId: "multi-tab-stale-event-9",
@@ -193,9 +197,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
         });
 
         await tabOneNetwork.resetEventStreamURLs();
-        await tabTwoNetwork.resetEventStreamURLs();
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
-        await tabTwoPage.reload({ waitUntil: "domcontentloaded" });
 
         const staleReconnectTimeoutMs = 120_000;
         const tabReconnectWithoutStaleCursor = async (network) => {
@@ -223,14 +225,20 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
           async () => tabReconnectWithoutStaleCursor(tabOneNetwork),
           staleReconnectTimeoutMs,
         );
+
+        const tabTwoReloadPage = await browserPage.context.newPage();
+        const tabTwoReloadNetwork = await installNetworkCapture(tabTwoReloadPage);
+        await tabTwoReloadPage.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
         await waitForDurableCheckpoint(
           "tab two stale identity reconnect",
-          async () => tabReconnectWithoutStaleCursor(tabTwoNetwork),
+          async () => tabReconnectWithoutStaleCursor(tabTwoReloadNetwork),
           staleReconnectTimeoutMs,
         );
 
         const tabOneURLs = await tabOneNetwork.readEventStreamURLs();
-        const tabTwoURLs = await tabTwoNetwork.readEventStreamURLs();
+        const tabTwoURLs = await tabTwoReloadNetwork.readEventStreamURLs();
         expect(
           tabOneURLs.some((url) =>
             eventStreamHasCursor(url, "multi-tab-stale-event-9"),
@@ -242,7 +250,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
           ),
         ).toBe(false);
 
-        await tabTwoPage.close();
+        await tabTwoReloadPage.close();
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
