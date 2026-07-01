@@ -33,6 +33,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
 
@@ -71,9 +72,10 @@ func NewLocalModelDomain(cfg *runtimehost.Config) LocalModelDomain {
 
 // FactoryServiceCollaborators groups explicit S6 composition collaborators.
 type FactoryServiceCollaborators struct {
-	Sessions     *factorysessions.Registry
-	LocalModels  LocalModelDomain
-	RuntimeBuild *runtimebuild.Service
+	Sessions         *factorysessions.Registry
+	LocalModels      LocalModelDomain
+	RuntimeBuild     *runtimebuild.Service
+	WorkersScheduler *workersservice.Service
 }
 
 // NewFactoryServiceCollaborators builds S6 collaborators using the provided
@@ -85,6 +87,7 @@ func NewFactoryServiceCollaborators(
 	sessions *factorysessions.Registry,
 ) FactoryServiceCollaborators {
 	startupLocalModels := NewLocalModelDomain(cfg)
+	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
 	return FactoryServiceCollaborators{
 		Sessions:    sessions,
 		LocalModels: startupLocalModels,
@@ -96,6 +99,7 @@ func NewFactoryServiceCollaborators(
 			runtimehost.NewInferenceProgressPublisherFactory(sessions, baseLogger),
 			runtimehost.NewSessionDispatchCompletionObserverFactory(sessions),
 		),
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
 	}
 }
 
@@ -105,11 +109,13 @@ func NewFactoryServiceCollaboratorsFromParts(
 	sessions *factorysessions.Registry,
 	localModels LocalModelDomain,
 	runtimeBuild *runtimebuild.Service,
+	workersScheduler *workersservice.Service,
 ) FactoryServiceCollaborators {
 	return FactoryServiceCollaborators{
-		Sessions:     sessions,
-		LocalModels:  localModels,
-		RuntimeBuild: runtimeBuild,
+		Sessions:         sessions,
+		LocalModels:      localModels,
+		RuntimeBuild:     runtimeBuild,
+		WorkersScheduler: workersScheduler,
 	}
 }
 
@@ -175,6 +181,9 @@ func BuildFactoryCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehos
 	}
 	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
+		return nil, err
+	}
+	if err := ensureServiceBackendScope(cfg, root.BaseLogger); err != nil {
 		return nil, err
 	}
 	load, err := LoadFactoryConfigForCompose(cfg, root)
@@ -286,6 +295,7 @@ func ComposeFactoryCore(
 		root.BaseLogger,
 		collaborators.Sessions,
 		collaborators.RuntimeBuild,
+		collaborators.WorkersScheduler,
 		collaborators.LocalModels,
 		hostedWorkers,
 		clock,

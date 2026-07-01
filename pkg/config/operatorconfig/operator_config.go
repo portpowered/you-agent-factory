@@ -89,10 +89,10 @@ func LoadFileDefaults(path string) (Defaults, error) {
 // ParseFileDefaults validates operator config JSON bytes.
 func ParseFileDefaults(data []byte) (Defaults, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
 
 	var cfg struct {
-		Defaults Defaults `json:"defaults"`
+		Defaults       Defaults `json:"defaults"`
+		BackendScopeID string   `json:"backendScopeID"`
 	}
 	if err := decoder.Decode(&cfg); err != nil {
 		return Defaults{}, fmt.Errorf("decode operator config JSON: %w", err)

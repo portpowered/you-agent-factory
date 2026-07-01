@@ -8,15 +8,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
 
 // ComposeCollaboratorSnapshot records whether collaborators were initialized on a
 // built Core or Host. Tests compare snapshots across wire and direct build paths.
 type ComposeCollaboratorSnapshot struct {
-	SessionsInitialized      bool
-	RuntimeBuildInitialized  bool
-	LocalModelsInitialized   bool
+	SessionsInitialized         bool
+	RuntimeBuildInitialized     bool
+	WorkersSchedulerInitialized bool
+	LocalModelsInitialized      bool
 	ModelAssetsInitialized   bool
 	ModelServiceInitialized  bool
 	FactorySaveInitialized   bool
@@ -36,9 +38,10 @@ type Core struct {
 	cfg           *Config
 	factoryRootDir string
 	baseLogger     *zap.Logger
-	sessions       *factorysessions.Registry
-	runtimeBuild   *runtimebuild.Service
-	localModels    LocalModelDomain
+	sessions         *factorysessions.Registry
+	runtimeBuild     *runtimebuild.Service
+	workersScheduler *workersservice.Service
+	localModels      LocalModelDomain
 	hostedWorkers  hostedworkers.Config
 	clock          factory.Clock
 	startupBundle  *factoryRuntimeBundle
@@ -102,6 +105,14 @@ func (core *Core) RuntimeBuild() *runtimebuild.Service {
 	return core.runtimeBuild
 }
 
+// WorkersScheduler returns the workers scheduling collaborator owned by the core.
+func (core *Core) WorkersScheduler() *workersservice.Service {
+	if core == nil {
+		return nil
+	}
+	return core.workersScheduler
+}
+
 // ModelHost returns the process-wide model host collaborator.
 func (core *Core) ModelHost() modelhost.Host {
 	if core == nil {
@@ -151,9 +162,10 @@ func (core *Core) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapshot {
 	}
 	bundle := core.StartupBundle()
 	snapshot := ComposeCollaboratorSnapshot{
-		SessionsInitialized:      core.Sessions() != nil,
-		RuntimeBuildInitialized:  core.RuntimeBuild() != nil,
-		LocalModelsInitialized:   core.LocalModels().Manager != nil,
+		SessionsInitialized:         core.Sessions() != nil,
+		RuntimeBuildInitialized:     core.RuntimeBuild() != nil,
+		WorkersSchedulerInitialized: core.WorkersScheduler() != nil,
+		LocalModelsInitialized:      core.LocalModels().Manager != nil,
 		ModelAssetsInitialized:   core.ModelAssetPuller() != nil,
 		DefinitionsInitialized:   true,
 		HostedWorkersLoggerReady: core.HostedWorkers().Logger != nil,
@@ -172,6 +184,7 @@ func NewCore(
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
 	runtimeBuild *runtimebuild.Service,
+	workersScheduler *workersservice.Service,
 	localModels LocalModelDomain,
 	hostedWorkers hostedworkers.Config,
 	clock factory.Clock,
@@ -183,9 +196,10 @@ func NewCore(
 		cfg:            cfg,
 		factoryRootDir: factoryRootDir,
 		baseLogger:     baseLogger,
-		sessions:       sessions,
-		runtimeBuild:   runtimeBuild,
-		localModels:    localModels,
+		sessions:         sessions,
+		runtimeBuild:     runtimeBuild,
+		workersScheduler: workersScheduler,
+		localModels:      localModels,
 		hostedWorkers:  hostedWorkers,
 		clock:          clock,
 		startupBundle:  startupBundle,

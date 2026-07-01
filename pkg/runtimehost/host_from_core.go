@@ -22,8 +22,9 @@ func NewHostFromCore(core *Core) *Host {
 		modelAssets:    core.modelAssets,
 		baseLogger:     core.BaseLogger(),
 		logger:         core.Logger(),
-		clock:          core.Clock(),
-		runtimeBuild:   core.RuntimeBuild(),
+		clock:            core.Clock(),
+		runtimeBuild:     core.RuntimeBuild(),
+		workersScheduler: core.WorkersScheduler(),
 	}
 	host.coordinator = newCoordinator(host)
 	host.definitions = newFactoryDefinitionService(host)
@@ -50,6 +51,7 @@ func (h *Host) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapshot {
 	bundle := h.currentRuntimeBundle()
 	snapshot.SessionsInitialized = h.sessions != nil
 	snapshot.RuntimeBuildInitialized = h.runtimeBuild != nil
+	snapshot.WorkersSchedulerInitialized = h.workersScheduler != nil
 	snapshot.ModelAssetsInitialized = h.modelAssets != nil
 	snapshot.HostedWorkersLoggerReady = h.hostedWorkers.Logger != nil
 	if bundle != nil {

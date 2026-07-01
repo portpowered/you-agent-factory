@@ -36,12 +36,9 @@ import (
 )
 
 const (
-	DefaultFactorySessionID                     = factorysessions.DefaultSessionID
-	FactorySessionTargetKindDefault             = factorysessions.TargetKindDefault
-	FactorySessionTargetKindNamed               = factorysessions.TargetKindNamed
-	runtimeMetricSessionResponseStreamPublished = "session_response_stream.published"
-	runtimeMetricSessionResponseStreamCompacted = "session_response_stream.compacted"
-	runtimeMetricSessionResponseStreamDegraded  = "session_response_stream.degraded"
+	DefaultFactorySessionID         = factorysessions.DefaultSessionID
+	FactorySessionTargetKindDefault = factorysessions.TargetKindDefault
+	FactorySessionTargetKindNamed   = factorysessions.TargetKindNamed
 )
 
 type (
@@ -70,13 +67,13 @@ type FactoryCoordinator interface {
 	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
-	startDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error)
-	startBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error
-	startLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error
-	stopLiveRuntimeSidecars(*liveRuntimeHandle)
-	stopLiveRuntime(*liveRuntimeHandle) error
-	shutdownOtherLiveSessions(*liveRuntimeHandle) error
-	replaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error
+	StartDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error)
+	StartBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error
+	StartLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error
+	StopLiveRuntimeSidecars(*liveRuntimeHandle)
+	StopLiveRuntime(*liveRuntimeHandle) error
+	ShutdownOtherLiveSessions(*liveRuntimeHandle) error
+	ReplaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error
 }
 
 type runtimeCoordinator struct {
@@ -427,14 +424,14 @@ func (fs *Host) openFactorySessionForTarget(ctx context.Context, target FactoryS
 	if err != nil {
 		return "", err
 	}
-	if err := fs.startBackgroundSessionWithMetadata(ctx, sessionID, replacement, target); err != nil {
+	if err := fs.StartBackgroundSessionWithMetadata(ctx, sessionID, replacement, target); err != nil {
 		return "", err
 	}
 	return sessionID, nil
 }
 
 func (fs *Host) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *factoryRuntimeBundle) error {
-	return fs.startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
+	return fs.StartBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{
 			Kind: FactorySessionTargetKindDefault,
 		},
@@ -445,16 +442,16 @@ func (fs *Host) startBackgroundSession(ctx context.Context, sessionID string, ru
 }
 
 //nolint:contextcheck // The request context bounds startup waiting, while the active service runtime context owns the long-lived session runtime and sidecars.
-func (fs *Host) startBackgroundSessionWithMetadata(
+func (fs *Host) StartBackgroundSessionWithMetadata(
 	ctx context.Context,
 	sessionID string,
 	runtimeBundle *factoryRuntimeBundle,
 	target FactorySessionTarget,
 ) error {
-	return fs.requireCoordinator().startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, target)
+	return fs.requireCoordinator().StartBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, target)
 }
 
-func (c *runtimeCoordinator) startBackgroundSessionWithMetadata(
+func (c *runtimeCoordinator) StartBackgroundSessionWithMetadata(
 	ctx context.Context,
 	sessionID string,
 	runtimeBundle *factoryRuntimeBundle,
@@ -473,12 +470,12 @@ func (c *runtimeCoordinator) startBackgroundSessionWithMetadata(
 	}
 	handle := fs.startLiveRuntime(serviceCtx, runtimeBundle)
 	if err := fs.waitForLiveRuntimeStart(ctx, handle); err != nil {
-		_ = fs.stopLiveRuntime(handle)
+		_ = fs.StopLiveRuntime(handle)
 		return fmt.Errorf("start runtime session: %w", err)
 	}
 	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) == interfaces.RuntimeModeService {
-		if err := fs.startLiveRuntimeSidecars(serviceCtx, handle); err != nil {
-			_ = fs.stopLiveRuntime(handle)
+		if err := fs.StartLiveRuntimeSidecars(serviceCtx, handle); err != nil {
+			_ = fs.StopLiveRuntime(handle)
 			return fmt.Errorf("start runtime session sidecars: %w", err)
 		}
 	}
@@ -507,7 +504,7 @@ func (fs *Host) stopFactorySession(sessionID string) error {
 	}
 
 	fs.unregisterLiveSession(sessionID)
-	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
+	if err := fs.StopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	return nil
@@ -558,22 +555,22 @@ func (fs *Host) startReplacementSessionRuntime(
 		ServiceCtx:                  serviceCtx,
 		Bundle:                      replacement,
 		Clock:                       fs.clock,
-		AttachSidecars:              fs.startLiveRuntimeSidecars,
+		AttachSidecars:              fs.StartLiveRuntimeSidecars,
 		AttachSidecarsInServiceMode: serviceMode,
 	})
 }
 
 //nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.
-func (fs *Host) replaceSessionRuntime(
+func (fs *Host) ReplaceSessionRuntime(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 	name string,
 	replacement *factoryRuntimeBundle,
 ) error {
-	return fs.requireCoordinator().replaceSessionRuntime(ctx, session, name, replacement)
+	return fs.requireCoordinator().ReplaceSessionRuntime(ctx, session, name, replacement)
 }
 
-func (c *runtimeCoordinator) replaceSessionRuntime(
+func (c *runtimeCoordinator) ReplaceSessionRuntime(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 	name string,
@@ -596,7 +593,7 @@ func (c *runtimeCoordinator) replaceSessionRuntime(
 		Current:         handle,
 		ServiceCtx:      serviceCtx,
 		ServiceMode:     serviceMode,
-		RestoreSidecars: fs.startLiveRuntimeSidecars,
+		RestoreSidecars: fs.StartLiveRuntimeSidecars,
 	}
 	attempt.Begin()
 	defer attempt.End()
@@ -628,7 +625,7 @@ func (c *runtimeCoordinator) replaceSessionRuntime(
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
-	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
+	if err := fs.StopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior session runtime shutdown failed", zap.Error(err), zap.String("session_id", session.ID))
 	}
 	return nil
@@ -745,7 +742,7 @@ func (fs *Host) failServiceModeStartup(currentRuntime *liveRuntimeHandle, startu
 	if currentRuntime == nil {
 		return startupErr
 	}
-	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+	if stopErr := fs.StopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
 		return errors.Join(startupErr, stopErr)
 	}
 	return startupErr
@@ -861,7 +858,7 @@ func (fs *Host) buildSessionProjectionContext(
 	projectionCtx := factorysessions.ProjectionContext{
 		Session:          session,
 		FactoryCfg:       factoryCfg,
-		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).RuntimeInstanceID),
+		BackendScopeID:   factorySessionBackendScopeID(fs, session),
 		RuntimeStartedAt: liveSessionBundle(session).StartedAtUTC,
 		Now:              time.Now().UTC(),
 	}
@@ -1005,28 +1002,35 @@ func (fs *Host) newSessionResponseStreamSetInstance() *factorysessions.SessionRe
 }
 
 func factorySessionBackendScopeID(fs *Host, session *factorysessions.LiveSession) string {
+	_ = session
 	if fs != nil && fs.cfg != nil {
-		if runtimeInstanceID := strings.TrimSpace(fs.cfg.RuntimeInstanceID); runtimeInstanceID != "" {
-			return runtimeInstanceID
+		if backendScopeID := strings.TrimSpace(fs.cfg.BackendScopeID); backendScopeID != "" {
+			return backendScopeID
 		}
+	}
+	if bundle := liveSessionBundle(session); bundle != nil {
+		return strings.TrimSpace(bundle.BackendScopeID)
 	}
 	return ""
 }
 
 func factorySessionStreamGenerationID(fs *Host, session *factorysessions.LiveSession) string {
+	if fs != nil && session != nil {
+		if snapshot, err := fs.GetEngineStateSnapshotForSession(context.Background(), session.ID); err == nil {
+			if streamGenerationID := strings.TrimSpace(snapshot.StreamGenerationID); streamGenerationID != "" {
+				return streamGenerationID
+			}
+		}
+	}
 	factorySessionID := ""
 	if session != nil {
 		factorySessionID = strings.TrimSpace(session.ID)
 	}
-	backendScopeID := factorySessionBackendScopeID(fs, session)
-	switch {
-	case backendScopeID != "" && factorySessionID != "":
-		return backendScopeID + "::" + factorySessionID
-	case factorySessionID != "":
-		return factorySessionID
-	default:
-		return backendScopeID
+	_ = factorySessionID
+	if bundle := liveSessionBundle(session); bundle != nil && !bundle.StartedAtUTC.IsZero() {
+		return bundle.StartedAtUTC.UTC().Format(time.RFC3339Nano)
 	}
+	return ""
 }
 
 func NewInferenceProgressPublisherFactory(
@@ -1400,10 +1404,6 @@ func (fs *Host) ResumeLiveFactorySession(
 	return fs.requireSessionGateway().ResumeLiveFactorySession(ctx, sessionID, request)
 }
 
-const (
-	runtimeMetricLifecycleControl = "runtime.lifecycle_control"
-)
-
 func (fs *Host) observeLiveLifecycleControl(
 	sessionID string,
 	operation factorysessionexecution.LifecycleControlKind,
@@ -1739,10 +1739,10 @@ func (fs *Host) requireSessionGateway() SessionGateway {
 	if fs == nil {
 		return newSessionGatewayService(nil)
 	}
-	if fs.SessionGateway == nil {
-		fs.SessionGateway = newSessionGatewayService(fs)
+	if fs.sessionGateway == nil {
+		fs.sessionGateway = newSessionGatewayService(fs)
 	}
-	return fs.SessionGateway
+	return fs.sessionGateway
 }
 
 // ProvideSessionGatewayCollaborator constructs the session gateway for a built service shell.
@@ -1753,7 +1753,7 @@ func ProvideSessionGatewayCollaborator(shell HostShell, cfg *Config) SessionGate
 // AttachSessionGatewayCollaborator assigns the session gateway on the service shell.
 func AttachSessionGatewayCollaborator(shell HostShell, gateway SessionGateway) *Host {
 	if shell.Host != nil {
-		shell.Host.SessionGateway = gateway
+		shell.Host.sessionGateway = gateway
 	}
 	return shell.Host
 }

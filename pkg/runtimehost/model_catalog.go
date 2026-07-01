@@ -727,17 +727,6 @@ const (
 	invocationPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
 	invocationPolicyExplicit              = "EXPLICIT"
 
-	invocationMetricNormalizationAttempts = "invocation.normalization_attempts"
-	invocationMetricNormalizationSuccess  = "invocation.normalization_success"
-	invocationMetricNormalizationFailure  = "invocation.normalization_failure"
-	invocationMetricInterpolationFailure  = "invocation.interpolation_failure"
-	invocationMetricAttempts              = "invocation.attempts"
-	invocationMetricSuccess               = "invocation.success"
-	invocationMetricFailure               = "invocation.failure"
-	invocationMetricUnresolvedPrimary     = "invocation.unresolved_primary"
-	invocationMetricFallbackPolicyUsed    = "invocation.fallback_policy_used"
-	invocationMetricResultType            = "invocation.result_type"
-
 	invocationPolicyModeAuthored = "authored"
 	invocationPolicyModeFallback = "fallback"
 )

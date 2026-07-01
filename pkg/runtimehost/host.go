@@ -38,6 +38,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
 
 	"go.uber.org/zap"
@@ -108,6 +109,7 @@ type hostRunState struct {
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
 // session registry, pkg/localmodels owns managed model runtime wiring, and
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
+// pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
 type Host struct {
 	runtimeMu      sync.RWMutex
 	activationMu   sync.RWMutex
@@ -117,9 +119,10 @@ type Host struct {
 	core           *Core
 	sessions       *factorysessions.Registry
 	factorySave    FactorySaveSaver
-	SessionGateway SessionGateway
+	sessionGateway SessionGateway
 	runtimeBuild   *runtimebuild.Service
-	hostedWorkers  hostedworkers.Config
+	workersScheduler *workersservice.Service
+	hostedWorkers    hostedworkers.Config
 	factoryRootDir string
 	policy         hostCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
@@ -182,6 +185,12 @@ type Config struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
+	// BackendScopeID is the stable session/cache namespace; empty local backends persist local-<uuid> during construction.
+	BackendScopeID string
+	// SystemConfigHomeDir overrides the home directory for backendScopeID system config resolution.
+	SystemConfigHomeDir string
+	// SystemConfigPath overrides the system config file path for backendScopeID persistence.
+	SystemConfigPath string
 	// RuntimeLogDir optionally overrides the default
 	// ~/.you-agent-factory/logs directory. Tests use this to keep file-backed
 	// logs isolated.
@@ -373,7 +382,7 @@ func (fs *Host) applyNamedFactoryReplacement(
 		if err := factoryconfig.WriteCurrentFactoryPointer(persistRoot, name); err != nil {
 			return err
 		}
-		return fs.replaceSessionRuntime(ctx, session, name, replacement)
+		return fs.ReplaceSessionRuntime(ctx, session, name, replacement)
 	}
 	if err := fs.requireIdleRuntime(ctx); err != nil {
 		return err
@@ -456,10 +465,10 @@ func (fs *Host) Run(ctx context.Context) error {
 
 	err = fs.waitForActiveRuntime(ctx)
 	currentRuntime = fs.currentLiveRuntime()
-	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
+	if stopErr := fs.StopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
 		err = stopErr
 	}
-	if stopErr := fs.shutdownOtherLiveSessions(currentRuntime); stopErr != nil && err == nil {
+	if stopErr := fs.ShutdownOtherLiveSessions(currentRuntime); stopErr != nil && err == nil {
 		err = stopErr
 	}
 	fs.clearRunState()
@@ -482,7 +491,7 @@ func (fs *Host) startRunRuntime(
 	sidecars *sync.WaitGroup,
 	serviceMode bool,
 ) (*liveRuntimeHandle, error) {
-	currentRuntime, err := fs.startDefaultRuntime(ctx, runCtx, serviceMode)
+	currentRuntime, err := fs.StartDefaultRuntime(ctx, runCtx, serviceMode)
 	if err != nil {
 		return nil, err
 	}
@@ -566,15 +575,15 @@ func (fs *Host) submitServiceModeWorkFile(
 	return nil
 }
 
-func (fs *Host) startDefaultRuntime(
+func (fs *Host) StartDefaultRuntime(
 	ctx context.Context,
 	runCtx context.Context,
 	serviceMode bool,
 ) (*liveRuntimeHandle, error) {
-	return fs.requireCoordinator().startDefaultRuntime(ctx, runCtx, serviceMode)
+	return fs.requireCoordinator().StartDefaultRuntime(ctx, runCtx, serviceMode)
 }
 
-func (c *runtimeCoordinator) startDefaultRuntime(
+func (c *runtimeCoordinator) StartDefaultRuntime(
 	ctx context.Context,
 	runCtx context.Context,
 	serviceMode bool,
@@ -594,13 +603,13 @@ func (c *runtimeCoordinator) startDefaultRuntime(
 		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
 	}
 	if serviceMode {
-		if err := fs.startLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
+		if err := fs.StartLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
 			if fs.defaultSessionClosedDuringStartup() {
 				return nil, nil
 			}
 			fs.clearRunState()
 			fs.unregisterLiveSession(DefaultFactorySessionID)
-			_ = fs.stopLiveRuntime(currentRuntime)
+			_ = fs.StopLiveRuntime(currentRuntime)
 			return nil, err
 		}
 	}
@@ -733,11 +742,11 @@ func (fs *Host) startLiveRuntime(ctx context.Context, runtimeBundle *factoryRunt
 	return factoryservice.Start(ctx, runtimeBundle)
 }
 
-func (fs *Host) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
-	return fs.requireCoordinator().startLiveRuntimeSidecars(ctx, handle)
+func (fs *Host) StartLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
+	return fs.requireCoordinator().StartLiveRuntimeSidecars(ctx, handle)
 }
 
-func (c *runtimeCoordinator) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
+func (c *runtimeCoordinator) StartLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
 	fs := c.host
 	if handle == nil || handle.Bundle == nil {
 		return fmt.Errorf("runtime handle is required")
@@ -766,17 +775,10 @@ func (c *runtimeCoordinator) startLiveRuntimeSidecars(ctx context.Context, handl
 		}()
 	}
 
-	fs.startCronWatchersForRuntime(
+	fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
 		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryDir(),
-		handle.Bundle.RuntimeCfg.FactoryConfig(),
-		handle.Bundle.RuntimeCfg,
-		submitWorkRequestWithFactory(handle.Bundle.Factory),
-	)
-	fs.startPollerWatchersForRuntime(
-		sidecarCtx,
-		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryConfig(),
 		handle.Bundle.RuntimeCfg,
 		submitWorkRequestWithFactory(handle.Bundle.Factory),
@@ -792,33 +794,33 @@ func (c *runtimeCoordinator) startLiveRuntimeSidecars(ctx context.Context, handl
 	return nil
 }
 
-func (fs *Host) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
-	fs.requireCoordinator().stopLiveRuntimeSidecars(handle)
+func (fs *Host) StopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
+	fs.requireCoordinator().StopLiveRuntimeSidecars(handle)
 }
 
-func (c *runtimeCoordinator) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
+func (c *runtimeCoordinator) StopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
 	factoryservice.StopSidecars(handle)
 }
 
-func (fs *Host) stopLiveRuntime(handle *liveRuntimeHandle) error {
-	return fs.requireCoordinator().stopLiveRuntime(handle)
+func (fs *Host) StopLiveRuntime(handle *liveRuntimeHandle) error {
+	return fs.requireCoordinator().StopLiveRuntime(handle)
 }
 
-func (c *runtimeCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) error {
+func (c *runtimeCoordinator) StopLiveRuntime(handle *liveRuntimeHandle) error {
 	fs := c.host
 	if handle == nil {
 		return nil
 	}
 	err := factoryservice.Stop(handle, fs.clock)
-	fs.stopLiveRuntimeSidecars(handle)
+	fs.StopLiveRuntimeSidecars(handle)
 	return err
 }
 
-func (fs *Host) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
-	return fs.requireCoordinator().shutdownOtherLiveSessions(except)
+func (fs *Host) ShutdownOtherLiveSessions(except *liveRuntimeHandle) error {
+	return fs.requireCoordinator().ShutdownOtherLiveSessions(except)
 }
 
-func (c *runtimeCoordinator) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
+func (c *runtimeCoordinator) ShutdownOtherLiveSessions(except *liveRuntimeHandle) error {
 	fs := c.host
 	if fs == nil || fs.sessions == nil {
 		return nil
@@ -834,7 +836,7 @@ func (c *runtimeCoordinator) shutdownOtherLiveSessions(except *liveRuntimeHandle
 			continue
 		}
 		if handle != nil {
-			if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
+			if err := fs.StopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 				errs = append(errs, err)
 			}
 		}

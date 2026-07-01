@@ -34,6 +34,25 @@ func TestLoadFileDefaults_MalformedFileNamesPath(t *testing.T) {
 	}
 }
 
+func TestParseFileDefaults_AcceptsBackendScopeIDWithoutAffectingDefaults(t *testing.T) {
+	defaults, err := ParseFileDefaults([]byte(`{
+		"backendScopeID": "local-11111111-2222-4333-8444-555555555555",
+		"defaults": {
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5-codex"
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("ParseFileDefaults() error = %v", err)
+	}
+	if defaults.WorkerModelProvider != "codex" {
+		t.Fatalf("provider = %q, want codex", defaults.WorkerModelProvider)
+	}
+	if defaults.WorkerModel != "gpt-5-codex" {
+		t.Fatalf("model = %q, want gpt-5-codex", defaults.WorkerModel)
+	}
+}
+
 func TestParseFileDefaults_AcceptsWorkerModelDefaults(t *testing.T) {
 	defaults, err := ParseFileDefaults([]byte(`{
 		"defaults": {

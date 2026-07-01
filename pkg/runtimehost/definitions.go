@@ -442,7 +442,7 @@ func (h *Host) activateSessionEditableFactory(
 	if err := h.requireIdleRuntimeForSession(ctx, sessionID); err != nil {
 		return err
 	}
-	return h.replaceSessionRuntime(ctx, session, runtimeName, replacement)
+	return h.ReplaceSessionRuntime(ctx, session, runtimeName, replacement)
 }
 
 func (h *Host) replaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {

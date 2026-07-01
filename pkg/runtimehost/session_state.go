@@ -21,6 +21,9 @@ import (
 )
 
 
+// LiveSessionState tracks per-session runtime state attached to live session handles.
+type LiveSessionState = liveSessionState
+
 type liveSessionState struct {
 	bundle                *factoryRuntimeBundle
 	handle                *liveRuntimeHandle
@@ -61,36 +64,18 @@ type hostCoordinatorPolicy struct {
 	commandRunnerOverride         workers.CommandRunner
 }
 
-const (
-	runtimeMetricLifecycleStarted     = "runtime.lifecycle.started"
-	runtimeMetricLifecycleStopped     = "runtime.lifecycle.stopped"
-	runtimeMetricStateActive          = "runtime.state.active"
-	runtimeMetricStateIdle            = "runtime.state.idle"
-	runtimeMetricStatePaused          = "runtime.state.paused"
-	runtimeMetricStateFailed          = "runtime.state.failed"
-	runtimeMetricQueueInFlight        = "runtime.queue.in_flight"
-	runtimeMetricQueueSubmissionCount = "queue.submission_count"
-	runtimeMetricDispatchStarted      = "dispatch.started"
-	runtimeMetricDispatchComplete     = "dispatch.completed"
-	runtimeMetricDispatchDuration     = "dispatch.duration"
-	runtimeMetricDispatchRetries      = "dispatch.retry_count"
-	runtimeMetricDispatchCost         = "dispatch.cost"
-	runtimeMetricProviderRequest      = "provider.requested"
-	runtimeMetricProviderComplete     = "provider.completed"
-	runtimeMetricProviderFailed       = "provider.failed"
-	runtimeMetricProviderDuration     = "provider.duration"
-	runtimeMetricProviderInputTok     = "provider.input_tokens"
-	runtimeMetricProviderOutputTok    = "provider.output_tokens"
-	runtimeMetricProviderCost         = "provider.cost"
-	runtimeMetricScriptStarted        = "script.started"
-	runtimeMetricScriptComplete       = "script.completed"
-	runtimeMetricScriptDuration       = "script.duration"
-	runtimeMetricScriptTimedOut       = "script.timed_out"
-	runtimeMetricScriptFailed         = "script.failed"
-)
-
 // CoordinatorPolicy captures normalized host coordinator settings derived from Config.
 type CoordinatorPolicy = hostCoordinatorPolicy
+
+// FactoryDir returns the coordinator factory root directory.
+func (p CoordinatorPolicy) FactoryDir() string {
+	return p.dir
+}
+
+// MockWorkersConfig returns mock worker config from coordinator policy for tests.
+func (p CoordinatorPolicy) MockWorkersConfig() *factoryconfig.MockWorkersConfig {
+	return p.mockWorkersConfig
+}
 
 func (h *Host) coordinatorPolicy() hostCoordinatorPolicy {
 	if h == nil {
@@ -278,12 +263,12 @@ func (h *Host) handleDefaultRuntimeStartFailure(
 ) error {
 	if h.defaultSessionClosedDuringStartup() {
 		h.clearRunState()
-		_ = h.stopLiveRuntime(currentRuntime)
+		_ = h.StopLiveRuntime(currentRuntime)
 		return nil
 	}
 	h.clearRunState()
 	h.unregisterLiveSession(DefaultFactorySessionID)
-	stopErr := h.stopLiveRuntime(currentRuntime)
+	stopErr := h.StopLiveRuntime(currentRuntime)
 	if isCanceledServiceStartup(ctx, startErr) {
 		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
 			return stopErr
@@ -295,13 +280,6 @@ func (h *Host) handleDefaultRuntimeStartFailure(
 	}
 	return fmt.Errorf("start runtime: %w", startErr)
 }
-
-const (
-	modelPullMetricAttempts      = "managed_runtime.pull.attempts"
-	modelPullMetricSuccess       = "managed_runtime.pull.success"
-	modelPullMetricFailure       = "managed_runtime.pull.failure"
-	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
-)
 
 func (h *Host) modelPullMetricsRecorder() ModelPullMetricsRecorder {
 	if h == nil || h.cfg == nil {

@@ -24,6 +24,7 @@ func InjectFactoryService(
 		provideFactoryConfigLoad,
 		provideServiceClock,
 		provideRuntimeBuildService,
+		provideWorkersSchedulerService,
 		provideFactoryServiceCollaborators,
 		provideHostedWorkersConfig,
 		provideFactoryCore,
