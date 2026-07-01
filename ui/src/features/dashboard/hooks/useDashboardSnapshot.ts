@@ -70,7 +70,6 @@ function useGuardedTimelineCheckpointBootstrap({
     setPreflightError(null);
     setPreflightReadyKey(null);
     setStreamIdentity(null);
-    setBackendRuntimeCacheScope(null);
 
     if (
       checkpointHydrationKey == null ||
