@@ -129,7 +129,7 @@ type serviceRunState struct {
 //
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
 // session registry, pkg/localmodels owns managed model runtime wiring, and
-// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
+// pkg/workers/service owns poller supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu      sync.RWMutex
 	activationMu   sync.RWMutex

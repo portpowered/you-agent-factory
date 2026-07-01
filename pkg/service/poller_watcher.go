@@ -30,48 +30,13 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 		return
 	}
 
-	for _, workstation := range factoryCfg.Workstations {
-		ws := workstation
-		if ws.Kind != interfaces.WorkstationKindPoller {
-			continue
-		}
-
-		workerName := strings.TrimSpace(ws.WorkerTypeName)
-		if workerName == "" {
-			fs.logger.Warn("script poller disabled",
-				zap.String("workstation", ws.Name),
-				zap.String("reason", "missing worker binding"),
-			)
-			continue
-		}
-
-		workerDef, ok := runtimeCfg.Worker(workerName)
-		if !ok || workerDef == nil {
-			fs.logger.Warn("script poller disabled",
-				zap.String("workstation", ws.Name),
-				zap.String("worker", workerName),
-				zap.String("reason", "worker config not found"),
-			)
-			continue
-		}
-		switch {
-		case interfaces.IsScriptWorkerType(workerDef.Type):
-			fs.workersSchedulerService().StartScriptPoller(ctx, sidecars, runtimeCfg, ws, workerDef, workersservice.WorkRequestSubmitter(submitter))
-		case interfaces.IsPollerWorkerType(workerDef.Type):
-			if workerDef.Provider != interfaces.HostedWorkerProviderLinear {
-				fs.logger.Warn("hosted poller disabled",
-					zap.String("workstation", ws.Name),
-					zap.String("worker", workerName),
-					zap.String("provider", workerDef.Provider),
-					zap.String("reason", "unsupported hosted provider"),
-				)
-				continue
-			}
-			hostedworkers.StartLinearPoller(ctx, sidecars, fs.hostedWorkers, runtimeCfg, ws, workerDef, hostedworkers.Submitter(submitter))
-		default:
-			continue
-		}
-	}
+	fs.workersSchedulerService().StartPollersForRuntime(
+		ctx,
+		sidecars,
+		factoryCfg,
+		runtimeCfg,
+		workersservice.WorkRequestSubmitter(submitter),
+	)
 }
 
 func (fs *FactoryService) workersSchedulerService() *workersservice.Service {
@@ -89,10 +54,17 @@ func (fs *FactoryService) workersSchedulerService() *workersservice.Service {
 	if fs != nil && fs.logger != nil {
 		logger = fs.logger
 	}
+	hosted := hostedworkers.Config{}
+	if fs != nil {
+		hosted = fs.hostedWorkers
+	}
 	return workersservice.New(workersservice.Config{
-		Logger:        logger,
-		Clock:         clock,
-		CommandRunner: runner,
+		Logger:               logger,
+		Clock:                clock,
+		CommandRunner:        runner,
+		HostedHTTPClient:     hosted.HTTPClient,
+		HostedSecretResolver: hosted.SecretResolver,
+		HostedLinearEndpoint: hosted.LinearEndpoint,
 	})
 }
 
