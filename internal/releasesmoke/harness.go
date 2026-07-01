@@ -190,7 +190,11 @@ func (s *harnessSession) RunChecks(ctx context.Context, cfg Config) (Result, err
 		return Result{}, s.failure(nil, "wait_for_status", err)
 	}
 
-	stream, err := openEventStream(ctx, s.client, s.baseURL+"/events")
+	stream, err := openEventStream(
+		ctx,
+		s.client,
+		strings.TrimSuffix(s.baseURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/events",
+	)
 	if err != nil {
 		return Result{}, s.failure(nil, "open_events", err)
 	}

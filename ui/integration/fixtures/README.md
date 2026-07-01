@@ -15,7 +15,7 @@ coverage-report commands, use the canonical maintainer guide:
 
 - Use `src/testing/replay-fixtures.ts` to load replay fixtures into typed `FactoryEvent[]`.
 - Use `buildReplayFixtureTimelineSnapshot(...)` from that same module when a test needs the canonical timeline projection seam instead of raw event parsing.
-- Use `src/testing/replay-harness.ts` when an App-level test should mount the real `/events` stream seam and replay one of these fixtures without hand-rolled `EventSource` mocks.
+- Use `src/testing/replay-harness.ts` when an App-level test should mount the real session-scoped `GET /factory-sessions/{session_id}/events` stream seam and replay one of these fixtures without hand-rolled `EventSource` mocks.
 - Add fixture-level metadata such as covered surfaces and verification layers to `replayFixtureCatalog` in `src/testing/replay-fixture-catalog.ts` rather than duplicating ad hoc maps in individual tests.
 - Run `bun run replay:coverage` after changing replay scenarios or tracked coverage surfaces to print the current coverage matrix, and use `bun run replay:coverage:check` in review workflows to catch metadata drift.
 

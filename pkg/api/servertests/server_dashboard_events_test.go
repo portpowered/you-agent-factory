@@ -155,6 +155,8 @@ func TestGetDashboardUI_FallbacksToIndexForClientRoutes(t *testing.T) {
 	}
 }
 
+// TestGetEvents_* exercises compatibility-only process-global GET /events behavior.
+// Dashboard, Factory Session, and replay smokes should use session-scoped routes instead.
 func TestGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	historical := testHistoricalFactoryEvents(t, eventTime)
@@ -311,6 +313,7 @@ func testHistoricalFactoryEvents(t *testing.T, eventTime time.Time) []factoryapi
 	}
 }
 
+// openCompatibilityEventStreamReader opens process-global GET /events for retained compatibility coverage.
 func openEventStreamReader(t *testing.T, serverURL string) (*bufio.Reader, func()) {
 	t.Helper()
 
