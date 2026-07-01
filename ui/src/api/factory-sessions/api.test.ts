@@ -19,6 +19,7 @@ import {
 import { getFactorySessionDispatchDetail } from "./dispatch-detail";
 import { getFactorySessionSyncPreflight } from "./sync-preflight";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: factory session API contract cases share one fetch harness.
 describe("factory sessions API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

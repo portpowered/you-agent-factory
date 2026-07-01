@@ -240,7 +240,8 @@ export const initialEditableFactoryDefinitionVersion = {
 const sessionFactoryPathPattern = /^\/factory-sessions\/([^/]+)\/factory$/;
 const sessionSyncPreflightPathPattern =
   /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
-const sessionEventsPathPattern = /^\/factory-sessions\/([^/]+)\/events$/;
+const sessionEventsPathPattern =
+  /^\/factory-sessions\/([^/]+)\/events(?:\?.*)?$/;
 const factorySessionReadPathPattern = /^\/factory-sessions\/([^/]+)$/;
 const promptTemplateContractPathPattern =
   /^\/factory-sessions\/([^/]+)\/factory\/workstations\/[^/]+\/prompt-template-contract$/;

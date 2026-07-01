@@ -24,6 +24,10 @@ import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
+import {
+  readSessionPersistenceInvalidationRecords,
+  resetSessionPersistenceInvalidationRecords,
+} from "../lib/session-persistence-diagnostics";
 import { useDashboardSnapshot } from "./useDashboardSnapshot";
 
 const replayHarness = createReplayHarness();
@@ -128,12 +132,87 @@ function timelineSnapshot(snapshot: DashboardSnapshot): WorldState {
   };
 }
 
-function checkpointStorageKey(): string {
+function checkpointStorageKey(
+  identity: {
+    backendScopeID?: string;
+    factorySessionID?: string;
+    streamGenerationID?: string;
+  } = {},
+): string {
   return [
-    "backend-scope-a",
-    DEFAULT_FACTORY_SESSION_ID,
-    "2026-06-26T00:00:00Z",
+    identity.backendScopeID ?? "backend-scope-a",
+    identity.factorySessionID ?? DEFAULT_FACTORY_SESSION_ID,
+    identity.streamGenerationID ?? "2026-06-26T00:00:00Z",
   ].join("::");
+}
+
+function storedCheckpointEnvelope(
+  identity: {
+    backendScopeID?: string;
+    factorySessionID?: string;
+    streamGenerationID?: string;
+  } = {},
+  options: {
+    afterEventId?: string;
+    afterSequence?: number;
+    schemaVersion?: number;
+    selectedTick?: number;
+    streamIdentity?: {
+      backendScopeID: string;
+      factorySessionID: string;
+      streamGenerationID: string;
+    };
+  } = {},
+) {
+  const selectedTick = options.selectedTick ?? 7;
+  return {
+    checkpoint: {
+      afterEventId: options.afterEventId ?? "checkpoint-event-7",
+      afterSequence: options.afterSequence ?? 7,
+      replayState: emptyReplayWorldState(selectedTick),
+      selectedTick,
+    },
+    schemaVersion: options.schemaVersion ?? 2,
+    sessionID: identity.factorySessionID ?? DEFAULT_FACTORY_SESSION_ID,
+    storageKey: checkpointStorageKey(identity),
+    ...(options.streamIdentity ? { streamIdentity: options.streamIdentity } : {}),
+  };
+}
+
+function mockFactorySessionStreamIdentity(
+  spy: ReturnType<typeof vi.spyOn>,
+  streamIdentity: {
+    backendScopeID: string;
+    factorySessionID: string;
+    streamGenerationID: string;
+  },
+): void {
+  spy.mockResolvedValue({
+    session: {
+      factoryDir: "/workspace/factory",
+      folderPath: "/workspace",
+      id: DEFAULT_FACTORY_SESSION_ID,
+      isDefault: true,
+      project: "factory",
+      runtime: {
+        lifecycle: {
+          startedAt: "2026-06-26T00:00:00Z",
+          updatedAt: "2026-06-26T00:00:00Z",
+        },
+        orchestratorKind: "STATIC",
+        progress: {
+          categories: {},
+          factoryState: "IDLE",
+          inFlightCount: 0,
+          totalTokens: 0,
+        },
+        streamIdentity,
+        status: "IDLE",
+        usage: { resources: [] },
+      },
+      target: { kind: "default", name: DEFAULT_FACTORY_SESSION_ID },
+    },
+  });
 }
 
 describe("useDashboardSnapshot composer", () => {
@@ -600,6 +679,209 @@ describe("useDashboardSnapshot composer", () => {
       }),
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
+  });
+});
+
+describe("useDashboardSnapshot checkpoint identity recovery", () => {
+  let indexedDBRecords: Map<string, unknown>;
+  let queryClient: QueryClient;
+  let getFactorySessionSpy: ReturnType<typeof vi.spyOn>;
+
+  const currentStreamIdentity = {
+    backendScopeID: "backend-scope-a",
+    factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+    streamGenerationID: "2026-06-26T00:00:00Z",
+  };
+
+  beforeEach(() => {
+    resetSessionPersistenceInvalidationRecords();
+    replayHarness.install();
+    indexedDBRecords = installIndexedDBTestDouble();
+    getFactorySessionSpy = vi.spyOn(factorySessionsAPI, "getFactorySession");
+    mockFactorySessionStreamIdentity(getFactorySessionSpy, currentStreamIdentity);
+    queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+    useFactoryTimelineStore.getState().reset();
+  });
+
+  afterEach(() => {
+    resetSessionPersistenceInvalidationRecords();
+    getFactorySessionSpy.mockRestore();
+    replayHarness.reset();
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+    useFactoryTimelineStore.getState().reset();
+  });
+
+  it("reopens the event stream with the saved cursor when checkpoint identity matches", async () => {
+    indexedDBRecords.set(
+      checkpointStorageKey(currentStreamIdentity),
+      storedCheckpointEnvelope(currentStreamIdentity, {
+        streamIdentity: currentStreamIdentity,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
+    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(7);
+  });
+
+  it("ignores a stale checkpoint when backendScopeID changes and reconnects without the old cursor", async () => {
+    const staleIdentity = {
+      ...currentStreamIdentity,
+      backendScopeID: "backend-scope-stale",
+    };
+    indexedDBRecords.set(
+      checkpointStorageKey(staleIdentity),
+      storedCheckpointEnvelope(staleIdentity, {
+        streamIdentity: staleIdentity,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([]);
+  });
+
+  it("ignores a stale checkpoint when streamGenerationID changes and reconnects without the old cursor", async () => {
+    const staleIdentity = {
+      ...currentStreamIdentity,
+      streamGenerationID: "2026-06-25T00:00:00Z",
+    };
+    indexedDBRecords.set(
+      checkpointStorageKey(staleIdentity),
+      storedCheckpointEnvelope(staleIdentity, {
+        streamIdentity: staleIdentity,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+  });
+
+  it("ignores a remapped factorySessionID checkpoint and reconnects without the old cursor", async () => {
+    const staleIdentity = {
+      ...currentStreamIdentity,
+      factorySessionID: "session-remapped-uuid",
+    };
+    indexedDBRecords.set(
+      checkpointStorageKey(staleIdentity),
+      storedCheckpointEnvelope(staleIdentity, {
+        streamIdentity: staleIdentity,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+  });
+
+  it("deletes identity-missing v2 checkpoints and reconnects without after_event_id or after_sequence", async () => {
+    indexedDBRecords.set(
+      checkpointStorageKey(currentStreamIdentity),
+      storedCheckpointEnvelope(currentStreamIdentity, {
+        schemaVersion: 2,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    await expect(
+      readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
+        backendScopeID: currentStreamIdentity.backendScopeID,
+        factorySessionID: currentStreamIdentity.factorySessionID,
+        streamGenerationID: currentStreamIdentity.streamGenerationID,
+      }),
+    ).resolves.toBe(null);
+  });
+
+  it("records a sanitized diagnostic when stored checkpoint identity mismatches the current stream identity", async () => {
+    indexedDBRecords.set(
+      checkpointStorageKey(currentStreamIdentity),
+      storedCheckpointEnvelope(currentStreamIdentity, {
+        streamIdentity: {
+          backendScopeID: "backend-scope-a",
+          factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+          streamGenerationID: "2026-06-25T00:00:00Z",
+        },
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(readSessionPersistenceInvalidationRecords()).toEqual([
+        expect.objectContaining({
+          reason: "stream_generation_changed",
+          recoveryAction: "clear_stream_derived_state",
+          requestedSessionID: DEFAULT_FACTORY_SESSION_ID,
+        }),
+      ]);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
   });
 });
 
