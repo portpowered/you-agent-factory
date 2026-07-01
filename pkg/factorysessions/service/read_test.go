@@ -2,61 +2,70 @@ package service_test
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 )
 
-func TestService_ListFactorySessions_DelegatesToControlPlane(t *testing.T) {
+func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testing.T) {
 	t.Parallel()
 
-	host := &openTestHost{
-		sessionIDs: []string{"sess-1"},
-		sessions: map[string]*factorysessions.LiveSession{
-			"sess-1": {
-				ID: "sess-1",
-				SessionState: factorysessions.SessionState{
-					FactoryDir: "/tmp/factory",
-				},
-			},
-		},
-	}
+	session := &factorysessions.LiveSession{ID: "sess-preflight"}
+	host := &openTestHost{requireSession: session}
 	gateway := factorysessionservice.New(host)
 
-	response, err := gateway.ListFactorySessions(context.Background())
+	response, err := gateway.GetFactorySessionSyncPreflight(context.Background(), "sess-preflight", nil)
 	if err != nil {
-		t.Fatalf("ListFactorySessions: %v", err)
+		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
 	}
-	if len(response.Sessions) != 1 || response.Sessions[0].Id != "sess-1" {
-		t.Fatalf("sessions = %#v, want sess-1", response.Sessions)
+	if response.ReasonCode != factoryapi.Ok {
+		t.Fatalf("reasonCode = %q, want ok", response.ReasonCode)
 	}
-}
-
-func TestService_GetFactorySession_ReturnsNotFoundForMissingSession(t *testing.T) {
-	t.Parallel()
-
-	host := &openTestHost{
-		requireSessionE: fmt.Errorf("%w: missing", apisurface.ErrFactorySessionNotFound),
-	}
-	gateway := factorysessionservice.New(host)
-
-	_, err := gateway.GetFactorySession(context.Background(), "missing")
-	if err == nil || !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-		t.Fatalf("GetFactorySession error = %v, want not found", err)
+	if response.BackendScopeId == nil || *response.BackendScopeId != "runtime-test" {
+		t.Fatalf("backendScopeId = %#v, want runtime-test", response.BackendScopeId)
 	}
 }
 
-func TestService_GetFactorySession_RejectsDurableSessionID(t *testing.T) {
+func TestService_GetFactorySessionSyncPreflight_RejectsDurableSessionID(t *testing.T) {
 	t.Parallel()
 
 	gateway := factorysessionservice.New(&openTestHost{})
 
-	_, err := gateway.GetFactorySession(context.Background(), "dur-sess-js-run-n-001")
-	if err == nil || !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-		t.Fatalf("GetFactorySession error = %v, want not found", err)
+	response, err := gateway.GetFactorySessionSyncPreflight(context.Background(), "dur-sess-js-run-n-001", nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
+	}
+	if response.ReasonCode != factoryapi.SessionNotFound {
+		t.Fatalf("reasonCode = %q, want session_not_found", response.ReasonCode)
+	}
+}
+
+func TestService_GetFactorySessionResult_RejectsNonJavaScriptFactory(t *testing.T) {
+	t.Parallel()
+
+	host := &openTestHost{
+		requireSession: &factorysessions.LiveSession{ID: "sess-petri"},
+	}
+	gateway := factorysessionservice.New(host)
+
+	_, err := gateway.GetFactorySessionResult(context.Background(), "sess-petri")
+	if err == nil {
+		t.Fatal("GetFactorySessionResult = nil, want result unavailable")
+	}
+}
+
+func TestService_GetFactorySessionPartialResult_RejectsNonJavaScriptFactory(t *testing.T) {
+	t.Parallel()
+
+	host := &openTestHost{
+		requireSession: &factorysessions.LiveSession{ID: "sess-petri"},
+	}
+	gateway := factorysessionservice.New(host)
+
+	_, err := gateway.GetFactorySessionPartialResult(context.Background(), "sess-petri")
+	if err == nil {
+		t.Fatal("GetFactorySessionPartialResult = nil, want result unavailable")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"go.uber.org/zap"
@@ -72,6 +73,22 @@ func (h *openTestHost) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
 	return factorysessions.ProjectionContext{Session: session}, nil
+}
+
+func (h *openTestHost) ResolveSyncPreflightTarget(_ string) (controlplane.SyncPreflightTarget, error) {
+	return controlplane.SyncPreflightTarget{Session: h.requireSession}, nil
+}
+
+func (h *openTestHost) BackendScopeID() string {
+	return "runtime-test"
+}
+
+func (h *openTestHost) StreamGenerationID(_ *factorysessions.LiveSession) string {
+	return "runtime-test::sess-1"
+}
+
+func (h *openTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []factoryapi.FactoryEvent {
+	return nil
 }
 
 func (h *openTestHost) SessionFactory(_ string) (factory.Factory, error) {

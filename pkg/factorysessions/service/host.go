@@ -10,6 +10,8 @@ import (
 type Host interface {
 	controlplane.OpenControlHost
 	controlplane.LiveReadHost
+	controlplane.SyncPreflightHost
+	controlplane.ResultReadHost
 	controlplane.DurableLifecycleHost
 	dataplane.LiveOpenHost
 	dataplane.LiveLifecycleHost

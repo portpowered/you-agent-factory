@@ -11,7 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -22,6 +24,9 @@ type sessionGateway interface {
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
+	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor) (factoryapi.FactorySessionSyncPreflightResponse, error)
+	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
+	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	PauseLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	ResumeLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	CloseFactorySession(context.Context, string) error
@@ -105,6 +110,36 @@ func (h sessionGatewayHost) BuildSessionProjectionContext(
 		return factorysessions.ProjectionContext{}, fmt.Errorf("factory service is required")
 	}
 	return h.FactoryService.buildSessionProjectionContext(ctx, session)
+}
+
+func (h sessionGatewayHost) ResolveSyncPreflightTarget(sessionID string) (controlplane.SyncPreflightTarget, error) {
+	if h.FactoryService == nil {
+		return controlplane.SyncPreflightTarget{}, fmt.Errorf("factory service is required")
+	}
+	target, err := h.FactoryService.resolveSessionSyncPreflightTarget(sessionID)
+	return controlplane.SyncPreflightTarget{Session: target.session, Remapped: target.remapped}, err
+}
+
+func (h sessionGatewayHost) BackendScopeID() string {
+	if h.FactoryService == nil {
+		return ""
+	}
+	return factorySessionBackendScopeID(h.FactoryService, nil)
+}
+
+func (h sessionGatewayHost) StreamGenerationID(session *factorysessions.LiveSession) string {
+	if h.FactoryService == nil {
+		return ""
+	}
+	return factorySessionStreamGenerationID(h.FactoryService, session)
+}
+
+func (h sessionGatewayHost) LiveSessionEvents(session *factorysessions.LiveSession) []factoryapi.FactoryEvent {
+	handle := liveSessionHandle(session)
+	if handle == nil || handle.runtime == nil || handle.runtime.eventHistory == nil {
+		return nil
+	}
+	return handle.runtime.eventHistory.Events()
 }
 
 func (h sessionGatewayHost) SessionFactory(sessionID string) (factory.Factory, error) {

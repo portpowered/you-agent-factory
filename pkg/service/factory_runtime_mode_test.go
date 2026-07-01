@@ -1549,6 +1549,28 @@ func (s *stubSessionGateway) GetFactorySession(_ context.Context, sessionID stri
 	return s.getSessionResult, nil
 }
 
+func (s *stubSessionGateway) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	sessionID string,
+	_ *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	s.calls = append(s.calls, "get-session-sync-preflight")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return factoryapi.FactorySessionSyncPreflightResponse{}, nil
+}
+
+func (s *stubSessionGateway) GetFactorySessionResult(_ context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+	s.calls = append(s.calls, "get-session-result")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return factoryapi.FactorySessionLiveResult{}, nil
+}
+
+func (s *stubSessionGateway) GetFactorySessionPartialResult(_ context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+	s.calls = append(s.calls, "get-session-partial-result")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return factoryapi.FactorySessionPartialResult{}, nil
+}
+
 func (s *stubSessionGateway) PauseLiveFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	s.calls = append(s.calls, "pause-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
@@ -1876,6 +1898,18 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if _, err := svc.CancelDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
 		t.Fatalf("CancelDurableFactorySession: %v", err)
 	}
+	if _, err := svc.GetFactorySessionSyncPreflight(context.Background(), "session-a", nil); err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
+	}
+	if _, err := svc.GetFactorySessionResult(context.Background(), "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionResult: %v", err)
+	}
+	if _, err := svc.GetFactorySessionPartialResult(context.Background(), "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionPartialResult: %v", err)
+	}
+	if _, err := svc.SubscribeSessionResponseStream("session-a", "dispatch-1", 0); err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
 	if err := svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
 		t.Fatalf("ActivateNamedFactory: %v", err)
 	}
@@ -1909,8 +1943,8 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if strings.Join(stub.calls, ",") != "activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
 		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence without open, read, or close methods", stub.calls)
 	}
-	if strings.Join(gatewayStub.calls, ",") != "list-sessions,open-session,open-session-from-folder,close-session,pause-session,resume-session,pause-durable-session,cancel-durable-session" {
-		t.Fatalf("session gateway calls = %#v, want delegated read, open, live lifecycle, and durable lifecycle sequence", gatewayStub.calls)
+	if strings.Join(gatewayStub.calls, ",") != "list-sessions,open-session,open-session-from-folder,close-session,pause-session,resume-session,pause-durable-session,cancel-durable-session,get-session-sync-preflight,get-session-result,get-session-partial-result,subscribe-response-stream" {
+		t.Fatalf("session gateway calls = %#v, want delegated read, open, lifecycle, preflight, result, and stream sequence", gatewayStub.calls)
 	}
 	if len(stub.runtimeNames) != 1 || stub.runtimeNames[0] != "gamma" {
 		t.Fatalf("activation targets = %#v, want gamma", stub.runtimeNames)
