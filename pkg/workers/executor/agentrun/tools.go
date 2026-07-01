@@ -76,6 +76,64 @@ func sanitizeToolDiagnosticDetail(detail string) string {
 	return trimmed[:toolDiagnosticMaxLen] + "..."
 }
 
+func toolFailureDetail(toolName, arguments string, err error) string {
+	if err == nil {
+		return ""
+	}
+	relativePath := toolRelativePathFromArguments(arguments)
+	reason := toolFailureReason(err)
+	if relativePath != "" {
+		return fmt.Sprintf("path=%s reason=%s", relativePath, reason)
+	}
+	return fmt.Sprintf("reason=%s", reason)
+}
+
+func toolRelativePathFromArguments(arguments string) string {
+	trimmed := strings.TrimSpace(arguments)
+	if trimmed == "" {
+		return ""
+	}
+	var pathArgs pathArgument
+	if err := json.Unmarshal([]byte(trimmed), &pathArgs); err == nil {
+		return strings.TrimSpace(pathArgs.Path)
+	}
+	var writeArgs writeFileArgument
+	if err := json.Unmarshal([]byte(trimmed), &writeArgs); err == nil {
+		return strings.TrimSpace(writeArgs.Path)
+	}
+	return ""
+}
+
+func toolFailureReason(err error) string {
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return "not_found"
+	case errors.Is(err, fs.ErrPermission):
+		return "permission_denied"
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "tool path is required"):
+		return "path_required"
+	case strings.Contains(message, "tool path must be relative"):
+		return "path_must_be_relative"
+	case strings.Contains(message, "tool path cannot escape"):
+		return "path_escape_denied"
+	case strings.Contains(message, "arguments must be json"):
+		return "invalid_arguments"
+	case strings.Contains(message, "agent working directory"):
+		return "working_directory_unavailable"
+	case strings.Contains(message, "not supported"):
+		return "tool_not_supported"
+	case strings.Contains(message, "read_file failed"),
+		strings.Contains(message, "list_directory failed"),
+		strings.Contains(message, "write_file failed"):
+		return "operation_failed"
+	default:
+		return "operation_failed"
+	}
+}
+
 func toolDiagnosticsMetadata(policy string, recorder *ToolDiagnosticRecorder) map[string]string {
 	metadata := map[string]string{
 		DiagnosticToolPolicy: interfaces.NormalizeAgentWorkerToolPolicy(policy),
@@ -166,7 +224,7 @@ func (executor *PolicyToolExecutor) Execute(ctx context.Context, call messages.T
 
 	content, err := executor.executeBoundedTool(toolName, call.Arguments)
 	if err != nil {
-		executor.recorder.Record(toolName, "failure", err.Error())
+		executor.recorder.Record(toolName, "failure", toolFailureDetail(toolName, call.Arguments, err))
 		return messages.ToolCallResponse{}, err
 	}
 	executor.recorder.Record(toolName, "success", contentSummary(content))

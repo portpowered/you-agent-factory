@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
@@ -124,6 +125,82 @@ func TestPolicyToolExecutor_RejectsPathEscape(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected path escape rejection")
+	}
+}
+
+func TestPolicyToolExecutor_FailureDiagnosticsExcludeAbsolutePaths(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		toolName   string
+		arguments  string
+		wantPath   string
+		wantReason string
+		setup      func(t *testing.T, dir string)
+	}{
+		{
+			name:       "read missing file",
+			toolName:   ToolNameReadFile,
+			arguments:  `{"path":"missing.txt"}`,
+			wantPath:   "missing.txt",
+			wantReason: "not_found",
+		},
+		{
+			name:       "list missing directory",
+			toolName:   ToolNameListDirectory,
+			arguments:  `{"path":"missing-dir"}`,
+			wantPath:   "missing-dir",
+			wantReason: "not_found",
+		},
+		{
+			name:       "write when parent path is a file",
+			toolName:   ToolNameWriteFile,
+			arguments:  `{"path":"nested/out.txt","content":"data"}`,
+			wantPath:   "nested/out.txt",
+			wantReason: "operation_failed",
+			setup: func(t *testing.T, dir string) {
+				t.Helper()
+				if err := os.WriteFile(filepath.Join(dir, "nested"), []byte("blocker"), 0o644); err != nil {
+					t.Fatalf("WriteFile blocker: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			caseDir := t.TempDir()
+			if tc.setup != nil {
+				tc.setup(t, caseDir)
+			}
+			localRecorder := NewToolDiagnosticRecorder()
+			localExecutor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyEnabled, caseDir, localRecorder)
+			_, err := localExecutor.Execute(context.Background(), messages.ToolCall{
+				ID:        "tc1",
+				Name:      tc.toolName,
+				Arguments: tc.arguments,
+			})
+			if err == nil {
+				t.Fatal("expected tool failure")
+			}
+			metadata := toolDiagnosticsMetadata(interfaces.AgentWorkerToolPolicyEnabled, localRecorder)
+			diagnostics := metadata[DiagnosticToolDiagnostics]
+			if diagnostics == "" {
+				t.Fatalf("tool diagnostics = %#v, want failure summary", metadata)
+			}
+			if strings.Contains(diagnostics, caseDir) {
+				t.Fatalf("tool diagnostics leak absolute working directory %q: %q", caseDir, diagnostics)
+			}
+			if !strings.Contains(diagnostics, "path="+tc.wantPath) {
+				t.Fatalf("tool diagnostics = %q, want relative path %q", diagnostics, tc.wantPath)
+			}
+			if !strings.Contains(diagnostics, "reason="+tc.wantReason) {
+				t.Fatalf("tool diagnostics = %q, want reason %q", diagnostics, tc.wantReason)
+			}
+		})
 	}
 }
 
