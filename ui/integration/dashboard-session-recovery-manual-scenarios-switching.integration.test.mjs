@@ -197,6 +197,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
         await tabTwoPage.reload({ waitUntil: "domcontentloaded" });
 
+        const staleReconnectTimeoutMs = 60_000;
         await waitForDurableCheckpoint(
           "tab one stale identity reconnect",
           async () => {
@@ -208,7 +209,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
                 ) && eventStreamOmitsCursor(url),
             );
           },
-          browserScenarioTimeoutMs,
+          staleReconnectTimeoutMs,
         );
         await waitForDurableCheckpoint(
           "tab two stale identity reconnect",
@@ -221,7 +222,7 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
                 ) && eventStreamOmitsCursor(url),
             );
           },
-          browserScenarioTimeoutMs,
+          staleReconnectTimeoutMs,
         );
 
         const tabOneURLs = await tabOneNetwork.readEventStreamURLs();
