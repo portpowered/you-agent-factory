@@ -2,6 +2,11 @@
   "compilerOptions": {
     "composite": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "baseUrl": ".",
+    "paths": {
+      "youagentfactory/components": ["packages/components/src/index.ts"],
+      "youagentfactory/components/*": ["packages/components/src/*"]
+    },
     "target": "ES2022",
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
@@ -17,11 +22,12 @@
     "sourceMap": true,
     "skipLibCheck": true
   },
-  "include": ["src"],
+  "include": ["src", "packages/components/src"],
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "src/**/*.stories.tsx",
-    "src/features/bento/components/dashboard-bento-story-shared.tsx"
+    "src/features/bento/components/dashboard-bento-story-shared.tsx",
+    "packages/components/src/**/*.test.ts"
   ]
 }

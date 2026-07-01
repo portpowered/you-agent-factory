@@ -1,11 +1,17 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
+const componentsPackageRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "packages/components/src",
+);
 const isCoverageRun = process.argv.includes("--coverage");
 const profileSourceMaps =
   process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "true" ||
@@ -103,6 +109,18 @@ export default defineConfig({
         ]
       : []),
   ],
+  resolve: {
+    alias: {
+      "youagentfactory/components": path.join(
+        componentsPackageRoot,
+        "index.ts",
+      ),
+      "youagentfactory/components/styles.css": path.join(
+        componentsPackageRoot,
+        "styles.css",
+      ),
+    },
+  },
   server: {
     host: true,
     port: 4173,
