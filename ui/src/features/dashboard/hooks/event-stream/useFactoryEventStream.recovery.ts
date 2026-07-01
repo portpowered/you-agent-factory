@@ -6,7 +6,7 @@ import type {
   probeFactoryEventStreamRecovery,
 } from "../../../../api/events";
 import { deleteTimelineCheckpoint } from "../../../timeline/public";
-import type { StreamDerivedCacheIdentity } from "../../../timeline/lib/stream-derived-cache-identity";
+import type { StreamDerivedCacheIdentity } from "../../../timeline/public";
 import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
 import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
 import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";

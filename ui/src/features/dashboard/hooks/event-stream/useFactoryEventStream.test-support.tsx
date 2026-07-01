@@ -4,7 +4,7 @@ import type { PropsWithChildren } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import { createReplayHarness } from "../../../../testing/replay-harness";
-import { useFactoryTimelineStore } from "../../../timeline/state/factoryTimelineStore";
+import { useFactoryTimelineStore } from "../../../timeline/public";
 import { DashboardSessionProvider } from "../../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../state/dashboardSessionStore";
 import {

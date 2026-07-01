@@ -7,11 +7,11 @@ import {
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../../current-selection/base/public";
 import { FACTORY_SESSION_DETAIL_QUERY_KEY } from "../../factory-session-detail/public";
-import type { StreamDerivedCacheIdentity } from "../../timeline/lib/stream-derived-cache-identity";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import {
   normalizeStreamDerivedCacheIdentity,
   streamDerivedCacheKeyPrefix,
-} from "../../timeline/lib/stream-derived-cache-identity";
+} from "../../timeline/public";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export type FactoryDefinitionQueryResetMode = "invalidate" | "remove";

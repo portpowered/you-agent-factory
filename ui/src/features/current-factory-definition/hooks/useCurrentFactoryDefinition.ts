@@ -10,9 +10,11 @@ import {
   normalizeStreamDerivedCacheIdentity,
   streamDerivedCacheKeyPrefix,
   type StreamDerivedCacheIdentity,
-} from "../../timeline/lib/stream-derived-cache-identity";
-import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
-import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
+} from "../../timeline/public";
+import {
+  useDashboardSession,
+  useDashboardStreamStore,
+} from "../../dashboard/public";
 
 export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
   "current-factory-definition";

@@ -7,7 +7,7 @@ import {
 import {
   normalizeStreamDerivedCacheIdentity,
   type StreamDerivedCacheIdentity,
-} from "../../timeline/lib/stream-derived-cache-identity";
+} from "../../timeline/public";
 import {
   clearStoredTimelineCheckpointsForFactorySessionID,
   clearTimelineCheckpoint,

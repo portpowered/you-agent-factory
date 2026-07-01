@@ -23,7 +23,7 @@ import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
-import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
+import { readFactoryTimelineDebugOptions } from "../../timeline/public";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;

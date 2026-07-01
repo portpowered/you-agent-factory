@@ -12,7 +12,7 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { StreamDerivedCacheIdentity } from "../../timeline/lib/stream-derived-cache-identity";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export function clearQueuedFlush(
