@@ -27,13 +27,18 @@ func ListSummaries(registry *Registry) []factoryapi.FactorySessionSummary {
 		}
 		summaries = append(summaries, SummaryResponse(session))
 	}
+	SortSessionSummaries(summaries)
+	return summaries
+}
+
+// SortSessionSummaries orders session summaries with default sessions first, then by id.
+func SortSessionSummaries(summaries []factoryapi.FactorySessionSummary) {
 	sort.SliceStable(summaries, func(i, j int) bool {
 		if summaries[i].IsDefault != summaries[j].IsDefault {
 			return summaries[i].IsDefault
 		}
 		return summaries[i].Id < summaries[j].Id
 	})
-	return summaries
 }
 
 // SummaryResponse maps a live session to the API summary shape.

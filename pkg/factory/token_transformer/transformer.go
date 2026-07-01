@@ -93,6 +93,7 @@ func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now t
 			Relations:                factorypkg.CloneRuntimeRelations(req.Relations),
 			Content:                  cloneWorkContent(req.Content),
 			Payload:                  factorypkg.CloneRuntimePayload(req.Payload),
+			InvocationArguments:      interfaces.CloneInvocationArguments(req.InvocationArguments),
 		},
 		CreatedAt: now,
 		EnteredAt: now,
@@ -206,6 +207,7 @@ func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenI
 	if color == nil {
 		return nil
 	}
+	applyOutputInvocationArguments(color, in.InputColors)
 	mode := in.WorkPropagationMode
 	if mode == "" {
 		mode = interfaces.WorkPropagationModeOutputAsPayload
@@ -219,6 +221,17 @@ func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenI
 		}
 		return nil
 	}
+}
+
+func applyOutputInvocationArguments(color *interfaces.TokenColor, inputColors []interfaces.TokenColor) {
+	if color == nil || color.InvocationArguments != nil {
+		return
+	}
+	source := firstNonResourceInput(inputColors)
+	if source == nil || source.InvocationArguments == nil {
+		return
+	}
+	color.InvocationArguments = interfaces.CloneInvocationArguments(source.InvocationArguments)
 }
 
 // PreserveInputApplicationError reports invalid PRESERVE_INPUT routing.
@@ -261,6 +274,9 @@ func ApplyPreservedInputToColor(
 	}
 	if len(color.Tags) == 0 && len(source.Tags) > 0 {
 		color.Tags = factorypkg.CloneRuntimeTags(source.Tags)
+	}
+	if color.InvocationArguments == nil {
+		color.InvocationArguments = interfaces.CloneInvocationArguments(source.InvocationArguments)
 	}
 	return nil
 }

@@ -1,0 +1,14 @@
+type: string
+description: High-level output shape hint exposed by a factory invocation signature.
+x-enum-varnames:
+  - FactoryInvocationOutputContractModeInline
+  - FactoryInvocationOutputContractModeFile
+  - FactoryInvocationOutputContractModeJson
+enum:
+  - INLINE
+  - FILE
+  - JSON
+x-enum-descriptions:
+  - The primary result is expected inline in the invocation response.
+  - The primary result is expected to be written to a caller-supplied file path.
+  - The primary result is expected to be structured JSON-like content.

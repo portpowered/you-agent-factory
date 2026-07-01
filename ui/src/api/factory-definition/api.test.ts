@@ -4,6 +4,8 @@ import {
   normalizeFactoryDefinition,
 } from "./api";
 
+const providerPlaceholder = "${".concat("provider}");
+
 describe("factory-definition normalization boundary", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -369,6 +371,88 @@ describe("normalizeFactoryDefinition", () => {
           worktree: "detached",
         },
       ],
+    });
+  });
+
+  it("accepts canonical invocation signatures from the generated factory contract", () => {
+    expect(
+      normalizeFactoryDefinition({
+        invocationSignature: {
+          parameters: [
+            {
+              aliases: ["out"],
+              bindings: [
+                { kind: "POSITIONAL", position: 1 },
+                { kind: "NAMED" },
+              ],
+              choices: ["summary", "json"],
+              defaultValue: "summary",
+              description: "Output format",
+              externalName: "output",
+              name: "outputFormat",
+              required: true,
+              sensitive: true,
+              typeHint: "STRING",
+              valueMode: "EXACT",
+            },
+          ],
+          unknownNamedArgumentPolicy: "COLLECT",
+          outputContract: {
+            contentType: "application/json",
+            description: "Writes a structured result",
+            fileExtension: ".json",
+            mode: "JSON",
+            pathParameter: "outputPath",
+          },
+          examples: [
+            {
+              argv: ["brief.md", "--output=json"],
+              description: "Invoke with a named output override",
+              name: "named-output",
+              stdin: "draft this",
+            },
+          ],
+        },
+        name: "agent-factory",
+      }),
+    ).toEqual({
+      invocationSignature: {
+        parameters: [
+          {
+            aliases: ["out"],
+            bindings: [
+              { kind: "POSITIONAL", position: 1 },
+              { kind: "NAMED" },
+            ],
+            choices: ["summary", "json"],
+            defaultValue: "summary",
+            description: "Output format",
+            externalName: "output",
+            name: "outputFormat",
+            required: true,
+            sensitive: true,
+            typeHint: "STRING",
+            valueMode: "EXACT",
+          },
+        ],
+        unknownNamedArgumentPolicy: "COLLECT",
+        outputContract: {
+          contentType: "application/json",
+          description: "Writes a structured result",
+          fileExtension: ".json",
+          mode: "JSON",
+          pathParameter: "outputPath",
+        },
+        examples: [
+          {
+            argv: ["brief.md", "--output=json"],
+            description: "Invoke with a named output override",
+            name: "named-output",
+            stdin: "draft this",
+          },
+        ],
+      },
+      name: "agent-factory",
     });
   });
 
@@ -1063,6 +1147,29 @@ describe("worker modelProvider validation", () => {
       ],
     });
     expect(normalized.guards?.[0]?.modelProvider).toBe(modelProvider);
+  });
+
+  it("accepts exact invocation placeholders for worker modelProvider when the signature declares the parameter", () => {
+    const normalized = normalizeFactoryDefinition({
+      invocationSignature: {
+        parameters: [
+          {
+            bindings: [{ kind: "NAMED" }],
+            name: "provider",
+          },
+        ],
+      },
+      name: "provider-factory",
+      workers: [
+        {
+          modelProvider: providerPlaceholder,
+          name: "writer",
+          type: "MODEL_WORKER",
+        },
+      ],
+    });
+
+    expect(normalized.workers?.[0]?.modelProvider).toBe(providerPlaceholder);
   });
 });
 

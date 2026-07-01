@@ -114,6 +114,9 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 	if overlay.Provider != nil {
 		base.Provider = mergeProviderDiagnostic(base.Provider, overlay.Provider)
 	}
+	if overlay.Invocation != nil {
+		base.Invocation = interfaces.CloneWorkDiagnostics(&interfaces.WorkDiagnostics{Invocation: overlay.Invocation}).Invocation
+	}
 	if overlay.Command != nil {
 		base.Command = overlay.Command
 	}
