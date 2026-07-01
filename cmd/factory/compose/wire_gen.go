@@ -13,7 +13,9 @@ import (
 
 // Injectors from wire.go:
 
-// InjectFactoryService is the wireinject entry for the factory composition root.
+// InjectFactoryService is the legacy wireinject entry retained for compose
+// equivalence tests. New transport composition must use InjectAPITransport,
+// InjectCLITransport, or InjectMCPTransport from pkg/initializer instead.
 func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig) (*service.FactoryService, error) {
 	factoryServiceRoot, err := provideFactoryServiceRoot(cfg)
 	if err != nil {
