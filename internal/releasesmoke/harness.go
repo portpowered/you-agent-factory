@@ -177,6 +177,7 @@ func (s *harnessSession) Start(ctx context.Context) error {
 	s.cmd.Stdout = s.stdoutBuf
 	s.cmd.Stderr = s.stderrBuf
 	s.cmd.Dir = s.workspacePath
+	s.cmd.Env = append(os.Environ(), "HOME="+s.workspacePath)
 
 	if err := s.cmd.Start(); err != nil {
 		return s.failure(nil, "start_binary", err)
