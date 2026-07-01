@@ -19,7 +19,6 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -369,37 +368,6 @@ func (fs *FactoryService) GetCurrentFactoryForSession(ctx context.Context, sessi
 
 func (c *runtimeFactoryCoordinator) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
 	return c.service.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
-}
-
-func (s *runtimeFactoryDefinitionService) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
-	fs := s.service
-	session, err := fs.requireSession(sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	rootDir := factorysessions.SessionFactoryRootDir(fs.factoryRootDir, session)
-	factoryName := factorysessions.FactoryName(rootDir, runtimeCfg)
-	versionRootDir := rootDir
-	if persistRoot := sessionFactoryPersistRoot(fs.factoryRootDir, session); persistRoot != "" {
-		if pointerName, err := configpersist.ReadCurrentFactoryPointer(persistRoot); err == nil {
-			pointerFactoryName := factoryapi.FactoryName(pointerName)
-			if session.IsDefault || pointerFactoryName == factoryName {
-				factoryName = pointerFactoryName
-			}
-		}
-		if sameFactoryDir(persistRoot, rootDir) {
-			versionRootDir = persistRoot
-		}
-	}
-	serialized, err := fs.serializeNamedFactory(factoryName, runtimeCfg, true)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	return fs.withCurrentFactoryVersion(versionRootDir, serialized.Name, serialized)
 }
 
 func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
