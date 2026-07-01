@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file compatibility-shell package doc and SessionRuntimeHost remain with FactoryService until dedicated transport host seam splits.
+// pkgmaintcheck:ignore-file-lines compatibility-shell package doc and SessionRuntimeHost remain with FactoryService until dedicated transport host seam splits.
 // Package service provides factory runtime coordination, session hosting, and
 // domain service implementations used by pkg/initializer and legacy callers.
 //

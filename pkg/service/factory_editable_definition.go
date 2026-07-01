@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file core-backed definition and model composition helpers remain with editable definition until dedicated core-from seams split.
+// pkgmaintcheck:ignore-file-lines core-backed definition and model composition helpers remain with editable definition until dedicated core-from seams split.
 package service
 
 import (
