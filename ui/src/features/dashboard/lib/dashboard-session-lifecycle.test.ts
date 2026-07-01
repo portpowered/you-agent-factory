@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { factorySessionDetailQueryKey } from "../../factory-session-detail/hooks/use-factory-session-detail";
 import {
   clearDashboardSessionRuntimeQueries,
   dashboardSessionKey,
@@ -79,9 +80,13 @@ describe("resetDashboardSessionScopedState", () => {
     expect(resetTimeline).toHaveBeenCalledTimes(1);
     expect(resetStreamState).toHaveBeenCalledTimes(1);
     expect(resetStreamState).toHaveBeenCalledWith("en");
-    expect(queryClient.removeQueries).toHaveBeenCalledTimes(1);
-    expect(queryClient.removeQueries).toHaveBeenCalledWith({
+    expect(queryClient.removeQueries).toHaveBeenCalledTimes(2);
+    expect(queryClient.removeQueries).toHaveBeenNthCalledWith(1, {
       queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
+      exact: false,
+    });
+    expect(queryClient.removeQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: ["factory-session-detail"],
       exact: false,
     });
   });
@@ -100,7 +105,7 @@ describe("resetDashboardSessionScopedState", () => {
     );
 
     expect(resetStreamState).toHaveBeenCalledWith(undefined);
-    expect(queryClient.removeQueries).toHaveBeenCalledTimes(1);
+    expect(queryClient.removeQueries).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -110,15 +115,19 @@ describe("clearDashboardSessionRuntimeQueries", () => {
       removeQueries: vi.fn(),
     };
 
-    clearDashboardSessionRuntimeQueries(queryClient as never, "session-beta");
+    clearDashboardSessionRuntimeQueries(
+      queryClient as never,
+      "session-beta",
+      "backend-scope-a",
+    );
 
     expect(queryClient.removeQueries).toHaveBeenCalledTimes(2);
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(1, {
-      queryKey: ["current-factory-definition", "session-beta"],
+      queryKey: ["current-factory-definition", "backend-scope-a", "session-beta"],
       exact: false,
     });
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(2, {
-      queryKey: ["factory-session-detail", "session-beta"],
+      queryKey: factorySessionDetailQueryKey("session-beta", "backend-scope-a"),
       exact: false,
     });
   });
@@ -135,20 +144,26 @@ describe("recoverDashboardSessionScopedState", () => {
       queryClient as never,
       "session-beta",
       resetTimeline,
+      "backend-scope-a",
     );
 
     expect(resetTimeline).toHaveBeenCalledTimes(1);
     expect(queryClient.removeQueries).toHaveBeenCalledTimes(3);
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(1, {
-      queryKey: ["current-factory-definition", "session-beta"],
+      queryKey: ["current-factory-definition", "backend-scope-a", "session-beta"],
       exact: false,
     });
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(2, {
-      queryKey: ["factory-session-detail", "session-beta"],
+      queryKey: factorySessionDetailQueryKey("session-beta", "backend-scope-a"),
       exact: false,
     });
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(3, {
-      queryKey: ["current-factory-definition", "session-beta", "document"],
+      queryKey: [
+        "current-factory-definition",
+        "backend-scope-a",
+        "session-beta",
+        "document",
+      ],
       exact: true,
     });
   });

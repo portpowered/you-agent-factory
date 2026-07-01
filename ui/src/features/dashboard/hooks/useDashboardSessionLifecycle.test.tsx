@@ -212,9 +212,13 @@ describe("useDashboardSessionLifecycle", () => {
           .setSelectedSessionID("session-beta");
       });
 
-      expect(removeQueries).toHaveBeenCalledTimes(1);
-      expect(removeQueries).toHaveBeenCalledWith({
+      expect(removeQueries).toHaveBeenCalledTimes(2);
+      expect(removeQueries).toHaveBeenNthCalledWith(1, {
         queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
+        exact: false,
+      });
+      expect(removeQueries).toHaveBeenNthCalledWith(2, {
+        queryKey: ["factory-session-detail"],
         exact: false,
       });
     });

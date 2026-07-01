@@ -6,6 +6,7 @@ import {
   type ProviderSessionDetailResponse,
   type ProviderSessionDetailsAPIError,
 } from "../../../api/provider-session-details";
+import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 
 export const PROVIDER_SESSION_DETAIL_QUERY_KEY = [
@@ -25,12 +26,16 @@ export type ProviderSessionDetailViewState =
 export function useProviderSessionDetail(
   session: LoadableProviderSessionRef | null,
 ): ProviderSessionDetailViewState {
+  const backendRuntimeCacheScope = useDashboardStreamStore(
+    (state) => state.backendRuntimeCacheScope,
+  );
   const query = useQuery<
     ProviderSessionDetailResponse,
     ProviderSessionDetailsAPIError
   >({
     queryKey: [
       ...PROVIDER_SESSION_DETAIL_QUERY_KEY,
+      backendRuntimeCacheScope ?? "",
       session?.provider ?? "",
       session?.kind ?? "",
       session?.id ?? "",

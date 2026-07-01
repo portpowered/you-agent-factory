@@ -5,15 +5,21 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../hooks/useCurrentFactoryDefinition";
+import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 
 export function syncCurrentFactoryDocumentCache(
   queryClient: QueryClient,
   sessionID: string | null | undefined,
   document: CurrentFactoryDocument,
 ): void {
-  queryClient.setQueryData(currentFactoryDocumentQueryKey(sessionID), document);
+  const backendRuntimeCacheScope =
+    useDashboardStreamStore.getState().backendRuntimeCacheScope;
   queryClient.setQueryData(
-    currentFactoryDefinitionQueryKey(sessionID),
+    currentFactoryDocumentQueryKey(sessionID, backendRuntimeCacheScope),
+    document,
+  );
+  queryClient.setQueryData(
+    currentFactoryDefinitionQueryKey(sessionID, backendRuntimeCacheScope),
     document,
   );
 }

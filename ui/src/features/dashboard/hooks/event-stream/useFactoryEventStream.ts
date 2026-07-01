@@ -18,6 +18,7 @@ import {
   compactFactoryEventForTimeline,
   readFactoryTimelineDebugOptions,
 } from "../../../timeline/state/factoryTimelineDebug";
+import type { TimelineCheckpointStreamIdentity } from "../../../timeline/state/timelineCheckpointPersistence";
 import {
   clearQueuedFlush,
   pausedDashboardStreamState,
@@ -44,6 +45,7 @@ export interface UseFactoryEventStreamOptions {
   probeRecovery?: typeof probeFactoryEventStreamRecovery;
   refreshToken?: number;
   sessionID: string | null;
+  streamIdentity?: TimelineCheckpointStreamIdentity | null;
   validateReconnectCursor?: (
     sessionID?: string | null,
     reconnect?: FactoryEventReconnectCursor,
@@ -71,6 +73,7 @@ interface DashboardStreamConnectionOptions {
       typeof useDashboardStreamStore.getState
     >["streamState"],
   ) => void;
+  streamIdentity?: TimelineCheckpointStreamIdentity | null;
   streamSessionID: string;
   validateReconnectCursor: (
     sessionID?: string | null,
@@ -165,6 +168,7 @@ function useDashboardStreamConnection({
   scheduleQueuedFlush,
   sessionID,
   setStreamState,
+  streamIdentity,
   streamSessionID,
   validateReconnectCursor,
 }: DashboardStreamConnectionOptions) {
@@ -283,6 +287,7 @@ function useDashboardStreamConnection({
             refs,
             resetTimeline,
             setStreamState,
+            streamIdentity,
             streamSessionID,
           });
         };
@@ -321,6 +326,7 @@ function useDashboardStreamConnection({
     scheduleQueuedFlush,
     sessionID,
     setStreamState,
+    streamIdentity,
     streamSessionID,
     validateReconnectCursor,
   ]);
@@ -337,6 +343,7 @@ export function useFactoryEventStream({
   probeRecovery = probeFactoryEventStreamRecovery,
   refreshToken = 0,
   sessionID,
+  streamIdentity = null,
   validateReconnectCursor = validateFactoryEventReconnectCursor,
 }: UseFactoryEventStreamOptions) {
   const queryClient = useQueryClient();
@@ -406,6 +413,7 @@ export function useFactoryEventStream({
     scheduleQueuedFlush,
     sessionID,
     setStreamState,
+    streamIdentity,
     streamSessionID,
     validateReconnectCursor,
   });

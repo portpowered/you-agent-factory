@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { shouldResetDashboardRuntimeScopedState } from "../lib/backend-runtime-cache-scope";
 import {
   dashboardSessionKey,
   resetDashboardSessionScopedState,
@@ -24,7 +25,11 @@ export function useDashboardSessionLifecycle({
   const resetStreamState = useDashboardStreamStore(
     (state) => state.resetStreamState,
   );
+  const backendRuntimeCacheScope = useDashboardStreamStore(
+    (state) => state.backendRuntimeCacheScope,
+  );
   const lastSessionKeyRef = useRef<string | null>(null);
+  const lastBackendScopeRef = useRef<string | null>(null);
 
   const sessionKey = useMemo(
     () => dashboardSessionKey(sessionID, refreshToken),
@@ -61,6 +66,28 @@ export function useDashboardSessionLifecycle({
 
     resetLocalizedSessionState();
   }, [refreshToken, resetLocalizedSessionState, sessionID, sessionKey]);
+
+  useEffect(() => {
+    const previousBackendScope = lastBackendScopeRef.current;
+    const backendScopeChanged =
+      backendRuntimeCacheScope !== previousBackendScope;
+    lastBackendScopeRef.current = backendRuntimeCacheScope;
+
+    if (!backendScopeChanged) {
+      return;
+    }
+
+    if (
+      !shouldResetDashboardRuntimeScopedState({
+        previousBackendScope,
+        backendRuntimeCacheScope,
+      })
+    ) {
+      return;
+    }
+
+    resetLocalizedSessionState();
+  }, [backendRuntimeCacheScope, resetLocalizedSessionState]);
 
   return useMemo(
     () => ({

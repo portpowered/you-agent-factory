@@ -4,7 +4,9 @@ import type { DashboardStreamState } from "../../../api/dashboard/types";
 import { getDashboardStreamMessages } from "../messages/dashboard-stream";
 
 interface DashboardStreamStoreState {
+  backendRuntimeCacheScope: string | null;
   resetStreamState: (locale?: string | null) => void;
+  setBackendRuntimeCacheScope: (backendRuntimeCacheScope: string | null) => void;
   setStreamState: (streamState: DashboardStreamState) => void;
   streamState: DashboardStreamState;
 }
@@ -20,8 +22,15 @@ export function createDefaultDashboardStreamState(
 
 export const useDashboardStreamStore = create<DashboardStreamStoreState>(
   (set) => ({
+    backendRuntimeCacheScope: null,
     resetStreamState: (locale) => {
-      set({ streamState: createDefaultDashboardStreamState(locale) });
+      set({
+        backendRuntimeCacheScope: null,
+        streamState: createDefaultDashboardStreamState(locale),
+      });
+    },
+    setBackendRuntimeCacheScope: (backendRuntimeCacheScope) => {
+      set({ backendRuntimeCacheScope });
     },
     setStreamState: (streamState) => {
       set({ streamState });
