@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { createComponentsPackageAliases } from "./packages/components/src/vite-aliases";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { coverageConfigDefaults } from "vitest/config";
 
@@ -110,16 +111,7 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: {
-      "youagentfactory/components": path.join(
-        componentsPackageRoot,
-        "index.ts",
-      ),
-      "youagentfactory/components/styles.css": path.join(
-        componentsPackageRoot,
-        "styles.css",
-      ),
-    },
+    alias: createComponentsPackageAliases(componentsPackageRoot),
   },
   server: {
     host: true,
