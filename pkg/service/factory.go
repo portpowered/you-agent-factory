@@ -169,6 +169,18 @@ type FactoryServiceConfig struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
+	// BackendScopeID is the stable backend namespace used for session identity
+	// and client cache isolation. Empty local backends load or generate and
+	// persist local-<uuid> in system config during service construction.
+	BackendScopeID string
+	// SystemConfigHomeDir overrides the home directory used to resolve the
+	// shared system config path for backendScopeID persistence. Empty uses
+	// os.UserHomeDir().
+	SystemConfigHomeDir string
+	// SystemConfigPath overrides the system config file path used for
+	// backendScopeID persistence. Empty derives the path from
+	// SystemConfigHomeDir or os.UserHomeDir().
+	SystemConfigPath string
 	// RuntimeLogDir optionally overrides the default
 	// ~/.you-agent-factory/logs directory. Tests use this to keep file-backed
 	// logs isolated.

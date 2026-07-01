@@ -1586,6 +1586,7 @@ func (s *stubSessionGateway) GetFactorySessionSyncPreflight(
 	_ context.Context,
 	sessionID string,
 	_ *interfaces.FactoryEventReconnectCursor,
+	_ *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	s.calls = append(s.calls, "get-session-sync-preflight")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
@@ -1729,6 +1730,7 @@ func (s *stubFactoryCoordinator) GetFactorySessionSyncPreflight(
 	_ context.Context,
 	sessionID string,
 	_ *interfaces.FactoryEventReconnectCursor,
+	_ *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	s.calls = append(s.calls, "get-session-sync-preflight")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
@@ -1936,7 +1938,7 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if _, err := svc.CancelDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
 		t.Fatalf("CancelDurableFactorySession: %v", err)
 	}
-	if _, err := svc.GetFactorySessionSyncPreflight(context.Background(), "session-a", nil); err != nil {
+	if _, err := svc.GetFactorySessionSyncPreflight(context.Background(), "session-a", nil, nil); err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
 	}
 	if _, err := svc.GetFactorySessionResult(context.Background(), "session-a"); err != nil {

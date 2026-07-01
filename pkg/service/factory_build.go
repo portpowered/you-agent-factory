@@ -355,6 +355,7 @@ func buildRuntimeBundle(
 		LoadedFactoryCfg:      input.loadedFactoryCfg,
 		BaseLogger:            input.baseLogger,
 		RuntimeInstanceID:     input.runtimeInstanceID,
+		BackendScopeID:        serviceBackendScopeID(input.cfg),
 		Clock:                 input.clock,
 		RecordPath:            input.recordPath,
 		WorkflowID:            input.workflowID,

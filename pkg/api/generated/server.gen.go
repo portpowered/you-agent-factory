@@ -356,10 +356,11 @@ const (
 
 // Defines values for FactorySessionSyncPreflightReasonCode.
 const (
-	CursorStale         FactorySessionSyncPreflightReasonCode = "cursor_stale"
-	LogicalSessionRemap FactorySessionSyncPreflightReasonCode = "logical_session_remap"
-	Ok                  FactorySessionSyncPreflightReasonCode = "ok"
-	SessionNotFound     FactorySessionSyncPreflightReasonCode = "session_not_found"
+	CursorStale              FactorySessionSyncPreflightReasonCode = "cursor_stale"
+	LogicalSessionRemap      FactorySessionSyncPreflightReasonCode = "logical_session_remap"
+	LogicalSessionUnresolved FactorySessionSyncPreflightReasonCode = "logical_session_unresolved"
+	Ok                       FactorySessionSyncPreflightReasonCode = "ok"
+	SessionNotFound          FactorySessionSyncPreflightReasonCode = "session_not_found"
 )
 
 // Defines values for FactorySessionTargetRefKind.
@@ -5653,11 +5654,17 @@ type AfterSequence = int
 // ArtifactID defines model for ArtifactID.
 type ArtifactID = string
 
+// BackendScopeId defines model for BackendScopeId.
+type BackendScopeId = string
+
 // DispatchID defines model for DispatchID.
 type DispatchID = string
 
 // FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
 type FactorySessionResultIncludeArtifacts = bool
+
+// LogicalSessionKeyId defines model for LogicalSessionKeyId.
+type LogicalSessionKeyId = string
 
 // MaxResults defines model for MaxResults.
 type MaxResults = int
@@ -5764,6 +5771,12 @@ type GetFactorySessionSyncPreflightBySessionIdParams struct {
 
 	// AfterSequence Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
 	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// BackendScopeId Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target.
+	BackendScopeId *BackendScopeId `form:"backend_scope_id,omitempty" json:"backend_scope_id,omitempty"`
+
+	// LogicalSessionKeyId Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector.
+	LogicalSessionKeyId *LogicalSessionKeyId `form:"logical_session_key_id,omitempty" json:"logical_session_key_id,omitempty"`
 }
 
 // ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
@@ -8144,6 +8157,22 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionSyncPreflightBySessionId(w h
 	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "backend_scope_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "backend_scope_id", r.URL.Query(), &params.BackendScopeId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "backend_scope_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "logical_session_key_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "logical_session_key_id", r.URL.Query(), &params.LogicalSessionKeyId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "logical_session_key_id", Err: err})
 		return
 	}
 

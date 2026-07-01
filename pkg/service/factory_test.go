@@ -1066,6 +1066,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		RuntimeMetricsDir: runtimeMetricsDir,
 		RecordPath:        options.recordPath,
 		ExtraOptions:      options.extraOptions,
+		SystemConfigHomeDir: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)

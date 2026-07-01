@@ -291,6 +291,8 @@ paths:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/BackendScopeId'
+        - $ref: '#/components/parameters/LogicalSessionKeyId'
       responses:
         '200':
           description: Typed session sync preflight outcome for the targeted session selector.
@@ -1382,6 +1384,20 @@ components:
       schema:
         type: integer
         minimum: 0
+    BackendScopeId:
+      name: backend_scope_id
+      in: query
+      required: false
+      description: Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target.
+      schema:
+        type: string
+    LogicalSessionKeyId:
+      name: logical_session_key_id
+      in: query
+      required: false
+      description: Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector.
+      schema:
+        type: string
   responses:
     BadRequest:
       description: Request payload or parameter was invalid.
@@ -3154,6 +3170,7 @@ components:
         - cursor_stale
         - session_not_found
         - logical_session_remap
+        - logical_session_unresolved
     FactorySessionSyncPreflightReconnectCursor:
       type: object
       additionalProperties: false

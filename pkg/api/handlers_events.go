@@ -182,6 +182,7 @@ func (s *Server) GetFactorySessionSyncPreflightBySessionId(
 		r.Context(),
 		string(sessionID),
 		reconnectCursorFromParams(params.AfterEventId, params.AfterSequence),
+		logicalResolveHintFromParams(params.BackendScopeId, params.LogicalSessionKeyId),
 	)
 	if err != nil {
 		s.logger.Error("get factory session sync preflight failed", zap.Error(err))
@@ -204,6 +205,23 @@ func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSeque
 		cursor.AfterSequence = &sequence
 	}
 	return cursor
+}
+
+func logicalResolveHintFromParams(
+	backendScopeID *factoryapi.BackendScopeId,
+	logicalSessionKeyID *factoryapi.LogicalSessionKeyId,
+) *interfaces.FactorySessionLogicalResolveHint {
+	if backendScopeID == nil && logicalSessionKeyID == nil {
+		return nil
+	}
+	hint := &interfaces.FactorySessionLogicalResolveHint{}
+	if backendScopeID != nil {
+		hint.BackendScopeID = string(*backendScopeID)
+	}
+	if logicalSessionKeyID != nil {
+		hint.LogicalSessionKeyID = string(*logicalSessionKeyID)
+	}
+	return hint
 }
 
 func afterEventIDParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterEventId {

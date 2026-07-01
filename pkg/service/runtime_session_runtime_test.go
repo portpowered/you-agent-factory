@@ -1008,6 +1008,7 @@ func startRunningSessionServiceOnDir(t *testing.T, rootDir string) *runningSessi
 		Dir:               rootDir,
 		RuntimeMode:       interfaces.RuntimeModeService,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		SystemConfigHomeDir: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService(restart): %v", err)
@@ -1520,6 +1521,7 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableA
 	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		RuntimeInstanceID: "backend-scope-js",
+		BackendScopeID:    "backend-scope-js",
 		StartedAtUTC:      startedAt,
 		RuntimeCfg:        runtimeCfg,
 		Factory: &aggregateSnapshotFactory{
@@ -1564,6 +1566,7 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHa
 	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		RuntimeInstanceID: "backend-scope-js",
+		BackendScopeID:    "backend-scope-js",
 		StartedAtUTC:      startedAt,
 		RuntimeCfg:        runtimeCfg,
 		Factory: &aggregateSnapshotFactory{
@@ -2944,7 +2947,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 
 	valid, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
 		AfterEventID: recorded[0].Id,
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(valid): %v", err)
 	}
@@ -2955,7 +2958,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 
 	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
 		AfterEventID: "factory-event/missing-preflight-cursor",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(stale): %v", err)
 	}
@@ -2970,7 +2973,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_MissingSessionReturnsType
 	})
 	defer harness.stop(t)
 
-	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", nil)
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", nil, nil)
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(missing): %v", err)
 	}
@@ -2999,7 +3002,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsT
 		t.Fatalf("CloseFactorySession(default): %v", err)
 	}
 
-	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil)
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(remap): %v", err)
 	}
@@ -3076,7 +3079,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_IdentityMatchesSessionRea
 		t.Fatal("session streamIdentity = nil, want populated identity")
 	}
 
-	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil)
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil, nil)
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(default): %v", err)
 	}
@@ -3095,6 +3098,71 @@ func TestFactoryService_GetFactorySessionSyncPreflight_IdentityMatchesSessionRea
 	}
 	if response.StreamGenerationId == nil || *response.StreamGenerationId != wantIdentity.StreamGenerationID {
 		t.Fatalf("streamGenerationId = %#v, want %q", response.StreamGenerationId, wantIdentity.StreamGenerationID)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_ResolvesLogicalSessionByHint(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	betaSession := harness.requireSession(t, betaSessionID)
+	logicalKey := factorySessionLogicalSessionKeyID(betaSession)
+	backendScope := harness.svc.cfg.BackendScopeID
+	staleUUID := "live-session-stale-uuid-001"
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(
+		context.Background(),
+		staleUUID,
+		nil,
+		&interfaces.FactorySessionLogicalResolveHint{
+			BackendScopeID:      backendScope,
+			LogicalSessionKeyID: logicalKey,
+		},
+	)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(logical resolve): %v", err)
+	}
+	if response.ReasonCode != factoryapi.LogicalSessionRemap {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.LogicalSessionRemap)
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != betaSessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, betaSessionID)
+	}
+	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != logicalKey {
+		t.Fatalf("logicalSessionKeyId = %#v, want %q", response.LogicalSessionKeyId, logicalKey)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_UnresolvedLogicalSessionReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(
+		context.Background(),
+		"live-session-stale-uuid-002",
+		nil,
+		&interfaces.FactorySessionLogicalResolveHint{
+			BackendScopeID:      harness.svc.cfg.BackendScopeID,
+			LogicalSessionKeyID: "/missing/root::named::ghost",
+		},
+	)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(unresolved): %v", err)
+	}
+	if response.ReasonCode != factoryapi.LogicalSessionUnresolved {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.LogicalSessionUnresolved)
+	}
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false")
+	}
+	if response.FactorySessionId != nil || response.StreamGenerationId != nil {
+		t.Fatalf("identity fields = %#v, want no factorySessionId or streamGenerationId", response)
 	}
 }
 

@@ -308,6 +308,8 @@ paths:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/BackendScopeId'
+        - $ref: '#/components/parameters/LogicalSessionKeyId'
       responses:
         '200':
           description: Typed session sync preflight outcome for the targeted session selector.
@@ -1424,6 +1426,10 @@ components:
       $ref: './components/parameters/AfterEventId.yaml'
     AfterSequence:
       $ref: './components/parameters/AfterSequence.yaml'
+    BackendScopeId:
+      $ref: './components/parameters/BackendScopeId.yaml'
+    LogicalSessionKeyId:
+      $ref: './components/parameters/LogicalSessionKeyId.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'

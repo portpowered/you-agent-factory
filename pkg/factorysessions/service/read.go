@@ -30,11 +30,12 @@ func (s *Service) GetFactorySessionSyncPreflight(
 	ctx context.Context,
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
+	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	if s == nil || s.host == nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.GetLiveFactorySessionSyncPreflight(ctx, s.host, sessionID, reconnect)
+	return controlplane.GetLiveFactorySessionSyncPreflight(ctx, s.host, sessionID, reconnect, logicalResolve)
 }
 
 // GetFactorySessionResult returns the terminal JavaScript session result read shape.

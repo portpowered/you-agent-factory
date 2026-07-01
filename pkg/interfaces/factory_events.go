@@ -12,6 +12,13 @@ type FactoryEventReconnectCursor struct {
 	AfterSequence *int
 }
 
+// FactorySessionLogicalResolveHint carries persisted logical-session identity
+// used to remap an unknown factorySessionID to the current live session.
+type FactorySessionLogicalResolveHint struct {
+	BackendScopeID      string
+	LogicalSessionKeyID string
+}
+
 // FactoryEventReconnectScope configures how reconnect cursors are interpreted.
 type FactoryEventReconnectScope struct {
 	// SessionID enables sessionSequence-based after_sequence matching for

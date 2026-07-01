@@ -21,6 +21,7 @@ type Bundle struct {
 	Dir                  string
 	FolderPath           string
 	RuntimeInstanceID    string
+	BackendScopeID       string
 	StartedAtUTC         time.Time
 	EventHistory         *factoryevents.FactoryEventHistory
 	Factory              factory.Factory

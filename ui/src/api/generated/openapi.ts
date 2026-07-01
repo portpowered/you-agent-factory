@@ -4986,6 +4986,10 @@ export interface components {
     AfterEventId: string;
     /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
     AfterSequence: number;
+    /** @description Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target. */
+    BackendScopeId: string;
+    /** @description Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector. */
+    LogicalSessionKeyId: string;
   };
   requestBodies: never;
   headers: never;
@@ -5285,6 +5289,10 @@ export interface operations {
         after_event_id?: components["parameters"]["AfterEventId"];
         /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
         after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target. */
+        backend_scope_id?: components["parameters"]["BackendScopeId"];
+        /** @description Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector. */
+        logical_session_key_id?: components["parameters"]["LogicalSessionKeyId"];
       };
       header?: never;
       path: {
@@ -6528,6 +6536,7 @@ export const FactorySessionSyncPreflightReasonCode = {
   cursor_stale: "cursor_stale",
   session_not_found: "session_not_found",
   logical_session_remap: "logical_session_remap",
+  logical_session_unresolved: "logical_session_unresolved",
 } as const;
 export type FactorySessionSyncPreflightReasonCode =
   (typeof FactorySessionSyncPreflightReasonCode)[keyof typeof FactorySessionSyncPreflightReasonCode];
