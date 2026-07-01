@@ -20,6 +20,7 @@ import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import {
+  currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
   useCurrentFactoryDocument,
 } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
@@ -42,7 +43,10 @@ import {
   fetchRequestPath,
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
-import { handleFactorySessionPreflightRequest } from "./app-shell-session-preflight-test-utils";
+import {
+  buildAppShellStreamIdentity,
+  handleFactorySessionPreflightRequest,
+} from "./app-shell-session-preflight-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import {
   seedTimelineSnapshot,
@@ -252,9 +256,31 @@ export function renderApp({
   });
   queryClients.push(queryClient);
   if (seedCurrentFactoryDocument) {
+    const resolvedSessionID = sessionID ?? DEFAULT_FACTORY_SESSION_ID;
+    const sessionSummary =
+      availableFactorySessions.find((session) => session.id === resolvedSessionID) ??
+      availableFactorySessions[0];
+    if (!sessionSummary) {
+      throw new Error("expected at least one factory session summary for app-shell seeding");
+    }
+    const currentFactoryDocument = sessionFactoryDocumentFromSnapshot(snapshot);
+    const streamIdentity = buildAppShellStreamIdentity(sessionSummary, snapshot);
+
     queryClient.setQueryData(
-      currentFactoryDocumentQueryKey(sessionID ?? DEFAULT_FACTORY_SESSION_ID),
-      sessionFactoryDocumentFromSnapshot(snapshot),
+      currentFactoryDocumentQueryKey(resolvedSessionID, streamIdentity),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDefinitionQueryKey(resolvedSessionID, streamIdentity),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(resolvedSessionID),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDefinitionQueryKey(resolvedSessionID),
+      currentFactoryDocument,
     );
   }
 

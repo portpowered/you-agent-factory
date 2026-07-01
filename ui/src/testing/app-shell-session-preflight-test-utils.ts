@@ -35,6 +35,18 @@ function jsonResponse(
   });
 }
 
+export function buildAppShellStreamIdentity(
+  summary: FactorySessionSummary,
+  snapshot: DashboardSnapshot,
+) {
+  const streamIdentity =
+    buildFactorySessionResponse(summary, snapshot).runtime.streamIdentity;
+  if (!streamIdentity) {
+    throw new Error("expected app-shell factory session stream identity");
+  }
+  return streamIdentity;
+}
+
 export function buildFactorySessionResponse(
   summary: FactorySessionSummary,
   snapshot: DashboardSnapshot,

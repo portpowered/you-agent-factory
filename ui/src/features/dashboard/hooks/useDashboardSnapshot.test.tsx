@@ -673,12 +673,7 @@ describe("useDashboardSnapshot composer", () => {
       await expect(
         readTimelineCheckpoint(
           window.indexedDB,
-          DEFAULT_FACTORY_SESSION_ID,
-          {
-            backendScopeID: "backend-scope-a",
-            factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-            streamGenerationID: "2026-06-26T00:00:00Z",
-          },
+          resolvedDefaultStreamIdentity(),
         ),
       ).resolves.toEqual(
         expect.objectContaining({
@@ -696,7 +691,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(2);
     });
     expect(replayHarness.getStreams().at(-1)?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
   });
 });

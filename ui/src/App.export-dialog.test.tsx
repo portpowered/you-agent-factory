@@ -155,11 +155,11 @@ describe("App shell export dialog flows", () => {
 
       currentFactoryFetchCount += 1;
 
-      if (currentFactoryFetchCount === 1) {
+      if (currentFactoryFetchCount <= 2) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
 
-      if (currentFactoryFetchCount === 2) {
+      if (currentFactoryFetchCount === 3) {
         return refreshedCurrentFactoryResponse.promise;
       }
 

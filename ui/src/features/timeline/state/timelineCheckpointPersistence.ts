@@ -1,5 +1,8 @@
 import type { FactoryEventReconnectCursor } from "../../../api/events";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  DEFAULT_FACTORY_SESSION_ID,
+  isDefaultFactorySessionID,
+} from "../../../api/session-routing";
 import {
   normalizeStreamDerivedCacheIdentity,
   streamDerivedCheckpointStorageKey,
@@ -27,7 +30,17 @@ function matchesStoredCheckpointFactorySessionID(
   envelope: TimelineCheckpointEnvelope,
   factorySessionID: string,
 ): boolean {
-  return envelope.streamIdentity?.factorySessionID === factorySessionID;
+  const requestedSessionID = factorySessionID.trim();
+  const storedFactorySessionID =
+    envelope.streamIdentity?.factorySessionID?.trim() ?? "";
+  if (storedFactorySessionID === requestedSessionID) {
+    return true;
+  }
+  return (
+    isDefaultFactorySessionID(requestedSessionID) &&
+    storedFactorySessionID !== "" &&
+    !isDefaultFactorySessionID(storedFactorySessionID)
+  );
 }
 
 interface PersistedTimelineCheckpoint {

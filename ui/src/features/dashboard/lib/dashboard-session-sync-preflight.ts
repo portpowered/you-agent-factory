@@ -251,13 +251,6 @@ export async function bootstrapDashboardSessionSyncPreflight({
   refreshToken: number;
   sessionID: string;
 }): Promise<DashboardSessionSyncPreflightOutcome> {
-  if (refreshToken > 0) {
-    await clearStoredTimelineCheckpointsForFactorySessionID(
-      indexedDB,
-      sessionID,
-    );
-  }
-
   let response: FactorySessionSyncPreflightResponse;
   try {
     response = await getFactorySessionSyncPreflight(sessionID);
@@ -266,6 +259,44 @@ export async function bootstrapDashboardSessionSyncPreflight({
       error,
       "The dashboard could not load the selected session.",
     );
+  }
+
+  if (refreshToken > 0) {
+    const refreshStreamIdentity =
+      streamIdentityFromSyncPreflightResponse(response);
+    if (isNonRecoverableSyncPreflightReason(response.reasonCode)) {
+      if (refreshStreamIdentity) {
+        await clearCheckpointForStreamIdentity(indexedDB, refreshStreamIdentity);
+      } else {
+        await clearStoredTimelineCheckpointsForFactorySessionID(
+          indexedDB,
+          sessionID,
+        );
+      }
+      return {
+        kind: "recovery",
+        recovery: recoveryFromResponse(response),
+      };
+    }
+    if (!refreshStreamIdentity) {
+      return {
+        kind: "recovery",
+        recovery: recoveryFromResponse(response),
+      };
+    }
+    await clearCheckpointForStreamIdentity(indexedDB, refreshStreamIdentity);
+    return {
+      kind: "ready",
+      result: {
+        checkpoint: null,
+        reconnectCursor: undefined,
+        remappedFactorySessionId:
+          response.reasonCode === "logical_session_remap"
+            ? (response.factorySessionId ?? null)
+            : null,
+        streamIdentity: refreshStreamIdentity,
+      },
+    };
   }
 
   if (isNonRecoverableSyncPreflightReason(response.reasonCode)) {
