@@ -61,6 +61,7 @@ github.com/portpowered/infinite-you/pkg/factory
 github.com/portpowered/infinite-you/pkg/factory/events 
 github.com/portpowered/infinite-you/pkg/factory/projections 
 github.com/portpowered/infinite-you/pkg/factory/requests 
+github.com/portpowered/infinite-you/pkg/factory/service 
 github.com/portpowered/infinite-you/pkg/factory/state 
 github.com/portpowered/infinite-you/pkg/factory/subsystems 
 github.com/portpowered/infinite-you/pkg/factory/throttle 
@@ -69,7 +70,7 @@ github.com/portpowered/infinite-you/pkg/factory/validation
 github.com/portpowered/infinite-you/pkg/interfaces 
 github.com/portpowered/infinite-you/pkg/logging 
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview 
-github.com/portpowered/infinite-you/pkg/service/ingest 
+github.com/portpowered/infinite-you/pkg/factory/ingest 
 github.com/portpowered/infinite-you/pkg/service/runtimebuild 
 github.com/portpowered/infinite-you/pkg/timework 
 github.com/portpowered/infinite-you/pkg/workcontent 
