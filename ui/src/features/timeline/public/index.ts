@@ -7,6 +7,8 @@ export {
 export {
   deleteTimelineCheckpoint,
   clearTimelineCheckpoint,
+  clearStoredTimelineCheckpointsForFactorySessionID,
+  findStoredCheckpointEnvelopeByFactorySessionID,
   type TimelineCheckpointStreamIdentity,
   purgeLegacyTimelineCheckpoints,
   persistTimelineCheckpoint,

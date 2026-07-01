@@ -23,6 +23,13 @@ interface TimelineCheckpointEnvelope {
   streamIdentity: TimelineCheckpointStreamIdentity;
 }
 
+function matchesStoredCheckpointFactorySessionID(
+  envelope: TimelineCheckpointEnvelope,
+  factorySessionID: string,
+): boolean {
+  return envelope.streamIdentity?.factorySessionID === factorySessionID;
+}
+
 interface PersistedTimelineCheckpoint {
   afterEventId?: string;
   afterSequence?: number;
@@ -212,6 +219,53 @@ function matchesStreamIdentity(
       normalizedExpected.logicalSessionKeyID &&
     normalizedActual.streamGenerationID === normalizedExpected.streamGenerationID
   );
+}
+
+export async function findStoredCheckpointEnvelopeByFactorySessionID(
+  indexedDB: IndexedDBLike | undefined,
+  factorySessionID: string,
+): Promise<TimelineCheckpointEnvelope | null> {
+  const normalizedFactorySessionID = factorySessionID.trim();
+  if (!indexedDB || normalizedFactorySessionID === "") {
+    return null;
+  }
+
+  const database = await openCheckpointDatabase(indexedDB);
+  try {
+    const transaction = database.transaction(CHECKPOINT_STORE_NAME, "readonly");
+    const store = transaction.objectStore(CHECKPOINT_STORE_NAME);
+    const envelopes = await requestToPromise<TimelineCheckpointEnvelope[]>(
+      store.getAll(),
+    );
+    return (
+      envelopes.find(
+        (envelope) =>
+          envelope.schemaVersion === CHECKPOINT_SCHEMA_VERSION_GUARDED &&
+          matchesStoredCheckpointFactorySessionID(
+            envelope,
+            normalizedFactorySessionID,
+          ),
+      ) ?? null
+    );
+  } catch {
+    return null;
+  } finally {
+    database.close();
+  }
+}
+
+export async function clearStoredTimelineCheckpointsForFactorySessionID(
+  indexedDB: IndexedDBLike | undefined,
+  factorySessionID: string,
+): Promise<void> {
+  const envelope = await findStoredCheckpointEnvelopeByFactorySessionID(
+    indexedDB,
+    factorySessionID,
+  );
+  if (!envelope) {
+    return;
+  }
+  await clearTimelineCheckpoint(indexedDB, envelope.streamIdentity);
 }
 
 export async function persistTimelineCheckpoint(

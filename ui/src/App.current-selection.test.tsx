@@ -275,7 +275,11 @@ describe("App current selection", () => {
         readyDispatchWorkstationRequestsByDispatchID,
     });
 
-    fireEvent.click(getActiveStorySelectionButton());
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Select work item Active Story",
+      }),
+    );
 
     const workDetail = await screen.findByRole("article", {
       name: "Current selection",
@@ -470,7 +474,11 @@ describe("App current selection", () => {
         traceFixtures: activeStoryTraceFixtures,
       });
 
-      fireEvent.click(getActiveStorySelectionButton());
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Select work item Active Story",
+        }),
+      );
 
       const dashboardGrid = screen.getByRole("region", {
         name: "you-agent-factory bento board",
@@ -502,7 +510,11 @@ describe("App current selection", () => {
         traceFixtures: activeStoryTraceFixtures,
       });
 
-      fireEvent.click(getActiveStorySelectionButton());
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Select work item Active Story",
+        }),
+      );
 
       const dashboardGrid = screen.getByRole("region", {
         name: "you-agent-factory bento board",

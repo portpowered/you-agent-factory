@@ -423,13 +423,14 @@ describe("App shell import flows", () => {
     });
     expectNoPostFactoriesActivation(fetchMock);
     await waitFor(() => {
-      const sessionFetchCount = fetchMock.mock.calls.filter(([url, init]) => {
+      const sessionPreflightCount = fetchMock.mock.calls.filter(([url, init]) => {
+        const path = resolveFetchPath(url);
         return (
-          resolveFetchPath(url) === "/factory-sessions/~default" &&
+          path.startsWith("/factory-sessions/~default/sync-preflight") &&
           resolveFetchMethod(url, init) === "GET"
         );
       }).length;
-      expect(sessionFetchCount).toBeGreaterThanOrEqual(2);
+      expect(sessionPreflightCount).toBeGreaterThanOrEqual(2);
     });
 
     const refreshedStream = MockEventSource.instances.at(-1);

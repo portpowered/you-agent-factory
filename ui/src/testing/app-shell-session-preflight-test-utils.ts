@@ -4,6 +4,22 @@ import type {
   FactorySession,
   FactorySessionSummary,
 } from "../api/factory-sessions/api";
+import {
+  isDefaultFactorySessionID,
+} from "../api/session-routing";
+
+export const APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID =
+  "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function resolvedFactorySessionID(summary: FactorySessionSummary): string {
+  return isDefaultFactorySessionID(summary.id)
+    ? APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID
+    : summary.id;
+}
+
+function logicalSessionKeyID(summary: FactorySessionSummary): string {
+  return `${summary.folderPath}::${summary.target.kind}${summary.target.name ? `::${summary.target.name}` : "::"}`;
+}
 
 function jsonResponse(
   body: unknown,
@@ -51,8 +67,8 @@ export function buildFactorySessionResponse(
       status: "IDLE",
       streamIdentity: {
         backendScopeID: `${summary.folderPath}::test-backend`,
-        factorySessionID: summary.id,
-        logicalSessionKeyID: `${summary.folderPath}::${summary.target.kind}${summary.target.name ? `::${summary.target.name}` : "::"}`,
+        factorySessionID: resolvedFactorySessionID(summary),
+        logicalSessionKeyID: logicalSessionKeyID(summary),
         streamGenerationID: lifecycleTimestamp,
       },
       usage: { resources: [] },
@@ -87,23 +103,28 @@ export function handleFactorySessionPreflightRequest({
   );
   if (syncPreflightMatch) {
     const requestedSessionID = decodeURIComponent(syncPreflightMatch[1] ?? "");
+    const searchParams = new URLSearchParams(syncPreflightMatch[2] ?? "");
+    const afterSequence = searchParams.get("after_sequence");
     const sessionSummary = availableFactorySessions.find(
-      (session) => session.id === requestedSessionID,
+      (session) =>
+        session.id === requestedSessionID ||
+        (isDefaultFactorySessionID(requestedSessionID) &&
+          isDefaultFactorySessionID(session.id)),
     );
 
     if (!sessionSummary) {
-      return jsonResponse(
-        {
-          code: "FACTORY_SESSION_NOT_FOUND",
-          message: `Factory session ${requestedSessionID} was not found.`,
+      return jsonResponse({
+        checkpointReusable: false,
+        reasonCode: "session_not_found",
+        reconnectCursor: {
+          provided:
+            searchParams.has("after_event_id") || afterSequence != null,
+          validForStreamGeneration: false,
         },
-        404,
-        "Not Found",
-      );
+        requestedSessionId: requestedSessionID,
+      });
     }
 
-    const searchParams = new URLSearchParams(syncPreflightMatch[2] ?? "");
-    const afterSequence = searchParams.get("after_sequence");
     const sessionResponse = buildFactorySessionResponse(sessionSummary, snapshot);
     const streamGenerationId =
       sessionResponse.runtime.streamIdentity?.streamGenerationID ??
@@ -112,8 +133,8 @@ export function handleFactorySessionPreflightRequest({
     return jsonResponse({
       backendScopeId: `${sessionSummary.folderPath}::test-backend`,
       checkpointReusable: true,
-      factorySessionId: sessionSummary.id,
-      logicalSessionKeyId: `${sessionSummary.folderPath}::${sessionSummary.id}`,
+      factorySessionId: resolvedFactorySessionID(sessionSummary),
+      logicalSessionKeyId: logicalSessionKeyID(sessionSummary),
       reasonCode: "ok",
       reconnectCursor: {
         afterEventId: searchParams.get("after_event_id") ?? undefined,
