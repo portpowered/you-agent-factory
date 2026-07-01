@@ -225,6 +225,18 @@ func afterSequenceParam(cursor *interfaces.FactoryEventReconnectCursor) *factory
 	return &value
 }
 
+func writeSessionEventStreamHandshakeHeaders(
+	w http.ResponseWriter,
+	stream *interfaces.FactoryEventStream,
+) {
+	if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
+		w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
+	}
+	if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
+		w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
+	}
+}
+
 func (s *Server) getEvents(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -257,12 +269,7 @@ func (s *Server) getEvents(
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	if includeSessionHandshake {
-		if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
-			w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
-		}
-		if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
-			w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
-		}
+		writeSessionEventStreamHandshakeHeaders(w, stream)
 	}
 
 	for _, event := range stream.History {

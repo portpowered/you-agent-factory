@@ -140,6 +140,7 @@ type FactoryService struct {
 	core           *FactoryCore
 	sessions       *factorysessions.Registry
 	factorySave    factorySaveSaver
+	sessionGateway sessionGateway
 	runtimeBuild   *runtimebuild.Service
 	hostedWorkers  hostedworkers.Config
 	factoryRootDir string
@@ -152,7 +153,7 @@ type FactoryService struct {
 	startTime                time.Time
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
-	modelService             ModelService
+	modelService             apisurface.ModelAPI
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
@@ -320,6 +321,14 @@ type FactoryServiceConfig struct {
 	// collaborator. Tests use this to assert SaveFactoryForSession delegates
 	// without running the full save orchestration pipeline.
 	FactorySave factorySaveSaver
+	// SessionGateway, when non-nil, replaces the default
+	// factorysessions/service gateway collaborator. Tests use this to assert
+	// OpenFactorySession delegates without running the full open pipeline.
+	SessionGateway sessionGateway
+	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.
+	// Tests use this to assert model transport methods delegate without running
+	// the full managed-runtime pipeline.
+	ModelAPI apisurface.ModelAPI
 	// ModelAssets, when non-nil, replaces the default localmodels.AssetPuller
 	// collaborator wired at service construction. Tests use this to assert
 	// PullModel delegates without running managed asset downloads.
@@ -964,33 +973,3 @@ func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *l
 	}
 }
 
-func isCanceledServiceStartup(ctx context.Context, err error) bool {
-	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
-}
-
-func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
-	for {
-		handle := fs.currentLiveRuntime()
-		if handle == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(25 * time.Millisecond):
-				continue
-			}
-		}
-		select {
-		case <-ctx.Done():
-			_ = handle.wait()
-		case <-handle.runDone:
-		}
-		if fs.currentLiveRuntime() != handle {
-			continue
-		}
-		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
-			fs.sessions != nil && fs.sessions.Count() == 0 {
-			continue
-		}
-		return handle.result()
-	}
-}

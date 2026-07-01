@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -52,58 +53,13 @@ type ModelPullMetricsRecorder interface {
 	RecordModelPullMetric(InvocationMetric)
 }
 
-// ModelService owns direct model catalog, pull, and invocation operations.
-// FactoryService keeps these methods only as a phase-one compatibility facade.
-type ModelService interface {
-	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
-	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
-	PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error)
-	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error)
-}
-
-type modelServiceDependencies struct {
-	runtimeConfig           func() *factoryconfig.LoadedFactoryConfig
-	modelAssetPuller        func() modelAssetPuller
-	modelHost               func() modelhost.Host
-	modelInvocationExecutor func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error)
-	factoryRunnerID         func() string
-	logger                  *zap.Logger
-	modelPullMetrics        func() ModelPullMetricsRecorder
-}
-
-type runtimeModelService struct {
-	deps modelServiceDependencies
-}
-
-var _ ModelService = (*runtimeModelService)(nil)
-var _ apisurface.ModelAPI = (*runtimeModelService)(nil)
-
-func newModelService(deps modelServiceDependencies) ModelService {
-	return &runtimeModelService{deps: deps}
-}
-
-func newFactoryModelService(fs *FactoryService) ModelService {
+func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
 	if fs == nil {
-		return newModelService(modelServiceDependencies{})
-	}
-	return newModelService(modelServiceDependencies{
-		runtimeConfig:           fs.currentRuntimeConfig,
-		modelAssetPuller:        fs.modelAssetPuller,
-		modelHost:               fs.modelHost,
-		modelInvocationExecutor: fs.modelInvocationExecutor,
-		factoryRunnerID:         fs.factoryRunnerID,
-		logger:                  fs.logger,
-		modelPullMetrics:        fs.modelPullMetricsRecorder,
-	})
-}
-
-func (fs *FactoryService) requireModelService() ModelService {
-	if fs == nil {
-		return newFactoryModelService(nil)
+		return wireModelServiceCollaborator(nil, nil)
 	}
 	fs.modelInitOnce.Do(func() {
 		if fs.modelService == nil {
-			fs.modelService = newFactoryModelService(fs)
+			fs.modelService = wireModelServiceCollaborator(fs, fs.cfg)
 		}
 	})
 	return fs.modelService
@@ -142,25 +98,109 @@ func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
 	return puller
 }
 
-const directModelInvocationTransitionID = "direct-model-invocation"
-
 func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
-func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	return modelhost.ListModelsWithHost(ctx, s.modelHost(), s.currentRuntimeConfig())
+// modelServiceHost adapts FactoryService runtime seams for pkg/models/service wiring.
+type modelServiceHost struct {
+	*FactoryService
 }
 
-func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	return modelhost.GetModelWithHost(ctx, s.modelHost(), s.currentRuntimeConfig(), modelName)
+var _ modelsservice.Host = modelServiceHost{}
+
+func (h modelServiceHost) RuntimeConfig() func() *factoryconfig.LoadedFactoryConfig {
+	if h.FactoryService == nil {
+		return func() *factoryconfig.LoadedFactoryConfig { return nil }
+	}
+	return h.FactoryService.currentRuntimeConfig
 }
 
-func (s *runtimeModelService) modelHost() modelhost.Host {
-	if s == nil || s.deps.modelHost == nil {
+func (h modelServiceHost) ModelHost() func() modelhost.Host {
+	if h.FactoryService == nil {
+		return func() modelhost.Host { return nil }
+	}
+	return h.FactoryService.modelHost
+}
+
+func (h modelServiceHost) ModelAssetPuller() func() localmodels.AssetPuller {
+	if h.FactoryService == nil {
+		return func() localmodels.AssetPuller { return nil }
+	}
+	return h.FactoryService.modelAssetPuller
+}
+
+func (h modelServiceHost) Logger() func() *zap.Logger {
+	if h.FactoryService == nil {
+		return func() *zap.Logger { return nil }
+	}
+	return func() *zap.Logger { return h.FactoryService.logger }
+}
+
+func (h modelServiceHost) ModelPullMetrics() func() modelsservice.PullMetricsRecorder {
+	if h.FactoryService == nil {
+		return func() modelsservice.PullMetricsRecorder { return nil }
+	}
+	return func() modelsservice.PullMetricsRecorder {
+		recorder := h.FactoryService.modelPullMetricsRecorder()
+		if recorder == nil {
+			return nil
+		}
+		return modelPullMetricsHostAdapter{inner: recorder}
+	}
+}
+
+func (h modelServiceHost) ModelInvocationExecutor() modelsservice.ModelInvocationExecutor {
+	if h.FactoryService == nil {
 		return nil
 	}
-	return s.deps.modelHost()
+	return h.FactoryService.modelInvocationExecutor
+}
+
+func (h modelServiceHost) FactoryRunnerID() func() string {
+	if h.FactoryService == nil {
+		return func() string { return "" }
+	}
+	return h.FactoryService.factoryRunnerID
+}
+
+type modelPullMetricsHostAdapter struct {
+	inner ModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsHostAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(InvocationMetric{
+		Name:   metric.Name,
+		Labels: metric.Labels,
+	})
+}
+
+func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) apisurface.ModelAPI {
+	if cfg != nil && cfg.ModelAPI != nil {
+		return cfg.ModelAPI
+	}
+	return modelsservice.NewFromHost(modelServiceHost{FactoryService: fs})
+}
+
+// ProvideModelServiceCollaborator constructs the model-domain collaborator for a
+// built FactoryService shell.
+func ProvideModelServiceCollaborator(
+	shell FactoryServiceShell,
+	cfg *FactoryServiceConfig,
+) apisurface.ModelAPI {
+	return wireModelServiceCollaborator(shell.Service, cfg)
+}
+
+// AttachModelServiceCollaborator assigns the model-domain collaborator on the
+// service shell and returns the assembled FactoryService.
+func AttachModelServiceCollaborator(
+	shell FactoryServiceShell,
+	modelAPI apisurface.ModelAPI,
+) *FactoryService {
+	if shell.Service != nil {
+		shell.Service.modelService = modelAPI
+	}
+	return shell.Service
 }
 
 func (fs *FactoryService) modelHost() modelhost.Host {
@@ -176,142 +216,6 @@ func (fs *FactoryService) modelHost() modelhost.Host {
 		return bundle.modelHost
 	}
 	return nil
-}
-
-func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	started := time.Now()
-	host := s.modelHost()
-	if host == nil {
-		puller := s.modelAssetPuller()
-		opts := localmodels.PullOptions{
-			RuntimeCacheInspector: puller,
-			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
-		}
-		result, err := localmodels.PullModelWithOptions(puller, ctx, s.currentRuntimeConfig(), modelName, opts)
-		s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
-		return result, err
-	}
-	result, err := modelhost.PullWithHost(ctx, host, s.currentRuntimeConfig(), modelName)
-	s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
-	return result, err
-}
-
-func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
-	runtimeCfg := s.currentRuntimeConfig()
-	if runtimeCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	factoryCfg := runtimeCfg.FactoryConfig()
-	if factoryCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory config is not available")
-	}
-
-	workerDef, operation, err := localmodels.SelectInvocationWorker(runtimeCfg, modelName, request.Operation)
-	failureContext := apisurface.InferenceFailureContext{
-		ModelName: strings.TrimSpace(modelName),
-		Operation: strings.TrimSpace(request.Operation),
-	}
-	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
-	}
-	failureContext.WorkerName = workerDef.Name
-	failureContext.ModelName = workerDef.Model
-	managed, readinessErr := modelhost.EnsureInvocationReady(ctx, s.modelHost(), runtimeCfg, workerDef.Model)
-	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
-	if readinessErr != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(readinessErr, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, readinessErr
-	}
-
-	inputContent := workcontent.PartsFromGenerated(request.Content)
-	inputTokens := []interfaces.Token{{
-		ID: "direct-model-invocation-input",
-		Color: interfaces.TokenColor{
-			Content: inputContent,
-		},
-	}}
-	workstationDef := invocations.DirectInferenceWorkstationConfig(
-		request.Operation,
-		invocations.OperationBindingsFromGenerated(request.Bindings),
-	)
-	resolvedBindings, err := invocations.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-
-	executor, err := s.modelInvocationExecutor(runtimeCfg, factoryCfg, workerDef.Name)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-	workstationRequest := directModelInvocationWorkstationRequest(workerDef, request, inputTokens, resolvedBindings, s.factoryRunnerID())
-
-	result, err := executor.Execute(ctx, workstationRequest)
-	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
-	}
-	if result.Outcome == interfaces.OutcomeFailed {
-		if failure, ok := apisurface.ClassifyInferenceWorkResultFailure(result, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
-	}
-
-	outputContent, err := invocations.WorkContentFromInferenceOutput(result.Output, operation)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-	streamFile, streamContentType, err := directModelInvocationStream(outputContent, request.Options)
-	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
-	}
-
-	return apisurface.ModelInvocationResult{
-		ModelName:         workerDef.Model,
-		Worker:            workerDef.Name,
-		Operation:         strings.TrimSpace(request.Operation),
-		ProviderLocality:  workerDef.ModelLocality,
-		Content:           outputContent,
-		Bindings:          interfaces.CloneResolvedModelOperationBindings(resolvedBindings),
-		StreamFile:        streamFile,
-		StreamContentType: streamContentType,
-	}, nil
-}
-
-func directModelInvocationWorkstationRequest(
-	workerDef *interfaces.WorkerConfig,
-	request factoryapi.ModelInvocationRequest,
-	inputTokens []interfaces.Token,
-	resolvedBindings []interfaces.ResolvedModelOperationBinding,
-	factoryRunnerID string,
-) interfaces.WorkstationExecutionRequest {
-	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
-	inputContent := workcontent.PartsFromGenerated(request.Content)
-	return interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
-			DispatchID:      directModelInvocationTransitionID,
-			TransitionID:    directModelInvocationTransitionID,
-			WorkerType:      workerDef.Name,
-			WorkstationName: directModelInvocationTransitionID,
-			InputTokens:     workers.InputTokens(inputTokens...),
-		},
-		WorkerType:            workerDef.Name,
-		WorkstationType:       directModelInvocationTransitionID,
-		RunnerID:              selection.RunnerID,
-		RunnerSelectionSource: selection.Source,
-		InputTokens:           workers.InputTokens(inputTokens...),
-		ModelOperation:        strings.TrimSpace(request.Operation),
-		ModelBindings:         resolvedBindings,
-		SystemPrompt:          workerDef.Body,
-		UserMessage:           invocations.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
-	}
 }
 
 type sessionInvocationWaitInput struct {
@@ -1144,38 +1048,6 @@ func primaryResultMetricType(parts []interfaces.WorkContentPart) string {
 	return "mixed:" + strings.Join(names, "+")
 }
 
-func (s *runtimeModelService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
-	if s == nil || s.deps.runtimeConfig == nil {
-		return nil
-	}
-	return s.deps.runtimeConfig()
-}
-
-func (s *runtimeModelService) modelAssetPuller() modelAssetPuller {
-	if s == nil || s.deps.modelAssetPuller == nil {
-		return newModelAssetPuller("")
-	}
-	return s.deps.modelAssetPuller()
-}
-
-func (s *runtimeModelService) modelInvocationExecutor(
-	runtimeCfg *factoryconfig.LoadedFactoryConfig,
-	factoryCfg *interfaces.FactoryConfig,
-	workerName string,
-) (workers.WorkstationRequestExecutor, error) {
-	if s == nil || s.deps.modelInvocationExecutor == nil {
-		return nil, fmt.Errorf("model invocation executor is not configured")
-	}
-	return s.deps.modelInvocationExecutor(runtimeCfg, factoryCfg, workerName)
-}
-
-func (s *runtimeModelService) factoryRunnerID() string {
-	if s == nil || s.deps.factoryRunnerID == nil {
-		return ""
-	}
-	return s.deps.factoryRunnerID()
-}
-
 func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
 	if runtimeCfg == nil || factoryCfg == nil {
 		return nil, fmt.Errorf("runtime config is required")
@@ -1245,23 +1117,6 @@ func (fs *FactoryService) commandRunnerOverride() workers.CommandRunner {
 		return nil
 	}
 	return fs.coordinatorPolicy().commandRunnerOverride
-}
-
-func directModelInvocationStream(content []interfaces.WorkContentPart, options *factoryapi.ModelInvocationOptions) (string, string, error) {
-	if options == nil || options.ResponseMode == nil || *options.ResponseMode != factoryapi.AUDIOSTREAM {
-		return "", "", nil
-	}
-	for _, part := range content {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeAudio || strings.TrimSpace(part.File) == "" {
-			continue
-		}
-		contentType := strings.TrimSpace(part.ContentType)
-		if contentType == "" {
-			contentType = "application/octet-stream"
-		}
-		return part.File, contentType, nil
-	}
-	return "", "", fmt.Errorf("%w: invocation did not produce audio output", apisurface.ErrModelInvocationUnsupportedMode)
 }
 
 func stringValue[T ~string](value *T) string {

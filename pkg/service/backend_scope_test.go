@@ -208,6 +208,7 @@ func TestBuildFactoryService_ReusesConfiguredScopeFromSystemConfig(t *testing.T)
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this service test keeps session-operation backend-scope parity assertions on one restartable runtime flow.
 func TestBuildFactoryService_BackendScopeStableAcrossSessionOperations(t *testing.T) {
 	t.Parallel()
 
