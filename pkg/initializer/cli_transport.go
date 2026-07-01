@@ -34,11 +34,3 @@ func (t *CLITransport) Runner() *service.FactoryService {
 	}
 	return t.Host.FactoryService()
 }
-
-// Run starts the session runtime loop for local CLI runs.
-func (t *CLITransport) Run(ctx context.Context) error {
-	if t == nil || t.Host == nil {
-		return nil
-	}
-	return t.Host.Run(ctx)
-}
