@@ -173,7 +173,35 @@ func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	workCmd.AddCommand(newWorkListCommand(globals, diagnostics))
 	workCmd.AddCommand(newWorkShowCommand(globals, diagnostics))
 	workCmd.AddCommand(newWorkMoveCommand(globals, diagnostics))
+	workCmd.AddCommand(newWorkVisualizeCommand())
 	return workCmd
+}
+
+func newWorkVisualizeCommand() *cobra.Command {
+	var format string
+	cmd := &cobra.Command{
+		Use:   "visualize <batch-file.json>",
+		Short: "Render a work batch dependency graph as Mermaid",
+		Long: "Read a local FACTORY_REQUEST_BATCH JSON file and render its declared work dependencies as a Mermaid flowchart.\n\n" +
+			"This command is read-only: it does not submit work or contact a running factory.\n\n" +
+			"Redirect stdout to save the diagram, for example:\n" +
+			cliBinaryName + " work visualize batch.json > my-graph.mermaid",
+		Example: "  # Emit raw Mermaid flowchart syntax to stdout.\n" +
+			"  " + cliBinaryName + " work visualize batch.json > my-graph.mermaid",
+		Args:    cobra.ExactArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return visualizeWork(workcli.VisualizeConfig{
+				BatchFile: args[0],
+				Format:    format,
+				Output:    cmd.OutOrStdout(),
+			})
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	cmd.Flags().StringVar(&format, "format", "mermaid", "output format (mermaid)")
+	return cmd
 }
 
 func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
