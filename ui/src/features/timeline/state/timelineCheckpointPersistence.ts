@@ -8,7 +8,7 @@ import {
   recordSessionPersistenceInvalidation,
   userClearedSessionsDiagnostic,
   type SessionPersistenceIdentityScope,
-} from "../../dashboard/lib/session-persistence/diagnostics";
+} from "../../dashboard/public/session-persistence-diagnostics";
 import {
   normalizeStreamDerivedCacheIdentity,
   streamDerivedCheckpointStorageKey,
