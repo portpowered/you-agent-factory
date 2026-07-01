@@ -53,8 +53,13 @@ func (s *stubDurableExecution) Pause(_ context.Context, sessionID string, _ fact
 	return s.pauseResult, nil
 }
 
-func (s *stubDurableExecution) Resume(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
-	return factorysessionexecution.LifecycleControlResult{}, errors.New("not implemented")
+func (s *stubDurableExecution) Resume(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+	return factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: factorysessionexecution.LifecycleControlResume,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+		Status:    factorysessionexecution.LifecycleStatusRunning,
+	}, nil
 }
 
 func (s *stubDurableExecution) Cancel(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
@@ -66,20 +71,40 @@ func (s *stubDurableExecution) Cancel(context.Context, string, factorysessionexe
 	}, nil
 }
 
-func (s *stubDurableExecution) Terminate(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
-	return factorysessionexecution.LifecycleControlResult{}, errors.New("not implemented")
+func (s *stubDurableExecution) Terminate(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
+	return factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: factorysessionexecution.LifecycleControlTerminate,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+		Status:    factorysessionexecution.LifecycleStatusTerminated,
+	}, nil
 }
 
-func (s *stubDurableExecution) Approve(context.Context, string, factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error) {
-	return factorysessionexecution.LifecycleControlResult{}, errors.New("not implemented")
+func (s *stubDurableExecution) Approve(_ context.Context, sessionID string, _ factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error) {
+	return factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: factorysessionexecution.LifecycleControlApprove,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+		Status:    factorysessionexecution.LifecycleStatusRunning,
+	}, nil
 }
 
-func (s *stubDurableExecution) RetryDispatch(context.Context, string, factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error) {
-	return factorysessionexecution.LifecycleControlResult{}, errors.New("not implemented")
+func (s *stubDurableExecution) RetryDispatch(_ context.Context, sessionID string, _ factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error) {
+	return factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: factorysessionexecution.LifecycleControlRetryDispatch,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+		Status:    factorysessionexecution.LifecycleStatusRunning,
+	}, nil
 }
 
-func (s *stubDurableExecution) InterruptDispatch(context.Context, string, factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.LifecycleControlResult, error) {
-	return factorysessionexecution.LifecycleControlResult{}, errors.New("not implemented")
+func (s *stubDurableExecution) InterruptDispatch(_ context.Context, sessionID string, _ factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.LifecycleControlResult, error) {
+	return factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: factorysessionexecution.LifecycleControlInterruptDispatch,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+		Status:    factorysessionexecution.LifecycleStatusRunning,
+	}, nil
 }
 
 func (s *stubDurableExecution) GetResult(context.Context, string, factorysessionexecution.ResultRequest) (factorysessionexecution.ResultReadResult, error) {
@@ -166,5 +191,105 @@ func TestService_CancelDurableFactorySession_DelegatesToControlPlane(t *testing.
 	}
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceling {
 		t.Fatalf("status = %q, want CANCELING", response.Status)
+	}
+}
+
+func TestService_ResumeDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+	t.Parallel()
+
+	execution := &stubDurableExecution{}
+	execution.pauseResult = factorysessionexecution.LifecycleControlResult{
+		Operation: factorysessionexecution.LifecycleControlResume,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+		Status:    factorysessionexecution.LifecycleStatusRunning,
+	}
+	gateway := factorysessionservice.New(&durableLifecycleGatewayHost{execution: execution})
+
+	response, err := gateway.ResumeDurableFactorySession(
+		context.Background(),
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ResumeDurableFactorySession: %v", err)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
+func TestService_TerminateDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+	t.Parallel()
+
+	execution := &stubDurableExecution{}
+	gateway := factorysessionservice.New(&durableLifecycleGatewayHost{execution: execution})
+
+	response, err := gateway.TerminateDurableFactorySession(
+		context.Background(),
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("TerminateDurableFactorySession: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+}
+
+func TestService_ApproveDurableFactorySession_DelegatesToControlPlane(t *testing.T) {
+	t.Parallel()
+
+	execution := &stubDurableExecution{}
+	gateway := factorysessionservice.New(&durableLifecycleGatewayHost{execution: execution})
+
+	response, err := gateway.ApproveDurableFactorySession(
+		context.Background(),
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionApproveRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ApproveDurableFactorySession: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+}
+
+func TestService_RetryDurableFactorySessionDispatch_DelegatesToControlPlane(t *testing.T) {
+	t.Parallel()
+
+	execution := &stubDurableExecution{}
+	gateway := factorysessionservice.New(&durableLifecycleGatewayHost{execution: execution})
+
+	response, err := gateway.RetryDurableFactorySessionDispatch(
+		context.Background(),
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionRetryDispatchRequest{DispatchId: "dispatch-1"},
+	)
+	if err != nil {
+		t.Fatalf("RetryDurableFactorySessionDispatch: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+}
+
+func TestService_InterruptDurableFactorySessionDispatch_DelegatesToControlPlane(t *testing.T) {
+	t.Parallel()
+
+	execution := &stubDurableExecution{}
+	gateway := factorysessionservice.New(&durableLifecycleGatewayHost{execution: execution})
+
+	response, err := gateway.InterruptDurableFactorySessionDispatch(
+		context.Background(),
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionInterruptDispatchRequest{DispatchId: "dispatch-1"},
+	)
+	if err != nil {
+		t.Fatalf("InterruptDurableFactorySessionDispatch: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
 	}
 }

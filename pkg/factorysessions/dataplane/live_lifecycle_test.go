@@ -164,3 +164,86 @@ func TestLiveLifecycle_CloseSession_StopsLiveSession(t *testing.T) {
 		t.Fatalf("stopped sessions = %#v, want sess-1", host.stoppedSessions)
 	}
 }
+
+func TestLiveLifecycle_ApplyControl_AcceptsPausedResume(t *testing.T) {
+	t.Parallel()
+
+	testFactory := &lifecycleTestFactory{factoryState: string(interfaces.FactoryStatePaused)}
+	host := &lifecycleTestHost{factory: testFactory}
+	controller := dataplane.NewLiveLifecycle(host)
+
+	result, err := controller.ApplyControl(
+		context.Background(),
+		"sess-1",
+		factorysessionexecution.LifecycleControlResume,
+		factorysessionexecution.ControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ApplyControl: %v", err)
+	}
+	if result.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+	if result.Status != factorysessionexecution.LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", result.Status)
+	}
+	if testFactory.resumeCalls != 1 {
+		t.Fatalf("resume calls = %d, want 1", testFactory.resumeCalls)
+	}
+}
+
+func TestLiveLifecycle_CloseSession_PropagatesStopError(t *testing.T) {
+	t.Parallel()
+
+	host := &lifecycleTestHost{stopErr: fmt.Errorf("stop failed")}
+	controller := dataplane.NewLiveLifecycle(host)
+
+	if err := controller.CloseSession("sess-1"); err == nil {
+		t.Fatal("CloseSession = nil, want stop error")
+	}
+}
+
+func TestLiveLifecycle_ApplyControl_ReturnsErrorWhenSnapshotUnavailable(t *testing.T) {
+	t.Parallel()
+
+	testFactory := &lifecycleTestFactory{}
+	testFactory.factoryState = ""
+	host := &lifecycleTestHost{
+		factory: &snapshotErrorFactory{inner: testFactory},
+	}
+	controller := dataplane.NewLiveLifecycle(host)
+
+	_, err := controller.ApplyControl(
+		context.Background(),
+		"sess-1",
+		factorysessionexecution.LifecycleControlPause,
+		factorysessionexecution.ControlRequest{},
+	)
+	if err == nil {
+		t.Fatal("ApplyControl = nil, want snapshot error")
+	}
+}
+
+type snapshotErrorFactory struct {
+	inner *lifecycleTestFactory
+}
+
+func (f *snapshotErrorFactory) Run(context.Context) error { return f.inner.Run(context.Background()) }
+func (f *snapshotErrorFactory) Pause(context.Context) error { return f.inner.Pause(context.Background()) }
+func (f *snapshotErrorFactory) Resume(context.Context) error { return f.inner.Resume(context.Background()) }
+func (f *snapshotErrorFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+	return f.inner.GetFactoryEvents(context.Background())
+}
+func (f *snapshotErrorFactory) WaitToComplete() <-chan struct{} { return f.inner.WaitToComplete() }
+func (f *snapshotErrorFactory) SubmitWorkRequest(ctx context.Context, req interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	return f.inner.SubmitWorkRequest(ctx, req)
+}
+func (f *snapshotErrorFactory) SubscribeFactoryEvents(ctx context.Context, cursor *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+	return f.inner.SubscribeFactoryEvents(ctx, cursor, scope)
+}
+func (f *snapshotErrorFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	return nil, fmt.Errorf("snapshot unavailable")
+}
+func (f *snapshotErrorFactory) MoveWork(ctx context.Context, a, b string, source interfaces.WorkStateChangeSource, reason string) (interfaces.OperatorMoveResult, error) {
+	return f.inner.MoveWork(ctx, a, b, source, reason)
+}

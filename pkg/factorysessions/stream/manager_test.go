@@ -157,3 +157,73 @@ func TestManager_JavaScriptCheckpointStoreIsSessionOwned(t *testing.T) {
 		t.Fatalf("checkpoint store = (%p, %p), want same session-owned instance", first, second)
 	}
 }
+
+func TestManager_CloseDispatch_ReleasesOneDispatchStream(t *testing.T) {
+	t.Parallel()
+
+	host := &streamTestHost{
+		session: &factorysessions.LiveSession{ID: "sess-close-dispatch"},
+	}
+	manager := stream.NewManager(host)
+	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-close-dispatch")
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "alpha"))
+
+	if !manager.CloseDispatch(host.session, "dispatch-1") {
+		t.Fatal("CloseDispatch = false, want true")
+	}
+}
+
+func TestManager_DispatchCompletionObserverFactory_ClosesDispatchOnCompletion(t *testing.T) {
+	t.Parallel()
+
+	host := &streamTestHost{
+		session: &factorysessions.LiveSession{ID: "sess-observer"},
+	}
+	manager := stream.NewManager(host)
+	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-observer")
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "alpha"))
+
+	observer := manager.DispatchCompletionObserverFactory()("sess-observer")
+	observer("dispatch-1")
+
+	subscription, err := manager.Subscribe("sess-observer", "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(initial.Events) != 1 {
+		t.Fatalf("events = %d, want one buffered event after dispatch close", len(initial.Events))
+	}
+}
+
+func TestManager_InferenceProgressPublisher_NormalizesFragmentKinds(t *testing.T) {
+	t.Parallel()
+
+	host := &streamTestHost{
+		session: &factorysessions.LiveSession{ID: "sess-fragments"},
+	}
+	manager := stream.NewManager(host)
+	publisher := manager.InferenceProgressPublisherFactory(nil)("sess-fragments")
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "response"))
+	publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	publisher(workerprovider.FailedFragment("dispatch-1", nil, "failed"))
+
+	subscription, err := manager.Subscribe("sess-fragments", "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(initial.Events) != 3 {
+		t.Fatalf("event count = %d, want 3", len(initial.Events))
+	}
+}

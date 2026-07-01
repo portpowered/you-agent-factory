@@ -236,3 +236,123 @@ func TestRetryDurableFactorySessionDispatch_PreservesDistinctFromLiveLifecycle(t
 		t.Fatalf("status = %q, want RUNNING", response.Status)
 	}
 }
+
+func TestResumeDurableFactorySession_RoutesDurableSessionToExecution(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingDurableExecution{
+		result: factorysessionexecution.LifecycleControlResult{
+			SessionID: "dur-sess-js-run-n-001",
+			Operation: factorysessionexecution.LifecycleControlResume,
+			Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+			Status:    factorysessionexecution.LifecycleStatusRunning,
+		},
+	}
+	host := &durableLifecycleTestHost{service: recorder}
+
+	result, err := controlplane.ResumeDurableFactorySession(
+		context.Background(),
+		host,
+		"dur-sess-js-run-n-001",
+		factorysessionexecution.ControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ResumeDurableFactorySession: %v", err)
+	}
+	if recorder.lastOperation != "resume" {
+		t.Fatalf("execution operation = %q, want resume", recorder.lastOperation)
+	}
+	if result.Status != factorysessionexecution.LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", result.Status)
+	}
+}
+
+func TestTerminateDurableFactorySession_RoutesDurableSessionToExecution(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingDurableExecution{
+		result: factorysessionexecution.LifecycleControlResult{
+			SessionID: "dur-sess-js-run-n-001",
+			Operation: factorysessionexecution.LifecycleControlTerminate,
+			Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+			Status:    factorysessionexecution.LifecycleStatusTerminated,
+		},
+	}
+	host := &durableLifecycleTestHost{service: recorder}
+
+	result, err := controlplane.TerminateDurableFactorySession(
+		context.Background(),
+		host,
+		"dur-sess-js-run-n-001",
+		factorysessionexecution.ControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("TerminateDurableFactorySession: %v", err)
+	}
+	if recorder.lastOperation != "terminate" {
+		t.Fatalf("execution operation = %q, want terminate", recorder.lastOperation)
+	}
+	if result.Status != factorysessionexecution.LifecycleStatusTerminated {
+		t.Fatalf("status = %q, want TERMINATED", result.Status)
+	}
+}
+
+func TestApproveDurableFactorySession_RoutesDurableSessionToExecution(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingDurableExecution{
+		result: factorysessionexecution.LifecycleControlResult{
+			SessionID: "dur-sess-js-run-n-001",
+			Operation: factorysessionexecution.LifecycleControlApprove,
+			Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+			Status:    factorysessionexecution.LifecycleStatusRunning,
+		},
+	}
+	host := &durableLifecycleTestHost{service: recorder}
+
+	result, err := controlplane.ApproveDurableFactorySession(
+		context.Background(),
+		host,
+		"dur-sess-js-run-n-001",
+		factorysessionexecution.ApproveRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ApproveDurableFactorySession: %v", err)
+	}
+	if recorder.lastOperation != "approve" {
+		t.Fatalf("execution operation = %q, want approve", recorder.lastOperation)
+	}
+	if result.Operation != factorysessionexecution.LifecycleControlApprove {
+		t.Fatalf("operation = %q, want APPROVE", result.Operation)
+	}
+}
+
+func TestInterruptDurableFactorySessionDispatch_RoutesDurableSessionToExecution(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingDurableExecution{
+		result: factorysessionexecution.LifecycleControlResult{
+			SessionID: "dur-sess-js-run-n-001",
+			Operation: factorysessionexecution.LifecycleControlInterruptDispatch,
+			Outcome:   factorysessionexecution.LifecycleControlOutcomeAccepted,
+			Status:    factorysessionexecution.LifecycleStatusRunning,
+		},
+	}
+	host := &durableLifecycleTestHost{service: recorder}
+
+	result, err := controlplane.InterruptDurableFactorySessionDispatch(
+		context.Background(),
+		host,
+		"dur-sess-js-run-n-001",
+		factorysessionexecution.InterruptDispatchRequest{DispatchID: "dispatch-1"},
+	)
+	if err != nil {
+		t.Fatalf("InterruptDurableFactorySessionDispatch: %v", err)
+	}
+	if recorder.lastOperation != "interrupt-dispatch" {
+		t.Fatalf("execution operation = %q, want interrupt-dispatch", recorder.lastOperation)
+	}
+	if result.Operation != factorysessionexecution.LifecycleControlInterruptDispatch {
+		t.Fatalf("operation = %q, want INTERRUPT_DISPATCH", result.Operation)
+	}
+}

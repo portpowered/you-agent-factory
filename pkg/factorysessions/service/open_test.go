@@ -275,3 +275,24 @@ func TestService_OpenFactorySession_MapsOpenedSessionSummary(t *testing.T) {
 		t.Fatalf("response session = %#v, want sess-1", response.Session)
 	}
 }
+
+func TestService_OpenFactorySession_PropagatesRequireSessionError(t *testing.T) {
+	t.Parallel()
+
+	host := &openTestHost{
+		targets: []factorysessions.Target{{
+			Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+			FactoryDir: "/tmp/factory",
+		}},
+		openSessionID:   "sess-1",
+		requireSessionE: errors.New("session missing"),
+	}
+	gateway := factorysessionservice.New(host)
+
+	_, err := gateway.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
+		FolderPath: "/tmp",
+	})
+	if err == nil {
+		t.Fatal("OpenFactorySession = nil, want require session error")
+	}
+}

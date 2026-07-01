@@ -102,3 +102,20 @@ func TestGetLiveFactorySessionSyncPreflight_StaleCursorReturnsCursorStale(t *tes
 		t.Fatalf("reasonCode = %q, want cursor_stale", response.ReasonCode)
 	}
 }
+
+func TestLogicalSessionKeyID_UsesFolderAndTargetIdentity(t *testing.T) {
+	t.Parallel()
+
+	key := controlplane.LogicalSessionKeyID(&factorysessions.LiveSession{
+		SessionState: factorysessions.SessionState{
+			FolderPath: "/tmp/demo",
+		},
+		Target: factorysessions.TargetRef{
+			Kind: factorysessions.TargetKindNamed,
+			Name: "beta",
+		},
+	})
+	if key == "" {
+		t.Fatal("LogicalSessionKeyID = empty, want stable key")
+	}
+}
