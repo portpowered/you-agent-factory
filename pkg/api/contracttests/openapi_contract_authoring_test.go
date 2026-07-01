@@ -595,6 +595,18 @@ func TestOpenAPIContract_SessionEventStreamHandshakeExposesIdentityHeaders(t *te
 		t,
 		operation,
 		"200",
+		"X-Factory-Session-Logical-Session-Key-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
+		"200",
+		"X-Factory-Session-Factory-Session-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
+		"200",
 		"X-Factory-Session-Stream-Generation-Id",
 	)
 }

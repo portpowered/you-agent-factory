@@ -372,7 +372,13 @@ func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context
 	if err != nil {
 		return nil, err
 	}
-	return factoryservice.SubscribeFactoryEventsForSession(ctx, liveSessionHandle(session).Bundle, sessionID, reconnect)
+	stream, err := factoryservice.SubscribeFactoryEventsForSession(ctx, liveSessionHandle(session).Bundle, sessionID, reconnect)
+	if err != nil || stream == nil || session == nil {
+		return stream, err
+	}
+	stream.FactorySessionID = strings.TrimSpace(session.ID)
+	stream.LogicalSessionKeyID = factorysessions.LogicalSessionKeyID(session)
+	return stream, err
 }
 
 func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

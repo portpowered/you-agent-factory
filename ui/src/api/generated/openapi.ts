@@ -5270,6 +5270,10 @@ export interface operations {
         headers: {
           /** @description Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Backend-Scope-Id"?: string;
+          /** @description Stable logical session key for the resolved Factory Session target within the current backend scope. Compare this handshake header with session-sync or preflight `logicalSessionKeyId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Logical-Session-Key-Id"?: string;
+          /** @description Resolved UUID Factory Session identifier for the current live event history. Compare this handshake header with session-sync or preflight `factorySessionId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Factory-Session-Id"?: string;
           /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Stream-Generation-Id"?: string;
           [name: string]: unknown;

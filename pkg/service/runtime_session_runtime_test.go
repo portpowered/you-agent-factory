@@ -1603,6 +1603,25 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHa
 	if handshakeGenerationID != streamGenerationID {
 		t.Fatalf("event handshake stream generation id = %q, want session read id %q", handshakeGenerationID, streamGenerationID)
 	}
+	assertEventStreamHandshakeMatchesStreamIdentity(t, eventsRecorder.Header(), requireLiveSessionStreamIdentity(t, session, defaultFactorySessionID, "javascript session read"))
+}
+
+func TestFactoryService_SessionEventStreamHandshakeExposesResolvedStreamIdentity(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		namedFactories: []string{"alpha"},
+		defaultFactory: "alpha",
+	})
+	defer harness.stop(t)
+
+	server := httptest.NewServer(api.NewServer(harness.svc, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	defaultSession := getLiveFactorySession(t, server.URL, defaultFactorySessionID)
+	streamIdentity := requireLiveSessionStreamIdentity(t, defaultSession, defaultFactorySessionID, "default session read")
+	assertResolvedDefaultLiveSessionID(t, streamIdentity.FactorySessionID)
+
+	handshakeHeaders := getLiveSessionEventStreamHandshakeHeaders(t, server.URL, streamIdentity.FactorySessionID)
+	assertEventStreamHandshakeMatchesStreamIdentity(t, handshakeHeaders, streamIdentity)
 }
 
 func TestFactoryService_ListFactorySessions_IncludesRuntimeProjection(t *testing.T) {
@@ -2334,6 +2353,11 @@ func getLiveFactorySession(t *testing.T, serverURL, sessionID string) factoryapi
 
 func getLiveSessionEventStreamGenerationID(t *testing.T, serverURL, sessionID string) string {
 	t.Helper()
+	return getLiveSessionEventStreamHandshakeHeaders(t, serverURL, sessionID).Get("X-Factory-Session-Stream-Generation-Id")
+}
+
+func getLiveSessionEventStreamHandshakeHeaders(t *testing.T, serverURL, sessionID string) http.Header {
+	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/factory-sessions/"+sessionID+"/events", nil)
 	if err != nil {
 		t.Fatalf("new GET /factory-sessions/%s/events request: %v", sessionID, err)
@@ -2346,7 +2370,38 @@ func getLiveSessionEventStreamGenerationID(t *testing.T, serverURL, sessionID st
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /factory-sessions/%s/events status = %d, want 200", sessionID, resp.StatusCode)
 	}
-	return resp.Header.Get("X-Factory-Session-Stream-Generation-Id")
+	return resp.Header
+}
+
+func requireLiveSessionStreamIdentity(t *testing.T, session factoryapi.FactorySession, sessionID, label string) factoryapi.FactorySessionStreamIdentity {
+	t.Helper()
+	if session.Runtime.StreamIdentity == nil {
+		t.Fatalf("%s session read streamIdentity for %s = nil, want resolved identity", label, sessionID)
+	}
+	identity := *session.Runtime.StreamIdentity
+	if strings.TrimSpace(identity.BackendScopeID) == "" ||
+		strings.TrimSpace(identity.LogicalSessionKeyID) == "" ||
+		strings.TrimSpace(identity.FactorySessionID) == "" ||
+		strings.TrimSpace(identity.StreamGenerationID) == "" {
+		t.Fatalf("%s session read streamIdentity for %s = %#v, want all identity fields", label, sessionID, identity)
+	}
+	return identity
+}
+
+func assertEventStreamHandshakeMatchesStreamIdentity(t *testing.T, headers http.Header, identity factoryapi.FactorySessionStreamIdentity) {
+	t.Helper()
+	if got := headers.Get("X-Factory-Session-Backend-Scope-Id"); got != identity.BackendScopeID {
+		t.Fatalf("event handshake backend scope id = %q, want session read id %q", got, identity.BackendScopeID)
+	}
+	if got := headers.Get("X-Factory-Session-Logical-Session-Key-Id"); got != identity.LogicalSessionKeyID {
+		t.Fatalf("event handshake logical session key id = %q, want session read id %q", got, identity.LogicalSessionKeyID)
+	}
+	if got := headers.Get("X-Factory-Session-Factory-Session-Id"); got != identity.FactorySessionID {
+		t.Fatalf("event handshake factory session id = %q, want session read id %q", got, identity.FactorySessionID)
+	}
+	if got := headers.Get("X-Factory-Session-Stream-Generation-Id"); got != identity.StreamGenerationID {
+		t.Fatalf("event handshake stream generation id = %q, want session read id %q", got, identity.StreamGenerationID)
+	}
 }
 
 func requireLiveSessionStreamGenerationID(t *testing.T, session factoryapi.FactorySession, sessionID, label string) string {
