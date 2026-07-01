@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -37,6 +40,15 @@ const categoryModules = {
   tokens,
 } as const;
 
+const packageRoot = path.dirname(fileURLToPath(import.meta.url));
+
+function readPackageTokenCss(fileName: string): string {
+  return readFileSync(
+    path.join(packageRoot, "styles", fileName),
+    "utf8",
+  );
+}
+
 describe("youagentfactory/components package import resolution", () => {
   it("imports the package root through the configured package path", () => {
     expect(COMPONENTS_PACKAGE_NAME).toBe("youagentfactory/components");
@@ -44,8 +56,25 @@ describe("youagentfactory/components package import resolution", () => {
 
   it("imports the CSS entrypoint through the configured package path", () => {
     expect(typeof stylesCss).toBe("string");
-    // Comment-only placeholder CSS may inline as an empty string before token migration.
     expect(stylesCss).not.toMatch(/@import\s+["'].*\/ui\/src\//);
+
+    const stylesEntrypoint = readFileSync(
+      path.join(packageRoot, "styles.css"),
+      "utf8",
+    );
+    const palettePresets = readPackageTokenCss("color-palette-presets.css");
+    const roleTokens = readPackageTokenCss("color-role-tokens.css");
+    const typographyTokens = readPackageTokenCss("typography-role-tokens.css");
+    const layoutTokens = readPackageTokenCss("layout-role-tokens.css");
+
+    expect(stylesEntrypoint).toContain(
+      '@import "./styles/color-palette-presets.css";',
+    );
+    expect(palettePresets).toContain("--color-af-foundation-background");
+    expect(roleTokens).toContain("--color-primary:");
+    expect(typographyTokens).toContain("--text-body-medium:");
+    expect(layoutTokens).toContain("--spacing-layout-section:");
+    expect(palettePresets).toContain('[data-color-palette="factory-dark"]');
   });
 
   it.each(COMPONENT_CATEGORY_EXPORT_PATHS)(
