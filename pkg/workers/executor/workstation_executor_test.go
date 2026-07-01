@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split.
+// pkgmaintcheck:ignore-file-lines focused workstation execution tests stay together until the model-binding seam gets a dedicated package-level test split.
 package executor
 
 import (
@@ -94,6 +96,93 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	}
 }
 
+func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t *testing.T) {
+	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Factory: &interfaces.FactoryConfig{
+				InvocationSignature: &interfaces.InvocationSignatureConfig{
+					Parameters: []interfaces.InvocationParameterConfig{
+						{Name: "input"},
+						{Name: "provider"},
+						{Name: "model"},
+						{Name: "apiKey", Sensitive: true},
+					},
+				},
+			},
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {
+					Type:  interfaces.WorkerTypeModel,
+					Body:  "Provider ${provider}",
+					Model: "${model}",
+				},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {
+					Type:             interfaces.WorkstationTypeModel,
+					PromptTemplate:   "Process ${input}",
+					WorkingDirectory: "workspace/${provider}",
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-interpolate",
+		TransitionID:    "t-interpolate",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+		InputTokens: InputTokens(interfaces.Token{
+			ID: "tok-1",
+			Color: interfaces.TokenColor{
+				WorkID: "work-1",
+				InvocationArguments: &interfaces.InvocationArguments{
+					Arguments: map[string]interfaces.InvocationArgument{
+						"input":    {Values: []string{"draft"}},
+						"provider": {Values: []string{"cursor"}},
+						"model":    {Values: []string{"gpt-5.5"}},
+						"apiKey": {
+							Values:    []string{"secret"},
+							Sensitive: true,
+							Sources:   []interfaces.InvocationArgumentSource{{Kind: "NAMED", Redact: true}},
+						},
+					},
+				},
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if mock.dispatch.SystemPrompt != "Provider cursor" {
+		t.Fatalf("system prompt = %q, want interpolated worker body", mock.dispatch.SystemPrompt)
+	}
+	if mock.dispatch.UserMessage != "Process draft" {
+		t.Fatalf("user message = %q, want interpolated prompt", mock.dispatch.UserMessage)
+	}
+	if !strings.HasSuffix(mock.dispatch.WorkingDirectory, filepath.Join("workspace", "cursor")) {
+		t.Fatalf("working directory = %q, want interpolated provider path suffix", mock.dispatch.WorkingDirectory)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Invocation == nil {
+		t.Fatalf("result diagnostics = %#v, want invocation summary", result.Diagnostics)
+	}
+	if len(result.Diagnostics.Invocation.Parameters) != 4 {
+		t.Fatalf("invocation parameter count = %d, want 4", len(result.Diagnostics.Invocation.Parameters))
+	}
+	for _, parameter := range result.Diagnostics.Invocation.Parameters {
+		if parameter.Name == "model" && parameter.Redacted {
+			t.Fatalf("model diagnostic = %#v, want non-redacted summary", parameter)
+		}
+		if parameter.Name == "apiKey" && !parameter.Redacted {
+			t.Fatalf("apiKey diagnostic = %#v, want redacted summary", parameter)
+		}
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this workstation execution contract test keeps canonical runtime field assertions together on the worker seam.
 func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields(t *testing.T) {
 	projectRoot := t.TempDir()
@@ -143,6 +232,103 @@ func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFiel
 	if remaining < 30*time.Millisecond || remaining > 250*time.Millisecond {
 		t.Fatalf("deadline offset = %v, want workstation timeout range", remaining)
 	}
+}
+
+func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsSource(t *testing.T) {
+	workstation := &interfaces.FactoryWorkstationConfig{
+		Type:      interfaces.WorkstationTypeInvoke,
+		Operation: "TTS",
+		OperationBindings: []interfaces.ModelOperationBinding{
+			{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance", Type: interfaces.ModelOperationContentTypeText}},
+			{
+				Slot:     "voice",
+				Selector: &interfaces.ModelOperationBindingSelector{Role: "voice"},
+				Config:   []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeJSON, Role: "voice", JSON: []byte(`{"name":"alloy"}`)}},
+			},
+			{Slot: "style", DefaultContent: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "neutral", Slot: "style"}}},
+		},
+	}
+	worker := &interfaces.WorkerConfig{
+		Name: "tts-worker",
+		Operations: []interfaces.ModelOperation{{
+			Name:   "TTS",
+			Inputs: []interfaces.ModelOperationSlot{{Name: "text", Required: true}, {Name: "voice"}, {Name: "style"}, {Name: "optional"}},
+		}},
+	}
+	inputs := []interfaces.Token{{
+		ID: "tok-1",
+		Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Slot: "ignored", Label: "utterance", Text: "first"},
+			{Type: interfaces.WorkContentPartTypeText, Slot: "text", Label: "utterance", Text: "second"},
+		}},
+	}}
+
+	got, err := resolveModelOperationBindings(workstation, worker, inputs)
+	if err != nil {
+		t.Fatalf("resolveModelOperationBindings: %v", err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("binding count = %d, want 4", len(got))
+	}
+	if got[0].Source != interfaces.ModelOperationBindingSourceInput || got[0].Content[0].Text != "first" {
+		t.Fatalf("text binding = %#v, want first input match", got[0])
+	}
+	if got[1].Source != interfaces.ModelOperationBindingSourceConfig || string(got[1].Content[0].JSON) != `{"name":"alloy"}` {
+		t.Fatalf("voice binding = %#v, want config fallback", got[1])
+	}
+	if got[2].Source != interfaces.ModelOperationBindingSourceDefault || got[2].Content[0].Text != "neutral" {
+		t.Fatalf("style binding = %#v, want default fallback", got[2])
+	}
+	if got[3].Source != interfaces.ModelOperationBindingSourceOmitted || len(got[3].Content) != 0 {
+		t.Fatalf("optional binding = %#v, want omitted", got[3])
+	}
+}
+
+func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingRequiredInput(t *testing.T) {
+	workstation := &interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeInvoke, Operation: "TTS"}
+	worker := &interfaces.WorkerConfig{
+		Name: "tts-worker",
+		Operations: []interfaces.ModelOperation{{
+			Name:   "TTS",
+			Inputs: []interfaces.ModelOperationSlot{{Name: "text", Required: true}},
+		}},
+	}
+
+	got, err := resolveModelOperationBindings(workstation, worker, []interfaces.Token{{
+		ID:    "tok-1",
+		Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Slot: "text", Text: "hello"}}},
+	}})
+	if err != nil {
+		t.Fatalf("resolveModelOperationBindings implicit slot: %v", err)
+	}
+	if len(got) != 1 || got[0].Source != interfaces.ModelOperationBindingSourceInput || got[0].Content[0].Text != "hello" {
+		t.Fatalf("implicit slot binding = %#v, want input text", got)
+	}
+
+	_, err = resolveModelOperationBindings(workstation, worker, nil)
+	if err == nil {
+		t.Fatal("expected missing required input slot to fail")
+	}
+}
+
+func TestInferenceRequestForExecutionRequest_AuthoredWorkingDirectoryRequiresRunnerCapability(t *testing.T) {
+	req := testAgentRequest(
+		interfaces.WorkDispatch{DispatchID: "d-authored-workdir", TransitionID: "t-authored-workdir", WorkerType: "worker-a", WorkstationName: "review"},
+		withAgentPrompts("System prompt", "Review"),
+		withAgentWorkingDirectory("/tmp/authored"),
+		func(req *interfaces.WorkstationExecutionRequest) {
+			req.WorkingDirectoryAuthored = true
+		},
+	)
+	got := inferenceRequestForExecutionRequest(req, &interfaces.WorkerConfig{
+		Model: "gemini-1.5-pro", ModelProvider: interfaces.RunnerIDGemini,
+	}, nil)
+	for _, capability := range got.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityWorkingDirectory {
+			return
+		}
+	}
+	t.Fatalf("capabilities = %#v, want authored working directory capability", got.RequiredOptionalCapabilities)
 }
 
 func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonicalContent(t *testing.T) {
@@ -854,135 +1040,4 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 	if got := mock.dispatch.UserMessage; got != "Inspect work-2" {
 		t.Fatalf("second user message = %q", got)
 	}
-}
-
-func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsSource(t *testing.T) {
-	workstation := &interfaces.FactoryWorkstationConfig{
-		Type:      interfaces.WorkstationTypeInvoke,
-		Operation: "TTS",
-		OperationBindings: []interfaces.ModelOperationBinding{
-			{
-				Slot: "text",
-				Selector: &interfaces.ModelOperationBindingSelector{
-					Label: "utterance",
-					Type:  interfaces.ModelOperationContentTypeText,
-				},
-			},
-			{
-				Slot: "voice",
-				Selector: &interfaces.ModelOperationBindingSelector{
-					Role: "voice",
-				},
-				Config: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeJSON,
-					Role: "voice",
-					JSON: []byte(`{"name":"alloy"}`),
-				}},
-			},
-			{
-				Slot: "style",
-				DefaultContent: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
-					Text: "neutral",
-					Slot: "style",
-				}},
-			},
-		},
-	}
-	worker := &interfaces.WorkerConfig{
-		Name: "tts-worker",
-		Operations: []interfaces.ModelOperation{{
-			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{
-				{Name: "text", Required: true},
-				{Name: "voice"},
-				{Name: "style"},
-				{Name: "optional"},
-			},
-		}},
-	}
-	inputs := []interfaces.Token{{
-		ID: "tok-1",
-		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Slot: "ignored", Label: "utterance", Text: "first"},
-				{Type: interfaces.WorkContentPartTypeText, Slot: "text", Label: "utterance", Text: "second"},
-			},
-		},
-	}}
-
-	got, err := resolveModelOperationBindings(workstation, worker, inputs)
-	if err != nil {
-		t.Fatalf("resolveModelOperationBindings: %v", err)
-	}
-	if len(got) != 4 {
-		t.Fatalf("binding count = %d, want 4", len(got))
-	}
-	if got[0].Source != interfaces.ModelOperationBindingSourceInput || got[0].Content[0].Text != "first" {
-		t.Fatalf("text binding = %#v, want first input match", got[0])
-	}
-	if got[1].Source != interfaces.ModelOperationBindingSourceConfig || string(got[1].Content[0].JSON) != `{"name":"alloy"}` {
-		t.Fatalf("voice binding = %#v, want config fallback", got[1])
-	}
-	if got[2].Source != interfaces.ModelOperationBindingSourceDefault || got[2].Content[0].Text != "neutral" {
-		t.Fatalf("style binding = %#v, want default fallback", got[2])
-	}
-	if got[3].Source != interfaces.ModelOperationBindingSourceOmitted || len(got[3].Content) != 0 {
-		t.Fatalf("optional binding = %#v, want omitted", got[3])
-	}
-}
-
-func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingRequiredInput(t *testing.T) {
-	workstation := &interfaces.FactoryWorkstationConfig{
-		Type:      interfaces.WorkstationTypeInvoke,
-		Operation: "TTS",
-	}
-	worker := &interfaces.WorkerConfig{
-		Name: "tts-worker",
-		Operations: []interfaces.ModelOperation{{
-			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{
-				{Name: "text", Required: true},
-			},
-		}},
-	}
-
-	got, err := resolveModelOperationBindings(workstation, worker, []interfaces.Token{{
-		ID: "tok-1",
-		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
-				Slot: "text",
-				Text: "hello",
-			}},
-		},
-	}})
-	if err != nil {
-		t.Fatalf("resolveModelOperationBindings implicit slot: %v", err)
-	}
-	if len(got) != 1 || got[0].Source != interfaces.ModelOperationBindingSourceInput || got[0].Content[0].Text != "hello" {
-		t.Fatalf("implicit slot binding = %#v, want input text", got)
-	}
-
-	_, err = resolveModelOperationBindings(workstation, worker, nil)
-	if err == nil {
-		t.Fatal("expected missing required input slot to fail")
-	}
-}
-
-func TestInferenceRequestForExecutionRequest_AuthoredWorkingDirectoryRequiresRunnerCapability(t *testing.T) {
-	req := testAgentRequest(interfaces.WorkDispatch{
-		DispatchID: "d-authored-workdir", TransitionID: "t-authored-workdir", WorkerType: "worker-a", WorkstationName: "review",
-	}, withAgentPrompts("System prompt", "Review"), withAgentWorkingDirectory("/tmp/authored"), func(req *interfaces.WorkstationExecutionRequest) {
-		req.WorkingDirectoryAuthored = true
-	})
-	got := inferenceRequestForExecutionRequest(req, &interfaces.WorkerConfig{
-		Model: "gemini-1.5-pro", ModelProvider: interfaces.RunnerIDGemini,
-	}, nil)
-	for _, capability := range got.RequiredOptionalCapabilities {
-		if capability == interfaces.RunnerOptionalCapabilityWorkingDirectory {
-			return
-		}
-	}
-	t.Fatalf("capabilities = %#v, want authored working directory capability", got.RequiredOptionalCapabilities)
 }

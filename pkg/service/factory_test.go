@@ -19,7 +19,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -326,6 +328,194 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 
 	generated.Name = factoryapi.FactoryName(name)
 	return generated
+}
+
+func TestResolveSessionInvocationInput_SignatureArgsNormalizeNamedInputs(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+			"mode":  []any{"fast", "review"},
+		},
+	}
+
+	resolved, err := resolveSessionInvocationInput(signatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.Source != invocationInputSourceStructuredArgs {
+		t.Fatalf("source = %q, want %q", resolved.Source, invocationInputSourceStructuredArgs)
+	}
+	if len(resolved.Content) != 0 {
+		t.Fatalf("content = %#v, want no compatibility content", resolved.Content)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if values := resolved.NormalizedArguments.Arguments["input"].Values; len(values) != 1 || values[0] != "hello" {
+		t.Fatalf("input values = %#v, want [hello]", values)
+	}
+	if values := resolved.NormalizedArguments.Arguments["mode"].Values; len(values) != 2 || values[0] != "fast" || values[1] != "review" {
+		t.Fatalf("mode values = %#v, want [fast review]", values)
+	}
+}
+
+func TestResolveSessionInvocationInput_SignatureArgsRejectMissingRequiredInput(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"mode": "fast",
+		},
+	}
+
+	_, err := resolveSessionInvocationInput(signatureInvocationFactoryConfig(), request)
+	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeMissingRequiredInput)
+}
+
+func TestResolveSessionInvocationInput_EmptyStructuredArgsStillUseSignature(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{},
+	}
+
+	resolved, err := resolveSessionInvocationInput(optionalSignatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.Source != invocationInputSourceStructuredArgs {
+		t.Fatalf("source = %q, want %q", resolved.Source, invocationInputSourceStructuredArgs)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if len(resolved.NormalizedArguments.Arguments) != 1 {
+		t.Fatalf("normalized args = %#v, want defaulted optional args", resolved.NormalizedArguments.Arguments)
+	}
+	if values := resolved.NormalizedArguments.Arguments["mode"].Values; len(values) != 1 || values[0] != "fast" {
+		t.Fatalf("mode values = %#v, want [fast]", values)
+	}
+}
+
+func TestResolveSessionInvocationInput_StructuredArgsAcceptPositionalOnlyParameterKeys(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	resolved, err := resolveSessionInvocationInput(positionalOnlySignatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if values := resolved.NormalizedArguments.Arguments["input"].Values; len(values) != 1 || values[0] != "hello" {
+		t.Fatalf("input values = %#v, want [hello]", values)
+	}
+	if source := resolved.NormalizedArguments.Arguments["input"].Sources[0]; source.Kind != invocations.ArgumentSourceKindStructured {
+		t.Fatalf("input source kind = %q, want %q", source.Kind, invocations.ArgumentSourceKindStructured)
+	}
+}
+
+func TestResolveSessionInvocationInput_SignatureArgsRejectCompatibilityContentMix(t *testing.T) {
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := invocationTextContent(t, "legacy compatibility text")
+	request := factoryapi.InvocationRequest{
+		SourceKind: &sourceKind,
+		Content:    &content,
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	_, err := resolveSessionInvocationInput(signatureInvocationFactoryConfig(), request)
+	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeSourceConflict)
+}
+
+func TestResolveSessionInvocationInput_RejectsStructuredArgsWithoutActiveSignature(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	_, err := resolveSessionInvocationInput(&interfaces.FactoryConfig{}, request)
+	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeInvalidActiveSignature)
+}
+
+func signatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{
+				{
+					Name:     "input",
+					Required: true,
+					Bindings: []interfaces.InvocationParameterBindingConfig{{
+						Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+					}},
+				},
+				{
+					Name:      "mode",
+					ValueMode: string(factoryapi.FactoryInvocationParameterValueModeRepeated),
+					Bindings: []interfaces.InvocationParameterBindingConfig{{
+						Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+					}},
+				},
+			},
+		},
+	}
+}
+
+func optionalSignatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:         "mode",
+				DefaultValue: "fast",
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
+		},
+	}
+}
+
+func positionalOnlySignatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:     "input",
+				Required: true,
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind:     string(factoryapi.FactoryInvocationParameterBindingKindPositional),
+					Position: 1,
+				}},
+			}},
+		},
+	}
+}
+
+func invocationTextContent(t *testing.T, text string) factoryapi.WorkContent {
+	t.Helper()
+
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build invocation text content: %v", err)
+	}
+	return factoryapi.WorkContent{part}
+}
+
+func assertSessionInvocationArgumentErrorCode(t *testing.T, err error, want invocations.ArgumentErrorCode) {
+	t.Helper()
+
+	var argumentErr *invocations.ArgumentError
+	if !errors.As(err, &argumentErr) {
+		t.Fatalf("error = %v, want ArgumentError", err)
+	}
+	if argumentErr.Code != want {
+		t.Fatalf("code = %q, want %q", argumentErr.Code, want)
+	}
 }
 
 func withServicePayloadVersion(t *testing.T, payload []byte, version factoryapi.HybridLogicalTimestamp) []byte {
@@ -4160,9 +4350,9 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := newModelService(modelServiceDependencies{
-		runtimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		modelAssetPuller: func() modelAssetPuller {
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: func() localmodels.AssetPuller {
 			return &managedPullMetricsAssetPuller{
 				result: apisurface.ModelPullResult{
 					ModelName: "OMNIVOICE_Q4_K_M",
@@ -4178,7 +4368,9 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 				},
 			}
 		},
-		modelPullMetrics: func() ModelPullMetricsRecorder { return recorder },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			return modelPullMetricsTestAdapter{inner: recorder}
+		},
 	})
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
@@ -4214,14 +4406,16 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := newModelService(modelServiceDependencies{
-		runtimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		modelAssetPuller: func() modelAssetPuller {
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: func() localmodels.AssetPuller {
 			return &managedPullMetricsAssetPuller{
 				err: apisurface.ErrManagedRuntimeSourceFetchFailed,
 			}
 		},
-		modelPullMetrics: func() ModelPullMetricsRecorder { return recorder },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			return modelPullMetricsTestAdapter{inner: recorder}
+		},
 	})
 
 	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -4254,6 +4448,14 @@ func (r *capturingModelPullMetricsRecorder) RecordModelPullMetric(metric Invocat
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics = append(r.metrics, metric)
+}
+
+type modelPullMetricsTestAdapter struct {
+	inner *capturingModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsTestAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(InvocationMetric{Name: metric.Name, Labels: metric.Labels})
 }
 
 func (r *capturingModelPullMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
@@ -4310,6 +4512,166 @@ func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric Invoc
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics = append(r.metrics, metric)
+}
+
+func (r *capturingInvocationMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, metric := range r.metrics {
+		if metric.Name != name {
+			continue
+		}
+		match := true
+		for key, value := range labels {
+			if metric.Labels[key] != value {
+				match = false
+				break
+			}
+		}
+		if match {
+			return
+		}
+	}
+	t.Fatalf("metrics %#v do not contain %q with labels %#v", r.metrics, name, labels)
+}
+
+func TestInvokeFactorySession_RecordsNormalizationFailureTelemetry(t *testing.T) {
+	t.Parallel()
+
+	recorder := &capturingInvocationMetricsRecorder{}
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name:    "sig-factory",
+		Project: "factory-argument-signatures",
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:     "input",
+				Required: true,
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{InvocationMetricsRecorder: recorder},
+		logger: zap.New(logCore),
+	}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{runtimeCfg: runtimeCfg})
+
+	_, err := svc.InvokeFactorySession(context.Background(), defaultFactorySessionID, factoryapi.InvocationRequest{
+		Args: &map[string]any{"mode": "fast"},
+	})
+	if err == nil {
+		t.Fatal("expected missing required input error")
+	}
+
+	signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature)
+	recorder.assertContainsMetric(t, invocationMetricNormalizationAttempts, map[string]string{
+		"input_source":    string(invocationInputSourceStructuredArgs),
+		"factory_name":    factoryCfg.Name,
+		"factory_project": factoryCfg.Project,
+		"signature_hash":  signatureHash,
+	})
+	recorder.assertContainsMetric(t, invocationMetricNormalizationFailure, map[string]string{
+		"input_source":    string(invocationInputSourceStructuredArgs),
+		"factory_name":    factoryCfg.Name,
+		"factory_project": factoryCfg.Project,
+		"signature_hash":  signatureHash,
+		"error_code":      string(invocations.ArgumentErrorCodeUnknownArgument),
+	})
+
+	entries := observedLogs.FilterMessage("factory session invocation argument failure").AllUntimed()
+	if len(entries) != 1 {
+		t.Fatalf("argument failure logs = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["factory_name"] != factoryCfg.Name || fields["factory_project"] != factoryCfg.Project {
+		t.Fatalf("factory fields = %#v, want %q/%q", fields, factoryCfg.Name, factoryCfg.Project)
+	}
+	if fields["error_code"] != string(invocations.ArgumentErrorCodeUnknownArgument) {
+		t.Fatalf("error_code = %#v, want %q", fields["error_code"], invocations.ArgumentErrorCodeUnknownArgument)
+	}
+	if fields["argument_key"] != "mode" {
+		t.Fatalf("argument_key = %#v, want mode", fields["argument_key"])
+	}
+	if value, ok := fields["signature_hash"].(string); !ok || value == "" {
+		t.Fatalf("signature_hash = %#v, want non-empty string", fields["signature_hash"])
+	}
+}
+
+func TestInvokeFactorySession_InterpolationFailureLogsRedactedArgumentDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	recorder := &capturingInvocationMetricsRecorder{}
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name:    "sig-factory",
+		Project: "factory-argument-signatures",
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:      "apiKey",
+				Sensitive: true,
+				ValueMode: string(factoryapi.FactoryInvocationParameterValueModeRepeated),
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
+			OutputContract: &interfaces.InvocationOutputContractConfig{
+				PathParameter: "apiKey",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{InvocationMetricsRecorder: recorder},
+		logger: zap.New(logCore),
+	}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{runtimeCfg: runtimeCfg})
+
+	_, err := svc.InvokeFactorySession(context.Background(), defaultFactorySessionID, factoryapi.InvocationRequest{
+		Args: &map[string]any{"apiKey": []any{"super-secret", "second-secret"}},
+	})
+	if err == nil {
+		t.Fatal("expected interpolation validation error")
+	}
+
+	signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature)
+	recorder.assertContainsMetric(t, invocationMetricInterpolationFailure, map[string]string{
+		"input_source":    string(invocationInputSourceStructuredArgs),
+		"factory_name":    factoryCfg.Name,
+		"factory_project": factoryCfg.Project,
+		"signature_hash":  signatureHash,
+		"error_code":      string(invocations.ArgumentErrorCodeInvalidInterpolation),
+	})
+
+	entries := observedLogs.FilterMessage("factory session invocation argument failure").AllUntimed()
+	if len(entries) != 1 {
+		t.Fatalf("argument failure logs = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["argument_name"] != "apiKey" {
+		t.Fatalf("argument_name = %#v, want apiKey", fields["argument_name"])
+	}
+	if fields["argument_value_redacted"] != true {
+		t.Fatalf("argument_value_redacted = %#v, want true", fields["argument_value_redacted"])
+	}
+	if fields["argument_value_count"] != int64(2) {
+		t.Fatalf("argument_value_count = %#v, want 2", fields["argument_value_count"])
+	}
+	if strings.Contains(entries[0].Message, "super-secret") {
+		t.Fatalf("log message leaked sensitive value: %#v", entries[0])
+	}
+	if strings.Contains(fmt.Sprint(fields), "super-secret") || strings.Contains(fmt.Sprint(fields), "second-secret") {
+		t.Fatalf("log fields leaked sensitive values: %#v", fields)
+	}
+	for _, metric := range recorder.metrics {
+		if strings.Contains(fmt.Sprint(metric), "super-secret") || strings.Contains(fmt.Sprint(metric), "second-secret") {
+			t.Fatalf("metrics leaked sensitive values: %#v", recorder.metrics)
+		}
+	}
 }
 
 func TestResolveFactoryServiceRoot_AssignsLoggerAndRuntimeInstanceID(t *testing.T) {
@@ -4424,13 +4786,15 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 	}
 
 	svc := NewFactoryServiceFromCore(core)
+	shell := FactoryServiceShell{Service: svc}
+	svc = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, core.cfg))
 	svc.factorySave = &recordingFactorySaveSaver{}
 
 	snapshot := svc.ComposeCollaboratorSnapshot()
 	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.LocalModelsInitialized {
 		t.Fatalf("snapshot missing core collaborators: %+v", snapshot)
 	}
-	if !snapshot.ModelAssetsInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {
+	if !snapshot.ModelAssetsInitialized || !snapshot.ModelServiceInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {
 		t.Fatalf("snapshot missing service collaborators: %+v", snapshot)
 	}
 	if !snapshot.HostedWorkersLoggerReady || !snapshot.BundleModelResources || !snapshot.BundleLocalModels {
