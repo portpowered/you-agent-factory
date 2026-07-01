@@ -106,8 +106,6 @@ func assertInferenceExitFailure(t *testing.T, tc exitFailureInferenceTestCase) {
 }
 
 func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvents(t *testing.T) {
-	t.Parallel()
-
 	scriptPath := filepath.Join(t.TempDir(), "codex")
 	script := "#!/bin/sh\n" +
 		"printf '%s\\n' '{\"event\":\"session.created\",\"session_id\":\"sess-codex-1\"}'\n" +
@@ -157,8 +155,6 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 }
 
 func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEventsToBoundedDiagnostics(t *testing.T) {
-	t.Parallel()
-
 	scriptPath := filepath.Join(t.TempDir(), "codex")
 	script := "#!/bin/sh\n" +
 		"printf '%s\\n' '{\"event\":\"session.created\",\"session_id\":\"sess-codex-2\"}'\n" +

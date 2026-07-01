@@ -835,6 +835,58 @@ declares `handlingBehavior: ["DEFAULT"]`.
 - Clean invocation never adds startup banners, dashboard URLs, runtime-log
   paths, simple-dashboard snapshots, or recording-path notices to stdout.
 
+#### Response-stream stdout mode
+
+Supported one-shot factory invocations accept `--output response-stream` to
+attach the CLI to internal `SessionResponseStream` progress while the local
+runtime is owned by the same `you run` process:
+
+```bash
+you run --named @you/goal --output response-stream "Ship the login bugfix"
+```
+
+This mode is valid only for supported one-shot invocation runs such as
+`you run --named` or `you run --factory` with positional text or piped stdin.
+It is rejected for `--continuously`, replay mode, `--work` batch runs, and
+other non-invocation `you run` shapes with `INVOCATION_OUTPUT_UNSUPPORTED`.
+
+When the CLI can safely attach to the live internal stream, it subscribes to
+session-owned response-stream events instead of provider stdout.
+
+Human-readable mode prefixes progress with `[you:progress]` and keeps the final
+`primaryResult` separate under a `--- primary result ---` header after progress
+completes. Response fragments that mirror the final answer are not replayed as
+ordinary progress. When terminal stdout is slower than internal stream delivery,
+the CLI keeps provider dispatch non-blocking by queueing progress locally and
+prints a `[you:progress] terminal output backlog (...)` notice if render-queue
+pressure drops progress lines.
+
+JSON mode (`--json` with `--output response-stream`) emits newline-delimited
+JSON records to stdout:
+
+- `progress` records carry ordered internal stream events (`sequence`,
+  `dispatchId`, `kind`, `eventType`, `payload`).
+- `stream_gap` records report resumed consumption behind the retained window.
+- `stream_gap` records with `reason: "terminal_output_backlog"` report CLI
+  rendering backlog when stdout consumption is slower than internal stream
+  delivery and progress lines were dropped from the bounded render queue.
+- `compaction` records report truncation, coalescing, or age eviction with
+  dropped-sequence counts.
+- `primary_result` records wrap the shared `InvocationResponse` envelope for the
+  final invocation outcome.
+
+Non-success invocation outcomes still exit non-zero with the same stable CLI
+error codes as primary-result-only mode. Human-readable response-stream mode
+prints a distinct `--- invocation outcome ---` section with `status`, `error`,
+`message`, and any available `session` / `workId` / `workName` / `workState`
+context instead of implying success or replaying a missing `primaryResult` as
+progress. JSON response-stream mode emits the same final `primary_result` record
+shape with the shared `InvocationResponse` failure envelope.
+
+When no internal stream is available on the invocation path, stdout falls back to
+the existing primary-result-only contract after completion (human text or a
+single `primary_result` JSON record).
+
 Text success example:
 
 ```bash

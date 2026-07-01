@@ -20,6 +20,7 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
+		{"session", "dispatches"},
 		{"session", "pause"},
 		{"session", "resume"},
 		{"session", "create"},
@@ -46,6 +47,7 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	for _, want := range []string{
 		"list",
 		"show",
+		"dispatches",
 		"pause",
 		"resume",
 		"create",
@@ -124,6 +126,96 @@ func TestSessionPauseCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	}
 	if got.SessionID != "" {
 		t.Fatalf("sessionId = %q, want omitted-session default routing", got.SessionID)
+	}
+}
+
+func TestSessionShowCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalShowSession := showSession
+	defer func() {
+		showSession = originalShowSession
+	}()
+
+	var got session.ShowConfig
+	showSession = func(cfg session.ShowConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "show", "dur-sess-js-run-n-001"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session show with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to ShowConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "dur-sess-js-run-n-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", got.SessionID)
+	}
+}
+
+func TestSessionDispatchesCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalListSessionDispatches := listSessionDispatches
+	defer func() {
+		listSessionDispatches = originalListSessionDispatches
+	}()
+
+	var got session.DispatchesConfig
+	listSessionDispatches = func(cfg session.DispatchesConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "dispatches", "dur-sess-js-run-n-001"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session dispatches with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to DispatchesConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "dur-sess-js-run-n-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", got.SessionID)
+	}
+}
+
+func TestSessionDispatchesCommand_HelpDocumentsDurableInspection(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "dispatches", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session dispatches --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"dispatches [session-id]",
+		"dur-sess-",
+		"FactorySession",
+		"Dispatch",
+		"FactoryArtifact",
+		"ListFactorySessionDispatchesResponse",
+		"you session dispatches",
+		"--json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("session dispatches help missing %q:\n%s", want, help)
+		}
 	}
 }
 

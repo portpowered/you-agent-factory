@@ -4,16 +4,21 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/factory"
 )
 
 // StreamSet keeps the dispatch-keyed internal response streams owned by one
 // live Factory Session runtime.
 type StreamSet struct {
-	mu               sync.RWMutex
-	streams          map[string]*SessionResponseStream
-	closedDispatches map[string]struct{}
-	closed           bool
-	newStream        func() *SessionResponseStream
+	mu                         sync.RWMutex
+	streams                    map[string]*SessionResponseStream
+	closedDispatches           map[string]struct{}
+	closed                     bool
+	newStream                  func() *SessionResponseStream
+	clock                      factory.Clock
+	completedDispatchRetention time.Duration
 }
 
 // NewStreamSet allocates an empty response-stream set using the default stream
@@ -25,13 +30,32 @@ func NewStreamSet() *StreamSet {
 // NewStreamSetWithFactory allocates an empty response-stream set using the
 // supplied stream constructor for newly observed dispatch identities.
 func NewStreamSetWithFactory(newStream func() *SessionResponseStream) *StreamSet {
+	return NewStreamSetWithFactoryAndRetention(
+		newStream,
+		DefaultCompletedDispatchRetention(),
+		factory.RealClock{},
+	)
+}
+
+// NewStreamSetWithFactoryAndRetention allocates a response-stream set with
+// explicit completed-dispatch retention and eviction clock controls.
+func NewStreamSetWithFactoryAndRetention(
+	newStream func() *SessionResponseStream,
+	completedDispatchRetention time.Duration,
+	clock factory.Clock,
+) *StreamSet {
 	if newStream == nil {
 		newStream = NewSessionResponseStream
 	}
+	if completedDispatchRetention <= 0 {
+		completedDispatchRetention = DefaultCompletedDispatchRetention()
+	}
 	return &StreamSet{
-		streams:          make(map[string]*SessionResponseStream),
-		closedDispatches: make(map[string]struct{}),
-		newStream:        newStream,
+		streams:                    make(map[string]*SessionResponseStream),
+		closedDispatches:           make(map[string]struct{}),
+		newStream:                  newStream,
+		clock:                      factory.EnsureClock(clock),
+		completedDispatchRetention: completedDispatchRetention,
 	}
 }
 
@@ -44,30 +68,19 @@ func (s *StreamSet) Stream(dispatchID string) *SessionResponseStream {
 	}
 	key := normalizeDispatchID(dispatchID)
 
-	s.mu.RLock()
-	stream := s.streams[key]
-	closed := s.closed
-	_, dispatchClosed := s.closedDispatches[key]
-	s.mu.RUnlock()
-	if stream != nil {
-		return stream
-	}
-	if closed || dispatchClosed {
-		return nil
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if stream = s.streams[key]; stream != nil {
-		return stream
-	}
+	s.evictExpiredCompletedDispatchesLocked()
 	if s.closed {
 		return nil
 	}
-	if _, dispatchClosed = s.closedDispatches[key]; dispatchClosed {
+	if stream := s.streams[key]; stream != nil {
+		return stream
+	}
+	if _, dispatchClosed := s.closedDispatches[key]; dispatchClosed {
 		return nil
 	}
-	stream = s.newStream()
+	stream := s.newStream()
 	s.streams[key] = stream
 	return stream
 }
@@ -87,8 +100,9 @@ func (s *StreamSet) Count() int {
 	if s == nil {
 		return 0
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.evictExpiredCompletedDispatchesLocked()
 	return len(s.streams)
 }
 
@@ -98,8 +112,9 @@ func (s *StreamSet) DispatchIDs() []string {
 	if s == nil {
 		return nil
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.evictExpiredCompletedDispatchesLocked()
 
 	ids := make([]string, 0, len(s.streams))
 	for dispatchID := range s.streams {
@@ -109,8 +124,9 @@ func (s *StreamSet) DispatchIDs() []string {
 	return ids
 }
 
-// CloseDispatch detaches subscribers and removes one dispatch-scoped stream
-// from the set.
+// CloseDispatch detaches live subscribers, stops further publication for one
+// dispatch, and retains the buffered stream so late consumers can still
+// discover and drain ordered progress until the session stream set closes.
 func (s *StreamSet) CloseDispatch(dispatchID string) bool {
 	if s == nil {
 		return false
@@ -122,14 +138,43 @@ func (s *StreamSet) CloseDispatch(dispatchID string) bool {
 		return false
 	}
 	stream := s.streams[key]
-	delete(s.streams, key)
-	s.closedDispatches[key] = struct{}{}
-	s.mu.Unlock()
 	if stream == nil {
+		s.mu.Unlock()
 		return false
 	}
-	stream.Close()
+	s.closedDispatches[key] = struct{}{}
+	s.mu.Unlock()
+	stream.CompleteDispatch()
+	s.evictExpiredCompletedDispatches()
 	return true
+}
+
+func (s *StreamSet) evictExpiredCompletedDispatches() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.evictExpiredCompletedDispatchesLocked()
+}
+
+func (s *StreamSet) evictExpiredCompletedDispatchesLocked() {
+	if s == nil || s.closed || len(s.streams) == 0 {
+		return
+	}
+	now := s.clock.Now().UTC()
+	for key, stream := range s.streams {
+		if _, completed := s.closedDispatches[key]; !completed {
+			continue
+		}
+		stream.EnforceRetention()
+		completedAt := stream.DispatchCompletedAt()
+		if completedAt.IsZero() || now.Sub(completedAt) < s.completedDispatchRetention {
+			continue
+		}
+		stream.Close()
+		delete(s.streams, key)
+	}
 }
 
 // Close detaches all dispatch-scoped subscribers and clears the set.

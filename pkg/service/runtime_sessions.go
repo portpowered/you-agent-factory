@@ -1271,6 +1271,21 @@ func (fs *FactoryService) SubscribeSessionResponseStream(
 	return streams.Subscribe(dispatchID, afterSequence)
 }
 
+func (fs *FactoryService) SessionResponseStreamDispatchIDs(sessionID string) ([]string, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("factory service is required")
+	}
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return nil, nil
+	}
+	return streams.DispatchIDs(), nil
+}
+
 func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
 	if fs != nil && fs.newSessionResponseStream != nil {
 		return fs.newSessionResponseStream()

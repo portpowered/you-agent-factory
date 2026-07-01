@@ -127,6 +127,10 @@ type RunConfig struct {
 	// JSONOutput emits the API-shaped InvocationResponse for factory invocation
 	// results, including non-success outcomes that return recovery context.
 	JSONOutput bool
+	// InvocationOutputMode selects stdout behavior for one-shot factory
+	// invocations. Empty uses the primary-result-only contract; response-stream
+	// attaches to internal SessionResponseStream progress when available.
+	InvocationOutputMode string
 	// InvocationMetricsRecorder receives invocation counter emissions from the
 	// CLI boundary, including pre-runtime source conflicts.
 	InvocationMetricsRecorder service.InvocationMetricsRecorder
@@ -429,6 +433,9 @@ func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, 
 
 	invocationRequest, invocationMode, err := resolveFactoryInvocationRequest(cfg)
 	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
+	if err := validateInvocationOutputMode(cfg, invocationMode); err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 	}
 	return cfg, invocationRequest, invocationMode, recordPath, nil

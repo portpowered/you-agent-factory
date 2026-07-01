@@ -51,7 +51,35 @@ primary-result behavior.
   logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
-  success-only CLI fork.
+  success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`
+  select primary-result-only versus internal `SessionResponseStream` attachment
+  for supported one-shot factory invocations; keep mode validation, unsupported
+  run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
+  stream attachment and bounded async progress stdout draining in
+  `pkg/cli/run/invocation_observability.go`, human and JSON progress rendering in
+  `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
+  `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
+  `pkg/cli/run/run_wire_api_test.go`, and invocation wiring in
+  `pkg/cli/run/factory_invocation_input.go`. The `pkg/cli/run` package is at the
+  15-file limit; extend existing files instead of adding new ones. Human response-stream
+  terminal outcomes use `--- invocation outcome ---` with structured status/error
+  fields; JSON response-stream terminal outcomes stay on the final
+  `primary_result` NDJSON record. Internal stream listing for
+  CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
+  `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
+  `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
+  late CLI pollers can still subscribe and drain retained progress until the
+  completed-dispatch retention window expires; `runResponseStreamAttachment` in
+  `pkg/cli/run/invocation_observability.go` performs one final dispatch-ID
+  discovery pass when attachment shutdown is requested so dispatches that
+  complete between poll ticks are still subscribed before `streamAttachment.stop()`
+  returns. `StreamSet` evicts completed streams after
+  `DefaultCompletedDispatchRetention()` and re-enforces per-stream retention
+  through `SessionResponseStream.EnforceRetention()` without relying on future
+  `Append` calls. `responseStreamProgressWriter` serializes all stdout writes
+  through `outputMu`; after a drain timeout it abandons further progress writes
+  and `writeFinalInvocationResult` acquires the same lock so final
+  primary-result/outcome output cannot interleave with an in-flight progress write.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
