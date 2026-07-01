@@ -490,6 +490,35 @@ The CLI `you run --factory` mode uses the same invocation contract for input
 resolution and primary-result selection; it just writes the successful
 `primaryResult` to stdout instead of returning an HTTP response.
 
+## Agent-run dispatch inspection
+
+Use factory-session dispatch inspection when you need to distinguish final
+agent output from bounded tool diagnostics or transcript metadata after an
+`AGENT_RUN` dispatch.
+
+| Surface | What it shows for agent runs |
+|---------|------------------------------|
+| Dashboard dispatch detail | Final output in the ordinary dispatch result area; separate **Agent run** section with `tool_policy`, `tool_call_count`, bounded `tool_diagnostics`, and transcript summaries when present |
+| Session API / replay projections | `agentRunInspection` on workstation request responses; replay-safe `AGENT_RUN_RESPONSE` events carry the same bounded diagnostic payload |
+| Modelhost (`you models inspect`, `/models`) | Readiness, lifecycle, and lease state only — not agent transcript ownership |
+
+Agent-run inspection uses typed fields rather than mixed log blobs:
+
+- **Final output** — the accepted or failed work result used for routing and
+  downstream payload propagation.
+- **Tool diagnostics** — safe summaries for allowed tool start, success, denial,
+  or failure. Raw process output and secrets are not primary customer results.
+- **Transcript metadata** — bounded per-message role and summary entries when
+  the runtime records them.
+
+When an agent dispatch fails, inspect `failure_class` and optional
+`recovery_action` in the agent-run inspection view. See `you docs workers`
+for the supported agent-run failure classes and tool-policy behavior.
+
+`INFERENCE_RUN` dispatches continue to expose inference-attempt inspection
+separately. Agent-backed dispatches do not substitute inference-attempt views
+for agent-run diagnostics.
+
 ## Dashboard
 
 When the service was started via `you` or `you run` without `--quiet`, open:

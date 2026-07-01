@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -1235,8 +1236,12 @@ You are a helpful assistant.
 	if !ok {
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
-	if _, ok := wsExec.Executor.(*workers.AgentExecutor); !ok {
-		t.Fatalf("expected wrapped executor to be *workers.AgentExecutor, got %T", wsExec.Executor)
+	router, ok := wsExec.Executor.(*workerexecutor.WorkstationBehaviorRouter)
+	if !ok {
+		t.Fatalf("expected wrapped executor to be *executor.WorkstationBehaviorRouter, got %T", wsExec.Executor)
+	}
+	if _, ok := router.InferenceExecutor.(*workers.AgentExecutor); !ok {
+		t.Fatalf("expected inference executor to be *workers.AgentExecutor, got %T", router.InferenceExecutor)
 	}
 
 	workerDef, ok := wsExec.RuntimeConfig.Worker("worker-a")
@@ -1462,6 +1467,7 @@ func executeModelWorkerProgressPublisherServiceTest(
 		recorder,
 		nil,
 		nil,
+		time.Now,
 		LocalModelDomain{},
 	)
 	if err != nil {
@@ -1641,6 +1647,7 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		logging.NoopLogger{},
 		true,
 		provider,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -2309,6 +2316,7 @@ func loadWorkersFromConfigForServiceTest(
 		inferenceRecorder,
 		nil,
 		nil,
+		nil,
 		LocalModelDomain{},
 	)
 }
@@ -2627,6 +2635,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		nil,
 		history.RecordModelEvent,
+		nil,
 		func() time.Time { return eventTime },
 		LocalModelDomain{
 			Resources: newLocalModelResourceLimiter(),
@@ -2820,6 +2829,7 @@ func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) 
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -3093,6 +3103,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithModelHost(
 		nil,
 		nil,
 		history.RecordModelEvent,
+		nil,
 		func() time.Time { return eventTime },
 		domain,
 	)

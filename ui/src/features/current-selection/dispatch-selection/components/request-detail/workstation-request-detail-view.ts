@@ -1,4 +1,5 @@
 import type { DashboardSelectedRunner } from "../../../../../api/dashboard/types";
+import { WorkstationType } from "../../../../../api/generated/openapi";
 import { formatWorkItemLabel } from "../../../../../components/ui/formatters";
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-types";
@@ -6,6 +7,7 @@ import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-ty
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
   hasFailedOutcome: boolean;
+  isAgentBackedRequest: boolean;
   isScriptBackedRequest: boolean;
   normalizedFailureMessage: string | undefined;
   normalizedFailureReason: string | undefined;
@@ -23,6 +25,9 @@ export function buildWorkstationRequestDetailView(
   const isScriptBackedRequest =
     request.script_request !== undefined ||
     request.script_response !== undefined;
+  const isAgentBackedRequest =
+    request.workstation_type === WorkstationType.WorkstationTypeAgentRun ||
+    request.workstation_type === WorkstationType.WorkstationTypeModelWorkstation;
   const normalizedFailureReason = normalizeDetailText(request.failure_reason);
   const normalizedFailureMessage = normalizeDetailText(request.failure_message);
   const hasFailureDetails =
@@ -42,6 +47,7 @@ export function buildWorkstationRequestDetailView(
   return {
     hasFailureDetails,
     hasFailedOutcome,
+    isAgentBackedRequest,
     isScriptBackedRequest,
     normalizedFailureMessage,
     normalizedFailureReason,

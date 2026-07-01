@@ -147,3 +147,55 @@ func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundInference(t *testing.T
 		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", servingEndpoint, healthServer.URL)
 	}
 }
+
+func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundAgentWorker(t *testing.T) {
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	cfg := supervisedCatalogFactoryConfig()
+	cfg.Workers[0].Type = interfaces.WorkerTypeAgent
+	loaded := mustLoadedCatalogConfig(t, cfg)
+	baseHost := newSupervisedTestHost(t, &fakeProcessLauncher{
+		newProcess: func(spec ProcessStartSpec) *fakeManagedProcess {
+			return newFakeManagedProcess(healthServer.URL, nil)
+		},
+	})
+	host := &recordingLeaseHost{CatalogHost: baseHost}
+	runtime := &executionTestRuntime{}
+	cachePath := t.TempDir()
+	assets := executionTestAssetPuller{
+		cache: localmodels.CacheLayout{
+			ModelName: "OMNIVOICE_Q4_K_M",
+			CachePath: cachePath,
+			Revision:  "rev-test",
+			Files:     []string{cachePath + "/model.gguf", cachePath + "/tokenizer.gguf"},
+		},
+	}
+	leaseExec := NewLeaseExecution(host, assets, runtime, localmodels.Hooks{})
+	workerDef, ok := loaded.Worker("voice-local")
+	if !ok {
+		t.Fatal("expected voice-local worker in loaded config")
+	}
+	if workerDef.Type != interfaces.WorkerTypeAgent {
+		t.Fatalf("worker type = %q, want %q", workerDef.Type, interfaces.WorkerTypeAgent)
+	}
+
+	runner := leaseExec.WrapRunner(noopProviderRunner{}, loaded, loaded.FactoryConfig(), workerDef)
+	if _, ok := runner.(*leaseBoundRunner); !ok {
+		t.Fatalf("runner type = %T, want *leaseBoundRunner", runner)
+	}
+	result, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-agent-1"},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Content != "ok" {
+		t.Fatalf("content = %q, want host-owned inference result", result.Content)
+	}
+	if host.acquires != 1 || host.releases != 1 {
+		t.Fatalf("lease acquire/release = %d/%d, want 1/1", host.acquires, host.releases)
+	}
+}

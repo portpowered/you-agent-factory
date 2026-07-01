@@ -445,6 +445,16 @@ func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
 	h.appendGenerated(event)
 }
 
+// RecordAgentRunEvent appends an agent-run boundary event to the same
+// canonical history used for dispatch and replay events.
+func (h *FactoryEventHistory) RecordAgentRunEvent(event factoryapi.FactoryEvent) {
+	if h == nil || !isAgentRunEventType(event.Type) {
+		return
+	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
+	h.appendGenerated(event)
+}
+
 // AppendRecordedEvent appends one already-shaped canonical event into the
 // history so callers can bridge runtime-owned events into a wider stream.
 func (h *FactoryEventHistory) AppendRecordedEvent(event factoryapi.FactoryEvent) {
@@ -789,6 +799,10 @@ func isScriptEventType(eventType factoryapi.FactoryEventType) bool {
 	default:
 		return false
 	}
+}
+
+func isAgentRunEventType(eventType factoryapi.FactoryEventType) bool {
+	return eventType == factoryapi.FactoryEventTypeAgentRunResponse
 }
 
 func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {

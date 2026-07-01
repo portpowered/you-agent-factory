@@ -1040,6 +1040,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, work
 		Body:             stringPtrIfNotEmpty(def.Body),
 		Command:          stringPtrIfNotEmpty(def.Command),
 		Linear:           hostedLinearWorkerAPIFromInternal(def.Linear),
+		AgentTools:       agentWorkerToolsAPIFromInternal(def.AgentTools),
 		Model:            stringPtrIfNotEmpty(def.Model),
 		ModelProvider:    workerModelProviderPtrIfNotEmpty(def.ModelProvider),
 		ModelLocality:    workerModelLocalityPtrIfNotEmpty(def.ModelLocality),
@@ -1088,6 +1089,32 @@ func hostedLinearWorkerClaimAPIFromInternal(claim *interfaces.HostedLinearWorker
 	}
 	return &factoryapi.HostedLinearWorkerClaim{
 		AssigneeField: stringPtrIfNotEmpty(claim.AssigneeField),
+	}
+}
+
+func agentWorkerToolsAPIFromInternal(cfg *interfaces.AgentWorkerToolsConfig) *factoryapi.AgentWorkerToolsConfig {
+	if cfg == nil {
+		return nil
+	}
+	policy := interfaces.NormalizeAgentWorkerToolPolicy(cfg.Policy)
+	if policy == interfaces.AgentWorkerToolPolicyDisabled {
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicyDISABLED,
+		}
+	}
+	switch policy {
+	case interfaces.AgentWorkerToolPolicyReadOnly:
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicyREADONLY,
+		}
+	case interfaces.AgentWorkerToolPolicyEnabled:
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicyENABLED,
+		}
+	default:
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicy(policy),
+		}
 	}
 }
 

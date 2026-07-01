@@ -1832,6 +1832,8 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldScriptRequestView.yaml'
     FactoryWorldScriptResponseView:
       $ref: './components/schemas/factory-world/FactoryWorldScriptResponseView.yaml'
+    FactoryWorldAgentRunInspectionView:
+      $ref: './components/schemas/factory-world/FactoryWorldAgentRunInspectionView.yaml'
     FactoryWorldSelectedRunnerView:
       $ref: './components/schemas/factory-world/FactoryWorldSelectedRunnerView.yaml'
     FactoryWorldRunnerBaselineCapability:
@@ -1890,6 +1892,8 @@ components:
       $ref: './components/schemas/events/payloads/ScriptRequestEventPayload.yaml'
     ScriptResponseEventPayload:
       $ref: './components/schemas/events/payloads/ScriptResponseEventPayload.yaml'
+    AgentRunResponseEventPayload:
+      $ref: './components/schemas/events/payloads/AgentRunResponseEventPayload.yaml'
     DispatchResponseEventPayload:
       $ref: './components/schemas/events/payloads/DispatchResponseEventPayload.yaml'
     WorkStateChangeEventPayload:
@@ -1936,6 +1940,12 @@ components:
       $ref: './components/schemas/events/Diagnostics.yaml'
     SafeWorkDiagnostics:
       $ref: './components/schemas/events/SafeWorkDiagnostics.yaml'
+    SafeAgentRunDiagnostic:
+      $ref: './components/schemas/events/SafeAgentRunDiagnostic.yaml'
+    AgentRunToolDiagnosticEntry:
+      $ref: './components/schemas/events/AgentRunToolDiagnosticEntry.yaml'
+    AgentRunTranscriptEntry:
+      $ref: './components/schemas/events/AgentRunTranscriptEntry.yaml'
     WallClock:
       $ref: './components/schemas/events/WallClock.yaml'
 
@@ -2006,6 +2016,10 @@ components:
       $ref: './components/schemas/data-models/ResourceType.yaml'
     Worker:
       $ref: './components/schemas/data-models/Worker.yaml'
+    AgentWorkerToolsConfig:
+      $ref: './components/schemas/data-models/AgentWorkerToolsConfig.yaml'
+    AgentWorkerToolPolicy:
+      $ref: './components/schemas/data-models/AgentWorkerToolPolicy.yaml'
     WorkerType:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:

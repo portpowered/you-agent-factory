@@ -122,6 +122,36 @@ func TestManager_WrapRunner_AcceptsInferenceWorkerTaxonomyAlias(t *testing.T) {
 	}
 }
 
+func TestManager_WrapRunner_AcceptsAgentWorkerLocalModel(t *testing.T) {
+	runtime := &countingLocalRuntime{}
+	manager := NewManager(staticCatalogAssetPuller{cache: CacheLayout{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		CachePath: t.TempDir(),
+	}}, runtime, Hooks{})
+	if manager == nil {
+		t.Fatal("NewManager returned nil")
+	}
+
+	factoryCfg := managerTestFactoryConfig()
+	factoryCfg.Workers[0].Type = interfaces.WorkerTypeAgent
+	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), factoryCfg, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+	worker, ok := loaded.Worker("tts-worker")
+	if !ok || worker == nil {
+		t.Fatal("worker tts-worker not found in loaded config")
+	}
+
+	runner := manager.WrapRunner(stubRunner{}, loaded, factoryCfg, worker)
+	if _, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{ModelOperation: "TTS"}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := runtime.loadCount(); got != 1 {
+		t.Fatalf("load count = %d, want agent worker to route through managed runtime", got)
+	}
+}
+
 type stubRunner struct{}
 
 func (stubRunner) Execute(context.Context, interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
