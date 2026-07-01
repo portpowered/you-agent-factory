@@ -938,7 +938,7 @@ func TestFactoryService_Pause_RequiresActiveRuntimeAndWrapsPauseErrors(t *testin
 	}
 
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}})
-	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "pause Factory: pause failed") {
+	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "pause factory: pause failed") {
 		t.Fatalf("Pause wrapped error = %v, want wrapped pause failure", err)
 	}
 

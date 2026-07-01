@@ -1541,6 +1541,7 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableA
 	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		RuntimeInstanceID: "backend-scope-js",
+		BackendScopeID:    "backend-scope-js",
 		StartedAtUTC:      startedAt,
 		RuntimeCfg:        runtimeCfg,
 		Factory: &aggregateSnapshotFactory{
@@ -1588,6 +1589,7 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHa
 	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		RuntimeInstanceID: "backend-scope-js",
+		BackendScopeID:    "backend-scope-js",
 		StartedAtUTC:      startedAt,
 		RuntimeCfg:        runtimeCfg,
 		Factory: &aggregateSnapshotFactory{
