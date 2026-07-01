@@ -97,7 +97,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
   it("clears only the affected session checkpoint and runtime queries before replaying from scratch", async () => {
     const streamIdentity = resolvedDefaultStreamIdentity();
     const probeRecovery = vi.fn().mockResolvedValue({
-      factorySessionId: DEFAULT_FACTORY_SESSION_ID,
+      factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
       outcome: "CURSOR_STALE",
       retry: {
         omitAfterEventId: true,
@@ -173,7 +173,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
 
     await waitFor(() => {
       expect(probeRecovery).toHaveBeenCalledWith(
-        DEFAULT_FACTORY_SESSION_ID,
+        RESOLVED_DEFAULT_SESSION_UUID,
         {
           afterEventId: "checkpoint-event-7",
           afterSequence: 7,
@@ -185,7 +185,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
       expect(replayHarness.getStreams()).toHaveLength(2);
     });
     expect(replayHarness.getStreams()[1]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
     expect(deleteCheckpoint).toHaveBeenCalledWith(
       window.indexedDB,
@@ -226,7 +226,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
   it("shows a recoverable stream state when replay from scratch cannot reopen the session", async () => {
     const streamIdentity = resolvedDefaultStreamIdentity();
     const probeRecovery = vi.fn().mockResolvedValue({
-      factorySessionId: DEFAULT_FACTORY_SESSION_ID,
+      factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
       outcome: "CURSOR_STALE",
       retry: {
         omitAfterEventId: true,

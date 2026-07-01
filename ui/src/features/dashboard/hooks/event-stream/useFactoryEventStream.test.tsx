@@ -26,6 +26,16 @@ import {
 } from "./useFactoryEventStream.fixtures";
 
 const replayHarness = createReplayHarness();
+const RESOLVED_DEFAULT_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function resolvedDefaultStreamIdentity() {
+  return {
+    backendScopeID: "backend-scope-a",
+    factorySessionID: RESOLVED_DEFAULT_SESSION_UUID,
+    logicalSessionKeyID: "logical-default",
+    streamGenerationID: "2026-06-26T00:00:00Z",
+  };
+}
 
 function seedFactoryEventStreamStores(): void {
   useDashboardStreamStore.setState({
@@ -58,6 +68,79 @@ function resetFactoryEventStreamStores(): void {
   });
   useFactoryTimelineStore.getState().reset();
 }
+
+describe("useFactoryEventStream resolved session identity", () => {
+  let queryClient = createFactoryEventStreamQueryClient();
+
+  beforeEach(() => {
+    replayHarness.install();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 200,
+        }),
+      ),
+    );
+    queryClient = createFactoryEventStreamQueryClient();
+    seedFactoryEventStreamStores();
+  });
+
+  afterEach(() => {
+    resetFactoryEventStreamStores();
+    vi.unstubAllGlobals();
+  });
+
+  it("opens the resolved UUID session event stream for default-session selectors", async () => {
+    const streamIdentity = resolvedDefaultStreamIdentity();
+
+    renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          onEvent: () => {},
+          sessionID: DEFAULT_FACTORY_SESSION_ID,
+          streamIdentity,
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
+    );
+    expect(replayHarness.getStreams()[0]?.url).not.toBe("/events");
+    expect(replayHarness.getStreams()[0]?.url).not.toContain("~default");
+  });
+
+  it("never opens the process-global /events stream for dashboard traffic", async () => {
+    renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          onEvent: () => {},
+          sessionID: "session-beta",
+          streamIdentity: {
+            backendScopeID: "backend-scope-b",
+            factorySessionID: "session-beta",
+            logicalSessionKeyID: "logical-beta",
+            streamGenerationID: "2026-06-26T00:00:00Z",
+          },
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    for (const stream of replayHarness.getStreams()) {
+      expect(stream.url).toMatch(/^\/factory-sessions\//);
+      expect(stream.url).not.toBe("/events");
+    }
+  });
+});
 
 describe("useFactoryEventStream transport", () => {
   let queryClient = createFactoryEventStreamQueryClient();

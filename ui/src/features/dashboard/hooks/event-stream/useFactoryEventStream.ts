@@ -14,7 +14,10 @@ import {
   isDefaultFactorySessionID,
 } from "../../../../api/session-routing";
 import { useFactoryTimelineStore } from "../../../timeline/public";
-import type { StreamDerivedCacheIdentity } from "../../../timeline/lib/stream-derived-cache-identity";
+import {
+  normalizeStreamDerivedCacheIdentity,
+  type StreamDerivedCacheIdentity,
+} from "../../../timeline/lib/stream-derived-cache-identity";
 import {
   compactFactoryEventForTimeline,
   readFactoryTimelineDebugOptions,
@@ -81,7 +84,14 @@ interface DashboardStreamConnectionOptions {
   ) => Promise<FactoryEventReconnectValidationResult>;
 }
 
-function resolveStreamSessionID(sessionID: string | null): string {
+function resolveStreamSessionID(
+  sessionID: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+): string {
+  const resolvedIdentity = normalizeStreamDerivedCacheIdentity(streamIdentity);
+  if (resolvedIdentity) {
+    return resolvedIdentity.factorySessionID;
+  }
   if (sessionID == null) {
     return DEFAULT_FACTORY_SESSION_ID;
   }
@@ -360,8 +370,8 @@ export function useFactoryEventStream({
   const flushHandleRef = useRef<number | null>(null);
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
   const streamSessionID = useMemo(
-    () => resolveStreamSessionID(sessionID),
-    [sessionID],
+    () => resolveStreamSessionID(sessionID, streamIdentity),
+    [sessionID, streamIdentity],
   );
 
   const flushQueuedEvents = useCallback(() => {

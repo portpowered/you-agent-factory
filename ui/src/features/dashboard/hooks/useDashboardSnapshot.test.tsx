@@ -168,6 +168,40 @@ function okSyncPreflightResponse(
   };
 }
 
+function okSyncPreflightResponseForSession(
+  sessionID: string,
+  reconnectCursor?: syncPreflightAPI.FactorySessionSyncPreflightRequest["reconnectCursor"],
+) {
+  if (sessionID === "session-beta") {
+    return okSyncPreflightResponse({
+      backendScopeId: "backend-scope-b",
+      factorySessionId: "session-beta",
+      logicalSessionKeyId: "logical-beta",
+      requestedSessionId: "session-beta",
+      reconnectCursor: {
+        afterEventId: reconnectCursor?.afterEventId,
+        afterSequence: reconnectCursor?.afterSequence,
+        provided: Boolean(
+          reconnectCursor?.afterEventId ||
+            reconnectCursor?.afterSequence != null,
+        ),
+        validForStreamGeneration: true,
+      },
+    });
+  }
+  return okSyncPreflightResponse({
+    checkpointReusable: true,
+    reconnectCursor: {
+      afterEventId: reconnectCursor?.afterEventId,
+      afterSequence: reconnectCursor?.afterSequence,
+      provided: Boolean(
+        reconnectCursor?.afterEventId || reconnectCursor?.afterSequence != null,
+      ),
+      validForStreamGeneration: true,
+    },
+  });
+}
+
 describe("useDashboardSnapshot composer", () => {
   let indexedDBRecords: Map<string, unknown>;
   let queryClient: QueryClient;
@@ -178,19 +212,8 @@ describe("useDashboardSnapshot composer", () => {
     indexedDBRecords = installIndexedDBTestDouble();
     getSyncPreflightSpy = vi
       .spyOn(syncPreflightAPI, "getFactorySessionSyncPreflight")
-      .mockImplementation(async (_sessionID, reconnectCursor) =>
-        okSyncPreflightResponse({
-          checkpointReusable: true,
-          reconnectCursor: {
-            afterEventId: reconnectCursor?.afterEventId,
-            afterSequence: reconnectCursor?.afterSequence,
-            provided: Boolean(
-              reconnectCursor?.afterEventId ||
-                reconnectCursor?.afterSequence != null,
-            ),
-            validForStreamGeneration: true,
-          },
-        }),
+      .mockImplementation(async (sessionID, reconnectCursor) =>
+        okSyncPreflightResponseForSession(sessionID, reconnectCursor),
       );
     window.sessionStorage.clear();
     queryClient = new QueryClient({
@@ -374,7 +397,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
 
     act(() => {
@@ -512,7 +535,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(useFactoryTimelineStore.getState().selectedTick).toBe(7);
     });
     expect(replayHarness.getStreams().at(-1)?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
     );
   });
 
@@ -537,7 +560,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
     expect(useFactoryTimelineStore.getState().selectedTick).not.toBe(7);
     await expect(
@@ -592,7 +615,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
     await expect(
