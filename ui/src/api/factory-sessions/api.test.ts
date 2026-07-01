@@ -369,6 +369,54 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("reads the sync preflight surface with logical identity hints", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          backendScopeId: "backend-a",
+          checkpointReusable: true,
+          factorySessionId: "session-remapped",
+          logicalSessionKeyId: "lsk-named-target",
+          reasonCode: "logical_session_remap",
+          reconnectCursor: {
+            provided: false,
+            validForStreamGeneration: false,
+          },
+          requestedSessionId: "session-stale",
+          streamGenerationId: "stream-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight(
+        "session-stale",
+        {
+          afterEventId: "event-7",
+          afterSequence: 7,
+        },
+        {
+          backendScopeId: "backend-a",
+          logicalSessionKeyId: "lsk-named-target",
+        },
+      ),
+    ).resolves.toMatchObject({
+      factorySessionId: "session-remapped",
+      reasonCode: "logical_session_remap",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-stale/sync-preflight?after_event_id=event-7&after_sequence=7&backend_scope_id=backend-a&logical_session_key_id=lsk-named-target",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it("rejects invalid durable artifact detail responses", async () => {
     vi.stubGlobal(
       "fetch",

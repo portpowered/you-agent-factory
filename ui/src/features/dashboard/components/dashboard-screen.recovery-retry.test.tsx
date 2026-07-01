@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { PropsWithChildren } from "react";
 
 import * as factorySessionsAPI from "../../../api/factory-sessions";
+import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
@@ -88,6 +89,7 @@ function installIndexedDBTestDouble() {
             records.delete(key);
           }),
         get: (key: string) => indexedDBRequest(records.get(key)),
+        getAll: () => indexedDBRequest([...records.values()]),
         put: (value: { sessionID: string; storageKey?: string }) =>
           indexedDBRequest(value.storageKey ?? value.sessionID, () => {
             records.set(value.storageKey ?? value.sessionID, value);
@@ -123,7 +125,7 @@ function createWrapper(queryClient: QueryClient) {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the browser-visible stale-cursor retry flow shares one integration-style harness.
 describe("DashboardScreen stale-cursor retry", () => {
   let queryClient: QueryClient;
-  let getFactorySessionSpy: ReturnType<typeof vi.spyOn>;
+  let getFactorySessionSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     replayHarness.install();
@@ -134,6 +136,23 @@ describe("DashboardScreen stale-cursor retry", () => {
         queries: { retry: false },
       },
     });
+    getFactorySessionSyncPreflightSpy = vi
+      .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
+      .mockResolvedValue({
+        backendScopeId: "backend-scope-a",
+        checkpointReusable: true,
+        factorySessionId: DEFAULT_FACTORY_SESSION_ID,
+        logicalSessionKeyId: "lsk-default-folder",
+        reasonCode: FactorySessionSyncPreflightReasonCode.ok,
+        reconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: true,
+        },
+        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationId: "2026-06-26T00:00:00Z",
+      });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes(`/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`)) {
@@ -155,77 +174,8 @@ describe("DashboardScreen stale-cursor retry", () => {
         );
       }
 
-      return new Response(
-        JSON.stringify({
-          session: {
-            factoryDir: "/workspace/factory",
-            folderPath: "/workspace",
-            id: DEFAULT_FACTORY_SESSION_ID,
-            isDefault: true,
-            project: "factory",
-            runtime: {
-              lifecycle: {
-                startedAt: "2026-06-26T00:00:00Z",
-                updatedAt: "2026-06-26T00:00:00Z",
-              },
-              orchestratorKind: "STATIC",
-              progress: {
-                categories: {},
-                factoryState: "IDLE",
-                inFlightCount: 0,
-                totalTokens: 0,
-              },
-              streamIdentity: {
-                backendScopeID: "backend-scope-a",
-                factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-                streamGenerationID: "2026-06-26T00:00:00Z",
-              },
-              status: "IDLE",
-              usage: { resources: [] },
-            },
-            target: { kind: "default", name: DEFAULT_FACTORY_SESSION_ID },
-          },
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
-        },
-      );
+      throw new Error(`unexpected fetch for ${url}`);
     }));
-    getFactorySessionSpy = vi
-      .spyOn(factorySessionsAPI, "getFactorySession")
-      .mockResolvedValue({
-        session: {
-          factoryDir: "/workspace/factory",
-          folderPath: "/workspace",
-          id: DEFAULT_FACTORY_SESSION_ID,
-          isDefault: true,
-          project: "factory",
-          runtime: {
-            lifecycle: {
-              startedAt: "2026-06-26T00:00:00Z",
-              updatedAt: "2026-06-26T00:00:00Z",
-            },
-            orchestratorKind: "STATIC",
-            progress: {
-              categories: {},
-              factoryState: "IDLE",
-              inFlightCount: 0,
-              totalTokens: 0,
-            },
-            streamIdentity: {
-              backendScopeID: "backend-scope-a",
-              factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-              streamGenerationID: "2026-06-26T00:00:00Z",
-            },
-            status: "IDLE",
-            usage: { resources: [] },
-          },
-          target: { kind: "default", name: DEFAULT_FACTORY_SESSION_ID },
-        },
-      });
     useDashboardBentoStore.setState({
       refreshToken: 0,
       selectedTraceID: null,
@@ -243,7 +193,7 @@ describe("DashboardScreen stale-cursor retry", () => {
 
   afterEach(() => {
     replayHarness.reset();
-    getFactorySessionSpy.mockRestore();
+    getFactorySessionSyncPreflightSpy.mockRestore();
     vi.unstubAllGlobals();
     useDashboardBentoStore.setState({
       refreshToken: 0,

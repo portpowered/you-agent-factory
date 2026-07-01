@@ -118,6 +118,86 @@ async function deleteIndexedCheckpoint(
   }
 }
 
+export interface PersistedTimelineCheckpointPeek {
+  checkpoint: FactoryTimelineCheckpoint;
+  storageKey: string;
+  streamIdentity: TimelineCheckpointStreamIdentity | null;
+}
+
+async function listIndexedCheckpoints(
+  indexedDB: IndexedDBLike,
+): Promise<TimelineCheckpointEnvelope[]> {
+  const database = await openCheckpointDatabase(indexedDB);
+  try {
+    const transaction = database.transaction(CHECKPOINT_STORE_NAME, "readonly");
+    const store = transaction.objectStore(CHECKPOINT_STORE_NAME);
+    const result = await requestToPromise<TimelineCheckpointEnvelope[]>(
+      store.getAll(),
+    );
+    return result ?? [];
+  } finally {
+    database.close();
+  }
+}
+
+export async function peekPersistedTimelineCheckpoint(
+  indexedDB: IndexedDBLike | undefined,
+  sessionID: string | null,
+): Promise<PersistedTimelineCheckpointPeek | null> {
+  const normalizedSessionID = sessionID?.trim();
+  if (!indexedDB || !normalizedSessionID) {
+    return null;
+  }
+
+  try {
+    const envelopes = await listIndexedCheckpoints(indexedDB);
+    const envelope = envelopes.find(
+      (candidate) => candidate.sessionID === normalizedSessionID,
+    );
+    if (
+      !envelope ||
+      envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
+      !envelope.checkpoint?.replayState
+    ) {
+      return null;
+    }
+
+    return {
+      checkpoint: hydrateCheckpoint(envelope.checkpoint),
+      storageKey: envelope.storageKey,
+      streamIdentity: normalizeStreamIdentity(envelope.streamIdentity),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearTimelineCheckpointsForSession(
+  indexedDB: IndexedDBLike | undefined,
+  sessionID: string | null,
+): Promise<void> {
+  const normalizedSessionID = sessionID?.trim();
+  if (!indexedDB || !normalizedSessionID) {
+    return;
+  }
+
+  try {
+    const envelopes = await listIndexedCheckpoints(indexedDB);
+    const storageKeys = envelopes
+      .filter((envelope) => envelope.sessionID === normalizedSessionID)
+      .map((envelope) => envelope.storageKey)
+      .filter((storageKey) => storageKey.trim() !== "");
+
+    await Promise.all(
+      storageKeys.map((storageKey) =>
+        deleteIndexedCheckpoint(indexedDB, storageKey).catch(() => {}),
+      ),
+    );
+  } catch {
+    // Best-effort cleanup for stale reconnect state.
+  }
+}
+
 export async function clearTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   streamIdentity: TimelineCheckpointStreamIdentity | null,

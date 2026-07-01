@@ -52,6 +52,7 @@ export function buildFactorySessionResponse(
       streamIdentity: {
         backendScopeID: `${summary.folderPath}::test-backend`,
         factorySessionID: summary.id,
+        logicalSessionKeyID: `lsk-${summary.id}`,
         streamGenerationID: lifecycleTimestamp,
       },
       usage: { resources: [] },
@@ -112,7 +113,7 @@ export function handleFactorySessionPreflightRequest({
       backendScopeId: `${sessionSummary.folderPath}::test-backend`,
       checkpointReusable: true,
       factorySessionId: sessionSummary.id,
-      logicalSessionKeyId: `${sessionSummary.folderPath}::${sessionSummary.id}`,
+      logicalSessionKeyId: `lsk-${sessionSummary.id}`,
       reasonCode: "ok",
       reconnectCursor: {
         afterEventId: searchParams.get("after_event_id") ?? undefined,

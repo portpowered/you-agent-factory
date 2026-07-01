@@ -11,7 +11,13 @@ import {
 export type FactorySessionSyncPreflightResponse =
   components["schemas"]["FactorySessionSyncPreflightResponse"];
 
-export interface GetFactorySessionSyncPreflightOptions {
+export interface FactorySessionSyncPreflightIdentityHints {
+  backendScopeId?: string;
+  logicalSessionKeyId?: string;
+}
+
+export interface GetFactorySessionSyncPreflightOptions
+  extends FactorySessionSyncPreflightIdentityHints {
   fetch?: typeof globalThis.fetch;
 }
 
@@ -30,7 +36,7 @@ export async function getFactorySessionSyncPreflight(
     );
   }
 
-  const query = buildSyncPreflightQuery(reconnectCursor);
+  const query = buildSyncPreflightQuery(reconnectCursor, options);
 
   let response: Response;
   try {
@@ -78,6 +84,7 @@ export async function getFactorySessionSyncPreflight(
 
 function buildSyncPreflightQuery(
   reconnectCursor?: FactoryEventReconnectCursor,
+  identityHints?: FactorySessionSyncPreflightIdentityHints,
 ): string {
   const params = new URLSearchParams();
   if (reconnectCursor?.afterEventId) {
@@ -85,6 +92,14 @@ function buildSyncPreflightQuery(
   }
   if (reconnectCursor?.afterSequence != null) {
     params.set("after_sequence", String(reconnectCursor.afterSequence));
+  }
+  const backendScopeId = identityHints?.backendScopeId?.trim();
+  if (backendScopeId) {
+    params.set("backend_scope_id", backendScopeId);
+  }
+  const logicalSessionKeyId = identityHints?.logicalSessionKeyId?.trim();
+  if (logicalSessionKeyId) {
+    params.set("logical_session_key_id", logicalSessionKeyId);
   }
   const query = params.toString();
   return query ? `?${query}` : "";
