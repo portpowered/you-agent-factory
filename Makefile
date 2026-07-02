@@ -5,6 +5,8 @@ GO          ?= go
 INSTALL_DIR := $(or $(GOBIN),$(shell $(GO) env GOPATH)/bin)
 NPM         ?= npm
 BUN_BIN     := $(shell command -v bun 2>/dev/null)
+BUN_INSTALL := $(BUN_BIN) install --frozen-lockfile
+BUN_PACKAGE_DIRS := ui/packages/components ui
 UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
 UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
 UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install --frozen-lockfile,$(NPM) install --no-package-lock)
@@ -46,6 +48,7 @@ ifdef IS_WORKTREE
 endif
 
 GO_TEST_TIMEOUT ?= 300s
+GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 78.3
 PACKAGE_FILE_COUNT_ROOT ?= .
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count deadcode
@@ -68,7 +71,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
 default:
 	$(MAKE) generate-api
@@ -200,7 +203,7 @@ long-tests-functional-runtime:
 	$(MAKE) pr-inference-approval
 
 test-coverage-go:
-	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_TEST_TIMEOUT)
+	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_COVERAGE_TIMEOUT)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
@@ -242,6 +245,7 @@ verify-build-contracts:
 	$(MAKE) ui-build
 	$(MAKE) build
 	$(MAKE) lint
+	$(MAKE) ui-components-verify
 	$(MAKE) api-smoke
 	$(MAKE) wire-smoke
 
@@ -279,6 +283,7 @@ ci-verify-build-contracts: ci-typecheck
 	$(MAKE) ui-build
 	$(MAKE) build
 	$(MAKE) lint
+	$(MAKE) ui-components-verify
 	$(MAKE) api-smoke
 	$(MAKE) wire-smoke
 
@@ -300,6 +305,9 @@ release-surface-smoke:
 ui-deps:
 	cd ui && $(UI_INSTALL)
 
+ui-verify-fresh-npm-install:
+	cd ui && $(NPM) run verify:fresh-npm-install
+
 ui-lint:
 	cd ui && $(UI_SCRIPT) lint
 
@@ -317,6 +325,19 @@ deps:
 
 deps-tidy:
 	$(GO) mod tidy
+
+init:
+ifeq ($(BUN_BIN),)
+	$(error init requires bun on PATH; install Bun 1.3.12+ per ui/package.json packageManager and retry)
+endif
+	@set -e; \
+	for dir in $(BUN_PACKAGE_DIRS); do \
+		printf '%s\n' "==> bun install ($$dir)"; \
+		(cd "$$dir" && $(BUN_INSTALL)) || { \
+			printf '%s\n' "FAIL: bun install failed in $$dir. Rerun from repository root: cd $$dir && bun install --frozen-lockfile"; \
+			exit 1; \
+		}; \
+	done
 
 ui-build:
 ifeq ($(BUN_BIN),)
@@ -360,6 +381,29 @@ ui-storybook:
 
 ui-test-storybook:
 	cd ui && $(UI_SCRIPT) test-storybook
+
+ui-components-typecheck:
+	cd ui/packages/components && $(UI_SCRIPT) typecheck
+
+ui-components-test:
+	cd ui/packages/components && $(UI_SCRIPT) test:unit
+
+ui-components-storybook:
+	cd ui/packages/components && $(UI_SCRIPT) build-storybook
+
+ui-components-boundary:
+	cd ui/packages/components && $(UI_SCRIPT) check:package-boundary
+
+ui-components-dependency-direction:
+	cd ui/packages/components && $(UI_SCRIPT) check:package-dependency-direction
+
+ui-components-verify:
+	@printf '%s\n' "Running component package verification harness"
+	$(call run_verification_step,ui-components-typecheck,component package typecheck)
+	$(call run_verification_step,ui-components-test,component package tests)
+	$(call run_verification_step,ui-components-storybook,component package Storybook build)
+	$(call run_verification_step,ui-components-boundary,component package boundary checks)
+	$(call run_verification_step,ui-components-dependency-direction,component package dependency-direction checks)
 
 clean:
 	$(GO) clean ./...

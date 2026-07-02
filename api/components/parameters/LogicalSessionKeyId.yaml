@@ -1,0 +1,8 @@
+name: logical_session_key_id
+in: query
+required: false
+description: >-
+  Canonical logical-session key used with backend_scope_id to remap an unknown
+  factorySessionID to the current live session for the same folder and target selector.
+schema:
+  type: string

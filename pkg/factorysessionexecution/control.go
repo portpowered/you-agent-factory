@@ -212,6 +212,9 @@ func (s *JavaScriptRuntimeService) Pause(ctx context.Context, sessionID string, 
 }
 
 func (s *JavaScriptRuntimeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+	if result, handled, err := s.resumeInterruptedSessionViaLifecycleControl(ctx, sessionID, req); handled {
+		return result, err
+	}
 	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlResume, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
@@ -359,7 +362,7 @@ func (s *JavaScriptRuntimeService) recordAcceptedRuntimeInterrupt(
 	if applyRuntimeAcceptedLifecycleControl(s, state, LifecycleControlInterruptDispatch, RetryDispatchRequest{}, interrupt) && state.runCancel != nil {
 		state.runCancel()
 	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 	state.events = AppendDispatchInterruptedEvent(
 		state.events,
 		state.session,
@@ -492,7 +495,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 					control.Reason,
 				)
 			} else {
-				state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+				state.events = rebuildRuntimeSessionCanonicalEvents(state)
 			}
 		}
 	}

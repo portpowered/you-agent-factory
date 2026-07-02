@@ -718,6 +718,60 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 	}
 }
 
+func TestReconstructFactoryWorldState_OutputWorkStateReconstructsTerminalPlaceWithoutExplicitOutputPlace(t *testing.T) {
+	t0 := time.Date(2026, 6, 27, 7, 0, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+			ID:          "work-1",
+			WorkTypeID:  "task",
+			DisplayName: "Classifier terminal output",
+			TraceID:     "trace-1",
+			PlaceID:     "task:init",
+		}),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-1",
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "work-1",
+				PlaceID:  "task:init",
+				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Classifier terminal output", TraceID: "trace-1", PlaceID: "task:init"},
+			}},
+		}),
+		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+			DispatchID:     "dispatch-1",
+			TransitionID:   "t-review",
+			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Result:         interfaces.WorkstationResult{Outcome: "ACCEPTED", SelectedClassificationLabel: "approved"},
+			DurationMillis: 250,
+			OutputWork: []interfaces.FactoryWorkItem{{
+				ID:          "work-1",
+				WorkTypeID:  "task",
+				DisplayName: "Classifier terminal output",
+				TraceID:     "trace-1",
+				State:       "complete",
+			}},
+			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
+		}),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	terminal, ok := state.TerminalWorkByID["work-1"]
+	if !ok {
+		t.Fatalf("TerminalWorkByID = %#v, want work-1 indexed from outputWork state", state.TerminalWorkByID)
+	}
+	if terminal.WorkItem.PlaceID != "task:complete" {
+		t.Fatalf("terminal place = %q, want task:complete reconstructed from task+complete state", terminal.WorkItem.PlaceID)
+	}
+	if terminal.Status != "TERMINAL" {
+		t.Fatalf("terminal status = %q, want TERMINAL", terminal.Status)
+	}
+}
+
 func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress(t *testing.T) {
 	t0 := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{

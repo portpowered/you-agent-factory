@@ -1,4 +1,4 @@
-You are summarizing completed goal work {{ .WorkID }} at an AGENT_RUN workstation backed by an AGENT_WORKER.
+You are summarizing completed goal work {{ (index .Inputs 0).WorkID }} at an AGENT_RUN workstation backed by an AGENT_WORKER.
 
 The goal run may have passed through AGENT_RUN planning and execution steps and SCRIPT_RUN verification before review accepted the work. Produce a bounded final summary a customer can review quickly while preserving the reviewer disposition the factory routes on. Do not respond with open-ended discussion or unrestricted narrative.
 

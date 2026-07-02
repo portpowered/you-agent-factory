@@ -6,6 +6,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
+import readline from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +23,48 @@ export const readyTimeoutMs = 90_000;
 export const replayDelayMs = 25;
 export const uiInteractionTimeoutMs = 10_000;
 export const defaultFactorySessionID = "~default";
+export const resolvedDefaultFactorySessionID =
+  "019e0000-0000-7000-8000-000000000042";
+export const timelineCheckpointDBVersion = 3;
+export const timelineCheckpointSchemaVersion = 3;
+
+function isDefaultFactorySessionSelector(sessionID) {
+  return (
+    sessionID === defaultFactorySessionID ||
+    sessionID === resolvedDefaultFactorySessionID
+  );
+}
+
+function resolveRegistrySessionID(sessionID) {
+  return isDefaultFactorySessionSelector(sessionID)
+    ? defaultFactorySessionID
+    : sessionID;
+}
+
+function resolvedFactorySessionIDForSession(session) {
+  return session.isDefault || session.id === defaultFactorySessionID
+    ? resolvedDefaultFactorySessionID
+    : session.id;
+}
+
+function logicalSessionKeyIDForSession(session) {
+  const targetKind = session.target?.kind ?? "default";
+  const targetName = session.target?.name;
+  const nameSuffix =
+    typeof targetName === "string" && targetName.length > 0
+      ? `::${targetName}`
+      : "::";
+  return `${session.folderPath}::${targetKind}${nameSuffix}`;
+}
+
+function buildStreamIdentityForSession(session, streamGenerationID) {
+  return {
+    backendScopeID: `${session.folderPath}::browser-integration`,
+    factorySessionID: resolvedFactorySessionIDForSession(session),
+    logicalSessionKeyID: logicalSessionKeyIDForSession(session),
+    streamGenerationID,
+  };
+}
 
 /**
  * Poll until a durable checkpoint becomes true (API request captured, download
@@ -148,6 +191,60 @@ export async function selectComboboxOption(combobox, optionName) {
   await page.getByRole("option", { name: optionName, exact: true }).click();
 }
 
+/** Wait for the dashboard session sync-preflight handshake to succeed. */
+export async function waitForDashboardSyncPreflight(
+  page,
+  timeoutMs = readyTimeoutMs,
+) {
+  await page.waitForResponse(
+    (response) => {
+      try {
+        return (
+          sessionSyncPreflightPathPattern.test(
+            new URL(response.url()).pathname,
+          ) && response.ok()
+        );
+      } catch {
+        return false;
+      }
+    },
+    { timeout: timeoutMs },
+  );
+}
+
+/**
+ * Poll until the dashboard inline widget picker is mounted. Prefer this over
+ * heading-only readiness checkpoints because the header can render during
+ * sync-preflight recovery or empty-session shells before the bento mounts.
+ */
+export async function waitForDashboardWidgetPicker(
+  page,
+  timeoutMs = readyTimeoutMs,
+) {
+  await waitForDurableCheckpoint(
+    "dashboard widget picker",
+    async () =>
+      page
+        .getByRole("combobox", { name: "Browse widgets" })
+        .isVisible()
+        .catch(() => false),
+    timeoutMs,
+  );
+  return page.getByRole("combobox", { name: "Browse widgets" });
+}
+
+/** Open the dashboard and wait for sync-preflight plus the widget picker. */
+export async function gotoDashboardAndWaitForWidgetPicker(
+  page,
+  url,
+  timeoutMs = readyTimeoutMs,
+) {
+  const syncPreflightResponse = waitForDashboardSyncPreflight(page, timeoutMs);
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await syncPreflightResponse;
+  await waitForDashboardWidgetPicker(page, timeoutMs);
+}
+
 /** Open a labeled combobox within scope and choose an option by visible label. */
 export async function selectLabeledComboboxOption(scope, label, optionName) {
   await selectComboboxOption(
@@ -237,7 +334,11 @@ export const initialEditableFactoryDefinitionVersion = {
 };
 
 const sessionFactoryPathPattern = /^\/factory-sessions\/([^/]+)\/factory$/;
-const sessionEventsPathPattern = /^\/factory-sessions\/([^/]+)\/events$/;
+const sessionSyncPreflightPathPattern =
+  /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
+const sessionEventsPathPattern =
+  /^\/factory-sessions\/([^/]+)\/events(?:\?.*)?$/;
+const factorySessionReadPathPattern = /^\/factory-sessions\/([^/]+)$/;
 const promptTemplateContractPathPattern =
   /^\/factory-sessions\/([^/]+)\/factory\/workstations\/[^/]+\/prompt-template-contract$/;
 const promptTemplateValidationPathPattern =
@@ -416,6 +517,15 @@ function spawnRuntime(args, extraEnv = {}, options = {}) {
     env: createBunEnv(extraEnv, options),
     shell: false,
     stdio: "pipe",
+  });
+}
+
+function spawnRepoProcess(command, args, options = {}) {
+  return spawn(command, args, {
+    cwd: path.resolve(packageRoot, ".."),
+    env: createBunEnv(options.extraEnv),
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -664,6 +774,50 @@ function ensureSessionState(
   );
 }
 
+function buildSessionSyncPreflightResponse(
+  request,
+  sessionState,
+  requestedSessionId,
+) {
+  const requestURL = new URL(request.url ?? "/", `http://${previewHost}`);
+  const afterEventID = requestURL.searchParams.get("after_event_id");
+  const afterSequenceValue = requestURL.searchParams.get("after_sequence");
+  const afterSequence =
+    afterSequenceValue != null ? Number(afterSequenceValue) : null;
+  const reconnectCursorProvided =
+    typeof afterEventID === "string" || afterSequenceValue != null;
+  const reconnectCursorValid =
+    typeof afterEventID === "string" &&
+    afterEventID.length > 0 &&
+    typeof afterSequence === "number" &&
+    Number.isFinite(afterSequence);
+  if (!sessionState) {
+    return {
+      checkpointReusable: false,
+      reasonCode: "session_not_found",
+      reconnectCursor: {
+        provided: reconnectCursorProvided,
+        validForStreamGeneration: false,
+      },
+      requestedSessionId,
+    };
+  }
+
+  return {
+    backendScopeId: `${sessionState.session.folderPath}::browser-integration`,
+    checkpointReusable: reconnectCursorValid,
+    factorySessionId: resolvedFactorySessionIDForSession(sessionState.session),
+    logicalSessionKeyId: logicalSessionKeyIDForSession(sessionState.session),
+    reasonCode: "ok",
+    reconnectCursor: {
+      provided: reconnectCursorProvided,
+      validForStreamGeneration: reconnectCursorValid,
+    },
+    requestedSessionId,
+    streamGenerationId: sessionState.version.physical,
+  };
+}
+
 async function createBrowserPreview() {
   const { apiPort, previewPort } = await browserPreviewPorts();
   const apiOrigin = `http://${previewHost}:${apiPort}`;
@@ -777,6 +931,16 @@ export async function startBrowserPreview() {
   };
 }
 
+export async function stopBrowserPreview() {
+  const state = browserPreviewState();
+  if (state.preview) {
+    await state.preview.stop();
+  }
+  state.preview = null;
+  state.previewPromise = null;
+  sharedBrowserPorts = null;
+}
+
 export async function loadReplayLines(fileName) {
   return (await readFile(path.join(replayFixtureDirectory, fileName), "utf8"))
     .split(/\r?\n/)
@@ -793,18 +957,20 @@ export async function openBrowserPage(options = {}) {
   );
   const state = browserProcessState();
   if (!state.browserPromise) {
-    state.browserPromise = chromium.launch({ headless: true }).then((browser) => {
-      state.browser = browser;
-      if (!state.cleanupRegistered) {
-        state.cleanupRegistered = true;
-        process.once("exit", () => {
-          if (state.browser) {
-            state.browser.close().catch(() => {});
-          }
-        });
-      }
-      return browser;
-    });
+    state.browserPromise = chromium
+      .launch({ headless: true })
+      .then((browser) => {
+        state.browser = browser;
+        if (!state.cleanupRegistered) {
+          state.cleanupRegistered = true;
+          process.once("exit", () => {
+            if (state.browser) {
+              state.browser.close().catch(() => {});
+            }
+          });
+        }
+        return browser;
+      });
   }
   const browser = await state.browserPromise;
   const context = await browser.newContext({
@@ -884,6 +1050,104 @@ export async function openBrowserPage(options = {}) {
       await context.close();
     },
   };
+}
+
+export async function startRealBackendBrowserHarness({
+  apiPort,
+  factoryDir = path.resolve(packageRoot, "..", "factory"),
+  requestID = "req-browser-runtime-001",
+  startMode = "sync",
+  workflowFixture,
+  workflowName,
+} = {}) {
+  if (!workflowFixture || !workflowName) {
+    throw new Error(
+      "startRealBackendBrowserHarness requires workflowFixture and workflowName.",
+    );
+  }
+
+  const child = spawnRepoProcess(
+    "go",
+    [
+      "run",
+      "./tests/functional/internal/support/cmd/browser_api_harness",
+      "--api-port",
+      String(apiPort),
+      "--factory-dir",
+      factoryDir,
+      "--request-id",
+      requestID,
+      "--start-mode",
+      startMode,
+      "--workflow-fixture",
+      workflowFixture,
+      "--workflow-name",
+      workflowName,
+    ],
+    {
+      extraEnv: {
+        CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
+      },
+    },
+  );
+
+  let stderr = "";
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const lineReader = readline.createInterface({
+    input: child.stdout,
+  });
+  const ready = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(
+        new Error(
+          `Timed out waiting for real backend browser harness readiness.\n${stderr.trim()}`,
+        ),
+      );
+    }, readyTimeoutMs);
+
+    function rejectWithProcessExit(code, signal) {
+      clearTimeout(timeout);
+      reject(
+        new Error(
+          `Real backend browser harness exited before readiness: code=${code ?? "null"} signal=${signal ?? "null"}\n${stderr.trim()}`,
+        ),
+      );
+    }
+
+    child.once("exit", rejectWithProcessExit);
+    lineReader.once("line", (line) => {
+      clearTimeout(timeout);
+      child.off("exit", rejectWithProcessExit);
+      try {
+        resolve(JSON.parse(line));
+      } catch (error) {
+        reject(
+          new Error(
+            `Failed to parse real backend browser harness ready payload: ${line}\n${error.message}\n${stderr.trim()}`,
+          ),
+        );
+      }
+    });
+  });
+
+  try {
+    const payload = await ready;
+    return {
+      apiOrigin: payload.apiOrigin,
+      sessionID: payload.sessionId,
+      stop: async () => {
+        lineReader.close();
+        await stopProcess(child);
+      },
+    };
+  } catch (error) {
+    lineReader.close();
+    await stopProcess(child);
+    throw error;
+  }
 }
 
 function isBenignBrowserError(error) {
@@ -967,11 +1231,61 @@ export async function startFactoryApiServer({
     sessionRegistry.state.get(defaultFactorySessionID).eventLines = eventLines;
   }
 
+  function sessionStateForRequest(sessionID) {
+    return sessionRegistry.state.get(resolveRegistrySessionID(sessionID));
+  }
+
   function buildCurrentFactoryDocument(sessionID) {
-    const sessionState = sessionRegistry.state.get(sessionID);
+    const sessionState = sessionStateForRequest(sessionID);
     return {
       ...sessionState.currentFactory,
       version: sessionState.version,
+    };
+  }
+
+  function buildFactorySessionDocument(sessionID) {
+    const sessionState = sessionStateForRequest(sessionID);
+    if (!sessionState) {
+      return null;
+    }
+
+    const lifecycleTimestamp = sessionState.version.physical;
+    const factoryState =
+      sessionState.eventLines.length > 0 ? "FINISHED" : "IDLE";
+
+    return {
+      factoryDir: sessionState.session.factoryDir,
+      folderPath: sessionState.session.folderPath,
+      id: sessionState.session.id,
+      isDefault: sessionState.session.isDefault,
+      project: sessionState.session.project,
+      runtime: {
+        lifecycle: {
+          startedAt: lifecycleTimestamp,
+          updatedAt: lifecycleTimestamp,
+        },
+        orchestratorKind: "PETRI",
+        progress: {
+          categories: {
+            failed: 0,
+            initial: 0,
+            processing: 0,
+            terminal: 0,
+          },
+          factoryState,
+          inFlightCount: 0,
+          totalTokens: 0,
+        },
+        status: "IDLE",
+        streamIdentity: buildStreamIdentityForSession(
+          sessionState.session,
+          lifecycleTimestamp,
+        ),
+        usage: {
+          resources: [],
+        },
+      },
+      target: sessionState.session.target,
     };
   }
 
@@ -1055,10 +1369,39 @@ export async function startFactoryApiServer({
       return;
     }
 
+    const factorySessionReadMatch =
+      request.method === "GET"
+        ? request.url?.match(factorySessionReadPathPattern)
+        : null;
+    if (factorySessionReadMatch) {
+      const sessionID = decodeURIComponent(factorySessionReadMatch[1]);
+      const sessionDocument = buildFactorySessionDocument(sessionID);
+      if (!sessionDocument) {
+        response.writeHead(404, {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        });
+        response.end(
+          JSON.stringify({
+            code: "FACTORY_SESSION_NOT_FOUND",
+            message: `Factory session ${sessionID} was not found.`,
+          }),
+        );
+        return;
+      }
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(sessionDocument));
+      return;
+    }
+
     const sessionFactoryMatch = request.url?.match(sessionFactoryPathPattern);
     if (sessionFactoryMatch && request.method === "GET") {
       const sessionID = decodeURIComponent(sessionFactoryMatch[1]);
-      const sessionState = sessionRegistry.state.get(sessionID);
+      const sessionState = sessionStateForRequest(sessionID);
       if (!sessionState || sessionState.currentFactory === null) {
         response.writeHead(404, {
           "Access-Control-Allow-Origin": "*",
@@ -1081,9 +1424,28 @@ export async function startFactoryApiServer({
       return;
     }
 
+    const sessionSyncPreflightMatch = request.url?.match(
+      sessionSyncPreflightPathPattern,
+    );
+    if (sessionSyncPreflightMatch && request.method === "GET") {
+      const sessionID = decodeURIComponent(sessionSyncPreflightMatch[1]);
+      const sessionState = sessionStateForRequest(sessionID);
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(
+        JSON.stringify(
+          buildSessionSyncPreflightResponse(request, sessionState, sessionID),
+        ),
+      );
+      return;
+    }
+
     if (sessionFactoryMatch && request.method === "PUT") {
       const sessionID = decodeURIComponent(sessionFactoryMatch[1]);
-      const sessionState = sessionRegistry.state.get(sessionID);
+      const sessionState = sessionStateForRequest(sessionID);
       if (!sessionState) {
         response.writeHead(404, {
           "Access-Control-Allow-Origin": "*",
@@ -1206,7 +1568,7 @@ export async function startFactoryApiServer({
     const sessionEventsMatch = request.url?.match(sessionEventsPathPattern);
     if (sessionEventsMatch && request.method === "GET") {
       const sessionID = decodeURIComponent(sessionEventsMatch[1]);
-      const sessionState = sessionRegistry.state.get(sessionID);
+      const sessionState = sessionStateForRequest(sessionID);
       requestedEventSessionIDs.push(sessionID);
       if (!sessionState) {
         response.writeHead(404, {

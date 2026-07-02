@@ -360,7 +360,7 @@ func TestCurrentFactoryPUT_ReturnsMultipleTopologyValidationTargets(t *testing.T
 	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid current factory save response")
-	if errResp.Code != factoryapi.INVALIDFACTORY {
+	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
 	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
@@ -398,7 +398,7 @@ func TestCurrentFactoryPUT_ReturnsCanonicalTopologyValidationTargets(t *testing.
 	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid current factory save response")
-	if errResp.Code != factoryapi.INVALIDFACTORY {
+	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
 	if errResp.Targets == nil || len(*errResp.Targets) == 0 {
@@ -472,7 +472,7 @@ func TestCurrentFactoryPUT_RejectsTypeCountCollisionBeforePersistingDefaultFacto
 	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), string(body), http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode type-count collision save response")
-	if errResp.Code != factoryapi.INVALIDFACTORY {
+	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
 	if errResp.Targets == nil || !hasValidationTarget(
@@ -556,7 +556,7 @@ func staleVersionCase(name string, logicalDelta int64, physicalDelta time.Durati
 				Physical: current.Physical.Add(physicalDelta),
 			})
 		},
-		wantCode:  factoryapi.STALEFACTORYVERSION,
+			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }
@@ -567,7 +567,7 @@ func missingVersionCase() advancedSaveVersionCase {
 		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
 			return nil
 		},
-		wantCode:  factoryapi.STALEFACTORYVERSION,
+			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }
@@ -578,7 +578,7 @@ func missingLogicalVersionCase() advancedSaveVersionCase {
 		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
 			return map[string]any{"physical": current.Physical.Add(time.Second).UTC().Format(time.RFC3339Nano)}
 		},
-		wantCode:  factoryapi.STALEFACTORYVERSION,
+			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }
@@ -589,7 +589,7 @@ func missingPhysicalVersionCase() advancedSaveVersionCase {
 		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
 			return map[string]any{"logical": strconv.FormatInt(current.Logical.Int64()+1, 10)}
 		},
-		wantCode:  factoryapi.STALEFACTORYVERSION,
+			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }

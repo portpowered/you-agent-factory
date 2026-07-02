@@ -9,13 +9,6 @@ required:
 properties:
   orchestratorKind:
     $ref: '../data-models/FactoryOrchestratorKind.yaml'
-  streamGenerationID:
-    type: string
-    description: >-
-      Opaque invalidation token for the current live Factory Session event
-      history. Clients can compare this value across preflight reads and stream
-      handshakes to decide whether reconnect cursors and stream-derived
-      projections still belong to the same live history.
   dialect:
     type: string
     description: JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
@@ -45,6 +38,17 @@ properties:
     $ref: './FactorySessionUsage.yaml'
   lifecycle:
     $ref: './FactorySessionLifecycle.yaml'
+  stopSummary:
+    $ref: './FactoryStopSummary.yaml'
+    description: >-
+      Canonical stopped-state summary for paused, blocked, needs-human, and
+      interrupted inspection paths on the existing Factory Session surface.
+  streamIdentity:
+    $ref: './FactorySessionStreamIdentity.yaml'
+    description: >-
+      Backend-authoritative identity for the current live session event stream.
+      Clients must confirm this identity before reusing persisted reconnect
+      cursors or timeline checkpoints.
   petri:
     $ref: './FactorySessionPetriProjection.yaml'
   javascript:

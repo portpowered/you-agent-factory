@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions/api";
 import { getFactorySessionDispatchDetail } from "../../../api/factory-sessions/dispatch-detail";
@@ -17,27 +17,6 @@ vi.mock("../../../api/factory-sessions/dispatch-detail", async () => {
     getFactorySessionDispatchDetail: vi.fn(),
   };
 });
-
-const successfulDispatch = {
-  artifactIds: ["artifact-1"],
-  dispatchKind: "JAVASCRIPT_VERIFY",
-  id: "dispatch-success",
-  javascript: {
-    executionMode: "live",
-    taskKind: "VERIFY",
-    taskLabel: "verify-docs",
-  },
-  orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-  providerSessionRefs: [
-    {
-      id: "provider-session-1",
-      kind: "session_id" as const,
-      provider: "codex",
-    },
-  ],
-  sessionId: "dur-sess-js-success-002",
-  status: "COMPLETED",
-};
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -55,18 +34,32 @@ function createWrapper() {
 }
 
 describe("useFactorySessionDispatchDetail", () => {
+  beforeEach(() => {
+    vi.mocked(getFactorySessionDispatchDetail).mockReset();
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it("returns idle when no dispatch is selected", () => {
+  it("stays idle when no dispatch is selected", () => {
     const { result } = renderHook(
-      () => useFactorySessionDispatchDetail("dur-sess-js-success-002", null),
+      () => useFactorySessionDispatchDetail("dur-sess-js-success-1", null),
       { wrapper: createWrapper() },
     );
 
-    expect(result.current).toEqual({ status: "idle" });
     expect(getFactorySessionDispatchDetail).not.toHaveBeenCalled();
+    expect(result.current).toEqual({ status: "idle" });
+  });
+
+  it("stays idle when the selected dispatch id is blank", () => {
+    const { result } = renderHook(
+      () => useFactorySessionDispatchDetail("dur-sess-js-success-1", "   "),
+      { wrapper: createWrapper() },
+    );
+
+    expect(getFactorySessionDispatchDetail).not.toHaveBeenCalled();
+    expect(result.current).toEqual({ status: "idle" });
   });
 
   it("returns loading while dispatch detail is resolving", () => {
@@ -85,17 +78,45 @@ describe("useFactorySessionDispatchDetail", () => {
 
     expect(result.current).toEqual({ status: "loading" });
   });
+});
 
-  it("returns success with normalized live-provider inspection projection", async () => {
-    vi.mocked(getFactorySessionDispatchDetail).mockResolvedValue(
-      successfulDispatch,
-    );
+describe("useFactorySessionDispatchDetail success and error states", () => {
+  beforeEach(() => {
+    vi.mocked(getFactorySessionDispatchDetail).mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("projects a successful durable dispatch detail read", async () => {
+    vi.mocked(getFactorySessionDispatchDetail).mockResolvedValue({
+      artifactIds: ["artifact-final-1"],
+      dispatchKind: "JAVASCRIPT_AGENT",
+      id: "dispatch-success-1",
+      javascript: {
+        executionMode: "live",
+        taskKind: "AGENT",
+        taskLabel: "Draft response",
+      },
+      orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+      providerSessionRefs: [
+        {
+          id: "sess_codex_1",
+          kind: "session_id",
+          provider: "codex",
+        },
+      ],
+      sessionId: "dur-sess-js-success-1",
+      status: "COMPLETED",
+      statusTransitions: ["QUEUED", "RUNNING", "COMPLETED"],
+    });
 
     const { result } = renderHook(
       () =>
         useFactorySessionDispatchDetail(
-          "dur-sess-js-success-002",
-          "dispatch-success",
+          "dur-sess-js-success-1",
+          "dispatch-success-1",
         ),
       { wrapper: createWrapper() },
     );
@@ -104,33 +125,35 @@ describe("useFactorySessionDispatchDetail", () => {
       expect(result.current.status).toBe("success");
     });
 
-    if (result.current.status !== "success") {
-      throw new Error("expected success dispatch detail state");
-    }
-
-    expect(result.current.data).toMatchObject({
-      dispatchID: "dispatch-success",
-      javascript: {
-        executionMode: "live",
-        taskKind: "VERIFY",
-        taskLabel: "verify-docs",
-      },
-      providerSessionRefs: [
-        {
-          id: "provider-session-1",
-          kind: "session_id",
-          provider: "codex",
+    expect(getFactorySessionDispatchDetail).toHaveBeenCalledWith({
+      dispatch_id: "dispatch-success-1",
+      session_id: "dur-sess-js-success-1",
+    });
+    expect(result.current).toEqual({
+      status: "success",
+      data: expect.objectContaining({
+        dispatchID: "dispatch-success-1",
+        javascript: {
+          executionMode: "live",
+          taskKind: "AGENT",
+          taskLabel: "Draft response",
         },
-      ],
-      sessionID: "dur-sess-js-success-002",
-      status: "COMPLETED",
+        providerSessionRefs: [
+          {
+            id: "sess_codex_1",
+            kind: "session_id",
+            provider: "codex",
+          },
+        ],
+        status: "COMPLETED",
+      }),
     });
   });
 
-  it("returns not-found when dispatch detail is missing", async () => {
+  it("returns not-found when the dispatch detail read is unavailable", async () => {
     vi.mocked(getFactorySessionDispatchDetail).mockRejectedValue(
       new FactorySessionsAPIError("Dispatch not found.", {
-        code: "NOT_FOUND",
+        code: "INTERNAL_ERROR",
         status: 404,
       }),
     );
@@ -138,20 +161,20 @@ describe("useFactorySessionDispatchDetail", () => {
     const { result } = renderHook(
       () =>
         useFactorySessionDispatchDetail(
-          "dur-sess-js-success-002",
-          "dispatch-missing",
+          "dur-sess-js-failed-1",
+          "dispatch-missing-1",
         ),
       { wrapper: createWrapper() },
     );
 
     await waitFor(() => {
-      expect(result.current).toEqual({ status: "not-found" });
+      expect(result.current.status).toBe("not-found");
     });
   });
 
-  it("returns error when dispatch detail fails to load", async () => {
+  it("returns an error state when the dispatch detail read fails", async () => {
     vi.mocked(getFactorySessionDispatchDetail).mockRejectedValue(
-      new FactorySessionsAPIError("Dispatch detail unavailable.", {
+      new FactorySessionsAPIError("The factory sessions API rejected the request.", {
         code: "INTERNAL_ERROR",
         status: 500,
       }),
@@ -160,17 +183,19 @@ describe("useFactorySessionDispatchDetail", () => {
     const { result } = renderHook(
       () =>
         useFactorySessionDispatchDetail(
-          "dur-sess-js-success-002",
-          "dispatch-error",
+          "dur-sess-js-failed-1",
+          "dispatch-failed-1",
         ),
       { wrapper: createWrapper() },
     );
 
     await waitFor(() => {
-      expect(result.current).toEqual({
-        message: "Dispatch detail unavailable.",
-        status: "error",
-      });
+      expect(result.current.status).toBe("error");
+    });
+
+    expect(result.current).toEqual({
+      status: "error",
+      message: "The factory sessions API rejected the request.",
     });
   });
 });

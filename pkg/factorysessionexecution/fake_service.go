@@ -158,6 +158,13 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 	return result, nil
 }
 
+func (s *FakeService) ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error) {
+	if err := ctx.Err(); err != nil {
+		return AsyncStartResult{}, err
+	}
+	return AsyncStartResult{}, ErrUnsupportedControl
+}
+
 func (s *FakeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SessionReadResult{}, err

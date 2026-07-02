@@ -445,6 +445,16 @@ func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
 	h.appendGenerated(event)
 }
 
+// RecordAgentRunEvent appends an agent-run boundary event to the same
+// canonical history used for dispatch and replay events.
+func (h *FactoryEventHistory) RecordAgentRunEvent(event factoryapi.FactoryEvent) {
+	if h == nil || !isAgentRunEventType(event.Type) {
+		return
+	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
+	h.appendGenerated(event)
+}
+
 // AppendRecordedEvent appends one already-shaped canonical event into the
 // history so callers can bridge runtime-owned events into a wider stream.
 func (h *FactoryEventHistory) AppendRecordedEvent(event factoryapi.FactoryEvent) {
@@ -791,11 +801,16 @@ func isScriptEventType(eventType factoryapi.FactoryEventType) bool {
 	}
 }
 
+func isAgentRunEventType(eventType factoryapi.FactoryEventType) bool {
+	return eventType == factoryapi.FactoryEventTypeAgentRunResponse
+}
+
 func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 	currentChainingTraceID := token.Color.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
 	}
+	_, stateValue := splitPlaceID(token.PlaceID)
 	return interfaces.FactoryWorkItem{
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
@@ -806,6 +821,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 		TraceID:                  token.Color.TraceID,
 		Content:                  append([]interfaces.WorkContentPart(nil), token.Color.Content...),
 		ParentID:                 token.Color.ParentID,
+		State:                    stateValue,
 		PlaceID:                  token.PlaceID,
 		Tags:                     cloneStringMap(token.Color.Tags),
 	}

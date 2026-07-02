@@ -167,6 +167,7 @@ func workstationDispatchViewFromCompletion(
 			FailureReason:               workstationRequestStringPtr(completion.Result.FailureReason),
 			FailureMessage:              workstationRequestStringPtr(completion.Result.FailureMessage),
 			ScriptResponse:              generatedFactoryWorldScriptResponse(latestScriptResponse),
+			AgentRunInspection:          generatedFactoryWorldAgentRunInspection(completion.Diagnostics),
 			EndTime:                     timePtr(completion.CompletedAt),
 			DurationMillis:              int64Ptr(completion.DurationMillis),
 			OutputWorkItems:             workItemRefSlicePtr(outputWorkItems),
@@ -754,6 +755,15 @@ func generatedFactoryWorldScriptResponse(
 		Stderr:          workstationRequestStringPtr(response.Stderr),
 		Stdout:          workstationRequestStringPtr(response.Stdout),
 	}
+}
+
+func generatedFactoryWorldAgentRunInspection(
+	diagnostics *interfaces.SafeWorkDiagnostics,
+) *factoryapi.FactoryWorldAgentRunInspectionView {
+	if diagnostics == nil || diagnostics.AgentRun == nil {
+		return nil
+	}
+	return interfaces.GeneratedFactoryWorldAgentRunInspectionView(diagnostics.AgentRun)
 }
 
 func stringSlicePtr(values []string) *[]string {

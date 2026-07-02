@@ -39,7 +39,7 @@ export interface paths {
     put?: never;
     /**
      * Invoke one factory session and return its primary result
-     * @description Live-session compatibility API for text-first invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+     * @description Live-session compatibility API for invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Requests may use legacy text-first compatibility content or structured invocationSignature args. Structured args normalize through the shared backend argument resolver, while content preserves the legacy compatibility carrier. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
      */
     post: operations["invokeFactorySessionBySessionId"];
     delete?: never;
@@ -136,8 +136,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Stream factory events
-     * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+     * Stream process-global factory events (compatibility-only)
+     * @description Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. Dashboard clients must open GET /factory-sessions/{session_id}/events with the resolved UUID factorySessionID instead; this route does not carry session identity handshakes and must not govern default-session dashboard recovery. New Factory Session and durable replay consumers should use the session-scoped route so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
      */
     get: operations["getEvents"];
     put?: never;
@@ -157,9 +157,29 @@ export interface paths {
     };
     /**
      * Stream factory events for one session
-     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     * @description Canonical event stream for dashboard, Factory Session, and durable replay traffic. Streams factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
      */
     get: operations["getEventsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/sync-preflight": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Validate cached session sync state for one session
+     * @description Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+     */
+    get: operations["getFactorySessionSyncPreflightBySessionId"];
     put?: never;
     post?: never;
     delete?: never;
@@ -853,10 +873,14 @@ export interface components {
      */
     InvocationInputSourceKind: InvocationInputSourceKind;
     InvocationRequest: {
-      /** @description Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
-      sourceKind: components["schemas"]["InvocationInputSourceKind"];
-      /** @description Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. */
-      content: components["schemas"]["WorkContent"];
+      /** @description Compatibility input source category selected by the API caller when `content` is supplied. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
+      sourceKind?: components["schemas"]["InvocationInputSourceKind"];
+      /** @description Canonical text-first compatibility invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. When `args` is omitted, `content` and `sourceKind: text` preserve the legacy invocation contract. */
+      content?: components["schemas"]["WorkContent"];
+      /** @description Optional structured invocation arguments keyed by parameter name, externalName, or alias. Values must decode as a string or an array of strings. Signature-backed runtimes normalize these values through the shared backend argument resolver. Compatibility `content` requests should omit `args`. */
+      args?: {
+        [key: string]: unknown;
+      };
       /** @description Optional caller-supplied idempotency key for the invocation request. */
       requestId?: string;
       /**
@@ -881,6 +905,14 @@ export interface components {
       errorCode?: InvocationResponseErrorCode;
       /** @description Human-readable failure summary when status is not `COMPLETED`. */
       message?: string;
+      /** @description Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session. */
+      sessionId?: string;
+      /** @description Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workId?: string;
+      /** @description Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workName?: string;
+      /** @description Current authored work state that best explains the non-success invocation outcome when one scoped work item is available. */
+      workState?: string;
     };
     /**
      * @description Terminal status for a factory-session invocation.
@@ -1298,8 +1330,6 @@ export interface components {
     };
     FactorySessionRuntime: {
       orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
-      /** @description Opaque invalidation token for the current live Factory Session event history. Clients can compare this value across preflight reads and stream handshakes to decide whether reconnect cursors and stream-derived projections still belong to the same live history. */
-      streamGenerationID?: string;
       /** @description JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT. */
       dialect?: string;
       /** @description Authored JavaScript workflow source reference when applicable. */
@@ -1315,12 +1345,65 @@ export interface components {
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage: components["schemas"]["FactorySessionUsage"];
       lifecycle: components["schemas"]["FactorySessionLifecycle"];
+      /** @description Canonical stopped-state summary for paused, blocked, needs-human, and interrupted inspection paths on the existing Factory Session surface. */
+      stopSummary?: components["schemas"]["FactoryStopSummary"];
+      /** @description Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints. */
+      streamIdentity?: components["schemas"]["FactorySessionStreamIdentity"];
       petri?: components["schemas"]["FactorySessionPetriProjection"];
       javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
       /** @description Shared dispatch projections for the session runtime. */
       dispatches?: components["schemas"]["FactoryDispatch"][];
       /** @description Shared artifact projections for the session runtime. */
       artifacts?: components["schemas"]["FactoryArtifact"][];
+    };
+    /**
+     * @description Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+     * @enum {string}
+     */
+    FactoryStopKind: FactoryStopKind;
+    FactoryStopDispatchSummary: {
+      /** @description Stable dispatch identifier that most directly explains the stopped state. */
+      dispatchId: string;
+      status: components["schemas"]["FactoryDispatchStatus"];
+      dispatchKind: components["schemas"]["FactoryDispatchKind"];
+      /** @description Customer-authored workstation name when one existing workstation run explains the stop. */
+      workstationName?: string;
+      /** @description Stable failure or interruption reason when one is available from the latest relevant dispatch. */
+      failureReason?: string;
+      /** @description Human-readable failure or interruption detail from the latest relevant dispatch when available. */
+      failureMessage?: string;
+    };
+    FactoryStopSummary: {
+      stopKind: components["schemas"]["FactoryStopKind"];
+      /** @description Stable Factory Session identifier that owns the stopped work. */
+      sessionId: string;
+      /** @description Relevant work identifier when one work item best explains the stop. */
+      workId?: string;
+      /** @description Relevant work name when one work item best explains the stop. */
+      workName?: string;
+      /** @description Relevant work type name when one work item best explains the stop. */
+      workTypeName?: string;
+      /** @description Current authored work state label such as `goal:blocked` when one work item best explains the stop. */
+      workState?: string;
+      /** @description Session lifecycle-control status when the stop is explained by pause or another session-level lifecycle condition. */
+      sessionLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      latestDispatch?: components["schemas"]["FactoryStopDispatchSummary"];
+      /** @description Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone. */
+      latestResultSummary?: string;
+      /** @description Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route. */
+      suggestedRecoverySurface?: string;
+      /** @description Human-readable next step that names the existing work or session action the operator should take to recover or continue automation. */
+      suggestedRecoveryAction?: string;
+    };
+    FactorySessionStreamIdentity: {
+      /** @description Stable backend process or scope identity for the current live session stream. */
+      backendScopeID: string;
+      /** @description Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector. */
+      logicalSessionKeyID: string;
+      /** @description Stable live Factory Session identifier for the current stream. */
+      factorySessionID: string;
+      /** @description Stable generation identifier for the current live session stream incarnation. */
+      streamGenerationID: string;
     };
     /**
      * @description Canonical lifecycle status for one live factory session runtime.
@@ -1413,6 +1496,44 @@ export interface components {
       running: number;
       /** @description Child dispatches that have completed. */
       completed: number;
+    };
+    /**
+     * @description Typed session sync preflight response used before restoring cached dashboard
+     *     checkpoint state or opening the session event stream with a reconnect cursor.
+     */
+    FactorySessionSyncPreflightResponse: {
+      /** @description Session selector requested by the client. This may be `~default`. */
+      requestedSessionId: string;
+      reasonCode: components["schemas"]["FactorySessionSyncPreflightReasonCode"];
+      /** @description Canonical backend scope identifier for the current server-owned session cache and event history scope. */
+      backendScopeId?: string;
+      /** @description Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector. */
+      logicalSessionKeyId?: string;
+      /** @description Resolved live Factory Session identifier for the current preflight target. Clients must persist this value rather than treating `~default` as a durable session identifier. */
+      factorySessionId?: string;
+      /** @description Canonical event-stream generation identifier for the resolved live Factory Session. */
+      streamGenerationId?: string;
+      /** @description True when cached stream-derived checkpoint state is safe to restore for the resolved identity set. */
+      checkpointReusable: boolean;
+      reconnectCursor: components["schemas"]["FactorySessionSyncPreflightReconnectCursor"];
+    };
+    /**
+     * @description Stable backend-owned session sync preflight outcome code.
+     * @enum {string}
+     */
+    FactorySessionSyncPreflightReasonCode: FactorySessionSyncPreflightReasonCode;
+    FactorySessionSyncPreflightReconnectCursor: {
+      /** @description True when the client supplied at least one reconnect cursor field for validation. */
+      provided: boolean;
+      /** @description True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session. */
+      validForStreamGeneration: boolean;
+      /** @description Optional acknowledged FactoryEvent.id supplied by the client. */
+      afterEventId?: string;
+      /**
+       * Format: int64
+       * @description Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.
+       */
+      afterSequence?: number;
     };
     FactorySessionLiveResult: {
       /** @description Live factory session identifier for this result read. */
@@ -2228,6 +2349,40 @@ export interface components {
      * @enum {string}
      */
     FactorySessionExecutionSourceKind: FactorySessionExecutionSourceKind;
+    /**
+     * @example {
+     *       "factorySessionId": "session-alpha",
+     *       "outcome": "CURSOR_STALE",
+     *       "retry": {
+     *         "omitAfterEventId": true,
+     *         "omitAfterSequence": true
+     *       }
+     *     }
+     */
+    FactorySessionEventStreamRecovery: {
+      /** @description Session identifier for the event stream being probed. */
+      factorySessionId: string;
+      outcome: components["schemas"]["FactorySessionEventStreamRecoveryOutcome"];
+      retry: components["schemas"]["FactorySessionEventStreamRecoveryRetry"];
+    };
+    /**
+     * @description Structured session event reconnect probe outcome for one session-scoped event stream.
+     * @example CURSOR_STALE
+     * @enum {string}
+     */
+    FactorySessionEventStreamRecoveryOutcome: FactorySessionEventStreamRecoveryOutcome;
+    /**
+     * @example {
+     *       "omitAfterEventId": true,
+     *       "omitAfterSequence": true
+     *     }
+     */
+    FactorySessionEventStreamRecoveryRetry: {
+      /** @description True when the next reconnect must omit after_event_id and replay from the start of the session stream. */
+      omitAfterEventId: boolean;
+      /** @description True when the next reconnect must omit after_sequence and replay from the start of the session stream. */
+      omitAfterSequence: boolean;
+    };
     /** @description Inline workflow source carried directly in a durable execution request. */
     FactorySessionExecutionInlineWorkflow: {
       /** @description Optional JavaScript workflow dialect label for the inline source. */
@@ -2659,9 +2814,22 @@ export interface components {
       requestMetadata?: components["schemas"]["StringMap"];
       responseMetadata?: components["schemas"]["StringMap"];
     };
+    FactoryWorldInvocationDiagnostic: {
+      signatureHash?: string;
+      parameters?: components["schemas"]["FactoryWorldInvocationParameterDiagnostic"][];
+    };
+    FactoryWorldInvocationParameterDiagnostic: {
+      name?: string;
+      sourceKinds?: string[];
+      /** Format: int64 */
+      valueCount?: number;
+      redacted?: boolean;
+    };
     FactoryWorldWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
       provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
+      invocation?: components["schemas"]["FactoryWorldInvocationDiagnostic"];
     };
     FactoryWorldWorkItemRef: {
       workId: string;
@@ -2720,6 +2888,26 @@ export interface components {
       exitCode?: number;
       failureType?: string;
     };
+    /** @description Customer-visible agent-run inspection for one workstation dispatch response. */
+    FactoryWorldAgentRunInspectionView: {
+      /** @description Stable execution behavior marker for agent-loop runs. */
+      executionBehavior?: string;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
     FactoryWorldSelectedRunnerView: {
       runnerId?: components["schemas"]["RunnerID"];
       displayName?: string;
@@ -2766,6 +2954,7 @@ export interface components {
       failureReason?: string;
       failureMessage?: string;
       scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
+      agentRunInspection?: components["schemas"]["FactoryWorldAgentRunInspectionView"];
       /** Format: date-time */
       endTime?: string;
       /** Format: int64 */
@@ -2805,6 +2994,7 @@ export interface components {
         | components["schemas"]["InferenceResponseEventPayload"]
         | components["schemas"]["ScriptRequestEventPayload"]
         | components["schemas"]["ScriptResponseEventPayload"]
+        | components["schemas"]["AgentRunResponseEventPayload"]
         | components["schemas"]["DispatchResponseEventPayload"]
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
@@ -3071,6 +3261,18 @@ export interface components {
       exitCode?: number;
       failureType?: components["schemas"]["ScriptFailureType"];
     };
+    /** @description Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces. */
+    AgentRunResponseEventPayload: {
+      /** @description Stable identifier for this agent-run boundary event. */
+      agentRunId: string;
+      outcome: components["schemas"]["WorkOutcome"];
+      /**
+       * Format: int64
+       * @description Agent-loop execution duration in milliseconds.
+       */
+      durationMillis: number;
+      diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+    };
     /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
     DispatchResponseEventPayload: {
       completionId?: string;
@@ -3183,6 +3385,7 @@ export interface components {
     WorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      invocation?: components["schemas"]["InvocationDiagnostic"];
       command?: components["schemas"]["CommandDiagnostic"];
       panic?: components["schemas"]["PanicDiagnostic"];
       metadata?: components["schemas"]["StringMap"];
@@ -3197,6 +3400,17 @@ export interface components {
       model?: string;
       requestMetadata?: components["schemas"]["StringMap"];
       responseMetadata?: components["schemas"]["StringMap"];
+    };
+    InvocationDiagnostic: {
+      signatureHash?: string;
+      parameters?: components["schemas"]["InvocationParameterDiagnostic"][];
+    };
+    InvocationParameterDiagnostic: {
+      name?: string;
+      sourceKinds?: string[];
+      /** Format: int64 */
+      valueCount?: number;
+      redacted?: boolean;
     };
     CommandDiagnostic: {
       command?: string;
@@ -3225,6 +3439,47 @@ export interface components {
     SafeWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
+      invocation?: components["schemas"]["InvocationDiagnostic"];
+    };
+    /** @description Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership. */
+    SafeAgentRunDiagnostic: {
+      /**
+       * @description Stable execution behavior marker for agent-loop runs.
+       * @enum {string}
+       */
+      executionBehavior?: SafeAgentRunDiagnosticExecutionBehavior;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
+    /** @description Bounded summary for one agent tool lifecycle event. */
+    AgentRunToolDiagnosticEntry: {
+      /** @description Tool name invoked by the agent loop. */
+      toolName?: string;
+      /** @description Tool lifecycle phase such as start, success, failure, or denied. */
+      phase?: string;
+      /** @description Safe diagnostic detail without raw process output or secrets. */
+      detail?: string;
+    };
+    /** @description Bounded transcript metadata for one agent-loop message without exposing full prompt bodies. */
+    AgentRunTranscriptEntry: {
+      /** @description Message role such as system, user, assistant, or tool. */
+      role?: string;
+      /** @description Bounded summary of the message content for inspection. */
+      summary?: string;
     };
     WallClock: {
       /** Format: date-time */
@@ -3484,6 +3739,8 @@ export interface components {
       inputTypes?: components["schemas"]["InputType"][];
       /** @description Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation. */
       invocationReturn?: components["schemas"]["InvocationReturn"];
+      /** @description Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior. */
+      invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -3546,6 +3803,100 @@ export interface components {
       encoding: FactoryOrchestratorJavaScriptInlineSourceEncoding;
       /** @description Inline JavaScript workflow source text. */
       inline: string;
+    };
+    /** @description Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions. */
+    FactoryInvocationSignature: {
+      /** @description Declared invocation parameters keyed by canonical parameter name. */
+      parameters?: components["schemas"]["FactoryInvocationParameter"][];
+      /** @description Policy for named inputs that do not match any declared parameter binding. */
+      unknownNamedArgumentPolicy?: components["schemas"]["FactoryInvocationUnknownNamedArgumentPolicy"];
+      /** @description Optional customer-facing hint for the factory's primary output shape. */
+      outputContract?: components["schemas"]["FactoryInvocationOutputContract"];
+      /** @description Example invocations rendered in docs, help, and inspection surfaces. */
+      examples?: components["schemas"]["FactoryInvocationExample"][];
+    };
+    /** @description One canonical invocation parameter declared on a factory. */
+    FactoryInvocationParameter: {
+      /** @description Internal canonical parameter name used for normalized argument maps and interpolation. */
+      name: string;
+      /** @description Customer-facing description rendered in help, docs, and form controls. */
+      description?: string;
+      /** @description Preferred named-argument key shown to callers, such as `output`. */
+      externalName?: string;
+      /** @description Additional accepted named-argument keys that normalize to this parameter. */
+      aliases?: string[];
+      /** @description String-first hint that guides parsing, docs, and dashboard form selection. */
+      typeHint?: components["schemas"]["FactoryInvocationParameterTypeHint"];
+      /** @description Declares whether the parameter consumes one value, repeated values, variadic values, or file contents. */
+      valueMode?: components["schemas"]["FactoryInvocationParameterValueMode"];
+      /** @description When true, invocation normalization must reject requests that omit this parameter. */
+      required?: boolean;
+      /** @description When true, diagnostics must preserve names and source metadata but redact concrete values. */
+      sensitive?: boolean;
+      /** @description Optional allowed string values for this parameter. */
+      choices?: string[];
+      /** @description Default string value used when an omitted parameter resolves to one effective value. */
+      defaultValue?: string;
+      /** @description Default string values used when an omitted parameter resolves to multiple effective values. */
+      defaultValues?: string[];
+      /** @description Accepted invocation bindings for this parameter across positional, named, and stdin sources. */
+      bindings?: components["schemas"]["FactoryInvocationParameterBinding"][];
+    };
+    /** @description One public binding that exposes a parameter to callers. */
+    FactoryInvocationParameterBinding: {
+      /** @description Binding kind used to route invocation input into the parameter. */
+      kind: components["schemas"]["FactoryInvocationParameterBindingKind"];
+      /** @description 1-based positional slot used when kind is POSITIONAL. */
+      position?: number;
+    };
+    /**
+     * @description Public invocation binding kinds supported by factory signatures.
+     * @enum {string}
+     */
+    FactoryInvocationParameterBindingKind: FactoryInvocationParameterBindingKind;
+    /**
+     * @description String-first parsing and UI hint for one factory invocation parameter.
+     * @enum {string}
+     */
+    FactoryInvocationParameterTypeHint: FactoryInvocationParameterTypeHint;
+    /**
+     * @description Declares how one invocation parameter consumes one or more string values.
+     * @enum {string}
+     */
+    FactoryInvocationParameterValueMode: FactoryInvocationParameterValueMode;
+    /**
+     * @description Policy for named inputs that do not match any declared parameter binding.
+     * @enum {string}
+     */
+    FactoryInvocationUnknownNamedArgumentPolicy: FactoryInvocationUnknownNamedArgumentPolicy;
+    /** @description Customer-facing output hint for a factory invocation signature. */
+    FactoryInvocationOutputContract: {
+      /** @description High-level output contract mode exposed to callers. */
+      mode?: components["schemas"]["FactoryInvocationOutputContractMode"];
+      /** @description Parameter name that controls the destination path when the factory writes output to disk. */
+      pathParameter?: string;
+      /** @description Output media type hint for docs, API consumers, and dashboard affordances. */
+      contentType?: string;
+      /** @description Suggested file extension when the output mode writes a file. */
+      fileExtension?: string;
+      /** @description Human-readable summary of the primary output contract. */
+      description?: string;
+    };
+    /**
+     * @description High-level output shape hint exposed by a factory invocation signature.
+     * @enum {string}
+     */
+    FactoryInvocationOutputContractMode: FactoryInvocationOutputContractMode;
+    /** @description One example invocation for docs, help, and packaged-factory inspection. */
+    FactoryInvocationExample: {
+      /** @description Stable example name. */
+      name: string;
+      /** @description Customer-facing explanation of what the example does. */
+      description?: string;
+      /** @description CLI-style argument vector rendered after factory selection. */
+      argv?: string[];
+      /** @description Example stdin payload when the signature routes stdin into one parameter. */
+      stdin?: string;
     };
     /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
     InvocationReturn: {
@@ -3713,9 +4064,21 @@ export interface components {
       auth?: components["schemas"]["HostedWorkerAuth"];
       /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
       linear?: components["schemas"]["HostedLinearWorkerConfig"];
+      /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools. */
+      agentTools?: components["schemas"]["AgentWorkerToolsConfig"];
       /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
       body?: string;
     };
+    /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy. */
+    AgentWorkerToolsConfig: {
+      /** @description Required executor policy for agent-loop tool use on this worker. */
+      policy: components["schemas"]["AgentWorkerToolPolicy"];
+    };
+    /**
+     * @description Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+     * @enum {string}
+     */
+    AgentWorkerToolPolicy: AgentWorkerToolPolicy;
     /**
      * @description Worker implementation families supported by the public factory-config contract.
      * @enum {string}
@@ -4239,6 +4602,8 @@ export interface components {
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
       relations?: components["schemas"]["Relation"][];
+      /** @description Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation. */
+      stopSummary?: components["schemas"]["FactoryStopSummary"];
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
@@ -4621,6 +4986,10 @@ export interface components {
     AfterEventId: string;
     /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
     AfterSequence: number;
+    /** @description Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target. */
+    BackendScopeId: string;
+    /** @description Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector. */
+    LogicalSessionKeyId: string;
   };
   requestBodies: never;
   headers: never;
@@ -4896,19 +5265,59 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Factory event stream for the targeted session. */
+      /** @description Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json. */
       200: {
         headers: {
+          /** @description Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Backend-Scope-Id"?: string;
+          /** @description Stable logical session key for the resolved Factory Session target within the current backend scope. Compare this handshake header with session-sync or preflight `logicalSessionKeyId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Logical-Session-Key-Id"?: string;
+          /** @description Resolved UUID Factory Session identifier for the current live event history. Compare this handshake header with session-sync or preflight `factorySessionId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Factory-Session-Id"?: string;
           /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Stream-Generation-Id"?: string;
           [name: string]: unknown;
         };
         content: {
           "text/event-stream": string;
+          "application/json": components["schemas"]["FactorySessionEventStreamRecovery"];
         };
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySessionSyncPreflightBySessionId: {
+    parameters: {
+      query?: {
+        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        after_event_id?: components["parameters"]["AfterEventId"];
+        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+        /** @description Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target. */
+        backend_scope_id?: components["parameters"]["BackendScopeId"];
+        /** @description Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector. */
+        logical_session_key_id?: components["parameters"]["LogicalSessionKeyId"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Typed session sync preflight outcome for the targeted session selector. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionSyncPreflightResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };
@@ -5912,6 +6321,10 @@ export const InvocationInputSourceKind = {
 export type InvocationInputSourceKind =
   (typeof InvocationInputSourceKind)[keyof typeof InvocationInputSourceKind];
 export const InvocationResponseErrorCode = {
+  INVOCATION_BLOCKED: "INVOCATION_BLOCKED",
+  INVOCATION_INTERRUPTED: "INVOCATION_INTERRUPTED",
+  INVOCATION_NEEDS_HUMAN: "INVOCATION_NEEDS_HUMAN",
+  INVOCATION_PAUSED: "INVOCATION_PAUSED",
   INVOCATION_PRIMARY_RESULT_UNRESOLVED: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
   INVOCATION_TIMED_OUT: "INVOCATION_TIMED_OUT",
   INVOCATION_CANCELED: "INVOCATION_CANCELED",
@@ -6092,6 +6505,14 @@ export const FactorySessionTargetRefKind = {
 } as const;
 export type FactorySessionTargetRefKind =
   (typeof FactorySessionTargetRefKind)[keyof typeof FactorySessionTargetRefKind];
+export const FactoryStopKind = {
+  PAUSED: "PAUSED",
+  BLOCKED: "BLOCKED",
+  NEEDS_HUMAN: "NEEDS_HUMAN",
+  INTERRUPTED: "INTERRUPTED",
+} as const;
+export type FactoryStopKind =
+  (typeof FactoryStopKind)[keyof typeof FactoryStopKind];
 export const FactorySessionStatus = {
   // The session runtime is actively processing work.
   ACTIVE: "ACTIVE",
@@ -6116,6 +6537,15 @@ export const FactorySessionJavaScriptScriptStatus = {
 } as const;
 export type FactorySessionJavaScriptScriptStatus =
   (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
+export const FactorySessionSyncPreflightReasonCode = {
+  ok: "ok",
+  cursor_stale: "cursor_stale",
+  session_not_found: "session_not_found",
+  logical_session_remap: "logical_session_remap",
+  logical_session_unresolved: "logical_session_unresolved",
+} as const;
+export type FactorySessionSyncPreflightReasonCode =
+  (typeof FactorySessionSyncPreflightReasonCode)[keyof typeof FactorySessionSyncPreflightReasonCode];
 export const FactorySessionResultMode = {
   FactorySessionResultModeFinal: "final",
   FactorySessionResultModePartial: "partial",
@@ -6289,6 +6719,14 @@ export const FactorySessionExecutionSourceKind = {
 } as const;
 export type FactorySessionExecutionSourceKind =
   (typeof FactorySessionExecutionSourceKind)[keyof typeof FactorySessionExecutionSourceKind];
+export const FactorySessionEventStreamRecoveryOutcome = {
+  STREAM_READY: "STREAM_READY",
+  CURSOR_STALE: "CURSOR_STALE",
+  UNKNOWN_SESSION: "UNKNOWN_SESSION",
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+} as const;
+export type FactorySessionEventStreamRecoveryOutcome =
+  (typeof FactorySessionEventStreamRecoveryOutcome)[keyof typeof FactorySessionEventStreamRecoveryOutcome];
 export const FactorySessionWorkflowSourceResolutionOrder = {
   // Search project-local `.claude/workflows` first for workflow file and name sources.
   FactorySessionWorkflowSourceResolutionOrderProjectClaudeWorkflows:
@@ -6460,6 +6898,8 @@ export const FactoryEventType = {
   FactoryEventTypeScriptRequest: "SCRIPT_REQUEST",
   // A script-backed worker command attempt returned or failed before a normal exit.
   FactoryEventTypeScriptResponse: "SCRIPT_RESPONSE",
+  // An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
+  FactoryEventTypeAgentRunResponse: "AGENT_RUN_RESPONSE",
   // A workstation response finished processing and produced an outcome.
   FactoryEventTypeDispatchResponse: "DISPATCH_RESPONSE",
   // A work item moved between authored marking states.
@@ -6590,6 +7030,12 @@ export const WorkFailureType = {
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const SafeAgentRunDiagnosticExecutionBehavior = {
+  // Agent-loop execution through AGENT_RUN workstations.
+  agent_run: "agent_run",
+} as const;
+export type SafeAgentRunDiagnosticExecutionBehavior =
+  (typeof SafeAgentRunDiagnosticExecutionBehavior)[keyof typeof SafeAgentRunDiagnosticExecutionBehavior];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",
@@ -6611,6 +7057,66 @@ export const FactoryOrchestratorJavaScriptInlineSourceEncoding = {
 } as const;
 export type FactoryOrchestratorJavaScriptInlineSourceEncoding =
   (typeof FactoryOrchestratorJavaScriptInlineSourceEncoding)[keyof typeof FactoryOrchestratorJavaScriptInlineSourceEncoding];
+export const FactoryInvocationParameterBindingKind = {
+  // Consume a positional CLI-style argument at a declared 1-based slot.
+  FactoryInvocationParameterBindingKindPositional: "POSITIONAL",
+  // Consume one named argument key matched through the parameter's externalName or aliases.
+  FactoryInvocationParameterBindingKindNamed: "NAMED",
+  // Consume invocation stdin routed into one declared parameter.
+  FactoryInvocationParameterBindingKindStdin: "STDIN",
+  // Collect otherwise-unbound named arguments into one rest-style parameter.
+  FactoryInvocationParameterBindingKindNamedRest: "NAMED_REST",
+} as const;
+export type FactoryInvocationParameterBindingKind =
+  (typeof FactoryInvocationParameterBindingKind)[keyof typeof FactoryInvocationParameterBindingKind];
+export const FactoryInvocationParameterTypeHint = {
+  // Generic free-form string input.
+  FactoryInvocationParameterTypeHintString: "STRING",
+  // Path-like string input with no stronger file or directory guarantee.
+  FactoryInvocationParameterTypeHintPath: "PATH",
+  // File path string input.
+  FactoryInvocationParameterTypeHintFilePath: "FILE_PATH",
+  // Directory path string input.
+  FactoryInvocationParameterTypeHintDirectoryPath: "DIRECTORY_PATH",
+  // Numeric value encoded as a string for transport parity.
+  FactoryInvocationParameterTypeHintNumberString: "NUMBER_STRING",
+  // Boolean value encoded as a string with CLI-friendly flag behavior.
+  FactoryInvocationParameterTypeHintBooleanString: "BOOLEAN_STRING",
+} as const;
+export type FactoryInvocationParameterTypeHint =
+  (typeof FactoryInvocationParameterTypeHint)[keyof typeof FactoryInvocationParameterTypeHint];
+export const FactoryInvocationParameterValueMode = {
+  // Consume exactly one effective string value.
+  FactoryInvocationParameterValueModeExact: "EXACT",
+  // Consume zero or more repeated effective string values.
+  FactoryInvocationParameterValueModeRepeated: "REPEATED",
+  // Consume positional overflow values as one variadic parameter.
+  FactoryInvocationParameterValueModeVariadic: "VARIADIC",
+  // Resolve supplied path values to file contents before interpolation.
+  FactoryInvocationParameterValueModeFileContents: "FILE_CONTENTS",
+} as const;
+export type FactoryInvocationParameterValueMode =
+  (typeof FactoryInvocationParameterValueMode)[keyof typeof FactoryInvocationParameterValueMode];
+export const FactoryInvocationUnknownNamedArgumentPolicy = {
+  // Reject unknown named arguments during normalization.
+  FactoryInvocationUnknownNamedArgumentPolicyReject: "REJECT",
+  // Preserve unknown named arguments for compatibility handling.
+  FactoryInvocationUnknownNamedArgumentPolicyAllow: "ALLOW",
+  // Route unknown named arguments into one declared NAMED_REST parameter.
+  FactoryInvocationUnknownNamedArgumentPolicyCollect: "COLLECT",
+} as const;
+export type FactoryInvocationUnknownNamedArgumentPolicy =
+  (typeof FactoryInvocationUnknownNamedArgumentPolicy)[keyof typeof FactoryInvocationUnknownNamedArgumentPolicy];
+export const FactoryInvocationOutputContractMode = {
+  // The primary result is expected inline in the invocation response.
+  FactoryInvocationOutputContractModeInline: "INLINE",
+  // The primary result is expected to be written to a caller-supplied file path.
+  FactoryInvocationOutputContractModeFile: "FILE",
+  // The primary result is expected to be structured JSON-like content.
+  FactoryInvocationOutputContractModeJson: "JSON",
+} as const;
+export type FactoryInvocationOutputContractMode =
+  (typeof FactoryInvocationOutputContractMode)[keyof typeof FactoryInvocationOutputContractMode];
 export const InvocationReturnPolicy = {
   // Use the invocation-submitted work item terminal content as the primary result.
   InvocationReturnPolicySubmittedWorkTerminal: "SUBMITTED_WORK_TERMINAL",
@@ -6657,10 +7163,17 @@ export const ResourceType = {
   ResourceTypeInvocationSlot: "INVOCATION_SLOT",
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
+export const AgentWorkerToolPolicy = {
+  AgentWorkerToolPolicyDISABLED: "DISABLED",
+  AgentWorkerToolPolicyREADONLY: "READ_ONLY",
+  AgentWorkerToolPolicyENABLED: "ENABLED",
+} as const;
+export type AgentWorkerToolPolicy =
+  (typeof AgentWorkerToolPolicy)[keyof typeof AgentWorkerToolPolicy];
 export const WorkerType = {
   // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
   WorkerTypeInferenceWorker: "INFERENCE_WORKER",
-  // Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
+  // Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
   WorkerTypeAgentWorker: "AGENT_WORKER",
   // Script-backed worker that executes a configured command instead of calling a model provider.
   WorkerTypeScriptWorker: "SCRIPT_WORKER",
@@ -6762,7 +7275,7 @@ export type WorkstationKind =
 export const WorkstationType = {
   // One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
   WorkstationTypeInferenceRun: "INFERENCE_RUN",
-  // Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+  // Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
   WorkstationTypeAgentRun: "AGENT_RUN",
   // Script-run workstation that executes deterministic command or script behavior through a script worker.
   WorkstationTypeScriptRun: "SCRIPT_RUN",

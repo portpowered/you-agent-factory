@@ -2,7 +2,6 @@ package factorysessionexecution
 
 import (
 	"encoding/json"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -404,83 +403,6 @@ type ListSessionsResult struct {
 	DurableSessions []DurableSessionListSummary
 }
 
-// NormalizeListSessionsRequest validates and normalizes one scoped session list request.
-func NormalizeListSessionsRequest(req ListSessionsRequest) (ListSessionsRequest, error) {
-	scope := req.Scope
-	if scope == "" {
-		scope = DefaultSessionListScope
-	}
-	switch scope {
-	case SessionListScopeLive, SessionListScopePersisted, SessionListScopeAll:
-	default:
-		return ListSessionsRequest{}, NewValidationError("scope", "scope must be live, persisted, or all")
-	}
-
-	filters, err := normalizeSessionListFilters(req.Filters)
-	if err != nil {
-		return ListSessionsRequest{}, err
-	}
-	return ListSessionsRequest{
-		Scope:   scope,
-		Filters: filters,
-	}, nil
-}
-
-func normalizeSessionListFilters(filters SessionListFilters) (SessionListFilters, error) {
-	normalized := SessionListFilters{
-		SourceKind:      filters.SourceKind,
-		SourceRef:       strings.TrimSpace(filters.SourceRef),
-		ProjectBoundary: strings.TrimSpace(filters.ProjectBoundary),
-		Recoverable:     filters.Recoverable,
-		StaleLease:      filters.StaleLease,
-		CreatedAfter:    filters.CreatedAfter,
-		CreatedBefore:   filters.CreatedBefore,
-		UpdatedAfter:    filters.UpdatedAfter,
-		UpdatedBefore:   filters.UpdatedBefore,
-	}
-	if len(filters.Statuses) > 0 {
-		normalized.Statuses = append([]LifecycleStatus(nil), filters.Statuses...)
-	}
-	if len(filters.OrchestratorKinds) > 0 {
-		normalized.OrchestratorKinds = make([]string, 0, len(filters.OrchestratorKinds))
-		for _, kind := range filters.OrchestratorKinds {
-			trimmed := strings.TrimSpace(kind)
-			if trimmed != "" {
-				normalized.OrchestratorKinds = append(normalized.OrchestratorKinds, trimmed)
-			}
-		}
-	}
-	if filters.SourceKind != "" && !isKnownWorkflowSourceKind(filters.SourceKind) {
-		return SessionListFilters{}, NewValidationError("filters.sourceKind", "unsupported source kind")
-	}
-	if err := validateTimeRange("filters.created", normalized.CreatedAfter, normalized.CreatedBefore); err != nil {
-		return SessionListFilters{}, err
-	}
-	if err := validateTimeRange("filters.updated", normalized.UpdatedAfter, normalized.UpdatedBefore); err != nil {
-		return SessionListFilters{}, err
-	}
-	return normalized, nil
-}
-
-func isKnownWorkflowSourceKind(kind workflowsource.Kind) bool {
-	switch kind {
-	case workflowsource.KindFactoryID,
-		workflowsource.KindFactoryInline,
-		workflowsource.KindWorkflowFile,
-		workflowsource.KindWorkflowName,
-		workflowsource.KindInlineWorkflow:
-		return true
-	default:
-		return false
-	}
-}
-
-func validateTimeRange(field string, after, before *time.Time) error {
-	if after != nil && before != nil && after.After(*before) {
-		return NewValidationError(field, "after must be before or equal to before")
-	}
-	return nil
-}
 
 const canonicalFactoryEventSchemaVersion = "agent-factory.event.v1"
 
@@ -494,6 +416,7 @@ type canonicalFactoryEventContext struct {
 	OrchestratorDialect *string   `json:"orchestratorDialect,omitempty"`
 	PhaseID             *string   `json:"phaseId,omitempty"`
 	PhaseName           *string   `json:"phaseName,omitempty"`
+	CheckpointID        *string   `json:"checkpointId,omitempty"`
 	DispatchID          *string   `json:"dispatchId,omitempty"`
 	Source              *string   `json:"source,omitempty"`
 }
@@ -506,11 +429,6 @@ type canonicalFactoryEvent struct {
 	Payload       json.RawMessage              `json:"payload"`
 }
 
-type parsedCanonicalEvent struct {
-	ID              string
-	Sequence        int
-	SessionSequence *int
-}
 
 const (
 	canonicalEventSourceFakeService    = "fake-service"
@@ -524,9 +442,31 @@ func BuildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 }
 
 // BuildCanonicalRuntimeSessionEvents synthesizes canonical FactoryEvent documents
-// for one runtime-backed durable session read and result projection pair.
-func BuildCanonicalRuntimeSessionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
-	return buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
+// for one runtime-backed durable session read and result projection pair. When
+// dispatch projection input is provided, runtime-backed child dispatches also
+// emit DISPATCH_QUEUED and terminal DISPATCH_RECONCILED lifecycle events.
+func BuildCanonicalRuntimeSessionEvents(
+	session SessionReadResult,
+	result ResultReadResult,
+	dispatch ...RuntimeDispatchEventInput,
+) []json.RawMessage {
+	events := buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
+	if len(dispatch) == 0 {
+		return events
+	}
+	input := dispatch[0]
+	if len(input.CheckpointEvents) > 0 {
+		events = appendCanonicalOrchestratorCheckpointEvents(events, session, input.CheckpointEvents, canonicalEventSourceRuntimeService)
+	}
+	if len(input.Dispatches) == 0 {
+		return events
+	}
+	return appendCanonicalRuntimeDispatchLifecycleEvents(
+		events,
+		session,
+		input,
+		canonicalEventSourceRuntimeService,
+	)
 }
 
 func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadResult, source string) []json.RawMessage {
@@ -632,12 +572,16 @@ func appendCanonicalPauseResumeSessionEvents(
 		sessionSequence++
 	}
 	if lifecycle.ResumedAt != nil {
+		resumeStatus := string(LifecycleStatusRunning)
+		if lifecycle.InterruptedAt != nil && lifecycle.InterruptedAt.Before(lifecycle.ResumedAt.UTC()) {
+			resumeStatus = string(LifecycleStatusResuming)
+		}
 		events = append(events, builder.event(
 			"SESSION_RESUMED",
 			"session-resumed/"+sessionID,
 			sessionSequence,
 			mustMarshalPayload(map[string]any{
-				"status":    string(LifecycleStatusRunning),
+				"status":    resumeStatus,
 				"resumedAt": lifecycle.ResumedAt.UTC().Format(time.RFC3339),
 			}),
 		))
@@ -698,6 +642,15 @@ type canonicalSessionEventBuilder struct {
 }
 
 func (b canonicalSessionEventBuilder) event(eventType, id string, sessionSequence int, payload json.RawMessage) json.RawMessage {
+	return b.eventWithCheckpoint(eventType, id, sessionSequence, nil, payload)
+}
+
+func (b canonicalSessionEventBuilder) eventWithCheckpoint(
+	eventType, id string,
+	sessionSequence int,
+	checkpointID *string,
+	payload json.RawMessage,
+) json.RawMessage {
 	sequence := sessionSequence + 1
 	context := canonicalFactoryEventContext{
 		Sequence:        sequence,
@@ -718,6 +671,9 @@ func (b canonicalSessionEventBuilder) event(eventType, id string, sessionSequenc
 	}
 	if b.phaseName != nil {
 		context.PhaseName = b.phaseName
+	}
+	if checkpointID != nil && strings.TrimSpace(*checkpointID) != "" {
+		context.CheckpointID = checkpointID
 	}
 	encoded, err := json.Marshal(canonicalFactoryEvent{
 		SchemaVersion: canonicalFactoryEventSchemaVersion,
@@ -763,80 +719,4 @@ func mustMarshalPayload(payload map[string]any) json.RawMessage {
 
 func intPtr(value int) *int {
 	return &value
-}
-
-// FilterEventsAfterReconnect returns only events after the requested reconnect cursor.
-// When both AfterEventID and AfterSequence are set, AfterEventID wins.
-func FilterEventsAfterReconnect(events []json.RawMessage, req EventReconnectRequest, sessionID string) ([]json.RawMessage, error) {
-	if len(events) == 0 {
-		return nil, nil
-	}
-	if strings.TrimSpace(req.AfterEventID) == "" && req.AfterSequence == nil {
-		return append([]json.RawMessage(nil), events...), nil
-	}
-
-	parsed := make([]parsedCanonicalEvent, len(events))
-	for index, raw := range events {
-		event, err := parseCanonicalEvent(raw)
-		if err != nil {
-			return nil, fmt.Errorf("parse event %d: %w", index, err)
-		}
-		parsed[index] = event
-	}
-
-	if afterID := strings.TrimSpace(req.AfterEventID); afterID != "" {
-		return filterEventsAfterEventID(events, parsed, afterID)
-	}
-	if req.AfterSequence == nil {
-		return append([]json.RawMessage(nil), events...), nil
-	}
-	return filterEventsAfterSequence(events, parsed, *req.AfterSequence, sessionID)
-}
-
-func filterEventsAfterEventID(events []json.RawMessage, parsed []parsedCanonicalEvent, afterID string) ([]json.RawMessage, error) {
-	for index, event := range parsed {
-		if event.ID == afterID {
-			return append([]json.RawMessage(nil), events[index+1:]...), nil
-		}
-	}
-	return nil, fmt.Errorf("%w: after_event_id %q", ErrReconnectCursorNotFound, afterID)
-}
-
-func filterEventsAfterSequence(events []json.RawMessage, parsed []parsedCanonicalEvent, ackSequence int, sessionID string) ([]json.RawMessage, error) {
-	if sessionID != "" {
-		for index := len(parsed) - 1; index >= 0; index-- {
-			event := parsed[index]
-			if event.SessionSequence != nil && *event.SessionSequence == ackSequence {
-				return append([]json.RawMessage(nil), events[index+1:]...), nil
-			}
-		}
-		return nil, fmt.Errorf("%w: after_sequence %d for session %q", ErrReconnectCursorNotFound, ackSequence, sessionID)
-	}
-	for index := len(parsed) - 1; index >= 0; index-- {
-		if parsed[index].Sequence == ackSequence {
-			return append([]json.RawMessage(nil), events[index+1:]...), nil
-		}
-	}
-	return nil, fmt.Errorf("%w: after_sequence %d", ErrReconnectCursorNotFound, ackSequence)
-}
-
-func parseCanonicalEvent(raw json.RawMessage) (parsedCanonicalEvent, error) {
-	var envelope struct {
-		ID      string `json:"id"`
-		Context struct {
-			Sequence        int  `json:"sequence"`
-			SessionSequence *int `json:"sessionSequence"`
-		} `json:"context"`
-	}
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return parsedCanonicalEvent{}, err
-	}
-	if strings.TrimSpace(envelope.ID) == "" {
-		return parsedCanonicalEvent{}, fmt.Errorf("event id is required")
-	}
-	return parsedCanonicalEvent{
-		ID:              envelope.ID,
-		Sequence:        envelope.Context.Sequence,
-		SessionSequence: envelope.Context.SessionSequence,
-	}, nil
 }

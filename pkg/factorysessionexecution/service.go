@@ -21,6 +21,7 @@ import (
 type Service interface {
 	StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error)
 	StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error)
+	ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error)
 	GetSession(ctx context.Context, sessionID string) (SessionReadResult, error)
 	Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
 	Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
@@ -321,7 +322,7 @@ func childArtifactFromDispatch(
 	}
 	return ArtifactSummary{
 		ID:           parsed.ArtifactID,
-		Kind:         "CHILD_OUTPUT",
+		Kind:         "CHILD_RESULT",
 		Visibility:   "WORKFLOW_RUNTIME",
 		Label:        child.Label,
 		DispatchID:   child.DispatchID,
@@ -352,7 +353,7 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		summary.Provider = provider
 		summary.ProviderSessionRefs = []ProviderSessionRef{{
 			Provider: provider,
-			Kind:     "AGENT",
+			Kind:     "session_id",
 			ID:       ref,
 		}}
 	}
@@ -545,20 +546,22 @@ func SeedRuntimeSessionWithRunningDispatch(
 			Retryable: true,
 		},
 	}
-	state := &runtimeSessionState{
-		session: session,
-		result:  result,
-		dispatches: []DispatchSummary{{
-			ID:     dispatchID,
-			Status: DispatchStatusRunning,
-			Phase:  "execute",
-			Label:  label,
-		}},
-		dispatchStatusTransitions: map[string][]DispatchStatus{
-			dispatchID: {DispatchStatusQueued, DispatchStatusRunning},
-		},
-		events: BuildCanonicalRuntimeSessionEvents(session, result),
+	dispatches := []DispatchSummary{{
+		ID:     dispatchID,
+		Status: DispatchStatusRunning,
+		Phase:  "execute",
+		Label:  label,
+	}}
+	dispatchStatusTransitions := map[string][]DispatchStatus{
+		dispatchID: {DispatchStatusQueued, DispatchStatusRunning},
 	}
+	state := &runtimeSessionState{
+		session:                   session,
+		result:                    result,
+		dispatches:                dispatches,
+		dispatchStatusTransitions: dispatchStatusTransitions,
+	}
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 
 	service.mu.Lock()
 	defer service.mu.Unlock()

@@ -88,17 +88,18 @@ paths:
       operationId: invokeFactorySessionBySessionId
       summary: Invoke one factory session and return its primary result
       description: >-
-        Live-session compatibility API for text-first invocations against an
-        already-open factory session. This route is not the primary durable
-        workflow execution entrypoint; use POST /factory-sessions/async or POST
+        Live-session compatibility API for invocations against an already-open
+        factory session. This route is not the primary durable workflow
+        execution entrypoint; use POST /factory-sessions/async or POST
         /factory-sessions/sync for dynamic workflow-backed durable execution.
-        Resolves one text-first invocation input, submits it to the selected live
-        factory session, waits for terminal primary-result selection, and returns
-        the result using the factory's invocationReturn policy. When
-        invocationReturn is omitted, runtimes use the documented
-        SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is
-        rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input
-        is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be
+        Requests may use legacy text-first compatibility content or structured
+        invocationSignature args. Structured args normalize through the shared
+        backend argument resolver, while content preserves the legacy
+        compatibility carrier. When invocationReturn is omitted, runtimes use
+        the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous
+        input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or
+        INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is
+        rejected with INVOCATION_INPUT_EMPTY. If no primary output can be
         resolved, the response status is FAILED with
         INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
       parameters:
@@ -244,8 +245,8 @@ paths:
       tags:
         - Runtime
       operationId: getEvents
-      summary: Stream factory events
-      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+      summary: Stream process-global factory events (compatibility-only)
+      description: Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. Dashboard clients must open GET /factory-sessions/{session_id}/events with the resolved UUID factorySessionID instead; this route does not carry session identity handshakes and must not govern default-session dashboard recovery. New Factory Session and durable replay consumers should use the session-scoped route so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
       parameters:
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
@@ -268,15 +269,27 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Canonical event stream for dashboard, Factory Session, and durable replay traffic. Streams factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
-          description: Factory event stream for the targeted session.
+          description: Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json.
           headers:
+            X-Factory-Session-Backend-Scope-Id:
+              description: Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
+            X-Factory-Session-Logical-Session-Key-Id:
+              description: Stable logical session key for the resolved Factory Session target within the current backend scope. Compare this handshake header with session-sync or preflight `logicalSessionKeyId` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
+            X-Factory-Session-Factory-Session-Id:
+              description: Resolved UUID Factory Session identifier for the current live event history. Compare this handshake header with session-sync or preflight `factorySessionId` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
             X-Factory-Session-Stream-Generation-Id:
               description: Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections.
               schema:
@@ -287,10 +300,35 @@ paths:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
               x-event-schema: '#/components/schemas/FactoryEvent'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionEventStreamRecovery'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/sync-preflight:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactorySessionSyncPreflightBySessionId
+      summary: Validate cached session sync state for one session
+      description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/BackendScopeId'
+        - $ref: '#/components/parameters/LogicalSessionKeyId'
+      responses:
+        '200':
+          description: Typed session sync preflight outcome for the targeted session selector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionSyncPreflightResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /status:
@@ -1400,6 +1438,10 @@ components:
       $ref: './components/parameters/AfterEventId.yaml'
     AfterSequence:
       $ref: './components/parameters/AfterSequence.yaml'
+    BackendScopeId:
+      $ref: './components/parameters/BackendScopeId.yaml'
+    LogicalSessionKeyId:
+      $ref: './components/parameters/LogicalSessionKeyId.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'
@@ -1546,6 +1588,14 @@ components:
       $ref: './components/schemas/api/FactorySession.yaml'
     FactorySessionRuntime:
       $ref: './components/schemas/api/FactorySessionRuntime.yaml'
+    FactoryStopKind:
+      $ref: './components/schemas/api/FactoryStopKind.yaml'
+    FactoryStopDispatchSummary:
+      $ref: './components/schemas/api/FactoryStopDispatchSummary.yaml'
+    FactoryStopSummary:
+      $ref: './components/schemas/api/FactoryStopSummary.yaml'
+    FactorySessionStreamIdentity:
+      $ref: './components/schemas/api/FactorySessionStreamIdentity.yaml'
     FactorySessionStatus:
       $ref: './components/schemas/api/FactorySessionStatus.yaml'
     FactorySessionProgress:
@@ -1568,6 +1618,12 @@ components:
       $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
     FactorySessionJavaScriptChildDispatchCounts:
       $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    FactorySessionSyncPreflightResponse:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightResponse.yaml'
+    FactorySessionSyncPreflightReasonCode:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightReasonCode.yaml'
+    FactorySessionSyncPreflightReconnectCursor:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightReconnectCursor.yaml'
     FactorySessionLiveResult:
       $ref: './components/schemas/api/FactorySessionLiveResult.yaml'
     FactorySessionResult:
@@ -1692,6 +1748,12 @@ components:
       $ref: './components/schemas/api/FactorySessionExecutionSource.yaml'
     FactorySessionExecutionSourceKind:
       $ref: './components/schemas/api/FactorySessionExecutionSourceKind.yaml'
+    FactorySessionEventStreamRecovery:
+      $ref: './components/schemas/api/FactorySessionEventStreamRecovery.yaml'
+    FactorySessionEventStreamRecoveryOutcome:
+      $ref: './components/schemas/api/FactorySessionEventStreamRecoveryOutcome.yaml'
+    FactorySessionEventStreamRecoveryRetry:
+      $ref: './components/schemas/api/FactorySessionEventStreamRecoveryRetry.yaml'
     FactorySessionExecutionInlineWorkflow:
       $ref: './components/schemas/api/FactorySessionExecutionInlineWorkflow.yaml'
     FactorySessionRequestedPolicy:
@@ -1772,6 +1834,10 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml'
     FactoryWorldProviderDiagnostic:
       $ref: './components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml'
+    FactoryWorldInvocationDiagnostic:
+      $ref: './components/schemas/factory-world/FactoryWorldInvocationDiagnostic.yaml'
+    FactoryWorldInvocationParameterDiagnostic:
+      $ref: './components/schemas/factory-world/FactoryWorldInvocationParameterDiagnostic.yaml'
     FactoryWorldWorkDiagnostics:
       $ref: './components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml'
     FactoryWorldWorkItemRef:
@@ -1784,6 +1850,8 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldScriptRequestView.yaml'
     FactoryWorldScriptResponseView:
       $ref: './components/schemas/factory-world/FactoryWorldScriptResponseView.yaml'
+    FactoryWorldAgentRunInspectionView:
+      $ref: './components/schemas/factory-world/FactoryWorldAgentRunInspectionView.yaml'
     FactoryWorldSelectedRunnerView:
       $ref: './components/schemas/factory-world/FactoryWorldSelectedRunnerView.yaml'
     FactoryWorldRunnerBaselineCapability:
@@ -1842,6 +1910,8 @@ components:
       $ref: './components/schemas/events/payloads/ScriptRequestEventPayload.yaml'
     ScriptResponseEventPayload:
       $ref: './components/schemas/events/payloads/ScriptResponseEventPayload.yaml'
+    AgentRunResponseEventPayload:
+      $ref: './components/schemas/events/payloads/AgentRunResponseEventPayload.yaml'
     DispatchResponseEventPayload:
       $ref: './components/schemas/events/payloads/DispatchResponseEventPayload.yaml'
     WorkStateChangeEventPayload:
@@ -1876,6 +1946,10 @@ components:
       $ref: './components/schemas/events/RenderedPromptDiagnostic.yaml'
     ProviderDiagnostic:
       $ref: './components/schemas/events/ProviderDiagnostic.yaml'
+    InvocationDiagnostic:
+      $ref: './components/schemas/events/InvocationDiagnostic.yaml'
+    InvocationParameterDiagnostic:
+      $ref: './components/schemas/events/InvocationParameterDiagnostic.yaml'
     CommandDiagnostic:
       $ref: './components/schemas/shared/CommandDiagnostic.yaml'
     PanicDiagnostic:
@@ -1884,6 +1958,12 @@ components:
       $ref: './components/schemas/events/Diagnostics.yaml'
     SafeWorkDiagnostics:
       $ref: './components/schemas/events/SafeWorkDiagnostics.yaml'
+    SafeAgentRunDiagnostic:
+      $ref: './components/schemas/events/SafeAgentRunDiagnostic.yaml'
+    AgentRunToolDiagnosticEntry:
+      $ref: './components/schemas/events/AgentRunToolDiagnosticEntry.yaml'
+    AgentRunTranscriptEntry:
+      $ref: './components/schemas/events/AgentRunTranscriptEntry.yaml'
     WallClock:
       $ref: './components/schemas/events/WallClock.yaml'
 
@@ -1904,6 +1984,26 @@ components:
       $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptConfig.yaml'
     FactoryOrchestratorJavaScriptInlineSource:
       $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptInlineSource.yaml'
+    FactoryInvocationSignature:
+      $ref: './components/schemas/data-models/FactoryInvocationSignature.yaml'
+    FactoryInvocationParameter:
+      $ref: './components/schemas/data-models/FactoryInvocationParameter.yaml'
+    FactoryInvocationParameterBinding:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterBinding.yaml'
+    FactoryInvocationParameterBindingKind:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterBindingKind.yaml'
+    FactoryInvocationParameterTypeHint:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterTypeHint.yaml'
+    FactoryInvocationParameterValueMode:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterValueMode.yaml'
+    FactoryInvocationUnknownNamedArgumentPolicy:
+      $ref: './components/schemas/data-models/FactoryInvocationUnknownNamedArgumentPolicy.yaml'
+    FactoryInvocationOutputContract:
+      $ref: './components/schemas/data-models/FactoryInvocationOutputContract.yaml'
+    FactoryInvocationOutputContractMode:
+      $ref: './components/schemas/data-models/FactoryInvocationOutputContractMode.yaml'
+    FactoryInvocationExample:
+      $ref: './components/schemas/data-models/FactoryInvocationExample.yaml'
     InvocationReturn:
       $ref: './components/schemas/data-models/InvocationReturn.yaml'
     InvocationReturnPolicy:
@@ -1934,6 +2034,10 @@ components:
       $ref: './components/schemas/data-models/ResourceType.yaml'
     Worker:
       $ref: './components/schemas/data-models/Worker.yaml'
+    AgentWorkerToolsConfig:
+      $ref: './components/schemas/data-models/AgentWorkerToolsConfig.yaml'
+    AgentWorkerToolPolicy:
+      $ref: './components/schemas/data-models/AgentWorkerToolPolicy.yaml'
     WorkerType:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:

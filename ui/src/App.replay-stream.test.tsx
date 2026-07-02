@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "./api/events";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   failureAnalysisTimelineEvents,
   graphStateSmokeTimelineEvents,
@@ -245,12 +245,12 @@ const streamedGraphChangeEvents = [
 describe("App streamed replay rendering flows", () => {
   registerAppDashboardTestLifecycle();
 
-  it("smoke tests /events replay rendering without the removed dashboard snapshot route", async () => {
+  it("smoke tests session-scoped event replay rendering without the removed dashboard snapshot route", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
     const stream = await requireEventStream();
     expect(stream.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
 
     act(() => {

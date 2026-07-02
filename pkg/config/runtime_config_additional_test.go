@@ -611,6 +611,49 @@ func TestMergePortableBundledFiles_ManifestAuthoritativeDocsSkipsUnlistedDiskDoc
 	}
 }
 
+func TestMergePortableBundledFiles_ManifestAuthoritativeDocsIncludesNestedUnlistedDiskDocs(t *testing.T) {
+	existing := []interfaces.BundledFileConfig{{
+		Type:       interfaces.BundledFileTypeDoc,
+		TargetPath: "factory/docs/README.md",
+		Content: interfaces.BundledFileContentConfig{
+			Encoding: interfaces.BundledFileEncodingUTF8,
+		},
+	}}
+	collected := []interfaces.BundledFileConfig{
+		{
+			Type:       interfaces.BundledFileTypeDoc,
+			TargetPath: "factory/docs/README.md",
+			Content: interfaces.BundledFileContentConfig{
+				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   "# Factory docs\n",
+			},
+		},
+		{
+			Type:       interfaces.BundledFileTypeDoc,
+			TargetPath: "factory/docs/standards/review.md",
+			Content: interfaces.BundledFileContentConfig{
+				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   "# Review standards\n",
+			},
+		},
+		{
+			Type:       interfaces.BundledFileTypeDoc,
+			TargetPath: "factory/docs/orphan.md",
+			Content: interfaces.BundledFileContentConfig{
+				Encoding: interfaces.BundledFileEncodingUTF8,
+				Inline:   "orphan content",
+			},
+		},
+	}
+
+	merged := mergePortableBundledFiles(existing, collected, false)
+	if len(merged) != 2 {
+		t.Fatalf("merged bundled files = %#v, want listed and nested docs only", merged)
+	}
+	assertPortableBundledDocsMergeTarget(t, merged, "factory/docs/README.md", "# Factory docs\n")
+	assertPortableBundledDocsMergeTarget(t, merged, "factory/docs/standards/review.md", "# Review standards\n")
+}
+
 func TestMergePortableBundledFiles_DiscoverUnlistedDocsAddsDiskOnlyDocs(t *testing.T) {
 	existing := []interfaces.BundledFileConfig{{
 		Type:       interfaces.BundledFileTypeDoc,
@@ -689,4 +732,19 @@ func assertPortableBundledDocsTestFile(t *testing.T, path, want string) {
 	if string(data) != want {
 		t.Fatalf("file %s = %q, want %q", path, string(data), want)
 	}
+}
+
+func assertPortableBundledDocsMergeTarget(t *testing.T, merged []interfaces.BundledFileConfig, targetPath, wantInline string) {
+	t.Helper()
+
+	for _, bundledFile := range merged {
+		if bundledFile.TargetPath != targetPath {
+			continue
+		}
+		if bundledFile.Content.Inline != wantInline {
+			t.Fatalf("merged doc %q inline = %q, want %q", targetPath, bundledFile.Content.Inline, wantInline)
+		}
+		return
+	}
+	t.Fatalf("merged bundled files missing target %q: %#v", targetPath, merged)
 }

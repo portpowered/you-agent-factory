@@ -1,10 +1,6 @@
 @import "tailwindcss";
-@import "./styles/color-palette-presets.css";
-@import "./styles/color-role-tokens.css";
-@import "./styles/text-color-role-tokens.css";
-@import "./styles/typography-role-tokens.css";
+@import "@you-agent-factory/components/styles.css";
 @import "./styles/typography-role-utilities.css";
-@import "./styles/layout-role-tokens.css";
 
 @source "./**/*.{ts,tsx}";
 

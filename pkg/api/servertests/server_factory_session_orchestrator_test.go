@@ -26,6 +26,8 @@ func stringPointerForFactorySessionTest(value string) *string {
 
 func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 	phase := "review"
+	backendScopeID := "backend-scope-live"
+	logicalSessionKeyID := "/workspace/root::named::beta"
 	streamGenerationID := "stream-gen-live-001"
 	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
 		FactorySession: factoryapi.FactorySession{
@@ -38,9 +40,14 @@ func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 				Name: stringPointerForFactorySessionTest("beta"),
 			},
 			Runtime: factoryapi.FactorySessionRuntime{
-				OrchestratorKind:   factoryapi.JAVASCRIPT,
-				StreamGenerationID: &streamGenerationID,
-				Status:             factoryapi.FactorySessionStatusIDLE,
+				OrchestratorKind: factoryapi.JAVASCRIPT,
+				StreamIdentity: &factoryapi.FactorySessionStreamIdentity{
+					BackendScopeID:      backendScopeID,
+					LogicalSessionKeyID: logicalSessionKeyID,
+					FactorySessionID:    "session-beta",
+					StreamGenerationID:  streamGenerationID,
+				},
+				Status: factoryapi.FactorySessionStatusIDLE,
 				Progress: factoryapi.FactorySessionProgress{
 					FactoryState:  "UNKNOWN",
 					Categories:    factoryapi.StatusCategories{},
@@ -76,11 +83,142 @@ func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 	if response.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("orchestrator kind = %q, want JAVASCRIPT", response.Runtime.OrchestratorKind)
 	}
-	if response.Runtime.StreamGenerationID == nil || *response.Runtime.StreamGenerationID != streamGenerationID {
-		t.Fatalf("streamGenerationID = %#v, want %q", response.Runtime.StreamGenerationID, streamGenerationID)
+	if response.Runtime.StreamIdentity == nil {
+		t.Fatal("streamIdentity = nil, want populated identity")
+	}
+	if response.Runtime.StreamIdentity.BackendScopeID != backendScopeID {
+		t.Fatalf("streamIdentity.backendScopeID = %q, want %q", response.Runtime.StreamIdentity.BackendScopeID, backendScopeID)
+	}
+	if response.Runtime.StreamIdentity.FactorySessionID != "session-beta" {
+		t.Fatalf("streamIdentity.factorySessionID = %q, want session-beta", response.Runtime.StreamIdentity.FactorySessionID)
+	}
+	if response.Runtime.StreamIdentity.StreamGenerationID != streamGenerationID {
+		t.Fatalf("streamIdentity.streamGenerationID = %q, want %q", response.Runtime.StreamIdentity.StreamGenerationID, streamGenerationID)
 	}
 	if response.Runtime.Javascript == nil || response.Runtime.Javascript.Phase == nil || *response.Runtime.Javascript.Phase != "review" {
 		t.Fatalf("javascript projection = %#v", response.Runtime.Javascript)
+	}
+}
+
+func TestFactorySessionsAPI_GetFactorySessionSyncPreflight(t *testing.T) {
+	backendScopeID := "backend-scope-test"
+	logicalSessionKeyID := "/workspace/root::default::"
+	factorySessionID := "~default"
+	streamGenerationID := "backend-scope-test::~default"
+	afterEventID := "factory-event/initial-structure/0"
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
+		FactorySessionSyncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
+			RequestedSessionId:  "~default",
+			ReasonCode:          factoryapi.Ok,
+			CheckpointReusable:  true,
+			BackendScopeId:      &backendScopeID,
+			LogicalSessionKeyId: &logicalSessionKeyID,
+			FactorySessionId:    &factorySessionID,
+			StreamGenerationId:  &streamGenerationID,
+			ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+				Provided:                 true,
+				ValidForStreamGeneration: true,
+				AfterEventId:             &afterEventID,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/sync-preflight?after_event_id="+afterEventID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/~default/sync-preflight status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response factoryapi.FactorySessionSyncPreflightResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode sync preflight response: %v", err)
+	}
+	if response.ReasonCode != factoryapi.Ok {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.Ok)
+	}
+	if !response.CheckpointReusable || !response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("response = %#v, want reusable valid cursor", response)
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != factorySessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, factorySessionID)
+	}
+}
+
+func TestFactorySessionsAPI_GetFactorySessionSyncPreflight_StaleCursorReturnsTypedOutcome(t *testing.T) {
+	backendScopeID := "backend-scope-test"
+	logicalSessionKeyID := "/workspace/root::default::"
+	factorySessionID := "~default"
+	streamGenerationID := "backend-scope-test::~default"
+	afterEventID := "factory-event/missing-preflight-cursor"
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
+		FactorySessionSyncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
+			RequestedSessionId:  "~default",
+			ReasonCode:          factoryapi.CursorStale,
+			CheckpointReusable:  false,
+			BackendScopeId:      &backendScopeID,
+			LogicalSessionKeyId: &logicalSessionKeyID,
+			FactorySessionId:    &factorySessionID,
+			StreamGenerationId:  &streamGenerationID,
+			ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+				Provided:                 true,
+				ValidForStreamGeneration: false,
+				AfterEventId:             &afterEventID,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/sync-preflight?after_event_id="+afterEventID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET stale sync preflight status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response factoryapi.FactorySessionSyncPreflightResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode stale sync preflight response: %v", err)
+	}
+	if response.ReasonCode != factoryapi.CursorStale {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.CursorStale)
+	}
+	if response.CheckpointReusable || response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("response = %#v, want non-reusable stale cursor outcome", response)
+	}
+}
+
+func TestFactorySessionsAPI_GetFactorySessionSyncPreflight_MissingSessionReturnsTypedOutcome(t *testing.T) {
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
+		FactorySessionSyncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
+			RequestedSessionId: "~default",
+			ReasonCode:         factoryapi.SessionNotFound,
+			CheckpointReusable: false,
+			ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+				Provided:                 false,
+				ValidForStreamGeneration: false,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/live-session-missing-001/sync-preflight", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET missing-session sync preflight status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response factoryapi.FactorySessionSyncPreflightResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode missing-session sync preflight response: %v", err)
+	}
+	if response.ReasonCode != factoryapi.SessionNotFound {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.SessionNotFound)
+	}
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false")
+	}
+	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
+		t.Fatalf("identity fields = %#v, want nil for missing session", response)
 	}
 }
 

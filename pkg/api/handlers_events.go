@@ -17,7 +17,12 @@ import (
 	"go.uber.org/zap"
 )
 
-const sessionEventStreamGenerationHeader = "X-Factory-Session-Stream-Generation-Id"
+const (
+	sessionEventStreamBackendScopeHeader      = "X-Factory-Session-Backend-Scope-Id"
+	sessionEventStreamLogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
+	sessionEventStreamFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
+	sessionEventStreamGenerationHeader        = "X-Factory-Session-Stream-Generation-Id"
+)
 
 // GetStatus handles GET /status as the supported runtime status read model.
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +58,7 @@ func (s *Server) getStatus(
 	s.writeJSON(w, http.StatusOK, statusFromEngineStateSnapshot(*snapshot))
 }
 
-// GetEvents handles GET /events as a canonical factory event SSE stream.
+// GetEvents handles compatibility-only process-global GET /events.
 func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factoryapi.GetEventsParams) {
 	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
 	s.getEvents(w, r, false, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
@@ -62,6 +67,12 @@ func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factor
 }
 
 func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetEventsBySessionIdParams) {
+	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
+	if requestsJSONEventRecoveryProbe(r) {
+		s.probeFactorySessionEventStreamRecovery(w, r, string(sessionID), reconnect)
+		return
+	}
+
 	if isDurableExecutionSessionID(string(sessionID)) {
 		reader, ok := s.requireDurableSessionEventsReader(w)
 		if !ok {
@@ -94,10 +105,96 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 	if !ok {
 		return
 	}
-	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
 	s.getEvents(w, r, true, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
 		return sessionRuntime.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
 	})
+}
+
+func requestsJSONEventRecoveryProbe(r *http.Request) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(r.Header.Get("Accept"))), "application/json")
+}
+
+func (s *Server) probeFactorySessionEventStreamRecovery(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) {
+	probeCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	var err error
+	if isDurableExecutionSessionID(sessionID) {
+		reader, ok := s.requireDurableSessionEventsReader(w)
+		if !ok {
+			return
+		}
+		_, err = reader.ReadDurableFactorySessionEvents(probeCtx, sessionID, factoryapi.GetEventsBySessionIdParams{
+			AfterEventId: afterEventIDParam(reconnect),
+			AfterSequence: afterSequenceParam(reconnect),
+		})
+	} else {
+		sessionRuntime, ok := s.requireSessionRuntime(w)
+		if !ok {
+			return
+		}
+		_, err = sessionRuntime.SubscribeFactoryEventsForSession(probeCtx, sessionID, reconnect)
+	}
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION, false))
+			return
+		}
+		if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) ||
+			errors.Is(err, events.ErrReconnectCursorNotFound) ||
+			errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+			s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE, true))
+			return
+		}
+		s.logger.Error("probe factory session event recovery failed", zap.String("session_id", sessionID), zap.Error(err))
+		s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeINTERNALERROR, false))
+		return
+	}
+	s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeSTREAMREADY, false))
+}
+
+func staleCursorRecoveryResponse(
+	sessionID string,
+	outcome factoryapi.FactorySessionEventStreamRecoveryOutcome,
+	omitReconnectCursor bool,
+) factoryapi.FactorySessionEventStreamRecovery {
+	return factoryapi.FactorySessionEventStreamRecovery{
+		FactorySessionId: sessionID,
+		Outcome:          outcome,
+		Retry: factoryapi.FactorySessionEventStreamRecoveryRetry{
+			OmitAfterEventId:  omitReconnectCursor,
+			OmitAfterSequence: omitReconnectCursor,
+		},
+	}
+}
+
+func (s *Server) GetFactorySessionSyncPreflightBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetFactorySessionSyncPreflightBySessionIdParams,
+) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.GetFactorySessionSyncPreflight(
+		r.Context(),
+		string(sessionID),
+		reconnectCursorFromParams(params.AfterEventId, params.AfterSequence),
+		logicalResolveHintFromParams(params.BackendScopeId, params.LogicalSessionKeyId),
+	)
+	if err != nil {
+		s.logger.Error("get factory session sync preflight failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session sync preflight", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSequence *factoryapi.AfterSequence) *interfaces.FactoryEventReconnectCursor {
@@ -113,6 +210,57 @@ func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSeque
 		cursor.AfterSequence = &sequence
 	}
 	return cursor
+}
+
+func logicalResolveHintFromParams(
+	backendScopeID *factoryapi.BackendScopeId,
+	logicalSessionKeyID *factoryapi.LogicalSessionKeyId,
+) *interfaces.FactorySessionLogicalResolveHint {
+	if backendScopeID == nil && logicalSessionKeyID == nil {
+		return nil
+	}
+	hint := &interfaces.FactorySessionLogicalResolveHint{}
+	if backendScopeID != nil {
+		hint.BackendScopeID = string(*backendScopeID)
+	}
+	if logicalSessionKeyID != nil {
+		hint.LogicalSessionKeyID = string(*logicalSessionKeyID)
+	}
+	return hint
+}
+
+func afterEventIDParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterEventId {
+	if cursor == nil || strings.TrimSpace(cursor.AfterEventID) == "" {
+		return nil
+	}
+	value := factoryapi.AfterEventId(cursor.AfterEventID)
+	return &value
+}
+
+func afterSequenceParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterSequence {
+	if cursor == nil || cursor.AfterSequence == nil {
+		return nil
+	}
+	value := factoryapi.AfterSequence(*cursor.AfterSequence)
+	return &value
+}
+
+func writeSessionEventStreamHandshakeHeaders(
+	w http.ResponseWriter,
+	stream *interfaces.FactoryEventStream,
+) {
+	if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
+		w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
+	}
+	if logicalSessionKeyID := strings.TrimSpace(stream.LogicalSessionKeyID); logicalSessionKeyID != "" {
+		w.Header().Set(sessionEventStreamLogicalSessionKeyHeader, logicalSessionKeyID)
+	}
+	if factorySessionID := strings.TrimSpace(stream.FactorySessionID); factorySessionID != "" {
+		w.Header().Set(sessionEventStreamFactorySessionHeader, factorySessionID)
+	}
+	if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
+		w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
+	}
 }
 
 func (s *Server) getEvents(
@@ -147,9 +295,7 @@ func (s *Server) getEvents(
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	if includeSessionHandshake {
-		if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
-			w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
-		}
+		writeSessionEventStreamHandshakeHeaders(w, stream)
 	}
 
 	for _, event := range stream.History {

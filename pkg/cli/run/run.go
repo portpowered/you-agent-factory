@@ -29,9 +29,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -58,7 +61,10 @@ type RunConfig struct {
 	// InvocationStdinText carries stdin text resolved before Run when root
 	// already consumed the stdin stream for one-shot factory invocation.
 	InvocationStdinText *string
-	RunnerID            string
+	// InvocationNormalizedArguments carries CLI-normalized signature-backed
+	// invocation inputs for factories that declare invocationSignature.
+	InvocationNormalizedArguments *invocations.NormalizedArguments
+	RunnerID                      string
 	// OperatorDefaults carries resolved operator-level default worker model
 	// settings loaded at the CLI boundary.
 	OperatorDefaults operatorconfig.ResolvedDefaults
@@ -124,12 +130,16 @@ type RunConfig struct {
 	// StdinIsTTY reports whether stdin is an interactive TTY. Nil inspects
 	// os.Stdin directly.
 	StdinIsTTY func() bool
-	// JSONOutput emits the API-shaped InvocationResponse on successful factory
-	// invocation instead of only the primary text result.
+	// JSONOutput emits the API-shaped InvocationResponse for factory invocation
+	// results, including non-success outcomes that return recovery context.
 	JSONOutput bool
+	// InvocationOutputMode selects stdout behavior for one-shot factory
+	// invocations. Empty uses the primary-result-only contract; response-stream
+	// attaches to internal SessionResponseStream progress when available.
+	InvocationOutputMode string
 	// InvocationMetricsRecorder receives invocation counter emissions from the
 	// CLI boundary, including pre-runtime source conflicts.
-	InvocationMetricsRecorder service.InvocationMetricsRecorder
+	InvocationMetricsRecorder runtimehost.InvocationMetricsRecorder
 	Logger                    *zap.Logger
 }
 
@@ -137,8 +147,11 @@ type factoryServiceRunner interface {
 	Run(ctx context.Context) error
 }
 
+// RuntimeRunner is the local in-process runtime seam used by CLI startup.
+type RuntimeRunner = factoryServiceRunner
+
 type runtimeLogDiagnosticsProvider interface {
-	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
+	RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics
 }
 
 type engineStateSnapshotProvider interface {
@@ -158,11 +171,15 @@ type cleanInvocationWorkTarget struct {
 	WorkTypeName string
 }
 
-// FactoryServiceBuilder constructs the factory service used by Run.
-type FactoryServiceBuilder func(
+// RuntimeServiceBuilder constructs the runtime runner used by Run through
+// pkg/initializer transport composition.
+type RuntimeServiceBuilder func(
 	context.Context,
-	*service.FactoryServiceConfig,
+	*initializer.Config,
 ) (factoryServiceRunner, error)
+
+// FactoryServiceBuilder is the legacy name for RuntimeServiceBuilder.
+type FactoryServiceBuilder = RuntimeServiceBuilder
 
 // FactoryServiceBuildFunc constructs *service.FactoryService for registration
 // from cmd/ when the builder is defined outside pkg/cli/run.
@@ -181,9 +198,30 @@ func FactoryServiceBuilderFromService(build FactoryServiceBuildFunc) FactoryServ
 
 func defaultBuildFactoryService(
 	ctx context.Context,
-	cfg *service.FactoryServiceConfig,
+	cfg *initializer.Config,
 ) (factoryServiceRunner, error) {
-	return service.BuildFactoryService(ctx, cfg)
+	if cfg != nil && cfg.Port > 0 {
+		transport, err := initializer.InitializeAPITransport(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		if transport == nil {
+			return nil, errors.New("initializer API transport missing")
+		}
+		return transport, nil
+	}
+	transport, err := initializer.InitializeCLITransport(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if transport == nil {
+		return nil, errors.New("initializer CLI transport missing")
+	}
+	runner := transport.Runner()
+	if runner == nil {
+		return nil, errors.New("initializer CLI transport missing runtime runner")
+	}
+	return runner, nil
 }
 
 var buildFactoryService FactoryServiceBuilder = defaultBuildFactoryService
@@ -431,6 +469,9 @@ func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, 
 	if err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 	}
+	if err := validateInvocationOutputMode(cfg, invocationMode); err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
 	return cfg, invocationRequest, invocationMode, recordPath, nil
 }
 
@@ -499,12 +540,12 @@ func buildRunServiceConfig(
 	reservedAPIServer *reservedAPIServerListener,
 	dashboardReady chan struct{},
 	dashboardReadyOnce *sync.Once,
-) *service.FactoryServiceConfig {
+) *initializer.Config {
 	var apiServerReady chan struct{}
 	if cfg.Port > 0 {
 		apiServerReady = dashboardReady
 	}
-	svcCfg := &service.FactoryServiceConfig{
+	svcCfg := &initializer.Config{
 		Dir:                       cfg.Dir,
 		RunnerID:                  cfg.RunnerID,
 		OperatorDefaults:          cfg.OperatorDefaults,
@@ -684,7 +725,7 @@ func runAPIServerStarter(
 	reservedAPIServer *reservedAPIServerListener,
 	dashboardReady chan struct{},
 	dashboardReadyOnce *sync.Once,
-) service.APIServerStarter {
+) runtimehost.APIServerStarter {
 	markReady := func() {
 		dashboardReadyOnce.Do(func() {
 			close(dashboardReady)
@@ -702,7 +743,7 @@ func runAPIServerStarter(
 	}
 }
 
-func renderSimpleDashboard(input service.SimpleDashboardRenderInput) {
+func renderSimpleDashboard(input runtimehost.SimpleDashboardRenderInput) {
 	fmt.Print(dashboard.FormatSimpleDashboardWithRenderData(
 		input.EngineState,
 		input.RenderData,
@@ -730,15 +771,15 @@ func DashboardURL(host string, port int) string {
 	return "http://" + authority + "/dashboard/ui"
 }
 
-func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
+func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) runtimehost.RuntimeLogDiagnostics {
 	provider, ok := runner.(runtimeLogDiagnosticsProvider)
 	if !ok {
-		return service.RuntimeLogDiagnostics{}
+		return runtimehost.RuntimeLogDiagnostics{}
 	}
 	return provider.RuntimeLogDiagnostics()
 }
 
-func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics) bool {
+func emitStartupMessages(cfg RunConfig, runtimeLog runtimehost.RuntimeLogDiagnostics) bool {
 	if cfg.StartupOutput == nil {
 		return false
 	}

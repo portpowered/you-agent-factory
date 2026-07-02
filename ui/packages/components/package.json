@@ -1,0 +1,112 @@
+{
+  "name": "@you-agent-factory/components",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "*.css",
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./styles.css": "./src/styles.css",
+    "./primitives": {
+      "types": "./src/primitives/index.ts",
+      "default": "./src/primitives/index.ts"
+    },
+    "./forms": {
+      "types": "./src/forms/index.ts",
+      "default": "./src/forms/index.ts"
+    },
+    "./layout": {
+      "types": "./src/layout/index.ts",
+      "default": "./src/layout/index.ts"
+    },
+    "./feedback": {
+      "types": "./src/feedback/index.ts",
+      "default": "./src/feedback/index.ts"
+    },
+    "./data-display": {
+      "types": "./src/data-display/index.ts",
+      "default": "./src/data-display/index.ts"
+    },
+    "./navigation": {
+      "types": "./src/navigation/index.ts",
+      "default": "./src/navigation/index.ts"
+    },
+    "./overlays": {
+      "types": "./src/overlays/index.ts",
+      "default": "./src/overlays/index.ts"
+    },
+    "./charts": {
+      "types": "./src/charts/index.ts",
+      "default": "./src/charts/index.ts"
+    },
+    "./graphs": {
+      "types": "./src/graphs/index.ts",
+      "default": "./src/graphs/index.ts"
+    },
+    "./recipes": {
+      "types": "./src/recipes/index.ts",
+      "default": "./src/recipes/index.ts"
+    },
+    "./icons": {
+      "types": "./src/icons/index.ts",
+      "default": "./src/icons/index.ts"
+    },
+    "./utilities": {
+      "types": "./src/utilities/index.ts",
+      "default": "./src/utilities/index.ts"
+    },
+    "./testing": {
+      "types": "./src/testing/index.ts",
+      "default": "./src/testing/index.ts"
+    },
+    "./tokens": {
+      "types": "./src/tokens/index.ts",
+      "default": "./src/tokens/index.ts"
+    }
+  },
+  "scripts": {
+    "build-storybook": "storybook build --loglevel warn",
+    "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "check:package-dependency-direction": "node scripts/check-package-dependency-direction.mjs",
+    "storybook": "storybook dev -p 6017",
+    "test": "bun run test:unit && bun run check:package-boundary && bun run check:package-dependency-direction",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -b --noEmit --pretty false",
+    "verify": "bun run typecheck && bun run test:unit && bun run build-storybook && bun run check:package-boundary && bun run check:package-dependency-direction",
+    "verify:storybook-browser": "node scripts/verify-package-storybook-browser.mjs"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.10.2",
+    "recharts": "^3.8.1"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^10.3.5",
+    "@tailwindcss/node": "^4.2.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "@vitejs/plugin-react-swc": "^4.1.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "happy-dom": "^20.9.0",
+    "jest-axe": "^10.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "storybook": "^10.3.5",
+    "tailwindcss": "^4.2.2",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "4.1.3"
+  }
+}

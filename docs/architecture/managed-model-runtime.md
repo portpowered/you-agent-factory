@@ -57,9 +57,10 @@ through the same `MODEL` resource shape in `factory.json`:
 
 - `resources[].type: MODEL` carries the stable managed runtime identity in
   `model`, plus `backend` and `loadPolicy`.
-- LOCAL `MODEL_WORKER` entries reference that resource through
+- LOCAL `INFERENCE_WORKER` entries reference that resource through
   `workers[].resources[]` and keep `model` aligned with the managed runtime
-  identity.
+  identity. Legacy `MODEL_WORKER` inference workers remain accepted during the
+  migration window.
 - Validation rejects unsupported identities, invalid backend or load-policy
   combinations, and LOCAL workers without a matching `MODEL` resource.
 - Readiness for a factory dependency uses the same `managedRuntime` projection

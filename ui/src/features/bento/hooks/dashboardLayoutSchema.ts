@@ -157,6 +157,17 @@ const DEFAULT_DASHBOARD_LAYOUT_ITEMS = [
   }),
   dashboardLayoutItem({
     h: 4,
+    hidden: true,
+    id: DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.factorySession,
+    minH: 1,
+    minW: 1,
+    w: 4,
+    widgetType: DASHBOARD_WIDGET_IDS.factorySession,
+    x: 8,
+    y: 27,
+  }),
+  dashboardLayoutItem({
+    h: 4,
     id: DASHBOARD_INLINE_ADD_WIDGET_INSTANCE_ID,
     minH: 1,
     minW: 1,

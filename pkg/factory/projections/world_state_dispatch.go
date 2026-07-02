@@ -168,6 +168,31 @@ func (r *factoryWorldReducer) applyScriptResponse(event factoryapi.FactoryEvent,
 	responses[payload.ScriptRequestId] = current
 }
 
+func (r *factoryWorldReducer) applyAgentRunResponse(event factoryapi.FactoryEvent, payload factoryapi.AgentRunResponseEventPayload) {
+	dispatchID := stringValue(event.Context.DispatchId)
+	if dispatchID == "" || payload.AgentRunId == "" {
+		return
+	}
+	responses := r.agentRunResponsesForDispatch(dispatchID)
+	responses[payload.AgentRunId] = interfaces.FactoryWorldAgentRunResponse{
+		DispatchID:     dispatchID,
+		AgentRunID:     payload.AgentRunId,
+		Outcome:        string(payload.Outcome),
+		DurationMillis: payload.DurationMillis,
+		Diagnostics:    interfaces.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics),
+		ResponseTime:   event.Context.EventTime,
+	}
+}
+
+func (r *factoryWorldReducer) agentRunResponsesForDispatch(dispatchID string) map[string]interfaces.FactoryWorldAgentRunResponse {
+	responses := r.stateValue.AgentRunResponsesByDispatchID[dispatchID]
+	if responses == nil {
+		responses = make(map[string]interfaces.FactoryWorldAgentRunResponse)
+		r.stateValue.AgentRunResponsesByDispatchID[dispatchID] = responses
+	}
+	return responses
+}
+
 func (r *factoryWorldReducer) inferenceAttemptsForDispatch(dispatchID string) map[string]interfaces.FactoryWorldInferenceAttempt {
 	attempts := r.stateValue.InferenceAttemptsByDispatchID[dispatchID]
 	if attempts == nil {
@@ -270,6 +295,8 @@ func (r *factoryWorldReducer) dispatchOutputWorkItem(
 			item.PlaceID = derivedPlaceID
 		} else if payload.Outcome == factoryapi.WorkOutcomeContinue || payload.Outcome == factoryapi.WorkOutcomeRejected {
 			item.PlaceID = previousPlaceID
+		} else if item.State != "" {
+			item.PlaceID = r.placeForWorkTypeState(item.WorkTypeID, item.State)
 		}
 	}
 	return item
@@ -314,7 +341,7 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		),
 		TraceIDs:        interfaces.CanonicalChainingTraceIDs(traceIDs),
 		ProviderSession: latestInferenceProviderSession(latestAttempt),
-		Diagnostics:     latestInferenceDiagnostics(latestAttempt),
+		Diagnostics:     dispatchCompletionDiagnostics(r.latestAgentRunResponseForDispatch(dispatchID), latestAttempt),
 		TerminalWork:    r.terminalWorkForCompletion(payload.Outcome, workIDs),
 	}
 }
@@ -481,6 +508,34 @@ func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt
 		return nil
 	}
 	return interfaces.CloneSafeWorkDiagnostics(attempt.Diagnostics)
+}
+
+func dispatchCompletionDiagnostics(
+	agentRun *interfaces.FactoryWorldAgentRunResponse,
+	attempt *interfaces.FactoryWorldInferenceAttempt,
+) *interfaces.SafeWorkDiagnostics {
+	if agentRun != nil && agentRun.Diagnostics != nil {
+		return interfaces.CloneSafeWorkDiagnostics(agentRun.Diagnostics)
+	}
+	return latestInferenceDiagnostics(attempt)
+}
+
+func (r *factoryWorldReducer) latestAgentRunResponseForDispatch(dispatchID string) *interfaces.FactoryWorldAgentRunResponse {
+	responses := r.stateValue.AgentRunResponsesByDispatchID[dispatchID]
+	if len(responses) == 0 {
+		return nil
+	}
+	var latest *interfaces.FactoryWorldAgentRunResponse
+	for _, agentRunID := range sortedMapKeys(responses) {
+		response := responses[agentRunID]
+		if latest == nil ||
+			response.ResponseTime.After(latest.ResponseTime) ||
+			(response.ResponseTime.Equal(latest.ResponseTime) && response.AgentRunID > latest.AgentRunID) {
+			responseCopy := response
+			latest = &responseCopy
+		}
+	}
+	return latest
 }
 
 func (r *factoryWorldReducer) recordWorkStateChange(event factoryapi.FactoryEvent, payload factoryapi.WorkStateChangeEventPayload) {

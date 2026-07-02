@@ -165,6 +165,30 @@ func TestSessionResponseStream_TruncatesWhenByteLimitExceeded(t *testing.T) {
 	}
 }
 
+func TestSessionResponseStream_EnforceRetentionAfterDispatchCompletion(t *testing.T) {
+	start := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	stream := responsestream.NewSessionResponseStreamWithClock(
+		clock,
+		responsestream.RetentionLimits{MaxAge: time.Minute},
+	)
+
+	_, firstCompaction := stream.Append(progressEvent("dispatch-1", "old"))
+	if firstCompaction != nil {
+		t.Fatalf("first compaction = %#v, want nil", firstCompaction)
+	}
+	stream.CompleteDispatch()
+
+	clock.now = start.Add(2 * time.Minute)
+	compaction := stream.EnforceRetention()
+	if compaction == nil || compaction.Reason != responsestream.CompactionReasonAgeEvicted {
+		t.Fatalf("compaction = %#v, want age eviction after dispatch completion", compaction)
+	}
+	if events := stream.Events(); len(events) != 0 {
+		t.Fatalf("retained events = %#v, want empty window after age eviction", events)
+	}
+}
+
 func TestSessionResponseStream_EvictsByAge(t *testing.T) {
 	start := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 	clock := &fixedClock{now: start}

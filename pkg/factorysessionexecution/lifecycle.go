@@ -104,6 +104,9 @@ func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleSt
 	if status == "" {
 		return LifecycleControlOutcomeInvalidState
 	}
+	if status == LifecycleStatusInterrupted && operation == LifecycleControlResume {
+		return LifecycleControlOutcomeAccepted
+	}
 	if IsTerminalLifecycleStatus(status) {
 		switch operation {
 		case LifecycleControlRetryDispatch:
@@ -136,7 +139,7 @@ func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleSt
 		}
 	case LifecycleControlResume:
 		switch status {
-		case LifecycleStatusPaused:
+		case LifecycleStatusPaused, LifecycleStatusInterrupted:
 			return LifecycleControlOutcomeAccepted
 		case LifecycleStatusResuming, LifecycleStatusRunning:
 			return LifecycleControlOutcomeNoOp
@@ -596,7 +599,7 @@ func filterArtifactsSuppressingInterruptedLateResults(
 			filtered = append(filtered, artifact)
 			continue
 		}
-		if _, interrupted := preserved[dispatchID]; interrupted && artifact.Kind == "CHILD_OUTPUT" {
+		if _, interrupted := preserved[dispatchID]; interrupted && artifact.Kind == "CHILD_RESULT" {
 			continue
 		}
 		filtered = append(filtered, artifact)
@@ -822,4 +825,86 @@ type LifecycleControlResult struct {
 	RetryDispatchID     string
 	Detail              string
 	Links               LifecycleControlLinks
+}
+
+type parsedCanonicalEvent struct {
+	ID              string
+	Sequence        int
+	SessionSequence *int
+}
+
+// FilterEventsAfterReconnect returns only events after the requested reconnect cursor.
+// When both AfterEventID and AfterSequence are set, AfterEventID wins.
+func FilterEventsAfterReconnect(events []json.RawMessage, req EventReconnectRequest, sessionID string) ([]json.RawMessage, error) {
+	if len(events) == 0 {
+		return nil, nil
+	}
+	if strings.TrimSpace(req.AfterEventID) == "" && req.AfterSequence == nil {
+		return append([]json.RawMessage(nil), events...), nil
+	}
+
+	parsed := make([]parsedCanonicalEvent, len(events))
+	for index, raw := range events {
+		event, err := parseCanonicalEvent(raw)
+		if err != nil {
+			return nil, fmt.Errorf("parse event %d: %w", index, err)
+		}
+		parsed[index] = event
+	}
+
+	if afterID := strings.TrimSpace(req.AfterEventID); afterID != "" {
+		return filterEventsAfterEventID(events, parsed, afterID)
+	}
+	if req.AfterSequence == nil {
+		return append([]json.RawMessage(nil), events...), nil
+	}
+	return filterEventsAfterSequence(events, parsed, *req.AfterSequence, sessionID)
+}
+
+func filterEventsAfterEventID(events []json.RawMessage, parsed []parsedCanonicalEvent, afterID string) ([]json.RawMessage, error) {
+	for index, event := range parsed {
+		if event.ID == afterID {
+			return append([]json.RawMessage(nil), events[index+1:]...), nil
+		}
+	}
+	return nil, fmt.Errorf("%w: after_event_id %q", ErrReconnectCursorNotFound, afterID)
+}
+
+func filterEventsAfterSequence(events []json.RawMessage, parsed []parsedCanonicalEvent, ackSequence int, sessionID string) ([]json.RawMessage, error) {
+	if sessionID != "" {
+		for index := len(parsed) - 1; index >= 0; index-- {
+			event := parsed[index]
+			if event.SessionSequence != nil && *event.SessionSequence == ackSequence {
+				return append([]json.RawMessage(nil), events[index+1:]...), nil
+			}
+		}
+		return nil, fmt.Errorf("%w: after_sequence %d for session %q", ErrReconnectCursorNotFound, ackSequence, sessionID)
+	}
+	for index := len(parsed) - 1; index >= 0; index-- {
+		if parsed[index].Sequence == ackSequence {
+			return append([]json.RawMessage(nil), events[index+1:]...), nil
+		}
+	}
+	return nil, fmt.Errorf("%w: after_sequence %d", ErrReconnectCursorNotFound, ackSequence)
+}
+
+func parseCanonicalEvent(raw json.RawMessage) (parsedCanonicalEvent, error) {
+	var envelope struct {
+		ID      string `json:"id"`
+		Context struct {
+			Sequence        int  `json:"sequence"`
+			SessionSequence *int `json:"sessionSequence"`
+		} `json:"context"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return parsedCanonicalEvent{}, err
+	}
+	if strings.TrimSpace(envelope.ID) == "" {
+		return parsedCanonicalEvent{}, fmt.Errorf("event id is required")
+	}
+	return parsedCanonicalEvent{
+		ID:              envelope.ID,
+		Sequence:        envelope.Context.Sequence,
+		SessionSequence: envelope.Context.SessionSequence,
+	}, nil
 }

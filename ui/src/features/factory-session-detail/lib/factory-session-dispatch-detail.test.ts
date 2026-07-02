@@ -1,6 +1,10 @@
-import type { FactoryDispatch } from "../../../api/factory-sessions/dispatch-detail";
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dispatch drilldown projection cases share one normalization harness.
+import {
+  getFactorySessionDispatchDetail,
+  type FactoryDispatch,
+} from "../../../api/factory-sessions/dispatch-detail";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { normalizeFactorySessionDispatchDetail } from "./factory-session-dispatch-detail";
 
 const successfulDispatchFixture = {
@@ -44,6 +48,33 @@ const successfulDispatchFixture = {
     {
       code: "DISPATCH_WARNING",
       message: "Token budget was nearly exhausted.",
+    },
+  ],
+} satisfies FactoryDispatch;
+
+const minimalDispatchFixture = {
+  dispatchKind: "JAVASCRIPT_AGENT",
+  id: "dispatch-minimal-1",
+  orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+  sessionId: "dur-sess-js-minimal-1",
+  status: "QUEUED",
+} satisfies FactoryDispatch;
+
+const warningDispatchFixture = {
+  artifactIds: ["artifact-warning-log"],
+  dispatchKind: "JAVASCRIPT_VERIFY",
+  id: "dispatch-warning-1",
+  javascript: {
+    executionMode: "live",
+    taskKind: "VERIFY",
+  },
+  orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+  sessionId: "dur-sess-js-warning-1",
+  status: "COMPLETED",
+  warnings: [
+    {
+      code: "DISPATCH_WARNING",
+      message: "Verification completed with non-blocking warnings.",
     },
   ],
 } satisfies FactoryDispatch;
@@ -130,6 +161,55 @@ describe("normalizeFactorySessionDispatchDetail", () => {
     });
   });
 
+  it("maps a minimal durable dispatch with missing optional values into empty collections", () => {
+    expect(
+      normalizeFactorySessionDispatchDetail(minimalDispatchFixture),
+    ).toEqual({
+      artifactLinks: [],
+      dispatchID: "dispatch-minimal-1",
+      dispatchKind: "JAVASCRIPT_AGENT",
+      orchestratorKind: "JAVASCRIPT",
+      providerSessionRefs: [],
+      relatedWorkIDs: [],
+      sessionID: "dur-sess-js-minimal-1",
+      status: "QUEUED",
+      statusHistory: [],
+      warnings: [],
+    });
+  });
+
+  it("maps a completed dispatch with warnings into a failed-or-warning drilldown model", () => {
+    expect(
+      normalizeFactorySessionDispatchDetail(warningDispatchFixture),
+    ).toEqual({
+      artifactLinks: [
+        {
+          href: "/factory-sessions/dur-sess-js-warning-1/artifacts/artifact-warning-log",
+          id: "artifact-warning-log",
+        },
+      ],
+      dispatchID: "dispatch-warning-1",
+      dispatchKind: "JAVASCRIPT_VERIFY",
+      javascript: {
+        executionMode: "live",
+        taskKind: "VERIFY",
+        taskLabel: undefined,
+      },
+      orchestratorKind: "JAVASCRIPT",
+      providerSessionRefs: [],
+      relatedWorkIDs: [],
+      sessionID: "dur-sess-js-warning-1",
+      status: "COMPLETED",
+      statusHistory: [],
+      warnings: [
+        {
+          code: "DISPATCH_WARNING",
+          message: "Verification completed with non-blocking warnings.",
+        },
+      ],
+    });
+  });
+
   it("maps a failed durable dispatch with typed failure detail and omits blank optional fields", () => {
     expect(
       normalizeFactorySessionDispatchDetail(failedDispatchFixture),
@@ -163,5 +243,74 @@ describe("normalizeFactorySessionDispatchDetail", () => {
       usage: undefined,
       warnings: [],
     });
+  });
+});
+
+describe("factory session dispatch drilldown regression and scope", () => {
+  it("reads per-dispatch detail from the existing durable dispatch detail route", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(successfulDispatchFixture), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }),
+    );
+
+    await getFactorySessionDispatchDetail(
+      { dispatch_id: "dispatch-success-1", session_id: "dur-sess-js-success-1" },
+      { fetch },
+    );
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(String(fetch.mock.calls[0]?.[0])).toContain(
+      "/factory-sessions/dur-sess-js-success-1/dispatches/dispatch-success-1",
+    );
+    expect(String(fetch.mock.calls[0]?.[0])).not.toMatch(
+      /\/dynamic-workflow|\/workflow-runs/i,
+    );
+  });
+
+  it("projects successful and failed dispatches with public Factory Session vocabulary", () => {
+    const failedDispatchFixture = {
+      dispatchKind: "JAVASCRIPT_VERIFY",
+      failureDetail: {
+        errorClass: "verification_error",
+        message: "Expected release manifest checksum.",
+        reason: "VERIFY_ASSERTION_FAILED",
+      },
+      id: "dispatch-failed-1",
+      orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+      sessionId: "dur-sess-js-failed-1",
+      status: "FAILED",
+    } satisfies FactoryDispatch;
+
+    const success = normalizeFactorySessionDispatchDetail(
+      successfulDispatchFixture,
+    );
+    const failed = normalizeFactorySessionDispatchDetail(failedDispatchFixture);
+
+    expect(success).toMatchObject({
+      dispatchID: "dispatch-success-1",
+      providerSessionRefs: successfulDispatchFixture.providerSessionRefs,
+      sessionID: "dur-sess-js-success-1",
+      status: "COMPLETED",
+    });
+    expect(success.artifactLinks.map((link) => link.id)).toEqual([
+      "artifact-final-1",
+      "artifact-log-2",
+    ]);
+    expect(failed).toMatchObject({
+      dispatchID: "dispatch-failed-1",
+      failureDetail: {
+        errorClass: "verification_error",
+        message: "Expected release manifest checksum.",
+        reason: "VERIFY_ASSERTION_FAILED",
+      },
+      sessionID: "dur-sess-js-failed-1",
+      status: "FAILED",
+    });
+
+    const serialized = JSON.stringify({ failed, success });
+    expect(serialized).not.toContain("DynamicWorkflowRun");
+    expect(serialized).not.toContain("workflowRun");
   });
 });

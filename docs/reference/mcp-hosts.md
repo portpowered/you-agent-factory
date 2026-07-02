@@ -263,6 +263,7 @@ It does not claim API parity, dashboard parity, or real-runtime execution parity
 |-------------|----------|------------------------|
 | Shared `you mcp serve` stdio server (fixture-backed default; all host examples depend on this) | **Automated in-repo** | Stdio JSON-RPC install path: `initialize`, `tools/list`, `you.factory_session.validate_source`, `you.factory_session.start_async`, `you.factory_session.get`, and not-ready `you.factory_session.get_result` through `pkg/cli/mcp/serve_smoke_test.go` |
 | Runtime-backed `you mcp serve --runtime` stdio server | **Automated in-repo** | Same tool catalog with live durable JavaScript execution: async start, status polling, and not-ready or terminal `you.factory_session.get_result` through `pkg/cli/mcp/serve_runtime_smoke_test.go` |
+| Runtime-backed interrupted-to-resumed MCP stdio server | **Automated in-repo** | Same runtime-backed stdio path with `you.factory_session.control` resume, stable `FactorySession` id, dispatch continuity, and typed invalid resume outcomes through `pkg/cli/mcp/serve_runtime_resume_smoke_test.go`; non-resume fixture/runtime serve regression through `pkg/cli/mcp/serve_runtime_resume_non_regression_test.go` |
 | Generic stdio MCP client config pattern | **Documented manual** | Host respawn, config reload, and tool discovery through a real MCP client UI; shared server/tool behavior is automated above |
 | Cursor (`.cursor/mcp.json` or `~/.cursor/mcp.json`) | **Documented manual** | Same command/args/cwd as the generic pattern plus Cursor-specific config path and reload behavior |
 | Codex | **Documented manual** | Same stdio child-process launch through Codex MCP settings; no Codex-specific in-repo automation in this batch |
@@ -308,6 +309,25 @@ every host example above depends on. Fixture-backed smoke does **not** depend on
 runtime mode. Runtime-backed smoke does **not** prove host UI discovery, host
 config file parsing, dashboard inspection, or live factory HTTP runtime
 execution.
+
+`pkg/cli/mcp/serve_runtime_resume_smoke_test.go` exercises runtime-backed
+interrupted-to-resumed continuity on the same stdio server path:
+
+| Step | MCP method / tool | Behavior proved |
+|------|-------------------|-----------------|
+| Handshake | `initialize` | Protocol version `2024-11-05` |
+| Discovery | `tools/list` | Canonical resume/control tools present: `you.factory_session.control`, `you.factory_session.list_dispatches` |
+| Async start | `tools/call` → `you.factory_session.start_async` | WORKFLOW_NAME resumable JavaScript session start |
+| Interrupt | `tools/call` → `you.factory_session.control` | Accepted interrupt-dispatch on in-flight child work |
+| Resume | `tools/call` → `you.factory_session.control` | Accepted resume on the same durable session id |
+| Status/result | `you.factory_session.get`, `you.factory_session.get_result` | Resumed lifecycle timestamps and terminal result continuity |
+| Dispatch continuity | `you.factory_session.list_dispatches` | Completed child dispatches preserved without replay |
+| Invalid resume | `you.factory_session.control` | Typed `TERMINAL_SESSION` and `NO_OP` outcomes in result envelopes |
+
+`pkg/cli/mcp/serve_runtime_resume_non_regression_test.go` keeps the resume lane
+additive: fixture-backed install smoke, runtime-backed async serve, canonical
+`you.factory_session.*` resume inspection, and shared vocabulary guardrails
+remain stable after the resume smoke additions.
 
 ### Manual Host Smoke Sequence
 

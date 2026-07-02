@@ -113,7 +113,9 @@ describe("normalize durable inspection helpers", () => {
       },
     });
   });
+});
 
+describe("resultSurfacesFromDurableResult", () => {
   it("maps durable result reads into partial result surfaces", () => {
     expect(
       resultSurfacesFromDurableResult(

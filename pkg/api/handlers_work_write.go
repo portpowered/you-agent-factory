@@ -44,6 +44,8 @@ func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.
 		switch typed := err.(type) {
 		case *invocations.InputError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
+		case *invocations.ArgumentError:
+			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
 		case *apisurface.RequestValidationError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, "BAD_REQUEST")
 		default:
@@ -57,21 +59,7 @@ func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.
 		return
 	}
 
-	response := factoryapi.InvocationResponse{
-		RequestId: result.RequestID,
-		TraceId:   result.TraceID,
-		Status:    result.Status,
-	}
-	if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
-		response.PrimaryResult = content
-	}
-	if code := strings.TrimSpace(result.ErrorCode); code != "" {
-		value := factoryapi.InvocationResponseErrorCode(code)
-		response.ErrorCode = &value
-	}
-	if message := strings.TrimSpace(result.Message); message != "" {
-		response.Message = &message
-	}
+	response := apisurface.InvocationResponseFromResult(result)
 	s.writeJSON(w, http.StatusOK, response)
 }
 

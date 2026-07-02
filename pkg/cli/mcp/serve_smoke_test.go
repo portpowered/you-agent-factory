@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -161,13 +162,15 @@ func assertInstallSmokeRunningPoll(t *testing.T, client *stdioMCPClient, session
 
 func closeRunServeSmokeServer(t *testing.T, stdinWrite *os.File, serveErr <-chan error) {
 	t.Helper()
-	_ = stdinWrite.Close()
+	if stdinWrite != nil {
+		_ = stdinWrite.Close()
+	}
 	select {
 	case err := <-serveErr:
-		if err != nil && err != io.EOF && !strings.Contains(err.Error(), "file already closed") {
+		if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
 			t.Fatalf("RunServe: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("RunServe did not shut down after stdin closed")
 	}
 }

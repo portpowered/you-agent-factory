@@ -541,7 +541,7 @@ func TestLifecycleControlErrorResponse_MapsControlConflictAndNotFound(t *testing
 		t.Fatalf("status = %d, want 404", status)
 	}
 	errResp, ok := response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.NOTFOUND {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}
 
@@ -556,7 +556,7 @@ func TestLifecycleControlErrorResponse_MapsControlConflictAndNotFound(t *testing
 		t.Fatalf("status = %d, want 404", status)
 	}
 	errResp, ok = response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.NOTFOUND {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}
 }
@@ -576,6 +576,14 @@ func TestLifecycleControlSuccessStatus_MapsAcceptedCancelAndTerminate(t *testing
 	})
 	if terminateStatus != http.StatusOK {
 		t.Fatalf("terminate status = %d, want 200", terminateStatus)
+	}
+
+	noOpStatus := factorysession.LifecycleControlSuccessStatus(factorysessionexecution.LifecycleControlResult{
+		Outcome: factorysessionexecution.LifecycleControlOutcomeNoOp,
+		Status:  factorysessionexecution.LifecycleStatusRunning,
+	})
+	if noOpStatus != http.StatusOK {
+		t.Fatalf("no-op status = %d, want 200", noOpStatus)
 	}
 }
 
@@ -597,7 +605,7 @@ func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *test
 		t.Fatalf("status = %d, want 400", status)
 	}
 	errResp, ok := response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.BADREQUEST {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("response = %#v, want BAD_REQUEST ErrorResponse", response)
 	}
 
@@ -612,7 +620,7 @@ func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *test
 		t.Fatalf("status = %d, want 404", status)
 	}
 	errResp, ok = response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.NOTFOUND {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}
 }

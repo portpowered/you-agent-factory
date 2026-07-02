@@ -17,6 +17,7 @@ import {
 } from "./testing/app-shell-export-test-utils";
 import {
   baselineSnapshot,
+  chainRenderAppFetchMock,
   jsonResponse,
   registerAppDashboardTestLifecycle,
   renderApp,
@@ -61,9 +62,16 @@ describe("App shell export submission flows", () => {
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (
+        method === "GET" &&
+        path === "/factory-sessions/~default/factory"
+      ) {
+        return jsonResponse(currentSessionFactoryExportAPIResponse);
+      }
+
+      return undefined;
+    });
 
     try {
       fireEvent.click(
@@ -151,9 +159,16 @@ describe("App shell export submission flows", () => {
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (
+        method === "GET" &&
+        path === "/factory-sessions/~default/factory"
+      ) {
+        return jsonResponse(currentSessionFactoryExportAPIResponse);
+      }
+
+      return undefined;
+    });
 
     try {
       fireEvent.click(
@@ -227,9 +242,16 @@ describe("App shell export submission flows", () => {
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentFactoryWithBundledFilesAPIResponse),
-    );
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (
+        method === "GET" &&
+        path === "/factory-sessions/~default/factory"
+      ) {
+        return jsonResponse(currentFactoryWithBundledFilesAPIResponse);
+      }
+
+      return undefined;
+    });
     await settleAppShellDashboardEffects();
 
     try {

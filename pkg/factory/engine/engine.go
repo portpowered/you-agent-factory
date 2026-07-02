@@ -22,31 +22,31 @@ import (
 // wake channels and only wakes when something happens: a worker result arrives,
 // new work is submitted, or the context is cancelled.
 type FactoryEngine struct {
-	state             *state.Net
-	runtimeState      *RuntimeState
-	subsystems        []subsystems.Subsystem // sorted by TickGroup
-	logger            logging.Logger
-	clock             factory.Clock
-	resultCh          chan struct{}
-	submitSignal      chan struct{}
-	submissionHook    *queuedSubmissionHook
-	submissionHooks   []factory.SubmissionHook
-	submissionState   map[string]map[string]string
-	workRequests      map[string]interfaces.WorkRequestSubmitResult
-	recordSubmission  func(interfaces.FactorySubmissionRecord)
-	recordWorkRequest func(int, interfaces.WorkRequestRecord)
-	recordWorkInput   func(int, interfaces.SubmitRequest, interfaces.Token)
-	recordDispatch    func(interfaces.FactoryDispatchRecord)
-	recordCompletion  func(interfaces.FactoryCompletionRecord)
-	recordResponse    func(int, interfaces.WorkResult, interfaces.CompletedDispatch)
-	dispatchHandler        func(interfaces.WorkDispatch)
-	dispatchHook           factory.DispatchResultHook
-	resultHandler          func() // called when a result event is processed (e.g. decrement in-flight counter)
-	automaticTicksPaused   func() bool
-	onResultBufferDrained  func(drainedCount int)
-	mu                     sync.Mutex
-	transformer            *token_transformer.Transformer
-	acceptingSubmits       bool
+	state                 *state.Net
+	runtimeState          *RuntimeState
+	subsystems            []subsystems.Subsystem // sorted by TickGroup
+	logger                logging.Logger
+	clock                 factory.Clock
+	resultCh              chan struct{}
+	submitSignal          chan struct{}
+	submissionHook        *queuedSubmissionHook
+	submissionHooks       []factory.SubmissionHook
+	submissionState       map[string]map[string]string
+	workRequests          map[string]interfaces.WorkRequestSubmitResult
+	recordSubmission      func(interfaces.FactorySubmissionRecord)
+	recordWorkRequest     func(int, interfaces.WorkRequestRecord)
+	recordWorkInput       func(int, interfaces.SubmitRequest, interfaces.Token)
+	recordDispatch        func(interfaces.FactoryDispatchRecord)
+	recordCompletion      func(interfaces.FactoryCompletionRecord)
+	recordResponse        func(int, interfaces.WorkResult, interfaces.CompletedDispatch)
+	dispatchHandler       func(interfaces.WorkDispatch)
+	dispatchHook          factory.DispatchResultHook
+	resultHandler         func() // called when a result event is processed (e.g. decrement in-flight counter)
+	automaticTicksPaused  func() bool
+	onResultBufferDrained func(drainedCount int)
+	mu                    sync.Mutex
+	transformer           *token_transformer.Transformer
+	acceptingSubmits      bool
 }
 
 // NewFactoryEngine creates a new engine for the given net and marking.
@@ -202,7 +202,13 @@ func (e *FactoryEngine) NotifyResult() {
 }
 
 func (e *FactoryEngine) wakeForOperatorControl() {
-	e.wakeForPendingProcessing()
+	select {
+	case e.submitSignal <- struct{}{}:
+	default:
+	}
+	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
+		hook.SignalBufferedResults()
+	}
 }
 
 // WakeForPendingProcessing signals the engine loop when buffered submissions or

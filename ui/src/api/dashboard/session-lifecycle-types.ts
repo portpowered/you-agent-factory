@@ -11,8 +11,11 @@ export interface DashboardSessionBracket {
   failure_message?: string;
   failure_reason?: string;
   final_status?: string;
+  lifecycle_control_status?: string;
   orchestrator_dialect?: string;
   orchestrator_kind?: string;
+  paused_at?: string;
+  resumed_at?: string;
   result_status?: string;
   result_summary?: Array<{ text?: string; type?: string }>;
   session_id?: string;

@@ -1,4 +1,4 @@
-You are reviewing goal work {{ .WorkID }} backed by an AGENT_WORKER.
+You are reviewing goal work {{ (index .Inputs 0).WorkID }} backed by an AGENT_WORKER.
 
 Produce a reviewable disposition the factory can route on. The workstation prompt will ask for the customer-facing summary sections; your review must keep that output bounded and routeable. Do not respond with open-ended discussion or unrestricted narrative.
 

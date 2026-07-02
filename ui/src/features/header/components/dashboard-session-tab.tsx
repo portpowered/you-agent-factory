@@ -195,7 +195,7 @@ function SessionTabStatusIndicator({
           "absolute inset-0 rounded-full",
           status === "live" && "bg-success",
           (status === "connecting" || status === "reconnecting") && "bg-primary",
-          status === "offline" && "bg-error",
+          (status === "offline" || status === "recovery_failed") && "bg-error",
         )}
       />
     </span>

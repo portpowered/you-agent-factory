@@ -3,7 +3,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  defaultFactorySessionID,
   expectNoBrowserErrors,
+  previewHost,
+  resolvedDefaultFactorySessionID,
+  startFactoryApiServer,
   uiInteractionTimeoutMs,
   waitForCapturedDownloadOrDialogError,
   waitForDialogHidden,
@@ -83,5 +87,64 @@ describe("browser wait pattern helpers", () => {
       ],
       expect,
     );
+  });
+
+  it("serves sync preflight responses with the required identity set", async () => {
+    const server = await startFactoryApiServer({
+      apiPort: 3921,
+      currentFactory: { name: "Browser Harness Factory" },
+    });
+
+    try {
+      const response = await fetch(
+        `http://${previewHost}:3921/factory-sessions/${defaultFactorySessionID}/sync-preflight?after_event_id=event-7&after_sequence=7`,
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toMatchObject({
+        backendScopeId: "/replay/factory::browser-integration",
+        checkpointReusable: true,
+        factorySessionId: resolvedDefaultFactorySessionID,
+        logicalSessionKeyId: "/replay/factory::default::",
+        reasonCode: "ok",
+        reconnectCursor: {
+          provided: true,
+          validForStreamGeneration: true,
+        },
+        requestedSessionId: defaultFactorySessionID,
+      });
+      expect(body.streamGenerationId).toBeTypeOf("string");
+      expect(body.streamGenerationId).not.toMatch(/^browser-stream-/);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("reports session_not_found for missing preflight targets", async () => {
+    const server = await startFactoryApiServer({
+      apiPort: 3922,
+      currentFactory: { name: "Browser Harness Factory" },
+    });
+
+    try {
+      const response = await fetch(
+        `http://${previewHost}:3922/factory-sessions/session-missing/sync-preflight`,
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toEqual({
+        checkpointReusable: false,
+        reasonCode: "session_not_found",
+        reconnectCursor: {
+          provided: false,
+          validForStreamGeneration: false,
+        },
+        requestedSessionId: "session-missing",
+      });
+    } finally {
+      await server.stop();
+    }
   });
 });

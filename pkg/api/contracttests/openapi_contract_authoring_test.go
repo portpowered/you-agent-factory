@@ -82,6 +82,10 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"InferenceResponseEventPayload":             "./components/schemas/events/payloads/InferenceResponseEventPayload.yaml",
 		"ScriptRequestEventPayload":                 "./components/schemas/events/payloads/ScriptRequestEventPayload.yaml",
 		"ScriptResponseEventPayload":                "./components/schemas/events/payloads/ScriptResponseEventPayload.yaml",
+		"AgentRunResponseEventPayload":              "./components/schemas/events/payloads/AgentRunResponseEventPayload.yaml",
+		"SafeAgentRunDiagnostic":                    "./components/schemas/events/SafeAgentRunDiagnostic.yaml",
+		"AgentRunToolDiagnosticEntry":               "./components/schemas/events/AgentRunToolDiagnosticEntry.yaml",
+		"AgentRunTranscriptEntry":                   "./components/schemas/events/AgentRunTranscriptEntry.yaml",
 		"DispatchResponseEventPayload":              "./components/schemas/events/payloads/DispatchResponseEventPayload.yaml",
 		"WorkStateChangeEventPayload":               "./components/schemas/events/payloads/WorkStateChangeEventPayload.yaml",
 		"WorkStateChangeSource":                     "./components/schemas/events/WorkStateChangeSource.yaml",
@@ -115,6 +119,8 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkDiagnostics":                           "./components/schemas/events/WorkDiagnostics.yaml",
 		"RenderedPromptDiagnostic":                  "./components/schemas/events/RenderedPromptDiagnostic.yaml",
 		"ProviderDiagnostic":                        "./components/schemas/events/ProviderDiagnostic.yaml",
+		"InvocationDiagnostic":                      "./components/schemas/events/InvocationDiagnostic.yaml",
+		"InvocationParameterDiagnostic":             "./components/schemas/events/InvocationParameterDiagnostic.yaml",
 		"Diagnostics":                               "./components/schemas/events/Diagnostics.yaml",
 		"SafeWorkDiagnostics":                       "./components/schemas/events/SafeWorkDiagnostics.yaml",
 		"WallClock":                                 "./components/schemas/events/WallClock.yaml",
@@ -142,12 +148,15 @@ func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T)
 		"FactoryWorldWorkMoveOperationView":             "./components/schemas/factory-world/FactoryWorldWorkMoveOperationView.yaml",
 		"FactoryWorldRenderedPromptDiagnostic":          "./components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml",
 		"FactoryWorldProviderDiagnostic":                "./components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml",
+		"FactoryWorldInvocationDiagnostic":              "./components/schemas/factory-world/FactoryWorldInvocationDiagnostic.yaml",
+		"FactoryWorldInvocationParameterDiagnostic":     "./components/schemas/factory-world/FactoryWorldInvocationParameterDiagnostic.yaml",
 		"FactoryWorldWorkDiagnostics":                   "./components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml",
 		"FactoryWorldWorkItemRef":                       "./components/schemas/factory-world/FactoryWorldWorkItemRef.yaml",
 		"FactoryWorldTokenView":                         "./components/schemas/factory-world/FactoryWorldTokenView.yaml",
 		"FactoryWorldMutationView":                      "./components/schemas/factory-world/FactoryWorldMutationView.yaml",
 		"FactoryWorldScriptRequestView":                 "./components/schemas/factory-world/FactoryWorldScriptRequestView.yaml",
 		"FactoryWorldScriptResponseView":                "./components/schemas/factory-world/FactoryWorldScriptResponseView.yaml",
+		"FactoryWorldAgentRunInspectionView":            "./components/schemas/factory-world/FactoryWorldAgentRunInspectionView.yaml",
 		"FactoryWorldWorkstationRequestCountView":       "./components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml",
 		"FactoryWorldWorkstationRequestRequestView":     "./components/schemas/factory-world/FactoryWorldWorkstationRequestRequestView.yaml",
 		"FactoryWorldWorkstationRequestResponseView":    "./components/schemas/factory-world/FactoryWorldWorkstationRequestResponseView.yaml",
@@ -563,20 +572,40 @@ func TestOpenAPIContract_FactorySessionExposesRuntimeProjectionSchema(t *testing
 	assertSchemaPropertyRef(t, schemas, "FactorySessionSummary", "runtime", "#/components/schemas/FactorySessionRuntime")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "status", "#/components/schemas/FactorySessionStatus")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "streamIdentity", "#/components/schemas/FactorySessionStreamIdentity")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "petri", "#/components/schemas/FactorySessionPetriProjection")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "javascript", "#/components/schemas/FactorySessionJavaScriptProjection")
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionStatus"), "FactorySessionStatus", []string{"ACTIVE", "IDLE", "FINISHED"})
 }
 
-func TestOpenAPIContract_SessionEventStreamHandshakeExposesStreamGenerationHeader(t *testing.T) {
+func TestOpenAPIContract_SessionEventStreamHandshakeExposesIdentityHeaders(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	paths, ok := doc["paths"].(map[string]any)
 	if !ok {
 		t.Fatal("bundled OpenAPI paths are missing")
 	}
+	operation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
 	assertResponseHeaderString(
 		t,
-		pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"),
+		operation,
+		"200",
+		"X-Factory-Session-Backend-Scope-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
+		"200",
+		"X-Factory-Session-Logical-Session-Key-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
+		"200",
+		"X-Factory-Session-Factory-Session-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
 		"200",
 		"X-Factory-Session-Stream-Generation-Id",
 	)
@@ -586,7 +615,7 @@ func TestGeneratedFactorySessionContracts_RuntimeTypesAgreeWithOpenAPI(t *testin
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySession{}), "Runtime", reflect.TypeOf(factoryapi.FactorySessionRuntime{}))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionSummary{}), "Runtime", reflect.TypeOf((*factoryapi.FactorySessionRuntime)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "OrchestratorKind", reflect.TypeOf(factoryapi.FactoryOrchestratorKind("")))
-	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "StreamGenerationID", reflect.TypeOf((*string)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "StreamIdentity", reflect.TypeOf((*factoryapi.FactorySessionStreamIdentity)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Petri", reflect.TypeOf((*factoryapi.FactorySessionPetriProjection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Javascript", reflect.TypeOf((*factoryapi.FactorySessionJavaScriptProjection)(nil)))
 }
@@ -672,12 +701,15 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	runtimeSchema := schemaObject(t, schemas, "FactorySessionRuntime")
 	runtimeProperties, _ := runtimeSchema["properties"].(map[string]any)
-	streamGenerationID, ok := runtimeProperties["streamGenerationID"].(map[string]any)
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "streamIdentity", "#/components/schemas/FactorySessionStreamIdentity")
+	streamIdentityProperties := schemaProperties(t, schemaObject(t, schemas, "FactorySessionStreamIdentity"), "FactorySessionStreamIdentity")
+	assertRequiredFields(t, schemaObject(t, schemas, "FactorySessionStreamIdentity"), "backendScopeID", "logicalSessionKeyID", "factorySessionID", "streamGenerationID")
+	streamGenerationID, ok := streamIdentityProperties["streamGenerationID"].(map[string]any)
 	if !ok {
-		t.Fatal("FactorySessionRuntime.streamGenerationID schema is missing")
+		t.Fatal("FactorySessionStreamIdentity.streamGenerationID schema is missing")
 	}
 	if got, ok := streamGenerationID["type"].(string); !ok || got != "string" {
-		t.Fatalf("FactorySessionRuntime.streamGenerationID.type = %v, want string", streamGenerationID["type"])
+		t.Fatalf("FactorySessionStreamIdentity.streamGenerationID.type = %v, want string", streamGenerationID["type"])
 	}
 	assertArrayItemRef(t, runtimeProperties, "dispatches", "#/components/schemas/FactoryDispatch")
 	assertArrayItemRef(t, runtimeProperties, "artifacts", "#/components/schemas/FactoryArtifact")

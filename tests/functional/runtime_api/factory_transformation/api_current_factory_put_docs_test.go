@@ -262,7 +262,7 @@ func TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid(
 
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode malformed bundled inline save response")
-	if errResp.Code != factoryapi.BADREQUEST {
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("error code = %q, want BAD_REQUEST", errResp.Code)
 	}
 	if errResp.Targets == nil || !hasValidationTargetCode(*errResp.Targets, "factory.payload.invalid") {

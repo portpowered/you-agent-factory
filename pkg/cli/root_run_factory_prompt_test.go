@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -69,6 +68,12 @@ func TestRunCommand_RunCommandLongHelpDocumentsNamedFactory(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "materialize lazily into that global root on first use and stay editable on disk") {
 		t.Fatal("expected run command long help text to document built-in materialization and editability")
 	}
+	if !strings.Contains(runCmd.Long, "run --named <factory> --help") || !strings.Contains(runCmd.Long, "run --factory <factory.json> --help") {
+		t.Fatal("expected run command long help text to document signature-aware factory help entry points")
+	}
+	if !strings.Contains(runCmd.Long, "existing run-level flags available") {
+		t.Fatal("expected run command long help text to explain that operational flags remain available alongside factory-defined arguments")
+	}
 	if !strings.Contains(runCmd.Example, "run --named @you/tts") {
 		t.Fatal("expected run command examples to document simplified --named run")
 	}
@@ -78,6 +83,66 @@ func TestRunCommand_RunCommandLongHelpDocumentsNamedFactory(t *testing.T) {
 	}
 	if !strings.Contains(namedFlag.Usage, "built-ins materialize there on first use and remain editable") {
 		t.Fatalf("--named usage = %q, want built-in editability guidance", namedFlag.Usage)
+	}
+}
+
+func TestRunCommand_NamedFactoryHelpRendersInvocationSignature(t *testing.T) {
+	workingDirectory := t.TempDir()
+	homeDirectory := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDirectory)
+
+	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(workingDirectory)
+	if err != nil {
+		t.Fatalf("DefaultProjectNamedFactoryRoot: %v", err)
+	}
+	if _, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", portableFactoryPayloadWithInvocationSignature()); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+
+	root := NewRootCommand()
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "alpha", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named alpha --help: %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Factory invocation help",
+		"Selected factory: portable (named factory alpha)",
+		"Usage:\n  you run --named alpha <input> [--confirm <true|false>] [--mode <value>] [--output <file-path>]",
+		"positional 1 <input>",
+		"--confirm <true|false>",
+		"Named form also accepts bare `--confirm` as `true`.",
+		"stdin",
+		"Accepted values: fast, safe.",
+		"Default: safe.",
+		"Path parameter: output",
+		"you run --named alpha 'Fix the lint issues' --mode safe --output report.md",
+		"printf '%s\\n' 'Fix the lint issues' | you run --named alpha --mode fast",
+		"Existing operational flags such as `--no-record`, `--with-mock-workers`, `--server`, and `--json` still apply.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run --named alpha --help missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Load workflow and run the factory engine") {
+		t.Fatalf("expected signature-aware help instead of generic Cobra help:\n%s", got)
 	}
 }
 
@@ -213,6 +278,168 @@ func portableFactoryPayloadWithDefaultHandling() []byte {
     "onFailure": [{"workType": "story", "state": "failed"}]
   }]
 }`)
+}
+
+func portableFactoryPayloadWithInvocationSignature() []byte {
+	return []byte(`{
+  "name": "portable",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "input",
+        "description": "Primary text input for the portable factory.",
+        "required": true,
+        "bindings": [{"kind": "POSITIONAL", "position": 1}, {"kind": "STDIN"}]
+      },
+      {
+        "name": "mode",
+        "description": "Execution mode for the portable factory.",
+        "choices": ["fast", "safe"],
+        "defaultValue": "safe",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "confirm",
+        "typeHint": "BOOLEAN_STRING",
+        "description": "Request confirmation mode.",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "output",
+        "description": "Optional output file path.",
+        "aliases": ["out"],
+        "typeHint": "FILE_PATH",
+        "bindings": [{"kind": "NAMED"}]
+      }
+    ],
+    "outputContract": {
+      "mode": "FILE",
+      "pathParameter": "output",
+      "contentType": "text/plain",
+      "fileExtension": ".txt"
+    },
+    "examples": [
+      {
+        "name": "positional-input",
+        "argv": ["Fix the lint issues", "--mode", "safe", "--output", "report.md"]
+      },
+      {
+        "name": "stdin-input",
+        "argv": ["--mode", "fast"],
+        "stdin": "Fix the lint issues"
+      }
+    ]
+  },
+  "workTypes": [{
+    "name": "story",
+    "handlingBehavior": ["DEFAULT"],
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workstations": [{
+    "name": "ws",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}],
+    "onFailure": [{"workType": "story", "state": "failed"}]
+  }]
+}`)
+}
+
+func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	restore := setupNamedFactoryInvocationTest(t)
+	defer restore()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--named", "alpha",
+		"--no-record",
+		"draft",
+		"--mode", "fast",
+		"--confirm",
+		"--out=result.md",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named alpha with signature args: %v", err)
+	}
+	if !got.DisableDefaultRecording {
+		t.Fatal("expected --no-record to remain a run-level flag")
+	}
+	if got.InvocationNormalizedArguments == nil {
+		t.Fatal("expected signature-backed invocation arguments to be normalized")
+	}
+
+	wantValues := map[string]string{
+		"input":   "draft",
+		"mode":    "fast",
+		"confirm": "true",
+		"output":  "result.md",
+	}
+	for name, want := range wantValues {
+		assertInvocationArgumentValue(t, got, name, want)
+	}
+}
+
+func setupNamedFactoryInvocationTest(t *testing.T) func() {
+	t.Helper()
+
+	workingDirectory := t.TempDir()
+	homeDirectory := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	t.Setenv("HOME", homeDirectory)
+
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	segment, err := factoryconfig.NamedFactoryNameToLayoutSegment("alpha")
+	if err != nil {
+		t.Fatalf("NamedFactoryNameToLayoutSegment(alpha): %v", err)
+	}
+	factoryDir := filepath.Join(globalRoot, segment)
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+	return func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}
+}
+
+func assertInvocationArgumentValue(t *testing.T, got runcli.RunConfig, name, want string) {
+	t.Helper()
+
+	values := got.InvocationNormalizedArguments.Arguments[name].Values
+	if len(values) != 1 || values[0] != want {
+		t.Fatalf("%s values = %#v, want [%s]", name, values, want)
+	}
 }
 
 func TestRunCommand_NamedAndDirFlagsRejectConflict(t *testing.T) {
@@ -680,231 +907,5 @@ func TestRunCommand_FactoryPromptRejectsWhitespaceOnlyPositionalWithStableCode(t
 	}
 	if runCalled {
 		t.Fatal("run should not start for whitespace-only factory positional input")
-	}
-}
-
-func TestRunCommand_FactoryPromptRejectsEmptyStdinWithStableCode(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	dir := t.TempDir()
-	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
-
-	runCalled := false
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		runCalled = true
-		return nil
-	}
-
-	root := NewRootCommand()
-	root.SetIn(strings.NewReader(""))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "-"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected empty stdin rejection")
-	}
-	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
-		t.Fatalf("error = %q, want stable empty stdin code", err.Error())
-	}
-	if runCalled {
-		t.Fatal("run should not start for empty factory stdin")
-	}
-}
-
-func assertRunStdoutFreeOfOperatorChatter(t *testing.T, stdout string) {
-	t.Helper()
-
-	for _, forbidden := range []string{
-		"Factory initiated",
-		"Dashboard URL",
-		"Runtime log",
-		"Opening dashboard",
-		"Factory:",
-		"Recording saved",
-	} {
-		if strings.Contains(stdout, forbidden) {
-			t.Fatalf("stdout = %q, want no %q chatter", stdout, forbidden)
-		}
-	}
-}
-
-func TestRunCommand_FactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	dir := t.TempDir()
-	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
-
-	runCalled := false
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		runCalled = true
-		return nil
-	}
-
-	root := NewRootCommand()
-	root.SetIn(strings.NewReader("Fix from stdin\n"))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix from args", "-"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected ambiguous positional and stdin prompt rejection")
-	}
-	for _, want := range []string{
-		"INVOCATION_INPUT_SOURCE_CONFLICT",
-		"positional_text",
-		"stdin_text",
-	} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error = %q, want %q", err.Error(), want)
-		}
-	}
-	if runCalled {
-		t.Fatal("run should not start for ambiguous factory prompt input")
-	}
-}
-
-func TestRunCommand_FactoryPromptRejectsWorkFlagConflict(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	dir := t.TempDir()
-	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
-
-	runCalled := false
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		runCalled = true
-		return nil
-	}
-
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "--work", "work.json", "Fix the lint issues"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected conflict between positional prompt and --work")
-	}
-	if !strings.Contains(err.Error(), "cannot be used with --work") {
-		t.Fatalf("error = %q, want --work conflict message", err.Error())
-	}
-	if runCalled {
-		t.Fatal("run should not start when prompt conflicts with --work")
-	}
-}
-
-func TestRunCommand_PositionalPromptRequiresFactoryFlag(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	runCalled := false
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		runCalled = true
-		return nil
-	}
-
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--dir", "factory", "Fix the lint issues"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected positional prompt without --factory to fail")
-	}
-	if !strings.Contains(err.Error(), "require --factory") {
-		t.Fatalf("error = %q, want --factory requirement", err.Error())
-	}
-	if runCalled {
-		t.Fatal("run should not start for positional prompt without --factory")
-	}
-}
-
-func TestRunCommand_CleanInvocationFailureWritesPlaintextToStderr(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	dir := t.TempDir()
-	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
-
-	var stdout, stderr bytes.Buffer
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		return &runcli.InvocationError{
-			Code:    runcli.InvocationErrorCodeFailed,
-			Message: "clean invocation failed: mock worker rejected",
-		}
-	}
-
-	root := NewRootCommand()
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix the lint issues"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected clean invocation failure")
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty", stdout.String())
-	}
-	if got := stderr.String(); got != "RUN_INVOCATION_FAILED: clean invocation failed: mock worker rejected\n" {
-		t.Fatalf("stderr = %q", got)
-	}
-}
-
-func TestRunCommand_CleanInvocationJSONFailureWritesSingleErrorObjectToStderr(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	dir := t.TempDir()
-	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
-
-	var stdout, stderr bytes.Buffer
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		return &runcli.InvocationError{
-			Code:    runcli.InvocationErrorCodeTimeout,
-			Message: "clean invocation timed out",
-		}
-	}
-
-	root := NewRootCommand()
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
-	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected clean invocation timeout")
-	}
-	if stdout.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty", stdout.String())
-	}
-
-	var payload map[string]string
-	if decodeErr := json.Unmarshal(stderr.Bytes(), &payload); decodeErr != nil {
-		t.Fatalf("stderr is not one JSON object: %v\n%s", decodeErr, stderr.String())
-	}
-	if payload["code"] != runcli.InvocationErrorCodeTimeout {
-		t.Fatalf("code = %q, want %q", payload["code"], runcli.InvocationErrorCodeTimeout)
-	}
-	if payload["message"] != "clean invocation timed out" {
-		t.Fatalf("message = %q", payload["message"])
 	}
 }

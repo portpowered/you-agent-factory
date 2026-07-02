@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -177,7 +178,7 @@ func TestInterruptFactorySessionDispatch_MissingDispatchReturnsNotFound(t *testi
 	if status != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", status)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -196,7 +197,7 @@ func TestInterruptFactorySessionDispatch_MissingDispatchIDReturnsBadRequest(t *t
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", status)
 	}
-	if errResp.Code != factoryapi.BADREQUEST {
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("code = %q, want BAD_REQUEST", errResp.Code)
 	}
 }
@@ -214,7 +215,7 @@ func TestInterruptFactorySessionDispatch_NonDurableSessionPreservesLiveStub(t *t
 	if status != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", status)
 	}
-	if errResp.Code != factoryapi.INTERNALERROR {
+	if errResp.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
 		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
 	}
 }
@@ -422,4 +423,375 @@ func postFactorySessionInterruptDispatchRaw(
 		return nil, errors.New(errResp.Message)
 	}
 	return resp, nil
+}
+
+func apiLiveProviderSyncCompletedSession(t *testing.T) (*httptest.Server, string) {
+	t.Helper()
+	service := newAPILiveProviderRuntimeService(t)
+	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-live-provider-dispatch-sync-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+		Runtime: &factorysessionexecution.RuntimeOptions{
+			ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	return server, completed.SessionID
+}
+
+func assertAPILiveProviderOneCompletedDispatchProgress(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
+	sessionRead := getDurableFactorySession(t, serverURL, sessionID)
+	if sessionRead.Progress == nil ||
+		sessionRead.Progress.TotalDispatches == nil || *sessionRead.Progress.TotalDispatches != 1 ||
+		sessionRead.Progress.CompletedDispatches == nil || *sessionRead.Progress.CompletedDispatches != 1 {
+		t.Fatalf("session progress = %#v, want one completed dispatch", sessionRead.Progress)
+	}
+}
+
+func assertAPILiveProviderCompletedDispatchSummary(
+	t *testing.T,
+	dispatchSummary factoryapi.FactorySessionDispatchSummary,
+) {
+	t.Helper()
+	if dispatchSummary.Id != "dispatch-1" {
+		t.Fatalf("dispatch id = %q, want dispatch-1", dispatchSummary.Id)
+	}
+	if dispatchSummary.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("dispatch status = %q, want COMPLETED", dispatchSummary.Status)
+	}
+	if dispatchSummary.Provider == nil || *dispatchSummary.Provider != "mock" {
+		t.Fatalf("dispatch provider = %#v, want mock", dispatchSummary.Provider)
+	}
+	if dispatchSummary.Javascript == nil || dispatchSummary.Javascript.ExecutionMode == nil ||
+		*dispatchSummary.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("dispatch executionMode = %#v, want live-provider", dispatchSummary.Javascript)
+	}
+	if dispatchSummary.ProviderSessionRefs == nil || len(*dispatchSummary.ProviderSessionRefs) != 1 ||
+		(*dispatchSummary.ProviderSessionRefs)[0].Id != "live-provider-session-1" {
+		t.Fatalf("providerSessionRefs = %#v", dispatchSummary.ProviderSessionRefs)
+	}
+	if dispatchSummary.OutputArtifactIds == nil || len(*dispatchSummary.OutputArtifactIds) != 1 ||
+		(*dispatchSummary.OutputArtifactIds)[0] != "child-artifact-1" {
+		t.Fatalf("outputArtifactIds = %#v, want [child-artifact-1]", dispatchSummary.OutputArtifactIds)
+	}
+}
+
+func assertAPILiveProviderCompletedDispatchDetail(
+	t *testing.T,
+	dispatchDetail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+	if dispatchDetail.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("dispatch detail status = %q, want COMPLETED", dispatchDetail.Status)
+	}
+	if dispatchDetail.Javascript == nil || dispatchDetail.Javascript.ExecutionMode == nil ||
+		*dispatchDetail.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("dispatch detail executionMode = %#v, want live-provider", dispatchDetail.Javascript)
+	}
+	assertAPIDispatchStatusTransitions(t, dispatchDetail.StatusTransitions, []factoryapi.FactoryDispatchStatus{
+		factoryapi.FactoryDispatchStatusQUEUED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+		factoryapi.FactoryDispatchStatusCOMPLETED,
+	})
+	if dispatchDetail.ArtifactIds == nil || len(*dispatchDetail.ArtifactIds) != 1 ||
+		(*dispatchDetail.ArtifactIds)[0] != "child-artifact-1" {
+		t.Fatalf("dispatch artifactIds = %#v, want [child-artifact-1]", dispatchDetail.ArtifactIds)
+	}
+}
+
+func assertAPILiveProviderCompletedDispatchReads(
+	t *testing.T,
+	serverURL, sessionID string,
+) (factoryapi.FactorySessionDispatchSummary, factoryapi.FactoryDispatch) {
+	t.Helper()
+	dispatchList := getDurableDispatchList(t, serverURL, sessionID)
+	if len(dispatchList.Dispatches) != 1 {
+		t.Fatalf("dispatch list = %#v, want one dispatch", dispatchList.Dispatches)
+	}
+	dispatchSummary := dispatchList.Dispatches[0]
+	assertAPILiveProviderCompletedDispatchSummary(t, dispatchSummary)
+	dispatchDetail := getDurableDispatchDetail(t, serverURL, sessionID, "dispatch-1")
+	assertAPILiveProviderCompletedDispatchDetail(t, dispatchDetail)
+	return dispatchSummary, dispatchDetail
+}
+
+func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsQueuedRunningCompletedPath(t *testing.T) {
+	server, sessionID := apiLiveProviderSyncCompletedSession(t)
+	defer server.Close()
+
+	assertAPILiveProviderOneCompletedDispatchProgress(t, server.URL, sessionID)
+	dispatchSummary, dispatchDetail := assertAPILiveProviderCompletedDispatchReads(t, server.URL, sessionID)
+	assertAPILiveProviderProviderSessionRef(t, dispatchSummary.ProviderSessionRefs)
+	assertAPILiveProviderArtifactLineage(t, server.URL, sessionID, dispatchSummary, dispatchDetail)
+
+	events := getDurableFactorySessionEvents(t, server.URL, sessionID, "")
+	assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
+		t,
+		events,
+		"dispatch-1",
+		dispatchSummary,
+		dispatchDetail,
+	)
+}
+
+func TestLiveProviderAndFakeChildSessions_APIPreserveDistinctProviderAndArtifactProjections(t *testing.T) {
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+
+	fakeService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+	})
+	fakeCompleted, err := fakeService.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-live-provider-fake-child-coexist-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+	})
+	if err != nil {
+		t.Fatalf("fake StartSync: %v", err)
+	}
+
+	liveService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		Provider:          factorysessionexecution.SmokeLiveChildProvider(),
+	})
+	liveCompleted, err := liveService.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-live-provider-live-child-coexist-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+		Runtime: &factorysessionexecution.RuntimeOptions{
+			ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		},
+	})
+	if err != nil {
+		t.Fatalf("live StartSync: %v", err)
+	}
+
+	fakeServer := httptest.NewServer(newAPITestServer(&testutil.MockFactory{DurableExecutionService: fakeService}).Handler())
+	defer fakeServer.Close()
+	liveServer := httptest.NewServer(newAPITestServer(&testutil.MockFactory{DurableExecutionService: liveService}).Handler())
+	defer liveServer.Close()
+
+	fakeDispatch := getDurableDispatchList(t, fakeServer.URL, fakeCompleted.SessionID).Dispatches[0]
+	if fakeDispatch.Javascript == nil || fakeDispatch.Javascript.ExecutionMode == nil ||
+		*fakeDispatch.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeFake {
+		t.Fatalf("fake dispatch executionMode = %#v, want fake", fakeDispatch.Javascript)
+	}
+	if fakeDispatch.ProviderSessionRefs == nil || len(*fakeDispatch.ProviderSessionRefs) != 1 ||
+		(*fakeDispatch.ProviderSessionRefs)[0].Id != "fake-provider-session-1" {
+		t.Fatalf("fake providerSessionRefs = %#v", fakeDispatch.ProviderSessionRefs)
+	}
+	fakeArtifact := getDurableArtifactList(t, fakeServer.URL, fakeCompleted.SessionID).Artifacts[0]
+	if fakeArtifact.DispatchId == nil || *fakeArtifact.DispatchId != "dispatch-1" {
+		t.Fatalf("fake artifact dispatchId = %#v, want dispatch-1", fakeArtifact.DispatchId)
+	}
+
+	liveDispatch := getDurableDispatchList(t, liveServer.URL, liveCompleted.SessionID).Dispatches[0]
+	if liveDispatch.Javascript == nil || liveDispatch.Javascript.ExecutionMode == nil ||
+		*liveDispatch.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("live dispatch executionMode = %#v, want live-provider", liveDispatch.Javascript)
+	}
+	assertAPILiveProviderProviderSessionRef(t, liveDispatch.ProviderSessionRefs)
+	liveDispatchDetail := getDurableDispatchDetail(t, liveServer.URL, liveCompleted.SessionID, "dispatch-1")
+	assertAPILiveProviderArtifactLineage(t, liveServer.URL, liveCompleted.SessionID, liveDispatch, liveDispatchDetail)
+
+	fakeSnapshot := captureDurableSessionInspectionSnapshot(t, fakeServer.URL, fakeCompleted.SessionID)
+	assertAPIFakeChildInspectionSnapshot(t, fakeSnapshot)
+	liveSnapshot := captureDurableSessionInspectionSnapshot(t, liveServer.URL, liveCompleted.SessionID)
+	if liveSnapshot.read.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("live session status = %q, want SUCCEEDED", liveSnapshot.read.Status)
+	}
+}
+
+func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsRunningDispatchBeforeCompletion(t *testing.T) {
+	service, provider := newAPILiveProviderBlockingRuntimeService(t)
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-live-provider-dispatch-async-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+		Runtime: &factorysessionexecution.RuntimeOptions{
+			ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	provider.waitForInferStart(t)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	runningDispatch := waitForAPIDispatchStatus(
+		t,
+		server.URL,
+		started.SessionID,
+		"dispatch-1",
+		factoryapi.FactoryDispatchStatusRUNNING,
+		2*time.Second,
+	)
+	if runningDispatch.Javascript == nil || runningDispatch.Javascript.ExecutionMode == nil ||
+		*runningDispatch.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("running dispatch executionMode = %#v, want live-provider", runningDispatch.Javascript)
+	}
+
+	sessionRead := getDurableFactorySession(t, server.URL, started.SessionID)
+	if sessionRead.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("session status while child running = %q, want RUNNING", sessionRead.Status)
+	}
+	if sessionRead.Progress == nil || sessionRead.Progress.TotalDispatches == nil ||
+		*sessionRead.Progress.TotalDispatches != 1 {
+		t.Fatalf("session progress while child running = %#v, want one total dispatch", sessionRead.Progress)
+	}
+
+	provider.releaseInfer()
+	waitForRuntimeSessionTerminal(t, service, started.SessionID)
+
+	completedDetail := getDurableDispatchDetail(t, server.URL, started.SessionID, "dispatch-1")
+	if completedDetail.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("dispatch detail after completion = %q, want COMPLETED", completedDetail.Status)
+	}
+	assertAPIDispatchStatusTransitions(t, completedDetail.StatusTransitions, []factoryapi.FactoryDispatchStatus{
+		factoryapi.FactoryDispatchStatusQUEUED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+		factoryapi.FactoryDispatchStatusCOMPLETED,
+	})
+}
+
+func assertAPILiveProviderFailedSessionRead(t *testing.T, snapshot durableSessionInspectionSnapshot) {
+	t.Helper()
+	if snapshot.read.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", snapshot.read.Status)
+	}
+	if snapshot.read.Progress == nil ||
+		snapshot.read.Progress.TotalDispatches == nil || *snapshot.read.Progress.TotalDispatches != 1 ||
+		snapshot.read.Progress.FailedDispatches == nil || *snapshot.read.Progress.FailedDispatches != 1 {
+		t.Fatalf("session progress = %#v, want one failed dispatch", snapshot.read.Progress)
+	}
+	if snapshot.read.Failure == nil || snapshot.read.Failure.Reason == nil ||
+		*snapshot.read.Failure.Reason == "" {
+		t.Fatalf("session failure = %#v, want typed workflow failure", snapshot.read.Failure)
+	}
+}
+
+func assertAPILiveProviderFailedSessionSnapshot(
+	t *testing.T,
+	snapshot durableSessionInspectionSnapshot,
+	dispatchID string,
+) (factoryapi.FactorySessionDispatchSummary, factoryapi.FactoryDispatch) {
+	t.Helper()
+	assertAPILiveProviderFailedSessionRead(t, snapshot)
+	if len(snapshot.dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatch list = %#v, want one dispatch", snapshot.dispatches.Dispatches)
+	}
+	dispatchSummary := snapshot.dispatches.Dispatches[0]
+	if dispatchSummary.Id != dispatchID {
+		t.Fatalf("dispatch id = %q, want %q", dispatchSummary.Id, dispatchID)
+	}
+	if dispatchSummary.Status != factoryapi.FactoryDispatchStatusFAILED {
+		t.Fatalf("dispatch status = %q, want FAILED", dispatchSummary.Status)
+	}
+	if dispatchSummary.Javascript == nil || dispatchSummary.Javascript.ExecutionMode == nil ||
+		*dispatchSummary.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("dispatch executionMode = %#v, want live-provider", dispatchSummary.Javascript)
+	}
+	assertAPILiveProviderDispatchFailureDetail(t, dispatchSummary.FailureDetail)
+	return dispatchSummary, factoryapi.FactoryDispatch{}
+}
+
+func assertAPILiveProviderFailedDispatchDetail(
+	t *testing.T,
+	serverURL, sessionID, dispatchID string,
+	dispatchSummary factoryapi.FactorySessionDispatchSummary,
+) factoryapi.FactoryDispatch {
+	t.Helper()
+	dispatchDetail := getDurableDispatchDetail(t, serverURL, sessionID, dispatchID)
+	if dispatchDetail.Status != factoryapi.FactoryDispatchStatusFAILED {
+		t.Fatalf("dispatch detail status = %q, want FAILED", dispatchDetail.Status)
+	}
+	if dispatchDetail.Javascript == nil || dispatchDetail.Javascript.ExecutionMode == nil ||
+		*dispatchDetail.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("dispatch detail executionMode = %#v, want live-provider", dispatchDetail.Javascript)
+	}
+	assertAPILiveProviderDispatchFailureDetail(t, dispatchDetail.FailureDetail)
+	assertAPIDispatchStatusTransitions(t, dispatchDetail.StatusTransitions, []factoryapi.FactoryDispatchStatus{
+		factoryapi.FactoryDispatchStatusQUEUED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+		factoryapi.FactoryDispatchStatusFAILED,
+	})
+	if dispatchDetail.ArtifactIds != nil && len(*dispatchDetail.ArtifactIds) != 0 {
+		t.Fatalf("dispatch artifactIds = %#v, want none for failed child", dispatchDetail.ArtifactIds)
+	}
+	if dispatchSummary.OutputArtifactIds != nil && len(*dispatchSummary.OutputArtifactIds) != 0 {
+		t.Fatalf("dispatch outputArtifactIds = %#v, want none for failed child", dispatchSummary.OutputArtifactIds)
+	}
+	return dispatchDetail
+}
+
+func assertAPILiveProviderFailedDispatchHasNoArtifacts(
+	t *testing.T,
+	serverURL, sessionID string,
+	snapshot durableSessionInspectionSnapshot,
+) {
+	t.Helper()
+	artifactList := getDurableArtifactList(t, serverURL, sessionID)
+	if len(artifactList.Artifacts) != 0 {
+		t.Fatalf("artifact list = %#v, want none for failed child", artifactList.Artifacts)
+	}
+	if snapshot.read.ArtifactRefs != nil && len(*snapshot.read.ArtifactRefs) != 0 {
+		t.Fatalf("session artifactRefs = %#v, want none for failed child", snapshot.read.ArtifactRefs)
+	}
+}
+
+func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsFailedBridgedChildWithTypedFailureDetail(t *testing.T) {
+	service := newAPILifecycleFailingChildRuntimeService(t)
+	sessionID, dispatchID := startRuntimeBackedFailedSessionWithDispatch(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	snapshot := captureDurableSessionInspectionSnapshot(t, server.URL, sessionID)
+	dispatchSummary, _ := assertAPILiveProviderFailedSessionSnapshot(t, snapshot, dispatchID)
+	dispatchDetail := assertAPILiveProviderFailedDispatchDetail(t, server.URL, sessionID, dispatchID, dispatchSummary)
+	assertAPILiveProviderFailedDispatchHasNoArtifacts(t, server.URL, sessionID, snapshot)
+
+	assertPostControlEventsAlignWithStatus(t, sessionID, snapshot.events, snapshot.read.Status)
+	assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
+		t,
+		snapshot.events,
+		dispatchID,
+		dispatchSummary,
+		dispatchDetail,
+	)
+	if snapshot.result.SessionStatus == nil ||
+		*snapshot.result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("result sessionStatus = %#v, want FAILED", snapshot.result.SessionStatus)
+	}
 }

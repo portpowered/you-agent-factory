@@ -371,7 +371,7 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode open factory session error response: %v", err)
 	}
-	if response.Code != factoryapi.BADREQUEST {
+	if response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("open factory session error code = %q, want BAD_REQUEST", response.Code)
 	}
 	if response.Targets == nil || len(*response.Targets) != 1 {
@@ -616,6 +616,42 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 			}
 			assertFactorySessionInvocation(t, mock, tc.body, tc.result, tc.wantSubmitText)
 		})
+	}
+}
+
+func TestFactorySessionsAPI_InvokeFactorySession_DecodesStructuredArgs(t *testing.T) {
+	mock := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"~default": {},
+		},
+		InvokeFactoryResult: apisurface.FactoryInvocationResult{
+			RequestID: "invoke-structured-1",
+			TraceID:   "trace-structured-1",
+			Status:    factoryapi.InvocationTerminalStatusCompleted,
+			PrimaryResult: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "ok",
+			}},
+		},
+	}
+
+	srv := newTestServer(mock)
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(`{"args":{"input":"hello","tag":["alpha","beta"]}}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if len(mock.InvokedFactorySessions) != 1 {
+		t.Fatalf("invoked factory sessions = %d, want 1", len(mock.InvokedFactorySessions))
+	}
+	if mock.InvokedFactorySessions[0].Args == nil {
+		t.Fatal("invocation args = nil, want decoded args map")
+	}
+	if got := (*mock.InvokedFactorySessions[0].Args)["input"]; got != "hello" {
+		t.Fatalf("args[input] = %#v, want hello", got)
 	}
 }
 

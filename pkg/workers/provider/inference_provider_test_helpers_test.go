@@ -9,7 +9,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -92,16 +94,16 @@ type april11FailureShapeFixture struct {
 }
 
 type april11FailureShapeSample struct {
-	Name                  string                       `json:"name"`
-	ExitCode              int                          `json:"exit_code"`
-	Stdout                string                       `json:"stdout"`
-	Stderr                string                       `json:"stderr"`
+	Name                  string                     `json:"name"`
+	ExitCode              int                        `json:"exit_code"`
+	Stdout                string                     `json:"stdout"`
+	Stderr                string                     `json:"stderr"`
 	WantType              interfaces.WorkFailureType `json:"want_type"`
-	WantMessage           string                       `json:"want_message"`
-	WantRetryable         bool                         `json:"want_retryable"`
-	WantTerminal          bool                         `json:"want_terminal"`
-	WantThrottlePause     bool                         `json:"want_throttle_pause"`
-	RejectMessageContains []string                     `json:"reject_message_contains"`
+	WantMessage           string                     `json:"want_message"`
+	WantRetryable         bool                       `json:"want_retryable"`
+	WantTerminal          bool                       `json:"want_terminal"`
+	WantThrottlePause     bool                       `json:"want_throttle_pause"`
+	RejectMessageContains []string                   `json:"reject_message_contains"`
 }
 
 func loadApril11FailureShapeFixture(t *testing.T) april11FailureShapeFixture {
@@ -170,23 +172,94 @@ func writeTestFile(t *testing.T, dir, name, content string) {
 	}
 }
 
+func writeExecutableTestScript(t *testing.T, path string, content string) {
+	t.Helper()
+
+	dir := filepath.Dir(path)
+	tmpFile, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		t.Fatalf("creating executable temp %s: %v", path, err)
+	}
+	tmpPath := tmpFile.Name()
+	cleanup := func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+	}
+
+	if err := tmpFile.Chmod(0o755); err != nil {
+		cleanup()
+		t.Fatalf("chmod temp executable %s: %v", tmpPath, err)
+	}
+	if _, err := tmpFile.WriteString(content); err != nil {
+		cleanup()
+		t.Fatalf("writing %s: %v", tmpPath, err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		cleanup()
+		t.Fatalf("syncing %s: %v", tmpPath, err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		t.Fatalf("closing %s: %v", tmpPath, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		t.Fatalf("renaming %s to %s: %v", tmpPath, path, err)
+	}
+	syncDirectoryForExecutableWrite(t, dir)
+	releaseExecutableWriteLock(t, path)
+}
+
+func releaseExecutableWriteLock(t *testing.T, path string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	executable, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("opening executable %s after write: %v", path, err)
+	}
+	if err := executable.Close(); err != nil {
+		t.Fatalf("closing executable %s after write: %v", path, err)
+	}
+}
+
+func syncDirectoryForExecutableWrite(t *testing.T, dir string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	directory, err := os.Open(dir)
+	if err != nil {
+		t.Fatalf("opening directory %s for sync: %v", dir, err)
+	}
+	defer func() {
+		if err := directory.Close(); err != nil {
+			t.Fatalf("closing directory %s after executable write sync: %v", dir, err)
+		}
+	}()
+	if err := directory.Sync(); err != nil {
+		t.Fatalf("syncing directory %s after executable write: %v", dir, err)
+	}
+}
+
 func writeEditorMarkerScript(t *testing.T, markerPath string) string {
 	t.Helper()
 	dir := t.TempDir()
 	if strings.EqualFold(filepath.Ext(os.Args[0]), ".exe") {
 		script := filepath.Join(dir, "editor.bat")
 		content := "@echo off\r\necho invoked > %1\r\nexit /b 42\r\n"
-		if err := os.WriteFile(script, []byte(content), 0755); err != nil {
-			t.Fatalf("writing editor marker script: %v", err)
-		}
+		writeExecutableTestScript(t, script, content)
 		return script + " " + markerPath
 	}
 
 	script := filepath.Join(dir, "editor.sh")
 	content := "#!/bin/sh\nprintf invoked > \"$1\"\nexit 42\n"
-	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
-		t.Fatalf("writing editor marker script: %v", err)
-	}
+	writeExecutableTestScript(t, script, content)
 	return script + " " + markerPath
 }
 
@@ -532,6 +605,7 @@ func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(
 		t.Fatalf("expected runner not to be called, got %d calls", fakeExec.calls)
 	}
 }
+
 // Smoke: one Codex dispatch materializes both file:// and remote https URLs to distinct -i paths.
 func TestScriptWrapProvider_Infer_CodexBatchLocalAndRemoteImageURLs(t *testing.T) {
 	workspace := t.TempDir()
@@ -615,4 +689,158 @@ func (e *codexMixedImageAssertExec) Run(ctx context.Context, req CommandRequest)
 		}
 	}
 	return e.recordingProviderExec.Run(ctx, req)
+}
+
+func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join(t.TempDir(), "stream.sh")
+	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\necho stdout-chunk\necho stderr-chunk 1>&2\n")
+
+	var publishedMu sync.Mutex
+	var published []InferenceProgressFragment
+	runner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
+		publishedMu.Lock()
+		published = append(published, fragment)
+		publishedMu.Unlock()
+	}, nil)
+
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command:    scriptPath,
+		DispatchID: "dispatch-stream-1",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !strings.Contains(string(result.Stdout), "stdout-chunk") {
+		t.Fatalf("stdout = %q, want stdout-chunk", result.Stdout)
+	}
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
+	if len(published) < 2 {
+		t.Fatalf("published events = %d, want at least 2", len(published))
+	}
+
+	var sawResponse bool
+	var sawProgress bool
+	for _, fragment := range published {
+		if fragment.DispatchID != "dispatch-stream-1" {
+			t.Fatalf("dispatch = %q, want dispatch-stream-1", fragment.DispatchID)
+		}
+		switch fragment.Kind {
+		case ResponseFragmentKind:
+			sawResponse = true
+		case ProgressFragmentKind:
+			sawProgress = true
+		default:
+			t.Fatalf("unexpected kind %q", fragment.Kind)
+		}
+	}
+	if !sawResponse || !sawProgress {
+		t.Fatalf("published fragments = %#v, want both response and progress kinds", published)
+	}
+}
+
+func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndLaterValidEventsInOrder(t *testing.T) {
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' '{not json}'\n" +
+		"printf '%s\\n' '{\"type\":\"mystery\"}'\n" +
+		"printf '%s\\n' '{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-session-123\"}'\n" +
+		"printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-session-123\"}'\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var publishedMu sync.Mutex
+	var published []InferenceProgressFragment
+	runner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
+		publishedMu.Lock()
+		published = append(published, fragment)
+		publishedMu.Unlock()
+	}, nil)
+
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command:    string(interfaces.ModelProviderCursor),
+		DispatchID: "dispatch-stream-cursor",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
+	if len(published) != 4 {
+		t.Fatalf("published fragments = %#v, want 4 ordered fragments; result=%#v", published, result)
+	}
+	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored malformed JSON record", nil)
+	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored unknown event type \"mystery\"", nil)
+	assertInferenceProgressFragment(t, published[2], "dispatch-stream-cursor", ResponseFragmentKind, "Plan ", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-123",
+	})
+	assertInferenceProgressFragment(t, published[3], "dispatch-stream-cursor", ResponseFragmentKind, "done", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-123",
+	})
+}
+
+func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join(t.TempDir(), "nostream.sh")
+	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\necho stdout-fallback\necho stderr-fallback 1>&2\nexit 7\n")
+
+	runner := NewInferenceProgressPublishingCommandRunner(nil, nil)
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command: scriptPath,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("exit code = %d, want 7", result.ExitCode)
+	}
+	if !strings.Contains(string(result.Stdout), "stdout-fallback") {
+		t.Fatalf("stdout = %q, want stdout-fallback", result.Stdout)
+	}
+	if !strings.Contains(string(result.Stderr), "stderr-fallback") {
+		t.Fatalf("stderr = %q, want stderr-fallback", result.Stderr)
+	}
+}
+
+func assertInferenceProgressFragment(
+	t *testing.T,
+	fragment InferenceProgressFragment,
+	wantDispatchID string,
+	wantKind string,
+	wantPayload string,
+	wantSession *interfaces.ProviderSessionMetadata,
+) {
+	t.Helper()
+	if fragment.DispatchID != wantDispatchID {
+		t.Fatalf("dispatch = %q, want %q", fragment.DispatchID, wantDispatchID)
+	}
+	if fragment.Kind != wantKind {
+		t.Fatalf("kind = %q, want %q", fragment.Kind, wantKind)
+	}
+	if fragment.Payload != wantPayload {
+		t.Fatalf("payload = %q, want %q", fragment.Payload, wantPayload)
+	}
+	if wantSession == nil {
+		if fragment.ProviderSessionRef != nil {
+			t.Fatalf("provider session = %#v, want nil", fragment.ProviderSessionRef)
+		}
+		return
+	}
+	if fragment.ProviderSessionRef == nil {
+		t.Fatal("provider session = nil, want canonical session")
+	}
+	if *fragment.ProviderSessionRef != *wantSession {
+		t.Fatalf("provider session = %#v, want %#v", fragment.ProviderSessionRef, wantSession)
+	}
 }

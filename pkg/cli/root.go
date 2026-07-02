@@ -41,12 +41,14 @@ var submitBatch = submitcli.SubmitBatch
 var listWork = workcli.List
 var showWork = workcli.Show
 var moveWork = workcli.Move
+var visualizeWork = workcli.Visualize
 var listSessions = sessioncli.List
 var showSession = sessioncli.Show
-var createSession = sessioncli.Create
-var deleteSession = sessioncli.Delete
 var pauseSession = sessioncli.Pause
 var resumeSession = sessioncli.Resume
+var listSessionDispatches = sessioncli.Dispatches
+var createSession = sessioncli.Create
+var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var validateFactory = factorycli.Validate
@@ -668,89 +670,6 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	return cmd
 }
 
-func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
-	cfg := defaultcmd.ExplicitRunConfig()
-
-	cmd := &cobra.Command{
-		Use:           "run",
-		Short:         "Load workflow and run the factory engine",
-		SilenceErrors: true,
-		Long: "Load workflow and run the factory engine.\n\n" +
-			"For the quickest local setup, run " + cliBinaryName + " with no arguments. " +
-			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
-			"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
-			"Default execution uses batch mode and exits after idle completion. " +
-			"Normal live runs record by default unless you pass --no-record. " +
-			"Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata. " +
-			"Use global --default-worker-model-provider and --default-worker-model to set operator-level model defaults for omitted model-worker fields. " +
-			"Use --continuously to keep the factory alive while idle until you cancel it. " +
-			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
-			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
-			"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
-			"Built-ins such as @you/tts materialize lazily into that global root on first use and stay editable on disk for later runs. " +
-			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
-			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
-			"Packaged @you/tts invocation details live in " + cliBinaryName + " docs packaged-tts. " +
-			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
-			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
-			"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
-			"Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
-		Example: "  # Start the out-of-the-box continuous factory.\n" +
-			"  " + cliBinaryName + "\n\n" +
-			"  # Submit a Markdown task to the default scaffold.\n" +
-			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
-			"  # Run an existing factory once in explicit batch mode.\n" +
-			"  " + cliBinaryName + " run --dir factory\n\n" +
-			"  # Run a persisted named factory from any working directory.\n" +
-			"  " + cliBinaryName + " run --named @you/tts\n\n" +
-			"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
-			"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"",
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
-			promptArgs := args
-			if cfg.MockWorkersConfigPath == defaultMockWorkersConfigPathSentinel {
-				if len(args) > 0 {
-					cfg.MockWorkersConfigPath = args[0]
-					promptArgs = args[1:]
-				} else {
-					cfg.MockWorkersConfigPath = ""
-				}
-			}
-			err := runFactory(cmd, cfg, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
-			if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
-				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
-			}
-			return err
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.Workflow, "workflow", "", "workflow ID to run (default: all)")
-	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
-	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
-	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable")
-	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs; use positional text or piped stdin for the invocation input")
-	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used")
-	cmd.Flags().BoolVar(&cfg.DisableDefaultRecording, "no-record", false, "disable the default replay artifact for this invocation")
-	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing sensitive replay artifact")
-	cmd.Flags().StringVar(&cfg.RuntimeLogDir, "runtime-log-dir", "", "root directory for structured runtime log files grouped by UTC start date (default: ~/.you-agent-factory/logs)")
-	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxSize, "runtime-log-max-size-mb", cfg.RuntimeLogConfig.MaxSize, "rotate each runtime log file after this many megabytes")
-	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxBackups, "runtime-log-max-backups", cfg.RuntimeLogConfig.MaxBackups, "maximum rotated runtime log files to retain")
-	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxAge, "runtime-log-max-age-days", cfg.RuntimeLogConfig.MaxAge, "maximum days to retain rotated runtime log files")
-	cmd.Flags().BoolVar(&cfg.RuntimeLogConfig.Compress, "runtime-log-compress", false, "compress rotated runtime log files")
-	cmd.Flags().StringVar(&cfg.RuntimeMetricsDir, "runtime-metrics-dir", "", "root directory for structured runtime metrics JSONL files grouped by UTC start date (default: ~/.you-agent-factory/metrics)")
-	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxSize, "runtime-metrics-max-size-mb", cfg.RuntimeMetricsConfig.MaxSize, "rotate each runtime metrics file after this many megabytes")
-	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxBackups, "runtime-metrics-max-backups", cfg.RuntimeMetricsConfig.MaxBackups, "maximum rotated runtime metrics files to retain")
-	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxAge, "runtime-metrics-max-age-days", cfg.RuntimeMetricsConfig.MaxAge, "maximum days to retain rotated runtime metrics files")
-	cmd.Flags().BoolVar(&cfg.RuntimeMetricsConfig.Compress, "runtime-metrics-compress", false, "compress rotated runtime metrics files")
-	cmd.Flags().StringVar(&cfg.MockWorkersConfigPath, "with-mock-workers", "", "enable mock-worker execution with an optional mock-workers JSON config path")
-	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
-	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
-	return cmd
-}
-
 func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, verbose, debug bool) error {
 	logger, err := logging.BuildLogger(verbose, debug)
 	if err != nil {
@@ -759,18 +678,18 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cfg.Logger = logger
 	cfg.Verbose = verbose || debug
 
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
-	if err != nil {
-		return err
-	}
-	cfg.OperatorDefaults = resolvedOperatorDefaults
-
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
 	}
 	if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
 		return err
 	}
+
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+	if err != nil {
+		return err
+	}
+	cfg.OperatorDefaults = resolvedOperatorDefaults
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs); err != nil {
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
@@ -908,6 +827,30 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	factoryChanged := cmd.Flags().Changed("factory")
 	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
+
+	if !factoryChanged && !namedChanged {
+		return resolveLegacyRunFactoryPrompt(cmd, promptArgs)
+	}
+	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.InOrStdin()) {
+		return nil
+	}
+
+	signature, err := runcli.ResolveFactoryInvocationSignature(cfg.Dir)
+	if err != nil {
+		return err
+	}
+	if signature != nil {
+		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature)
+	}
+	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged)
+}
+
+func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string) error {
+	for _, arg := range promptArgs {
+		if strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("unknown flag: %s", arg)
+		}
+	}
 	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
 		PromptArgs: promptArgs,
 		Stdin:      cmd.InOrStdin(),
@@ -915,12 +858,42 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if err != nil {
 		return err
 	}
+	if input.Payload != "" {
+		return fmt.Errorf("positional prompt arguments require --factory or --named")
+	}
+	return nil
+}
 
-	if !factoryChanged && !namedChanged {
-		if input.Payload != "" {
-			return fmt.Errorf("positional prompt arguments require --factory or --named")
-		}
-		return nil
+func resolveSignatureRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+) error {
+	normalized, err := runcli.ResolveSignatureFactoryInvocationInput(runcli.SignatureFactoryInvocationInputConfig{
+		PromptArgs: promptArgs,
+		Signature:  signature,
+		Stdin:      cmd.InOrStdin(),
+	})
+	if err != nil {
+		return err
+	}
+	cfg.InvocationNormalizedArguments = &normalized
+	return nil
+}
+
+func resolveCompatibilityRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+) error {
+	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
+		PromptArgs: promptArgs,
+		Stdin:      cmd.InOrStdin(),
+	})
+	if err != nil {
+		return err
 	}
 	if workChanged && input.Payload != "" {
 		return fmt.Errorf("%s cannot be used with --work", input.Source)
@@ -931,7 +904,11 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if input.Payload == "" {
 		return nil
 	}
+	assignCompatibilityInvocationInput(cfg, input)
+	return nil
+}
 
+func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input runcli.FactoryInvocationInput) {
 	payload := input.Payload
 	switch input.Source {
 	case runcli.InvocationInputSourcePositional:
@@ -940,5 +917,15 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		cfg.InvocationStdinText = &payload
 	}
 	cfg.CleanInvocationInputSource = input.Source
-	return nil
+}
+
+func runCommandInputIsTTY(stdin io.Reader) bool {
+	if stdin != nil && stdin != os.Stdin {
+		return false
+	}
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }

@@ -45,7 +45,7 @@ func TestSessionFactoryPUT_UpsertReplaceRejectsStaleVersion(t *testing.T) {
 	)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode stale upsert replace response")
-	if errResp.Code != factoryapi.STALEFACTORYVERSION {
+	if errResp.Code != factoryapi.ErrorResponseCodeSTALEFACTORYVERSION {
 		t.Fatalf("error code = %q, want STALE_FACTORY_VERSION", errResp.Code)
 	}
 

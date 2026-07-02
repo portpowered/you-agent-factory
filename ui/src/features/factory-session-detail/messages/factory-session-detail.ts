@@ -10,24 +10,44 @@ import {
   resolveLocalizedMessages,
 } from "../../../i18n";
 import {
+  chineseFactorySessionArtifactDetailMessages,
+  englishFactorySessionArtifactDetailMessages,
+  type FactorySessionArtifactDetailMessages,
+} from "./factory-session-detail.artifacts";
+import {
   chineseFactorySessionEventReplayMessages,
   englishFactorySessionEventReplayMessages,
   type FactorySessionEventReplayMessages,
 } from "./factory-session-detail.event-replay";
+import {
+  chineseFactorySessionLifecycleOutcomeMessages,
+  englishFactorySessionLifecycleOutcomeMessages,
+  type FactorySessionLifecycleOutcomeMessages,
+} from "./factory-session-detail.lifecycle-outcomes";
 
 export interface FactorySessionDetailMessages
-  extends FactorySessionEventReplayMessages {
-  artifactLinksHeading: string;
-  artifactRefActionLabel: string;
-  artifactsHeading: string;
+  extends FactorySessionArtifactDetailMessages,
+    FactorySessionEventReplayMessages,
+    FactorySessionLifecycleOutcomeMessages {
+  lifecycleActionApproveLabel: string;
+  lifecycleActionCancelLabel: string;
+  lifecycleActionPauseLabel: string;
+  lifecycleActionResumeLabel: string;
+  lifecycleActionRetryDispatchLabel: string;
+  lifecycleActionTerminateLabel: string;
+  lifecycleControlsEmptyState: string;
+  lifecycleControlsHeading: string;
+  lifecycleControlsRetrySelectionHint: string;
+  lifecycleControlsSelectedDispatchLabel: (dispatchID: string) => string;
   checkpointRefsHeading: string;
   childDispatchCountsLabel: string;
   collapseDispatchDetailLabel: (dispatchID: string) => string;
   dispatchAttemptLabel: string;
   dispatchDetailErrorState: string;
   dispatchDetailHeading: string;
-  dispatchDetailMissingState: string;
+  dispatchDetailMissingState: (dispatchID: string) => string;
   dispatchDetailLoadingState: string;
+  dispatchDetailRetryLabel: string;
   dispatchExecutionModeSummary: (mode: string) => string;
   dispatchKindLabel: string;
   dispatchLabelField: string;
@@ -53,6 +73,7 @@ export interface FactorySessionDetailMessages
   failureMessageLabel: string;
   failureReasonLabel: string;
   finalResultRefLabel: string;
+  lifecycleControlStatusLabel: string;
   javascriptProjectionMissingState: string;
   javascriptTaskHeading: string;
   javascriptTaskKindLabel: string;
@@ -214,9 +235,21 @@ const chineseDurableLifecycleStatusLabels = {
 
 const factorySessionDetailMessagesByLocale = {
   en: {
-    artifactLinksHeading: "Dispatch artifacts",
-    artifactRefActionLabel: "Open artifact",
-    artifactsHeading: "Artifacts",
+    ...englishFactorySessionArtifactDetailMessages,
+    lifecycleActionApproveLabel: "Approve",
+    lifecycleActionCancelLabel: "Cancel",
+    lifecycleActionPauseLabel: "Pause",
+    lifecycleActionResumeLabel: "Resume",
+    lifecycleActionRetryDispatchLabel: "Retry dispatch",
+    lifecycleActionTerminateLabel: "Terminate",
+    ...englishFactorySessionLifecycleOutcomeMessages,
+    lifecycleControlsEmptyState:
+      "No lifecycle controls are available for this Factory Session state.",
+    lifecycleControlsHeading: "Lifecycle controls",
+    lifecycleControlsRetrySelectionHint:
+      "Select a failed dispatch to make retry available on this detail surface.",
+    lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
+      `Selected dispatch: ${dispatchID}`,
     checkpointRefsHeading: "Checkpoint refs",
     collapseDispatchDetailLabel: (dispatchID) =>
       `Collapse dispatch detail for ${dispatchID}`,
@@ -225,7 +258,9 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailErrorState: "The dispatch detail could not be loaded.",
     dispatchDetailHeading: "Dispatch detail",
     dispatchDetailLoadingState: "Loading dispatch detail…",
-    dispatchDetailMissingState: "This dispatch detail is no longer available.",
+    dispatchDetailMissingState: (dispatchID) =>
+      `Dispatch detail for ${dispatchID} is no longer available.`,
+    dispatchDetailRetryLabel: "Retry loading dispatch detail",
     dispatchExecutionModeSummary: (mode) => `Execution mode: ${mode}`,
     dispatchKindLabel: "Dispatch kind",
     dispatchLabelField: "Dispatch label",
@@ -250,6 +285,7 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "Failure message",
     failureReasonLabel: "Failure reason",
     finalResultRefLabel: "Final result ref",
+    lifecycleControlStatusLabel: "Factory Session lifecycle",
     javascriptProjectionMissingState:
       "JavaScript workflow runtime details are not available for this session.",
     javascriptTaskHeading: "JavaScript task",
@@ -297,9 +333,20 @@ const factorySessionDetailMessagesByLocale = {
     warningsHeading: "Dispatch warnings",
   },
   "zh-CN": {
-    artifactLinksHeading: "调度工件",
-    artifactRefActionLabel: "打开工件",
-    artifactsHeading: "工件",
+    ...chineseFactorySessionArtifactDetailMessages,
+    lifecycleActionApproveLabel: "批准",
+    lifecycleActionCancelLabel: "取消",
+    lifecycleActionPauseLabel: "暂停",
+    lifecycleActionResumeLabel: "恢复",
+    lifecycleActionRetryDispatchLabel: "重试调度",
+    lifecycleActionTerminateLabel: "终止",
+    ...chineseFactorySessionLifecycleOutcomeMessages,
+    lifecycleControlsEmptyState: "当前工厂会话状态没有可用的生命周期控制。",
+    lifecycleControlsHeading: "生命周期控制",
+    lifecycleControlsRetrySelectionHint:
+      "选择失败的调度后，当前详情界面才会显示重试操作。",
+    lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
+      `已选择调度：${dispatchID}`,
     checkpointRefsHeading: "检查点引用",
     collapseDispatchDetailLabel: (dispatchID) =>
       `收起 ${dispatchID} 的调度详情`,
@@ -308,7 +355,9 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailErrorState: "无法加载调度详情。",
     dispatchDetailHeading: "调度详情",
     dispatchDetailLoadingState: "正在加载调度详情…",
-    dispatchDetailMissingState: "此调度详情已不可用。",
+    dispatchDetailMissingState: (dispatchID) =>
+      `${dispatchID} 的调度详情已不可用。`,
+    dispatchDetailRetryLabel: "重试加载调度详情",
     dispatchExecutionModeSummary: (mode) => `执行模式：${mode}`,
     dispatchKindLabel: "调度类型",
     dispatchLabelField: "调度标签",
@@ -331,7 +380,9 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "失败消息",
     failureReasonLabel: "失败原因",
     finalResultRefLabel: "最终结果引用",
-    javascriptProjectionMissingState: "此会话的 JavaScript 工作流运行时详情不可用。",
+    lifecycleControlStatusLabel: "工厂会话生命周期",
+    javascriptProjectionMissingState:
+      "此会话的 JavaScript 工作流运行时详情不可用。",
     javascriptTaskHeading: "JavaScript 任务",
     javascriptTaskKindLabel: "任务类型",
     javascriptTaskLabel: "任务标签",

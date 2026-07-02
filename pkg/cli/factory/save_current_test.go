@@ -151,7 +151,7 @@ func TestSaveCurrent_ReturnsActionableCurrentFactoryNotFoundError(t *testing.T) 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
-			Code:    factoryapi.NOTFOUND,
+			Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 			Message: "Current factory not found.",
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)

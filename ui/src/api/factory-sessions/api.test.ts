@@ -6,6 +6,7 @@ import {
   closeFactorySession,
   FactorySessionsAPIError,
   getFactorySession,
+  getFactorySessionArtifact,
   getFactorySessionPartialResult,
   getFactorySessionResult,
   listFactorySessions,
@@ -16,7 +17,9 @@ import {
   listFactorySessionDispatches,
 } from "./api-durable-inspection";
 import { getFactorySessionDispatchDetail } from "./dispatch-detail";
+import { getFactorySessionSyncPreflight } from "./sync-preflight";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: factory session API contract cases share one fetch harness.
 describe("factory sessions API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -263,6 +266,282 @@ describe("factory sessions API", () => {
         },
         method: "POST",
       }),
+    );
+  });
+
+  it("loads durable artifact detail from the typed artifact route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sessionId: "dur-sess-js-success-002",
+          id: "art-js-success-001",
+          kind: "FINAL_RESULT",
+          visibility: "PUBLIC",
+          label: "Docs refresh output",
+          content: [
+            {
+              text: "Documentation refresh complete.",
+              type: "text",
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionArtifact(
+        "dur-sess-js-success-002",
+        "art-js-success-001",
+      ),
+    ).resolves.toMatchObject({
+      content: [
+        {
+          text: "Documentation refresh complete.",
+          type: "text",
+        },
+      ],
+      id: "art-js-success-001",
+      sessionId: "dur-sess-js-success-002",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/dur-sess-js-success-002/artifacts/art-js-success-001",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("reads the sync preflight surface with reconnect cursor query parameters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          backendScopeId: "backend-a",
+          checkpointReusable: true,
+          factorySessionId: "session-beta",
+          logicalSessionKeyId: "logical-beta",
+          reasonCode: "ok",
+          reconnectCursor: {
+            afterEventId: "event-7",
+            afterSequence: 7,
+            provided: true,
+            validForStreamGeneration: true,
+          },
+          requestedSessionId: "session-beta",
+          streamGenerationId: "stream-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("session-beta", {
+        afterEventId: "event-7",
+        afterSequence: 7,
+      }),
+    ).resolves.toEqual({
+      backendScopeId: "backend-a",
+      checkpointReusable: true,
+      factorySessionId: "session-beta",
+      logicalSessionKeyId: "logical-beta",
+      reasonCode: "ok",
+      reconnectCursor: {
+        afterEventId: "event-7",
+        afterSequence: 7,
+        provided: true,
+        validForStreamGeneration: true,
+      },
+      requestedSessionId: "session-beta",
+      streamGenerationId: "stream-beta",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta/sync-preflight?after_event_id=event-7&after_sequence=7",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("accepts stale-cursor sync preflight outcomes without treating them as transport failures", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          backendScopeId: "backend-a",
+          checkpointReusable: false,
+          factorySessionId: "session-beta",
+          logicalSessionKeyId: "logical-beta",
+          reasonCode: "cursor_stale",
+          reconnectCursor: {
+            afterEventId: "event-missing",
+            provided: true,
+            validForStreamGeneration: false,
+          },
+          requestedSessionId: "session-beta",
+          streamGenerationId: "stream-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("session-beta", {
+        afterEventId: "event-missing",
+      }),
+    ).resolves.toMatchObject({
+      checkpointReusable: false,
+      reasonCode: "cursor_stale",
+      reconnectCursor: {
+        provided: true,
+        validForStreamGeneration: false,
+      },
+    });
+  });
+
+  it("accepts missing-session sync preflight outcomes with HTTP 200", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          checkpointReusable: false,
+          reasonCode: "session_not_found",
+          reconnectCursor: {
+            provided: false,
+            validForStreamGeneration: false,
+          },
+          requestedSessionId: "live-session-missing-001",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("live-session-missing-001"),
+    ).resolves.toMatchObject({
+      checkpointReusable: false,
+      reasonCode: "session_not_found",
+    });
+  });
+
+  it("accepts logical-session-remap sync preflight outcomes with the resolved identity set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          backendScopeId: "backend-a",
+          checkpointReusable: false,
+          factorySessionId: "session-promoted",
+          logicalSessionKeyId: "logical-default",
+          reasonCode: "logical_session_remap",
+          reconnectCursor: {
+            provided: false,
+            validForStreamGeneration: false,
+          },
+          requestedSessionId: "~default",
+          streamGenerationId: "stream-promoted",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getFactorySessionSyncPreflight("~default")).resolves.toMatchObject({
+      checkpointReusable: false,
+      factorySessionId: "session-promoted",
+      reasonCode: "logical_session_remap",
+      streamGenerationId: "stream-promoted",
+    });
+  });
+
+  it("rejects invalid durable artifact detail responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ id: "art-js-success-001" }), {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        }),
+      ),
+    );
+
+    await expect(
+      getFactorySessionArtifact(
+        "dur-sess-js-success-002",
+        "art-js-success-001",
+      ),
+    ).rejects.toMatchObject<Partial<FactorySessionsAPIError>>({
+      code: "INTERNAL_ERROR",
+      message: "The factory sessions API returned an invalid response.",
+    });
+  });
+
+  it("rejects partial resumable sync preflight responses that omit the identity set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          checkpointReusable: true,
+          reasonCode: "ok",
+          reconnectCursor: {
+            provided: false,
+            validForStreamGeneration: true,
+          },
+          requestedSessionId: "session-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("session-beta"),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "The factory sessions API returned an invalid response.",
+        {
+          code: "INTERNAL_ERROR",
+          responseBody: {
+            checkpointReusable: true,
+            reasonCode: "ok",
+            reconnectCursor: {
+              provided: false,
+              validForStreamGeneration: true,
+            },
+            requestedSessionId: "session-beta",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
     );
   });
 

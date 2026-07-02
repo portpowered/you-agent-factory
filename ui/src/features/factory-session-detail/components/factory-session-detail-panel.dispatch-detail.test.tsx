@@ -1,3 +1,5 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: dispatch drilldown boundary states share one fetch harness.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dispatch drilldown boundary states share one fetch harness.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +9,7 @@ import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
 import {
   jsonResponse,
   renderWithQueryClient,
-} from "./factory-session-detail-panel.test-helpers";
+} from "./test-support/factory-session-detail-panel.test-helpers";
 
 const SESSION_ID = "session-beta";
 const PRIMARY_PROVIDER_SESSION =
@@ -161,6 +163,127 @@ describe("FactorySessionDetailPanel dispatch detail failure payload", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders successful dispatch detail with status, execution mode, provider sessions, and artifacts", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/session-beta")) {
+        return jsonResponse({
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          runtime: {
+            dispatches: [
+              {
+                dispatchKind: "JAVASCRIPT_AGENT",
+                id: "dispatch-success",
+                label: "Draft response",
+                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                sessionId: "session-beta",
+                status: "COMPLETED",
+              },
+            ],
+            javascript: {
+              childDispatchCounts: {
+                completed: 1,
+                queued: 0,
+                running: 0,
+              },
+              phases: [],
+              scriptStatus: "IDLE",
+            },
+            lifecycle: {
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:05:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            progress: {
+              categories: {},
+              factoryState: "RUNNING",
+              inFlightCount: 0,
+              totalTokens: 0,
+            },
+            status: "IDLE",
+            usage: { resources: [] },
+          },
+          target: { kind: "named", name: "beta" },
+        });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (
+        url.endsWith(
+          "/factory-sessions/session-beta/dispatches/dispatch-success",
+        )
+      ) {
+        return jsonResponse({
+          artifactIds: ["artifact-final-1", "artifact-log-2"],
+          attempt: 2,
+          dispatchKind: "JAVASCRIPT_AGENT",
+          id: "dispatch-success",
+          javascript: {
+            executionMode: "live",
+            taskKind: "AGENT",
+            taskLabel: "Draft response",
+          },
+          label: "Draft response",
+          model: "gpt-5.5",
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          phase: "deliver",
+          provider: "openai",
+          providerSessionRefs: [
+            {
+              id: "sess_codex_1",
+              kind: "session_id",
+              provider: "codex",
+            },
+          ],
+          relatedWorkIds: ["work-alpha"],
+          runnerId: "runner-web-1",
+          sessionId: "session-beta",
+          status: "COMPLETED",
+          statusTransitions: ["QUEUED", "RUNNING", "COMPLETED"],
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(<FactorySessionDetailPanel sessionID="session-beta" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dispatches")).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Expand dispatch detail for dispatch-success",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("JavaScript task")).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("COMPLETED").length).toBeGreaterThan(0);
+    expect(screen.getByText("live")).toBeTruthy();
+    expect(screen.getByText("Provider sessions")).toBeTruthy();
+    expect(screen.getByText("session_id · sess_codex_1")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "artifact-final-1" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "artifact-log-2" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Runtime")).toBeTruthy();
+    expect(screen.getByText("JavaScript workflow")).toBeTruthy();
+  });
+
   it("renders failed dispatch detail with typed failure data and artifact links", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
@@ -266,6 +389,124 @@ describe("FactorySessionDetailPanel dispatch detail failure payload", () => {
       screen.getByRole("link", { name: "artifact-failure-log" }),
     ).toBeTruthy();
     expect(screen.getAllByText("FAILED").length).toBeGreaterThan(1);
+    expect(screen.getByText("Failure detail")).toBeTruthy();
+  });
+
+  it("renders warning dispatch detail with typed warning data", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/session-beta")) {
+        return jsonResponse({
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          runtime: {
+            dispatches: [
+              {
+                dispatchKind: "JAVASCRIPT_VERIFY",
+                id: "dispatch-warning",
+                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                sessionId: "session-beta",
+                status: "COMPLETED",
+                warnings: [
+                  {
+                    code: "DISPATCH_WARNING",
+                    message: "Verification completed with non-blocking warnings.",
+                  },
+                ],
+              },
+            ],
+            javascript: {
+              childDispatchCounts: {
+                completed: 1,
+                queued: 0,
+                running: 0,
+              },
+              phases: [],
+              scriptStatus: "IDLE",
+            },
+            lifecycle: {
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:05:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            progress: {
+              categories: {},
+              factoryState: "RUNNING",
+              inFlightCount: 0,
+              totalTokens: 0,
+            },
+            status: "IDLE",
+            usage: { resources: [] },
+          },
+          target: { kind: "named", name: "beta" },
+        });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (
+        url.endsWith(
+          "/factory-sessions/session-beta/dispatches/dispatch-warning",
+        )
+      ) {
+        return jsonResponse({
+          artifactIds: ["artifact-warning-log"],
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          id: "dispatch-warning",
+          javascript: {
+            executionMode: "live",
+            taskKind: "VERIFY",
+            taskLabel: "Verify docs",
+          },
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          sessionId: "session-beta",
+          status: "COMPLETED",
+          warnings: [
+            {
+              code: "DISPATCH_WARNING",
+              message: "Verification completed with non-blocking warnings.",
+            },
+          ],
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(<FactorySessionDetailPanel sessionID="session-beta" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dispatches")).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Expand dispatch detail for dispatch-warning",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("DISPATCH_WARNING")).toBeTruthy();
+    });
+
+    expect(
+      screen.getAllByText("Dispatch warnings").length,
+    ).toBeGreaterThanOrEqual(1);
+
+    expect(
+      screen.getAllByText(
+        "Verification completed with non-blocking warnings.",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("DISPATCH_WARNING")).toBeTruthy();
+    expect(screen.queryByText("Failure detail")).toBeNull();
+    expect(screen.getByText("Runtime")).toBeTruthy();
   });
 });
 
@@ -299,7 +540,9 @@ describe("FactorySessionDetailPanel dispatch detail boundary states", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("This dispatch detail is no longer available."),
+        screen.getByText(
+          "Dispatch detail for dispatch-missing is no longer available.",
+        ),
       ).toBeTruthy();
     });
 

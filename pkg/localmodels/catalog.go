@@ -62,7 +62,7 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 
 	aggregates := make(map[string]*catalogAggregate)
 	for _, worker := range factoryCfg.Workers {
-		if !interfaces.IsInferenceWorkerType(worker.Type) {
+		if !catalogWorkerIncludesModel(worker) {
 			continue
 		}
 		key := canonicalModelName(worker.Model)
@@ -132,6 +132,15 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 		}
 	}
 	return catalog
+}
+
+func catalogWorkerIncludesModel(worker interfaces.WorkerConfig) bool {
+	if interfaces.IsInferenceWorkerType(worker.Type) {
+		return true
+	}
+	return interfaces.IsAgentWorkerType(worker.Type) &&
+		strings.TrimSpace(worker.ModelLocality) == interfaces.ModelLocalityLocal &&
+		strings.TrimSpace(worker.Model) != ""
 }
 
 func capabilityFromWorker(worker interfaces.WorkerConfig) factoryapi.ModelCapability {
@@ -652,6 +661,7 @@ func SelectInvocationWorker(
 	}
 
 	var modelMatched bool
+	var matchedWorkerName string
 	for _, worker := range runtimeCfg.FactoryConfig().Workers {
 		workerDef, ok := runtimeCfg.Worker(worker.Name)
 		if !ok || workerDef == nil || !interfaces.IsInferenceWorkerType(workerDef.Type) {
@@ -661,6 +671,7 @@ func SelectInvocationWorker(
 			continue
 		}
 		modelMatched = true
+		matchedWorkerName = workerDef.Name
 		for _, operation := range workerDef.Operations {
 			if strings.TrimSpace(operation.Name) == operationName {
 				return workerDef, operation, nil
@@ -668,7 +679,7 @@ func SelectInvocationWorker(
 		}
 	}
 	if modelMatched {
-		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, modelName, operationName)
+		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: worker %q for model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, matchedWorkerName, modelName, operationName)
 	}
 	return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
 }

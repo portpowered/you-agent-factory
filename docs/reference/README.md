@@ -36,7 +36,8 @@ concept owners below when you need the complete customer-facing contract.
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
-| `packaged-goal` | Packaged `@you/goal` invocation, materialization, and editability | [Packaged Goal](packaged-goal.md) |
+| `packaged-fusion` | Packaged `@you/fusion` invocation, signature-aware help, materialization, and editability | [Packaged Fusion](packaged-fusion.md) |
+| `packaged-goal` | Packaged `@you/goal` batch invocation, stdout primary result, materialization, and headless operator-interaction scope | [Packaged Goal](packaged-goal.md) |
 | `packaged-tts` | Packaged `@you/tts` invocation, materialization, metadata result, and editability | [Packaged TTS](packaged-tts.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
@@ -90,8 +91,14 @@ filesystem work around that invocation.
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
 - [Workers](workers.md) owns worker types, worker-scoped runtime fields,
-  model/script/hosted backend fields, hosted `auth.secretRef` guidance, and
-  split `workers/<name>/AGENTS.md` placement.
+  model/script/hosted backend fields, explicit `AGENT_WORKER` tool policy,
+  agent-run failure classes, hosted `auth.secretRef` guidance, and split
+  `workers/<name>/AGENTS.md` placement.
+- [Workstations](workstations.md) owns `AGENT_RUN` versus `INFERENCE_RUN`
+  runtime behavior in addition to workstation kinds, route fields, and
+  workstation-scoped execution settings.
+- [Sessions](sessions.md) owns agent-run dispatch inspection in addition to
+  live session discovery, status API fields, and dashboard routing.
 
 Use these canonical concept owners when you need the current contract.
 

@@ -13,7 +13,9 @@ import (
 
 // Injectors from wire.go:
 
-// InjectFactoryService is the wireinject entry for the factory composition root.
+// InjectFactoryService is the legacy wireinject entry retained for compose
+// equivalence tests. New transport composition must use InjectAPITransport,
+// InjectCLITransport, or InjectMCPTransport from pkg/initializer instead.
 func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig) (*service.FactoryService, error) {
 	factoryServiceRoot, err := provideFactoryServiceRoot(cfg)
 	if err != nil {
@@ -28,12 +30,13 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 	clock := provideServiceClock(cfg, factoryConfigLoadResult)
 	logger := provideBaseLogger(factoryServiceRoot)
 	runtimebuildService := provideRuntimeBuildService(cfg, clock, logger, v)
-	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService)
 	config := provideHostedWorkersConfig(cfg, logger, clock)
-	factoryCore, err := provideFactoryCore(ctx, cfg, factoryServiceRoot, factoryServiceCollaborators, factoryConfigLoadResult, clock, config)
+	serviceService := provideWorkersSchedulerService(cfg, clock, logger, config)
+	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService, serviceService)
+	v2, err := provideFactoryCore(ctx, cfg, factoryServiceRoot, factoryServiceCollaborators, factoryConfigLoadResult, clock, config)
 	if err != nil {
 		return nil, err
 	}
-	factoryService := provideFactoryService(factoryCore, cfg)
-	return factoryService, nil
+	v3 := provideFactoryService(v2, cfg)
+	return v3, nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -191,12 +192,20 @@ type sessionInvocationRunner interface {
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 }
 
+type sessionResponseStreamInvocationRunner interface {
+	sessionInvocationRunner
+	sessionResponseStreamAttachable
+}
+
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
 	if strings.TrimSpace(cfg.WorkFile) != "" {
 		return nil, false, nil
 	}
 	if factoryInvocationRoot(cfg) == "" {
 		return nil, false, nil
+	}
+	if cfg.InvocationNormalizedArguments != nil {
+		return invocationRequestFromNormalizedArguments(*cfg.InvocationNormalizedArguments), true, nil
 	}
 
 	stdinTTY := stdinIsTTY(cfg)
@@ -260,10 +269,25 @@ func factoryInvocationRoot(cfg RunConfig) string {
 }
 
 func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *factoryapi.InvocationRequest {
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := *workcontent.GeneratedPtrFromParts(resolved.Content)
 	return &factoryapi.InvocationRequest{
-		SourceKind: factoryapi.InvocationInputSourceKindText,
-		Content:    *workcontent.GeneratedPtrFromParts(resolved.Content),
+		SourceKind: &sourceKind,
+		Content:    &content,
 	}
+}
+
+func invocationRequestFromNormalizedArguments(normalized invocations.NormalizedArguments) *factoryapi.InvocationRequest {
+	args := make(map[string]any, len(normalized.Arguments))
+	for name, argument := range normalized.Arguments {
+		if len(argument.Values) == 1 {
+			args[name] = argument.Values[0]
+			continue
+		}
+		values := append([]string(nil), argument.Values...)
+		args[name] = values
+	}
+	return &factoryapi.InvocationRequest{Args: &args}
 }
 
 func wrapInvocationInputError(err error) error {
@@ -275,6 +299,26 @@ func wrapInvocationInputError(err error) error {
 		Code:    string(inputErr.Code),
 		Message: inputErr.Message,
 	}
+}
+
+var buildFactoryInvocationService FactoryServiceBuilder = defaultBuildFactoryInvocationService
+
+func defaultBuildFactoryInvocationService(
+	ctx context.Context,
+	svcCfg *initializer.Config,
+) (factoryServiceRunner, error) {
+	transport, err := initializer.InitializeCLITransport(ctx, svcCfg)
+	if err != nil {
+		return nil, err
+	}
+	if transport == nil {
+		return nil, errors.New("initializer CLI transport missing")
+	}
+	runner := transport.Runner()
+	if runner == nil {
+		return nil, errors.New("initializer CLI transport missing runtime runner")
+	}
+	return runner, nil
 }
 
 func runFactoryInvocation(
@@ -290,7 +334,7 @@ func runFactoryInvocation(
 	svcCfg.WorkFile = ""
 	svcCfg.SimpleDashboardRenderer = nil
 
-	factorySvc, err := buildFactoryService(ctx, svcCfg)
+	factorySvc, err := buildFactoryInvocationService(ctx, svcCfg)
 	if err != nil {
 		return err
 	}
@@ -313,7 +357,27 @@ func runFactoryInvocation(
 		return err
 	}
 
+	var streamAttachment *responseStreamAttachment
+	var streamRenderer responseStreamRenderer
+	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		streamRenderer = newResponseStreamRenderer(cfg.Output, cfg.JSONOutput)
+		if streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner); ok {
+			streamAttachment = startResponseStreamAttachment(
+				ctx,
+				streamInvoker,
+				factorysessions.DefaultSessionID,
+				streamRenderer,
+			)
+		}
+	}
+
 	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
+	if streamAttachment != nil {
+		streamAttachment.stop()
+	}
+	if streamRenderer != nil {
+		streamRenderer.stopProgressRendering()
+	}
 	cancel()
 	runErr := <-runErrCh
 	if err != nil {
@@ -323,9 +387,9 @@ func runFactoryInvocation(
 		return runErr
 	}
 	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
-		return invocationResultFailure(result)
+		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
-	return writeInvocationSuccess(cfg, result)
+	return writeInvocationSuccess(cfg, result, streamRenderer)
 }
 
 func waitForInvocationSessionReady(
@@ -357,56 +421,108 @@ func waitForInvocationSessionReady(
 }
 
 type invocationCLIError struct {
-	Code    string
-	Message string
+	Code      string
+	Message   string
+	SessionID string
+	WorkID    string
+	WorkName  string
+	WorkState string
 }
 
 func (e invocationCLIError) Error() string {
+	contextSuffix := e.contextSuffix()
 	switch {
 	case strings.TrimSpace(e.Code) == "":
-		return strings.TrimSpace(e.Message)
+		return strings.TrimSpace(e.Message) + contextSuffix
 	case strings.TrimSpace(e.Message) == "":
-		return strings.TrimSpace(e.Code)
+		return strings.TrimSpace(e.Code) + contextSuffix
 	default:
-		return strings.TrimSpace(e.Code) + ": " + strings.TrimSpace(e.Message)
+		return strings.TrimSpace(e.Code) + ": " + strings.TrimSpace(e.Message) + contextSuffix
 	}
+}
+
+func (e invocationCLIError) contextSuffix() string {
+	fields := make([]string, 0, 4)
+	if sessionID := strings.TrimSpace(e.SessionID); sessionID != "" {
+		fields = append(fields, "session="+sessionID)
+	}
+	if workID := strings.TrimSpace(e.WorkID); workID != "" {
+		fields = append(fields, "workId="+workID)
+	}
+	if workName := strings.TrimSpace(e.WorkName); workName != "" {
+		fields = append(fields, "workName="+workName)
+	}
+	if workState := strings.TrimSpace(e.WorkState); workState != "" {
+		fields = append(fields, "workState="+workState)
+	}
+	if len(fields) == 0 {
+		return ""
+	}
+	return " [" + strings.Join(fields, " ") + "]"
 }
 
 func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 	return invocationCLIError{
-		Code:    strings.TrimSpace(result.ErrorCode),
-		Message: strings.TrimSpace(result.Message),
+		Code:      strings.TrimSpace(result.ErrorCode),
+		Message:   strings.TrimSpace(result.Message),
+		SessionID: strings.TrimSpace(result.SessionID),
+		WorkID:    strings.TrimSpace(result.WorkID),
+		WorkName:  strings.TrimSpace(result.WorkName),
+		WorkState: strings.TrimSpace(result.WorkState),
 	}
 }
 
-func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	output := cfg.Output
-	if output == nil {
-		output = os.Stdout
+func writeInvocationFailure(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer responseStreamRenderer,
+) error {
+	if streamRenderer != nil {
+		if err := streamRenderer.writeFinalInvocationResult(result); err != nil {
+			return err
+		}
+	} else if cfg.JSONOutput {
+		if err := writeInvocationJSON(cfg, result); err != nil {
+			return err
+		}
 	}
+	return invocationResultFailure(result)
+}
 
+func writeInvocationSuccess(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer responseStreamRenderer,
+) error {
+	if streamRenderer != nil {
+		return streamRenderer.writeFinalInvocationResult(result)
+	}
 	if cfg.JSONOutput {
-		response := factoryapi.InvocationResponse{
-			RequestId: result.RequestID,
-			TraceId:   result.TraceID,
-			Status:    result.Status,
-		}
-		if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
-			response.PrimaryResult = content
-		}
-		encoded, err := json.Marshal(response)
-		if err != nil {
-			return fmt.Errorf("marshal invocation response: %w", err)
-		}
-		_, err = fmt.Fprintln(output, string(encoded))
-		return err
+		return writeInvocationJSON(cfg, result)
 	}
 
 	text, err := invocationPrimaryResultText(result.PrimaryResult)
 	if err != nil {
 		return err
 	}
+	output := cfg.Output
+	if output == nil {
+		output = os.Stdout
+	}
 	_, err = fmt.Fprint(output, text)
+	return err
+}
+
+func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
+	output := cfg.Output
+	if output == nil {
+		output = os.Stdout
+	}
+	encoded, err := json.Marshal(apisurface.InvocationResponseFromResult(result))
+	if err != nil {
+		return fmt.Errorf("marshal invocation response: %w", err)
+	}
+	_, err = fmt.Fprintln(output, string(encoded))
 	return err
 }
 
@@ -423,4 +539,142 @@ func invocationPrimaryResultText(parts []interfaces.WorkContentPart) (string, er
 		textParts = append(textParts, part.Text)
 	}
 	return strings.Join(textParts, "\n"), nil
+}
+
+type SignatureFactoryInvocationInputConfig struct {
+	PromptArgs []string
+	Signature  *interfaces.InvocationSignatureConfig
+	Stdin      io.Reader
+	StdinIsTTY func() bool
+}
+
+func ResolveSignatureFactoryInvocationInput(cfg SignatureFactoryInvocationInputConfig) (invocations.NormalizedArguments, error) {
+	positionalArgs, namedArgs, explicitStdin, err := splitSignatureInvocationArgs(cfg.PromptArgs, cfg.Signature)
+	if err != nil {
+		return invocations.NormalizedArguments{}, err
+	}
+	stdinPayload, hasStdin, err := resolveInvocationStdin(FactoryInvocationInputConfig{
+		Stdin:      cfg.Stdin,
+		StdinIsTTY: cfg.StdinIsTTY,
+	}, explicitStdin)
+	if err != nil {
+		return invocations.NormalizedArguments{}, err
+	}
+
+	input := invocations.NormalizeArgumentsInput{
+		Signature:      cfg.Signature,
+		PositionalArgs: positionalArgs,
+		NamedArgs:      namedArgs,
+	}
+	if hasStdin {
+		input.StdinText = &stdinPayload
+	}
+
+	normalized, err := invocations.NormalizeArguments(input)
+	if err != nil {
+		return invocations.NormalizedArguments{}, signatureInvocationInputError(err)
+	}
+	return normalized, nil
+}
+
+func splitSignatureInvocationArgs(args []string, signature *interfaces.InvocationSignatureConfig) ([]string, []invocations.NamedArgumentInput, bool, error) {
+	positional := make([]string, 0, len(args))
+	named := make([]invocations.NamedArgumentInput, 0)
+	explicitStdin := false
+	booleanNamedKeys := signatureBooleanNamedKeys(signature)
+
+	for index := 0; index < len(args); index++ {
+		token := args[index]
+		if strings.TrimSpace(token) == "-" {
+			explicitStdin = true
+			continue
+		}
+		if !strings.HasPrefix(token, "--") || token == "--" {
+			positional = append(positional, token)
+			continue
+		}
+
+		raw := strings.TrimPrefix(token, "--")
+		if name, value, ok := strings.Cut(raw, "="); ok {
+			named = append(named, invocations.NamedArgumentInput{Key: strings.TrimSpace(name), Values: []string{value}})
+			continue
+		}
+
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			return nil, nil, false, fmt.Errorf("factory argument name is required after --")
+		}
+
+		if booleanNamedKeys[name] {
+			if index+1 < len(args) && isExplicitBooleanStringValue(args[index+1]) {
+				index++
+				named = append(named, invocations.NamedArgumentInput{Key: name, Values: []string{args[index]}})
+				continue
+			}
+			named = append(named, invocations.NamedArgumentInput{Key: name, Values: []string{"true"}})
+			continue
+		}
+
+		if index+1 >= len(args) {
+			return nil, nil, false, fmt.Errorf("factory argument --%s requires a value", name)
+		}
+		index++
+		named = append(named, invocations.NamedArgumentInput{Key: name, Values: []string{args[index]}})
+	}
+
+	return positional, named, explicitStdin, nil
+}
+
+func signatureBooleanNamedKeys(signature *interfaces.InvocationSignatureConfig) map[string]bool {
+	keys := map[string]bool{}
+	if signature == nil {
+		return keys
+	}
+	for _, parameter := range signature.Parameters {
+		if strings.TrimSpace(parameter.TypeHint) != string(factoryapi.FactoryInvocationParameterTypeHintBooleanString) {
+			continue
+		}
+		hasNamedBinding := false
+		for _, binding := range parameter.Bindings {
+			if strings.TrimSpace(binding.Kind) == string(factoryapi.FactoryInvocationParameterBindingKindNamed) {
+				hasNamedBinding = true
+				break
+			}
+		}
+		if !hasNamedBinding {
+			continue
+		}
+		if name := strings.TrimSpace(parameter.Name); name != "" {
+			keys[name] = true
+		}
+		if external := strings.TrimSpace(parameter.ExternalName); external != "" {
+			keys[external] = true
+		}
+		for _, alias := range parameter.Aliases {
+			if trimmed := strings.TrimSpace(alias); trimmed != "" {
+				keys[trimmed] = true
+			}
+		}
+	}
+	return keys
+}
+
+func isExplicitBooleanStringValue(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "false", "1", "0", "yes", "no", "on", "off":
+		return true
+	default:
+		return false
+	}
+}
+
+func signatureInvocationInputError(err error) error {
+	argumentErr, ok := err.(*invocations.ArgumentError)
+	if !ok {
+		return err
+	}
+	return &InvocationError{
+		Code:    string(argumentErr.Code),
+		Message: argumentErr.Message,
+	}
 }

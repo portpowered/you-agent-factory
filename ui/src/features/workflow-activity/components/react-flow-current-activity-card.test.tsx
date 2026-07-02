@@ -1376,6 +1376,41 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     ).toBeNull();
   });
 
+  it("renders nested bundled docs as observe-mode graph nodes from the saved factory document", async () => {
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    refreshFactoryFromTopology(snapshot);
+    const nestedDocPath = "factory/docs/standards/review.md";
+    const savedDocument = {
+      ...currentFactoryDocumentFromSnapshot(snapshot),
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "# Review standards" },
+            targetPath: nestedDocPath,
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    snapshot.factory = savedDocument;
+
+    renderCurrentActivity({
+      snapshot,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select review.md doc" }),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText(nestedDocPath)).toBeTruthy();
+  });
+
   it("renders bundled docs as observe-mode graph nodes from the saved factory document", async () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     refreshFactoryFromTopology(snapshot);
@@ -2598,16 +2633,22 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(screen.getByText("worker:reviewer")).toBeTruthy();
     expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
     expect(screen.getByText("Active Story")).toBeTruthy();
+    const reviewWorkstationButton = screen.getByRole("button", {
+      name: "Select Review workstation",
+    });
     expect(
-      within(screen.getByRole("button", { name: "Select Review workstation" }))
+      within(reviewWorkstationButton)
         .getByRole("img", { name: "Repeater workstation" })
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("repeater");
     expect(
-      within(screen.getByRole("button", { name: "Select Review workstation" }))
-        .getByRole("img", { name: "Active" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("active-work");
+      reviewWorkstationButton
+        .closest("[data-current-activity-node-type='workstation']")
+        ?.className.includes("border-af-success-border"),
+    ).toBe(true);
+    expect(
+      within(reviewWorkstationButton).queryByRole("img", { name: "Active" }),
+    ).toBeNull();
     expect(await getStateNodeArticle("story:implemented")).toBeTruthy();
     expect(
       (await getStateNodeArticle("story:documented"))
@@ -2811,10 +2852,13 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("repeater");
     expect(
-      within(reviewButton)
-        .getByRole("img", { name: "Active" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("active-work");
+      reviewButton
+        .closest("[data-current-activity-node-type='workstation']")
+        ?.className.includes("border-af-success-border"),
+    ).toBe(true);
+    expect(
+      within(reviewButton).queryByRole("img", { name: "Active" }),
+    ).toBeNull();
     expect(await getStateNodeArticle("story:documented")).toBeTruthy();
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("dispatch-review-active")).toBeNull();

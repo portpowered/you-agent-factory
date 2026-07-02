@@ -7,6 +7,7 @@ import type {
 } from "../../../api/dashboard/types";
 import {
   formatDurationFromISO,
+  formatGraphDurationFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -58,10 +59,10 @@ export type CurrentActivityWorkstationNode = Node<
 
 const WORKSTATION_SUMMARY_DOT_LIMIT = 10;
 const WORKSTATION_VISIBLE_WORK_ITEM_LIMIT = 3;
-const WORKSTATION_TITLE_COMPACT_LENGTH = 16;
-const WORKSTATION_TITLE_DENSE_LENGTH = 28;
-const WORK_ITEM_LABEL_COMPACT_LENGTH = 28;
-const WORK_ITEM_LABEL_DENSE_LENGTH = 48;
+const WORKSTATION_TITLE_COMPACT_LENGTH = 20;
+const WORKSTATION_TITLE_DENSE_LENGTH = 34;
+const WORK_ITEM_LABEL_COMPACT_LENGTH = 38;
+const WORK_ITEM_LABEL_DENSE_LENGTH = 58;
 
 export function WorkstationNodeView({
   data,
@@ -327,9 +328,15 @@ function ActiveWorkstationNodeContent({
         {visibleWorkItemEntries.map(({ execution, workItem }) => {
           const workItemSelected = data.selectedWorkID === workItem.work_id;
           const workItemLabel = formatWorkItemLabel(workItem);
-          const durationLabel = formatDurationFromISO(
+          const durationLabel = formatGraphDurationFromISO(
             execution.started_at,
             data.now,
+            data.locale,
+          );
+          const durationTitle = formatDurationFromISO(
+            execution.started_at,
+            data.now,
+            data.locale,
           );
           const workItemContent = (
             <>
@@ -348,7 +355,7 @@ function ActiveWorkstationNodeContent({
             </>
           );
           const workItemClassName = cn(
-            "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-outline bg-surface px-2 py-1.5 text-[0.74rem]",
+            "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden rounded-lg border border-outline bg-surface px-1.5 py-1 text-[0.74rem]",
             workItemSelected &&
               "border-info-border bg-info-container shadow-af-info-chip",
           );
@@ -367,7 +374,7 @@ function ActiveWorkstationNodeContent({
                       nodeID: data.workstation.node_id,
                     });
                   }}
-                  title={`${workItemLabel} - ${durationLabel}`}
+                  title={`${workItemLabel} - ${durationTitle}`}
                 >
                   {workItemContent}
                 </GraphNodeButton>
@@ -375,7 +382,7 @@ function ActiveWorkstationNodeContent({
                 <div
                   className={workItemClassName}
                   data-selected={workItemSelected ? "true" : undefined}
-                  title={`${workItemLabel} - ${durationLabel}`}
+                  title={`${workItemLabel} - ${durationTitle}`}
                 >
                   {workItemContent}
                 </div>
@@ -402,8 +409,6 @@ function WorkstationHeaderContent({
   semanticIconMetadata: ReturnType<typeof workstationGraphPresentation>;
   workstationTitle: string;
 }) {
-  const messages = getActivityGraphMessages(data.locale);
-
   return (
     <>
       <span
@@ -424,14 +429,6 @@ function WorkstationHeaderContent({
       >
         {workstationTitle}
       </span>
-      {data.active ? (
-        <GraphSemanticIcon
-          className="h-4 w-4 shrink-0 text-success"
-          kind="active-work"
-          label={messages.activeBadgeLabel}
-          locale={data.locale}
-        />
-      ) : null}
     </>
   );
 }

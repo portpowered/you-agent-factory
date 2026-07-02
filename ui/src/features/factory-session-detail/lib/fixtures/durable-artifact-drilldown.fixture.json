@@ -1,0 +1,36 @@
+{
+  "previewable": {
+    "sessionId": "dur-sess-js-success-002",
+    "id": "art-js-success-001",
+    "kind": "FINAL_RESULT",
+    "visibility": "PUBLIC",
+    "label": "Docs refresh output",
+    "contentHash": "sha256:js-success-art-001",
+    "sizeBytes": 2048,
+    "createdAt": "2026-06-08T13:10:00Z",
+    "dispatchId": "disp-js-success-002",
+    "auditMode": "FULL",
+    "content": [
+      {
+        "type": "text",
+        "text": "Documentation refresh complete."
+      }
+    ]
+  },
+  "downloadOnly": {
+    "sessionId": "dur-sess-js-paused-001",
+    "id": "art-js-pause-001",
+    "kind": "FINDING",
+    "visibility": "PUBLIC",
+    "label": "Approval draft",
+    "contentHash": "sha256:js-pause-art-001",
+    "sizeBytes": 512,
+    "createdAt": "2026-06-08T11:00:00Z",
+    "dispatchId": "disp-js-pause-001",
+    "auditMode": "REDACTED",
+    "contentRef": {
+      "href": "/factory-sessions/dur-sess-js-paused-001/artifacts/art-js-pause-001",
+      "method": "GET"
+    }
+  }
+}

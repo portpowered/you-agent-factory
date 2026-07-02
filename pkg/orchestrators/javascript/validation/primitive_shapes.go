@@ -18,6 +18,8 @@ func (a *sourceAnalyzer) validateSupportedPrimitiveShape(call *js.CallExpr, prim
 		a.validateWorkflowArtifactCall(call)
 	case "workflow.checkpoint":
 		a.validateWorkflowCheckpointCall(call)
+	case "workflow.resumeState":
+		a.validateWorkflowResumeStateCall(call)
 	case "workflow.budget":
 		a.validateWorkflowBudgetCall(call)
 	case "workflow.final":
@@ -68,6 +70,10 @@ func (a *sourceAnalyzer) validateLogCall(call *js.CallExpr, primitive string) {
 	if _, ok := isObjectLiteral(second); !ok {
 		a.addIssue(shapeIssueCode(primitive), fmt.Sprintf("%s() optional fields argument must be an object literal", primitive), call)
 	}
+}
+
+func (a *sourceAnalyzer) validateWorkflowResumeStateCall(call *js.CallExpr) {
+	a.validateArity(call, "workflow.resumeState", 0)
 }
 
 func (a *sourceAnalyzer) validateWorkflowCheckpointCall(call *js.CallExpr) {
