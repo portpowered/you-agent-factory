@@ -339,6 +339,32 @@ describe("bootstrapDashboardSessionSyncPreflight manual refresh", () => {
     });
     expect(records.has(storageKey)).toBe(false);
   });
+
+  it("returns recovery when manual refresh hits an unresolved session", async () => {
+    getSyncPreflightSpy.mockResolvedValue({
+      checkpointReusable: false,
+      reasonCode: "session_not_found",
+      reconnectCursor: {
+        provided: false,
+        validForStreamGeneration: false,
+      },
+      requestedSessionId: "session-missing",
+    });
+
+    await expect(
+      bootstrapDashboardSessionSyncPreflight({
+        indexedDB: window.indexedDB,
+        refreshToken: 1,
+        sessionID: "session-missing",
+      }),
+    ).resolves.toEqual({
+      kind: "recovery",
+      recovery: {
+        reasonCode: "session_not_found",
+        requestedSessionId: "session-missing",
+      },
+    });
+  });
 });
 
 describe("dashboard-session-sync-preflight stream identity helpers", () => {

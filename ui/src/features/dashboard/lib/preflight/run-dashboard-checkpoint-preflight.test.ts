@@ -43,12 +43,16 @@ function installPreflightMocks() {
   const clearCheckpointsSpy = vi
     .spyOn(timelinePublic, "clearTimelineCheckpointsForSession")
     .mockResolvedValue(undefined);
+  const readCheckpointSpy = vi
+    .spyOn(timelinePublic, "readTimelineCheckpoint")
+    .mockResolvedValue(null);
 
   return {
     clearCheckpointsSpy,
     getSyncPreflightSpy,
     peekCheckpointSpy,
     queryClient,
+    readCheckpointSpy,
   };
 }
 
@@ -113,11 +117,17 @@ describe("runDashboardCheckpointPreflight recovery", () => {
   let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
   let peekCheckpointSpy: ReturnType<typeof vi.spyOn>;
   let clearCheckpointsSpy: ReturnType<typeof vi.spyOn>;
+  let readCheckpointSpy: ReturnType<typeof vi.spyOn>;
   let queryClient: ReturnType<typeof installPreflightMocks>["queryClient"];
 
   beforeEach(() => {
-    ({ clearCheckpointsSpy, getSyncPreflightSpy, peekCheckpointSpy, queryClient } =
-      installPreflightMocks());
+    ({
+      clearCheckpointsSpy,
+      getSyncPreflightSpy,
+      peekCheckpointSpy,
+      queryClient,
+      readCheckpointSpy,
+    } = installPreflightMocks());
   });
 
   afterEach(() => {
@@ -184,5 +194,44 @@ describe("runDashboardCheckpointPreflight recovery", () => {
     });
     expect(hydration.resolvedSessionID).toBeNull();
     expect(clearCheckpointsSpy).toHaveBeenCalled();
+  });
+
+  it("restores persisted checkpoints when preflight reuses reconnect cursors", async () => {
+    const restoreCheckpoint = vi.fn();
+    const checkpoint = {
+      afterEventId: "event-3",
+      afterSequence: 3,
+      syncIdentity: {
+        backendScopeId: "backend-scope-a",
+        factorySessionId: RESOLVED_SESSION_UUID,
+        logicalSessionKeyId: "lsk-default",
+        streamGenerationId: "generation-1",
+      },
+      worldState: {} as never,
+    };
+    readCheckpointSpy.mockResolvedValue(checkpoint);
+
+    const hydration = await runDashboardCheckpointPreflight({
+      onRemapSessionID: vi.fn(),
+      onStreamOffline: vi.fn(),
+      queryClient: queryClient as never,
+      rawSessionID: RESOLVED_SESSION_UUID,
+      restoreCheckpoint,
+    });
+
+    expect(restoreCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        afterEventId: "event-3",
+        syncIdentity: expect.objectContaining({
+          factorySessionId: RESOLVED_SESSION_UUID,
+          logicalSessionKeyId: "lsk-default",
+        }),
+      }),
+    );
+    expect(hydration.persistedCheckpoint).toEqual(checkpoint);
+    expect(hydration.initialReconnectCursor).toEqual({
+      afterEventId: "event-3",
+      afterSequence: 3,
+    });
   });
 });
