@@ -16,20 +16,20 @@ function createComponentsPackageResolvePlugin(
 ): Plugin {
   const categoryAliases = new Map(
     COMPONENT_CATEGORY_EXPORT_PATHS.map((categoryPath) => [
-      `youagentfactory/components/${categoryPath}`,
+      `@you-agent-factory/components/${categoryPath}`,
       path.join(packageRoot, categoryPath, "index.ts"),
     ]),
   );
 
   return {
-    name: "youagentfactory-components-package-resolve",
+    name: "you-agent-factory-components-package-resolve",
     resolveId(source) {
-      if (source === "youagentfactory/components") {
+      if (source === "@you-agent-factory/components") {
         return path.join(packageRoot, "index.ts");
       }
 
       const [specifierPath] = source.split("?", 1);
-      if (specifierPath === "youagentfactory/components/styles.css") {
+      if (specifierPath === "@you-agent-factory/components/styles.css") {
         return path.join(packageRoot, "styles.css");
       }
 
@@ -54,7 +54,7 @@ export default defineConfig({
     setupFiles: ["./src/testing/vitest.setup.ts"],
     server: {
       deps: {
-        inline: [/^youagentfactory\/components/],
+        inline: [/^@you-agent-factory\/components/],
       },
     },
   },

@@ -18,8 +18,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"go.uber.org/zap"
 )
 
@@ -64,7 +65,7 @@ func main() {
 
 	svc, handler, serviceDone, err := startFactoryService(ctx, logger, cfg, projectRoot)
 	if err != nil {
-		fatalf("InjectFactoryService: %v", err)
+		fatalf("InjectAPITransport: %v", err)
 	}
 
 	httpServer, err := startHTTPServer(cfg.apiPort, handler)
@@ -138,16 +139,16 @@ func startFactoryService(
 	logger *zap.Logger,
 	cfg harnessConfig,
 	projectRoot string,
-) (*service.FactoryService, http.Handler, <-chan error, error) {
+) (*runtimehost.Host, http.Handler, <-chan error, error) {
 	var handler http.Handler
 	readyCh := make(chan struct{})
-	serviceCfg := &service.FactoryServiceConfig{
+	serviceCfg := &initializer.Config{
 		Dir:                      cfg.factoryDir,
 		ExecutionBaseDir:         projectRoot,
 		Logger:                   logger,
 		MockWorkersConfig:        config.NewEmptyMockWorkersConfig(),
 		Port:                     cfg.apiPort,
-		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
+		RuntimeFileLoggingPolicy: runtimehost.RuntimeFileLoggingPolicyDisabled,
 		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
 			handler = api.NewServer(surface, port, l).Handler()
 			close(readyCh)
@@ -156,14 +157,18 @@ func startFactoryService(
 		},
 	}
 
-	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
+	transport, err := compose.InjectAPITransport(ctx, serviceCfg)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	svc := transport.Host.CompatibilityServiceShell()
+	if svc == nil {
+		return nil, nil, nil, fmt.Errorf("initializer API transport missing session runtime host")
 	}
 
 	serviceDone := make(chan error, 1)
 	go func() {
-		serviceDone <- svc.Run(ctx)
+		serviceDone <- transport.Run(ctx)
 	}()
 
 	if err := waitForAPIHandler(readyCh, serviceDone); err != nil {
@@ -281,7 +286,7 @@ func fatalf(format string, args ...any) {
 
 func startSession(
 	ctx context.Context,
-	svc *service.FactoryService,
+	svc *runtimehost.Host,
 	startMode string,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (string, error) {

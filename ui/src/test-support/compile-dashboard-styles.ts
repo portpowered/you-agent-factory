@@ -18,7 +18,7 @@ const componentsPackageStylesPath = path.join(
 
 export function createComponentsPackageCssResolver(): Resolver {
   return async (id) => {
-    if (id === "youagentfactory/components/styles.css") {
+    if (id === "@you-agent-factory/components/styles.css") {
       return componentsPackageStylesPath;
     }
     return undefined;

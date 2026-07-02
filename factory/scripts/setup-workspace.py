@@ -80,11 +80,18 @@ def restore_stashed_changes(repo_path, stash_ref, scope_label):
         cwd=repo_path, check=False,
     )
     if apply_result.returncode != 0:
-        raise RuntimeError(
-            f"{scope_label} sync succeeded, but restoring stashed changes failed; "
-            f"{stash_ref} was preserved: "
-            f"{(apply_result.stderr or apply_result.stdout).strip()}"
+        fallback_result = run_git(
+            "stash", "apply", stash_ref,
+            cwd=repo_path, check=False,
         )
+        if fallback_result.returncode != 0:
+            details = (fallback_result.stderr or fallback_result.stdout).strip()
+            if not details:
+                details = (apply_result.stderr or apply_result.stdout).strip()
+            raise RuntimeError(
+                f"{scope_label} sync succeeded, but restoring stashed changes failed; "
+                f"{stash_ref} was preserved: {details}"
+            )
 
     drop_result = run_git("stash", "drop", stash_ref, cwd=repo_path, check=False)
     if drop_result.returncode != 0:

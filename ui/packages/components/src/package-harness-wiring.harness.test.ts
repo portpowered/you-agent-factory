@@ -63,7 +63,7 @@ describe("component package harness wiring", () => {
     ).rejects.toMatchObject({
       code: 2,
       stderr: expect.stringContaining(
-        "youagentfactory/components package boundary check failed:",
+        "@you-agent-factory/components package boundary check failed:",
       ),
     });
   });

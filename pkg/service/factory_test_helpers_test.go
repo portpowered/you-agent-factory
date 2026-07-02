@@ -22,10 +22,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
 )
 
 func minimalFactoryConfig() map[string]any {
@@ -56,17 +58,43 @@ func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 }
 
 func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle) {
-	if svc == nil {
-		return
-	}
-	if svc.sessions == nil {
-		svc.sessions = factorysessions.NewRegistry()
-	}
-	handle := &liveRuntimeHandle{Bundle: bundle, RunDone: make(chan struct{})}
-	registeredSessionID := svc.registerLiveSession(defaultFactorySessionID, handle, FactorySessionTarget{
-		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
-	}, true)
-	svc.setRunState(context.Background(), registeredSessionID, handle)
+	runtimehost.BindTestStartupRuntime(svc, bundle)
+}
+
+func newTestFactoryServiceWithOpts(opts runtimehost.TestHostOptions) *FactoryService {
+	return runtimehost.NewTestHost(opts)
+}
+
+func newTestFactoryServiceWithSessions(sessions *factorysessions.Registry) *FactoryService {
+	svc := newTestFactoryService()
+	svc.SetSessionsForTest(sessions)
+	return svc
+}
+
+func newTestFactoryService() *FactoryService {
+	return newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{})
+}
+
+func newTestFactoryServiceWithHostedWorkers(svcCfg *FactoryServiceConfig, logger *zap.Logger) *FactoryService {
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(svcCfg),
+		Logger: logger,
+		Config: svcCfg,
+	})
+	svc.SetHostedWorkersForTest(buildHostedWorkersConfig(svcCfg, logger, nil))
+	return svc
+}
+
+func newTestFactoryServiceWithFactorySave(stub runtimehost.FactorySaveSaver) *FactoryService {
+	svc := newTestFactoryService()
+	svc.SetFactorySaveForTest(stub)
+	return svc
+}
+
+func newTestFactoryServiceWithDefinitions(stub FactoryDefinitionService) *FactoryService {
+	svc := newTestFactoryService()
+	svc.SetDefinitionsForTest(stub)
+	return svc
 }
 
 type recordingDiagnosticsProvider struct{}
@@ -1194,7 +1222,7 @@ func resumeSessionFactory(t *testing.T, session *liveFactorySession) {
 
 func requireLiveSession(t *testing.T, svc *FactoryService, sessionID string) *liveFactorySession {
 	t.Helper()
-	session := svc.sessionByID(sessionID)
+	session := svc.SessionByID(sessionID)
 	if session == nil {
 		t.Fatalf("session %q is not registered", sessionID)
 	}

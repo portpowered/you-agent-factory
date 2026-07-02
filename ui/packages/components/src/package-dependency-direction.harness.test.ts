@@ -187,7 +187,7 @@ describe("package dependency-direction harness", () => {
     const packageSrcDir = await createPackageTree(
       {
         "primitives/bad.tsx":
-          'import { SettingsSection } from "youagentfactory/components/recipes";\nexport function Bad() { return <SettingsSection />; }\n',
+          'import { SettingsSection } from "@you-agent-factory/components/recipes";\nexport function Bad() { return <SettingsSection />; }\n',
         "recipes/index.ts": 'export function SettingsSection() { return null; }\n',
       },
       tempRoot,
@@ -204,7 +204,7 @@ describe("package dependency-direction harness", () => {
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining(
-        "youagentfactory/components package dependency-direction check failed:",
+        "@you-agent-factory/components package dependency-direction check failed:",
       ),
     });
   });

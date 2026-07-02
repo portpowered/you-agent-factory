@@ -1,9 +1,8 @@
-package service
+package runtimehost
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -528,11 +527,11 @@ func submitWorkRequestWithFactory(activeFactory factory.Factory) workRequestSubm
 	}
 }
 
-func (fs *FactoryService) currentRuntimeSubmitter() workRequestSubmitter {
+func (fs *Host) currentRuntimeSubmitter() workRequestSubmitter {
 	return submitWorkRequestWithFactory(fs.currentFactory())
 }
 
-func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error {
+func (fs *Host) preseedCurrentRuntimeInputs(ctx context.Context) error {
 	runtimeBundle := fs.currentRuntimeBundle()
 	if runtimeBundle == nil || runtimeBundle.Listener == nil {
 		return nil
@@ -543,7 +542,7 @@ func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error
 	return nil
 }
 
-func (fs *FactoryService) startupRuntimeBundle() *factoryRuntimeBundle {
+func (fs *Host) startupRuntimeBundle() *factoryRuntimeBundle {
 	if fs == nil {
 		return nil
 	}
@@ -552,7 +551,7 @@ func (fs *FactoryService) startupRuntimeBundle() *factoryRuntimeBundle {
 	return fs.startupBundle
 }
 
-func (fs *FactoryService) setStartupBundle(runtimeBundle *factoryRuntimeBundle) {
+func (fs *Host) setStartupBundle(runtimeBundle *factoryRuntimeBundle) {
 	if fs == nil {
 		return
 	}
@@ -561,7 +560,7 @@ func (fs *FactoryService) setStartupBundle(runtimeBundle *factoryRuntimeBundle) 
 	fs.startupBundle = runtimeBundle
 }
 
-func (fs *FactoryService) clearStartupBundle() {
+func (fs *Host) clearStartupBundle() {
 	if fs == nil {
 		return
 	}
@@ -570,7 +569,7 @@ func (fs *FactoryService) clearStartupBundle() {
 	fs.startupBundle = nil
 }
 
-func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBundle) {
+func (fs *Host) syncActiveSessionDir(runtimeBundle *factoryRuntimeBundle) {
 	if fs == nil || fs.cfg == nil {
 		return
 	}
@@ -585,13 +584,13 @@ func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBund
 	fs.cfg.Dir = runtimeBundle.Dir
 }
 
-func (fs *FactoryService) currentRunState() *serviceRunState {
+func (fs *Host) currentRunState() *hostRunState {
 	fs.runMu.RLock()
 	defer fs.runMu.RUnlock()
 	return fs.runState
 }
 
-func (fs *FactoryService) currentLiveRuntime() *liveRuntimeHandle {
+func (fs *Host) currentLiveRuntime() *liveRuntimeHandle {
 	fs.runMu.RLock()
 	defer fs.runMu.RUnlock()
 	if fs.runState == nil {
@@ -600,28 +599,28 @@ func (fs *FactoryService) currentLiveRuntime() *liveRuntimeHandle {
 	return fs.runState.runtime
 }
 
-func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, runtime *liveRuntimeHandle) {
+func (fs *Host) setRunState(ctx context.Context, sessionID string, runtime *liveRuntimeHandle) {
 	fs.runMu.Lock()
 	defer fs.runMu.Unlock()
 	if ctx == nil {
 		fs.runState = nil
 		return
 	}
-	fs.runState = &serviceRunState{
+	fs.runState = &hostRunState{
 		ctx:       ctx,
 		sessionID: sessionID,
 		runtime:   runtime,
 	}
 }
 
-func (fs *FactoryService) clearRunState() {
+func (fs *Host) clearRunState() {
 	fs.runMu.Lock()
 	defer fs.runMu.Unlock()
 	fs.runState = nil
 }
 
 // SubmitWorkRequest submits a canonical work request batch to the factory.
-func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (fs *Host) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	fs.activationMu.RLock()
 	defer fs.activationMu.RUnlock()
 
@@ -630,25 +629,25 @@ func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfa
 
 // SubscribeFactoryEvents returns canonical factory event history followed by
 // live events from the current service-owned runtime.
-func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+func (fs *Host) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return factoryservice.SubscribeFactoryEvents(ctx, fs.currentRuntimeBundle(), reconnect, scope)
 }
 
 // WaitToComplete returns a channel that is closed when all tokens reach
 // terminal or failed places and no dispatches are in flight. Delegates to
 // the underlying factory's termination signal.
-func (fs *FactoryService) WaitToComplete() <-chan struct{} {
+func (fs *Host) WaitToComplete() <-chan struct{} {
 	return factoryservice.WaitToComplete(fs.currentRuntimeBundle())
 }
 
 // GetEngineStateSnapshot returns the factory boundary's aggregate
 // observability snapshot.
-func (fs *FactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+func (fs *Host) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	return factoryservice.GetEngineStateSnapshot(ctx, fs.currentRuntimeBundle())
 }
 
 // Pause pauses the current runtime instance.
-func (fs *FactoryService) Pause(ctx context.Context) error {
+func (fs *Host) Pause(ctx context.Context) error {
 	activeFactory := fs.currentFactory()
 	if activeFactory == nil {
 		return fmt.Errorf("factory service runtime is not available")
@@ -660,7 +659,7 @@ func (fs *FactoryService) Pause(ctx context.Context) error {
 }
 
 // Resume resumes the current runtime instance and wakes buffered work.
-func (fs *FactoryService) Resume(ctx context.Context) error {
+func (fs *Host) Resume(ctx context.Context) error {
 	activeFactory := fs.currentFactory()
 	if activeFactory == nil {
 		return fmt.Errorf("factory service runtime is not available")
@@ -672,7 +671,7 @@ func (fs *FactoryService) Resume(ctx context.Context) error {
 }
 
 // GetFactoryEvents returns the canonical factory event history.
-func (fs *FactoryService) GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent, error) {
+func (fs *Host) GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent, error) {
 	activeFactory := fs.currentFactory()
 	if activeFactory == nil {
 		return nil, fmt.Errorf("factory service runtime is not available")
@@ -684,7 +683,7 @@ func (fs *FactoryService) GetFactoryEvents(ctx context.Context) ([]factoryapi.Fa
 	return events, nil
 }
 
-func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
+func (fs *Host) submitWorkFile(ctx context.Context) error {
 	workFile := fs.coordinatorPolicy().workFile
 	data, err := os.ReadFile(workFile)
 	if err != nil {
@@ -705,14 +704,14 @@ func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
 	return nil
 }
 
-func (fs *FactoryService) currentFactory() factory.Factory {
+func (fs *Host) currentFactory() factory.Factory {
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
 		return bundle.Factory
 	}
 	return nil
 }
 
-func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
+func (fs *Host) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
 		return bundle.RuntimeCfg
 	}
@@ -725,7 +724,7 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 }
 
 // StartupWorkerConfig returns the named worker from the built startup runtime config.
-func (fs *FactoryService) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, bool) {
+func (fs *Host) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, bool) {
 	runtimeCfg := fs.currentRuntimeConfig()
 	if runtimeCfg == nil {
 		return nil, false
@@ -733,7 +732,7 @@ func (fs *FactoryService) StartupWorkerConfig(name string) (*interfaces.WorkerCo
 	return runtimeCfg.Worker(name)
 }
 
-func (fs *FactoryService) workflowID() string {
+func (fs *Host) workflowID() string {
 	if fs == nil {
 		return ""
 	}
@@ -742,7 +741,7 @@ func (fs *FactoryService) workflowID() string {
 	return fs.coordinatorPolicy().workflowID
 }
 
-func applyOperatorDefaultsToLoadedConfig(cfg *FactoryServiceConfig, loaded *factoryconfig.LoadedFactoryConfig) error {
+func applyOperatorDefaultsToLoadedConfig(cfg *Config, loaded *factoryconfig.LoadedFactoryConfig) error {
 	if cfg == nil || loaded == nil || cfg.ReplayPath != "" {
 		return nil
 	}
@@ -752,7 +751,7 @@ func applyOperatorDefaultsToLoadedConfig(cfg *FactoryServiceConfig, loaded *fact
 	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
 }
 
-func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
+func validateReplayModeConfig(cfg *Config) error {
 	if cfg == nil {
 		return fmt.Errorf("factory service config is required")
 	}
@@ -762,7 +761,12 @@ func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
 	return nil
 }
 
-func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
+// ValidateReplayModeConfig validates record/replay startup inputs for core composition.
+func ValidateReplayModeConfig(cfg *Config) error {
+	return validateReplayModeConfig(cfg)
+}
+
+func loadFactoryConfigForMode(cfg *Config) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
 	if cfg.ReplayPath == "" {
 		loaded, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
 		if loaded != nil {
@@ -792,7 +796,7 @@ func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedF
 	return loaded, artifact, nil
 }
 
-func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interfaces.ReplayArtifact, logger *zap.Logger) {
+func warnReplayMetadataMismatches(cfg *Config, artifact *interfaces.ReplayArtifact, logger *zap.Logger) {
 	if artifact == nil || cfg == nil || cfg.Dir == "" {
 		return
 	}
@@ -844,35 +848,4 @@ func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 		return interfaces.RuntimeModeBatch
 	}
 	return mode
-}
-
-func isCanceledServiceStartup(ctx context.Context, err error) bool {
-	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
-}
-
-func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
-	for {
-		handle := fs.currentLiveRuntime()
-		if handle == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(25 * time.Millisecond):
-				continue
-			}
-		}
-		select {
-		case <-ctx.Done():
-			_ = handle.Wait()
-		case <-handle.RunDone:
-		}
-		if fs.currentLiveRuntime() != handle {
-			continue
-		}
-		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
-			fs.sessions != nil && fs.sessions.Count() == 0 {
-			continue
-		}
-		return handle.Result()
-	}
 }

@@ -9,7 +9,7 @@ import { resolveRelativeImport } from "./resolve-relative-import.mjs";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPackageDir = path.resolve(scriptDir, "..");
 const defaultPackageSrcDir = path.join(defaultPackageDir, "src");
-const packageImportPrefix = "youagentfactory/components";
+const packageImportPrefix = "@you-agent-factory/components";
 const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const skippedFileSuffixes = [
   ".test.js",
@@ -353,13 +353,13 @@ async function main() {
 
   if (report.violations.length === 0) {
     process.stdout.write(
-      "youagentfactory/components package dependency-direction check passed.\n",
+      "@you-agent-factory/components package dependency-direction check passed.\n",
     );
     return;
   }
 
   process.stderr.write(
-    "youagentfactory/components package dependency-direction check failed:\n",
+    "@you-agent-factory/components package dependency-direction check failed:\n",
   );
 
   for (const violation of report.violations) {

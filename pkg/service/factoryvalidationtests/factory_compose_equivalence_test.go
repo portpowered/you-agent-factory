@@ -7,7 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 )
 
 func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T) {
@@ -17,7 +17,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := t.Context()
-	cfg := &service.FactoryServiceConfig{Dir: dir}
+	cfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{Dir: dir})
 
 	built, err := service.BuildFactoryService(ctx, cfg)
 	if err != nil {
@@ -54,8 +54,8 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	}
 	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
 	composed = service.AttachFactorySaveCollaborator(
-		service.FactoryServiceShell{Service: composed},
-		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
+		service.FactoryServiceShell{Host: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Host: composed}, composeCfg),
 	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
@@ -120,7 +120,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := t.Context()
-	cfg := &service.FactoryServiceConfig{
+	cfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir: dir,
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",
@@ -130,8 +130,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		},
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-		Logger:                                  zap.NewNop(),
-	}
+	})
 
 	built, err := service.BuildFactoryService(ctx, cfg)
 	if err != nil {
@@ -167,8 +166,8 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	}
 	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, cfg))
 	composed = service.AttachFactorySaveCollaborator(
-		service.FactoryServiceShell{Service: composed},
-		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, cfg),
+		service.FactoryServiceShell{Host: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Host: composed}, cfg),
 	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {

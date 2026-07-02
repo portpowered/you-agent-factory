@@ -18,7 +18,7 @@ const packageTokenFixturePath = path.join(
 
 function createPackageCssResolver(): Resolver {
   return async (id) => {
-    if (id === "youagentfactory/components/styles.css") {
+    if (id === "@you-agent-factory/components/styles.css") {
       return packageStylesPath;
     }
     return undefined;

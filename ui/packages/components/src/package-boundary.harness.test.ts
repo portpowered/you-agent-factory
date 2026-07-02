@@ -283,7 +283,7 @@ describe("package boundary harness", () => {
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining(
-        "youagentfactory/components package boundary check failed:",
+        "@you-agent-factory/components package boundary check failed:",
       ),
     });
   });

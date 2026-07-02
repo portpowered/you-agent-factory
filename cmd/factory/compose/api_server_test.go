@@ -62,14 +62,14 @@ func TestServeAPIServer_WiredFactoryServiceServesStatus(t *testing.T) {
 		},
 	}
 
-	svc, err := compose.InjectFactoryService(ctx, svcCfg)
+	transport, err := compose.InjectAPITransport(ctx, svcCfg)
 	if err != nil {
-		t.Fatalf("InjectFactoryService: %v", err)
+		t.Fatalf("InjectAPITransport: %v", err)
 	}
 
 	runErrCh := make(chan error, 1)
 	go func() {
-		runErrCh <- svc.Run(ctx)
+		runErrCh <- transport.Run(ctx)
 	}()
 
 	select {
