@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 )
 
 func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndSavePaths(t *testing.T) {
@@ -84,15 +84,14 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir: rootDir,
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider: "CODEX",
 			WorkerModel:         "gpt-5-codex",
 		},
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}

@@ -714,7 +714,11 @@ const (
 	invocationPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
 	invocationPolicyExplicit              = "EXPLICIT"
 
-	invocationMetricNormalizationAttempts = "invocation.normalization_attempts"
+	// InvocationMetricNormalizationAttempts is the exported metric name for
+	// invocation input normalization attempts recorded by the service layer.
+	InvocationMetricNormalizationAttempts = "invocation.normalization_attempts"
+
+	invocationMetricNormalizationAttempts = InvocationMetricNormalizationAttempts
 	invocationMetricNormalizationSuccess  = "invocation.normalization_success"
 	invocationMetricNormalizationFailure  = "invocation.normalization_failure"
 	invocationMetricInterpolationFailure  = "invocation.interpolation_failure"

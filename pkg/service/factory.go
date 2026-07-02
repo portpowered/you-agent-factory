@@ -144,6 +144,13 @@ const (
 	RuntimeFileLoggingPolicyDisabled RuntimeFileLoggingPolicy = "disabled"
 )
 
+type RuntimeMetricsPolicy string
+
+const (
+	RuntimeMetricsPolicyEnabled  RuntimeMetricsPolicy = "enabled"
+	RuntimeMetricsPolicyDisabled RuntimeMetricsPolicy = "disabled"
+)
+
 // FactoryServiceConfig holds all parameters needed to build and run a factory.
 type FactoryServiceConfig struct {
 	// Dir is the factory root directory containing factory.json and inputs/.
@@ -193,6 +200,9 @@ type FactoryServiceConfig struct {
 	// RuntimeLogConfig controls bounded runtime file logging behavior.
 	// Zero values use defaults that match the package rolling policy.
 	RuntimeLogConfig logging.RuntimeLogConfig
+	// RuntimeMetricsPolicy controls whether the service creates a runtime
+	// metrics sink. Empty defaults to enabled for production-facing behavior.
+	RuntimeMetricsPolicy RuntimeMetricsPolicy
 	// RuntimeMetricsDir optionally overrides the default
 	// ~/.you-agent-factory/metrics directory. Tests use this to keep
 	// file-backed metrics isolated.
@@ -699,6 +709,12 @@ func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 		}
 	}
 	return fs.startupRuntimeBundle()
+}
+
+// CurrentRuntimeBundle returns the active runtime bundle for the default session,
+// the current run state, or the pre-run startup bundle when no session is bound yet.
+func (fs *FactoryService) CurrentRuntimeBundle() *factoryRuntimeBundle {
+	return fs.currentRuntimeBundle()
 }
 
 func (fs *FactoryService) publishFactoryChangeEvent(

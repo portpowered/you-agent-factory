@@ -325,6 +325,17 @@ func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
 	}
 }
 
+func runtimeMetricsEnabled(policy RuntimeMetricsPolicy) bool {
+	switch policy {
+	case "", RuntimeMetricsPolicyEnabled:
+		return true
+	case RuntimeMetricsPolicyDisabled:
+		return false
+	default:
+		return true
+	}
+}
+
 func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink *logging.RuntimeLogSink) *zap.Logger {
 	if logSink != nil {
 		return logSink.Logger()
@@ -342,6 +353,9 @@ func buildRuntimeMetricsSink(
 	folderPath string,
 	factoryDir string,
 ) (*logging.RuntimeMetricsSink, error) {
+	if !runtimeMetricsEnabled(cfg.RuntimeMetricsPolicy) {
+		return nil, nil
+	}
 	metricsSink, err := logging.BuildRuntimeMetricsSink(
 		sessionID,
 		runtimeInstanceID,

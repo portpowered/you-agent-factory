@@ -399,6 +399,7 @@ func hostConfigFromService(cfg *FactoryServiceConfig) factoryservice.Config {
 		RuntimeLogDir:                           cfg.RuntimeLogDir,
 		RuntimeLogConfig:                        cfg.RuntimeLogConfig,
 		RuntimeFileLoggingPolicy:                factoryservice.RuntimeFileLoggingPolicy(cfg.RuntimeFileLoggingPolicy),
+		RuntimeMetricsPolicy:                    factoryservice.RuntimeMetricsPolicy(cfg.RuntimeMetricsPolicy),
 		RuntimeMetricsDir:                       cfg.RuntimeMetricsDir,
 		RuntimeMetricsConfig:                    cfg.RuntimeMetricsConfig,
 		RecordPath:                              cfg.RecordPath,
