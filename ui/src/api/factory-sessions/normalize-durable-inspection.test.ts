@@ -1,5 +1,11 @@
 import { FactoryOrchestratorKind } from "../generated/openapi";
 import {
+  buildFailedBridgedChildDispatchSummary,
+  buildSuccessfulLiveProviderDispatchSummary,
+  failedBridgedChildSessionID,
+  successfulLiveProviderSessionID,
+} from "../../testing/factory-session-live-provider-inspection-fixtures";
+import {
   dispatchSummariesToFactoryDispatches,
   durableSupplementalReadPlan,
   resultSurfacesFromDurableReadModel,
@@ -13,29 +19,9 @@ describe("normalize durable inspection helpers", () => {
   it("maps durable dispatch summaries into shared FactoryDispatch rows", () => {
     expect(
       dispatchSummariesToFactoryDispatches(
-        "dur-sess-js-success-002",
+        successfulLiveProviderSessionID,
         FactoryOrchestratorKind.JAVASCRIPT,
-        [
-          {
-            attempt: 1,
-            dispatchKind: "JAVASCRIPT_VERIFY",
-            javascript: {
-              executionMode: "live",
-              taskKind: "VERIFY",
-              taskLabel: "verify-release",
-            },
-            id: "disp-js-success-002",
-            label: "verify-docs",
-            outputArtifactIds: ["art-js-success-001"],
-            status: "COMPLETED",
-            warnings: [
-              {
-                code: "DISPATCH_WARNING",
-                message: "child output truncated for display",
-              },
-            ],
-          },
-        ],
+        [buildSuccessfulLiveProviderDispatchSummary()],
       ),
     ).toEqual([
       expect.objectContaining({
@@ -44,17 +30,51 @@ describe("normalize durable inspection helpers", () => {
         javascript: {
           executionMode: "live",
           taskKind: "VERIFY",
-          taskLabel: "verify-release",
+          taskLabel: "verify-docs",
         },
         label: "verify-docs",
-        sessionId: "dur-sess-js-success-002",
-        status: "COMPLETED",
-        warnings: [
+        providerSessionRefs: [
           {
-            code: "DISPATCH_WARNING",
-            message: "child output truncated for display",
+            id: "resp-docs-refresh-001",
+            kind: "session_id",
+            provider: "codex",
           },
         ],
+        sessionId: successfulLiveProviderSessionID,
+        status: "COMPLETED",
+      }),
+    ]);
+  });
+
+  it("maps failed bridged-child dispatch summaries with provider-session refs and typed failure detail", () => {
+    expect(
+      dispatchSummariesToFactoryDispatches(
+        failedBridgedChildSessionID,
+        FactoryOrchestratorKind.JAVASCRIPT,
+        [buildFailedBridgedChildDispatchSummary()],
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        failureDetail: {
+          errorClass: "verification_error",
+          message: "Expected release manifest checksum.",
+          reason: "VERIFY_ASSERTION_FAILED",
+        },
+        id: "disp-js-fail-002",
+        javascript: {
+          executionMode: "live",
+          taskKind: "VERIFY",
+          taskLabel: "verify",
+        },
+        providerSessionRefs: [
+          {
+            id: "resp-verify-failed-001",
+            kind: "session_id",
+            provider: "codex",
+          },
+        ],
+        sessionId: failedBridgedChildSessionID,
+        status: "FAILED",
       }),
     ]);
   });
