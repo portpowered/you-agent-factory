@@ -36,6 +36,8 @@ Every browser integration file uses `describe.sequential` and shares a
 | `factory-graph-editor-selection-no-panel-delete.integration.test.mjs` | Shared preview | Chromium hit targets |
 | `maintainer-phantom-worker-graph.integration.test.mjs` | Shared preview | Graph editor tools in real layout |
 | `browser-test-harness.artifacts.integration.test.mjs` | Env-only (no preview) | Artifact path resolution |
+| `durable-session-real-backend.integration.test.mjs` | Shared preview + Wire-backed `browser_api_harness` per scenario | One bounded durable JavaScript session-detail proof against a real backend |
+| `browser-test-harness.real-backend-setup.integration.test.mjs` | API port only (no preview) | Setup regression for `dur-sess-*` seeding without Playwright preview |
 
 Within each file, `it` blocks run in order. Individual tests start their own
 `startFactoryApiServer` on `preview.apiPort` and their own Playwright browser
@@ -92,6 +94,19 @@ Lane failures should rerun with `make ui-integration-test`. For a single file:
 ```bash
 cd ui && vitest run integration/factory-name-preservation.integration.test.mjs --no-file-parallelism --maxWorkers 1
 ```
+
+For the bounded durable JavaScript Factory Session real-backend proof only:
+
+```bash
+make test-ui-durable-session-real-backend
+# or
+cd ui && bun run test:integration:durable-session-real-backend
+```
+
+That focused lane runs `durable-session-real-backend.integration.test.mjs` and
+`browser-test-harness.real-backend-setup.integration.test.mjs` without pulling
+in the full browser integration directory. Fast fixture-backed unit, hook,
+adapter, and Storybook coverage stays on `make ui-test` / `cd ui && bun run test:unit`.
 
 CI retains Playwright trace, screenshot, HTML, and diagnostics JSON under the
 lane artifact directory when `AGENT_FACTORY_BROWSER_ARTIFACT_DIR` is set.
