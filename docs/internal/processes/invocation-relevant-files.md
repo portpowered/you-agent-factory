@@ -267,8 +267,9 @@ primary-result behavior.
   transitioner and topology-level routing proofs.
 - Named `@you/goal` operator-control smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
-  proving API and CLI pause/resume buffering, ordered post-resume drain,
-  interrupted inspect summaries via `session show` and `work show`, and durable
+  proving API and CLI pause/resume buffering, ordered post-resume drain via
+  plan-goal dispatch `StartTime` ordering in `DispatchHistory`, interrupted
+  inspect summaries via `session show` and `work show`, and durable
   `SESSION_LIFECYCLE_CONTROL` replay events. Reuse
   `writePackagedGoalSlowPlannerTopologyMockWorkers` when ordered drain timing
   needs observable separation between buffered submissions.

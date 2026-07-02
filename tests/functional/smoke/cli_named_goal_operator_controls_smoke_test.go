@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -118,31 +119,66 @@ func assertNamedGoalOperatorBufferedGoalsDrainedInSubmissionOrder(
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(20 * time.Second)
-	var sawFirstCompleteBeforeSecond bool
-	for time.Now().Before(deadline) {
-		firstWork := getNamedGoalRoutingWorkByIDOnServer(t, server, firstID)
-		secondWork := getNamedGoalRoutingWorkByIDOnServer(t, server, secondID)
-		firstState := generatedWorkStateName(firstWork.State)
-		secondState := generatedWorkStateName(secondWork.State)
-		if firstState == "complete" && secondState != "complete" {
-			sawFirstCompleteBeforeSecond = true
-			break
-		}
-		if firstState == "complete" && secondState == "complete" {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !sawFirstCompleteBeforeSecond {
+	waitForNamedGoalRoutingWorkAtState(t, server, []string{firstID, secondID}, "complete", 30*time.Second)
+
+	snapshot := server.GetEngineStateSnapshot(t)
+	firstPlan, okFirst := namedGoalOperatorPlanGoalDispatchForWork(
+		snapshot.DispatchHistory,
+		firstID,
+	)
+	secondPlan, okSecond := namedGoalOperatorPlanGoalDispatchForWork(
+		snapshot.DispatchHistory,
+		secondID,
+	)
+	if !okFirst || !okSecond {
 		t.Fatalf(
-			"did not observe first buffered goal %q complete before second goal %q while draining after resume",
+			"dispatch history missing plan-goal dispatches for buffered goals %q and %q: %#v",
+			firstID,
+			secondID,
+			snapshot.DispatchHistory,
+		)
+	}
+	if !firstPlan.StartTime.Before(secondPlan.StartTime) {
+		t.Fatalf(
+			"plan-goal start order = first@%s second@%s for works %q then %q; want first buffered goal to start before second",
+			firstPlan.StartTime.UTC(),
+			secondPlan.StartTime.UTC(),
 			firstID,
 			secondID,
 		)
 	}
+}
 
-	waitForNamedGoalRoutingWorkAtState(t, server, []string{secondID}, "complete", 15*time.Second)
+func namedGoalOperatorPlanGoalDispatchForWork(
+	history []interfaces.CompletedDispatch,
+	workID string,
+) (interfaces.CompletedDispatch, bool) {
+	for _, dispatch := range history {
+		if dispatch.WorkstationName != goal.PackagedPlanWorkstationName {
+			continue
+		}
+		if namedGoalOperatorDispatchInvolvesWorkID(dispatch, workID) {
+			return dispatch, true
+		}
+	}
+	return interfaces.CompletedDispatch{}, false
+}
+
+func namedGoalOperatorDispatchInvolvesWorkID(
+	dispatch interfaces.CompletedDispatch,
+	workID string,
+) bool {
+	for _, token := range dispatch.ConsumedTokens {
+		if token.Color.WorkID == workID {
+			return true
+		}
+	}
+	for _, mutation := range dispatch.OutputMutations {
+		if mutation.Token != nil && mutation.Token.Color.WorkID == workID {
+			return true
+		}
+	}
+	return false
 }
 
 func TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary(t *testing.T) {
@@ -398,7 +434,7 @@ func writePackagedGoalSlowPlannerTopologyMockWorkers(t *testing.T, opts packaged
 				RunType:         factoryconfig.MockWorkerRunTypeScript,
 				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
 					Command: "/bin/sh",
-					Args:    []string{"-c", "sleep 1"},
+					Args:    []string{"-c", "sleep 2"},
 				},
 			},
 			{

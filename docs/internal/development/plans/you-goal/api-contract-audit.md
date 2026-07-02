@@ -532,10 +532,53 @@ contracts. Customer wording lives in `docs/reference/packaged-goal.md`
 | Fresh packaged run | `tests/functional/smoke/cli_named_goal_run_smoke_test.go` | Fresh-home materialization, successful `primaryResult` stdout, customer-edit preservation, and legacy prompt-template upgrade on reuse |
 | CLI/API invocation parity | `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go` | Positional, stdin, and API invocation paths share `InvocationResponse` semantics for success and representative failures |
 | Decision routing | `tests/functional/smoke/cli_named_goal_routing_smoke_test.go` | Accepted, blocked, needs-human, failed, interrupted, rework, and structured unknown decisions surface predictable outcomes |
-| Operator controls, replay, inspection | `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go` | Pause buffers work, resume drains in order, interrupted inspect summaries stay on shared session/work surfaces, and `SESSION_LIFECYCLE_CONTROL` replay events remain durable |
+| Operator controls, replay, inspection | `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go` | Pause buffers work, resume drains buffered goals in submission order (plan-goal `StartTime` ordering), interrupted inspect summaries stay on shared session/work surfaces, and `SESSION_LIFECYCLE_CONTROL` replay events remain durable |
 | Response-stream boundary | `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go` plus `pkg/api/contracttests/` | CLI `--output response-stream` still returns `primaryResult`; internal `SessionResponseStream` data stays out of public OpenAPI and durable `FactoryEvent` contracts |
 | Customer docs and vocabulary | `docs/reference/packaged-goal.md`, `pkg/cli/docs/docs_packaged_reference_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go` | Packaged goal docs describe shipped invocation, routing, operator controls, and recovery without goal-specific public routes or internal stream contracts |
 | Generated artifact alignment | `make api-smoke` and `pkg/api/contracttests/openapi_contract_surface_test.go` | Public generated artifacts remain aligned with the internal-only response-stream boundary |
+
+### Final verification commands (`you-goal-06-007`, 2026-07-02 UTC)
+
+All commands ran from the `you-goal-06` worktree unless noted.
+
+| Command | Result | Notes |
+|---------|--------|-------|
+| `make typecheck` | pass | Dashboard TypeScript build check |
+| `make test` | pass | Short Go suite including functional smoke packages |
+| `make api-smoke` | pass | OpenAPI validate/bundle, generated drift check, contract integration smoke |
+| `go test ./tests/functional/smoke/ -run 'TestNamedGoal\|TestDocsCommandSmoke_' -count=1 -timeout 600s` | pass | Focused `@you/goal` functional smoke and packaged-docs CLI smoke |
+| `go test ./pkg/cli/docs/... -count=1` | pass | Packaged reference topic markers |
+| `go test ./pkg/cli -run TestDocsCommand_ -count=1` | pass | `you docs` command coverage |
+| `go test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1` | pass | Functional docs smoke |
+| `make verify-fast` | **narrower** | `make typecheck` and `make test` pass; `make ui-test` fails on pre-existing `factory-graph-layout-performance.test.ts` 500/1000-node budget regressions unrelated to `@you/goal` (no UI graph-editor or layout code changed in this lane) |
+| `make docs-reference-smoke` | **skipped** | See docs verification note below |
+
+Focused smoke fixtures exercised end-to-end:
+
+- `TestNamedGoalRun_RealCLIMaterializesFreshFactoryAndPreservesCustomerEditsOnRerun`
+- `TestNamedGoalInvocationParity_*`
+- `TestNamedGoalRouting_*`
+- `TestNamedGoalOperatorControls_*`
+- `TestNamedGoalResponseStream_*`
+- `TestDocsCommandSmoke_PackagedGoalTopic_*`
+
+### Skipped or narrower verification
+
+| Skipped lane | Concrete reason | Risk left behind |
+|--------------|-----------------|------------------|
+| `make docs-reference-smoke` | `docs-reference-check` shells into `docs/` and runs `go run ../markdown-linter/cmd/markdown-linter`, which is absent from nested worktrees (`stat .../markdown-linter: directory not found`) | Markdown lint drift in `docs/reference/` is not enforced by the Make target in worktrees; in-repo docs `go test` lanes above still prove topic content and CLI wiring |
+| `make verify-fast` (full green) | Inherited UI graph-layout performance budget failures in `ui/src/features/factory-graph-editor/lib/layout/performance/factory-graph-layout-performance.test.ts`; `@you/goal` verification did not touch graph-editor layout code | Large-factory dashboard layout performance regressions may land without this lane catching them until UI perf budgets are repaired on `main` |
+
+### Remaining follow-up gaps
+
+| Gap | Owning surface | Expected observable behavior | Suggested verification |
+|-----|----------------|------------------------------|------------------------|
+| Worktree-safe `make docs-reference-smoke` | `docs/` + CI Make targets | `make docs-reference-smoke` passes from nested worktrees and CI without a sibling `markdown-linter` checkout | `make docs-reference-smoke` from a `.claude/worktrees/...` checkout; tracked in `tasks/ideas-to-review/docs/fix-docs-reference-smoke-worktree-path.md` |
+| Factory graph layout performance budgets | `ui` graph-editor layout | 500-node and 1000-node canonical layout fixtures stay within documented median budgets | `make ui-test` / `make verify-fast` green on `factory-graph-layout-performance.test.ts` after budget repair or fixture tuning |
+
+### Scope confirmation
+
+Final verification for `@you/goal` added focused functional smoke tests, packaged/customer docs updates, a CLI `--output response-stream` flag wiring fix, and maintainer verification records. It did **not** introduce new public OpenAPI routes, `FactoryEvent` response-stream contracts, goal-specific control APIs, or broad unrelated cleanup outside the `@you/goal` verification surfaces listed above.
 
 **Docs verification note:** `make docs-reference-smoke` currently fails in nested
 worktrees because `docs-reference-check` shells into `docs/` and invokes a
