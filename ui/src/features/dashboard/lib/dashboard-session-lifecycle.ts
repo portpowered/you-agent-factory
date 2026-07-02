@@ -66,22 +66,6 @@ export function shouldResetDashboardSessionScopedState({
   return previousSessionKey !== null || refreshToken !== 0;
 }
 
-export function isDefaultFactorySessionAliasRemap(
-  previousSessionID: string | null,
-  sessionID: string | null,
-): boolean {
-  if (previousSessionID == null || sessionID == null) {
-    return false;
-  }
-  if (previousSessionID === sessionID) {
-    return false;
-  }
-  return (
-    isDefaultFactorySessionID(previousSessionID) ||
-    isDefaultFactorySessionID(sessionID)
-  );
-}
-
 /** True when sync-preflight remaps the default alias to its runtime UUID identity. */
 export function isDefaultToRuntimeSessionAliasRemap(
   previousSessionID: string | null,
