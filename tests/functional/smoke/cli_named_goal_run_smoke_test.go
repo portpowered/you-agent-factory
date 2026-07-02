@@ -11,6 +11,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 )
 
@@ -174,6 +175,111 @@ func TestNamedGoalRun_RealCLIUpgradesLegacyMaterializedBuiltinBeforeBatchInvocat
 	}
 	if strings.Contains(stdout.String(), goalText) {
 		t.Fatalf("stdout echoed submitted goal text %q", goalText)
+	}
+}
+
+func TestNamedGoalRun_RealCLIMaterializesFreshFactoryAndPreservesCustomerEditsOnRerun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI named @you/goal fresh materialization smoke")
+	}
+
+	goalText := fmt.Sprintf("functional-smoke-named-goal-fresh-%d", time.Now().UnixNano())
+
+	port, err := reserveLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	homeDir := t.TempDir()
+	materializedDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "@you%2Fgoal")
+	if _, err := os.Stat(materializedDir); !os.IsNotExist(err) {
+		t.Fatalf("fresh home should not already contain materialized @you/goal factory: stat %v", err)
+	}
+
+	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
+	binaryPath := buildYouCLIBinary(t)
+	unrelatedWorkingDir := t.TempDir()
+
+	runNamedGoalSmokeCLI := func(goalText string) (stdout string, stderr string, runErr error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		cmd := exec.CommandContext(
+			ctx,
+			binaryPath,
+			"run",
+			"--named", goal.PackagedFactoryName,
+			"--with-mock-workers",
+			"--no-record",
+			"--server", baseURL,
+			"--quiet",
+			mockWorkersPath,
+			goalText,
+		)
+		cmd.Dir = unrelatedWorkingDir
+		cmd.Env = append(os.Environ(), "HOME="+homeDir)
+
+		var outBuf, errBuf strings.Builder
+		cmd.Stdout = &outBuf
+		cmd.Stderr = &errBuf
+		runErr = cmd.Run()
+		return outBuf.String(), errBuf.String(), runErr
+	}
+
+	stdout, stderr, err := runNamedGoalSmokeCLI(goalText)
+	if err != nil {
+		t.Fatalf("first you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout, stderr)
+	}
+	if stdout != packagedGoalMockWorkerAcceptedSummary {
+		t.Fatalf("first stdout = %q, want only primary result %q", stdout, packagedGoalMockWorkerAcceptedSummary)
+	}
+	assertNamedGoalMaterializedSplitLayout(t, materializedDir)
+
+	workerPath := filepath.Join(materializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
+	editedWorkerBody := "customer edited goal executor after first materialization\n"
+	if err := os.WriteFile(workerPath, []byte(editedWorkerBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(customer-edited worker): %v", err)
+	}
+
+	secondGoalText := fmt.Sprintf("functional-smoke-named-goal-fresh-rerun-%d", time.Now().UnixNano())
+	stdout, stderr, err = runNamedGoalSmokeCLI(secondGoalText)
+	if err != nil {
+		t.Fatalf("second you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout, stderr)
+	}
+	if stdout != packagedGoalMockWorkerAcceptedSummary {
+		t.Fatalf("second stdout = %q, want only primary result %q", stdout, packagedGoalMockWorkerAcceptedSummary)
+	}
+
+	workerBody, err := os.ReadFile(workerPath)
+	if err != nil {
+		t.Fatalf("ReadFile(customer-edited worker): %v", err)
+	}
+	if strings.TrimSpace(string(workerBody)) != strings.TrimSpace(editedWorkerBody) {
+		t.Fatalf("customer-edited worker body = %q, want preserved %q", string(workerBody), editedWorkerBody)
+	}
+}
+
+func assertNamedGoalMaterializedSplitLayout(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	for _, dirName := range []string{interfaces.WorkersDir, interfaces.WorkstationsDir} {
+		info, err := os.Stat(filepath.Join(factoryDir, dirName))
+		if err != nil {
+			t.Fatalf("stat materialized %s: %v", dirName, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("materialized %s is not a directory", dirName)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, goal.PackagedExecuteWorkstationName, interfaces.FactoryAgentsFileName),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected materialized path %s: %v", path, err)
+		}
 	}
 }
 

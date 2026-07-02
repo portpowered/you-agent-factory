@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -300,6 +301,26 @@ func wrapInvocationInputError(err error) error {
 	}
 }
 
+var buildFactoryInvocationService FactoryServiceBuilder = defaultBuildFactoryInvocationService
+
+func defaultBuildFactoryInvocationService(
+	ctx context.Context,
+	svcCfg *initializer.Config,
+) (factoryServiceRunner, error) {
+	transport, err := initializer.InitializeCLITransport(ctx, svcCfg)
+	if err != nil {
+		return nil, err
+	}
+	if transport == nil {
+		return nil, errors.New("initializer CLI transport missing")
+	}
+	runner := transport.Runner()
+	if runner == nil {
+		return nil, errors.New("initializer CLI transport missing runtime runner")
+	}
+	return runner, nil
+}
+
 func runFactoryInvocation(
 	ctx context.Context,
 	cfg RunConfig,
@@ -313,7 +334,7 @@ func runFactoryInvocation(
 	svcCfg.WorkFile = ""
 	svcCfg.SimpleDashboardRenderer = nil
 
-	factorySvc, err := buildFactoryService(ctx, svcCfg)
+	factorySvc, err := buildFactoryInvocationService(ctx, svcCfg)
 	if err != nil {
 		return err
 	}

@@ -25,15 +25,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 		Long:               runCommandLongHelp(),
 		Example:            runCommandExamples(),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if err := rejectDeprecatedPortFlag(cmd, args); err != nil {
-				return err
-			}
-			normalized, err := runcli.NormalizeInvocationOutputMode(invocationOutputMode)
-			if err != nil {
-				return err
-			}
-			cfg.InvocationOutputMode = normalized
-			return nil
+			return rejectDeprecatedPortFlag(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeRunCommand(cmd, args, &cfg, globals, diagnostics, operatorDefaults)
@@ -48,6 +40,9 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	if err != nil {
 		return err
 	}
+	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
+		return err
+	}
 	if helpRequested(cmd) {
 		return writeRunCommandHelp(cmd, &resolvedConfig)
 	}
@@ -56,6 +51,18 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}
 	return err
+}
+
+func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConfig) error {
+	if !cmd.Flags().Changed("output") {
+		return nil
+	}
+	normalized, err := runcli.NormalizeInvocationOutputMode(cmd.Flag("output").Value.String())
+	if err != nil {
+		return err
+	}
+	cfg.InvocationOutputMode = normalized
+	return nil
 }
 
 func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, cfg *runcli.RunConfig) ([]string, runcli.RunConfig, error) {

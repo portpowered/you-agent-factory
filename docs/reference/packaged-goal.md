@@ -56,13 +56,12 @@ dashboard startup output. That flag affects operator chatter only; it does not
 change invocation input resolution or primary-result selection.
 
 Use `--output response-stream` on supported one-shot `@you/goal` invocations when
-the CLI owns the live runtime and you want live internal session response-stream
-progress instead of waiting silently for the final `primaryResult`. This mode
-subscribes only to internal `SessionResponseStream` data exposed by the local
-runtime; it does not tail provider-native stdout. Unsupported run shapes such as
-`--continuously`, replay mode, or non-invocation `you run` paths return
-`INVOCATION_OUTPUT_UNSUPPORTED`. When the runtime path cannot attach to an
-internal response stream, the CLI falls back to primary-result-only stdout.
+the CLI owns the live runtime and you want live progress fragments instead of
+waiting silently for the final `primaryResult`. This mode streams progress from
+the local runtime session; it does not tail provider-native stdout. Unsupported
+run shapes such as `--continuously`, replay mode, or non-invocation `you run`
+paths return `INVOCATION_OUTPUT_UNSUPPORTED`. When the runtime path cannot attach
+to a live progress stream, the CLI falls back to primary-result-only stdout.
 
 This guide documents the supported headless **operator-interaction** claim for
 the normal batch success path. It does **not** promise that batch invocation
@@ -161,6 +160,35 @@ Blocked and needs-human are authored routed goal states. Paused and interrupted
 come from shared session lifecycle or dispatch interruption context. They are
 reported distinctly so operators do not need a goal-specific endpoint or raw
 provider payload inspection to understand what happened.
+
+## Operator controls during active execution
+
+`@you/goal` reuses the same public `FactorySession`, `Work`, and `Dispatch`
+controls as other live factories. There are no goal-specific pause, resume, or
+interrupt routes.
+
+During an open live session (for example one started by `you run --named
+@you/goal` or `you run --continuously`):
+
+- **Pause** with `you session pause [session-id]` or
+  `POST /factory-sessions/{session_id}/pause` to stop automatic progression
+  while the session keeps accepting inbound work and worker results.
+- **Resume** with `you session resume [session-id]` or
+  `POST /factory-sessions/{session_id}/resume` to wake execution and drain
+  buffered submissions and completed worker results in submission order.
+- **Interrupt** an in-flight dispatch through the existing dispatch
+  interruption surfaces; interrupted goals route to `goal:interrupted` and
+  surface `INVOCATION_INTERRUPTED` when an invocation waits on the interrupted
+  work.
+
+Paused sessions report `INVOCATION_PAUSED` when a batch invocation stops
+waiting. `SESSION_LIFECYCLE_CONTROL` events record pause and resume for replay
+and inspection.
+
+Use `you session show`, `you work show`, and `GET
+/factory-sessions/{session_id}/events` to inspect buffered work, interruption
+context, and lifecycle history. See `you docs sessions` for the full pause,
+resume, buffering, and replay semantics.
 
 The non-success response also includes shared recovery context such as
 `sessionId`, `workId`, `workName`, and `workState` when one work item explains
