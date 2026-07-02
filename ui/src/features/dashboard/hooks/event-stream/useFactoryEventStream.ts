@@ -13,14 +13,14 @@ import {
   DEFAULT_FACTORY_SESSION_ID,
   isDefaultFactorySessionID,
 } from "../../../../api/session-routing";
-import { useFactoryTimelineStore } from "../../../timeline/public";
+import {
+  type TimelineCheckpointStreamIdentity,
+  useFactoryTimelineStore,
+} from "../../../timeline/public";
 import {
   compactFactoryEventForTimeline,
   readFactoryTimelineDebugOptions,
 } from "../../../timeline/state/factoryTimelineDebug";
-import {
-  type TimelineCheckpointStreamIdentity,
-} from "../../../timeline/public";
 import {
   clearQueuedFlush,
   pausedDashboardStreamState,

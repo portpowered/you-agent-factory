@@ -141,7 +141,7 @@ describe("App shell export dialog flows", () => {
         },
         ok: true,
       });
-    const { fetchMock } = renderApp({
+    renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
       fetchOverride: async (path, method) => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { FactorySessionSyncPreflightResponse } from "../../../api/factory-sessions/sync-preflight";
-import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
+import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
+import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
 import {
   resolveDashboardSyncPreflight,
   shouldClearCheckpointAfterPreflight,
@@ -115,15 +115,17 @@ describe("dashboard-session-sync-preflight", () => {
   });
 
   it("returns non-recoverable outcomes for unresolved logical targets", () => {
-    const resolution = resolveDashboardSyncPreflight({
-      checkpointReusable: false,
-      reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,
-      reconnectCursor: {
-        provided: false,
-        validForStreamGeneration: false,
-      },
-      requestedSessionId: "session-missing",
-    });
+    const resolution = resolveDashboardSyncPreflight(
+      buildPreflightResponse({
+        checkpointReusable: false,
+        reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,
+        reconnectCursor: {
+          provided: false,
+          validForStreamGeneration: false,
+        },
+        requestedSessionId: "session-missing",
+      }),
+    );
 
     expect(resolution).toEqual({
       kind: "non-recoverable",

@@ -11,8 +11,7 @@ import {
   useFactoryTimelineStore,
 } from "../../timeline/public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
-import { useDashboardStreamStore } from "../state/dashboardStreamStore";
-import { useDashboardCheckpointPreflight } from "./useDashboardCheckpointPreflight";
+import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";

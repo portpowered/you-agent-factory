@@ -19,10 +19,11 @@ import {
 import { getFactorySessionDispatchDetail } from "./dispatch-detail";
 import { getFactorySessionSyncPreflight } from "./sync-preflight";
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("factory sessions API", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
 
   it("lists live factory sessions from the typed API surface", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
@@ -773,7 +774,9 @@ describe("factory sessions API", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+});
 
+describe("factory sessions read and durable API", () => {
   it("loads one live factory session from the typed API surface", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

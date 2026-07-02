@@ -5,8 +5,10 @@ export {
   useFactoryTimelineStore,
 } from "../state/factoryTimelineStore";
 export {
+  clearTimelineCheckpointsForSession,
   deleteTimelineCheckpoint,
   clearTimelineCheckpoint,
+  peekPersistedTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
