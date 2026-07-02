@@ -7,9 +7,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   COMPONENT_CATEGORY_EXPORT_PATHS,
   COMPONENTS_PACKAGE_NAME,
-} from "youagentfactory/components";
-import stylesCss from "youagentfactory/components/styles.css?inline";
-import * as primitives from "youagentfactory/components/primitives";
+} from "@you-agent-factory/components";
+import stylesCss from "@you-agent-factory/components/styles.css?inline";
+import * as primitives from "@you-agent-factory/components/primitives";
 import { dashboardComponentsPackageName } from "./components-package-resolution";
 import viteConfig from "../../vite.config";
 
@@ -18,7 +18,7 @@ const importerPath = path.join(
   "components-package-resolution.test.ts",
 );
 
-describe("dashboard youagentfactory/components package resolution", () => {
+describe("dashboard @you-agent-factory/components package resolution", () => {
   let viteServer: ViteDevServer;
 
   beforeAll(async () => {
@@ -30,15 +30,15 @@ describe("dashboard youagentfactory/components package resolution", () => {
   });
 
   it("imports the package root through the configured package path", () => {
-    expect(dashboardComponentsPackageName).toBe("youagentfactory/components");
-    expect(COMPONENTS_PACKAGE_NAME).toBe("youagentfactory/components");
+    expect(dashboardComponentsPackageName).toBe("@you-agent-factory/components");
+    expect(COMPONENTS_PACKAGE_NAME).toBe("@you-agent-factory/components");
   });
 
   it("imports the CSS entrypoint through the dashboard Vite resolver", async () => {
     expect(typeof stylesCss).toBe("string");
 
     const resolved = await viteServer.pluginContainer.resolveId(
-      "youagentfactory/components/styles.css",
+      "@you-agent-factory/components/styles.css",
       importerPath,
       { ssr: false },
     );
@@ -52,7 +52,7 @@ describe("dashboard youagentfactory/components package resolution", () => {
 
   it("resolves the CSS entrypoint with Vite resolveId", async () => {
     const resolved = await viteServer.pluginContainer.resolveId(
-      "youagentfactory/components/styles.css",
+      "@you-agent-factory/components/styles.css",
       importerPath,
       { ssr: false },
     );
@@ -62,10 +62,10 @@ describe("dashboard youagentfactory/components package resolution", () => {
   });
 
   it.each(COMPONENT_CATEGORY_EXPORT_PATHS)(
-    "resolves deep import youagentfactory/components/%s with Vite resolveId",
+    "resolves deep import @you-agent-factory/components/%s with Vite resolveId",
     async (categoryPath) => {
       const resolved = await viteServer.pluginContainer.resolveId(
-        `youagentfactory/components/${categoryPath}`,
+        `@you-agent-factory/components/${categoryPath}`,
         importerPath,
         { ssr: false },
       );

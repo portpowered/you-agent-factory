@@ -137,13 +137,13 @@ async function main() {
 
   if (violations.length === 0) {
     process.stdout.write(
-      "youagentfactory/components package boundary check passed.\n",
+      "@you-agent-factory/components package boundary check passed.\n",
     );
     return;
   }
 
   process.stderr.write(
-    "youagentfactory/components package boundary check failed:\n",
+    "@you-agent-factory/components package boundary check failed:\n",
   );
 
   for (const violation of violations) {

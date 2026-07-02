@@ -68,7 +68,7 @@
     "react-resizable-panels": "^4.10.0",
     "recharts": "^3.8.1",
     "sonner": "^2.0.7",
-    "youagentfactory/components": "file:./packages/components",
+    "@you-agent-factory/components": "file:./packages/components",
     "zustand": "^4.5.7"
   },
   "devDependencies": {

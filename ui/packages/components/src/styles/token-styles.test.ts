@@ -7,7 +7,7 @@ import {
   readDocumentCssVariable,
 } from "./compile-package-token-styles";
 
-describe("youagentfactory/components token styles entrypoint", () => {
+describe("@you-agent-factory/components token styles entrypoint", () => {
   let documentRoot: HTMLElement;
 
   beforeAll(async () => {
