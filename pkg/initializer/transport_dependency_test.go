@@ -55,6 +55,7 @@ func TestInitializerComposition_DoesNotDelegateToServiceBuildFactoryCore(t *test
 		"pkg/initializer/services.go",
 		"pkg/initializer/api_transport.go",
 		"pkg/initializer/cli_transport.go",
+		"pkg/initializer/mcp_transport.go",
 	}
 	forbidden := []string{
 		"service.BuildFactoryCore(",
