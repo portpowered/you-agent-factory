@@ -20,8 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestBuildFactoryService_ReplayModeLoadsEmbeddedConfigWithoutFactoryFiles(t *testing.T) {
@@ -425,10 +424,10 @@ func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testi
 	mismatchedConfig["workers"] = []map[string]string{{"name": "worker-a"}, {"name": "worker-b"}}
 	factoryfixtures.WriteFactoryJSON(t, sourceDir, mismatchedConfig)
 
-	core, observedLogs := observer.New(zap.WarnLevel)
+	capturingLogger, observedLogs := testdeps.CapturingZapLogger(zapcore.WarnLevel)
 	_, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:        sourceDir,
-		Logger:     zap.New(core),
+		Logger:     capturingLogger,
 		ReplayPath: artifactPath,
 	})
 	if err != nil {

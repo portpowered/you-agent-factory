@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
 )
 
 // ServiceTestHarness wraps a FactoryService built via BuildFactoryService()
@@ -100,6 +101,22 @@ func WithMockWorkersConfig(mockCfg *factoryconfig.MockWorkersConfig) ServiceTest
 func WithRuntimeMode(mode interfaces.RuntimeMode) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {
 		cfg.serviceConfig.RuntimeMode = mode
+	}
+}
+
+// WithZapLogger sets an explicit zap logger for observability tests. The logger
+// is preserved when quiet defaults are applied afterward.
+func WithZapLogger(logger *zap.Logger) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		cfg.serviceConfig.Logger = logger
+	}
+}
+
+// WithInvocationMetricsRecorder sets an explicit invocation metrics recorder for
+// observability tests. The recorder is preserved when quiet defaults are applied.
+func WithInvocationMetricsRecorder(recorder service.InvocationMetricsRecorder) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		cfg.serviceConfig.InvocationMetricsRecorder = recorder
 	}
 }
 

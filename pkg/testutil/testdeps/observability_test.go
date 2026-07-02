@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestDefaultObservability_UsesNoopLoggerAndMetricsEmitter(t *testing.T) {
@@ -219,5 +220,93 @@ func TestApplyFactoryServiceConfig_BuildFactoryServiceDoesNotCreateMetricsFiles(
 	}
 	if len(metricFiles) != 0 {
 		t.Fatalf("metrics files = %v, want none", metricFiles)
+	}
+}
+
+func TestCapturingObservability_RecordsLogAndMetricEmissions(t *testing.T) {
+	t.Parallel()
+
+	obs, capture := testdeps.Capturing(zapcore.InfoLevel)
+	obs.Logger.Info("observability under test", "detail", "value")
+
+	fields := metrics.Fields{DispatchID: "dispatch-1", Workstation: "review"}
+	if err := obs.MetricsEmitter.Counter(context.Background(), "dispatch.started", 1, fields); err != nil {
+		t.Fatalf("Counter: %v", err)
+	}
+	if err := obs.MetricsEmitter.Sample(context.Background(), "dispatch.duration", 12.5, "ms", fields); err != nil {
+		t.Fatalf("Sample: %v", err)
+	}
+
+	logs := capture.ObservedLogs.FilterMessage("observability under test").All()
+	if len(logs) != 1 {
+		t.Fatalf("observed logs = %d, want 1", len(logs))
+	}
+	if !capture.Metrics.ContainsCounter("dispatch.started", 1, fields) {
+		t.Fatal("expected captured counter emission")
+	}
+	if !capture.Metrics.ContainsSample("dispatch.duration", 12.5, "ms", fields) {
+		t.Fatal("expected captured sample emission")
+	}
+}
+
+func TestCapturingObservability_DoesNotAffectDefaultQuietObservability(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	obs, capture := testdeps.Capturing(zapcore.InfoLevel)
+	obs.Logger.Info("isolated capture log")
+	if len(capture.ObservedLogs.All()) != 1 {
+		t.Fatalf("capturing logs = %d, want 1", len(capture.ObservedLogs.All()))
+	}
+
+	quiet := testdeps.Default()
+	quiet.Logger.Info("quiet default log")
+	if err := quiet.MetricsEmitter.Counter(context.Background(), "dispatch.started", 1, metrics.Fields{}); err != nil {
+		t.Fatalf("Counter: %v", err)
+	}
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("default observability wrote files after isolated capture: %v", entries)
+	}
+}
+
+func TestRecordingInvocationMetrics_CapturesFactoryServiceMetrics(t *testing.T) {
+	t.Parallel()
+
+	recorder := testdeps.NewRecordingInvocationMetrics()
+	recorder.RecordInvocationMetric(service.InvocationMetric{
+		Name:   "runtime.loaded",
+		Labels: map[string]string{"identity": "model-a"},
+	})
+
+	if !recorder.Contains("runtime.loaded", map[string]string{"identity": "model-a"}) {
+		t.Fatal("expected captured invocation metric")
+	}
+}
+
+func TestApplyFactoryServiceConfig_PreservesCapturingLoggerAndMetricsRecorder(t *testing.T) {
+	t.Parallel()
+
+	obs, capture := testdeps.Capturing(zapcore.WarnLevel)
+	recorder := testdeps.NewRecordingInvocationMetrics()
+	cfg := &service.FactoryServiceConfig{
+		Logger:                    obs.ZapLogger,
+		InvocationMetricsRecorder: recorder,
+	}
+	testdeps.Default().ApplyFactoryServiceConfig(cfg)
+
+	if cfg.Logger != obs.ZapLogger {
+		t.Fatal("ApplyFactoryServiceConfig replaced explicit capturing logger")
+	}
+	if cfg.InvocationMetricsRecorder != recorder {
+		t.Fatal("ApplyFactoryServiceConfig replaced explicit metrics recorder")
+	}
+
+	obs.ZapLogger.Warn("preserved capturing logger")
+	if len(capture.ObservedLogs.FilterMessage("preserved capturing logger").All()) != 1 {
+		t.Fatal("expected capturing logger to remain observable after quiet defaults")
 	}
 }
