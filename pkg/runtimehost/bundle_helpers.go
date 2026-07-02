@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -53,11 +52,6 @@ func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *fact
 	return nil
 }
 
-// ModelEventDiagnosticsForTest exposes model-event diagnostic projection for tests.
-func ModelEventDiagnosticsForTest(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
-	return modelEventDiagnostics(success, err)
-}
-
 func modelEventErrorClass(err error) string {
 	var readinessErr *apisurface.ManagedRuntimeInvocationError
 	if errors.As(err, &readinessErr) && readinessErr.ReadinessState != "" {
@@ -71,25 +65,4 @@ func modelEventErrorClass(err error) string {
 		return ""
 	}
 	return "MODEL_EXECUTION_FAILED"
-}
-
-// ModelEventErrorClassForTest exposes model-event error classification for tests.
-func ModelEventErrorClassForTest(err error) string {
-	return modelEventErrorClass(err)
-}
-
-// NewRecordingModelRunnerForTest wraps a model runner with event recording for tests.
-func NewRecordingModelRunnerForTest(
-	inner workers.Runner,
-	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
-	recorder modelEventRecorder,
-	now func() time.Time,
-) workers.Runner {
-	return newRecordingModelRunner(inner, factoryCfg, workerDef, recorder, now)
-}
-
-// ModelEventContextForTest builds factory event context metadata for tests.
-func ModelEventContextForTest(request interfaces.RunnerExecutionRequest, eventTime time.Time) factoryapi.FactoryEventContext {
-	return modelEventContext(request, eventTime)
 }

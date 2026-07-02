@@ -1136,10 +1136,6 @@ func factorySessionBackendScopeID(fs *Host, session *factorysessions.LiveSession
 	return ""
 }
 
-func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) string {
-	return factorysessions.LogicalSessionKeyID(session)
-}
-
 func factorySessionStreamGenerationID(_ *Host, session *factorysessions.LiveSession) string {
 	if session == nil {
 		return ""
@@ -1933,13 +1929,6 @@ func newSessionGatewayService(fs *Host) *factorysessionservice.Service {
 	return factorysessionservice.New(sessionGatewayHost{fs})
 }
 
-func wireSessionGatewayCollaborator(fs *Host, cfg *Config) SessionGateway {
-	if cfg != nil && cfg.SessionGateway != nil {
-		return cfg.SessionGateway
-	}
-	return newSessionGatewayService(fs)
-}
-
 func (fs *Host) requireSessionGateway() SessionGateway {
 	if fs == nil {
 		return newSessionGatewayService(nil)
@@ -1948,17 +1937,4 @@ func (fs *Host) requireSessionGateway() SessionGateway {
 		fs.sessionGateway = newSessionGatewayService(fs)
 	}
 	return fs.sessionGateway
-}
-
-// ProvideSessionGatewayCollaborator constructs the session gateway for a built service shell.
-func ProvideSessionGatewayCollaborator(shell HostShell, cfg *Config) SessionGateway {
-	return wireSessionGatewayCollaborator(shell.Host, cfg)
-}
-
-// AttachSessionGatewayCollaborator assigns the session gateway on the service shell.
-func AttachSessionGatewayCollaborator(shell HostShell, gateway SessionGateway) *Host {
-	if shell.Host != nil {
-		shell.Host.sessionGateway = gateway
-	}
-	return shell.Host
 }

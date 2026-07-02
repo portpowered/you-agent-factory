@@ -11,7 +11,6 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -19,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
-
 
 // LiveSessionState tracks per-session runtime state attached to live session handles.
 type LiveSessionState = liveSessionState
@@ -31,16 +29,6 @@ type liveSessionState struct {
 	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
 	responseStreamsOnce   sync.Once
 	responseStreams       *factorysessions.SessionResponseStreamSet
-}
-
-// NewStartupLiveSessionHandle constructs the default session handle attached
-// during startup core composition.
-func NewStartupLiveSessionHandle(bundle *factoryservice.Bundle, spec *runtimebuild.SessionBuildSpec) any {
-	if spec == nil {
-		return &liveSessionState{bundle: bundle}
-	}
-	copied := *spec
-	return &liveSessionState{bundle: bundle, spec: &copied}
 }
 
 type hostCoordinatorPolicy struct {
