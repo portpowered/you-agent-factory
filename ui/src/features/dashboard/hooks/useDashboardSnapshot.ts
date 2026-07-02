@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import {
+  recordSessionPersistenceInvalidation,
+  silentReplayRecoveryDiagnostic,
+} from "../public";
+import {
   clearTimelineCheckpoint,
   type FactoryTimelineCheckpoint,
   persistTimelineCheckpoint,
@@ -16,7 +20,6 @@ import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
-import { readFactoryTimelineDebugOptions } from "../../timeline/public";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
@@ -43,7 +46,6 @@ function usePersistedTimelineCheckpoint({
     const persistHandle = window.setTimeout(() => {
       void persistTimelineCheckpoint(
         window.indexedDB,
-        rawSessionID,
         checkpoint
           ? {
               ...checkpoint,
@@ -56,13 +58,7 @@ function usePersistedTimelineCheckpoint({
     return () => {
       window.clearTimeout(persistHandle);
     };
-  }, [
-    checkpoint,
-    checkpointsDisabled,
-    rawSessionID,
-    streamIdentity,
-    syncIdentity,
-  ]);
+  }, [checkpoint, checkpointsDisabled, streamIdentity, syncIdentity]);
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: snapshot composition keeps preflight, checkpoint hydration, and stream wiring in one hook.
@@ -90,7 +86,7 @@ export function useDashboardSnapshot({
   const invalidatedReconnectCursorRef = useRef(false);
   const lastPersistedCheckpointRef =
     useRef<FactoryTimelineCheckpoint | null>(null);
-  const lastSessionKeyRef = useRef<string | null>(null);
+  const lastSessionIDRef = useRef<string | null>(null);
   const queuedAppendRef =
     useRef<(events: FactoryEvent[]) => void>(appendEvents);
 
@@ -177,7 +173,6 @@ export function useDashboardSnapshot({
   usePersistedTimelineCheckpoint({
     checkpoint: currentReplayCheckpoint,
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
-    rawSessionID: effectiveSessionID,
     streamIdentity,
     syncIdentity: checkpointSyncIdentity,
   });
@@ -204,6 +199,7 @@ export function useDashboardSnapshot({
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
     sessionID: effectiveSessionID,
+    streamIdentity,
   });
 
   useDashboardTimelineMemoryDebug({ debugOptions, eventCount });
@@ -230,7 +226,6 @@ export function useDashboardSnapshot({
       streamState,
     }),
     [
-      checkpointHydrated,
       error,
       isInitialLoading,
       preflightError,

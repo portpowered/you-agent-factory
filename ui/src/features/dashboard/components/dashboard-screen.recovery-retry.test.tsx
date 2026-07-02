@@ -33,7 +33,7 @@ function resolvedDefaultStreamIdentity() {
 }
 
 function okSyncPreflightResponse(
-  overrides: Partial<syncPreflightAPI.FactorySessionSyncPreflightResponse> = {},
+  overrides: Partial<factorySessionsAPI.FactorySessionSyncPreflightResponse> = {},
 ) {
   return {
     backendScopeId: "backend-scope-a",

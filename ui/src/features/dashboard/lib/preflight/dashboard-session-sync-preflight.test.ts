@@ -46,7 +46,7 @@ describe("dashboard-session-sync-preflight", () => {
       streamIdentity: {
         backendScopeID: "backend-scope-a",
         factorySessionID: "session-live-001",
-        logicalSessionKeyId: "lsk-default-folder",
+        logicalSessionKeyID: "lsk-default-folder",
         streamGenerationID: "2026-06-26T00:00:00Z",
       },
     });

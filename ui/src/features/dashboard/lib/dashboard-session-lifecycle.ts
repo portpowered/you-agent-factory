@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { isDefaultFactorySessionID } from "../../../api/session-routing";
 import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
   currentFactoryDefinitionQueryKey,
@@ -63,6 +64,22 @@ export function shouldResetDashboardSessionScopedState({
     return true;
   }
   return previousSessionKey !== null || refreshToken !== 0;
+}
+
+export function isDefaultFactorySessionAliasRemap(
+  previousSessionID: string | null,
+  sessionID: string | null,
+): boolean {
+  if (previousSessionID == null || sessionID == null) {
+    return false;
+  }
+  if (previousSessionID === sessionID) {
+    return false;
+  }
+  return (
+    isDefaultFactorySessionID(previousSessionID) ||
+    isDefaultFactorySessionID(sessionID)
+  );
 }
 
 export function resetDashboardSessionScopedState(

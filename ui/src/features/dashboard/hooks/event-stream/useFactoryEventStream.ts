@@ -19,10 +19,6 @@ import {
   useFactoryTimelineStore,
 } from "../../../timeline/public";
 import {
-  normalizeStreamDerivedCacheIdentity,
-  type StreamDerivedCacheIdentity,
-} from "../../../timeline/public";
-import {
   compactFactoryEventForTimeline,
   readFactoryTimelineDebugOptions,
 } from "../../../timeline/state/factoryTimelineDebug";

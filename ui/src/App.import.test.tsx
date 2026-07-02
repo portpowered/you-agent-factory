@@ -127,7 +127,7 @@ describe("App shell import flows", () => {
 
     expect(await screen.findByRole("heading", { name: "U" })).toBeTruthy();
     expectNoRetiredDashboardBranding();
-    expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
     expect(
       await screen.findByRole("region", { name: "Work graph viewport" }),

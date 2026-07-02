@@ -9,10 +9,8 @@ export interface DashboardSessionRecoveryState {
   requestedSessionId: string;
 }
 
-export interface DashboardSyncPreflightStreamIdentity
-  extends TimelineCheckpointStreamIdentity {
-  logicalSessionKeyId: string;
-}
+export type DashboardSyncPreflightStreamIdentity =
+  TimelineCheckpointStreamIdentity;
 
 export type DashboardSyncPreflightResolution =
   | {
@@ -128,7 +126,7 @@ function streamIdentityFromSyncPreflightResponse(
   return {
     backendScopeID,
     factorySessionID,
-    logicalSessionKeyId,
+    logicalSessionKeyID: logicalSessionKeyId,
     streamGenerationID,
   };
 }
@@ -187,7 +185,7 @@ export function checkpointSyncIdentityFromPreflight(
   return {
     backendScopeId: streamIdentity.backendScopeID,
     factorySessionId: streamIdentity.factorySessionID,
-    logicalSessionKeyId: streamIdentity.logicalSessionKeyId,
+    logicalSessionKeyId: streamIdentity.logicalSessionKeyID,
     streamGenerationId: streamIdentity.streamGenerationID,
   };
 }

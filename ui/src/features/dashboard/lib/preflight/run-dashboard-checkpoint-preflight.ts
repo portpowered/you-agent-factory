@@ -18,7 +18,6 @@ import {
   type DashboardSessionRecoveryState,
   resolveDashboardSyncPreflight,
   shouldClearCheckpointAfterPreflight,
-  shouldRemapDashboardSession,
   syncPreflightIdentityHintsFromCheckpoint,
 } from "./dashboard-session-sync-preflight";
 
@@ -89,13 +88,11 @@ export async function runDashboardCheckpointPreflight({
     const checkpointStreamIdentity: TimelineCheckpointStreamIdentity = {
       backendScopeID: resolvedStreamIdentity.backendScopeID,
       factorySessionID: resolvedStreamIdentity.factorySessionID,
+      logicalSessionKeyID: resolvedStreamIdentity.logicalSessionKeyID,
       streamGenerationID: resolvedStreamIdentity.streamGenerationID,
     };
 
-    if (
-      shouldRemapDashboardSession(response, requestedSessionId) ||
-      shouldClearCheckpointAfterPreflight(response)
-    ) {
+    if (shouldClearCheckpointAfterPreflight(response)) {
       await clearTimelineCheckpointsForSession(
         window.indexedDB,
         requestedSessionId,
@@ -117,7 +114,6 @@ export async function runDashboardCheckpointPreflight({
     if (checkpointReusable && validatedReconnectCursor) {
       checkpoint = await readTimelineCheckpoint(
         window.indexedDB,
-        resolvedSessionId,
         checkpointStreamIdentity,
       );
     }

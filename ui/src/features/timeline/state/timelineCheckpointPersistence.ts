@@ -1,4 +1,3 @@
-import type { FactoryEventReconnectCursor } from "../../../api/events";
 import {
   DEFAULT_FACTORY_SESSION_ID,
   isDefaultFactorySessionID,
@@ -178,8 +177,8 @@ export async function peekPersistedTimelineCheckpoint(
 
   try {
     const envelopes = await listIndexedCheckpoints(indexedDB);
-    const envelope = envelopes.find(
-      (candidate) => candidate.sessionID === normalizedSessionID,
+    const envelope = envelopes.find((candidate) =>
+      matchesStoredCheckpointFactorySessionID(candidate, normalizedSessionID),
     );
     if (
       !envelope ||
@@ -192,7 +191,9 @@ export async function peekPersistedTimelineCheckpoint(
     return {
       checkpoint: hydrateCheckpoint(envelope.checkpoint),
       storageKey: envelope.storageKey,
-      streamIdentity: normalizeStreamIdentity(envelope.streamIdentity),
+      streamIdentity: normalizeStreamDerivedCacheIdentity(
+        envelope.streamIdentity,
+      ),
     };
   } catch {
     return null;
@@ -211,7 +212,12 @@ export async function clearTimelineCheckpointsForSession(
   try {
     const envelopes = await listIndexedCheckpoints(indexedDB);
     const storageKeys = envelopes
-      .filter((envelope) => envelope.sessionID === normalizedSessionID)
+      .filter((envelope) =>
+        matchesStoredCheckpointFactorySessionID(
+          envelope,
+          normalizedSessionID,
+        ),
+      )
       .map((envelope) => envelope.storageKey)
       .filter((storageKey) => storageKey.trim() !== "");
 

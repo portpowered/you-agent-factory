@@ -17,10 +17,6 @@ function resolvedFactorySessionID(summary: FactorySessionSummary): string {
     : summary.id;
 }
 
-function logicalSessionKeyID(summary: FactorySessionSummary): string {
-  return `${summary.folderPath}::${summary.target.kind}${summary.target.name ? `::${summary.target.name}` : "::"}`;
-}
-
 const DEFAULT_LOGICAL_SESSION_KEY_ID =
   "lsk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -82,7 +78,7 @@ export function buildFactorySessionResponse(
       status: "IDLE",
       streamIdentity: {
         backendScopeID: `${summary.folderPath}::test-backend`,
-        factorySessionID: summary.id,
+        factorySessionID: resolvedFactorySessionID(summary),
         logicalSessionKeyID: DEFAULT_LOGICAL_SESSION_KEY_ID,
         streamGenerationID: lifecycleTimestamp,
       },
@@ -148,7 +144,7 @@ export function handleFactorySessionPreflightRequest({
     return jsonResponse({
       backendScopeId: `${sessionSummary.folderPath}::test-backend`,
       checkpointReusable: true,
-      factorySessionId: sessionSummary.id,
+      factorySessionId: resolvedFactorySessionID(sessionSummary),
       logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
       reasonCode: "ok",
       reconnectCursor: {
