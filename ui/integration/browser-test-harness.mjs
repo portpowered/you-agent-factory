@@ -416,7 +416,12 @@ async function browserDistReady() {
     await stat(path.join(packageRoot, "dist", "index.html"));
     await stat(path.join(packageRoot, "dist", "assets", "index.js"));
     await stat(path.join(packageRoot, "dist", "assets", "index.css"));
-    return true;
+    const bundle = await readFile(
+      path.join(packageRoot, "dist", "assets", "index.js"),
+      "utf8",
+    );
+    // Rebuild when the preview bundle predates session sync-preflight bootstrap.
+    return bundle.includes("/sync-preflight");
   } catch {
     return false;
   }

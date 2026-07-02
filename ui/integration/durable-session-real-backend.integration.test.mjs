@@ -12,7 +12,9 @@ import {
   startBrowserPreview,
   stopBrowserPreview,
   startRealBackendBrowserHarness,
+  readyTimeoutMs,
   uiInteractionTimeoutMs,
+  waitForDashboardSyncPreflight,
   waitForDashboardWidgetPicker,
 } from "./browser-test-harness.mjs";
 
@@ -22,9 +24,15 @@ import {
 // Focused rerun: `make test-ui-durable-session-real-backend` or
 // `cd ui && bun run test:integration:durable-session-real-backend`.
 
-async function openFactorySessionWidget(page) {
-  const browseWidgets = await waitForDashboardWidgetPicker(page);
-  await selectComboboxOption(browseWidgets, "Factory session");
+async function openFactorySessionWidget(
+  page,
+  { widgetPickerTimeoutMs = uiInteractionTimeoutMs } = {},
+) {
+  await waitForDashboardWidgetPicker(page, widgetPickerTimeoutMs);
+  await selectComboboxOption(
+    page.getByRole("combobox", { name: "Browse widgets" }),
+    "Factory session",
+  );
   await page.getByRole("button", { name: "Add widget: Factory session" }).click();
   await page
     .getByRole("heading", {
@@ -55,11 +63,18 @@ async function assertRunningSummaryScenario(preview) {
       },
       { times: 1 },
     );
-    await gotoDashboardAndWaitForWidgetPicker(
+    const syncPreflightResponse = waitForDashboardSyncPreflight(
       browserPage.page,
-      `${preview.previewURL}?factorySessionId=${encodeURIComponent(backend.sessionID)}`,
+      readyTimeoutMs,
     );
-    await openFactorySessionWidget(browserPage.page);
+    await browserPage.page.goto(
+      `${preview.previewURL}?factorySessionId=${encodeURIComponent(backend.sessionID)}`,
+      { waitUntil: "domcontentloaded" },
+    );
+    await syncPreflightResponse;
+    await openFactorySessionWidget(browserPage.page, {
+      widgetPickerTimeoutMs: readyTimeoutMs,
+    });
     await browserPage.page
       .getByRole("status")
       .filter({ hasText: "Loading factory session runtime…" })
