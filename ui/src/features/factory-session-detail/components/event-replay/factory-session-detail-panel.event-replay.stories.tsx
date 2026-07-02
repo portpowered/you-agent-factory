@@ -71,13 +71,18 @@ export const DurableReplayDisclosure = {
     const timeline = canvas
       .getAllByRole("list")
       .find((element) => element.tagName === "OL");
-    expect(timeline).toBeTruthy();
-    const timelineItems = within(timeline!).getAllByRole("listitem");
+    if (!timeline) {
+      throw new Error("Expected replay timeline <ol> to be present.");
+    }
+    const timelineItems = within(timeline).getAllByRole("listitem");
     expect(timelineItems).toHaveLength(5);
-    expect(within(timelineItems[0]!).getByText("Session started")).toBeTruthy();
-    expect(
-      within(timelineItems[4]!).getByText("Session event 5 · Tick 5"),
-    ).toBeTruthy();
+    const firstItem = timelineItems[0];
+    const lastItem = timelineItems[4];
+    if (!firstItem || !lastItem) {
+      throw new Error("Expected replay timeline to include five list items.");
+    }
+    expect(within(firstItem).getByText("Session started")).toBeTruthy();
+    expect(within(lastItem).getByText("Session event 5 · Tick 5")).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(successfulReplaySessionID),
 };
