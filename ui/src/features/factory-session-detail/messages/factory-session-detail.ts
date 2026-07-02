@@ -45,8 +45,9 @@ export interface FactorySessionDetailMessages
   dispatchAttemptLabel: string;
   dispatchDetailErrorState: string;
   dispatchDetailHeading: string;
-  dispatchDetailMissingState: string;
+  dispatchDetailMissingState: (dispatchID: string) => string;
   dispatchDetailLoadingState: string;
+  dispatchDetailRetryLabel: string;
   dispatchExecutionModeSummary: (mode: string) => string;
   dispatchKindLabel: string;
   dispatchLabelField: string;
@@ -72,6 +73,7 @@ export interface FactorySessionDetailMessages
   failureMessageLabel: string;
   failureReasonLabel: string;
   finalResultRefLabel: string;
+  lifecycleControlStatusLabel: string;
   javascriptProjectionMissingState: string;
   javascriptTaskHeading: string;
   javascriptTaskKindLabel: string;
@@ -256,7 +258,9 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailErrorState: "The dispatch detail could not be loaded.",
     dispatchDetailHeading: "Dispatch detail",
     dispatchDetailLoadingState: "Loading dispatch detail…",
-    dispatchDetailMissingState: "This dispatch detail is no longer available.",
+    dispatchDetailMissingState: (dispatchID) =>
+      `Dispatch detail for ${dispatchID} is no longer available.`,
+    dispatchDetailRetryLabel: "Retry loading dispatch detail",
     dispatchExecutionModeSummary: (mode) => `Execution mode: ${mode}`,
     dispatchKindLabel: "Dispatch kind",
     dispatchLabelField: "Dispatch label",
@@ -281,6 +285,7 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "Failure message",
     failureReasonLabel: "Failure reason",
     finalResultRefLabel: "Final result ref",
+    lifecycleControlStatusLabel: "Factory Session lifecycle",
     javascriptProjectionMissingState:
       "JavaScript workflow runtime details are not available for this session.",
     javascriptTaskHeading: "JavaScript task",
@@ -350,7 +355,9 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailErrorState: "无法加载调度详情。",
     dispatchDetailHeading: "调度详情",
     dispatchDetailLoadingState: "正在加载调度详情…",
-    dispatchDetailMissingState: "此调度详情已不可用。",
+    dispatchDetailMissingState: (dispatchID) =>
+      `${dispatchID} 的调度详情已不可用。`,
+    dispatchDetailRetryLabel: "重试加载调度详情",
     dispatchExecutionModeSummary: (mode) => `执行模式：${mode}`,
     dispatchKindLabel: "调度类型",
     dispatchLabelField: "调度标签",
@@ -373,6 +380,7 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "失败消息",
     failureReasonLabel: "失败原因",
     finalResultRefLabel: "最终结果引用",
+    lifecycleControlStatusLabel: "工厂会话生命周期",
     javascriptProjectionMissingState:
       "此会话的 JavaScript 工作流运行时详情不可用。",
     javascriptTaskHeading: "JavaScript 任务",

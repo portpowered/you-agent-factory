@@ -1,5 +1,5 @@
-/** Stable package identifier for `youagentfactory/components` consumers. */
-export const COMPONENTS_PACKAGE_NAME = "youagentfactory/components" as const;
+/** Stable package identifier for `@you-agent-factory/components` consumers. */
+export const COMPONENTS_PACKAGE_NAME = "@you-agent-factory/components" as const;
 
 export type ComponentsPackageName = typeof COMPONENTS_PACKAGE_NAME;
 

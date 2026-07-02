@@ -1,5 +1,7 @@
 import { expect, it } from "vitest";
 
+import { canonicalSessionLifecycleControlReplayEvents, canonicalSessionLifecycleReplayEvents } from "../../../../testing/session-lifecycle-replay-fixtures";
+import { reconstructWorldState } from "./replayWorldState";
 import { projectRuntime } from "./projectRuntime";
 import type { ReplayWorldState } from "./types";
 import { emptyWorldRuntime } from "./types";
@@ -258,4 +260,60 @@ it("projects session bracket, artifacts, and javascript dispatches into runtime 
 
   expect(runtime.session.bracket).toEqual(state.sessionBracket);
   expect(runtime.session.has_data).toBe(true);
+});
+
+it("projects paused and resumed lifecycle bracket from canonical replay world state", () => {
+  const pausedState = reconstructWorldState(
+    [...canonicalSessionLifecycleReplayEvents],
+    2,
+  );
+  const pausedRuntime = projectRuntime(pausedState);
+
+  expect(pausedRuntime.session.bracket).toMatchObject({
+    lifecycle_control_status: "PAUSED",
+    paused_at: "2026-06-09T12:00:02Z",
+    session_id: "session-alpha",
+  });
+
+  const runningState = reconstructWorldState(
+    [...canonicalSessionLifecycleReplayEvents],
+    3,
+  );
+  const runningRuntime = projectRuntime(runningState);
+
+  expect(runningRuntime.session.bracket).toMatchObject({
+    lifecycle_control_status: "RUNNING",
+    paused_at: "2026-06-09T12:00:02Z",
+    resumed_at: "2026-06-09T12:00:04Z",
+    session_id: "session-alpha",
+  });
+  expect(runningRuntime.session.has_data).toBe(true);
+});
+
+it("projects paused and resumed lifecycle bracket from SESSION_LIFECYCLE_CONTROL replay events", () => {
+  const pausedState = reconstructWorldState(
+    [...canonicalSessionLifecycleControlReplayEvents],
+    2,
+  );
+  const pausedRuntime = projectRuntime(pausedState);
+
+  expect(pausedRuntime.session.bracket).toMatchObject({
+    lifecycle_control_status: "PAUSED",
+    paused_at: "2026-06-09T12:00:02Z",
+    session_id: "session-alpha",
+  });
+
+  const runningState = reconstructWorldState(
+    [...canonicalSessionLifecycleControlReplayEvents],
+    3,
+  );
+  const runningRuntime = projectRuntime(runningState);
+
+  expect(runningRuntime.session.bracket).toMatchObject({
+    lifecycle_control_status: "RUNNING",
+    paused_at: "2026-06-09T12:00:02Z",
+    resumed_at: "2026-06-09T12:00:04Z",
+    session_id: "session-alpha",
+  });
+  expect(runningRuntime.session.has_data).toBe(true);
 });

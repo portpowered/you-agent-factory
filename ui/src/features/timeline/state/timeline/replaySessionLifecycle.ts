@@ -93,6 +93,62 @@ function applySessionResultUpdated(
   );
 }
 
+function applySessionPaused(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
+  const payload = event.payload as Record<string, unknown>;
+  const bracket = ensureSessionBracket(state);
+  mergeSessionBracketIdentity(bracket, event.context);
+  if (typeof payload.status === "string") {
+    bracket.lifecycle_control_status = payload.status;
+  }
+  if (typeof payload.pausedAt === "string") {
+    bracket.paused_at = payload.pausedAt;
+  }
+}
+
+function applySessionResumed(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
+  const payload = event.payload as Record<string, unknown>;
+  const bracket = ensureSessionBracket(state);
+  mergeSessionBracketIdentity(bracket, event.context);
+  if (typeof payload.status === "string") {
+    bracket.lifecycle_control_status = payload.status;
+  }
+  if (typeof payload.resumedAt === "string") {
+    bracket.resumed_at = payload.resumedAt;
+  }
+}
+
+function applySessionLifecycleControl(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
+  const payload = event.payload as Record<string, unknown>;
+  if (payload.outcome !== "ACCEPTED") {
+    return;
+  }
+  const bracket = ensureSessionBracket(state);
+  mergeSessionBracketIdentity(bracket, event.context);
+  if (typeof payload.newStatus === "string") {
+    bracket.lifecycle_control_status = payload.newStatus;
+  }
+  if (typeof payload.occurredAt !== "string") {
+    return;
+  }
+  const operation = payload.operation;
+  if (operation === "PAUSE") {
+    bracket.paused_at = payload.occurredAt;
+    return;
+  }
+  if (operation === "RESUME") {
+    bracket.resumed_at = payload.occurredAt;
+  }
+}
+
 function applySessionCompleted(
   state: ReplayWorldState,
   event: FactoryEvent,
@@ -142,6 +198,15 @@ export function applySessionLifecycleEvent(
   switch (event.type) {
     case FACTORY_EVENT_TYPES.sessionStarted:
       applySessionStarted(state, event);
+      return true;
+    case FACTORY_EVENT_TYPES.sessionPaused:
+      applySessionPaused(state, event);
+      return true;
+    case FACTORY_EVENT_TYPES.sessionResumed:
+      applySessionResumed(state, event);
+      return true;
+    case FACTORY_EVENT_TYPES.sessionLifecycleControl:
+      applySessionLifecycleControl(state, event);
       return true;
     case FACTORY_EVENT_TYPES.sessionResultUpdated:
       applySessionResultUpdated(state, event);

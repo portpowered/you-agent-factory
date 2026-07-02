@@ -1,6 +1,6 @@
-// Package service provides compatibility aliases and composition helpers for the
-// extracted runtime host. Authoritative runtime/session ownership lives in
-// pkg/runtimehost.
+// Package service provides compatibility aliases and legacy wire helpers for the
+// extracted runtime host. Authoritative composition lives in pkg/initializer and
+// pkg/composebridge; runtime/session ownership lives in pkg/runtimehost.
 package service
 
 import (
@@ -54,11 +54,6 @@ func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway runtime
 	return runtimehost.AttachSessionGatewayCollaborator(shell, gateway)
 }
 
-// ValidateReplayModeConfig rejects incompatible replay and record mode combinations.
-func ValidateReplayModeConfig(cfg *FactoryServiceConfig) error {
-	return runtimehost.ValidateReplayModeConfig(cfg)
-}
-
 func newInferenceProgressPublisherFactory(sessions *factorysessions.Registry, logger *zap.Logger) runtimehost.InferenceProgressPublisherFactory {
 	return runtimehost.NewInferenceProgressPublisherFactory(sessions, logger)
 }
@@ -88,6 +83,7 @@ type (
 	SimpleDashboardRenderer     = runtimehost.SimpleDashboardRenderer
 	APIServerStarter            = runtimehost.APIServerStarter
 	RuntimeFileLoggingPolicy    = runtimehost.RuntimeFileLoggingPolicy
+	RuntimeMetricsPolicy        = runtimehost.RuntimeMetricsPolicy
 	RuntimeLogDiagnostics       = runtimehost.RuntimeLogDiagnostics
 	InvocationMetricsRecorder   = runtimehost.InvocationMetricsRecorder
 	InvocationMetric            = runtimehost.InvocationMetric
@@ -104,6 +100,8 @@ var (
 const (
 	RuntimeFileLoggingPolicyEnabled  = runtimehost.RuntimeFileLoggingPolicyEnabled
 	RuntimeFileLoggingPolicyDisabled = runtimehost.RuntimeFileLoggingPolicyDisabled
+	RuntimeMetricsPolicyEnabled      = runtimehost.RuntimeMetricsPolicyEnabled
+	RuntimeMetricsPolicyDisabled     = runtimehost.RuntimeMetricsPolicyDisabled
 )
 
 type (

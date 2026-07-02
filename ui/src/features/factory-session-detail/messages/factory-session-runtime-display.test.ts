@@ -2,6 +2,7 @@ import {
   formatFactoryOrchestratorKind,
   formatFactorySessionRuntimeStatus,
   formatFactorySessionScriptStatus,
+  resolveFactoryDispatchStatusTone,
 } from "./factory-session-runtime-display";
 
 describe("factory session runtime display", () => {
@@ -27,5 +28,24 @@ describe("factory session runtime display", () => {
     expect(formatFactoryOrchestratorKind("PETRI")).toBe("Petri net");
     expect(formatFactorySessionScriptStatus("RUNNING")).toBe("Running");
     expect(formatFactorySessionScriptStatus("IDLE")).toBe("Idle");
+  });
+
+  it("maps dispatch status to semantic status-pill tones", () => {
+    expect(resolveFactoryDispatchStatusTone({ status: "FAILED" })).toBe(
+      "danger",
+    );
+    expect(
+      resolveFactoryDispatchStatusTone({
+        status: "COMPLETED",
+        warningCount: 1,
+      }),
+    ).toBe("warning");
+    expect(resolveFactoryDispatchStatusTone({ status: "COMPLETED" })).toBe(
+      "success",
+    );
+    expect(resolveFactoryDispatchStatusTone({ status: "RUNNING" })).toBe(
+      "active",
+    );
+    expect(resolveFactoryDispatchStatusTone({ status: "QUEUED" })).toBe("info");
   });
 });

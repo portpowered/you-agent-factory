@@ -16,8 +16,8 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -25,8 +25,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
@@ -261,14 +261,14 @@ func ComposeFactoryCore(
 	}
 	defaultLiveSessionID := factorysessions.NewSessionID()
 	defaultSessionSpec, err := collaborators.RuntimeBuild.BuildSpec(ctx, runtimebuild.SessionSpecInput{
-		Dir:                                   cfg.Dir,
-		FolderPath:                            root.FactoryRootDir,
-		SessionID:                             defaultLiveSessionID,
-		ExecutionBaseDir:                      cfg.ExecutionBaseDir,
-		LoadedFactoryCfg:                      load.LoadedFactoryCfg,
-		RuntimeInstanceID:                     cfg.RuntimeInstanceID,
-		SideEffects:                           replaySideEffects,
-		AdditionalFactoryOpts:                 replayFactoryOpts,
+		Dir:                                    cfg.Dir,
+		FolderPath:                             root.FactoryRootDir,
+		SessionID:                              defaultLiveSessionID,
+		ExecutionBaseDir:                       cfg.ExecutionBaseDir,
+		LoadedFactoryCfg:                       load.LoadedFactoryCfg,
+		RuntimeInstanceID:                      cfg.RuntimeInstanceID,
+		SideEffects:                            replaySideEffects,
+		AdditionalFactoryOpts:                  replayFactoryOpts,
 		PreserveCompatibilityDefaultRecordPath: true,
 	})
 	if err != nil {

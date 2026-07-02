@@ -191,6 +191,60 @@ export async function selectComboboxOption(combobox, optionName) {
   await page.getByRole("option", { name: optionName, exact: true }).click();
 }
 
+/** Wait for the dashboard session sync-preflight handshake to succeed. */
+export async function waitForDashboardSyncPreflight(
+  page,
+  timeoutMs = readyTimeoutMs,
+) {
+  await page.waitForResponse(
+    (response) => {
+      try {
+        return (
+          sessionSyncPreflightPathPattern.test(
+            new URL(response.url()).pathname,
+          ) && response.ok()
+        );
+      } catch {
+        return false;
+      }
+    },
+    { timeout: timeoutMs },
+  );
+}
+
+/**
+ * Poll until the dashboard inline widget picker is mounted. Prefer this over
+ * heading-only readiness checkpoints because the header can render during
+ * sync-preflight recovery or empty-session shells before the bento mounts.
+ */
+export async function waitForDashboardWidgetPicker(
+  page,
+  timeoutMs = readyTimeoutMs,
+) {
+  await waitForDurableCheckpoint(
+    "dashboard widget picker",
+    async () =>
+      page
+        .getByRole("combobox", { name: "Browse widgets" })
+        .isVisible()
+        .catch(() => false),
+    timeoutMs,
+  );
+  return page.getByRole("combobox", { name: "Browse widgets" });
+}
+
+/** Open the dashboard and wait for sync-preflight plus the widget picker. */
+export async function gotoDashboardAndWaitForWidgetPicker(
+  page,
+  url,
+  timeoutMs = readyTimeoutMs,
+) {
+  const syncPreflightResponse = waitForDashboardSyncPreflight(page, timeoutMs);
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await syncPreflightResponse;
+  await waitForDashboardWidgetPicker(page, timeoutMs);
+}
+
 /** Open a labeled combobox within scope and choose an option by visible label. */
 export async function selectLabeledComboboxOption(scope, label, optionName) {
   await selectComboboxOption(

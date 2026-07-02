@@ -6,7 +6,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 )
 
@@ -14,8 +13,8 @@ import (
 type Services struct {
 	core              *Core
 	Sessions          *factorysessions.Registry
-	FactoryDefinition service.FactoryDefinitionService
-	Models            service.ModelService
+	FactoryDefinition FactoryDefinitionService
+	Models            ModelService
 	Workers           hostedworkers.Config
 	RuntimeHost       *runtimebuild.Service
 }
@@ -35,5 +34,19 @@ func (s *Services) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, b
 	if s == nil {
 		return nil, false
 	}
-	return service.StartupWorkerConfigFromCore(s.core, name)
+	return StartupWorkerConfigFromCore(s.core, name)
+}
+
+func servicesFromCore(core *Core) *Services {
+	if core == nil {
+		return nil
+	}
+	return &Services{
+		core:              core,
+		Sessions:          core.Sessions(),
+		FactoryDefinition: NewFactoryDefinitionServiceFromCore(core),
+		Models:            NewModelServiceFromCore(core),
+		Workers:           core.HostedWorkers(),
+		RuntimeHost:       core.RuntimeBuild(),
+	}
 }

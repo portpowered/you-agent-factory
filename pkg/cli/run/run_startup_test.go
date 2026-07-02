@@ -304,7 +304,7 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 
 	var diagnostics bytes.Buffer
 	err := Run(context.Background(), RunConfig{
-		Dir:     dir,
+		Dir:      dir,
 		Workflow: "workflow-1",
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",
@@ -580,6 +580,9 @@ func TestRun_WireBuiltFactoryServiceServesStatus(t *testing.T) {
 		t.Fatalf("Close listener: %v", err)
 	}
 
+	restoreBuilder := setInitializerRuntimeBuilder(t)
+	defer restoreBuilder()
+
 	originalStartAPIServer := startAPIServer
 	originalServeFactoryAPIServer := serveFactoryAPIServer
 	defer func() {
@@ -666,6 +669,9 @@ func TestRun_WireBuiltFactoryServiceListsModels(t *testing.T) {
 	if err := listener.Close(); err != nil {
 		t.Fatalf("Close listener: %v", err)
 	}
+
+	restoreBuilder := setInitializerRuntimeBuilder(t)
+	defer restoreBuilder()
 
 	originalStartAPIServer := startAPIServer
 	originalServeFactoryAPIServer := serveFactoryAPIServer

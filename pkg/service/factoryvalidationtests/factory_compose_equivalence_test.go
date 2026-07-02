@@ -7,7 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 )
 
 func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T) {
@@ -17,7 +17,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := t.Context()
-	cfg := &service.FactoryServiceConfig{Dir: dir}
+	cfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{Dir: dir})
 
 	built, err := service.BuildFactoryService(ctx, cfg)
 	if err != nil {
@@ -120,7 +120,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := t.Context()
-	cfg := &service.FactoryServiceConfig{
+	cfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir: dir,
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",
@@ -130,8 +130,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		},
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-		Logger:                                  zap.NewNop(),
-	}
+	})
 
 	built, err := service.BuildFactoryService(ctx, cfg)
 	if err != nil {

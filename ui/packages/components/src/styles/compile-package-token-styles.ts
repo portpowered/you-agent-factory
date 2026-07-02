@@ -1,22 +1,31 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { compile, type Resolver } from "@tailwindcss/node";
 
-import { compileDashboardStyles } from "../../../../src/test-support/compile-dashboard-styles";
-
-const uiStylesPath = path.resolve(
+const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
-  "..",
-  "..",
+);
+const packageStylesPath = path.join(packageRoot, "src", "styles.css");
+const packageTokenFixturePath = path.join(
+  packageRoot,
   "src",
-  "styles.css",
+  "styles",
+  "package-token-styles-fixture.css",
 );
 
-function extractBalancedBlock(
-  source: string,
-  marker: string,
-): string {
+function createPackageCssResolver(): Resolver {
+  return async (id) => {
+    if (id === "@you-agent-factory/components/styles.css") {
+      return packageStylesPath;
+    }
+    return undefined;
+  };
+}
+
+function extractBalancedBlock(source: string, marker: string): string {
   const start = source.indexOf(marker);
   if (start === -1) {
     return "";
@@ -59,19 +68,26 @@ function injectCompiledRootRules(
     compiledCss.match(/\[data-color-palette="[^"]+"\][^{]*\{[^}]*\}/g) ?? [];
   const themeLayer = extractBalancedBlock(compiledCss, "@layer theme");
   const style = documentRef.createElement("style");
-  style.textContent = [
-    themeLayer,
-    ...rootBlocks,
-    ...paletteBlocks,
-  ].join("\n");
+  style.textContent = [themeLayer, ...rootBlocks, ...paletteBlocks].join("\n");
   documentRef.head?.appendChild(style);
   return root;
+}
+
+export async function compilePackageTokenFixtureStyles(): Promise<string> {
+  const source = readFileSync(packageTokenFixturePath, "utf8");
+  const compiled = await compile(source, {
+    base: path.dirname(packageTokenFixturePath),
+    from: packageTokenFixturePath,
+    onDependency: () => {},
+    customCssResolver: createPackageCssResolver(),
+  });
+  return compiled.build([]);
 }
 
 export async function injectCompiledPackageTokenStyles(
   documentRef: Document,
 ): Promise<HTMLElement> {
-  const compiledCss = await compileDashboardStyles(uiStylesPath);
+  const compiledCss = await compilePackageTokenFixtureStyles();
   return injectCompiledRootRules(documentRef, compiledCss);
 }
 

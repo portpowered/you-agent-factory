@@ -277,7 +277,11 @@ export const DispatchDrilldownStates = {
         name: "Expand dispatch detail for dispatch-missing",
       }),
     );
-    expect(await canvas.findByText("This dispatch detail is no longer available.")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        "Dispatch detail for dispatch-missing is no longer available.",
+      ),
+    ).toBeTruthy();
     expect(
       await canvas.findByText(
         "Provider session: codex / session_id / provider-session-1",

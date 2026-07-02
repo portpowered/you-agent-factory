@@ -65,7 +65,7 @@ describe("layout-role-tokens (US-007)", () => {
 
   it("imports layout tokens from the component package styles entrypoint", () => {
     expect(stylesSource).toContain(
-      '@import "youagentfactory/components/styles.css";',
+      '@import "@you-agent-factory/components/styles.css";',
     );
   });
 
