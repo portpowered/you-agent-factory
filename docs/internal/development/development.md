@@ -28,7 +28,10 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 
 Run commands from the repository root shown above.
 
+Fresh checkouts should run `make init` once to install Bun dependencies for the dashboard (`ui/`) and the scoped components package (`ui/packages/components/`). The target requires Bun on `PATH`, stops on the first failed install, and does not require changing directories manually.
+
 ```bash
+make init
 make build
 make generate-api
 make api-smoke
@@ -52,6 +55,7 @@ make fmt
 make dashboard-verify
 make release VERSION=v1.2.3
 make ui-deps
+make ui-verify-fresh-npm-install
 make ui-build
 make ui-test
 make ui-integration-test
@@ -69,6 +73,7 @@ Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` 
 | Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Bun covered phases via `test:coverage`, then replay check |
 | Playwright integration | `cd ui && bun run test:integration` or `make ui-integration-test` | Vitest + Playwright |
 | Unit then integration | `cd ui && bun run test` | Bun unit lane, then Vitest integration |
+| Fresh npm install proof for scoped local components | `make ui-verify-fresh-npm-install` or `cd ui && npm run verify:fresh-npm-install` | Node script runs an isolated dashboard `npm install` and asserts `@you-agent-factory/components` resolves from `packages/components` |
 | Storybook browser stories | `cd ui && bun run storybook:test-runner:ci` or `make ui-test-storybook` | Vitest Storybook project (`vitest.storybook.config.ts`) |
 
 Prefer `bun run test:unit` (or `make ui-test`) over ad hoc `bun test <paths>` for dashboard unit work so batching, exclusions, preload, and worker policy stay aligned with CI. Targeted unit proof may still use `cd ui && bun test <paths>` when a story explicitly needs one file or subtree. Storybook browser, Storybook script verifiers, and the coverage standalone dashboard-shell script phase remain Vitest-only; idea and cleanup writeups should cite `bun run test:unit`, `make ui-test`, `make test-ui-coverage`, or the Storybook Vitest commands above instead of legacy `vitest run` unit invocations.

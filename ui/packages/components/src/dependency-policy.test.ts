@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-describe("youagentfactory/components dependency policy", () => {
+describe("@you-agent-factory/components dependency policy", () => {
   it("resolves recharts as an installable package dependency", async () => {
     const recharts = await import("recharts");
     expect(recharts.ResponsiveContainer).toBeDefined();
