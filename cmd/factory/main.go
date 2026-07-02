@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/pkg/cli"
 	"github.com/portpowered/infinite-you/pkg/cli/run"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 )
 
 var executeCLI = cli.Execute
@@ -18,14 +18,13 @@ func main() {
 	executeCLI()
 }
 
-func buildCLIRuntimeRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (run.RuntimeRunner, error) {
-	transport, err := compose.InjectCLITransport(ctx, cfg)
+func buildCLIRuntimeRunner(ctx context.Context, cfg *initializer.Config) (run.RuntimeRunner, error) {
+	runner, err := compose.InjectRuntimeRunner(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	runner := transport.Runner()
 	if runner == nil {
-		return nil, errors.New("initializer CLI transport missing runtime runner")
+		return nil, errors.New("initializer runtime runner missing")
 	}
 	return runner, nil
 }

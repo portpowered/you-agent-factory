@@ -1,6 +1,6 @@
-// Package service provides compatibility aliases and composition helpers for the
-// extracted runtime host. Authoritative runtime/session ownership lives in
-// pkg/runtimehost.
+// Package service provides compatibility aliases and legacy wire helpers for the
+// extracted runtime host. Authoritative composition lives in pkg/initializer and
+// pkg/composebridge; runtime/session ownership lives in pkg/runtimehost.
 package service
 
 import (
@@ -52,11 +52,6 @@ func ProvideSessionGatewayCollaborator(shell FactoryServiceShell, cfg *FactorySe
 
 func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway runtimehost.SessionGateway) *FactoryService {
 	return runtimehost.AttachSessionGatewayCollaborator(shell, gateway)
-}
-
-// ValidateReplayModeConfig rejects incompatible replay and record mode combinations.
-func ValidateReplayModeConfig(cfg *FactoryServiceConfig) error {
-	return runtimehost.ValidateReplayModeConfig(cfg)
 }
 
 func newInferenceProgressPublisherFactory(sessions *factorysessions.Registry, logger *zap.Logger) runtimehost.InferenceProgressPublisherFactory {

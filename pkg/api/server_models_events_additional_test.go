@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -167,9 +168,9 @@ func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t 
 		return &interfaces.FactoryEventStream{
 			BackendScopeID:      "backend-scope-001",
 			LogicalSessionKeyID: "/workspace/root::default::",
-			FactorySessionID:      "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f",
-			StreamGenerationID:    "stream-gen-live-001",
-			Events:                liveEvents,
+			FactorySessionID:    "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f",
+			StreamGenerationID:  "stream-gen-live-001",
+			Events:              liveEvents,
 		}, nil
 	})
 
@@ -298,8 +299,8 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 			wantMsg:    "model invocation operation is not supported",
 		},
 		{
-			name:       "provider_execution_timeout",
-			body:       validBody,
+			name: "provider_execution_timeout",
+			body: validBody,
 			invokeErr: &apisurface.InferenceFailure{
 				Class:   apisurface.InferenceFailureClassTimeout,
 				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
@@ -458,16 +459,16 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	transport, err := initializer.InitializeAPITransport(context.Background(), &initializer.Config{
 		Dir:               dir,
 		MockWorkersConfig: factoryconfig.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 	})
 	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
+		t.Fatalf("InitializeAPITransport: %v", err)
 	}
 
-	srv := NewServer(svc, 0, zap.NewNop())
+	srv := NewServer(transport.SessionAPISurface(), 0, zap.NewNop())
 	req := httptest.NewRequest(http.MethodGet, "/models", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -478,6 +479,26 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	response := decodeJSONResponse[factoryapi.ListModelsResponse](t, rec)
 	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("models = %#v, want one OMNIVOICE summary", response.Results)
+	}
+}
+
+func TestInjectAPITransport_RejectsInvalidFactoryBeforeServing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{Dir: t.TempDir()}
+
+	_, errInit := initializer.InitializeAPITransport(ctx, &initializer.Config{Dir: cfg.Dir})
+	_, errService := service.BuildFactoryService(ctx, cfg)
+
+	if errInit == nil {
+		t.Fatal("expected InitializeAPITransport to fail without factory.json")
+	}
+	if errService == nil {
+		t.Fatal("expected BuildFactoryService to fail without factory.json")
+	}
+	if errService.Error() != errInit.Error() {
+		t.Fatalf("InitializeAPITransport error = %q, want %q", errInit, errService)
 	}
 }
 

@@ -22,9 +22,12 @@ func TestInitialize_RejectsMissingFactoryConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &initializer.Config{Dir: t.TempDir()}
 
-	_, errInit := initializer.Initialize(ctx, cfg)
+	services, errInit := initializer.Initialize(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
+	if services != nil {
+		t.Fatal("expected Initialize to return nil services without factory.json")
+	}
 	if errInit == nil {
 		t.Fatal("expected Initialize to fail without factory.json")
 	}
@@ -66,9 +69,12 @@ func TestInitialize_RejectsInvalidFactoryConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &initializer.Config{Dir: dir}
 
-	_, errInit := initializer.Initialize(ctx, cfg)
+	services, errInit := initializer.Initialize(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
+	if services != nil {
+		t.Fatal("expected Initialize to return nil services for invalid workstation worker reference")
+	}
 	if errInit == nil {
 		t.Fatal("expected Initialize to fail for invalid workstation worker reference")
 	}
@@ -218,5 +224,62 @@ func TestInitialize_GetCurrentFactoryForSession_DefaultSession(t *testing.T) {
 	}
 	if factory.Name == "" {
 		t.Fatal("expected default session factory name")
+	}
+}
+
+func TestAPITransport_NilReceiverMethodsAreSafe(t *testing.T) {
+	t.Parallel()
+
+	var transport *initializer.APITransport
+	if transport.SessionAPISurface() != nil {
+		t.Fatal("expected nil session API surface for nil transport")
+	}
+	if err := transport.Run(context.Background()); err != nil {
+		t.Fatalf("Run on nil transport: %v", err)
+	}
+}
+
+func TestCLITransport_NilReceiverMethodsAreSafe(t *testing.T) {
+	t.Parallel()
+
+	var transport *initializer.CLITransport
+	if transport.Runner() != nil {
+		t.Fatal("expected nil runner for nil transport")
+	}
+}
+
+func TestMCPTransport_NilReceiverSessionClientUsesDefault(t *testing.T) {
+	t.Parallel()
+
+	var transport *initializer.MCPTransport
+	if transport.SessionClient() == nil {
+		t.Fatal("expected default MCP session client for nil transport")
+	}
+}
+
+func TestServices_NilStartupWorkerConfig(t *testing.T) {
+	t.Parallel()
+
+	var services *initializer.Services
+	if worker, ok := services.StartupWorkerConfig("worker-a"); worker != nil || ok {
+		t.Fatalf("StartupWorkerConfig(nil) = (%v, %v), want (nil, false)", worker, ok)
+	}
+}
+
+func TestSessionRuntimeHost_NilReceiverMethodsAreSafe(t *testing.T) {
+	t.Parallel()
+
+	var host *initializer.SessionRuntimeHost
+	if host.SessionAPISurface() != nil {
+		t.Fatal("expected nil session API surface for nil host")
+	}
+	if err := host.Run(context.Background()); err != nil {
+		t.Fatalf("Run on nil host: %v", err)
+	}
+	if host.LocalRuntimeRunner() != nil {
+		t.Fatal("expected nil local runtime runner for nil host")
+	}
+	if host.CompatibilityServiceShell() != nil {
+		t.Fatal("expected nil compatibility shell for nil host")
 	}
 }
