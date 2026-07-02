@@ -287,6 +287,32 @@ func TestRecordingInvocationMetrics_CapturesFactoryServiceMetrics(t *testing.T) 
 	}
 }
 
+func TestProductionFactoryServiceConfig_PreservesEnabledObservabilityPoliciesWithoutTestDeps(t *testing.T) {
+	t.Parallel()
+
+	productionCfg := &service.FactoryServiceConfig{}
+	if productionCfg.RuntimeFileLoggingPolicy != "" {
+		t.Fatalf("RuntimeFileLoggingPolicy = %q, want empty production default", productionCfg.RuntimeFileLoggingPolicy)
+	}
+	if productionCfg.RuntimeMetricsPolicy != "" {
+		t.Fatalf("RuntimeMetricsPolicy = %q, want empty production default", productionCfg.RuntimeMetricsPolicy)
+	}
+	if productionCfg.Logger != nil {
+		t.Fatal("expected unset logger before production wiring")
+	}
+
+	quietCfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{})
+	if quietCfg.RuntimeFileLoggingPolicy != service.RuntimeFileLoggingPolicyDisabled {
+		t.Fatalf("RuntimeFileLoggingPolicy = %q, want disabled after testdeps", quietCfg.RuntimeFileLoggingPolicy)
+	}
+	if quietCfg.RuntimeMetricsPolicy != service.RuntimeMetricsPolicyDisabled {
+		t.Fatalf("RuntimeMetricsPolicy = %q, want disabled after testdeps", quietCfg.RuntimeMetricsPolicy)
+	}
+	if quietCfg.Logger == nil {
+		t.Fatal("expected quiet logger after testdeps")
+	}
+}
+
 func TestApplyFactoryServiceConfig_PreservesCapturingLoggerAndMetricsRecorder(t *testing.T) {
 	t.Parallel()
 
