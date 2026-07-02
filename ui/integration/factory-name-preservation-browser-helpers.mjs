@@ -9,6 +9,8 @@ import {
   fillWorkstationPromptBody,
   uiInteractionTimeoutMs,
   waitForCapturedDownloadOrDialogError,
+  waitForDashboardSyncPreflight,
+  waitForDashboardWidgetPicker,
   waitForDialogHidden,
   waitForDurableControlEnabled,
 } from "./browser-test-harness.mjs";
@@ -281,15 +283,12 @@ export async function installCapturedDownloadHook(page) {
 }
 
 export async function waitForDashboardReady(page, previewURL, server) {
+  const syncPreflightResponse = waitForDashboardSyncPreflight(page);
   await page.goto(previewURL, {
     waitUntil: "domcontentloaded",
   });
-  await page
-    .getByRole("heading", { level: 1, name: "U", exact: true })
-    .waitFor({
-      state: "visible",
-      timeout: uiInteractionTimeoutMs,
-    });
+  await syncPreflightResponse;
+  await waitForDashboardWidgetPicker(page);
   await server.replayCompleted;
 }
 
