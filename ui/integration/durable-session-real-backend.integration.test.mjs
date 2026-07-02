@@ -102,7 +102,7 @@ async function assertRunningSummaryScenario(preview) {
   }
 }
 
-async function assertDispatchArtifactScenario(preview) {
+async function assertDispatchDetailScenario(preview) {
   const backend = await startRealBackendBrowserHarness({
     apiPort: preview.apiPort,
     startMode: "sync",
@@ -110,10 +110,19 @@ async function assertDispatchArtifactScenario(preview) {
     workflowName: "agent-run-fake-child",
   });
   const browserPage = await openBrowserPage({
-    artifactLabel: "durable-session-real-backend-dispatch-artifact",
+    artifactLabel: "durable-session-real-backend-dispatch",
   });
+  const dispatchDetailPath = `**/factory-sessions/${encodeURIComponent(backend.sessionID)}/dispatches/dispatch-1`;
 
   try {
+    await browserPage.page.route(
+      dispatchDetailPath,
+      async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 750));
+        await route.continue();
+      },
+      { times: 1 },
+    );
     await browserPage.page.goto(
       `${preview.previewURL}?factorySessionId=${encodeURIComponent(backend.sessionID)}`,
       {
@@ -131,6 +140,15 @@ async function assertDispatchArtifactScenario(preview) {
       .getByRole("button", { name: "Expand dispatch detail for dispatch-1" })
       .click();
     await browserPage.page
+      .getByText("Loading dispatch detail…", { exact: true })
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    await browserPage.page
+      .getByRole("heading", { name: "Factory session runtime" })
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    await browserPage.page
+      .getByText("Dispatch detail", { exact: true })
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    await browserPage.page
       .getByText("JavaScript task", { exact: true })
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
     await browserPage.page
@@ -138,28 +156,22 @@ async function assertDispatchArtifactScenario(preview) {
       .first()
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
     await browserPage.page
+      .getByText("COMPLETED", { exact: true })
+      .first()
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    await browserPage.page
+      .getByText("JAVASCRIPT_AGENT", { exact: true })
+      .first()
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    await browserPage.page
       .getByText("fake", { exact: true })
       .first()
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-    const artifactLink = browserPage.page.getByRole("link", {
-      name: "child-artifact-1",
-    });
-    await artifactLink.waitFor({
-      state: "visible",
-      timeout: uiInteractionTimeoutMs,
-    });
-    await Promise.all([
-      browserPage.page.waitForURL(
-        new RegExp(
-          `/factory-sessions/${encodeURIComponent(backend.sessionID)}/artifacts/child-artifact-1$`,
-        ),
-        { timeout: uiInteractionTimeoutMs },
-      ),
-      artifactLink.click(),
-    ]);
     await browserPage.page
-      .locator("body")
-      .getByText('"id":"child-artifact-1"')
+      .getByText("QUEUED", { exact: true })
+      .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+    await browserPage.page
+      .getByText("RUNNING", { exact: true })
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
     expectNoBrowserErrors(
@@ -192,8 +204,8 @@ describe.sequential("durable session real backend browser integration", () => {
   );
 
   it(
-    "shows real durable dispatch detail and artifact drilldown for a completed backend session through the dashboard factory-session detail path",
-    async () => assertDispatchArtifactScenario(preview),
+    "shows real durable dispatch detail with loading and terminal backend data through the dashboard factory-session detail path",
+    async () => assertDispatchDetailScenario(preview),
     browserScenarioTimeoutMs,
   );
 });
