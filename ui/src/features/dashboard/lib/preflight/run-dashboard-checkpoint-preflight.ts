@@ -4,6 +4,7 @@ import { getFactorySessionSyncPreflight } from "../../../../api/factory-sessions
 import type { FactoryTimelineCheckpoint } from "../../../timeline/public";
 import {
   clearTimelineCheckpointsForSession,
+  normalizeStreamDerivedCacheIdentity,
   peekPersistedTimelineCheckpoint,
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,
@@ -11,6 +12,7 @@ import {
 } from "../../../timeline/public";
 import {
   clearDashboardSessionRuntimeQueries,
+  isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
 } from "../dashboard-session-lifecycle";
 import {
@@ -20,6 +22,26 @@ import {
   shouldClearCheckpointAfterPreflight,
   syncPreflightIdentityHintsFromCheckpoint,
 } from "./dashboard-session-sync-preflight";
+
+function storedCheckpointMatchesResolvedStream(
+  stored: TimelineCheckpointStreamIdentity | null | undefined,
+  resolved: TimelineCheckpointStreamIdentity,
+): boolean {
+  const normalizedStored = normalizeStreamDerivedCacheIdentity(stored);
+  const normalizedResolved = normalizeStreamDerivedCacheIdentity(resolved);
+  if (!normalizedStored || !normalizedResolved) {
+    return true;
+  }
+  if (normalizedStored.factorySessionID !== normalizedResolved.factorySessionID) {
+    return true;
+  }
+  return (
+    normalizedStored.backendScopeID === normalizedResolved.backendScopeID &&
+    normalizedStored.logicalSessionKeyID ===
+      normalizedResolved.logicalSessionKeyID &&
+    normalizedStored.streamGenerationID === normalizedResolved.streamGenerationID
+  );
+}
 
 export interface DashboardCheckpointPreflightHydration {
   initialReconnectCursor?: ReturnType<typeof reconnectCursorFromCheckpoint>;
@@ -92,6 +114,26 @@ export async function runDashboardCheckpointPreflight({
       streamGenerationID: resolvedStreamIdentity.streamGenerationID,
     };
 
+    let reconnectCursorForStream = validatedReconnectCursor;
+    if (
+      peekedCheckpoint?.streamIdentity != null &&
+      !storedCheckpointMatchesResolvedStream(
+        peekedCheckpoint.streamIdentity,
+        checkpointStreamIdentity,
+      )
+    ) {
+      await clearTimelineCheckpointsForSession(
+        window.indexedDB,
+        requestedSessionId,
+      );
+      recoverDashboardSessionScopedState(
+        queryClient,
+        requestedSessionId,
+        () => {},
+      );
+      reconnectCursorForStream = undefined;
+    }
+
     if (shouldClearCheckpointAfterPreflight(response)) {
       await clearTimelineCheckpointsForSession(
         window.indexedDB,
@@ -111,7 +153,7 @@ export async function runDashboardCheckpointPreflight({
     }
 
     let checkpoint: FactoryTimelineCheckpoint | null = null;
-    if (checkpointReusable && validatedReconnectCursor) {
+    if (checkpointReusable && reconnectCursorForStream) {
       checkpoint = await readTimelineCheckpoint(
         window.indexedDB,
         checkpointStreamIdentity,
@@ -127,12 +169,18 @@ export async function runDashboardCheckpointPreflight({
       });
     }
 
-    if (resolvedSessionId !== requestedSessionId) {
+    if (
+      resolvedSessionId !== requestedSessionId &&
+      !isDefaultToRuntimeSessionAliasRemap(
+        requestedSessionId,
+        resolvedSessionId,
+      )
+    ) {
       onRemapSessionID(resolvedSessionId);
     }
 
     return {
-      initialReconnectCursor: validatedReconnectCursor,
+      initialReconnectCursor: reconnectCursorForStream,
       persistedCheckpoint: checkpoint,
       preflightError: null,
       preflightRecovery: null,

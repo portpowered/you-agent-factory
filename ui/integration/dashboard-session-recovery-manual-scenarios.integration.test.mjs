@@ -12,6 +12,7 @@ import {
   startBrowserPreview,
   startFactoryApiServer,
   waitForDurableCheckpoint,
+  openDashboardWithSeededCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
   buildStreamIdentity,
@@ -52,15 +53,16 @@ describe.sequential("dashboard session recovery manual scenarios", () => {
 
       try {
         const network = await installNetworkCapture(browserPage.page);
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await seedTimelineCheckpoint(browserPage.page, identity, {
-          afterEventId: "manual-restart-event-5",
-          afterSequence: 5,
-          selectedTick: 5,
-        });
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await openDashboardWithSeededCheckpoint(
+          browserPage.page,
+          preview.previewURL,
+          () =>
+            seedTimelineCheckpoint(browserPage.page, identity, {
+              afterEventId: "manual-restart-event-5",
+              afterSequence: 5,
+              selectedTick: 5,
+            }),
+        );
 
         await waitForDurableCheckpoint(
           "restart cursor reuse",

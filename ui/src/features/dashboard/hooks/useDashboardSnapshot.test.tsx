@@ -633,7 +633,7 @@ describe("useDashboardSnapshot composer", () => {
       `/factory-sessions/${DEFAULT_RUNTIME_FACTORY_SESSION_ID}/events`,
     );
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
-      DEFAULT_RUNTIME_FACTORY_SESSION_ID,
+      DEFAULT_FACTORY_SESSION_ID,
     );
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(
       false,

@@ -82,6 +82,23 @@ export function isDefaultFactorySessionAliasRemap(
   );
 }
 
+/** True when sync-preflight remaps the default alias to its runtime UUID identity. */
+export function isDefaultToRuntimeSessionAliasRemap(
+  previousSessionID: string | null,
+  sessionID: string | null,
+): boolean {
+  if (previousSessionID == null || sessionID == null) {
+    return false;
+  }
+  if (previousSessionID === sessionID) {
+    return false;
+  }
+  return (
+    isDefaultFactorySessionID(previousSessionID) &&
+    !isDefaultFactorySessionID(sessionID)
+  );
+}
+
 export function resetDashboardSessionScopedState(
   queryClient: QueryClient,
   resetStreamState: (locale?: string | null) => void,

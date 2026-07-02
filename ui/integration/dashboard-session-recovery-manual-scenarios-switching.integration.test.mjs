@@ -13,6 +13,7 @@ import {
   startFactoryApiServer,
   uiInteractionTimeoutMs,
   waitForDurableCheckpoint,
+  openDashboardWithSeededCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
   buildStreamIdentity,
@@ -148,16 +149,18 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
 
       try {
         const tabOneNetwork = await installNetworkCapture(browserPage.page);
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await clearTimelineCheckpoints(browserPage.page);
-        await seedTimelineCheckpoint(browserPage.page, identity, {
-          afterEventId: "multi-tab-event-4",
-          afterSequence: 4,
-          selectedTick: 4,
-        });
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await openDashboardWithSeededCheckpoint(
+          browserPage.page,
+          preview.previewURL,
+          async () => {
+            await clearTimelineCheckpoints(browserPage.page);
+            await seedTimelineCheckpoint(browserPage.page, identity, {
+              afterEventId: "multi-tab-event-4",
+              afterSequence: 4,
+              selectedTick: 4,
+            });
+          },
+        );
 
         await waitForDurableCheckpoint(
           "tab one cursor reuse",
