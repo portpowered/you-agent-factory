@@ -741,9 +741,15 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
       ),
     );
     getSyncPreflightSpy = vi
-      .spyOn(syncPreflightAPI, "getFactorySessionSyncPreflight")
-      .mockImplementation(async (sessionID, reconnectCursor) =>
-        okSyncPreflightResponseForSession(sessionID, reconnectCursor),
+      .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
+      .mockImplementation(async (sessionID) =>
+        buildSyncPreflightResponse({
+          factorySessionId:
+            sessionID === DEFAULT_FACTORY_SESSION_ID
+              ? RESOLVED_DEFAULT_SESSION_UUID
+              : sessionID,
+          requestedSessionId: sessionID,
+        }),
       );
     window.sessionStorage.clear();
     queryClient = new QueryClient({
