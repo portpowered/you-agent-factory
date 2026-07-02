@@ -65,6 +65,37 @@ export function buildSuccessfulLiveProviderDispatchDetail() {
   };
 }
 
+export function buildFailedBridgedChildDurableSession(
+  sessionId = failedBridgedChildSessionID,
+) {
+  return {
+    dialect: "you-workflow-v1",
+    lifecycle: {
+      finishedAt: "2026-06-08T14:10:00Z",
+      startedAt: "2026-06-08T14:00:00Z",
+    },
+    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+    progress: {
+      completedDispatches: 1,
+      failedDispatches: 1,
+      inFlightDispatches: 0,
+      totalDispatches: 2,
+    },
+    resolvedSource: {
+      kind: "INLINE_WORKFLOW",
+      sourceRef: "inline-workflow/req-js-failed-partial-001",
+      sourceHash: "sha256:inline-workflow-001",
+    },
+    resultSummary: {
+      resultStatus: "FAILED_WITH_PARTIAL",
+      summary: "Partial synthesis available before verify failed.",
+    },
+    sessionId,
+    status: "FAILED",
+    usage: { resources: [] },
+  };
+}
+
 export function buildFailedBridgedChildDispatchSummary() {
   return {
     attempt: 1,
@@ -85,5 +116,47 @@ export function buildFailedBridgedChildDispatchSummary() {
     providerSessionRefs: [failedBridgedChildProviderSessionRef],
     sessionId: failedBridgedChildSessionID,
     status: "FAILED",
+  };
+}
+
+export function buildFailedBridgedChildDispatchList() {
+  return {
+    dispatches: [
+      {
+        attempt: 1,
+        dispatchKind: "JAVASCRIPT_SYNTHESIZE",
+        id: "disp-js-fail-001",
+        label: "synthesize",
+        sessionId: failedBridgedChildSessionID,
+        status: "COMPLETED",
+      },
+      buildFailedBridgedChildDispatchSummary(),
+    ],
+    sessionId: failedBridgedChildSessionID,
+  };
+}
+
+export function buildFailedBridgedChildDispatchDetail() {
+  return {
+    attempt: 1,
+    dispatchKind: "JAVASCRIPT_VERIFY",
+    failureDetail: {
+      errorClass: "verification_error",
+      message: "Expected release manifest checksum.",
+      reason: "VERIFY_ASSERTION_FAILED",
+    },
+    id: failedBridgedChildDispatchID,
+    javascript: {
+      executionMode: "live",
+      taskKind: "VERIFY",
+      taskLabel: "verify",
+    },
+    label: "verify",
+    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+    providerSessionRefs: [failedBridgedChildProviderSessionRef],
+    relatedWorkIds: [],
+    sessionId: failedBridgedChildSessionID,
+    status: "FAILED",
+    statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
   };
 }

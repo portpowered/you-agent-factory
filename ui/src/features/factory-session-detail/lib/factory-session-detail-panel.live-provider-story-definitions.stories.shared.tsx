@@ -3,8 +3,14 @@ import { expect, userEvent, within } from "storybook/test";
 
 import { buildSuccessfulDurableSession } from "../../../testing/factory-session-event-replay-fixtures";
 import {
+  buildFailedBridgedChildDispatchDetail,
+  buildFailedBridgedChildDispatchList,
+  buildFailedBridgedChildDurableSession,
   buildSuccessfulLiveProviderDispatchDetail,
   buildSuccessfulLiveProviderDispatchList,
+  failedBridgedChildDispatchID,
+  failedBridgedChildProviderSessionRef,
+  failedBridgedChildSessionID,
   successfulLiveProviderDispatchID,
   successfulLiveProviderSessionID,
   successfulLiveProviderSessionRef,
@@ -101,4 +107,80 @@ export const LiveProviderSuccessInspection = {
     ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
+};
+
+export const FailedBridgedChildInspection = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${failedBridgedChildSessionID}`,
+          response: {
+            body: buildFailedBridgedChildDurableSession(failedBridgedChildSessionID),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${failedBridgedChildSessionID}/dispatches`,
+          response: {
+            body: buildFailedBridgedChildDispatchList(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${failedBridgedChildSessionID}/dispatches/${failedBridgedChildDispatchID}`,
+          response: {
+            body: buildFailedBridgedChildDispatchDetail(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${failedBridgedChildSessionID}/results?mode=final`,
+          response: {
+            status: 404,
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${failedBridgedChildSessionID}/results?mode=partial`,
+          response: {
+            status: 404,
+          },
+        },
+      ],
+      sessionID: failedBridgedChildSessionID,
+    },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByText("Execution mode: live")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        `Provider session: ${failedBridgedChildProviderSessionRef.provider} / ${failedBridgedChildProviderSessionRef.kind} / ${failedBridgedChildProviderSessionRef.id}`,
+      ),
+    ).toBeTruthy();
+
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: `Expand dispatch detail for ${failedBridgedChildDispatchID}`,
+      }),
+    );
+
+    expect(await canvas.findByText("Failure detail")).toBeTruthy();
+    expect(await canvas.findByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
+    expect(await canvas.findByText("verification_error")).toBeTruthy();
+    expect(
+      await canvas.findByText("Expected release manifest checksum."),
+    ).toBeTruthy();
+    expect(await canvas.findByText("JavaScript task")).toBeTruthy();
+    expect(await canvas.findByText("Provider sessions")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        `${failedBridgedChildProviderSessionRef.kind} · ${failedBridgedChildProviderSessionRef.id}`,
+      ),
+    ).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(failedBridgedChildSessionID),
 };

@@ -1,4 +1,5 @@
 import {
+  FailedBridgedChildInspection as failedBridgedChildInspectionStory,
   LiveProviderSuccessInspection as liveProviderSuccessInspectionStory,
 } from "../lib/factory-session-detail-panel.live-provider-story-definitions.stories.shared";
 import {
@@ -22,6 +23,9 @@ export default {
 export const DispatchDrilldownStates = { ...dispatchDrilldownStatesStory };
 export const LiveProviderSuccessInspection = {
   ...liveProviderSuccessInspectionStory,
+};
+export const FailedBridgedChildInspection = {
+  ...failedBridgedChildInspectionStory,
 };
 export const DurableReplayDisclosure = { ...durableReplayDisclosureStory };
 export const DurableReplayDisclosureAwaitingApproval = {
