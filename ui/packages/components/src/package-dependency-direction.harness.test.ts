@@ -151,6 +151,33 @@ describe("package dependency-direction harness", () => {
     ]);
   });
 
+  it("flags lower layers importing higher package layers through directory index files", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "package-dependency-direction-index-imports-"),
+    );
+    tempRoots.push(tempRoot);
+
+    const packageSrcDir = await createPackageTree(
+      {
+        "primitives/bad.ts": 'import { SettingsSection } from "../recipes";\nexport const bad = SettingsSection;\n',
+        "recipes/index.ts": 'export function SettingsSection() { return null; }\n',
+      },
+      tempRoot,
+    );
+
+    const report = await scanPackageDependencyDirection(packageSrcDir);
+
+    expect(report.violations).toEqual([
+      expect.objectContaining({
+        kind: "package-layer-violation",
+        importPath: "../recipes",
+        relativeFilePath: "src/primitives/bad.ts",
+        sourceLayer: "primitives",
+        targetLayer: "recipes",
+      }),
+    ]);
+  });
+
   it("CLI fails with actionable output for dependency-direction violations", async () => {
     const tempRoot = await mkdtemp(
       path.join(os.tmpdir(), "package-dependency-direction-cli-failure-"),

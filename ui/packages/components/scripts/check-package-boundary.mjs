@@ -4,6 +4,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+import { resolveRelativeImport } from "./resolve-relative-import.mjs";
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPackageDir = path.resolve(scriptDir, "..");
 const defaultPackageSrcDir = path.join(defaultPackageDir, "src");
@@ -71,25 +73,6 @@ function getScriptKind(filePath) {
   }
 
   return ts.ScriptKind.JS;
-}
-
-function resolveRelativeImport(specifier, filePath) {
-  if (!specifier.startsWith(".")) {
-    return null;
-  }
-
-  const resolvedPath = path.resolve(path.dirname(filePath), specifier);
-  const extension = path.extname(resolvedPath);
-
-  if (extension.length > 0) {
-    return resolvedPath;
-  }
-
-  for (const candidateExtension of [".tsx", ".ts", ".jsx", ".js"]) {
-    return `${resolvedPath}${candidateExtension}`;
-  }
-
-  return resolvedPath;
 }
 
 function classifyRuntimeModuleImport(specifier) {

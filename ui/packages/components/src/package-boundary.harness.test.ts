@@ -223,6 +223,40 @@ describe("package boundary harness", () => {
     });
   });
 
+  it("flags dashboard API directory imports that resolve through index files", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "package-boundary-dashboard-index-imports-"),
+    );
+    tempRoots.push(tempRoot);
+
+    const packageSrcDir = await createPackageTree(
+      {
+        "widgets/bad.ts": 'import { apiClient } from "../../dashboard-src/api";\nexport const bad = apiClient;\n',
+      },
+      tempRoot,
+    );
+    const fixtureDashboardSrcDir = path.join(tempRoot, "dashboard-src");
+
+    await createDashboardFixture(
+      tempRoot,
+      "api/index.ts",
+      "export const apiClient = {};\n",
+    );
+
+    const report = await scanPackageBoundary(
+      packageSrcDir,
+      fixtureDashboardSrcDir,
+    );
+
+    expect(report.violations).toEqual([
+      expect.objectContaining({
+        kind: "dashboard-api-import",
+        importPath: "../../dashboard-src/api",
+        relativeFilePath: "src/widgets/bad.ts",
+      }),
+    ]);
+  });
+
   it("CLI fails with actionable output for boundary violations", async () => {
     const tempRoot = await mkdtemp(
       path.join(os.tmpdir(), "package-boundary-cli-failure-"),
