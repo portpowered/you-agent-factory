@@ -1,8 +1,8 @@
 package initializer
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // NewModelServiceFromCore constructs a ModelService from a composed Core without

@@ -59,7 +59,7 @@ func TestStartupCompatibility_RejectsInvalidOperatorDefaultsDuringRuntimeBuild(t
 
 	ctx := context.Background()
 	cfg := &initializer.Config{
-		Dir: dir,
+		Dir:    dir,
 		Logger: zap.NewNop(),
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider: "NOT_A_REAL_PROVIDER",
@@ -222,7 +222,8 @@ func writeStartupCompatibilityWorkstationAgentsMD(t *testing.T, factoryDir, work
 // Consolidated startup evidence for service-break-06-006: all transport composition
 // entrypoints succeed for a valid factory configuration without constructing
 // root pkg/service. Focused verification command:
-//   go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short
+//
+//	go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short
 func TestStartupEvidence_ValidFactoryConfigComposesAllTransportBundles(t *testing.T) {
 	t.Parallel()
 

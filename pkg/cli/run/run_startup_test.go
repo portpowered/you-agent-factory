@@ -304,7 +304,7 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 
 	var diagnostics bytes.Buffer
 	err := Run(context.Background(), RunConfig{
-		Dir:     dir,
+		Dir:      dir,
 		Workflow: "workflow-1",
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",

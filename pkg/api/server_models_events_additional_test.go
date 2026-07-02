@@ -168,9 +168,9 @@ func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t 
 		return &interfaces.FactoryEventStream{
 			BackendScopeID:      "backend-scope-001",
 			LogicalSessionKeyID: "/workspace/root::default::",
-			FactorySessionID:      "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f",
-			StreamGenerationID:    "stream-gen-live-001",
-			Events:                liveEvents,
+			FactorySessionID:    "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f",
+			StreamGenerationID:  "stream-gen-live-001",
+			Events:              liveEvents,
 		}, nil
 	})
 
@@ -299,8 +299,8 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 			wantMsg:    "model invocation operation is not supported",
 		},
 		{
-			name:       "provider_execution_timeout",
-			body:       validBody,
+			name: "provider_execution_timeout",
+			body: validBody,
 			invokeErr: &apisurface.InferenceFailure{
 				Class:   apisurface.InferenceFailureClassTimeout,
 				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
