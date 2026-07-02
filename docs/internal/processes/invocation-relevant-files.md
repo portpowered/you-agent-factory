@@ -252,6 +252,16 @@ primary-result behavior.
   empty-input and unresolved-primary-result failures. Reuse
   `scaffoldPackagedGoalInvocationFactoryForSmoke`, `buildYouCLIBinary`, and
   `support.StartFunctionalAPIServer` when extending parity coverage.
+- Final `@you/goal` decision-routing smoke coverage lives in
+  `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`, exercising
+  named-factory CLI `--json` outcomes for accepted, blocked, needs-human, and
+  failed classifier labels plus API-backed fixtures for interrupted routing,
+  needs_changes rework loops, and structured unknown decisions. Reuse
+  `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
+  and `support.StartFunctionalAPIServer` when extending routing verification.
+  Complement with `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
+  and `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` for
+  transitioner and topology-level routing proofs.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
