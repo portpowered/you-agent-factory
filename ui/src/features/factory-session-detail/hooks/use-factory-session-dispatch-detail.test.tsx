@@ -62,6 +62,33 @@ describe("useFactorySessionDispatchDetail", () => {
     expect(result.current).toEqual({ status: "idle" });
   });
 
+  it("returns loading while dispatch detail is resolving", () => {
+    vi.mocked(getFactorySessionDispatchDetail).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useFactorySessionDispatchDetail(
+          "dur-sess-js-success-002",
+          "dispatch-success",
+        ),
+      { wrapper: createWrapper() },
+    );
+
+    expect(result.current).toEqual({ status: "loading" });
+  });
+});
+
+describe("useFactorySessionDispatchDetail success and error states", () => {
+  beforeEach(() => {
+    vi.mocked(getFactorySessionDispatchDetail).mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("projects a successful durable dispatch detail read", async () => {
     vi.mocked(getFactorySessionDispatchDetail).mockResolvedValue({
       artifactIds: ["artifact-final-1"],
