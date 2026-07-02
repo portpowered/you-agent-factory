@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { createComponentsPackageAliases } from "./packages/components/src/vite-aliases";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
-import { coverageConfigDefaults } from "vitest/config";
+import { configDefaults, coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
@@ -130,6 +130,7 @@ export default defineConfig({
     },
     environment: "jsdom",
     exclude: [
+      ...configDefaults.exclude,
       "packages/components/src/**/*.test.ts",
       "packages/components/src/**/*.test.tsx",
       "packages/components/src/**/*.harness.test.ts",
