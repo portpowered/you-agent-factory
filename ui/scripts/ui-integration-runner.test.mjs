@@ -3,16 +3,33 @@ import { expect, test, vi } from "vitest";
 import {
   browserIntegrationPhaseName,
   buildBrowserIntegrationVitestArgs,
+  buildFocusedBrowserIntegrationVitestArgs,
   formatPhaseElapsed,
   phaseLogPrefix,
   runBrowserIntegration,
+  runFocusedBrowserIntegration,
 } from "./ui-integration-runner.mjs";
+import { durableSessionRealBackendIntegrationFiles } from "./ui-integration-targets.mjs";
 
 test("builds stable browser integration vitest args", () => {
   expect(buildBrowserIntegrationVitestArgs()).toEqual([
     "run",
     "--dir",
     "integration",
+    "--no-file-parallelism",
+    "--maxWorkers",
+    "1",
+  ]);
+});
+
+test("builds focused browser integration vitest args for durable session proof", () => {
+  expect(
+    buildFocusedBrowserIntegrationVitestArgs(
+      durableSessionRealBackendIntegrationFiles,
+    ),
+  ).toEqual([
+    "run",
+    ...durableSessionRealBackendIntegrationFiles,
     "--no-file-parallelism",
     "--maxWorkers",
     "1",
@@ -49,6 +66,34 @@ test("runBrowserIntegration emits categorized slow-file summary", () => {
   );
   expect(log).toHaveBeenCalledWith(
     `${phaseLogPrefix}   integration/factory-import-second-session.integration.test.mjs 120.00s [import-export]`,
+  );
+  expect(exit).not.toHaveBeenCalled();
+
+  log.mockRestore();
+  exit.mockRestore();
+});
+
+test("runFocusedBrowserIntegration runs only the requested integration files", () => {
+  const fixtureStdout =
+    " ✓ integration/durable-session-real-backend.integration.test.mjs (3 tests) 120000ms";
+  const spawn = vi.fn(() => ({ status: 0, stdout: fixtureStdout }));
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
+
+  runFocusedBrowserIntegration(durableSessionRealBackendIntegrationFiles, {
+    spawn,
+    phaseName: "Durable session real-backend browser integration Vitest pass",
+  });
+
+  expect(spawn).toHaveBeenCalledWith(
+    "vitest",
+    buildFocusedBrowserIntegrationVitestArgs(
+      durableSessionRealBackendIntegrationFiles,
+    ),
+    expect.objectContaining({
+      encoding: "utf8",
+      stdio: ["inherit", "pipe", "inherit"],
+    }),
   );
   expect(exit).not.toHaveBeenCalled();
 

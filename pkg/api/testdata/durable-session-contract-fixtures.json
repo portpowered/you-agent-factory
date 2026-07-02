@@ -791,6 +791,13 @@
           "dispatchKind": "JAVASCRIPT_VERIFY",
           "label": "verify",
           "attempt": 1,
+          "providerSessionRefs": [
+            {
+              "provider": "codex",
+              "kind": "session_id",
+              "id": "resp-verify-failed-001"
+            }
+          ],
           "javascript": {
             "taskKind": "VERIFY",
             "taskLabel": "verify",
@@ -798,7 +805,8 @@
           },
           "failureDetail": {
             "reason": "VERIFY_ASSERTION_FAILED",
-            "message": "Expected release manifest checksum."
+            "message": "Expected release manifest checksum.",
+            "errorClass": "verification_error"
           }
         }
       ],
@@ -815,10 +823,18 @@
           "taskLabel": "verify",
           "executionMode": "live"
         },
+        "providerSessionRefs": [
+          {
+            "provider": "codex",
+            "kind": "session_id",
+            "id": "resp-verify-failed-001"
+          }
+        ],
         "statusTransitions": ["QUEUED", "RUNNING", "FAILED"],
         "failureDetail": {
           "reason": "VERIFY_ASSERTION_FAILED",
-          "message": "Expected release manifest checksum."
+          "message": "Expected release manifest checksum.",
+          "errorClass": "verification_error"
         }
       },
       "artifacts": [],

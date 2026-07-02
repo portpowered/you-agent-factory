@@ -1,4 +1,10 @@
 import {
+  FailedBridgedChildInspection as failedBridgedChildInspectionStory,
+  LiveProviderAdjacentSurfacesRegression as liveProviderAdjacentSurfacesRegressionStory,
+  LiveProviderDispatchDetailUnavailable as liveProviderDispatchDetailUnavailableStory,
+  LiveProviderSuccessInspection as liveProviderSuccessInspectionStory,
+} from "./factory-session-detail-panel.live-provider-story-definitions.stories.shared";
+import {
   DispatchDrilldownStates as dispatchDrilldownStatesStory,
 } from "../../lib/factory-session-detail-panel.story-definitions.stories.shared";
 import { ArtifactDrilldown as artifactDrilldownStory } from "../../lib/factory-session-detail-panel.artifact-story-definitions.stories.shared";
@@ -19,6 +25,18 @@ export default {
 };
 
 export const DispatchDrilldownStates = { ...dispatchDrilldownStatesStory };
+export const LiveProviderSuccessInspection = {
+  ...liveProviderSuccessInspectionStory,
+};
+export const FailedBridgedChildInspection = {
+  ...failedBridgedChildInspectionStory,
+};
+export const LiveProviderAdjacentSurfacesRegression = {
+  ...liveProviderAdjacentSurfacesRegressionStory,
+};
+export const LiveProviderDispatchDetailUnavailable = {
+  ...liveProviderDispatchDetailUnavailableStory,
+};
 export const ArtifactDrilldown = { ...artifactDrilldownStory };
 export const DurableReplayDisclosure = { ...durableReplayDisclosureStory };
 export const DurableReplayDisclosureAwaitingApproval = {
