@@ -434,6 +434,52 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             git(["rev-parse", "refs/remotes/origin/main"], local_repo).stdout.strip(),
         )
 
+    def test_restore_stashed_changes_falls_back_when_index_apply_conflicts(self):
+        recorded = []
+        original_run_git = self.module.run_git
+
+        def fake_run_git(*args, **kwargs):
+            recorded.append(args)
+            if args == ("stash", "apply", "--index", "stash@{0}"):
+                return subprocess.CompletedProcess(
+                    ["git", *args],
+                    1,
+                    stdout="",
+                    stderr=(
+                        "error: conflicts in index. "
+                        "Try without --index."
+                    ),
+                )
+            if args == ("stash", "apply", "stash@{0}"):
+                return subprocess.CompletedProcess(
+                    ["git", *args],
+                    0,
+                    stdout="applied\n",
+                    stderr="",
+                )
+            if args == ("stash", "drop", "stash@{0}"):
+                return subprocess.CompletedProcess(
+                    ["git", *args],
+                    0,
+                    stdout="dropped\n",
+                    stderr="",
+                )
+            return original_run_git(*args, **kwargs)
+
+        self.module.run_git = fake_run_git
+        try:
+            self.module.restore_stashed_changes(
+                self.repo_path,
+                "stash@{0}",
+                "root main",
+            )
+        finally:
+            self.module.run_git = original_run_git
+
+        self.assertEqual(recorded[0], ("stash", "apply", "--index", "stash@{0}"))
+        self.assertEqual(recorded[1], ("stash", "apply", "stash@{0}"))
+        self.assertEqual(recorded[2], ("stash", "drop", "stash@{0}"))
+
 
 if __name__ == "__main__":
     unittest.main()
