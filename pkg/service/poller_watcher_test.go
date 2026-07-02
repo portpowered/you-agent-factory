@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -42,11 +43,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunW
 		outcomes: []pollerRunOutcome{{result: workers.CommandResult{}}},
 	}
 	logCore, _ := observer.New(zap.InfoLevel)
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
-		logger: zap.New(logCore),
-		clock:  fakeClock,
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		Logger: zap.New(logCore),
+		Clock:  fakeClock,
+	})
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           canonicalScriptPollerWorkstationName,
 		Type:           interfaces.WorkstationTypePoller,
@@ -73,10 +74,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunW
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 }
@@ -92,11 +93,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		},
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
-		logger: zap.New(logCore),
-		clock:  fakeClock,
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		Logger: zap.New(logCore),
+		Clock:  fakeClock,
+	})
 	poller := newCanonicalScriptPollerWorkstation()
 	standard := interfaces.FactoryWorkstationConfig{
 		Name:           "processor",
@@ -127,10 +128,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 	waitForFakeClockWaiters(t, fakeClock, 1)
@@ -163,10 +164,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 	runner := &pollerSequenceCommandRunner{
 		outcomes: []pollerRunOutcome{{waitForCancel: true}},
 	}
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch, CommandRunnerOverride: runner}),
-		logger: zap.NewNop(),
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch, CommandRunnerOverride: runner}),
+		Logger: zap.NewNop(),
+	})
 	poller := newCanonicalScriptPollerWorkstation()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
@@ -181,10 +182,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		},
 	}
 
-	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(context.Background(), handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	time.Sleep(50 * time.Millisecond)
 	if runner.callCount() != 0 {
@@ -232,11 +233,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		HostedPollerHTTPClient: server.Client(),
 		HostedLinearEndpoint:   server.URL,
 	}
-	svc := &FactoryService{
-		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
-		logger:        zap.NewNop(),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
-	}
+	svc := newTestFactoryServiceWithHostedWorkers(svcCfg, zap.NewNop())
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -274,10 +271,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	waitForHostedPollerSubmission(t, submitted, 1, time.Second)
 	if submitted.submitCalls != 1 {
@@ -355,11 +352,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		HostedPollerHTTPClient: server.Client(),
 		HostedLinearEndpoint:   server.URL,
 	}
-	svc := &FactoryService{
-		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
-		logger:        zap.New(logCore),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
-	}
+	svc := newTestFactoryServiceWithHostedWorkers(svcCfg, zap.New(logCore))
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -395,12 +388,12 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		},
 	}
 
-	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(context.Background(), handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
 
 	waitForObservedLogMessage(t, observedLogs, "hosted linear poller started", time.Second)
-	svc.stopLiveRuntimeSidecars(handle)
+	svc.StopLiveRuntimeSidecars(handle)
 
 	stopped := observedLogs.FilterMessage("hosted linear poller stopped").All()
 	if len(stopped) != 1 {
@@ -414,11 +407,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvider(t *testing.T) {
 	logCore, observedLogs := observer.New(zap.WarnLevel)
 	svcCfg := &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}
-	svc := &FactoryService{
-		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
-		logger:        zap.New(logCore),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
-	}
+	svc := newTestFactoryServiceWithHostedWorkers(svcCfg, zap.New(logCore))
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "custom-ingress",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -448,10 +437,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	time.Sleep(50 * time.Millisecond)
 	disabled := observedLogs.FilterMessage("hosted poller disabled").All()
@@ -479,11 +468,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 		},
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
-		logger: zap.New(logCore),
-		clock:  fakeClock,
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		Logger: zap.New(logCore),
+		Clock:  fakeClock,
+	})
 	poller := newCanonicalScriptPollerWorkstation()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
@@ -500,10 +489,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 	waitForFakeClockWaiters(t, fakeClock, 1)
@@ -524,10 +513,10 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 		outcomes: []pollerRunOutcome{{waitForCancel: true}},
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
-		logger: zap.New(logCore),
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		Logger: zap.New(logCore),
+	})
 	poller := newCanonicalScriptPollerWorkstation()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
@@ -542,12 +531,12 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 		},
 	}
 
-	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(context.Background(), handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
 
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
-	svc.stopLiveRuntimeSidecars(handle)
+	svc.StopLiveRuntimeSidecars(handle)
 
 	if observedLogs.FilterMessage("script poller started").Len() != 1 {
 		t.Fatalf("script poller started log count = %d, want 1", observedLogs.FilterMessage("script poller started").Len())
@@ -571,10 +560,10 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 			{waitForCancel: true},
 		},
 	}
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
-		logger: zap.NewNop(),
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		Logger: zap.NewNop(),
+	})
 	oldPoller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress-old",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -588,17 +577,17 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 	oldHandle := newScriptPollerRuntimeHandleForWorkstation(t, oldPoller, &aggregateSnapshotFactory{})
 	newHandle := newScriptPollerRuntimeHandleForWorkstation(t, newPoller, &aggregateSnapshotFactory{})
 
-	if err := svc.startLiveRuntimeSidecars(context.Background(), oldHandle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(context.Background(), oldHandle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars(old): %v", err)
 	}
 	waitForPollerRunnerCalls(t, runner, 1, time.Second)
 
-	svc.stopLiveRuntimeSidecars(oldHandle)
+	svc.StopLiveRuntimeSidecars(oldHandle)
 
-	if err := svc.startLiveRuntimeSidecars(context.Background(), newHandle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(context.Background(), newHandle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars(new): %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(newHandle)
+	defer svc.StopLiveRuntimeSidecars(newHandle)
 	waitForPollerRunnerCalls(t, runner, 2, time.Second)
 
 	reqs := runner.requests()
@@ -635,21 +624,21 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 		},
 	}
 	newFactory := &aggregateSnapshotFactory{}
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
-		logger: zap.NewNop(),
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		Logger: zap.NewNop(),
+	})
 	oldHandle := newScriptPollerRuntimeHandle(t, "linear-ingress-old", oldFactory)
 	newHandle := newScriptPollerRuntimeHandle(t, "linear-ingress-new", newFactory)
 
-	if err := svc.startLiveRuntimeSidecars(context.Background(), oldHandle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(context.Background(), oldHandle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars(old): %v", err)
 	}
 	<-submitStarted
 
 	stopped := make(chan struct{})
 	go func() {
-		svc.stopLiveRuntimeSidecars(oldHandle)
+		svc.StopLiveRuntimeSidecars(oldHandle)
 		close(stopped)
 	}()
 
@@ -667,10 +656,10 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 		t.Fatal("timed out waiting for stopLiveRuntimeSidecars(old) to finish")
 	}
 
-	if err := svc.startLiveRuntimeSidecars(context.Background(), newHandle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(context.Background(), newHandle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars(new): %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(newHandle)
+	defer svc.StopLiveRuntimeSidecars(newHandle)
 	waitForPollerRunnerCalls(t, runner, 2, time.Second)
 
 	if oldFactory.submitCalls != 1 {
@@ -970,11 +959,7 @@ func newHostedLinearPollerServiceFixture(
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	return hostedLinearPollerServiceFixture{
-		svc: &FactoryService{
-			policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
-			logger:        zap.NewNop(),
-			hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
-		},
+		svc: newTestFactoryServiceWithHostedWorkers(svcCfg, zap.NewNop()),
 		submitted:  submitted,
 		runtimeCfg: runtimeCfg,
 	}
@@ -1043,11 +1028,7 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 	)
 	return concurrentHostedAndScriptPollerFixture{
 		hostedLinearPollerServiceFixture: hostedLinearPollerServiceFixture{
-			svc: &FactoryService{
-				policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
-				logger:        zap.NewNop(),
-				hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
-			},
+			svc: newTestFactoryServiceWithHostedWorkers(svcCfg, zap.NewNop()),
 			submitted:  submitted,
 			runtimeCfg: runtimeCfg,
 		},
@@ -1062,12 +1043,12 @@ func startHostedLinearPollerSidecars(t *testing.T, fixture hostedLinearPollerSer
 		},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
-	if err := fixture.svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := fixture.svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		cancel()
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
 	return func() {
-		fixture.svc.stopLiveRuntimeSidecars(handle)
+		fixture.svc.StopLiveRuntimeSidecars(handle)
 		cancel()
 	}
 }
@@ -1152,7 +1133,7 @@ func TestFactoryService_RequiredInputCronKeepsTimeWorkPendingWhenInputMissing(t 
 	defer cancelRun()
 
 	ws := configuredCronWorkstationForServiceTest(t, svc, "poll-with-input")
-	if err := svc.submitCronTick(runCtx, ws, start); err != nil {
+	if err := submitCronTick(svc, runCtx, ws, start); err != nil {
 		t.Fatalf("submitCronTick: %v", err)
 	}
 
@@ -1445,11 +1426,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 		}
 		return nil
 	}
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
-		logger: zap.New(logCore),
-		clock:  fakeClock,
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		Logger: zap.New(logCore),
+		Clock:  fakeClock,
+	})
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    replacementFactory,
 			RuntimeCfg: runtimeCfg,
@@ -1458,10 +1439,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 	sidecarCtx, cancelSidecars := context.WithCancel(context.Background())
 	defer cancelSidecars()
 
-	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
 	assertCronWorkRequestNominalAt(t, startupRequest, start)
@@ -1607,11 +1588,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 	fakeClock := clockwork.NewFakeClock()
 	currentFactory := &aggregateSnapshotFactory{}
 	replacementFactory := &aggregateSnapshotFactory{}
-	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
-		logger: zap.NewNop(),
-		clock:  fakeClock,
-	}
+	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
+		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		Logger: zap.NewNop(),
+		Clock:  fakeClock,
+	})
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
 			Factory:    replacementFactory,
 			RuntimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
@@ -1620,10 +1601,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+	if err := svc.StartLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
 		t.Fatalf("startLiveRuntimeSidecars: %v", err)
 	}
-	defer svc.stopLiveRuntimeSidecars(handle)
+	defer svc.StopLiveRuntimeSidecars(handle)
 
 	if currentFactory.submitCalls != 0 {
 		t.Fatalf("current runtime submit calls = %d, want 0", currentFactory.submitCalls)
@@ -1644,7 +1625,7 @@ func TestFactoryService_CronTickSubmitsThroughEngineIngressAndAppearsInSnapshot(
 	defer cancelRun()
 
 	ws := configuredCronWorkstationForServiceTest(t, svc, "poll-for-work")
-	if err := svc.submitCronTick(runCtx, ws, start); err != nil {
+	if err := submitCronTick(svc, runCtx, ws, start); err != nil {
 		t.Fatalf("submitCronTick: %v", err)
 	}
 
@@ -1711,10 +1692,10 @@ func buildCronServiceForIngressTest(
 	}()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		handle := svc.currentLiveRuntime()
+		handle := currentLiveRuntime(svc)
 		if handle != nil {
 			startCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-			err := svc.waitForLiveRuntimeStart(startCtx, handle)
+			err := waitForLiveRuntimeStart(svc, startCtx, handle)
 			cancel()
 			if err != nil {
 				t.Fatalf("wait for cron service startup: %v", err)
@@ -1876,7 +1857,7 @@ func matchedTokenSnapshotTokensInPlace(t *testing.T, svc *FactoryService, placeI
 
 func configuredCronWorkstationForServiceTest(t *testing.T, svc *FactoryService, name string) interfaces.FactoryWorkstationConfig {
 	t.Helper()
-	runtimeCfg := svc.currentRuntimeConfig()
+	runtimeCfg := currentRuntimeConfig(svc)
 	if svc == nil || runtimeCfg == nil {
 		t.Fatal("expected loaded service runtime config")
 	}
@@ -1951,7 +1932,7 @@ func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputS
 	defer cancelRun()
 
 	ws := configuredCronWorkstationForServiceTest(t, svc, "poll-for-work")
-	if err := svc.submitCronTick(runCtx, ws, start); err != nil {
+	if err := submitCronTick(svc, runCtx, ws, start); err != nil {
 		t.Fatalf("submitCronTick: %v", err)
 	}
 
@@ -2014,7 +1995,7 @@ func TestFactoryService_LogicalMoveCronTickConsumesTimeWorkWithoutWorkerExecutor
 	if ws.Type != interfaces.WorkstationTypeLogical {
 		t.Fatalf("workstation type = %q, want %q", ws.Type, interfaces.WorkstationTypeLogical)
 	}
-	if err := svc.submitCronTick(runCtx, ws, start); err != nil {
+	if err := submitCronTick(svc, runCtx, ws, start); err != nil {
 		t.Fatalf("submitCronTick: %v", err)
 	}
 
@@ -2065,10 +2046,10 @@ func waitForCronServiceStartup(t *testing.T, svc *FactoryService) {
 	t.Helper()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
-		handle := svc.currentLiveRuntime()
+		handle := currentLiveRuntime(svc)
 		if handle != nil {
 			startCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-			err := svc.waitForLiveRuntimeStart(startCtx, handle)
+			err := waitForLiveRuntimeStart(svc, startCtx, handle)
 			cancel()
 			if err != nil {
 				t.Fatalf("wait for cron service startup: %v", err)

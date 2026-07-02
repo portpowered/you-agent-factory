@@ -1,6 +1,6 @@
 // backendsizecheck:ignore-file consolidated session runtime reads remain with runtime_sessions until dedicated service read seams split.
 // pkgmaintcheck:ignore-file-lines consolidated session runtime reads remain with runtime_sessions until dedicated service read seams split.
-package service
+package runtimehost
 
 import (
 	"context"
@@ -37,12 +37,9 @@ import (
 )
 
 const (
-	defaultFactorySessionID                     = factorysessions.DefaultSessionID
+	DefaultFactorySessionID                     = factorysessions.DefaultSessionID
 	FactorySessionTargetKindDefault             = factorysessions.TargetKindDefault
 	FactorySessionTargetKindNamed               = factorysessions.TargetKindNamed
-	runtimeMetricSessionResponseStreamPublished = "session_response_stream.published"
-	runtimeMetricSessionResponseStreamCompacted = "session_response_stream.compacted"
-	runtimeMetricSessionResponseStreamDegraded  = "session_response_stream.degraded"
 )
 
 type (
@@ -71,17 +68,17 @@ type FactoryCoordinator interface {
 	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
-	startDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error)
-	startBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error
-	startLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error
-	stopLiveRuntimeSidecars(*liveRuntimeHandle)
-	stopLiveRuntime(*liveRuntimeHandle) error
-	shutdownOtherLiveSessions(*liveRuntimeHandle) error
-	replaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error
+	StartDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error)
+	StartBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error
+	StartLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error
+	StopLiveRuntimeSidecars(*liveRuntimeHandle)
+	StopLiveRuntime(*liveRuntimeHandle) error
+	ShutdownOtherLiveSessions(*liveRuntimeHandle) error
+	ReplaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error
 }
 
-type runtimeFactoryCoordinator struct {
-	service *FactoryService
+type runtimeCoordinator struct {
+	host *Host
 }
 
 func liveSessionHandle(session *factorysessions.LiveSession) *liveRuntimeHandle {
@@ -131,7 +128,7 @@ type liveSessionRegistration struct {
 	preparedSpec     *runtimebuild.SessionBuildSpec
 }
 
-func (fs *FactoryService) buildLiveSessionRegistration(
+func (fs *Host) buildLiveSessionRegistration(
 	sessionID string,
 	handle *liveRuntimeHandle,
 	target FactorySessionTarget,
@@ -178,21 +175,21 @@ func liveSessionExecutionBaseDir(handle *liveRuntimeHandle, folderPath string, f
 	return executionBaseDir
 }
 
-func newFactoryCoordinator(fs *FactoryService) FactoryCoordinator {
-	return &runtimeFactoryCoordinator{service: fs}
+func newCoordinator(fs *Host) FactoryCoordinator {
+	return &runtimeCoordinator{host: fs}
 }
 
-func (fs *FactoryService) requireCoordinator() FactoryCoordinator {
+func (fs *Host) requireCoordinator() FactoryCoordinator {
 	if fs == nil {
-		return newFactoryCoordinator(nil)
+		return newCoordinator(nil)
 	}
 	if fs.coordinator == nil {
-		fs.coordinator = newFactoryCoordinator(fs)
+		fs.coordinator = newCoordinator(fs)
 	}
 	return fs.coordinator
 }
 
-func (fs *FactoryService) registerLiveSession(
+func (fs *Host) registerLiveSession(
 	sessionID string,
 	handle *liveRuntimeHandle,
 	target FactorySessionTarget,
@@ -243,7 +240,7 @@ func defaultSessionTargetFromRuntimeBundle(
 	return target
 }
 
-func (fs *FactoryService) unregisterLiveSession(sessionID string) {
+func (fs *Host) unregisterLiveSession(sessionID string) {
 	if fs == nil || fs.sessions == nil {
 		return
 	}
@@ -256,28 +253,28 @@ func (fs *FactoryService) unregisterLiveSession(sessionID string) {
 	fs.sessions.Remove(sessionID)
 }
 
-func (fs *FactoryService) currentSession() *factorysessions.LiveSession {
+func (fs *Host) currentSession() *factorysessions.LiveSession {
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
 	return fs.sessions.Current()
 }
 
-func (fs *FactoryService) defaultSession() *factorysessions.LiveSession {
+func (fs *Host) defaultSession() *factorysessions.LiveSession {
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
 	return fs.sessions.DefaultSession()
 }
 
-func (fs *FactoryService) sessionByID(sessionID string) *factorysessions.LiveSession {
+func (fs *Host) sessionByID(sessionID string) *factorysessions.LiveSession {
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
 	return fs.sessions.Get(sessionID)
 }
 
-func (fs *FactoryService) resolveLiveSessionSelector(sessionID string) (*factorysessions.LiveSession, error) {
+func (fs *Host) resolveLiveSessionSelector(sessionID string) (*factorysessions.LiveSession, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
@@ -286,7 +283,7 @@ func (fs *FactoryService) resolveLiveSessionSelector(sessionID string) (*factory
 		if session == nil {
 			selector := strings.TrimSpace(sessionID)
 			if selector == "" {
-				selector = defaultFactorySessionID
+				selector = DefaultFactorySessionID
 			}
 			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, selector)
 		}
@@ -294,7 +291,7 @@ func (fs *FactoryService) resolveLiveSessionSelector(sessionID string) (*factory
 		if handle == nil || handle.Bundle == nil {
 			selector := strings.TrimSpace(sessionID)
 			if selector == "" {
-				selector = defaultFactorySessionID
+				selector = DefaultFactorySessionID
 			}
 			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, selector)
 		}
@@ -308,11 +305,11 @@ func (fs *FactoryService) resolveLiveSessionSelector(sessionID string) (*factory
 	return session, nil
 }
 
-func (fs *FactoryService) requireSession(sessionID string) (*factorysessions.LiveSession, error) {
+func (fs *Host) requireSession(sessionID string) (*factorysessions.LiveSession, error) {
 	return fs.resolveLiveSessionSelector(sessionID)
 }
 
-func (fs *FactoryService) sessionFactory(sessionID string) (factory.Factory, error) {
+func (fs *Host) sessionFactory(sessionID string) (factory.Factory, error) {
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -320,7 +317,7 @@ func (fs *FactoryService) sessionFactory(sessionID string) (factory.Factory, err
 	return liveSessionHandle(session).Bundle.Factory, nil
 }
 
-func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error) {
+func (fs *Host) sessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error) {
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -328,12 +325,12 @@ func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig
 	return liveSessionHandle(session).Bundle.RuntimeCfg, nil
 }
 
-func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (fs *Host) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	return fs.requireCoordinator().SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
-func (c *runtimeFactoryCoordinator) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	fs := c.service
+func (c *runtimeCoordinator) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	fs := c.host
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return interfaces.WorkRequestSubmitResult{}, err
@@ -341,12 +338,12 @@ func (c *runtimeFactoryCoordinator) SubmitWorkRequestForSession(ctx context.Cont
 	return factoryservice.SubmitWorkRequest(ctx, liveSessionHandle(session).Bundle, request)
 }
 
-func (fs *FactoryService) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+func (fs *Host) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
 	return fs.requireCoordinator().MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
 }
 
-func (c *runtimeFactoryCoordinator) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
-	fs := c.service
+func (c *runtimeCoordinator) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+	fs := c.host
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return interfaces.OperatorMoveResult{}, err
@@ -355,19 +352,19 @@ func (c *runtimeFactoryCoordinator) MoveWorkForSession(ctx context.Context, sess
 }
 
 // MoveWork applies a synchronous operator relocation on the current service-owned runtime.
-func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (fs *Host) MoveWork(ctx context.Context, workID, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
 	fs.activationMu.RLock()
 	defer fs.activationMu.RUnlock()
 
 	return factoryservice.MoveWork(ctx, fs.currentRuntimeBundle(), workID, stateName, source, requestID)
 }
 
-func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+func (fs *Host) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
 }
 
-func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
-	fs := c.service
+func (c *runtimeCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+	fs := c.host
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -381,12 +378,12 @@ func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context
 	return stream, err
 }
 
-func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+func (fs *Host) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	return fs.requireCoordinator().GetEngineStateSnapshotForSession(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	fs := c.service
+func (c *runtimeCoordinator) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	fs := c.host
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return nil, err
@@ -394,37 +391,37 @@ func (c *runtimeFactoryCoordinator) GetEngineStateSnapshotForSession(ctx context
 	return factoryservice.GetEngineStateSnapshot(ctx, liveSessionHandle(session).Bundle)
 }
 
-func (fs *FactoryService) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+func (fs *Host) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
 	return fs.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
-	return c.service.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+func (c *runtimeCoordinator) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+	return c.host.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
 }
 
-func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+func (fs *Host) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
 	return fs.requireSessionGateway().OpenFactorySession(ctx, request)
 }
 
-func (c *runtimeFactoryCoordinator) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-	if c.service == nil {
+func (c *runtimeCoordinator) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	if c.host == nil {
 		return factoryapi.OpenFactorySessionResponse{}, fmt.Errorf("factory service is required")
 	}
-	return c.service.requireSessionGateway().OpenFactorySession(ctx, request)
+	return c.host.requireSessionGateway().OpenFactorySession(ctx, request)
 }
 
-func (fs *FactoryService) CloseFactorySession(ctx context.Context, sessionID string) error {
+func (fs *Host) CloseFactorySession(ctx context.Context, sessionID string) error {
 	return fs.requireSessionGateway().CloseFactorySession(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) CloseFactorySession(ctx context.Context, sessionID string) error {
-	if c.service == nil {
+func (c *runtimeCoordinator) CloseFactorySession(ctx context.Context, sessionID string) error {
+	if c.host == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	return c.service.requireSessionGateway().CloseFactorySession(ctx, sessionID)
+	return c.host.requireSessionGateway().CloseFactorySession(ctx, sessionID)
 }
 
-func (fs *FactoryService) openFactorySession(ctx context.Context, factoryDir string) (string, error) {
+func (fs *Host) openFactorySession(ctx context.Context, factoryDir string) (string, error) {
 	if fs == nil {
 		return "", fmt.Errorf("factory service is required")
 	}
@@ -439,7 +436,7 @@ func (fs *FactoryService) openFactorySession(ctx context.Context, factoryDir str
 	return sessionID, nil
 }
 
-func (fs *FactoryService) OpenFactorySessionFromFolder(
+func (fs *Host) OpenFactorySessionFromFolder(
 	ctx context.Context,
 	folderPath string,
 	target *FactorySessionTargetRef,
@@ -449,20 +446,20 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 	return fs.requireSessionGateway().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
 }
 
-func (c *runtimeFactoryCoordinator) OpenFactorySessionFromFolder(
+func (c *runtimeCoordinator) OpenFactorySessionFromFolder(
 	ctx context.Context,
 	folderPath string,
 	target *FactorySessionTargetRef,
 	validateOnly bool,
 	initNewFactory bool,
 ) (*FactorySessionOpenResult, error) {
-	if c.service == nil {
+	if c.host == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
-	return c.service.requireSessionGateway().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
+	return c.host.requireSessionGateway().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
 }
 
-func (fs *FactoryService) openFactorySessionForTarget(ctx context.Context, target FactorySessionTarget) (string, error) {
+func (fs *Host) openFactorySessionForTarget(ctx context.Context, target FactorySessionTarget) (string, error) {
 	if fs == nil {
 		return "", fmt.Errorf("factory service is required")
 	}
@@ -471,14 +468,14 @@ func (fs *FactoryService) openFactorySessionForTarget(ctx context.Context, targe
 	if err != nil {
 		return "", err
 	}
-	if err := fs.startBackgroundSessionWithMetadata(ctx, sessionID, replacement, target); err != nil {
+	if err := fs.StartBackgroundSessionWithMetadata(ctx, sessionID, replacement, target); err != nil {
 		return "", err
 	}
 	return sessionID, nil
 }
 
-func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *factoryRuntimeBundle) error {
-	return fs.startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
+func (fs *Host) startBackgroundSession(ctx context.Context, sessionID string, runtimeBundle *factoryRuntimeBundle) error {
+	return fs.StartBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{
 			Kind: FactorySessionTargetKindDefault,
 		},
@@ -489,22 +486,22 @@ func (fs *FactoryService) startBackgroundSession(ctx context.Context, sessionID 
 }
 
 //nolint:contextcheck // The request context bounds startup waiting, while the active service runtime context owns the long-lived session runtime and sidecars.
-func (fs *FactoryService) startBackgroundSessionWithMetadata(
+func (fs *Host) StartBackgroundSessionWithMetadata(
 	ctx context.Context,
 	sessionID string,
 	runtimeBundle *factoryRuntimeBundle,
 	target FactorySessionTarget,
 ) error {
-	return fs.requireCoordinator().startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, target)
+	return fs.requireCoordinator().StartBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, target)
 }
 
-func (c *runtimeFactoryCoordinator) startBackgroundSessionWithMetadata(
+func (c *runtimeCoordinator) StartBackgroundSessionWithMetadata(
 	ctx context.Context,
 	sessionID string,
 	runtimeBundle *factoryRuntimeBundle,
 	target FactorySessionTarget,
 ) error {
-	fs := c.service
+	fs := c.host
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
@@ -517,12 +514,12 @@ func (c *runtimeFactoryCoordinator) startBackgroundSessionWithMetadata(
 	}
 	handle := fs.startLiveRuntime(serviceCtx, runtimeBundle)
 	if err := fs.waitForLiveRuntimeStart(ctx, handle); err != nil {
-		_ = fs.stopLiveRuntime(handle)
+		_ = fs.StopLiveRuntime(handle)
 		return fmt.Errorf("start runtime session: %w", err)
 	}
 	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) == interfaces.RuntimeModeService {
-		if err := fs.startLiveRuntimeSidecars(serviceCtx, handle); err != nil {
-			_ = fs.stopLiveRuntime(handle)
+		if err := fs.StartLiveRuntimeSidecars(serviceCtx, handle); err != nil {
+			_ = fs.StopLiveRuntime(handle)
 			return fmt.Errorf("start runtime session sidecars: %w", err)
 		}
 	}
@@ -530,7 +527,7 @@ func (c *runtimeFactoryCoordinator) startBackgroundSessionWithMetadata(
 	return nil
 }
 
-func (fs *FactoryService) stopFactorySession(sessionID string) error {
+func (fs *Host) stopFactorySession(sessionID string) error {
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
@@ -555,15 +552,15 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	}
 
 	fs.unregisterLiveSession(sessionID)
-	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
+	if err := fs.StopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	return nil
 }
 
-func (fs *FactoryService) runSessionID() string {
+func (fs *Host) runSessionID() string {
 	if fs == nil {
-		return defaultFactorySessionID
+		return DefaultFactorySessionID
 	}
 	if runState := fs.currentRunState(); runState != nil && strings.TrimSpace(runState.sessionID) != "" {
 		return runState.sessionID
@@ -571,10 +568,10 @@ func (fs *FactoryService) runSessionID() string {
 	if session := fs.defaultSession(); session != nil {
 		return session.ID
 	}
-	return defaultFactorySessionID
+	return DefaultFactorySessionID
 }
 
-func (fs *FactoryService) requireIdleRuntimeForSession(
+func (fs *Host) requireIdleRuntimeForSession(
 	ctx context.Context,
 	sessionID string,
 ) error {
@@ -591,14 +588,14 @@ func (fs *FactoryService) requireIdleRuntimeForSession(
 	return nil
 }
 
-func sessionServiceContext(ctx context.Context, runState *serviceRunState) context.Context {
+func sessionServiceContext(ctx context.Context, runState *hostRunState) context.Context {
 	if runState != nil && runState.ctx != nil {
 		return runState.ctx
 	}
 	return ctx
 }
 
-func (fs *FactoryService) startReplacementSessionRuntime(
+func (fs *Host) startReplacementSessionRuntime(
 	ctx context.Context,
 	serviceCtx context.Context,
 	replacement *factoryRuntimeBundle,
@@ -609,28 +606,28 @@ func (fs *FactoryService) startReplacementSessionRuntime(
 		ServiceCtx:                  serviceCtx,
 		Bundle:                      replacement,
 		Clock:                       fs.clock,
-		AttachSidecars:              fs.startLiveRuntimeSidecars,
+		AttachSidecars:              fs.StartLiveRuntimeSidecars,
 		AttachSidecarsInServiceMode: serviceMode,
 	})
 }
 
 //nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.
-func (fs *FactoryService) replaceSessionRuntime(
+func (fs *Host) ReplaceSessionRuntime(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 	name string,
 	replacement *factoryRuntimeBundle,
 ) error {
-	return fs.requireCoordinator().replaceSessionRuntime(ctx, session, name, replacement)
+	return fs.requireCoordinator().ReplaceSessionRuntime(ctx, session, name, replacement)
 }
 
-func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
+func (c *runtimeCoordinator) ReplaceSessionRuntime(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 	name string,
 	replacement *factoryRuntimeBundle,
 ) error {
-	fs := c.service
+	fs := c.host
 	if session == nil {
 		return fmt.Errorf("%w: session handle is unavailable", apisurface.ErrFactorySessionNotFound)
 	}
@@ -648,7 +645,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		Current:         handle,
 		ServiceCtx:      serviceCtx,
 		ServiceMode:     serviceMode,
-		RestoreSidecars: fs.startLiveRuntimeSidecars,
+		RestoreSidecars: fs.StartLiveRuntimeSidecars,
 	}
 	attempt.Begin()
 	defer attempt.End()
@@ -680,7 +677,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
-	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
+	if err := fs.StopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior session runtime shutdown failed", zap.Error(err), zap.String("session_id", session.ID))
 	}
 	if previousScopeErr == nil {
@@ -699,7 +696,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 	return nil
 }
 
-func (fs *FactoryService) nextLiveSessionAfterStop(sessionID string) *factorysessions.LiveSession {
+func (fs *Host) nextLiveSessionAfterStop(sessionID string) *factorysessions.LiveSession {
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
@@ -715,11 +712,11 @@ func (fs *FactoryService) nextLiveSessionAfterStop(sessionID string) *factoryses
 	return nil
 }
 
-func (fs *FactoryService) discoverFactorySessionTargets(folderPath string) ([]FactorySessionTarget, error) {
+func (fs *Host) discoverFactorySessionTargets(folderPath string) ([]FactorySessionTarget, error) {
 	return factorysessions.DiscoverTargets(folderPath, fs.probeFactorySessionTarget)
 }
 
-func (fs *FactoryService) probeFactorySessionTarget(
+func (fs *Host) probeFactorySessionTarget(
 	folderPath string,
 	factoryDir string,
 	ref factorysessions.TargetRef,
@@ -750,7 +747,7 @@ func (fs *FactoryService) probeFactorySessionTarget(
 	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true, nil
 }
 
-func (fs *FactoryService) logFactorySessionTargetProbeFailure(
+func (fs *Host) logFactorySessionTargetProbeFailure(
 	folderPath string,
 	factoryDir string,
 	ref factorysessions.TargetRef,
@@ -777,7 +774,7 @@ func (fs *FactoryService) logFactorySessionTargetProbeFailure(
 	logger.Error("factory session discovery target runtime config load failed", fields...)
 }
 
-func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
+func (fs *Host) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
 	policy := fs.coordinatorPolicy()
 	if !serviceMode || policy.workFile == "" || policy.apiServerReady == nil || policy.port <= 0 || policy.apiServerStarter == nil {
 		return nil
@@ -791,7 +788,7 @@ func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.C
 		return ctx.Err()
 	}
 
-	timer := time.NewTimer(serviceModeStartupWorkReadabilityDelay)
+	timer := time.NewTimer(hostModeStartupWorkReadabilityDelay)
 	defer timer.Stop()
 
 	select {
@@ -804,13 +801,13 @@ func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.C
 	}
 }
 
-func (fs *FactoryService) failServiceModeStartup(currentRuntime *liveRuntimeHandle, startupErr error) error {
+func (fs *Host) failServiceModeStartup(currentRuntime *liveRuntimeHandle, startupErr error) error {
 	fs.clearRunState()
-	fs.unregisterLiveSession(defaultFactorySessionID)
+	fs.unregisterLiveSession(DefaultFactorySessionID)
 	if currentRuntime == nil {
 		return startupErr
 	}
-	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+	if stopErr := fs.StopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
 		return errors.Join(startupErr, stopErr)
 	}
 	return startupErr
@@ -823,29 +820,29 @@ func startupReadinessError(err error) error {
 	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
 }
 
-func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+func (fs *Host) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	return fs.requireSessionGateway().ListFactorySessions(ctx)
 }
 
-func (c *runtimeFactoryCoordinator) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
-	if c.service == nil {
+func (c *runtimeCoordinator) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	if c.host == nil {
 		return factoryapi.ListFactorySessionsResponse{}, fmt.Errorf("factory service is required")
 	}
-	return c.service.requireSessionGateway().ListFactorySessions(ctx)
+	return c.host.requireSessionGateway().ListFactorySessions(ctx)
 }
 
-func (fs *FactoryService) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+func (fs *Host) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
 	return fs.requireSessionGateway().GetFactorySession(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
-	if c.service == nil {
+func (c *runtimeCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	if c.host == nil {
 		return factoryapi.FactorySession{}, fmt.Errorf("factory service is required")
 	}
-	return c.service.requireSessionGateway().GetFactorySession(ctx, sessionID)
+	return c.host.requireSessionGateway().GetFactorySession(ctx, sessionID)
 }
 
-func (fs *FactoryService) GetFactorySessionSyncPreflight(
+func (fs *Host) GetFactorySessionSyncPreflight(
 	ctx context.Context,
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
@@ -859,16 +856,16 @@ func (fs *FactoryService) GetFactorySessionSyncPreflight(
 	return response, nil
 }
 
-func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
+func (c *runtimeCoordinator) GetFactorySessionSyncPreflight(
 	ctx context.Context,
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
-	if c.service == nil {
+	if c.host == nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, fmt.Errorf("factory service is required")
 	}
-	return c.service.GetFactorySessionSyncPreflight(ctx, sessionID, reconnect, logicalResolve)
+	return c.host.GetFactorySessionSyncPreflight(ctx, sessionID, reconnect, logicalResolve)
 }
 
 type sessionSyncPreflightTarget struct {
@@ -877,7 +874,7 @@ type sessionSyncPreflightTarget struct {
 	unresolved bool
 }
 
-func (fs *FactoryService) resolveSessionSyncPreflightTarget(
+func (fs *Host) resolveSessionSyncPreflightTarget(
 	sessionID string,
 	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
 ) (sessionSyncPreflightTarget, error) {
@@ -890,7 +887,7 @@ func (fs *FactoryService) resolveSessionSyncPreflightTarget(
 		return sessionSyncPreflightTarget{}, err
 	}
 
-	if strings.TrimSpace(sessionID) == defaultFactorySessionID {
+	if strings.TrimSpace(sessionID) == DefaultFactorySessionID {
 		if session := fs.preflightDefaultSessionSuccessor(); session != nil {
 			return sessionSyncPreflightTarget{session: session, remapped: true}, nil
 		}
@@ -911,11 +908,11 @@ func hasLogicalResolveHint(hint *interfaces.FactorySessionLogicalResolveHint) bo
 		strings.TrimSpace(hint.LogicalSessionKeyID) != ""
 }
 
-func (fs *FactoryService) resolveSessionSyncPreflightByLogicalKey(
+func (fs *Host) resolveSessionSyncPreflightByLogicalKey(
 	requestedSessionID string,
 	hint *interfaces.FactorySessionLogicalResolveHint,
 ) (sessionSyncPreflightTarget, error) {
-	serviceScope := serviceBackendScopeID(fs.cfg)
+	serviceScope := factorySessionBackendScopeID(fs, nil)
 	if serviceScope == "" || strings.TrimSpace(hint.BackendScopeID) != serviceScope {
 		return sessionSyncPreflightTarget{unresolved: true}, nil
 	}
@@ -928,20 +925,20 @@ func (fs *FactoryService) resolveSessionSyncPreflightByLogicalKey(
 	return sessionSyncPreflightTarget{session: session, remapped: remapped}, nil
 }
 
-func (fs *FactoryService) preflightDefaultSessionSuccessor() *factorysessions.LiveSession {
+func (fs *Host) preflightDefaultSessionSuccessor() *factorysessions.LiveSession {
 	if fs == nil {
 		return nil
 	}
 	if runState := fs.currentRunState(); runState != nil {
 		successorID := strings.TrimSpace(runState.sessionID)
-		if successorID != "" && successorID != defaultFactorySessionID {
+		if successorID != "" && successorID != DefaultFactorySessionID {
 			if session, err := fs.requireSession(successorID); err == nil {
 				return session
 			}
 		}
 	}
 	current := fs.currentSession()
-	if current == nil || current.ID == defaultFactorySessionID {
+	if current == nil || current.ID == DefaultFactorySessionID {
 		return nil
 	}
 	if session, err := fs.requireSession(current.ID); err == nil {
@@ -950,7 +947,7 @@ func (fs *FactoryService) preflightDefaultSessionSuccessor() *factorysessions.Li
 	return nil
 }
 
-func (fs *FactoryService) buildSessionProjectionContext(
+func (fs *Host) buildSessionProjectionContext(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
@@ -988,7 +985,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	return projectionCtx, nil
 }
 
-func (fs *FactoryService) projectJavaScriptRuntimeState(
+func (fs *Host) projectJavaScriptRuntimeState(
 	session *factorysessions.LiveSession,
 	checkpointStore *factorysessions.JavaScriptCheckpointStore,
 	selectedTick int,
@@ -1005,29 +1002,29 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), nil
 }
 
-func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+func (fs *Host) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
 	return fs.requireSessionGateway().GetFactorySessionResult(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
-	if c.service == nil {
+func (c *runtimeCoordinator) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+	if c.host == nil {
 		return factoryapi.FactorySessionLiveResult{}, fmt.Errorf("factory service is required")
 	}
-	return c.service.requireSessionGateway().GetFactorySessionResult(ctx, sessionID)
+	return c.host.requireSessionGateway().GetFactorySessionResult(ctx, sessionID)
 }
 
-func (fs *FactoryService) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+func (fs *Host) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
 	return fs.requireSessionGateway().GetFactorySessionPartialResult(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
-	if c.service == nil {
+func (c *runtimeCoordinator) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+	if c.host == nil {
 		return factoryapi.FactorySessionPartialResult{}, fmt.Errorf("factory service is required")
 	}
-	return c.service.requireSessionGateway().GetFactorySessionPartialResult(ctx, sessionID)
+	return c.host.requireSessionGateway().GetFactorySessionPartialResult(ctx, sessionID)
 }
 
-func (fs *FactoryService) javascriptCheckpointStoreDirect(session *factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
+func (fs *Host) javascriptCheckpointStoreDirect(session *factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
 	state := liveSessionRuntimeState(session)
 	if state == nil {
 		return nil
@@ -1038,7 +1035,7 @@ func (fs *FactoryService) javascriptCheckpointStoreDirect(session *factorysessio
 	return state.javascriptCheckpoints
 }
 
-func (fs *FactoryService) sessionResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+func (fs *Host) sessionResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
 	state := liveSessionRuntimeState(session)
 	if state == nil {
 		return nil
@@ -1049,7 +1046,7 @@ func (fs *FactoryService) sessionResponseStreams(session *factorysessions.LiveSe
 	return state.responseStreams
 }
 
-func (fs *FactoryService) sessionResponseStream(
+func (fs *Host) sessionResponseStream(
 	session *factorysessions.LiveSession,
 	dispatchID string,
 ) *factorysessions.SessionResponseStream {
@@ -1060,11 +1057,11 @@ func (fs *FactoryService) sessionResponseStream(
 	return streams.Stream(dispatchID)
 }
 
-func (fs *FactoryService) closeSessionResponseStreams(session *factorysessions.LiveSession) {
+func (fs *Host) closeSessionResponseStreams(session *factorysessions.LiveSession) {
 	fs.requireSessionGateway().CloseSessionResponseStreams(session)
 }
 
-func (fs *FactoryService) closeSessionResponseStreamsDirect(session *factorysessions.LiveSession) {
+func (fs *Host) closeSessionResponseStreamsDirect(session *factorysessions.LiveSession) {
 	streams := fs.sessionResponseStreams(session)
 	if streams == nil {
 		return
@@ -1072,7 +1069,7 @@ func (fs *FactoryService) closeSessionResponseStreamsDirect(session *factorysess
 	streams.Close()
 }
 
-func (fs *FactoryService) closeSessionResponseStreamDispatchDirect(
+func (fs *Host) closeSessionResponseStreamDispatchDirect(
 	session *factorysessions.LiveSession,
 	dispatchID string,
 ) bool {
@@ -1083,7 +1080,7 @@ func (fs *FactoryService) closeSessionResponseStreamDispatchDirect(
 	return streams.CloseDispatch(dispatchID)
 }
 
-func (fs *FactoryService) SubscribeSessionResponseStream(
+func (fs *Host) SubscribeSessionResponseStream(
 	sessionID string,
 	dispatchID string,
 	afterSequence int64,
@@ -1091,24 +1088,24 @@ func (fs *FactoryService) SubscribeSessionResponseStream(
 	return fs.requireSessionGateway().SubscribeSessionResponseStream(sessionID, dispatchID, afterSequence)
 }
 
-func (fs *FactoryService) SessionResponseStreamDispatchIDs(sessionID string) ([]string, error) {
+func (fs *Host) SessionResponseStreamDispatchIDs(sessionID string) ([]string, error) {
 	return fs.requireSessionGateway().SessionResponseStreamDispatchIDs(sessionID)
 }
 
-func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
+func (fs *Host) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
 	if fs != nil && fs.newSessionResponseStream != nil {
 		return fs.newSessionResponseStream()
 	}
 	return factorysessions.NewSessionResponseStream()
 }
 
-func (fs *FactoryService) newSessionResponseStreamSetInstance() *factorysessions.SessionResponseStreamSet {
+func (fs *Host) newSessionResponseStreamSetInstance() *factorysessions.SessionResponseStreamSet {
 	return factorysessions.NewSessionResponseStreamSetWithFactory(func() *factorysessions.SessionResponseStream {
 		return fs.newSessionResponseStreamInstance()
 	})
 }
 
-func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.LiveSession) string {
+func factorySessionBackendScopeID(fs *Host, session *factorysessions.LiveSession) string {
 	if fs != nil && fs.cfg != nil {
 		if backendScopeID := strings.TrimSpace(fs.cfg.BackendScopeID); backendScopeID != "" {
 			return backendScopeID
@@ -1124,7 +1121,7 @@ func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) str
 	return factorysessions.LogicalSessionKeyID(session)
 }
 
-func factorySessionStreamGenerationID(_ *FactoryService, session *factorysessions.LiveSession) string {
+func factorySessionStreamGenerationID(_ *Host, session *factorysessions.LiveSession) string {
 	if session == nil {
 		return ""
 	}
@@ -1151,28 +1148,28 @@ func factorySessionStreamGenerationID(_ *FactoryService, session *factorysession
 	return ""
 }
 
-func newInferenceProgressPublisherFactory(
+func NewInferenceProgressPublisherFactory(
 	sessions *factorysessions.Registry,
 	logger *zap.Logger,
 ) inferenceProgressPublisherFactory {
 	if sessions == nil {
 		return nil
 	}
-	gateway := newSessionGatewayService(&FactoryService{sessions: sessions})
+	gateway := newSessionGatewayService(&Host{sessions: sessions})
 	return gateway.InferenceProgressPublisherFactory(logger)
 }
 
-func newSessionDispatchCompletionObserverFactory(
+func NewSessionDispatchCompletionObserverFactory(
 	sessions *factorysessions.Registry,
 ) dispatchCompletionObserverFactory {
 	if sessions == nil {
 		return nil
 	}
-	gateway := newSessionGatewayService(&FactoryService{sessions: sessions})
+	gateway := newSessionGatewayService(&Host{sessions: sessions})
 	return gateway.DispatchCompletionObserverFactory()
 }
 
-func (fs *FactoryService) inferenceProgressPublisher(
+func (fs *Host) inferenceProgressPublisher(
 	sessionID string,
 	logger *zap.Logger,
 ) workerprovider.InferenceProgressPublisher {
@@ -1186,7 +1183,7 @@ func (fs *FactoryService) inferenceProgressPublisher(
 	return factory(sessionID)
 }
 
-func (fs *FactoryService) observeResponseStreamPublished(session *factorysessions.LiveSession, sessionID string, event responsestream.Event) {
+func (fs *Host) observeResponseStreamPublished(session *factorysessions.LiveSession, sessionID string, event responsestream.Event) {
 	fields := metrics.Fields{
 		DispatchID: strings.TrimSpace(event.DispatchID),
 		Reason:     string(event.Kind),
@@ -1194,7 +1191,7 @@ func (fs *FactoryService) observeResponseStreamPublished(session *factorysession
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamPublished, fields)
 }
 
-func (fs *FactoryService) observeResponseStreamCompaction(
+func (fs *Host) observeResponseStreamCompaction(
 	session *factorysessions.LiveSession,
 	sessionID string,
 	dispatchID string,
@@ -1217,7 +1214,7 @@ func (fs *FactoryService) observeResponseStreamCompaction(
 	}
 }
 
-func (fs *FactoryService) observeResponseStreamDegraded(
+func (fs *Host) observeResponseStreamDegraded(
 	session *factorysessions.LiveSession,
 	sessionID string,
 	dispatchID string,
@@ -1271,11 +1268,11 @@ func emitSessionResponseStreamMetric(
 	}
 }
 
-var _ apisurface.DurableSessionExecutionAPI = (*FactoryService)(nil)
-var _ apisurface.DurableSessionListingAPI = (*FactoryService)(nil)
-var _ apisurface.DurableSessionLifecycleAPI = (*FactoryService)(nil)
+var _ apisurface.DurableSessionExecutionAPI = (*Host)(nil)
+var _ apisurface.DurableSessionListingAPI = (*Host)(nil)
+var _ apisurface.DurableSessionLifecycleAPI = (*Host)(nil)
 
-func (fs *FactoryService) StartDurableFactorySessionAsync(
+func (fs *Host) StartDurableFactorySessionAsync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionExecutionResponse, error) {
@@ -1290,7 +1287,7 @@ func (fs *FactoryService) StartDurableFactorySessionAsync(
 	return factorysession.AsyncStartResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) StartDurableFactorySessionSync(
+func (fs *Host) StartDurableFactorySessionSync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionSyncExecutionResponse, error) {
@@ -1305,7 +1302,7 @@ func (fs *FactoryService) StartDurableFactorySessionSync(
 	return factorysession.SyncStartResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) durableExecutionService() factorysessionexecution.Service {
+func (fs *Host) durableExecutionService() factorysessionexecution.Service {
 	if fs == nil {
 		return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{})
 	}
@@ -1319,7 +1316,7 @@ func (fs *FactoryService) durableExecutionService() factorysessionexecution.Serv
 	return fs.durableExecution
 }
 
-func (fs *FactoryService) durableProjectRoot() string {
+func (fs *Host) durableProjectRoot() string {
 	if fs == nil {
 		return ""
 	}
@@ -1334,7 +1331,7 @@ func (fs *FactoryService) durableProjectRoot() string {
 	return strings.TrimSpace(fs.factoryRootDir)
 }
 
-func (fs *FactoryService) ListDurableFactorySessions(
+func (fs *Host) ListDurableFactorySessions(
 	ctx context.Context,
 	params factoryapi.ListFactorySessionsParams,
 ) (factoryapi.ListFactorySessionsResponse, error) {
@@ -1351,14 +1348,14 @@ func (fs *FactoryService) ListDurableFactorySessions(
 
 // ListDurableExecutionSessions returns the shared durable session listing projection
 // used by API merge logic before workspace rows are combined.
-func (fs *FactoryService) ListDurableExecutionSessions(
+func (fs *Host) ListDurableExecutionSessions(
 	ctx context.Context,
 	req factorysessionexecution.ListSessionsRequest,
 ) (factorysessionexecution.ListSessionsResult, error) {
 	return fs.durableExecutionService().ListSessions(ctx, req)
 }
 
-func (fs *FactoryService) GetDurableFactorySession(
+func (fs *Host) GetDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
 ) (factoryapi.FactorySessionDurableReadModel, error) {
@@ -1369,7 +1366,7 @@ func (fs *FactoryService) GetDurableFactorySession(
 	return factorysession.SessionReadResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) GetDurableFactorySessionResult(
+func (fs *Host) GetDurableFactorySessionResult(
 	ctx context.Context,
 	sessionID string,
 	params factoryapi.GetFactorySessionResultsParams,
@@ -1385,7 +1382,7 @@ func (fs *FactoryService) GetDurableFactorySessionResult(
 	return factorysession.ResultResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) ReadDurableFactorySessionEvents(
+func (fs *Host) ReadDurableFactorySessionEvents(
 	ctx context.Context,
 	sessionID string,
 	params factoryapi.GetEventsBySessionIdParams,
@@ -1407,7 +1404,7 @@ func (fs *FactoryService) ReadDurableFactorySessionEvents(
 	return factorysession.FactoryEventStreamFromReadResult(result), nil
 }
 
-func (fs *FactoryService) ListDurableFactorySessionDispatches(
+func (fs *Host) ListDurableFactorySessionDispatches(
 	ctx context.Context,
 	sessionID string,
 ) (factoryapi.ListFactorySessionDispatchesResponse, error) {
@@ -1418,7 +1415,7 @@ func (fs *FactoryService) ListDurableFactorySessionDispatches(
 	return factorysession.ListDispatchesResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) GetDurableFactorySessionDispatch(
+func (fs *Host) GetDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID, dispatchID string,
 ) (factoryapi.FactoryDispatch, error) {
@@ -1429,7 +1426,7 @@ func (fs *FactoryService) GetDurableFactorySessionDispatch(
 	return factorysession.DispatchDetailResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) ListDurableFactorySessionArtifacts(
+func (fs *Host) ListDurableFactorySessionArtifacts(
 	ctx context.Context,
 	sessionID string,
 ) (factoryapi.ListFactorySessionArtifactsResponse, error) {
@@ -1440,7 +1437,7 @@ func (fs *FactoryService) ListDurableFactorySessionArtifacts(
 	return factorysession.ListArtifactsResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) GetDurableFactorySessionArtifact(
+func (fs *Host) GetDurableFactorySessionArtifact(
 	ctx context.Context,
 	sessionID, artifactID string,
 ) (factoryapi.FactorySessionArtifactDetail, error) {
@@ -1451,7 +1448,7 @@ func (fs *FactoryService) GetDurableFactorySessionArtifact(
 	return factorysession.ArtifactDetailResponseToAPI(result), nil
 }
 
-func (fs *FactoryService) PauseDurableFactorySession(
+func (fs *Host) PauseDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
@@ -1459,7 +1456,7 @@ func (fs *FactoryService) PauseDurableFactorySession(
 	return fs.requireSessionGateway().PauseDurableFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) ResumeDurableFactorySession(
+func (fs *Host) ResumeDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
@@ -1467,7 +1464,7 @@ func (fs *FactoryService) ResumeDurableFactorySession(
 	return fs.requireSessionGateway().ResumeDurableFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) CancelDurableFactorySession(
+func (fs *Host) CancelDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
@@ -1475,7 +1472,7 @@ func (fs *FactoryService) CancelDurableFactorySession(
 	return fs.requireSessionGateway().CancelDurableFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) TerminateDurableFactorySession(
+func (fs *Host) TerminateDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
@@ -1483,7 +1480,7 @@ func (fs *FactoryService) TerminateDurableFactorySession(
 	return fs.requireSessionGateway().TerminateDurableFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) ApproveDurableFactorySession(
+func (fs *Host) ApproveDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionApproveRequest,
@@ -1491,7 +1488,7 @@ func (fs *FactoryService) ApproveDurableFactorySession(
 	return fs.requireSessionGateway().ApproveDurableFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) RetryDurableFactorySessionDispatch(
+func (fs *Host) RetryDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionRetryDispatchRequest,
@@ -1499,14 +1496,14 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	return fs.requireSessionGateway().RetryDurableFactorySessionDispatch(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
+func (fs *Host) InterruptDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionInterruptDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	return fs.requireSessionGateway().InterruptDurableFactorySessionDispatch(ctx, sessionID, request)
 }
-func (fs *FactoryService) PauseLiveFactorySession(
+func (fs *Host) PauseLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
@@ -1514,7 +1511,7 @@ func (fs *FactoryService) PauseLiveFactorySession(
 	return fs.requireSessionGateway().PauseLiveFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) ResumeLiveFactorySession(
+func (fs *Host) ResumeLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
@@ -1522,11 +1519,8 @@ func (fs *FactoryService) ResumeLiveFactorySession(
 	return fs.requireSessionGateway().ResumeLiveFactorySession(ctx, sessionID, request)
 }
 
-const (
-	runtimeMetricLifecycleControl = "runtime.lifecycle_control"
-)
 
-func (fs *FactoryService) observeLiveLifecycleControl(
+func (fs *Host) observeLiveLifecycleControl(
 	sessionID string,
 	operation factorysessionexecution.LifecycleControlKind,
 	control factorysessionexecution.ControlRequest,
@@ -1597,7 +1591,7 @@ func liveLifecycleControlLogFields(
 	return fields
 }
 
-func (fs *FactoryService) recordSessionPersistenceInvalidationFromPreflight(
+func (fs *Host) recordSessionPersistenceInvalidationFromPreflight(
 	response factoryapi.FactorySessionSyncPreflightResponse,
 ) {
 	if diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response); ok {
@@ -1605,7 +1599,7 @@ func (fs *FactoryService) recordSessionPersistenceInvalidationFromPreflight(
 	}
 }
 
-func (fs *FactoryService) recordSessionPersistenceInvalidation(
+func (fs *Host) recordSessionPersistenceInvalidation(
 	diagnostic sessionpersistence.InvalidationDiagnostic,
 ) {
 	if fs == nil {
@@ -1614,7 +1608,7 @@ func (fs *FactoryService) recordSessionPersistenceInvalidation(
 	fs.sessionPersistenceObserver().Record(diagnostic)
 }
 
-func (fs *FactoryService) sessionPersistenceObserver() sessionpersistence.Observer {
+func (fs *Host) sessionPersistenceObserver() sessionpersistence.Observer {
 	return sessionpersistence.Observer{
 		Logger: sessionPersistenceZapLogger{logger: fs.logger},
 	}
@@ -1635,7 +1629,7 @@ func (l sessionPersistenceZapLogger) Info(msg string, fields map[string]string) 
 	l.logger.Info(msg, zapFields...)
 }
 
-func (fs *FactoryService) sessionPersistenceScopeFromSession(
+func (fs *Host) sessionPersistenceScopeFromSession(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 ) (sessionpersistence.IdentityScope, error) {
@@ -1660,7 +1654,7 @@ func (fs *FactoryService) sessionPersistenceScopeFromSession(
 	return sessionpersistence.NormalizeScope(scope), nil
 }
 
-func (fs *FactoryService) emitLiveLifecycleControlMetric(
+func (fs *Host) emitLiveLifecycleControlMetric(
 	sessionID string,
 	operation factorysessionexecution.LifecycleControlKind,
 	outcomeClass string,
@@ -1683,7 +1677,7 @@ func (fs *FactoryService) emitLiveLifecycleControlMetric(
 }
 
 // sessionGateway is the injectable session gateway collaborator seam.
-type sessionGateway interface {
+type SessionGateway interface {
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
@@ -1709,16 +1703,16 @@ type sessionGateway interface {
 	DispatchCompletionObserverFactory() func(sessionID string) func(string)
 }
 
-var _ sessionGateway = (*factorysessionservice.Service)(nil)
+var _ SessionGateway = (*factorysessionservice.Service)(nil)
 
 type sessionGatewayHost struct {
-	*FactoryService
+	*Host
 }
 
 var _ factorysessionservice.Host = sessionGatewayHost{}
 
 func (h sessionGatewayHost) DiscoverTargets(folderPath string) ([]factorysessions.Target, error) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
 	return h.discoverFactorySessionTargets(folderPath)
@@ -1739,51 +1733,51 @@ func (h sessionGatewayHost) InitializeFactoryScaffold(factoryDir string) error {
 }
 
 func (h sessionGatewayHost) OpenLiveSessionForTarget(ctx context.Context, target factorysessions.Target) (string, error) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return "", fmt.Errorf("factory service is required")
 	}
 	return h.openFactorySessionForTarget(ctx, target)
 }
 
 func (h sessionGatewayHost) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
 	return h.requireSession(sessionID)
 }
 
 func (h sessionGatewayHost) ListLiveSessionIDs() []string {
-	if h.FactoryService == nil || h.FactoryService.sessions == nil {
+	if h.Host == nil || h.Host.sessions == nil {
 		return nil
 	}
-	return h.FactoryService.sessions.IDs()
+	return h.Host.sessions.IDs()
 }
 
 func (h sessionGatewayHost) GetLiveSession(sessionID string) *factorysessions.LiveSession {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil
 	}
-	return h.FactoryService.sessionByID(sessionID)
+	return h.Host.sessionByID(sessionID)
 }
 
 func (h sessionGatewayHost) BuildSessionProjectionContext(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
 ) (factorysessions.ProjectionContext, error) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return factorysessions.ProjectionContext{}, fmt.Errorf("factory service is required")
 	}
-	return h.FactoryService.buildSessionProjectionContext(ctx, session)
+	return h.Host.buildSessionProjectionContext(ctx, session)
 }
 
 func (h sessionGatewayHost) ResolveSyncPreflightTarget(
 	sessionID string,
 	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
 ) (controlplane.SyncPreflightTarget, error) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return controlplane.SyncPreflightTarget{}, fmt.Errorf("factory service is required")
 	}
-	target, err := h.FactoryService.resolveSessionSyncPreflightTarget(sessionID, logicalResolve)
+	target, err := h.Host.resolveSessionSyncPreflightTarget(sessionID, logicalResolve)
 	return controlplane.SyncPreflightTarget{
 		Session:    target.session,
 		Remapped:   target.remapped,
@@ -1792,17 +1786,17 @@ func (h sessionGatewayHost) ResolveSyncPreflightTarget(
 }
 
 func (h sessionGatewayHost) BackendScopeID() string {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return ""
 	}
-	return factorySessionBackendScopeID(h.FactoryService, nil)
+	return factorySessionBackendScopeID(h.Host, nil)
 }
 
 func (h sessionGatewayHost) StreamGenerationID(session *factorysessions.LiveSession) string {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return ""
 	}
-	return factorySessionStreamGenerationID(h.FactoryService, session)
+	return factorySessionStreamGenerationID(h.Host, session)
 }
 
 func (h sessionGatewayHost) LiveSessionEvents(session *factorysessions.LiveSession) []factoryapi.FactoryEvent {
@@ -1814,17 +1808,17 @@ func (h sessionGatewayHost) LiveSessionEvents(session *factorysessions.LiveSessi
 }
 
 func (h sessionGatewayHost) SessionFactory(sessionID string) (factory.Factory, error) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
-	return h.FactoryService.sessionFactory(sessionID)
+	return h.Host.sessionFactory(sessionID)
 }
 
 func (h sessionGatewayHost) StopLiveSession(sessionID string) error {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	return h.FactoryService.stopFactorySession(sessionID)
+	return h.Host.stopFactorySession(sessionID)
 }
 
 func (h sessionGatewayHost) ObserveLiveLifecycleControl(
@@ -1835,59 +1829,59 @@ func (h sessionGatewayHost) ObserveLiveLifecycleControl(
 	status factorysessionexecution.LifecycleStatus,
 	err error,
 ) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return
 	}
-	h.FactoryService.observeLiveLifecycleControl(sessionID, operation, control, outcome, status, err)
+	h.Host.observeLiveLifecycleControl(sessionID, operation, control, outcome, status, err)
 }
 
 func (h sessionGatewayHost) DurableExecution() factorysessionexecution.Service {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil
 	}
-	return h.FactoryService.durableExecutionService()
+	return h.Host.durableExecutionService()
 }
 
 func (h sessionGatewayHost) ResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil
 	}
-	return h.FactoryService.sessionResponseStreams(session)
+	return h.Host.sessionResponseStreams(session)
 }
 
 func (h sessionGatewayHost) NewResponseStream() *factorysessions.SessionResponseStream {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return factorysessions.NewSessionResponseStream()
 	}
-	return h.FactoryService.newSessionResponseStreamInstance()
+	return h.Host.newSessionResponseStreamInstance()
 }
 
 func (h sessionGatewayHost) CloseResponseStreams(session *factorysessions.LiveSession) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return
 	}
-	h.FactoryService.closeSessionResponseStreamsDirect(session)
+	h.Host.closeSessionResponseStreamsDirect(session)
 }
 
 func (h sessionGatewayHost) CloseResponseStreamDispatch(session *factorysessions.LiveSession, dispatchID string) bool {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return false
 	}
-	return h.FactoryService.closeSessionResponseStreamDispatchDirect(session, dispatchID)
+	return h.Host.closeSessionResponseStreamDispatchDirect(session, dispatchID)
 }
 
 func (h sessionGatewayHost) JavaScriptCheckpointStore(session *factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil
 	}
-	return h.FactoryService.javascriptCheckpointStoreDirect(session)
+	return h.Host.javascriptCheckpointStoreDirect(session)
 }
 
 func (h sessionGatewayHost) ObserveResponseStreamPublished(session *factorysessions.LiveSession, sessionID string, event responsestream.Event) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return
 	}
-	h.FactoryService.observeResponseStreamPublished(session, sessionID, event)
+	h.Host.observeResponseStreamPublished(session, sessionID, event)
 }
 
 func (h sessionGatewayHost) ObserveResponseStreamCompaction(
@@ -1896,10 +1890,10 @@ func (h sessionGatewayHost) ObserveResponseStreamCompaction(
 	dispatchID string,
 	summary responsestream.CompactionSummary,
 ) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return
 	}
-	h.FactoryService.observeResponseStreamCompaction(session, sessionID, dispatchID, summary)
+	h.Host.observeResponseStreamCompaction(session, sessionID, dispatchID, summary)
 }
 
 func (h sessionGatewayHost) ObserveResponseStreamDegraded(
@@ -1910,24 +1904,24 @@ func (h sessionGatewayHost) ObserveResponseStreamDegraded(
 	fallbackLogger *zap.Logger,
 	err error,
 ) {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return
 	}
-	h.FactoryService.observeResponseStreamDegraded(session, sessionID, dispatchID, reason, fallbackLogger, err)
+	h.Host.observeResponseStreamDegraded(session, sessionID, dispatchID, reason, fallbackLogger, err)
 }
 
-func newSessionGatewayService(fs *FactoryService) *factorysessionservice.Service {
+func newSessionGatewayService(fs *Host) *factorysessionservice.Service {
 	return factorysessionservice.New(sessionGatewayHost{fs})
 }
 
-func wireSessionGatewayCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) sessionGateway {
+func wireSessionGatewayCollaborator(fs *Host, cfg *Config) SessionGateway {
 	if cfg != nil && cfg.SessionGateway != nil {
 		return cfg.SessionGateway
 	}
 	return newSessionGatewayService(fs)
 }
 
-func (fs *FactoryService) requireSessionGateway() sessionGateway {
+func (fs *Host) requireSessionGateway() SessionGateway {
 	if fs == nil {
 		return newSessionGatewayService(nil)
 	}
@@ -1938,14 +1932,14 @@ func (fs *FactoryService) requireSessionGateway() sessionGateway {
 }
 
 // ProvideSessionGatewayCollaborator constructs the session gateway for a built service shell.
-func ProvideSessionGatewayCollaborator(shell FactoryServiceShell, cfg *FactoryServiceConfig) sessionGateway {
-	return wireSessionGatewayCollaborator(shell.Service, cfg)
+func ProvideSessionGatewayCollaborator(shell HostShell, cfg *Config) SessionGateway {
+	return wireSessionGatewayCollaborator(shell.Host, cfg)
 }
 
 // AttachSessionGatewayCollaborator assigns the session gateway on the service shell.
-func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway sessionGateway) *FactoryService {
-	if shell.Service != nil {
-		shell.Service.sessionGateway = gateway
+func AttachSessionGatewayCollaborator(shell HostShell, gateway SessionGateway) *Host {
+	if shell.Host != nil {
+		shell.Host.sessionGateway = gateway
 	}
-	return shell.Service
+	return shell.Host
 }

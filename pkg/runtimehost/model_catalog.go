@@ -1,6 +1,6 @@
 // backendsizecheck:ignore-file model catalog owns packaged TTS invocation wait and metrics paths until dedicated service seams split.
 // pkgmaintcheck:ignore-file-lines model catalog owns packaged TTS invocation wait and metrics paths until dedicated service seams split.
-package service
+package runtimehost
 
 import (
 	"context"
@@ -53,7 +53,7 @@ type ModelPullMetricsRecorder interface {
 	RecordModelPullMetric(InvocationMetric)
 }
 
-func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
+func (fs *Host) requireModelService() apisurface.ModelAPI {
 	if fs == nil {
 		return wireModelServiceCollaborator(nil, nil)
 	}
@@ -65,11 +65,11 @@ func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
 	return fs.modelService
 }
 
-func (fs *FactoryService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
+func (fs *Host) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
 	return fs.requireModelService().ListModels(ctx)
 }
 
-func (fs *FactoryService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+func (fs *Host) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 	return fs.requireModelService().GetModel(ctx, modelName)
 }
 
@@ -79,11 +79,11 @@ func newModelAssetPuller(cacheDir string) modelAssetPuller {
 	return localmodels.NewAssetPuller(cacheDir)
 }
 
-func (fs *FactoryService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
+func (fs *Host) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
 	return fs.requireModelService().PullModel(ctx, modelName)
 }
 
-func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
+func (fs *Host) modelAssetPuller() modelAssetPuller {
 	if fs != nil && fs.modelAssets != nil {
 		return fs.modelAssets
 	}
@@ -98,51 +98,51 @@ func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
 	return puller
 }
 
-func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+func (fs *Host) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
-// modelServiceHost adapts FactoryService runtime seams for pkg/models/service wiring.
+// modelServiceHost adapts Host runtime seams for pkg/models/service wiring.
 type modelServiceHost struct {
-	*FactoryService
+	*Host
 }
 
 var _ modelsservice.Host = modelServiceHost{}
 
 func (h modelServiceHost) RuntimeConfig() func() *factoryconfig.LoadedFactoryConfig {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return func() *factoryconfig.LoadedFactoryConfig { return nil }
 	}
-	return h.FactoryService.currentRuntimeConfig
+	return h.Host.currentRuntimeConfig
 }
 
 func (h modelServiceHost) ModelHost() func() modelhost.Host {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return func() modelhost.Host { return nil }
 	}
-	return h.FactoryService.modelHost
+	return h.Host.modelHost
 }
 
 func (h modelServiceHost) ModelAssetPuller() func() localmodels.AssetPuller {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return func() localmodels.AssetPuller { return nil }
 	}
-	return h.FactoryService.modelAssetPuller
+	return h.Host.modelAssetPuller
 }
 
 func (h modelServiceHost) Logger() func() *zap.Logger {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return func() *zap.Logger { return nil }
 	}
-	return func() *zap.Logger { return h.FactoryService.logger }
+	return func() *zap.Logger { return h.Host.logger }
 }
 
 func (h modelServiceHost) ModelPullMetrics() func() modelsservice.PullMetricsRecorder {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return func() modelsservice.PullMetricsRecorder { return nil }
 	}
 	return func() modelsservice.PullMetricsRecorder {
-		recorder := h.FactoryService.modelPullMetricsRecorder()
+		recorder := h.Host.modelPullMetricsRecorder()
 		if recorder == nil {
 			return nil
 		}
@@ -151,17 +151,17 @@ func (h modelServiceHost) ModelPullMetrics() func() modelsservice.PullMetricsRec
 }
 
 func (h modelServiceHost) ModelInvocationExecutor() modelsservice.ModelInvocationExecutor {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return nil
 	}
-	return h.FactoryService.modelInvocationExecutor
+	return h.Host.modelInvocationExecutor
 }
 
 func (h modelServiceHost) FactoryRunnerID() func() string {
-	if h.FactoryService == nil {
+	if h.Host == nil {
 		return func() string { return "" }
 	}
-	return h.FactoryService.factoryRunnerID
+	return h.Host.factoryRunnerID
 }
 
 type modelPullMetricsHostAdapter struct {
@@ -175,35 +175,48 @@ func (a modelPullMetricsHostAdapter) RecordModelPullMetric(metric modelsservice.
 	})
 }
 
-func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) apisurface.ModelAPI {
+// NewModelPullMetricsHostAdapter adapts host pull metrics recorders for pkg/models/service.
+func NewModelPullMetricsHostAdapter(recorder ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
+	if recorder == nil {
+		return nil
+	}
+	return modelPullMetricsHostAdapter{inner: recorder}
+}
+
+// CloneMetricLabels returns a defensive copy of metric labels.
+func CloneMetricLabels(labels map[string]string) map[string]string {
+	return cloneMetricLabels(labels)
+}
+
+func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
 	if cfg != nil && cfg.ModelAPI != nil {
 		return cfg.ModelAPI
 	}
-	return modelsservice.NewFromHost(modelServiceHost{FactoryService: fs})
+	return modelsservice.NewFromHost(modelServiceHost{Host: fs})
 }
 
 // ProvideModelServiceCollaborator constructs the model-domain collaborator for a
-// built FactoryService shell.
+// built Host shell.
 func ProvideModelServiceCollaborator(
-	shell FactoryServiceShell,
-	cfg *FactoryServiceConfig,
+	shell HostShell,
+	cfg *Config,
 ) apisurface.ModelAPI {
-	return wireModelServiceCollaborator(shell.Service, cfg)
+	return wireModelServiceCollaborator(shell.Host, cfg)
 }
 
 // AttachModelServiceCollaborator assigns the model-domain collaborator on the
-// service shell and returns the assembled FactoryService.
+// service shell and returns the assembled Host.
 func AttachModelServiceCollaborator(
-	shell FactoryServiceShell,
+	shell HostShell,
 	modelAPI apisurface.ModelAPI,
-) *FactoryService {
-	if shell.Service != nil {
-		shell.Service.modelService = modelAPI
+) *Host {
+	if shell.Host != nil {
+		shell.Host.modelService = modelAPI
 	}
-	return shell.Service
+	return shell.Host
 }
 
-func (fs *FactoryService) modelHost() modelhost.Host {
+func (fs *Host) modelHost() modelhost.Host {
 	if fs == nil {
 		return nil
 	}
@@ -235,7 +248,7 @@ type resolvedSessionInvocationInput struct {
 	NormalizedArguments *invocations.NormalizedArguments
 }
 
-func (fs *FactoryService) InvokeFactorySession(
+func (fs *Host) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.InvocationRequest,
@@ -297,7 +310,7 @@ func (fs *FactoryService) InvokeFactorySession(
 	)
 }
 
-func (fs *FactoryService) handleSessionInvocationInterpolationFailure(
+func (fs *Host) handleSessionInvocationInterpolationFailure(
 	sessionID string,
 	factoryCfg *interfaces.FactoryConfig,
 	resolved resolvedSessionInvocationInput,
@@ -311,7 +324,7 @@ func (fs *FactoryService) handleSessionInvocationInterpolationFailure(
 	return normalizeSessionInvocationError(err)
 }
 
-func (fs *FactoryService) submitSessionInvocationRequest(
+func (fs *Host) submitSessionInvocationRequest(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.InvocationRequest,
@@ -336,7 +349,7 @@ func (fs *FactoryService) submitSessionInvocationRequest(
 	)
 }
 
-func (fs *FactoryService) recordSuccessfulSessionInvocation(
+func (fs *Host) recordSuccessfulSessionInvocation(
 	sessionID string,
 	factoryCfg *interfaces.FactoryConfig,
 	source invocations.InputSourceLabel,
@@ -518,7 +531,7 @@ func invocationSignatureFromFactoryConfig(cfg *interfaces.FactoryConfig) *interf
 	return cfg.InvocationSignature
 }
 
-func (fs *FactoryService) waitForSessionInvocationResult(
+func (fs *Host) waitForSessionInvocationResult(
 	ctx context.Context,
 	sessionID string,
 	input sessionInvocationWaitInput,
@@ -558,7 +571,7 @@ func (fs *FactoryService) waitForSessionInvocationResult(
 	}
 }
 
-func (fs *FactoryService) handleInvocationWaitError(
+func (fs *Host) handleInvocationWaitError(
 	result apisurface.FactoryInvocationResult,
 	err error,
 ) (apisurface.FactoryInvocationResult, error) {
@@ -568,7 +581,7 @@ func (fs *FactoryService) handleInvocationWaitError(
 	return apisurface.FactoryInvocationResult{}, err
 }
 
-func (fs *FactoryService) handleInvocationSelectionSuccess(
+func (fs *Host) handleInvocationSelectionSuccess(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	selection invocations.PrimaryResultSelection,
@@ -608,7 +621,7 @@ func (fs *FactoryService) handleInvocationSelectionSuccess(
 	return result
 }
 
-func (fs *FactoryService) handleInvocationPrimaryResultFailure(
+func (fs *Host) handleInvocationPrimaryResultFailure(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	primaryErr *invocations.PrimaryResultError,
@@ -663,7 +676,7 @@ func invocationFailureClassForPrimaryResultError(code invocations.PrimaryResultE
 	}
 }
 
-func (fs *FactoryService) sessionInvocationWorldState(
+func (fs *Host) sessionInvocationWorldState(
 	ctx context.Context,
 	sessionID string,
 	selectedTick int,
@@ -714,22 +727,11 @@ const (
 	invocationPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
 	invocationPolicyExplicit              = "EXPLICIT"
 
-	invocationMetricNormalizationAttempts = "invocation.normalization_attempts"
-	invocationMetricNormalizationSuccess  = "invocation.normalization_success"
-	invocationMetricNormalizationFailure  = "invocation.normalization_failure"
-	invocationMetricInterpolationFailure  = "invocation.interpolation_failure"
-	invocationMetricAttempts              = "invocation.attempts"
-	invocationMetricSuccess               = "invocation.success"
-	invocationMetricFailure               = "invocation.failure"
-	invocationMetricUnresolvedPrimary     = "invocation.unresolved_primary"
-	invocationMetricFallbackPolicyUsed    = "invocation.fallback_policy_used"
-	invocationMetricResultType            = "invocation.result_type"
-
 	invocationPolicyModeAuthored = "authored"
 	invocationPolicyModeFallback = "fallback"
 )
 
-func (fs *FactoryService) logInvocationTerminalResult(
+func (fs *Host) logInvocationTerminalResult(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	result apisurface.FactoryInvocationResult,
@@ -768,7 +770,7 @@ func (fs *FactoryService) logInvocationTerminalResult(
 	)
 }
 
-func (fs *FactoryService) logInvocationFailure(
+func (fs *Host) logInvocationFailure(
 	sessionID string,
 	source invocations.InputSourceLabel,
 	cfg *interfaces.InvocationReturnConfig,
@@ -792,7 +794,7 @@ func (fs *FactoryService) logInvocationFailure(
 	)
 }
 
-func (fs *FactoryService) logInvocationArgumentFailure(
+func (fs *Host) logInvocationArgumentFailure(
 	sessionID string,
 	source invocations.InputSourceLabel,
 	factoryCfg *interfaces.FactoryConfig,
@@ -834,7 +836,7 @@ func (fs *FactoryService) logInvocationArgumentFailure(
 	)
 }
 
-func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]string) {
+func (fs *Host) recordInvocationMetric(name string, labels map[string]string) {
 	if fs == nil || fs.cfg == nil || fs.cfg.InvocationMetricsRecorder == nil {
 		return
 	}
@@ -1048,7 +1050,7 @@ func primaryResultMetricType(parts []interfaces.WorkContentPart) string {
 	return "mixed:" + strings.Join(names, "+")
 }
 
-func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
+func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
 	if runtimeCfg == nil || factoryCfg == nil {
 		return nil, fmt.Errorf("runtime config is required")
 	}
@@ -1092,28 +1094,28 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 	return workstationExecutor.Executor, nil
 }
 
-func (fs *FactoryService) factoryRunnerID() string {
+func (fs *Host) factoryRunnerID() string {
 	if fs == nil {
 		return ""
 	}
 	return fs.coordinatorPolicy().runnerID
 }
 
-func (fs *FactoryService) providerOverride() workers.Provider {
+func (fs *Host) providerOverride() workers.Provider {
 	if fs == nil {
 		return nil
 	}
 	return fs.coordinatorPolicy().providerOverride
 }
 
-func (fs *FactoryService) providerCommandRunnerOverride() workers.CommandRunner {
+func (fs *Host) providerCommandRunnerOverride() workers.CommandRunner {
 	if fs == nil {
 		return nil
 	}
 	return fs.coordinatorPolicy().providerCommandRunnerOverride
 }
 
-func (fs *FactoryService) commandRunnerOverride() workers.CommandRunner {
+func (fs *Host) commandRunnerOverride() workers.CommandRunner {
 	if fs == nil {
 		return nil
 	}
@@ -1141,12 +1143,12 @@ func invocationWaitContext(ctx context.Context, timeoutMillis *int64) (context.C
 	return ctx, func() {}
 }
 
-func (fs *FactoryService) isPackagedTTSSession(sessionID string) bool {
+func (fs *Host) isPackagedTTSSession(sessionID string) bool {
 	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
 	return err == nil && runtimeCfg != nil && tts.IsPackagedFactory(runtimeCfg.FactoryConfig())
 }
 
-func (fs *FactoryService) processInvocationWaitTick(
+func (fs *Host) processInvocationWaitTick(
 	waitCtx context.Context,
 	sessionID string,
 	input sessionInvocationWaitInput,
@@ -1299,7 +1301,7 @@ func tokenPlaceID(token *interfaces.Token) string {
 	return token.PlaceID
 }
 
-func (fs *FactoryService) resolveInvocationWaitTerminal(
+func (fs *Host) resolveInvocationWaitTerminal(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	worldState interfaces.FactoryWorldState,
@@ -1335,7 +1337,7 @@ func (fs *FactoryService) resolveInvocationWaitTerminal(
 	return fs.handleInvocationPrimaryResultFailure(sessionID, input, primaryErr)
 }
 
-func (fs *FactoryService) invocationWaitTimedOut(
+func (fs *Host) invocationWaitTimedOut(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	result apisurface.FactoryInvocationResult,
@@ -1347,7 +1349,7 @@ func (fs *FactoryService) invocationWaitTimedOut(
 	return terminalResult
 }
 
-func (fs *FactoryService) recordPackagedTTSInvocationMetric(
+func (fs *Host) recordPackagedTTSInvocationMetric(
 	name string,
 	source invocations.InputSourceLabel,
 	extra map[string]string,
@@ -1360,7 +1362,7 @@ func (fs *FactoryService) recordPackagedTTSInvocationMetric(
 	fs.recordInvocationMetric(name, labels)
 }
 
-func (fs *FactoryService) handlePackagedTTSInvocationFailure(
+func (fs *Host) handlePackagedTTSInvocationFailure(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	failure *tts.InvocationFailure,
@@ -1397,7 +1399,7 @@ func (fs *FactoryService) handlePackagedTTSInvocationFailure(
 	return result
 }
 
-func (fs *FactoryService) logPackagedTTSInvocationLoading(
+func (fs *Host) logPackagedTTSInvocationLoading(
 	sessionID string,
 	input sessionInvocationWaitInput,
 ) {
@@ -1415,7 +1417,7 @@ func (fs *FactoryService) logPackagedTTSInvocationLoading(
 	)
 }
 
-func (fs *FactoryService) logPackagedTTSInvocationCompleted(
+func (fs *Host) logPackagedTTSInvocationCompleted(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	selection invocations.PrimaryResultSelection,
