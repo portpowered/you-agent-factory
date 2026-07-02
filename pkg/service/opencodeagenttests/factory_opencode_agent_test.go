@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 )
 
 func TestBuildFactoryService_RejectsOpenCodeAgentOnNonOpenCodeRunner(t *testing.T) {
@@ -27,12 +27,11 @@ You are a helpful assistant.
 `)
 	writeWorkstationAgentsMD(t, dir, "process")
 
-	_, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	_, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:                                     dir,
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
-		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	}))
 	if err == nil || !strings.Contains(err.Error(), "openCodeAgent") || !strings.Contains(err.Error(), "reviewer") {
 		t.Fatalf("BuildFactoryService error = %v, want openCodeAgent configuration error", err)
 	}
@@ -53,13 +52,12 @@ You are a helpful assistant.
 `)
 	writeWorkstationAgentsMD(t, dir, "process")
 
-	_, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	_, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:                                     dir,
 		RunnerID:                                interfaces.RunnerIDOpenCode,
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
-		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService error = %v, want openCodeAgent with opencode runner", err)
 	}
@@ -77,12 +75,11 @@ You are a helpful assistant.
 `)
 	writeWorkstationAgentsMD(t, dir, "process")
 
-	_, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	_, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:                                     dir,
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
-		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService error = %v, want unchanged non-opencode runner behavior", err)
 	}

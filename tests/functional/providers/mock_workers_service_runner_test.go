@@ -11,9 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testing.T) {
@@ -45,13 +45,13 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 			logDir := t.TempDir()
 			runtimeID := strings.ReplaceAll(tt.name, " ", "-")
 
-			svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-				Dir:               dir,
-				MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-				Logger:            zap.NewNop(),
-				RuntimeLogDir:     logDir,
-				RuntimeInstanceID: runtimeID,
-			})
+			svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
+				Dir:                      dir,
+				MockWorkersConfig:        config.NewEmptyMockWorkersConfig(),
+				RuntimeLogDir:            logDir,
+				RuntimeInstanceID:        runtimeID,
+				RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyEnabled,
+			}))
 			if err != nil {
 				t.Fatalf("BuildFactoryService: %v", err)
 			}

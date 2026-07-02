@@ -23,6 +23,16 @@ func Default() Observability {
 	}
 }
 
+// QuietFactoryServiceConfig applies quiet observability defaults to cfg and
+// returns it for ordinary tests that build FactoryService directly.
+func QuietFactoryServiceConfig(cfg *service.FactoryServiceConfig) *service.FactoryServiceConfig {
+	if cfg == nil {
+		cfg = &service.FactoryServiceConfig{}
+	}
+	Default().ApplyFactoryServiceConfig(cfg)
+	return cfg
+}
+
 // ApplyFactoryServiceConfig applies quiet observability defaults to cfg when
 // callers have not set explicit observability dependencies.
 func (o Observability) ApplyFactoryServiceConfig(cfg *service.FactoryServiceConfig) {

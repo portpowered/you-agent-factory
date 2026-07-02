@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"go.uber.org/zap"
 )
 
@@ -50,12 +51,10 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	var handler http.Handler
 	readyCh := make(chan struct{})
 
-	serviceCfg := &service.FactoryServiceConfig{
-		Dir:                      cfg.FactoryDir,
-		Port:                     1,
-		Logger:                   zap.NewNop(),
-		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
-		ExtraOptions:             cfg.ExtraOptions,
+	serviceCfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
+		Dir:          cfg.FactoryDir,
+		Port:         1,
+		ExtraOptions: cfg.ExtraOptions,
 		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
 			if cfg.CaptureAPISurface != nil {
 				cfg.CaptureAPISurface(surface)
@@ -65,7 +64,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 			<-ctx.Done()
 			return nil
 		},
-	}
+	})
 	if cfg.UseMockWorkers {
 		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
 	}

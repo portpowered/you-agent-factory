@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	service "github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -40,12 +41,11 @@ func TestBuildFactoryService_ReplayModeLoadsEmbeddedConfigWithoutFactoryFiles(t 
 	}
 
 	replayDir := t.TempDir()
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:               replayDir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
 		ReplayPath:        artifactPath,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
@@ -75,12 +75,11 @@ func TestBuildFactoryService_ReplayModeDefaultsToDeterministicClock(t *testing.T
 		t.Fatalf("Save artifact: %v", err)
 	}
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:               t.TempDir(),
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
 		ReplayPath:        artifactPath,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
@@ -121,11 +120,10 @@ func TestBuildFactoryService_ReplayModeUsesRecordedProviderSideEffects(t *testin
 		},
 	})
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
-		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
@@ -190,16 +188,15 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 	}
 
 	var completions []interfaces.FactoryCompletionRecord
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
-		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
 		ExtraOptions: []factory.FactoryOption{
 			factory.WithCompletionRecorder(func(record interfaces.FactoryCompletionRecord) {
 				completions = append(completions, record)
 			}),
 		},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
@@ -259,12 +256,11 @@ func TestBuildFactoryService_ReplayModeReplaysOperatorWorkStateChange(t *testing
 		t.Fatalf("Save replay artifact: %v", err)
 	}
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:               t.TempDir(),
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
 		ReplayPath:        artifactPath,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
@@ -320,11 +316,10 @@ func TestBuildFactoryService_ReplayModeUsesRecordedCommandRunnerSideEffects(t *t
 		},
 	})
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
-		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
@@ -368,11 +363,10 @@ func TestBuildFactoryService_ReplayModeStopsOnDispatchDivergence(t *testing.T) {
 		},
 	})
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:        t.TempDir(),
-		Logger:     zap.NewNop(),
 		ReplayPath: artifactPath,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
