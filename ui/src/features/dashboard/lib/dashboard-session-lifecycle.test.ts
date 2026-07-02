@@ -6,6 +6,7 @@ import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import {
   clearDashboardSessionRuntimeQueries,
   dashboardSessionKey,
+  isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
   resetDashboardSessionScopedState,
   shouldResetDashboardSessionScopedState,
@@ -26,6 +27,34 @@ describe("dashboardSessionKey", () => {
 
   it("combines session id and refresh token", () => {
     expect(dashboardSessionKey("session-beta", 2)).toBe("session-beta::2");
+  });
+});
+
+describe("isDefaultToRuntimeSessionAliasRemap", () => {
+  it("returns true when the default alias remaps to a runtime UUID session", () => {
+    expect(
+      isDefaultToRuntimeSessionAliasRemap(
+        "~default",
+        "f3a2c1b0-1234-5678-9abc-def012345678",
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when both ids are the default alias", () => {
+    expect(isDefaultToRuntimeSessionAliasRemap("~default", "~default")).toBe(
+      false,
+    );
+  });
+
+  it("returns false when switching between non-default sessions", () => {
+    expect(
+      isDefaultToRuntimeSessionAliasRemap("session-alpha", "session-beta"),
+    ).toBe(false);
+  });
+
+  it("returns false when either id is missing", () => {
+    expect(isDefaultToRuntimeSessionAliasRemap(null, "~default")).toBe(false);
+    expect(isDefaultToRuntimeSessionAliasRemap("~default", null)).toBe(false);
   });
 });
 
