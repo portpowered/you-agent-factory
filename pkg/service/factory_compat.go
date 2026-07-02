@@ -54,11 +54,6 @@ func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway runtime
 	return runtimehost.AttachSessionGatewayCollaborator(shell, gateway)
 }
 
-// ValidateReplayModeConfig rejects incompatible replay and record mode combinations.
-func ValidateReplayModeConfig(cfg *FactoryServiceConfig) error {
-	return runtimehost.ValidateReplayModeConfig(cfg)
-}
-
 func newInferenceProgressPublisherFactory(sessions *factorysessions.Registry, logger *zap.Logger) runtimehost.InferenceProgressPublisherFactory {
 	return runtimehost.NewInferenceProgressPublisherFactory(sessions, logger)
 }
