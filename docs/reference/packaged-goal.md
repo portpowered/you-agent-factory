@@ -162,6 +162,35 @@ come from shared session lifecycle or dispatch interruption context. They are
 reported distinctly so operators do not need a goal-specific endpoint or raw
 provider payload inspection to understand what happened.
 
+## Operator controls during active execution
+
+`@you/goal` reuses the same public `FactorySession`, `Work`, and `Dispatch`
+controls as other live factories. There are no goal-specific pause, resume, or
+interrupt routes.
+
+During an open live session (for example one started by `you run --named
+@you/goal` or `you run --continuously`):
+
+- **Pause** with `you session pause [session-id]` or
+  `POST /factory-sessions/{session_id}/pause` to stop automatic progression
+  while the session keeps accepting inbound work and worker results.
+- **Resume** with `you session resume [session-id]` or
+  `POST /factory-sessions/{session_id}/resume` to wake execution and drain
+  buffered submissions and completed worker results in submission order.
+- **Interrupt** an in-flight dispatch through the existing dispatch
+  interruption surfaces; interrupted goals route to `goal:interrupted` and
+  surface `INVOCATION_INTERRUPTED` when an invocation waits on the interrupted
+  work.
+
+Paused sessions report `INVOCATION_PAUSED` when a batch invocation stops
+waiting. `SESSION_LIFECYCLE_CONTROL` events record pause and resume for replay
+and inspection.
+
+Use `you session show`, `you work show`, and `GET
+/factory-sessions/{session_id}/events` to inspect buffered work, interruption
+context, and lifecycle history. See `you docs sessions` for the full pause,
+resume, buffering, and replay semantics.
+
 The non-success response also includes shared recovery context such as
 `sessionId`, `workId`, `workName`, and `workState` when one work item explains
 the outcome. Use that context with the existing commands:

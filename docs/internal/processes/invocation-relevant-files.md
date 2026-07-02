@@ -292,9 +292,14 @@ primary-result behavior.
   worker model so customer edits to materialized `factory.json` affect the next
   invocation result.
 - `docs/reference/packaged-goal.md` is the packaged `you docs packaged-goal`
-  customer guide for `@you/goal` batch invocation, stdout primary result, and
+  customer guide for `@you/goal` batch invocation, stdout primary result, operator
+  controls during active execution, internal-only CLI response-stream scope, and
   the supported headless operator-interaction scope without widening localhost
-  listener promises.
+  listener promises. Packaged docs proof lives in
+  `pkg/cli/docs/docs_packaged_reference_test.go` and
+  `tests/functional/smoke/cli_docs_smoke_test.go`; maintainer final-verification
+  evidence for public-contract boundaries lives in
+  `docs/internal/development/plans/you-goal/api-contract-audit.md`.
 - `docs/reference/models.md` is the customer guide for `INFERENCE_RUN`,
   `INFERENCE_WORKER`, managed-runtime `/models` surfaces, local modelhost lease
   execution, and legacy `MODEL_INVOKE` / `MODEL_WORKER` migration aliases.
