@@ -1,10 +1,13 @@
-import { type ReactNode, useId, useState } from "react";
+import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useId, useState } from "react";
 
 import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
   AlertPanel,
+  Button,
   DashboardHeading,
   DashboardLabel,
   DashboardStatusPill,
@@ -13,15 +16,19 @@ import {
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
+import {
+  FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
+  useFactorySessionDispatchDetail,
+} from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
-import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { resolveFactorySessionLifecycleActionAvailability } from "../lib/factory-session-lifecycle-controls";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 import {
   formatFactoryOrchestratorKind,
   formatFactorySessionRuntimeStatus,
   formatFactorySessionScriptStatus,
+  resolveFactoryDispatchStatusTone,
 } from "../messages/factory-session-runtime-display";
 import { DispatchDetailContent } from "./dispatch-detail/dispatch-detail-content";
 import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
@@ -319,12 +326,22 @@ function DispatchSummaryRow({
 }) {
   const messages = getFactorySessionDetailMessages(locale);
   const detailRegionID = useId();
+  const queryClient = useQueryClient();
   const detailState = useFactorySessionDispatchDetail(
     sessionID,
     expanded ? dispatch.id : null,
   );
   const dispatchLabel = dispatch.label?.trim() || dispatch.id;
   const summaryDetails = getDispatchSummaryDetails(dispatch, messages);
+  const handleRetryDispatchDetail = () => {
+    void queryClient.refetchQueries({
+      queryKey: [
+        ...FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
+        sessionID,
+        dispatch.id,
+      ],
+    });
+  };
 
   return (
     <article className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
@@ -332,7 +349,13 @@ function DispatchSummaryRow({
         <div className="grid min-w-0 gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <DashboardLabel>{dispatchLabel}</DashboardLabel>
-            <DashboardStatusPill size="compact">
+            <DashboardStatusPill
+              size="compact"
+              tone={resolveFactoryDispatchStatusTone({
+                status: dispatch.status,
+                warningCount: dispatch.warnings?.length ?? 0,
+              })}
+            >
               {dispatch.status}
             </DashboardStatusPill>
           </div>
@@ -374,7 +397,9 @@ function DispatchSummaryRow({
       {expanded ? (
         <DispatchDetailState
           detailRegionID={detailRegionID}
+          dispatchID={dispatch.id}
           locale={locale}
+          onRetry={handleRetryDispatchDetail}
           state={detailState}
         />
       ) : null}
@@ -384,18 +409,22 @@ function DispatchSummaryRow({
 
 function DispatchDetailState({
   detailRegionID,
+  dispatchID,
   locale,
+  onRetry,
   state,
 }: {
   detailRegionID: string;
+  dispatchID: string;
   locale?: string;
+  onRetry: () => void;
   state: ReturnType<typeof useFactorySessionDispatchDetail>;
 }) {
   const messages = getFactorySessionDetailMessages(locale);
 
   if (state.status === "loading") {
     return (
-      <DetailCopy id={detailRegionID}>
+      <DetailCopy id={detailRegionID} role="status">
         {messages.dispatchDetailLoadingState}
       </DetailCopy>
     );
@@ -403,8 +432,8 @@ function DispatchDetailState({
 
   if (state.status === "not-found") {
     return (
-      <DetailCopy id={detailRegionID}>
-        {messages.dispatchDetailMissingState}
+      <DetailCopy id={detailRegionID} role="status">
+        {messages.dispatchDetailMissingState(dispatchID)}
       </DetailCopy>
     );
   }
@@ -412,7 +441,12 @@ function DispatchDetailState({
   if (state.status === "error") {
     return (
       <AlertPanel id={detailRegionID} tone="danger">
-        {state.message ?? messages.dispatchDetailErrorState}
+        <div className="grid gap-3">
+          <p>{state.message ?? messages.dispatchDetailErrorState}</p>
+          <Button onClick={onRetry} size="sm" tone="outline">
+            {messages.dispatchDetailRetryLabel}
+          </Button>
+        </div>
       </AlertPanel>
     );
   }

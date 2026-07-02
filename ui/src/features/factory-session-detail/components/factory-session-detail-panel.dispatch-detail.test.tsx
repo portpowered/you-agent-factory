@@ -387,6 +387,124 @@ describe("FactorySessionDetailPanel dispatch detail failure payload", () => {
       screen.getByRole("link", { name: "artifact-failure-log" }),
     ).toBeTruthy();
     expect(screen.getAllByText("FAILED").length).toBeGreaterThan(1);
+    expect(screen.getByText("Failure detail")).toBeTruthy();
+  });
+
+  it("renders warning dispatch detail with typed warning data", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/session-beta")) {
+        return jsonResponse({
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          runtime: {
+            dispatches: [
+              {
+                dispatchKind: "JAVASCRIPT_VERIFY",
+                id: "dispatch-warning",
+                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                sessionId: "session-beta",
+                status: "COMPLETED",
+                warnings: [
+                  {
+                    code: "DISPATCH_WARNING",
+                    message: "Verification completed with non-blocking warnings.",
+                  },
+                ],
+              },
+            ],
+            javascript: {
+              childDispatchCounts: {
+                completed: 1,
+                queued: 0,
+                running: 0,
+              },
+              phases: [],
+              scriptStatus: "IDLE",
+            },
+            lifecycle: {
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:05:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            progress: {
+              categories: {},
+              factoryState: "RUNNING",
+              inFlightCount: 0,
+              totalTokens: 0,
+            },
+            status: "IDLE",
+            usage: { resources: [] },
+          },
+          target: { kind: "named", name: "beta" },
+        });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (
+        url.endsWith(
+          "/factory-sessions/session-beta/dispatches/dispatch-warning",
+        )
+      ) {
+        return jsonResponse({
+          artifactIds: ["artifact-warning-log"],
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          id: "dispatch-warning",
+          javascript: {
+            executionMode: "live",
+            taskKind: "VERIFY",
+            taskLabel: "Verify docs",
+          },
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          sessionId: "session-beta",
+          status: "COMPLETED",
+          warnings: [
+            {
+              code: "DISPATCH_WARNING",
+              message: "Verification completed with non-blocking warnings.",
+            },
+          ],
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(<FactorySessionDetailPanel sessionID="session-beta" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dispatches")).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Expand dispatch detail for dispatch-warning",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("DISPATCH_WARNING")).toBeTruthy();
+    });
+
+    expect(
+      screen.getAllByText("Dispatch warnings").length,
+    ).toBeGreaterThanOrEqual(1);
+
+    expect(
+      screen.getAllByText(
+        "Verification completed with non-blocking warnings.",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("DISPATCH_WARNING")).toBeTruthy();
+    expect(screen.queryByText("Failure detail")).toBeNull();
+    expect(screen.getByText("Runtime")).toBeTruthy();
   });
 });
 

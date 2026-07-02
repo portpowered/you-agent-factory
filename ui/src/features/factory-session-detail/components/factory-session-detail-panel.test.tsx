@@ -384,9 +384,13 @@ describe("FactorySessionDetailPanel", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("This dispatch detail is no longer available."),
+        screen.getByText(
+          "Dispatch detail for dispatch-404 is no longer available.",
+        ),
       ).toBeTruthy();
     });
+    expect(screen.getByText("Dispatches")).toBeTruthy();
+    expect(screen.getByText("Runtime")).toBeTruthy();
   });
 
   it("replaces dispatch detail when selecting a different dispatch summary row", async () => {
@@ -635,5 +639,10 @@ describe("FactorySessionDetailPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("dispatch boom")).toBeTruthy();
     });
+    expect(
+      screen.getByRole("button", { name: "Retry loading dispatch detail" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Dispatches")).toBeTruthy();
+    expect(screen.getByText("Runtime")).toBeTruthy();
   });
 });

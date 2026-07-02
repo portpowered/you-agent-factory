@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
-import type { FactorySessionDispatchDrilldownModel } from "../lib/factory-session-dispatch-detail";
-import { normalizeFactorySessionDispatchDetail } from "../lib/factory-session-dispatch-detail";
-import type { FactoryDispatch } from "../../../api/factory-sessions/dispatch-detail";
+import type { FactoryDispatch } from "../../../../api/factory-sessions/dispatch-detail";
+import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
+import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";
+import { normalizeFactorySessionDispatchDetail } from "../../lib/factory-session-dispatch-detail";
 import { DispatchDetailContent } from "./dispatch-detail-content";
 
 const successfulDispatchFixture = {
@@ -123,5 +123,69 @@ describe("DispatchDetailContent", () => {
     );
     expect(screen.queryByText("preview")).toBeNull();
     expect(screen.queryByRole("button", { name: /lifecycle/i })).toBeNull();
+  });
+
+  it("renders failed dispatch status treatment and typed failure detail", () => {
+    const data = normalizeFactorySessionDispatchDetail({
+      dispatchKind: "JAVASCRIPT_VERIFY",
+      failureDetail: {
+        errorClass: "verification_error",
+        message: "Expected release manifest checksum.",
+        reason: "VERIFY_ASSERTION_FAILED",
+      },
+      id: "dispatch-failed-1",
+      javascript: {
+        executionMode: "live",
+        taskKind: "VERIFY",
+        taskLabel: "Verify docs",
+      },
+      orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+      sessionId: "dur-sess-js-failed-1",
+      status: "FAILED",
+      statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
+    } satisfies FactoryDispatch);
+
+    render(<DispatchDetailContent data={data} />);
+
+    expect(screen.getAllByText("FAILED").length).toBeGreaterThan(0);
+    expect(screen.getByText("Failure detail")).toBeTruthy();
+    expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
+    expect(screen.getByText("verification_error")).toBeTruthy();
+    expect(
+      screen.getByText("Expected release manifest checksum."),
+    ).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("renders warning dispatch status treatment and typed warning detail", () => {
+    const data = normalizeFactorySessionDispatchDetail({
+      artifactIds: ["artifact-warning-log"],
+      dispatchKind: "JAVASCRIPT_VERIFY",
+      id: "dispatch-warning-1",
+      javascript: {
+        executionMode: "live",
+        taskKind: "VERIFY",
+      },
+      orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+      sessionId: "dur-sess-js-warning-1",
+      status: "COMPLETED",
+      warnings: [
+        {
+          code: "DISPATCH_WARNING",
+          message: "Verification completed with non-blocking warnings.",
+        },
+      ],
+    } satisfies FactoryDispatch);
+
+    render(<DispatchDetailContent data={data} />);
+
+    expect(screen.getAllByText("COMPLETED").length).toBeGreaterThan(0);
+    expect(screen.getByText("Dispatch warnings")).toBeTruthy();
+    expect(screen.getByText("DISPATCH_WARNING")).toBeTruthy();
+    expect(
+      screen.getByText("Verification completed with non-blocking warnings."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Failure detail")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
