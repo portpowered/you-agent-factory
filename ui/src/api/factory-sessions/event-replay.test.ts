@@ -3,13 +3,17 @@ import {
   awaitingReplaySessionID,
   buildAwaitingDurableSession,
   buildAwaitingReplayEventStream,
+  buildEmptyReplayEventStream,
   buildSuccessfulDurableSession,
   buildSuccessfulReplayDispatchList,
   buildSuccessfulReplayEventStream,
   buildWarningDurableSession,
   buildWarningReplayDispatchList,
   buildWarningReplayEventStream,
+  emptyReplaySessionID,
+  errorReplaySessionID,
   successfulReplaySessionID,
+  unavailableReplaySessionID,
   warningReplaySessionID,
 } from "../../testing/factory-session-event-replay-fixtures";
 import {
@@ -66,17 +70,9 @@ describe("factory session event replay API", () => {
   });
 
   it("skips non-message SSE blocks and returns an empty event list for sparse history", () => {
-    expect(
-      parseFactoryEventReplayStream(
-        [
-          ": keepalive",
-          "",
-          "event: ping",
-          "data: ignored",
-          "",
-        ].join("\n"),
-      ),
-    ).toEqual([]);
+    expect(parseFactoryEventReplayStream(buildEmptyReplayEventStream())).toEqual(
+      [],
+    );
   });
 
   it("rejects malformed Factory Event payloads", async () => {
@@ -147,6 +143,18 @@ describe("factory session event replay shared fixtures", () => {
       resultSummary: expect.objectContaining({ resultStatus: "NOT_READY" }),
       sessionId: awaitingReplaySessionID,
       status: "AWAITING_APPROVAL",
+    });
+    expect(buildSuccessfulDurableSession(emptyReplaySessionID)).toMatchObject({
+      sessionId: emptyReplaySessionID,
+      status: "SUCCEEDED",
+    });
+    expect(buildWarningDurableSession(errorReplaySessionID)).toMatchObject({
+      sessionId: errorReplaySessionID,
+      status: "FAILED",
+    });
+    expect(buildWarningDurableSession(unavailableReplaySessionID)).toMatchObject({
+      sessionId: unavailableReplaySessionID,
+      status: "FAILED",
     });
     expect(buildSuccessfulReplayDispatchList()).toEqual({
       dispatches: [
