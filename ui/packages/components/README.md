@@ -174,6 +174,23 @@ importing recipes) or when production source imports testing support modules.
 Violations report the package file, import path, and both source and target
 layers.
 
+From the repository root:
+
+```bash
+make ui-components-typecheck
+make ui-components-test
+make ui-components-storybook
+make ui-components-boundary
+make ui-components-dependency-direction
+make ui-components-verify
+make ui-lint
+```
+
+`make ui-components-verify` runs the full component package harness with labeled
+failure output for typecheck, tests, Storybook build, boundary checks, and
+dependency-direction checks. CI runs the same harness in the Build, Lint, and API
+workflow after dashboard lint.
+
 From the `ui` workspace root:
 
 ```bash
