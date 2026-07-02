@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: orchestrator-aware session detail states share one fetch harness and assertion seam.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: orchestrator-aware session detail states share one fetch harness and assertion seam.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

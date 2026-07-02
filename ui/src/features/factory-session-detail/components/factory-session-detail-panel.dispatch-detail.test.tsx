@@ -1,3 +1,5 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: dispatch drilldown boundary states share one fetch harness.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dispatch drilldown boundary states share one fetch harness.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -538,7 +540,9 @@ describe("FactorySessionDetailPanel dispatch detail boundary states", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("This dispatch detail is no longer available."),
+        screen.getByText(
+          "Dispatch detail for dispatch-missing is no longer available.",
+        ),
       ).toBeTruthy();
     });
 

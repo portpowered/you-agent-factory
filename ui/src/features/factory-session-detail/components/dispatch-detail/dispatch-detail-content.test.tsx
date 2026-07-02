@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dispatch detail content states share one render harness.
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: factory session detail panel composes runtime, drilldown, lifecycle, and replay sections.
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
