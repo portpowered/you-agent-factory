@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestValidationError_ReasonFieldUnwrapAndNilReceiver(t *testing.T) {
+func TestValidationError_RequiredReasonFieldAndUnwrap(t *testing.T) {
 	t.Parallel()
 
 	err := requiredFieldError("backendScopeId", "backend scope is required")
@@ -21,6 +21,10 @@ func TestValidationError_ReasonFieldUnwrapAndNilReceiver(t *testing.T) {
 	if ve.Error() == "" || ve.Unwrap() == nil || ve.Reason() != ReasonRequired || ve.Field() != "backendScopeId" {
 		t.Fatalf("validationError accessors = %#v, want populated required error", ve)
 	}
+}
+
+func TestValidationError_InvalidAndAmbiguousReasons(t *testing.T) {
+	t.Parallel()
 
 	invalidErr := invalidTargetError("namedTarget", "")
 	if reason, field, ok := ValidationReasonFromError(invalidErr); !ok || reason != ReasonInvalidTarget || field != "namedTarget" {
@@ -31,6 +35,10 @@ func TestValidationError_ReasonFieldUnwrapAndNilReceiver(t *testing.T) {
 	if reason, field, ok := ValidationReasonFromError(ambiguousErr); !ok || reason != ReasonAmbiguousTarget || field != "folderPath" {
 		t.Fatalf("ambiguous ValidationReasonFromError() = (%q, %q, %v)", reason, field, ok)
 	}
+}
+
+func TestValidationError_NilAndNonValidationErrors(t *testing.T) {
+	t.Parallel()
 
 	if got := newValidationError(ReasonRequired, "field", nil); got != nil {
 		t.Fatalf("newValidationError(nil err) = %v, want nil", got)
