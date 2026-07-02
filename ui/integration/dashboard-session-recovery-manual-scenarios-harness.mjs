@@ -1,6 +1,8 @@
 import {
-  defaultFactorySessionID,
   initialEditableFactoryDefinitionVersion,
+  resolvedDefaultFactorySessionID,
+  timelineCheckpointDBVersion,
+  timelineCheckpointSchemaVersion,
 } from "./browser-test-harness.mjs";
 
 export const defaultFactoryDefinition = {
@@ -19,16 +21,19 @@ export const defaultFactoryDefinition = {
 };
 
 export const replayFactoryFolderPath = "/replay/factory";
-export const resolvedFactorySessionID = "019e0000-0000-7000-8000-000000000042";
+export const resolvedFactorySessionID = resolvedDefaultFactorySessionID;
+const defaultLogicalSessionKeyID = `${replayFactoryFolderPath}::default::`;
 
 export function buildStreamIdentity({
   backendScopeID = `${replayFactoryFolderPath}::browser-integration`,
-  factorySessionID = defaultFactorySessionID,
+  factorySessionID = resolvedDefaultFactorySessionID,
+  logicalSessionKeyID = defaultLogicalSessionKeyID,
   streamGenerationID = initialEditableFactoryDefinitionVersion.physical,
 } = {}) {
   return {
     backendScopeID,
     factorySessionID,
+    logicalSessionKeyID,
     streamGenerationID,
   };
 }
@@ -139,8 +144,11 @@ export async function installNetworkCapture(page) {
 }
 
 export async function clearTimelineCheckpoints(page) {
-  await page.evaluate(async () => {
-    const openRequest = indexedDB.open("agentFactoryTimelineCheckpoints", 2);
+  await page.evaluate(async (dbVersion) => {
+    const openRequest = indexedDB.open(
+      "agentFactoryTimelineCheckpoints",
+      dbVersion,
+    );
     const database = await new Promise((resolve, reject) => {
       openRequest.onupgradeneeded = () => {
         const db = openRequest.result;
@@ -158,7 +166,7 @@ export async function clearTimelineCheckpoints(page) {
       request.onerror = () => reject(request.error);
     });
     database.close();
-  });
+  }, timelineCheckpointDBVersion);
 }
 
 export async function seedTimelineCheckpoint(page, identity, cursor) {
@@ -167,10 +175,10 @@ export async function seedTimelineCheckpoint(page, identity, cursor) {
     cursor.replayState ??
     emptyReplayWorldState(cursor.selectedTick ?? cursor.afterSequence ?? 0);
   await page.evaluate(
-    async ({ envelope }) => {
+    async ({ dbVersion, envelope }) => {
       const openRequest = indexedDB.open(
         "agentFactoryTimelineCheckpoints",
-        2,
+        dbVersion,
       );
       const database = await new Promise((resolve, reject) => {
         openRequest.onupgradeneeded = () => {
@@ -192,6 +200,7 @@ export async function seedTimelineCheckpoint(page, identity, cursor) {
       database.close();
     },
     {
+      dbVersion: timelineCheckpointDBVersion,
       envelope: {
         checkpoint: {
           afterEventId: cursor.afterEventId,
@@ -199,8 +208,7 @@ export async function seedTimelineCheckpoint(page, identity, cursor) {
           replayState,
           selectedTick: cursor.selectedTick,
         },
-        schemaVersion: 2,
-        sessionID: identity.factorySessionID,
+        schemaVersion: timelineCheckpointSchemaVersion,
         storageKey,
         streamIdentity: identity,
       },

@@ -512,6 +512,16 @@ func (h *Host) FactorySessionBackendScopeIDForTest(session *factorysessions.Live
 	return factorySessionBackendScopeID(h, session)
 }
 
+// FactorySessionLogicalSessionKeyIDForTest exposes logical session key resolution for tests.
+func FactorySessionLogicalSessionKeyIDForTest(session *factorysessions.LiveSession) string {
+	return factorySessionLogicalSessionKeyID(session)
+}
+
+// RequireSessionForTest resolves a live session for service-package tests.
+func RequireSessionForTest(h *Host, sessionID string) (*factorysessions.LiveSession, error) {
+	return h.requireSession(sessionID)
+}
+
 // SessionFactoryPersistRootForTest resolves the durable persist root for a session in tests.
 func SessionFactoryPersistRootForTest(serviceRootDir string, session *factorysessions.LiveSession) string {
 	return sessionFactoryPersistRoot(serviceRootDir, session)

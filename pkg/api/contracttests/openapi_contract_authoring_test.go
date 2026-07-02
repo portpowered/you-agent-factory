@@ -595,6 +595,18 @@ func TestOpenAPIContract_SessionEventStreamHandshakeExposesIdentityHeaders(t *te
 		t,
 		operation,
 		"200",
+		"X-Factory-Session-Logical-Session-Key-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
+		"200",
+		"X-Factory-Session-Factory-Session-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
+		"200",
 		"X-Factory-Session-Stream-Generation-Id",
 	)
 }
@@ -691,6 +703,7 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 	runtimeProperties, _ := runtimeSchema["properties"].(map[string]any)
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "streamIdentity", "#/components/schemas/FactorySessionStreamIdentity")
 	streamIdentityProperties := schemaProperties(t, schemaObject(t, schemas, "FactorySessionStreamIdentity"), "FactorySessionStreamIdentity")
+	assertRequiredFields(t, schemaObject(t, schemas, "FactorySessionStreamIdentity"), "backendScopeID", "logicalSessionKeyID", "factorySessionID", "streamGenerationID")
 	streamGenerationID, ok := streamIdentityProperties["streamGenerationID"].(map[string]any)
 	if !ok {
 		t.Fatal("FactorySessionStreamIdentity.streamGenerationID schema is missing")

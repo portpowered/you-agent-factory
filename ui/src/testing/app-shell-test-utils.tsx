@@ -20,13 +20,13 @@ import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import {
+  currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
   useCurrentFactoryDocument,
 } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
-  createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
@@ -42,7 +42,10 @@ import {
   fetchRequestPath,
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
-import { handleFactorySessionPreflightRequest } from "./app-shell-session-preflight-test-utils";
+import {
+  buildAppShellStreamIdentity,
+  handleFactorySessionPreflightRequest,
+} from "./app-shell-session-preflight-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import {
   seedTimelineSnapshot,
@@ -53,7 +56,6 @@ import {
   isSessionFactoryRequest,
   mockGetSessionFactory,
   sessionFactoryDocumentFromSnapshot,
-  sessionFactoryNamedExportDocument,
 } from "./session-factory-mocks";
 
 export {
@@ -65,28 +67,6 @@ export {
   type FetchMock,
   type RenderAppFetchOverride,
 } from "./app-shell-fetch-test-utils";
-
-function testBackendScopeForSession(summary: FactorySessionSummary): string {
-  return `${summary.folderPath}::test-backend`;
-}
-
-function seedCurrentFactoryDocumentForAppShell(
-  queryClient: QueryClient,
-  _snapshot: DashboardSnapshot,
-  sessionID: string,
-  sessionSummary: FactorySessionSummary,
-): void {
-  const provenBackendScope = testBackendScopeForSession(sessionSummary);
-  const document = sessionFactoryNamedExportDocument;
-  queryClient.setQueryData(
-    currentFactoryDocumentQueryKey(sessionID),
-    document,
-  );
-  queryClient.setQueryData(
-    currentFactoryDocumentQueryKey(sessionID, provenBackendScope),
-    document,
-  );
-}
 
 export {
   renderWithDashboardSessionTest,
@@ -265,10 +245,6 @@ export function renderApp({
   workstationRequestsByDispatchID = {},
 }: RenderAppOptions): RenderAppResult {
   const availableFactorySessions = factorySessions ?? [defaultFactorySessionSummary];
-  const resolvedSessionID = sessionID ?? DEFAULT_FACTORY_SESSION_ID;
-  const sessionSummary =
-    availableFactorySessions.find((session) => session.id === resolvedSessionID) ??
-    availableFactorySessions[0];
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -279,11 +255,31 @@ export function renderApp({
   });
   queryClients.push(queryClient);
   if (seedCurrentFactoryDocument) {
-    seedCurrentFactoryDocumentForAppShell(
-      queryClient,
-      snapshot,
-      resolvedSessionID,
-      sessionSummary,
+    const resolvedSessionID = sessionID ?? DEFAULT_FACTORY_SESSION_ID;
+    const sessionSummary =
+      availableFactorySessions.find((session) => session.id === resolvedSessionID) ??
+      availableFactorySessions[0];
+    if (!sessionSummary) {
+      throw new Error("expected at least one factory session summary for app-shell seeding");
+    }
+    const currentFactoryDocument = sessionFactoryDocumentFromSnapshot(snapshot);
+    const streamIdentity = buildAppShellStreamIdentity(sessionSummary, snapshot);
+
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(resolvedSessionID, streamIdentity),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDefinitionQueryKey(resolvedSessionID, streamIdentity),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(resolvedSessionID),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDefinitionQueryKey(resolvedSessionID),
+      currentFactoryDocument,
     );
   }
 
@@ -408,6 +404,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
+    useDashboardStreamStore.getState().resetStreamState();
     resetCurrentFactoryDocumentMock();
   });
 
@@ -423,10 +420,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useExportDialogStore.setState({
       isExportDialogOpen: false,
     });
-    useDashboardStreamStore.setState({
-      backendRuntimeCacheScope: null,
-      streamState: createDefaultDashboardStreamState(),
-    });
+    useDashboardStreamStore.getState().resetStreamState();
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });

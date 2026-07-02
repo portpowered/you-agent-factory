@@ -233,6 +233,9 @@ func ComposeFactoryCore(
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
+	if err := ensureServiceBackendScope(cfg, root.BaseLogger); err != nil {
+		return nil, err
+	}
 	coreBuilt := false
 	var runtimeBundle *factoryservice.Bundle
 	defer func() {
@@ -256,15 +259,17 @@ func ComposeFactoryCore(
 	if err != nil {
 		return nil, err
 	}
+	defaultLiveSessionID := factorysessions.NewSessionID()
 	defaultSessionSpec, err := collaborators.RuntimeBuild.BuildSpec(ctx, runtimebuild.SessionSpecInput{
-		Dir:                   cfg.Dir,
-		FolderPath:            root.FactoryRootDir,
-		SessionID:             runtimehost.DefaultFactorySessionID,
-		ExecutionBaseDir:      cfg.ExecutionBaseDir,
-		LoadedFactoryCfg:      load.LoadedFactoryCfg,
-		RuntimeInstanceID:     cfg.RuntimeInstanceID,
-		SideEffects:           replaySideEffects,
-		AdditionalFactoryOpts: replayFactoryOpts,
+		Dir:                                   cfg.Dir,
+		FolderPath:                            root.FactoryRootDir,
+		SessionID:                             defaultLiveSessionID,
+		ExecutionBaseDir:                      cfg.ExecutionBaseDir,
+		LoadedFactoryCfg:                      load.LoadedFactoryCfg,
+		RuntimeInstanceID:                     cfg.RuntimeInstanceID,
+		SideEffects:                           replaySideEffects,
+		AdditionalFactoryOpts:                 replayFactoryOpts,
+		PreserveCompatibilityDefaultRecordPath: true,
 	})
 	if err != nil {
 		return nil, err
@@ -278,7 +283,7 @@ func ComposeFactoryCore(
 		return nil, fmt.Errorf("default runtime bundle is required")
 	}
 	collaborators.Sessions.Upsert(factorysessions.NewLiveSession(
-		runtimehost.DefaultFactorySessionID,
+		defaultLiveSessionID,
 		runtimeBundle.Dir,
 		runtimeBundle.FolderPath,
 		runtimeBundle.RuntimeCfg.RuntimeBaseDir(),

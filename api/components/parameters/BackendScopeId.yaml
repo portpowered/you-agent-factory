@@ -1,0 +1,8 @@
+name: backend_scope_id
+in: query
+required: false
+description: >-
+  Persisted backend scope identifier used with logical_session_key_id to remap an
+  unknown factorySessionID to the current live session for the same logical target.
+schema:
+  type: string

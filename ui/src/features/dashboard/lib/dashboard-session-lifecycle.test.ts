@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { factorySessionDetailQueryKey } from "../../factory-session-detail/hooks/use-factory-session-detail";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import {
   clearDashboardSessionRuntimeQueries,
   dashboardSessionKey,
@@ -10,6 +11,13 @@ import {
   shouldResetDashboardSessionScopedState,
   shouldResumeFromPersistedCheckpoint,
 } from "./dashboard-session-lifecycle";
+
+const testStreamIdentity: StreamDerivedCacheIdentity = {
+  backendScopeID: "backend-scope-a",
+  factorySessionID: "session-beta",
+  logicalSessionKeyID: "factory::default::",
+  streamGenerationID: "generation-1",
+};
 
 describe("dashboardSessionKey", () => {
   it("returns null when session is deselected", () => {
@@ -178,12 +186,17 @@ describe("clearDashboardSessionRuntimeQueries", () => {
     clearDashboardSessionRuntimeQueries(
       queryClient as never,
       "session-beta",
-      "backend-scope-a",
+      testStreamIdentity,
     );
 
     expect(queryClient.removeQueries).toHaveBeenCalledTimes(2);
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(1, {
-      queryKey: ["current-factory-definition", "backend-scope-a", "session-beta"],
+      queryKey: [
+        "current-factory-definition",
+        "backend-scope-a",
+        "session-beta",
+        "generation-1",
+      ],
       exact: false,
     });
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(2, {
@@ -204,13 +217,18 @@ describe("recoverDashboardSessionScopedState", () => {
       queryClient as never,
       "session-beta",
       resetTimeline,
-      "backend-scope-a",
+      testStreamIdentity,
     );
 
     expect(resetTimeline).toHaveBeenCalledTimes(1);
     expect(queryClient.removeQueries).toHaveBeenCalledTimes(3);
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(1, {
-      queryKey: ["current-factory-definition", "backend-scope-a", "session-beta"],
+      queryKey: [
+        "current-factory-definition",
+        "backend-scope-a",
+        "session-beta",
+        "generation-1",
+      ],
       exact: false,
     });
     expect(queryClient.removeQueries).toHaveBeenNthCalledWith(2, {
@@ -222,6 +240,7 @@ describe("recoverDashboardSessionScopedState", () => {
         "current-factory-definition",
         "backend-scope-a",
         "session-beta",
+        "generation-1",
         "document",
       ],
       exact: true,

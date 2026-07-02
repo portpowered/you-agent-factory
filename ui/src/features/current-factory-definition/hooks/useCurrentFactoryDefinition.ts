@@ -6,11 +6,15 @@ import {
   getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import {
-  backendRuntimeCacheScopeKey,
+  normalizeStreamDerivedCacheIdentity,
+  streamDerivedCacheKeyPrefix,
+  type StreamDerivedCacheIdentity,
+} from "../../timeline/public";
+import {
+  useDashboardSession,
   useDashboardStreamStore,
-} from "../../dashboard/public/runtime-cache-scope";
+} from "../../dashboard/public";
 
 export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
   "current-factory-definition";
@@ -23,11 +27,18 @@ function normalizeSessionQueryKey(
 
 export function currentFactoryDefinitionQueryKey(
   sessionID: string | null | undefined,
-  backendScopeID?: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ) {
+  const normalizedStreamIdentity =
+    normalizeStreamDerivedCacheIdentity(streamIdentity);
+  if (normalizedStreamIdentity) {
+    return [
+      CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+      ...streamDerivedCacheKeyPrefix(normalizedStreamIdentity),
+    ] as const;
+  }
   return [
     CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
-    backendRuntimeCacheScopeKey(backendScopeID),
     normalizeSessionQueryKey(sessionID),
   ] as const;
 }
@@ -37,15 +48,12 @@ export const CURRENT_FACTORY_DEFINITION_QUERY_KEY =
 
 export function useCurrentFactoryDefinition(isEnabled = true) {
   const { sessionID } = useDashboardSession();
-  const backendRuntimeCacheScope = useDashboardStreamStore(
-    (state) => state.backendRuntimeCacheScope,
+  const streamIdentity = useDashboardStreamStore(
+    (state) => state.resolvedStreamIdentity,
   );
 
   return useQuery<CanonicalFactoryDefinition, CurrentFactoryDefinitionError>({
-    queryKey: currentFactoryDefinitionQueryKey(
-      sessionID,
-      backendRuntimeCacheScope,
-    ),
+    queryKey: currentFactoryDefinitionQueryKey(sessionID, streamIdentity),
     queryFn: () => getCurrentFactoryDocument({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,
@@ -56,10 +64,10 @@ export function useCurrentFactoryDefinition(isEnabled = true) {
 
 export function currentFactoryDocumentQueryKey(
   sessionID: string | null | undefined,
-  backendScopeID?: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ) {
   return [
-    ...currentFactoryDefinitionQueryKey(sessionID, backendScopeID),
+    ...currentFactoryDefinitionQueryKey(sessionID, streamIdentity),
     "document",
   ] as const;
 }
@@ -69,15 +77,12 @@ export const CURRENT_FACTORY_DOCUMENT_QUERY_KEY =
 
 export function useCurrentFactoryDocument(isEnabled = true) {
   const { sessionID } = useDashboardSession();
-  const backendRuntimeCacheScope = useDashboardStreamStore(
-    (state) => state.backendRuntimeCacheScope,
+  const streamIdentity = useDashboardStreamStore(
+    (state) => state.resolvedStreamIdentity,
   );
 
   return useQuery<CurrentFactoryDocument, CurrentFactoryDefinitionError>({
-    queryKey: currentFactoryDocumentQueryKey(
-      sessionID,
-      backendRuntimeCacheScope,
-    ),
+    queryKey: currentFactoryDocumentQueryKey(sessionID, streamIdentity),
     queryFn: () => getCurrentFactoryDocument({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,

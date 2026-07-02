@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -1579,6 +1580,7 @@ func (s *stubSessionGateway) GetFactorySessionSyncPreflight(
 	_ context.Context,
 	sessionID string,
 	_ *interfaces.FactoryEventReconnectCursor,
+	_ *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	s.calls = append(s.calls, "get-session-sync-preflight")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
@@ -1722,6 +1724,7 @@ func (s *stubFactoryCoordinator) GetFactorySessionSyncPreflight(
 	_ context.Context,
 	sessionID string,
 	_ *interfaces.FactoryEventReconnectCursor,
+	_ *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	s.calls = append(s.calls, "get-session-sync-preflight")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
@@ -1917,7 +1920,7 @@ func invokeLifecycleDelegationMethods(
 	if _, err := svc.CancelDurableFactorySession(ctx, "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
 		t.Fatalf("CancelDurableFactorySession: %v", err)
 	}
-	if _, err := svc.GetFactorySessionSyncPreflight(ctx, "session-a", nil); err != nil {
+	if _, err := svc.GetFactorySessionSyncPreflight(ctx, "session-a", nil, nil); err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
 	}
 	if _, err := svc.GetFactorySessionResult(ctx, "session-a"); err != nil {
@@ -2079,8 +2082,11 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 	if defaultSession == nil {
 		t.Fatal("defaultSession = nil after Run, want ~default registry entry")
 	}
-	if defaultSession.ID != defaultFactorySessionID {
-		t.Fatalf("default session id = %q, want %q", defaultSession.ID, defaultFactorySessionID)
+	if defaultSession.ID == factorysessions.DefaultSessionID {
+		t.Fatalf("default session id = %q, want resolved uuid", defaultSession.ID)
+	}
+	if _, err := uuid.Parse(defaultSession.ID); err != nil {
+		t.Fatalf("default session id = %q, want uuid: %v", defaultSession.ID, err)
 	}
 	if !defaultSession.IsDefault {
 		t.Fatal("default session IsDefault = false, want true")
@@ -2104,11 +2110,12 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 	if runState == nil {
 		t.Fatal("runState = nil after Run, want default session run state")
 	}
-	if runState.SessionID() != defaultFactorySessionID {
-		t.Fatalf("runState.sessionID = %q, want %q", runState.SessionID(), defaultFactorySessionID)
+	if runState.SessionID() == factorysessions.DefaultSessionID {
+		t.Fatalf("runState.sessionID = %q, want resolved uuid", runState.SessionID())
 	}
-	if current := svc.CurrentSession(); current == nil || current.ID != defaultFactorySessionID {
-		t.Fatalf("currentSession = %#v, want selected %q", current, defaultFactorySessionID)
+	assertResolvedDefaultLiveSessionID(t, runState.SessionID())
+	if current := svc.CurrentSession(); current == nil || current.ID != runState.SessionID() {
+		t.Fatalf("currentSession = %#v, want selected %q", current, runState.SessionID())
 	}
 	if bundle := svc.CurrentRuntimeBundle(); bundle != defaultHandle.Bundle {
 		t.Fatal("currentRuntimeBundle should resolve through the default session registry handle after Run")

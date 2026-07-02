@@ -5,12 +5,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
-  defaultFactorySessionID,
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
   openBrowserPage,
+  resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
+  timelineCheckpointDBVersion,
+  timelineCheckpointSchemaVersion,
   uiInteractionTimeoutMs,
   waitForDurableCheckpoint,
 } from "./browser-test-harness.mjs";
@@ -31,9 +33,11 @@ const defaultFactoryDefinition = {
 };
 
 const replayFactoryFolderPath = "/replay/factory";
+const defaultLogicalSessionKeyID = `${replayFactoryFolderPath}::default::`;
 const currentStreamIdentity = {
   backendScopeID: `${replayFactoryFolderPath}::browser-integration`,
-  factorySessionID: defaultFactorySessionID,
+  factorySessionID: resolvedDefaultFactorySessionID,
+  logicalSessionKeyID: defaultLogicalSessionKeyID,
   streamGenerationID: initialEditableFactoryDefinitionVersion.physical,
 };
 
@@ -96,8 +100,11 @@ async function installEventStreamCapture(page) {
 }
 
 async function clearTimelineCheckpoints(page) {
-  await page.evaluate(async () => {
-    const openRequest = indexedDB.open("agentFactoryTimelineCheckpoints", 2);
+  await page.evaluate(async (dbVersion) => {
+    const openRequest = indexedDB.open(
+      "agentFactoryTimelineCheckpoints",
+      dbVersion,
+    );
     const database = await new Promise((resolve, reject) => {
       openRequest.onupgradeneeded = () => {
         const db = openRequest.result;
@@ -115,16 +122,16 @@ async function clearTimelineCheckpoints(page) {
       request.onerror = () => reject(request.error);
     });
     database.close();
-  });
+  }, timelineCheckpointDBVersion);
 }
 
 async function seedTimelineCheckpoint(page, identity, cursor) {
   const storageKey = checkpointStorageKey(identity);
   await page.evaluate(
-    async ({ envelope }) => {
+    async ({ dbVersion, envelope }) => {
       const openRequest = indexedDB.open(
         "agentFactoryTimelineCheckpoints",
-        2,
+        dbVersion,
       );
       const database = await new Promise((resolve, reject) => {
         openRequest.onupgradeneeded = () => {
@@ -146,6 +153,7 @@ async function seedTimelineCheckpoint(page, identity, cursor) {
       database.close();
     },
     {
+      dbVersion: timelineCheckpointDBVersion,
       envelope: {
         checkpoint: {
           afterEventId: cursor.afterEventId,
@@ -153,8 +161,7 @@ async function seedTimelineCheckpoint(page, identity, cursor) {
           replayState: emptyReplayWorldState(cursor.selectedTick),
           selectedTick: cursor.selectedTick,
         },
-        schemaVersion: 2,
-        sessionID: identity.factorySessionID,
+        schemaVersion: timelineCheckpointSchemaVersion,
         storageKey,
         streamIdentity: identity,
       },
@@ -260,7 +267,9 @@ describe.sequential("dashboard session recovery browser integration", () => {
             const urls = await readCapturedEventStreamURLs(browserPage.page);
             return urls.some(
               (url) =>
-                url.includes(`/factory-sessions/${defaultFactorySessionID}/events`) &&
+                url.includes(
+                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
+                ) &&
                 !url.includes("after_event_id=") &&
                 !url.includes("after_sequence="),
             );
@@ -271,7 +280,9 @@ describe.sequential("dashboard session recovery browser integration", () => {
         expect(
           staleURLs.some(
             (url) =>
-              url.includes(`/factory-sessions/${defaultFactorySessionID}/events`) &&
+              url.includes(
+                `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
+              ) &&
               !url.includes("after_event_id=stale-checkpoint-event-9"),
           ),
         ).toBe(true);
@@ -314,7 +325,7 @@ describe.sequential("dashboard session recovery browser integration", () => {
 
         let eventStreamAttempts = 0;
         await browserPage.page.route(
-          `**/factory-sessions/${defaultFactorySessionID}/events**`,
+          `**/factory-sessions/${resolvedDefaultFactorySessionID}/events**`,
           async (route) => {
             const request = route.request();
             const acceptHeader = request.headers().accept ?? "";
@@ -325,7 +336,7 @@ describe.sequential("dashboard session recovery browser integration", () => {
             if (acceptHeader.includes("application/json")) {
               await route.fulfill({
                 body: JSON.stringify({
-                  factorySessionId: defaultFactorySessionID,
+                  factorySessionId: resolvedDefaultFactorySessionID,
                   outcome: "CURSOR_STALE",
                   retry: {
                     omitAfterEventId: true,

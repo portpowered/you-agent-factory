@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 )
 
@@ -75,7 +76,10 @@ func (h *openTestHost) BuildSessionProjectionContext(
 	return factorysessions.ProjectionContext{Session: session}, nil
 }
 
-func (h *openTestHost) ResolveSyncPreflightTarget(_ string) (controlplane.SyncPreflightTarget, error) {
+func (h *openTestHost) ResolveSyncPreflightTarget(
+	_ string,
+	_ *interfaces.FactorySessionLogicalResolveHint,
+) (controlplane.SyncPreflightTarget, error) {
 	return controlplane.SyncPreflightTarget{Session: h.requireSession}, nil
 }
 

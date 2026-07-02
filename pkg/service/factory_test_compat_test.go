@@ -26,6 +26,10 @@ func registerLiveSession(
 	svc.RegisterLiveSessionForTest(sessionID, handle, target, selectSession)
 }
 
+func requireSessionForTest(svc *FactoryService, sessionID string) (*factorysessions.LiveSession, error) {
+	return runtimehost.RequireSessionForTest(svc, sessionID)
+}
+
 func requireIdleRuntime(svc *FactoryService, ctx context.Context) error {
 	return svc.RequireIdleRuntimeForTest(ctx)
 }

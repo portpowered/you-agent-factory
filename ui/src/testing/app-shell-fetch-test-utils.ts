@@ -31,6 +31,7 @@ export function nonPromptTemplateFetchPaths(
       !path.includes("/prompt-template-validation") &&
       path !== "/factory-sessions" &&
       !/^\/factory-sessions\/[^/]+$/.test(path) &&
+      !/^\/factory-sessions\/[^/]+\/sync-preflight(?:\?.*)?$/.test(path) &&
       !path.endsWith("/factory"),
   );
 }

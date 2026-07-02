@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -31,6 +32,24 @@ import (
 
 func minimalFactoryConfig() map[string]any {
 	return factoryfixtures.MinimalFactoryConfig()
+}
+
+func assertResolvedDefaultLiveSessionID(t *testing.T, sessionID string) {
+	t.Helper()
+	if sessionID == factorysessions.DefaultSessionID {
+		t.Fatalf("session id = %q, want resolved uuid", sessionID)
+	}
+	if _, err := uuid.Parse(sessionID); err != nil {
+		t.Fatalf("session id = %q, want uuid: %v", sessionID, err)
+	}
+}
+
+func assertSingleDefaultSessionIDs(t *testing.T, ids []string) {
+	t.Helper()
+	if len(ids) != 1 {
+		t.Fatalf("session ids = %v, want one default session", ids)
+	}
+	assertResolvedDefaultLiveSessionID(t, ids[0])
 }
 
 func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {

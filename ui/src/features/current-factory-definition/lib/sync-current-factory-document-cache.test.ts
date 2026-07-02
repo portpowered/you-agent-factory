@@ -11,8 +11,15 @@ import { syncCurrentFactoryDocumentCache } from "./sync-current-factory-document
 describe("syncCurrentFactoryDocumentCache", () => {
   it("writes the same document to scoped definition and document query keys", () => {
     const queryClient = new QueryClient();
+    const streamIdentity = {
+      backendScopeID: "backend-scope-a",
+      factorySessionID: "session-2",
+      logicalSessionKeyID: "logical-session-2",
+      streamGenerationID: "generation-1",
+    };
     useDashboardStreamStore.setState({
-      backendRuntimeCacheScope: "backend-scope-a",
+      backendRuntimeCacheScope: streamIdentity.backendScopeID,
+      resolvedStreamIdentity: streamIdentity,
     });
     const document: CurrentFactoryDocument = {
       name: "alpha",
@@ -29,12 +36,12 @@ describe("syncCurrentFactoryDocumentCache", () => {
 
     expect(
       queryClient.getQueryData(
-        currentFactoryDocumentQueryKey("session-2", "backend-scope-a"),
+        currentFactoryDocumentQueryKey("session-2", streamIdentity),
       ),
     ).toEqual(document);
     expect(
       queryClient.getQueryData(
-        currentFactoryDefinitionQueryKey("session-2", "backend-scope-a"),
+        currentFactoryDefinitionQueryKey("session-2", streamIdentity),
       ),
     ).toEqual(document);
   });

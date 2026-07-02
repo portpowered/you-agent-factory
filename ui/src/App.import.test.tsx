@@ -67,7 +67,8 @@ function buildFactorySessionGetResponse() {
       status: "IDLE",
       streamIdentity: {
         backendScopeID: "/workspace::test-backend",
-        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        factorySessionID: "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+        logicalSessionKeyID: "/workspace::default::",
         streamGenerationID: "2026-06-26T00:00:00Z",
       },
       usage: { resources: [] },
@@ -422,13 +423,14 @@ describe("App shell import flows", () => {
     });
     expectNoPostFactoriesActivation(fetchMock);
     await waitFor(() => {
-      const sessionFetchCount = fetchMock.mock.calls.filter(([url, init]) => {
+      const sessionPreflightCount = fetchMock.mock.calls.filter(([url, init]) => {
+        const path = resolveFetchPath(url);
         return (
-          resolveFetchPath(url) === "/factory-sessions/~default" &&
+          path.startsWith("/factory-sessions/~default/sync-preflight") &&
           resolveFetchMethod(url, init) === "GET"
         );
       }).length;
-      expect(sessionFetchCount).toBeGreaterThanOrEqual(2);
+      expect(sessionPreflightCount).toBeGreaterThanOrEqual(2);
     });
 
     const refreshedStream = MockEventSource.instances.at(-1);

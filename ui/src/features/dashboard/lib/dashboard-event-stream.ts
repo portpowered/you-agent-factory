@@ -12,6 +12,7 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export function clearQueuedFlush(
@@ -63,18 +64,26 @@ export function pausedDashboardStreamState() {
   };
 }
 
+function resolveStreamDerivedCacheIdentity(
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+): StreamDerivedCacheIdentity | null {
+  return (
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity
+  );
+}
+
 function cachedFactoryWithBundledFiles(
   queryClient: QueryClient,
   sessionID: string,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): CanonicalFactoryDefinition | null | undefined {
-  const backendRuntimeCacheScope =
-    useDashboardStreamStore.getState().backendRuntimeCacheScope;
+  const resolvedStreamIdentity = resolveStreamDerivedCacheIdentity(streamIdentity);
   return (
     queryClient.getQueryData<CurrentFactoryDocument>(
-      currentFactoryDocumentQueryKey(sessionID, backendRuntimeCacheScope),
+      currentFactoryDocumentQueryKey(sessionID, resolvedStreamIdentity),
     ) ??
     queryClient.getQueryData<CanonicalFactoryDefinition>(
-      currentFactoryDefinitionQueryKey(sessionID, backendRuntimeCacheScope),
+      currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
     )
   );
 }
@@ -83,6 +92,7 @@ export function syncCurrentFactoryDefinition(
   queryClient: QueryClient,
   event: FactoryEvent,
   sessionID: string,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): void {
   if (event.type !== FACTORY_EVENT_TYPES.factoryChange) {
     return;
@@ -91,28 +101,35 @@ export function syncCurrentFactoryDefinition(
   if (payloadFactory == null) {
     return;
   }
-  const backendRuntimeCacheScope =
-    useDashboardStreamStore.getState().backendRuntimeCacheScope;
+  const resolvedStreamIdentity = resolveStreamDerivedCacheIdentity(streamIdentity);
   try {
     const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
     const factoryWithBundledFiles = preserveExistingBundledFilesWhenAbsent(
       normalizedFactory,
-      cachedFactoryWithBundledFiles(queryClient, sessionID),
+      cachedFactoryWithBundledFiles(
+        queryClient,
+        sessionID,
+        resolvedStreamIdentity,
+      ),
     );
     queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey(sessionID, backendRuntimeCacheScope),
+      currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
       factoryWithBundledFiles,
     );
     const factoryForDocumentCache = preserveExistingBundledFilesWhenAbsent(
       factoryWithBundledFiles,
-      cachedFactoryWithBundledFiles(queryClient, sessionID),
+      cachedFactoryWithBundledFiles(
+        queryClient,
+        sessionID,
+        resolvedStreamIdentity,
+      ),
     );
     const document = toCurrentFactoryDocumentFromNormalizedFactory(
       factoryForDocumentCache,
     );
     if (document) {
       queryClient.setQueryData(
-        currentFactoryDocumentQueryKey(sessionID, backendRuntimeCacheScope),
+        currentFactoryDocumentQueryKey(sessionID, resolvedStreamIdentity),
         document,
       );
     }

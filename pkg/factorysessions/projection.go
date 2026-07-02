@@ -123,10 +123,15 @@ func projectedSessionStreamIdentity(
 		}
 		streamGenerationID = lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
 	}
+	logicalSessionKeyID := LogicalSessionKeyID(ctx.Session)
+	if logicalSessionKeyID == "" {
+		return nil
+	}
 	return &factoryapi.FactorySessionStreamIdentity{
-		BackendScopeID:     backendScopeID,
-		FactorySessionID:   sessionID,
-		StreamGenerationID: streamGenerationID,
+		BackendScopeID:      backendScopeID,
+		LogicalSessionKeyID: logicalSessionKeyID,
+		FactorySessionID:    sessionID,
+		StreamGenerationID:  streamGenerationID,
 	}
 }
 
