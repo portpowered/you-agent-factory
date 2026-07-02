@@ -226,7 +226,7 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 	assertPropertyRef(t, properties, "reconnectCursor", "#/components/schemas/FactorySessionSyncPreflightReconnectCursor")
 
 	reasonCode := schemaObject(t, schemas, "FactorySessionSyncPreflightReasonCode")
-	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap", "invalid_target_reference"})
+	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap", "invalid_target_reference", "logical_session_unresolved"})
 
 	logicalTarget := schemaObject(t, schemas, "FactorySessionLogicalTarget")
 	assertRequiredFields(t, logicalTarget, "kind", "folderPath")

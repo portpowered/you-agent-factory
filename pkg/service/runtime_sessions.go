@@ -33,6 +33,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -357,7 +358,13 @@ func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context
 	if err != nil {
 		return nil, err
 	}
-	return factoryservice.SubscribeFactoryEventsForSession(ctx, liveSessionHandle(session).Bundle, sessionID, reconnect)
+	stream, err := factoryservice.SubscribeFactoryEventsForSession(ctx, liveSessionHandle(session).Bundle, sessionID, reconnect)
+	if err != nil || stream == nil || session == nil {
+		return stream, err
+	}
+	stream.FactorySessionID = factorysessions.CanonicalFactorySessionID(session)
+	stream.LogicalSessionKeyID = factorySessionLogicalSessionKeyID(fs, session)
+	return stream, err
 }
 
 func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
@@ -811,7 +818,12 @@ func (fs *FactoryService) GetFactorySessionSyncPreflight(
 	sessionID string,
 	options interfaces.FactorySessionSyncPreflightOptions,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
-	return fs.requireCoordinator().GetFactorySessionSyncPreflight(ctx, sessionID, options)
+	response, err := fs.requireCoordinator().GetFactorySessionSyncPreflight(ctx, sessionID, options)
+	if err != nil {
+		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+	}
+	fs.recordSessionPersistenceInvalidationFromPreflight(response)
+	return response, nil
 }
 
 func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
@@ -2014,4 +2026,42 @@ func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway session
 		shell.Service.sessionGateway = gateway
 	}
 	return shell.Service
+}
+
+func (fs *FactoryService) recordSessionPersistenceInvalidationFromPreflight(
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	if diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response); ok {
+		fs.recordSessionPersistenceInvalidation(diagnostic)
+	}
+}
+
+func (fs *FactoryService) recordSessionPersistenceInvalidation(
+	diagnostic sessionpersistence.InvalidationDiagnostic,
+) {
+	if fs == nil {
+		return
+	}
+	fs.sessionPersistenceObserver().Record(diagnostic)
+}
+
+func (fs *FactoryService) sessionPersistenceObserver() sessionpersistence.Observer {
+	return sessionpersistence.Observer{
+		Logger: sessionPersistenceZapLogger{logger: fs.logger},
+	}
+}
+
+type sessionPersistenceZapLogger struct {
+	logger *zap.Logger
+}
+
+func (l sessionPersistenceZapLogger) Info(msg string, fields map[string]string) {
+	if l.logger == nil {
+		return
+	}
+	zapFields := make([]zap.Field, 0, len(fields))
+	for key, value := range fields {
+		zapFields = append(zapFields, zap.String(key, value))
+	}
+	l.logger.Info(msg, zapFields...)
 }

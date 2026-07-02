@@ -10,6 +10,8 @@ import {
   FACTORY_SESSION_DETAIL_QUERY_KEY,
   factorySessionDetailQueryKey,
 } from "../../factory-session-detail/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
+import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export type FactoryDefinitionQueryResetMode = "invalidate" | "remove";
 
@@ -88,13 +90,29 @@ export function resetDashboardSessionScopedState(
   });
 }
 
+function resolveSessionRuntimeCacheScope(
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+): string | null {
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
+  return (
+    resolvedStreamIdentity?.backendScopeID ??
+    useDashboardStreamStore.getState().backendRuntimeCacheScope
+  );
+}
+
+export { factorySessionDetailQueryKey } from "../../factory-session-detail/public";
+
 export function clearDashboardSessionRuntimeQueries(
   queryClient: QueryClient,
   sessionID: string,
-  backendScopeID?: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): void {
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
+  const backendScopeID = resolveSessionRuntimeCacheScope(resolvedStreamIdentity);
   queryClient.removeQueries({
-    queryKey: currentFactoryDefinitionQueryKey(sessionID, backendScopeID),
+    queryKey: currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
     exact: false,
   });
   queryClient.removeQueries({
@@ -107,13 +125,15 @@ export function recoverDashboardSessionScopedState(
   queryClient: QueryClient,
   sessionID: string,
   resetTimeline: () => void,
-  backendScopeID?: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): void {
   resetTimeline();
   resetSelectionHistoryStore();
-  clearDashboardSessionRuntimeQueries(queryClient, sessionID, backendScopeID);
+  clearDashboardSessionRuntimeQueries(queryClient, sessionID, streamIdentity);
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
   queryClient.removeQueries({
-    queryKey: currentFactoryDocumentQueryKey(sessionID, backendScopeID),
+    queryKey: currentFactoryDocumentQueryKey(sessionID, resolvedStreamIdentity),
     exact: true,
   });
 }

@@ -6,3 +6,4 @@ enum:
   - session_not_found
   - logical_session_remap
   - invalid_target_reference
+  - logical_session_unresolved

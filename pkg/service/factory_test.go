@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -1066,6 +1067,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		RuntimeMetricsDir: runtimeMetricsDir,
 		RecordPath:        options.recordPath,
 		ExtraOptions:      options.extraOptions,
+		SystemConfigHomeDir: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
@@ -1198,9 +1200,9 @@ func (h *runningSessionService) openFactorySession(t *testing.T, factoryName str
 func (h *runningSessionService) requireSession(t *testing.T, sessionID string) *liveFactorySession {
 	t.Helper()
 
-	session := h.svc.sessionByID(sessionID)
-	if session == nil {
-		t.Fatalf("expected session %q to be registered; got ids %v", sessionID, h.svc.sessions.IDs())
+	session, err := h.svc.requireSession(sessionID)
+	if err != nil {
+		t.Fatalf("expected session %q to be registered; got ids %v: %v", sessionID, h.svc.sessions.IDs(), err)
 	}
 	return session
 }
@@ -1335,7 +1337,12 @@ func assertSessionRuntimeMetricsPathsAreDistinct(t *testing.T, metricsRoot strin
 		if sessionComponent == "" {
 			sessionComponent = "unknown"
 		}
-		if !strings.Contains(filepath.Base(path), "-"+sessionComponent+"-") {
+		baseName := filepath.Base(path)
+		if session.IsDefault {
+			if !strings.Contains(baseName, "-default-") && !strings.Contains(baseName, "-"+sessionComponent+"-") {
+				t.Fatalf("session %s runtime metrics path %q does not include default session marker", session.ID, path)
+			}
+		} else if !strings.Contains(baseName, "-"+sessionComponent+"-") {
 			t.Fatalf("session %s runtime metrics path %q does not include session ID", session.ID, path)
 		}
 		seenPaths[path] = session.ID
@@ -4773,9 +4780,10 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 
 	core := &FactoryCore{
 		collaborators: FactoryServiceCollaborators{
-			Sessions:     factorysessions.NewRegistry(),
-			LocalModels:  localModelDomain{Manager: &managedLocalModelManager{}},
-			RuntimeBuild: &runtimebuild.Service{},
+			Sessions:         factorysessions.NewRegistry(),
+			LocalModels:      localModelDomain{Manager: &managedLocalModelManager{}},
+			RuntimeBuild:     &runtimebuild.Service{},
+			WorkersScheduler: workersservice.New(workersservice.Config{}),
 		},
 		hostedWorkers: hostedworkers.Config{Logger: zap.NewNop()},
 		startupBundle: &factoryRuntimeBundle{
@@ -4791,7 +4799,7 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 	svc.factorySave = &recordingFactorySaveSaver{}
 
 	snapshot := svc.ComposeCollaboratorSnapshot()
-	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.LocalModelsInitialized {
+	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.WorkersSchedulerInitialized || !snapshot.LocalModelsInitialized {
 		t.Fatalf("snapshot missing core collaborators: %+v", snapshot)
 	}
 	if !snapshot.ModelAssetsInitialized || !snapshot.ModelServiceInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {

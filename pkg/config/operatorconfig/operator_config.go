@@ -92,8 +92,8 @@ func ParseFileDefaults(data []byte) (Defaults, error) {
 	decoder.DisallowUnknownFields()
 
 	var cfg struct {
-		Defaults       Defaults `json:"defaults"`
 		BackendScopeID string   `json:"backendScopeID"`
+		Defaults       Defaults `json:"defaults"`
 	}
 	if err := decoder.Decode(&cfg); err != nil {
 		return Defaults{}, fmt.Errorf("decode operator config JSON: %w", err)

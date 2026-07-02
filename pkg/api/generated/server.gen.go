@@ -363,11 +363,12 @@ const (
 
 // Defines values for FactorySessionSyncPreflightReasonCode.
 const (
-	CursorStale            FactorySessionSyncPreflightReasonCode = "cursor_stale"
-	InvalidTargetReference FactorySessionSyncPreflightReasonCode = "invalid_target_reference"
-	LogicalSessionRemap    FactorySessionSyncPreflightReasonCode = "logical_session_remap"
-	Ok                     FactorySessionSyncPreflightReasonCode = "ok"
-	SessionNotFound        FactorySessionSyncPreflightReasonCode = "session_not_found"
+	CursorStale              FactorySessionSyncPreflightReasonCode = "cursor_stale"
+	InvalidTargetReference   FactorySessionSyncPreflightReasonCode = "invalid_target_reference"
+	LogicalSessionRemap      FactorySessionSyncPreflightReasonCode = "logical_session_remap"
+	LogicalSessionUnresolved FactorySessionSyncPreflightReasonCode = "logical_session_unresolved"
+	Ok                       FactorySessionSyncPreflightReasonCode = "ok"
+	SessionNotFound          FactorySessionSyncPreflightReasonCode = "session_not_found"
 )
 
 // Defines values for FactorySessionTargetRefKind.

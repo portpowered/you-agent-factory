@@ -156,7 +156,7 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 	}
 }
 
-func TestSessionScopedGetEvents_SessionHandshakeWritesStreamGenerationHeader(t *testing.T) {
+func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 	liveEvents := make(chan factoryapi.FactoryEvent)
 	close(liveEvents)
@@ -165,11 +165,23 @@ func TestSessionScopedGetEvents_SessionHandshakeWritesStreamGenerationHeader(t *
 	rec := httptest.NewRecorder()
 	srv.getEvents(rec, req, true, func(context.Context) (*interfaces.FactoryEventStream, error) {
 		return &interfaces.FactoryEventStream{
-			StreamGenerationID: "stream-gen-live-001",
-			Events:             liveEvents,
+			BackendScopeID:      "backend-scope-001",
+			LogicalSessionKeyID: "/workspace/root::default::",
+			FactorySessionID:      "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f",
+			StreamGenerationID:    "stream-gen-live-001",
+			Events:                liveEvents,
 		}, nil
 	})
 
+	if got := rec.Header().Get(sessionEventStreamBackendScopeHeader); got != "backend-scope-001" {
+		t.Fatalf("%s = %q, want backend-scope-001", sessionEventStreamBackendScopeHeader, got)
+	}
+	if got := rec.Header().Get(sessionEventStreamLogicalSessionKeyHeader); got != "/workspace/root::default::" {
+		t.Fatalf("%s = %q, want /workspace/root::default::", sessionEventStreamLogicalSessionKeyHeader, got)
+	}
+	if got := rec.Header().Get(sessionEventStreamFactorySessionHeader); got != "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f" {
+		t.Fatalf("%s = %q, want resolved UUID factory session id", sessionEventStreamFactorySessionHeader, got)
+	}
 	if got := rec.Header().Get(sessionEventStreamGenerationHeader); got != "stream-gen-live-001" {
 		t.Fatalf("%s = %q, want stream-gen-live-001", sessionEventStreamGenerationHeader, got)
 	}

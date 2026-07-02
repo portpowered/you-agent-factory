@@ -27,6 +27,7 @@ import (
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
@@ -105,8 +106,9 @@ type FactoryService struct {
 	sessions       *factorysessions.Registry
 	factorySave    factorySaveSaver
 	sessionGateway sessionGateway
-	runtimeBuild   *runtimebuild.Service
-	hostedWorkers  hostedworkers.Config
+	runtimeBuild      *runtimebuild.Service
+	workersScheduler  *workersservice.Service
+	hostedWorkers     hostedworkers.Config
 	factoryRootDir string
 	policy         serviceCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
@@ -169,11 +171,17 @@ type FactoryServiceConfig struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
-	// BackendScopeID is the stable session/cache namespace; empty local backends persist local-<uuid> during construction.
+	// BackendScopeID is the stable backend namespace used for session identity
+	// and client cache isolation. Empty local backends load or generate and
+	// persist local-<uuid> in system config during service construction.
 	BackendScopeID string
-	// SystemConfigHomeDir overrides the home directory for backendScopeID system config resolution.
+	// SystemConfigHomeDir overrides the home directory used to resolve the
+	// shared system config path for backendScopeID persistence. Empty uses
+	// os.UserHomeDir().
 	SystemConfigHomeDir string
-	// SystemConfigPath overrides the system config file path for backendScopeID persistence.
+	// SystemConfigPath overrides the system config file path used for
+	// backendScopeID persistence. Empty derives the path from
+	// SystemConfigHomeDir or os.UserHomeDir().
 	SystemConfigPath string
 	// RuntimeLogDir optionally overrides the default
 	// ~/.you-agent-factory/logs directory. Tests use this to keep file-backed
@@ -759,17 +767,10 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 		}()
 	}
 
-	fs.startCronWatchersForRuntime(
+	fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
 		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryDir(),
-		handle.Bundle.RuntimeCfg.FactoryConfig(),
-		handle.Bundle.RuntimeCfg,
-		submitWorkRequestWithFactory(handle.Bundle.Factory),
-	)
-	fs.startPollerWatchersForRuntime(
-		sidecarCtx,
-		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryConfig(),
 		handle.Bundle.RuntimeCfg,
 		submitWorkRequestWithFactory(handle.Bundle.Factory),

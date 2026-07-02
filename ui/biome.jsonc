@@ -80,7 +80,7 @@
       }
     },
     {
-      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.stories.tsx"],
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.tsx", "**/*.stories.tsx"],
       "linter": {
         "rules": {
           "style": {

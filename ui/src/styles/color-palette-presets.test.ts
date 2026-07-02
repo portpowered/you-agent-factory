@@ -7,8 +7,17 @@ import { getColorPaletteOptions } from "../features/header/messages/color-palett
 import { COLOR_PALETTE_IDS } from "../theme/color-palette";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
-const palettePresetsSourcePath = path.join(
+const packageStylesDir = path.resolve(
   stylesDir,
+  "..",
+  "..",
+  "packages",
+  "components",
+  "src",
+  "styles",
+);
+const palettePresetsSourcePath = path.join(
+  packageStylesDir,
   "color-palette-presets.css",
 );
 

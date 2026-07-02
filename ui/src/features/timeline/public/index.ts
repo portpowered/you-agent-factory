@@ -12,5 +12,5 @@ export {
   type TimelineCheckpointStreamIdentity,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
-  reconnectCursorFromCheckpoint,
 } from "../state/timelineCheckpointPersistence";
+export { reconnectCursorFromCheckpoint } from "../state/timelineCheckpointReconnect";

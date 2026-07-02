@@ -14,7 +14,8 @@ import {
   isDefaultFactorySessionID,
 } from "../../../../api/session-routing";
 import {
-  type TimelineCheckpointStreamIdentity,
+  normalizeStreamDerivedCacheIdentity,
+  type StreamDerivedCacheIdentity,
   useFactoryTimelineStore,
 } from "../../../timeline/public";
 import {
@@ -47,7 +48,7 @@ export interface UseFactoryEventStreamOptions {
   probeRecovery?: typeof probeFactoryEventStreamRecovery;
   refreshToken?: number;
   sessionID: string | null;
-  streamIdentity?: TimelineCheckpointStreamIdentity | null;
+  streamIdentity?: StreamDerivedCacheIdentity | null;
   validateReconnectCursor?: (
     sessionID?: string | null,
     reconnect?: FactoryEventReconnectCursor,
@@ -75,7 +76,7 @@ interface DashboardStreamConnectionOptions {
       typeof useDashboardStreamStore.getState
     >["streamState"],
   ) => void;
-  streamIdentity?: TimelineCheckpointStreamIdentity | null;
+  streamIdentity: StreamDerivedCacheIdentity | null;
   streamSessionID: string;
   validateReconnectCursor: (
     sessionID?: string | null,
@@ -83,7 +84,14 @@ interface DashboardStreamConnectionOptions {
   ) => Promise<FactoryEventReconnectValidationResult>;
 }
 
-function resolveStreamSessionID(sessionID: string | null): string {
+function resolveStreamSessionID(
+  sessionID: string | null,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+): string {
+  const resolvedIdentity = normalizeStreamDerivedCacheIdentity(streamIdentity);
+  if (resolvedIdentity) {
+    return resolvedIdentity.factorySessionID;
+  }
   if (sessionID == null) {
     return DEFAULT_FACTORY_SESSION_ID;
   }
@@ -204,7 +212,12 @@ function useDashboardStreamConnection({
       refs.staleCursorRecoveryAttemptedRef.current = false;
       invalidReconnectRecoveryUsedRef.current = false;
       refs.reconnectCursorRef.current = reconnectCursorFromEvent(event);
-      syncCurrentFactoryDefinition(queryClient, event, streamSessionID);
+      syncCurrentFactoryDefinition(
+        queryClient,
+        event,
+        streamSessionID,
+        streamIdentity,
+      );
       queuedEventsRef.current.push(
         compactFactoryEventForTimeline(event, debugOptions),
       );
@@ -357,8 +370,8 @@ export function useFactoryEventStream({
   const flushHandleRef = useRef<number | null>(null);
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
   const streamSessionID = useMemo(
-    () => resolveStreamSessionID(sessionID),
-    [sessionID],
+    () => resolveStreamSessionID(sessionID, streamIdentity),
+    [sessionID, streamIdentity],
   );
 
   const flushQueuedEvents = useCallback(() => {

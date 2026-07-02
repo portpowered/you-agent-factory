@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	sessionEventStreamBackendScopeHeader   = "X-Factory-Session-Backend-Scope-Id"
-	sessionEventStreamGenerationHeader     = "X-Factory-Session-Stream-Generation-Id"
+	sessionEventStreamBackendScopeHeader      = "X-Factory-Session-Backend-Scope-Id"
+	sessionEventStreamLogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
+	sessionEventStreamFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
+	sessionEventStreamGenerationHeader        = "X-Factory-Session-Stream-Generation-Id"
 )
 
 // GetStatus handles GET /status as the supported runtime status read model.
@@ -235,6 +237,12 @@ func writeSessionEventStreamHandshakeHeaders(
 ) {
 	if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
 		w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
+	}
+	if logicalSessionKeyID := strings.TrimSpace(stream.LogicalSessionKeyID); logicalSessionKeyID != "" {
+		w.Header().Set(sessionEventStreamLogicalSessionKeyHeader, logicalSessionKeyID)
+	}
+	if factorySessionID := strings.TrimSpace(stream.FactorySessionID); factorySessionID != "" {
+		w.Header().Set(sessionEventStreamFactorySessionHeader, factorySessionID)
 	}
 	if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
 		w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)

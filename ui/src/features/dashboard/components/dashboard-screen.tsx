@@ -156,6 +156,13 @@ function copyForPreflightRecovery(
     };
   }
 
+  if (recovery.reasonCode === "logical_session_unresolved") {
+    return {
+      detail: messages.logicalSessionUnresolvedDetail,
+      title: messages.logicalSessionUnresolvedTitle,
+    };
+  }
+
   return {
     detail: messages.unknownRecoveryDetail,
     title: messages.unknownRecoveryTitle,
