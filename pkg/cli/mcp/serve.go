@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
 	"github.com/spf13/cobra"
 )
@@ -19,7 +21,6 @@ type ServeConfig struct {
 	FixtureCatalogPath string
 	RuntimeBacked      bool
 	ProjectRoot        string
-	FactoryDir         string
 	Service            factorysessionexecution.Service
 	Stdin              *os.File
 	Stdout             *os.File
@@ -28,11 +29,11 @@ type ServeConfig struct {
 // RunServe starts the Factory Session MCP stdio server until stdin closes or the
 // process receives SIGINT/SIGTERM.
 func RunServe(ctx context.Context, cfg ServeConfig) error {
-	transport, err := composeMCPTransport(ctx, cfg)
+	service, err := resolveServeService(cfg)
 	if err != nil {
 		return err
 	}
-	client := transport.SessionClient()
+	client := mcpfactorysession.NewClientWithService(service)
 	server, err := mcpserver.New(mcpserver.Options{Client: client})
 	if err != nil {
 		return err
@@ -52,30 +53,71 @@ func RunServe(ctx context.Context, cfg ServeConfig) error {
 	return server.ServeStdio(ctx, stdin, stdout)
 }
 
-func composeMCPTransport(ctx context.Context, cfg ServeConfig) (*initializer.MCPTransport, error) {
-	if cfg.Service != nil {
-		return &initializer.MCPTransport{SessionExecution: cfg.Service}, nil
-	}
-	mcpCfg := &initializer.MCPConfig{
-		Options: initializer.MCPOptions{
-			FixtureCatalogPath: cfg.FixtureCatalogPath,
-			RuntimeBacked:      cfg.RuntimeBacked,
-			ProjectRoot:        cfg.ProjectRoot,
-		},
-	}
-	if trimmed := strings.TrimSpace(cfg.FactoryDir); trimmed != "" {
-		mcpCfg.Factory = &initializer.Config{Dir: trimmed}
-	}
-	return initializer.InitializeMCPTransport(ctx, mcpCfg)
-}
-
-// resolveServeService remains for focused unit tests that assert provider selection.
 func resolveServeService(cfg ServeConfig) (factorysessionexecution.Service, error) {
-	transport, err := composeMCPTransport(context.Background(), cfg)
+	if cfg.Service != nil {
+		return cfg.Service, nil
+	}
+	if cfg.RuntimeBacked {
+		projectRoot, err := resolveProjectRoot(cfg.ProjectRoot)
+		if err != nil {
+			return nil, err
+		}
+		service, err := factorysessionexecution.NewExecutionService(
+			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)
+		}
+		return service, nil
+	}
+	catalogPath, err := resolveFixtureCatalogPath(cfg.FixtureCatalogPath)
 	if err != nil {
 		return nil, err
 	}
-	return transport.SessionExecution, nil
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+	if err != nil {
+		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
+	}
+	return service, nil
+}
+
+func resolveProjectRoot(explicit string) (string, error) {
+	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
+		return trimmed, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve current working directory: %w", err)
+	}
+	return cwd, nil
+}
+
+func resolveFixtureCatalogPath(explicit string) (string, error) {
+	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
+		return trimmed, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve current working directory: %w", err)
+	}
+	relative := filepath.FromSlash(fixtures.ContractFixtureCatalogRelativePath)
+	dir := cwd
+	for {
+		candidate := filepath.Join(dir, relative)
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			return candidate, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return "", fmt.Errorf(
+		"fixture catalog not found; run from the repository root or set --fixture-catalog to %s",
+		fixtures.ContractFixtureCatalogRelativePath,
+	)
 }
 
 // NewServeCommand constructs `you mcp serve`.

@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -22,34 +21,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	"go.uber.org/zap"
 )
 
 func minimalFactoryConfig() map[string]any {
 	return factoryfixtures.MinimalFactoryConfig()
-}
-
-func assertResolvedDefaultLiveSessionID(t *testing.T, sessionID string) {
-	t.Helper()
-	if sessionID == factorysessions.DefaultSessionID {
-		t.Fatalf("session id = %q, want resolved uuid", sessionID)
-	}
-	if _, err := uuid.Parse(sessionID); err != nil {
-		t.Fatalf("session id = %q, want uuid: %v", sessionID, err)
-	}
-}
-
-func assertSingleDefaultSessionIDs(t *testing.T, ids []string) {
-	t.Helper()
-	if len(ids) != 1 {
-		t.Fatalf("session ids = %v, want one default session", ids)
-	}
-	assertResolvedDefaultLiveSessionID(t, ids[0])
 }
 
 func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
@@ -58,43 +37,26 @@ func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 }
 
 func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle) {
-	runtimehost.BindTestStartupRuntime(svc, bundle)
-}
-
-func newTestFactoryServiceWithOpts(opts runtimehost.TestHostOptions) *FactoryService {
-	return runtimehost.NewTestHost(opts)
-}
-
-func newTestFactoryServiceWithSessions(sessions *factorysessions.Registry) *FactoryService {
-	svc := newTestFactoryService()
-	svc.SetSessionsForTest(sessions)
-	return svc
-}
-
-func newTestFactoryService() *FactoryService {
-	return newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{})
-}
-
-func newTestFactoryServiceWithHostedWorkers(svcCfg *FactoryServiceConfig, logger *zap.Logger) *FactoryService {
-	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
-		Policy: serviceCoordinatorPolicyFromConfig(svcCfg),
-		Logger: logger,
-		Config: svcCfg,
-	})
-	svc.SetHostedWorkersForTest(buildHostedWorkersConfig(svcCfg, logger, nil))
-	return svc
-}
-
-func newTestFactoryServiceWithFactorySave(stub runtimehost.FactorySaveSaver) *FactoryService {
-	svc := newTestFactoryService()
-	svc.SetFactorySaveForTest(stub)
-	return svc
-}
-
-func newTestFactoryServiceWithDefinitions(stub FactoryDefinitionService) *FactoryService {
-	svc := newTestFactoryService()
-	svc.SetDefinitionsForTest(stub)
-	return svc
+	if svc == nil {
+		return
+	}
+	if svc.sessions == nil {
+		svc.sessions = factorysessions.NewRegistry()
+	}
+	handle := &liveRuntimeHandle{Bundle: bundle, RunDone: make(chan struct{})}
+	target := FactorySessionTarget{
+		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+	}
+	if svc.cfg != nil {
+		if folderPath := strings.TrimSpace(svc.cfg.Dir); folderPath != "" {
+			target.FolderPath = folderPath
+		}
+	}
+	if strings.TrimSpace(target.FolderPath) == "" && strings.TrimSpace(svc.factoryRootDir) != "" {
+		target.FolderPath = svc.factoryRootDir
+	}
+	svc.registerLiveSession(defaultFactorySessionID, handle, target, true)
+	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
 }
 
 type recordingDiagnosticsProvider struct{}
@@ -1222,7 +1184,7 @@ func resumeSessionFactory(t *testing.T, session *liveFactorySession) {
 
 func requireLiveSession(t *testing.T, svc *FactoryService, sessionID string) *liveFactorySession {
 	t.Helper()
-	session := svc.SessionByID(sessionID)
+	session := svc.sessionByID(sessionID)
 	if session == nil {
 		t.Fatalf("session %q is not registered", sessionID)
 	}

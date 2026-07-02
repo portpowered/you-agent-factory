@@ -29,12 +29,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -139,7 +137,7 @@ type RunConfig struct {
 	InvocationOutputMode string
 	// InvocationMetricsRecorder receives invocation counter emissions from the
 	// CLI boundary, including pre-runtime source conflicts.
-	InvocationMetricsRecorder runtimehost.InvocationMetricsRecorder
+	InvocationMetricsRecorder service.InvocationMetricsRecorder
 	Logger                    *zap.Logger
 }
 
@@ -151,7 +149,7 @@ type factoryServiceRunner interface {
 type RuntimeRunner = factoryServiceRunner
 
 type runtimeLogDiagnosticsProvider interface {
-	RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics
+	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
 }
 
 type engineStateSnapshotProvider interface {
@@ -171,15 +169,11 @@ type cleanInvocationWorkTarget struct {
 	WorkTypeName string
 }
 
-// RuntimeServiceBuilder constructs the runtime runner used by Run through
-// pkg/initializer transport composition.
-type RuntimeServiceBuilder func(
+// FactoryServiceBuilder constructs the factory service used by Run.
+type FactoryServiceBuilder func(
 	context.Context,
-	*initializer.Config,
+	*service.FactoryServiceConfig,
 ) (factoryServiceRunner, error)
-
-// FactoryServiceBuilder is the legacy name for RuntimeServiceBuilder.
-type FactoryServiceBuilder = RuntimeServiceBuilder
 
 // FactoryServiceBuildFunc constructs *service.FactoryService for registration
 // from cmd/ when the builder is defined outside pkg/cli/run.
@@ -198,30 +192,9 @@ func FactoryServiceBuilderFromService(build FactoryServiceBuildFunc) FactoryServ
 
 func defaultBuildFactoryService(
 	ctx context.Context,
-	cfg *initializer.Config,
+	cfg *service.FactoryServiceConfig,
 ) (factoryServiceRunner, error) {
-	if cfg != nil && cfg.Port > 0 {
-		transport, err := initializer.InitializeAPITransport(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		if transport == nil {
-			return nil, errors.New("initializer API transport missing")
-		}
-		return transport, nil
-	}
-	transport, err := initializer.InitializeCLITransport(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	if transport == nil {
-		return nil, errors.New("initializer CLI transport missing")
-	}
-	runner := transport.Runner()
-	if runner == nil {
-		return nil, errors.New("initializer CLI transport missing runtime runner")
-	}
-	return runner, nil
+	return service.BuildFactoryService(ctx, cfg)
 }
 
 var buildFactoryService FactoryServiceBuilder = defaultBuildFactoryService
@@ -540,12 +513,12 @@ func buildRunServiceConfig(
 	reservedAPIServer *reservedAPIServerListener,
 	dashboardReady chan struct{},
 	dashboardReadyOnce *sync.Once,
-) *initializer.Config {
+) *service.FactoryServiceConfig {
 	var apiServerReady chan struct{}
 	if cfg.Port > 0 {
 		apiServerReady = dashboardReady
 	}
-	svcCfg := &initializer.Config{
+	svcCfg := &service.FactoryServiceConfig{
 		Dir:                       cfg.Dir,
 		RunnerID:                  cfg.RunnerID,
 		OperatorDefaults:          cfg.OperatorDefaults,
@@ -725,7 +698,7 @@ func runAPIServerStarter(
 	reservedAPIServer *reservedAPIServerListener,
 	dashboardReady chan struct{},
 	dashboardReadyOnce *sync.Once,
-) runtimehost.APIServerStarter {
+) service.APIServerStarter {
 	markReady := func() {
 		dashboardReadyOnce.Do(func() {
 			close(dashboardReady)
@@ -743,7 +716,7 @@ func runAPIServerStarter(
 	}
 }
 
-func renderSimpleDashboard(input runtimehost.SimpleDashboardRenderInput) {
+func renderSimpleDashboard(input service.SimpleDashboardRenderInput) {
 	fmt.Print(dashboard.FormatSimpleDashboardWithRenderData(
 		input.EngineState,
 		input.RenderData,
@@ -771,15 +744,15 @@ func DashboardURL(host string, port int) string {
 	return "http://" + authority + "/dashboard/ui"
 }
 
-func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) runtimehost.RuntimeLogDiagnostics {
+func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
 	provider, ok := runner.(runtimeLogDiagnosticsProvider)
 	if !ok {
-		return runtimehost.RuntimeLogDiagnostics{}
+		return service.RuntimeLogDiagnostics{}
 	}
 	return provider.RuntimeLogDiagnostics()
 }
 
-func emitStartupMessages(cfg RunConfig, runtimeLog runtimehost.RuntimeLogDiagnostics) bool {
+func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics) bool {
 	if cfg.StartupOutput == nil {
 		return false
 	}

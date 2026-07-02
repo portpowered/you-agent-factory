@@ -76,10 +76,7 @@ func (h *openTestHost) BuildSessionProjectionContext(
 	return factorysessions.ProjectionContext{Session: session}, nil
 }
 
-func (h *openTestHost) ResolveSyncPreflightTarget(
-	_ string,
-	_ *interfaces.FactorySessionLogicalResolveHint,
-) (controlplane.SyncPreflightTarget, error) {
+func (h *openTestHost) ResolveSyncPreflightTarget(_ string, _ *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error) {
 	return controlplane.SyncPreflightTarget{Session: h.requireSession}, nil
 }
 

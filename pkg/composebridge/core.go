@@ -80,11 +80,11 @@ func ComposeCore(
 	if err != nil {
 		return nil, err
 	}
-	defaultLiveSessionID := factorysessions.NewSessionID()
+	defaultSessionID := factorysessions.DefaultSessionID
 	defaultSessionSpec, err := collaborators.RuntimeBuild.BuildSpec(ctx, runtimebuild.SessionSpecInput{
 		Dir:                                    cfg.Dir,
 		FolderPath:                             root.FactoryRootDir,
-		SessionID:                              defaultLiveSessionID,
+		SessionID:                              defaultSessionID,
 		ExecutionBaseDir:                       cfg.ExecutionBaseDir,
 		LoadedFactoryCfg:                       load.LoadedFactoryCfg,
 		RuntimeInstanceID:                      cfg.RuntimeInstanceID,
@@ -103,8 +103,8 @@ func ComposeCore(
 	if runtimeBundle == nil {
 		return nil, fmt.Errorf("default runtime bundle is required")
 	}
-	collaborators.Sessions.Upsert(factorysessions.NewLiveSession(
-		defaultLiveSessionID,
+	defaultSession := factorysessions.NewLiveSession(
+		defaultSessionID,
 		runtimeBundle.Dir,
 		runtimeBundle.FolderPath,
 		runtimeBundle.RuntimeCfg.RuntimeBaseDir(),
@@ -112,7 +112,9 @@ func ComposeCore(
 		NewStartupLiveSessionHandle(runtimeBundle, &defaultSessionSpec),
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
-	), true)
+	)
+	factorysessions.EnsureRuntimeFactorySessionID(defaultSession)
+	collaborators.Sessions.Upsert(defaultSession, true)
 
 	coreBuilt = true
 	return runtimehost.NewCore(

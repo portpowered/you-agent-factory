@@ -19,6 +19,14 @@ type FactorySessionLogicalResolveHint struct {
 	LogicalSessionKeyID string
 }
 
+// FactorySessionSyncPreflightOptions carries reconnect and logical identity hints
+// for session sync preflight resolution.
+type FactorySessionSyncPreflightOptions struct {
+	Reconnect           *FactoryEventReconnectCursor
+	BackendScopeID      *string
+	LogicalSessionKeyID *string
+}
+
 // FactoryEventReconnectScope configures how reconnect cursors are interpreted.
 type FactoryEventReconnectScope struct {
 	// SessionID enables sessionSequence-based after_sequence matching for

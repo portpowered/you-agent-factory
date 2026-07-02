@@ -175,45 +175,11 @@ func (a modelPullMetricsHostAdapter) RecordModelPullMetric(metric modelsservice.
 	})
 }
 
-// NewModelPullMetricsHostAdapter adapts host pull metrics recorders for pkg/models/service.
-func NewModelPullMetricsHostAdapter(recorder ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
-	if recorder == nil {
-		return nil
-	}
-	return modelPullMetricsHostAdapter{inner: recorder}
-}
-
-// CloneMetricLabels returns a defensive copy of metric labels.
-func CloneMetricLabels(labels map[string]string) map[string]string {
-	return cloneMetricLabels(labels)
-}
-
 func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
 	if cfg != nil && cfg.ModelAPI != nil {
 		return cfg.ModelAPI
 	}
 	return modelsservice.NewFromHost(modelServiceHost{Host: fs})
-}
-
-// ProvideModelServiceCollaborator constructs the model-domain collaborator for a
-// built Host shell.
-func ProvideModelServiceCollaborator(
-	shell HostShell,
-	cfg *Config,
-) apisurface.ModelAPI {
-	return wireModelServiceCollaborator(shell.Host, cfg)
-}
-
-// AttachModelServiceCollaborator assigns the model-domain collaborator on the
-// service shell and returns the assembled Host.
-func AttachModelServiceCollaborator(
-	shell HostShell,
-	modelAPI apisurface.ModelAPI,
-) *Host {
-	if shell.Host != nil {
-		shell.Host.modelService = modelAPI
-	}
-	return shell.Host
 }
 
 func (fs *Host) modelHost() modelhost.Host {

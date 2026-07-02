@@ -13,6 +13,7 @@ import {
   startFactoryApiServer,
   uiInteractionTimeoutMs,
   waitForDurableCheckpoint,
+  openDashboardWithSeededCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
   buildStreamIdentity,
@@ -24,6 +25,32 @@ import {
   replayWorldStateWithProviderSessionRef,
   seedTimelineCheckpoint,
 } from "./dashboard-session-recovery-manual-scenarios-harness.mjs";
+
+async function tabReconnectWithoutStaleCursor(
+  network,
+  {
+    defaultFactorySessionID,
+    resolvedDefaultFactorySessionID,
+  },
+) {
+  const urls = await network.readEventStreamURLs();
+  if (
+    urls.some(
+      (url) =>
+        url.includes(
+          `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
+        ) && eventStreamOmitsCursor(url),
+    )
+  ) {
+    return true;
+  }
+  return network.captured.syncPreflightReads.some(
+    (url) =>
+      url.includes(
+        `/factory-sessions/${defaultFactorySessionID}/sync-preflight`,
+      ) && !url.includes("after_event_id") && !url.includes("after_sequence"),
+  );
+}
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: scope-switch scenarios share one preview harness and IndexedDB helpers.
 describe.sequential("dashboard session recovery manual scope-switch scenarios", () => {
@@ -148,16 +175,18 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
 
       try {
         const tabOneNetwork = await installNetworkCapture(browserPage.page);
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await clearTimelineCheckpoints(browserPage.page);
-        await seedTimelineCheckpoint(browserPage.page, identity, {
-          afterEventId: "multi-tab-event-4",
-          afterSequence: 4,
-          selectedTick: 4,
-        });
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await openDashboardWithSeededCheckpoint(
+          browserPage.page,
+          preview.previewURL,
+          async () => {
+            await clearTimelineCheckpoints(browserPage.page);
+            await seedTimelineCheckpoint(browserPage.page, identity, {
+              afterEventId: "multi-tab-event-4",
+              afterSequence: 4,
+              selectedTick: 4,
+            });
+          },
+        );
 
         await waitForDurableCheckpoint(
           "tab one cursor reuse",
@@ -201,29 +230,14 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
 
         const staleReconnectTimeoutMs = 120_000;
-        const tabReconnectWithoutStaleCursor = async (network) => {
-          const urls = await network.readEventStreamURLs();
-          if (
-            urls.some(
-              (url) =>
-                url.includes(
-                  `/factory-sessions/${resolvedDefaultFactorySessionID}/events`,
-                ) && eventStreamOmitsCursor(url),
-            )
-          ) {
-            return true;
-          }
-          return network.captured.syncPreflightReads.some(
-            (url) =>
-              url.includes(
-                `/factory-sessions/${defaultFactorySessionID}/sync-preflight`,
-              ) && !url.includes("after_event_id") && !url.includes("after_sequence"),
-          );
-        };
 
         await waitForDurableCheckpoint(
           "tab one stale identity reconnect",
-          async () => tabReconnectWithoutStaleCursor(tabOneNetwork),
+          async () =>
+            tabReconnectWithoutStaleCursor(tabOneNetwork, {
+              defaultFactorySessionID,
+              resolvedDefaultFactorySessionID,
+            }),
           staleReconnectTimeoutMs,
         );
 
@@ -234,7 +248,11 @@ describe.sequential("dashboard session recovery manual scope-switch scenarios", 
         });
         await waitForDurableCheckpoint(
           "tab two stale identity reconnect",
-          async () => tabReconnectWithoutStaleCursor(tabTwoReloadNetwork),
+          async () =>
+            tabReconnectWithoutStaleCursor(tabTwoReloadNetwork, {
+              defaultFactorySessionID,
+              resolvedDefaultFactorySessionID,
+            }),
           staleReconnectTimeoutMs,
         );
 

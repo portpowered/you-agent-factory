@@ -16,7 +16,13 @@ export interface FactorySessionLogicalResolveHint {
   logicalSessionKeyID: string;
 }
 
-export interface GetFactorySessionSyncPreflightOptions {
+export interface FactorySessionSyncPreflightIdentityHints {
+  backendScopeId?: string;
+  logicalSessionKeyId?: string;
+}
+
+export interface GetFactorySessionSyncPreflightOptions
+  extends FactorySessionSyncPreflightIdentityHints {
   fetch?: typeof globalThis.fetch;
   logicalResolve?: FactorySessionLogicalResolveHint;
 }
@@ -36,7 +42,7 @@ export async function getFactorySessionSyncPreflight(
     );
   }
 
-  const query = buildSyncPreflightQuery(reconnectCursor, options.logicalResolve);
+  const query = buildSyncPreflightQuery(reconnectCursor, options);
 
   let response: Response;
   try {
@@ -84,7 +90,7 @@ export async function getFactorySessionSyncPreflight(
 
 function buildSyncPreflightQuery(
   reconnectCursor?: FactoryEventReconnectCursor,
-  logicalResolve?: FactorySessionLogicalResolveHint,
+  options?: GetFactorySessionSyncPreflightOptions,
 ): string {
   const params = new URLSearchParams();
   if (reconnectCursor?.afterEventId) {
@@ -93,14 +99,17 @@ function buildSyncPreflightQuery(
   if (reconnectCursor?.afterSequence != null) {
     params.set("after_sequence", String(reconnectCursor.afterSequence));
   }
-  if (logicalResolve?.backendScopeID.trim()) {
-    params.set("backend_scope_id", logicalResolve.backendScopeID.trim());
+  const backendScopeId =
+    options?.logicalResolve?.backendScopeID.trim() ||
+    options?.backendScopeId?.trim();
+  if (backendScopeId) {
+    params.set("backend_scope_id", backendScopeId);
   }
-  if (logicalResolve?.logicalSessionKeyID.trim()) {
-    params.set(
-      "logical_session_key_id",
-      logicalResolve.logicalSessionKeyID.trim(),
-    );
+  const logicalSessionKeyId =
+    options?.logicalResolve?.logicalSessionKeyID.trim() ||
+    options?.logicalSessionKeyId?.trim();
+  if (logicalSessionKeyId) {
+    params.set("logical_session_key_id", logicalSessionKeyId);
   }
   const query = params.toString();
   return query ? `?${query}` : "";

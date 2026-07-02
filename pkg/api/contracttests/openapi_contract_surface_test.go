@@ -216,7 +216,7 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 	}
 	parameters, ok := getOp["parameters"].([]any)
 	if !ok || len(parameters) != 5 {
-		t.Fatalf("sync preflight parameters = %#v, want session_id plus reconnect and logical resolve params", getOp["parameters"])
+		t.Fatalf("sync preflight parameters = %#v, want session_id plus identity and reconnect cursor params", getOp["parameters"])
 	}
 
 	response := schemaObject(t, schemas, "FactorySessionSyncPreflightResponse")
@@ -231,7 +231,20 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 	}
 
 	reasonCode := schemaObject(t, schemas, "FactorySessionSyncPreflightReasonCode")
-	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap", "logical_session_unresolved"})
+	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap", "invalid_target_reference", "logical_session_unresolved"})
+
+	logicalTarget := schemaObject(t, schemas, "FactorySessionLogicalTarget")
+	assertRequiredFields(t, logicalTarget, "kind", "folderPath")
+	logicalTargetProperties := schemaProperties(t, logicalTarget, "FactorySessionLogicalTarget")
+	assertPropertyRef(t, logicalTargetProperties, "kind", "#/components/schemas/FactorySessionLogicalTargetKind")
+	assertPropertyRef(t, logicalTargetProperties, "providerBoundary", "#/components/schemas/FactorySessionLogicalProviderBoundary")
+
+	streamIdentity := schemaObject(t, schemas, "FactorySessionStreamIdentity")
+	assertRequiredFields(t, streamIdentity, "backendScopeID", "logicalSessionKeyID", "factorySessionID", "streamGenerationID")
+	streamIdentityProperties := schemaProperties(t, streamIdentity, "FactorySessionStreamIdentity")
+	assertPropertyRef(t, streamIdentityProperties, "normalizedTarget", "#/components/schemas/FactorySessionLogicalTarget")
+
+	assertPropertyRef(t, properties, "normalizedTarget", "#/components/schemas/FactorySessionLogicalTarget")
 
 	reconnectCursor := schemaObject(t, schemas, "FactorySessionSyncPreflightReconnectCursor")
 	assertRequiredFields(t, reconnectCursor, "provided", "validForStreamGeneration")

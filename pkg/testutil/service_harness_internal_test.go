@@ -10,9 +10,10 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"go.uber.org/zap/zapcore"
 )
@@ -103,12 +104,12 @@ func TestNewServiceTestHarness_WithInvocationMetricsRecorder_RecordsSessionInvoc
 		t.Fatalf("WaitForRuntimeAvailability: %v", err)
 	}
 
-	_, err := h.svc.InvokeFactorySession(ctx, runtimehost.DefaultFactorySessionID, factoryapi.InvocationRequest{})
+	_, err := h.svc.InvokeFactorySession(ctx, sessionpath.DefaultFactorySessionID, factoryapi.InvocationRequest{})
 	if err == nil {
 		t.Fatal("InvokeFactorySession() error = nil, want invocation error")
 	}
-	if !recorder.Contains(runtimehost.InvocationMetricNormalizationAttempts, nil) {
-		t.Fatalf("expected %q invocation metric via harness recorder", runtimehost.InvocationMetricNormalizationAttempts)
+	if !recorder.Contains(service.InvocationMetricNormalizationAttempts, nil) {
+		t.Fatalf("expected %q invocation metric via harness recorder", service.InvocationMetricNormalizationAttempts)
 	}
 }
 

@@ -107,5 +107,6 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - [Development guide](internal/development/development.md)
 - [Architecture](architecture/architecture.md)
 - [Data model](architecture/data-model.md)
+- [Logical session identity](architecture/logical-session-identity.md)
 - [Cursor agent session storage](internal/development/cursor-agent-session-storage.md)
 - [React UI test warning inventory](internal/development/react-ui-test-warning-inventory.md)

@@ -11,9 +11,9 @@ import {
   persistTimelineCheckpoint,
   purgeLegacyTimelineCheckpoints,
   readTimelineCheckpoint,
-  reconnectCursorFromCheckpoint,
   type TimelineCheckpointStreamIdentity,
 } from "../timelineCheckpointPersistence";
+import { reconnectCursorFromCheckpoint } from "../timelineCheckpointReconnect";
 
 interface StoredCheckpointEnvelope {
   checkpoint?: {

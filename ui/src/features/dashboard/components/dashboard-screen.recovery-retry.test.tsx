@@ -3,7 +3,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { PropsWithChildren } from "react";
 
-import * as syncPreflightAPI from "../../../api/factory-sessions/sync-preflight";
+import * as factorySessionsAPI from "../../../api/factory-sessions";
+import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
@@ -28,25 +29,6 @@ function resolvedDefaultStreamIdentity() {
     factorySessionID: RESOLVED_DEFAULT_SESSION_UUID,
     logicalSessionKeyID: "logical-default",
     streamGenerationID: "2026-06-26T00:00:00Z",
-  };
-}
-
-function okSyncPreflightResponse(
-  overrides: Partial<syncPreflightAPI.FactorySessionSyncPreflightResponse> = {},
-) {
-  return {
-    backendScopeId: "backend-scope-a",
-    checkpointReusable: true,
-    factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
-    logicalSessionKeyId: "logical-default",
-    reasonCode: "ok" as const,
-    reconnectCursor: {
-      provided: false,
-      validForStreamGeneration: true,
-    },
-    requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
-    streamGenerationId: "2026-06-26T00:00:00Z",
-    ...overrides,
   };
 }
 
@@ -153,7 +135,7 @@ function createWrapper(queryClient: QueryClient) {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the browser-visible stale-cursor retry flow shares one integration-style harness.
 describe("DashboardScreen stale-cursor retry", () => {
   let queryClient: QueryClient;
-  let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
+  let getFactorySessionSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     replayHarness.install();
@@ -164,6 +146,23 @@ describe("DashboardScreen stale-cursor retry", () => {
         queries: { retry: false },
       },
     });
+    getFactorySessionSyncPreflightSpy = vi
+      .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
+      .mockResolvedValue({
+        backendScopeId: "backend-scope-a",
+        checkpointReusable: true,
+        factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
+        logicalSessionKeyId: "logical-default",
+        reasonCode: FactorySessionSyncPreflightReasonCode.ok,
+        reconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: true,
+        },
+        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationId: "2026-06-26T00:00:00Z",
+      });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes(`/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`)) {
@@ -185,24 +184,8 @@ describe("DashboardScreen stale-cursor retry", () => {
         );
       }
 
-      return new Response(null, { status: 404 });
+      throw new Error(`unexpected fetch for ${url}`);
     }));
-    getSyncPreflightSpy = vi
-      .spyOn(syncPreflightAPI, "getFactorySessionSyncPreflight")
-      .mockImplementation(async (_sessionID, reconnectCursor) =>
-        okSyncPreflightResponse({
-          checkpointReusable: true,
-          reconnectCursor: {
-            afterEventId: reconnectCursor?.afterEventId,
-            afterSequence: reconnectCursor?.afterSequence,
-            provided: Boolean(
-              reconnectCursor?.afterEventId ||
-                reconnectCursor?.afterSequence != null,
-            ),
-            validForStreamGeneration: true,
-          },
-        }),
-      );
     useDashboardBentoStore.setState({
       refreshToken: 0,
       selectedTraceID: null,
@@ -221,7 +204,7 @@ describe("DashboardScreen stale-cursor retry", () => {
 
   afterEach(() => {
     replayHarness.reset();
-    getSyncPreflightSpy.mockRestore();
+    getFactorySessionSyncPreflightSpy.mockRestore();
     vi.unstubAllGlobals();
     useDashboardBentoStore.setState({
       refreshToken: 0,

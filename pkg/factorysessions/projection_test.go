@@ -84,8 +84,20 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 	startedAt := now.Add(-5 * time.Minute)
 	argsSchema := json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"}}}`)
 	defaultPolicy := json.RawMessage(`{"maxAgents":3}`)
+	folderPath := t.TempDir()
+	logicalTarget := factoryapi.FactorySessionLogicalTarget{
+		Kind:       factoryapi.FactorySessionLogicalTargetKindDefault,
+		FolderPath: folderPath,
+	}
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{ID: "session-js", Project: "dynamic-workflow"},
+		Session: &LiveSession{
+			ID:      "session-js",
+			Project: "dynamic-workflow",
+			SessionState: SessionState{
+				FolderPath: folderPath,
+			},
+			Target: TargetRef{Kind: TargetKindDefault},
+		},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
@@ -114,9 +126,11 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 			RunningDispatches:   2,
 			CompletedDispatches: 4,
 		},
-		BackendScopeID:   "backend-scope-1",
-		RuntimeStartedAt: startedAt,
-		Now:              now,
+		BackendScopeID:      "backend-scope-1",
+		LogicalSessionKeyID: "lsk-0123456789abcdef0123456789abcdef",
+		NormalizedTarget:    &logicalTarget,
+		RuntimeStartedAt:    startedAt,
+		Now:                 now,
 	})
 	assertJavaScriptWorkflowSessionProjection(t, runtime)
 	if runtime.Budgets == nil || runtime.Budgets.MaxAgents == nil || *runtime.Budgets.MaxAgents != 3 {
@@ -126,18 +140,33 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 		t.Fatal("stream identity = nil, want identity for javascript session")
 	}
 	if runtime.StreamIdentity.BackendScopeID != "backend-scope-1" ||
-		runtime.StreamIdentity.LogicalSessionKeyID != "::default::" ||
+		runtime.StreamIdentity.LogicalSessionKeyID != "lsk-0123456789abcdef0123456789abcdef" ||
 		runtime.StreamIdentity.FactorySessionID != "session-js" ||
 		runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
 		t.Fatalf("stream identity = %#v, want stable backend/logical/session/start tuple", runtime.StreamIdentity)
+	}
+	if runtime.StreamIdentity.LogicalSessionKeyID == "" || runtime.StreamIdentity.NormalizedTarget == nil {
+		t.Fatalf("stream identity = %#v, want logical identity fields", runtime.StreamIdentity)
 	}
 }
 
 func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGenerationID(t *testing.T) {
 	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
 	startedAt := now.Add(-10 * time.Minute)
+	folderPath := t.TempDir()
+	logicalTarget := factoryapi.FactorySessionLogicalTarget{
+		Kind:       factoryapi.FactorySessionLogicalTargetKindDefault,
+		FolderPath: folderPath,
+	}
 	runtime := ProjectRuntime(ProjectionContext{
-		Session: &LiveSession{ID: "session-js", Project: "dynamic-workflow"},
+		Session: &LiveSession{
+			ID:      "session-js",
+			Project: "dynamic-workflow",
+			SessionState: SessionState{
+				FolderPath: folderPath,
+			},
+			Target: TargetRef{Kind: TargetKindDefault},
+		},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
 			Orchestrator: &interfaces.FactoryOrchestratorConfig{
@@ -157,9 +186,11 @@ func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGeneration
 			ArgsDigest:   "sha256:args-digest",
 			ScriptStatus: "RUNNING",
 		},
-		BackendScopeID:   "backend-scope-1",
-		RuntimeStartedAt: startedAt,
-		Now:              now,
+		BackendScopeID:      "backend-scope-1",
+		LogicalSessionKeyID: "lsk-0123456789abcdef0123456789abcdef",
+		NormalizedTarget:    &logicalTarget,
+		RuntimeStartedAt:    startedAt,
+		Now:                 now,
 	})
 	if runtime.StreamIdentity == nil {
 		t.Fatal("stream identity = nil, want identity for javascript session")

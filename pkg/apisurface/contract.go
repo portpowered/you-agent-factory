@@ -41,7 +41,7 @@ type FactorySaveAPI interface {
 type SessionAPI interface {
 	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error)
-	GetFactorySessionSyncPreflight(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor, logicalResolve *interfaces.FactorySessionLogicalResolveHint) (factoryapi.FactorySessionSyncPreflightResponse, error)
+	GetFactorySessionSyncPreflight(ctx context.Context, sessionID string, options interfaces.FactorySessionSyncPreflightOptions) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)

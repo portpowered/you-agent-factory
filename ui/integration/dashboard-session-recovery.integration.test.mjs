@@ -14,6 +14,7 @@ import {
   timelineCheckpointDBVersion,
   timelineCheckpointSchemaVersion,
   uiInteractionTimeoutMs,
+  openDashboardWithSeededCheckpoint,
   waitForDurableCheckpoint,
 } from "./browser-test-harness.mjs";
 
@@ -216,15 +217,16 @@ describe.sequential("dashboard session recovery browser integration", () => {
 
       try {
         await installEventStreamCapture(browserPage.page);
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await seedTimelineCheckpoint(browserPage.page, currentStreamIdentity, {
-          afterEventId: "browser-checkpoint-event-7",
-          afterSequence: 7,
-          selectedTick: 7,
-        });
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await openDashboardWithSeededCheckpoint(
+          browserPage.page,
+          preview.previewURL,
+          () =>
+            seedTimelineCheckpoint(browserPage.page, currentStreamIdentity, {
+              afterEventId: "browser-checkpoint-event-7",
+              afterSequence: 7,
+              selectedTick: 7,
+            }),
+        );
         await waitForDurableCheckpoint(
           "matching checkpoint stream",
           async () => {
@@ -243,6 +245,7 @@ describe.sequential("dashboard session recovery browser integration", () => {
         ).toBe(true);
 
         await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await new Promise((resolve) => setTimeout(resolve, 800));
         await clearTimelineCheckpoints(browserPage.page);
         await seedTimelineCheckpoint(
           browserPage.page,
@@ -313,15 +316,16 @@ describe.sequential("dashboard session recovery browser integration", () => {
 
       try {
         await installEventStreamCapture(browserPage.page);
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await seedTimelineCheckpoint(browserPage.page, currentStreamIdentity, {
-          afterEventId: "browser-checkpoint-event-7",
-          afterSequence: 7,
-          selectedTick: 7,
-        });
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await openDashboardWithSeededCheckpoint(
+          browserPage.page,
+          preview.previewURL,
+          () =>
+            seedTimelineCheckpoint(browserPage.page, currentStreamIdentity, {
+              afterEventId: "browser-checkpoint-event-7",
+              afterSequence: 7,
+              selectedTick: 7,
+            }),
+        );
 
         let eventStreamAttempts = 0;
         await browserPage.page.route(

@@ -57,7 +57,7 @@ type FactoryCoordinator interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
-	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor, *interfaces.FactorySessionLogicalResolveHint) (factoryapi.FactorySessionSyncPreflightResponse, error)
+	GetFactorySessionSyncPreflight(context.Context, string, interfaces.FactorySessionSyncPreflightOptions) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
@@ -845,10 +845,10 @@ func (c *runtimeCoordinator) GetFactorySession(ctx context.Context, sessionID st
 func (fs *Host) GetFactorySessionSyncPreflight(
 	ctx context.Context,
 	sessionID string,
-	reconnect *interfaces.FactoryEventReconnectCursor,
-	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
+	options interfaces.FactorySessionSyncPreflightOptions,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
-	response, err := fs.requireSessionGateway().GetFactorySessionSyncPreflight(ctx, sessionID, reconnect, logicalResolve)
+	logicalResolve := logicalResolveHintFromSyncPreflightOptions(options)
+	response, err := fs.requireSessionGateway().GetFactorySessionSyncPreflight(ctx, sessionID, options.Reconnect, logicalResolve)
 	if err != nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, err
 	}
@@ -859,13 +859,32 @@ func (fs *Host) GetFactorySessionSyncPreflight(
 func (c *runtimeCoordinator) GetFactorySessionSyncPreflight(
 	ctx context.Context,
 	sessionID string,
-	reconnect *interfaces.FactoryEventReconnectCursor,
-	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
+	options interfaces.FactorySessionSyncPreflightOptions,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	if c.host == nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, fmt.Errorf("factory service is required")
 	}
-	return c.host.GetFactorySessionSyncPreflight(ctx, sessionID, reconnect, logicalResolve)
+	return c.host.GetFactorySessionSyncPreflight(ctx, sessionID, options)
+}
+
+func logicalResolveHintFromSyncPreflightOptions(
+	options interfaces.FactorySessionSyncPreflightOptions,
+) *interfaces.FactorySessionLogicalResolveHint {
+	backendScopeID := ""
+	if options.BackendScopeID != nil {
+		backendScopeID = strings.TrimSpace(*options.BackendScopeID)
+	}
+	logicalSessionKeyID := ""
+	if options.LogicalSessionKeyID != nil {
+		logicalSessionKeyID = strings.TrimSpace(*options.LogicalSessionKeyID)
+	}
+	if backendScopeID == "" && logicalSessionKeyID == "" {
+		return nil
+	}
+	return &interfaces.FactorySessionLogicalResolveHint{
+		BackendScopeID:      backendScopeID,
+		LogicalSessionKeyID: logicalSessionKeyID,
+	}
 }
 
 type sessionSyncPreflightTarget struct {
@@ -1115,10 +1134,6 @@ func factorySessionBackendScopeID(fs *Host, session *factorysessions.LiveSession
 		return strings.TrimSpace(bundle.BackendScopeID)
 	}
 	return ""
-}
-
-func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) string {
-	return factorysessions.LogicalSessionKeyID(session)
 }
 
 func factorySessionStreamGenerationID(_ *Host, session *factorysessions.LiveSession) string {
@@ -1914,13 +1929,6 @@ func newSessionGatewayService(fs *Host) *factorysessionservice.Service {
 	return factorysessionservice.New(sessionGatewayHost{fs})
 }
 
-func wireSessionGatewayCollaborator(fs *Host, cfg *Config) SessionGateway {
-	if cfg != nil && cfg.SessionGateway != nil {
-		return cfg.SessionGateway
-	}
-	return newSessionGatewayService(fs)
-}
-
 func (fs *Host) requireSessionGateway() SessionGateway {
 	if fs == nil {
 		return newSessionGatewayService(nil)
@@ -1929,17 +1937,4 @@ func (fs *Host) requireSessionGateway() SessionGateway {
 		fs.sessionGateway = newSessionGatewayService(fs)
 	}
 	return fs.sessionGateway
-}
-
-// ProvideSessionGatewayCollaborator constructs the session gateway for a built service shell.
-func ProvideSessionGatewayCollaborator(shell HostShell, cfg *Config) SessionGateway {
-	return wireSessionGatewayCollaborator(shell.Host, cfg)
-}
-
-// AttachSessionGatewayCollaborator assigns the session gateway on the service shell.
-func AttachSessionGatewayCollaborator(shell HostShell, gateway SessionGateway) *Host {
-	if shell.Host != nil {
-		shell.Host.sessionGateway = gateway
-	}
-	return shell.Host
 }

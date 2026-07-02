@@ -25,7 +25,8 @@ import {
 } from "../../timeline/state/factoryTimelineStore";
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
 import { readTimelineCheckpoint } from "../../timeline/state/timelineCheckpointPersistence";
-import * as syncPreflightAPI from "../../../api/factory-sessions/sync-preflight";
+import * as factorySessionsAPI from "../../../api/factory-sessions";
+import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
@@ -36,6 +37,42 @@ import { useDashboardSnapshot } from "./useDashboardSnapshot";
 
 const replayHarness = createReplayHarness();
 
+const DEFAULT_STREAM_GENERATION_ID = "2026-06-26T00:00:00Z";
+const DEFAULT_BACKEND_SCOPE_ID = "backend-scope-a";
+const DEFAULT_LOGICAL_SESSION_KEY_ID = "lsk-default-folder";
+const DEFAULT_RUNTIME_FACTORY_SESSION_ID =
+  "550e8400-e29b-41d4-a716-446655440000";
+const RESOLVED_DEFAULT_SESSION_UUID = DEFAULT_RUNTIME_FACTORY_SESSION_ID;
+
+function defaultStreamIdentity(
+  factorySessionID = RESOLVED_DEFAULT_SESSION_UUID,
+) {
+  return {
+    backendScopeID: DEFAULT_BACKEND_SCOPE_ID,
+    factorySessionID,
+    logicalSessionKeyID: DEFAULT_LOGICAL_SESSION_KEY_ID,
+    streamGenerationID: DEFAULT_STREAM_GENERATION_ID,
+  };
+}
+
+function buildSyncPreflightResponse(
+  overrides: Partial<factorySessionsAPI.FactorySessionSyncPreflightResponse> = {},
+): factorySessionsAPI.FactorySessionSyncPreflightResponse {
+  return {
+    backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
+    checkpointReusable: true,
+    factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
+    logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
+    reasonCode: FactorySessionSyncPreflightReasonCode.ok,
+    reconnectCursor: {
+      provided: false,
+      validForStreamGeneration: true,
+    },
+    requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+    streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
+    ...overrides,
+  };
+}
 const SEEDED_SNAPSHOT: DashboardSnapshot = {
   factory_state: "IDLE",
   runtime: {
@@ -137,92 +174,27 @@ function timelineSnapshot(snapshot: DashboardSnapshot): WorldState {
   };
 }
 
-const RESOLVED_DEFAULT_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
-
-function resolvedDefaultStreamIdentity() {
-  return {
-    backendScopeID: "backend-scope-a",
-    factorySessionID: RESOLVED_DEFAULT_SESSION_UUID,
-    logicalSessionKeyID: "logical-default",
-    streamGenerationID: "2026-06-26T00:00:00Z",
-  };
-}
-
-function checkpointStorageKey(): string {
-  const identity = resolvedDefaultStreamIdentity();
+function checkpointStorageKey(
+  factorySessionID = RESOLVED_DEFAULT_SESSION_UUID,
+): string {
   return [
-    identity.backendScopeID,
-    identity.factorySessionID,
-    identity.streamGenerationID,
+    DEFAULT_BACKEND_SCOPE_ID,
+    factorySessionID,
+    DEFAULT_STREAM_GENERATION_ID,
   ].join("::");
-}
-
-function okSyncPreflightResponse(
-  overrides: Partial<syncPreflightAPI.FactorySessionSyncPreflightResponse> = {},
-) {
-  return {
-    backendScopeId: resolvedDefaultStreamIdentity().backendScopeID,
-    checkpointReusable: true,
-    factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
-    logicalSessionKeyId: resolvedDefaultStreamIdentity().logicalSessionKeyID,
-    reasonCode: "ok" as const,
-    reconnectCursor: {
-      provided: false,
-      validForStreamGeneration: true,
-    },
-    requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
-    streamGenerationId: resolvedDefaultStreamIdentity().streamGenerationID,
-    ...overrides,
-  };
-}
-
-function okSyncPreflightResponseForSession(
-  sessionID: string,
-  reconnectCursor?: syncPreflightAPI.FactorySessionSyncPreflightRequest["reconnectCursor"],
-) {
-  if (sessionID === "session-beta") {
-    return okSyncPreflightResponse({
-      backendScopeId: "backend-scope-b",
-      factorySessionId: "session-beta",
-      logicalSessionKeyId: "logical-beta",
-      requestedSessionId: "session-beta",
-      reconnectCursor: {
-        afterEventId: reconnectCursor?.afterEventId,
-        afterSequence: reconnectCursor?.afterSequence,
-        provided: Boolean(
-          reconnectCursor?.afterEventId ||
-            reconnectCursor?.afterSequence != null,
-        ),
-        validForStreamGeneration: true,
-      },
-    });
-  }
-  return okSyncPreflightResponse({
-    checkpointReusable: true,
-    reconnectCursor: {
-      afterEventId: reconnectCursor?.afterEventId,
-      afterSequence: reconnectCursor?.afterSequence,
-      provided: Boolean(
-        reconnectCursor?.afterEventId || reconnectCursor?.afterSequence != null,
-      ),
-      validForStreamGeneration: true,
-    },
-  });
 }
 
 describe("useDashboardSnapshot composer", () => {
   let indexedDBRecords: Map<string, unknown>;
   let queryClient: QueryClient;
-  let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
+  let getFactorySessionSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     replayHarness.install();
     indexedDBRecords = installIndexedDBTestDouble();
-    getSyncPreflightSpy = vi
-      .spyOn(syncPreflightAPI, "getFactorySessionSyncPreflight")
-      .mockImplementation(async (sessionID, reconnectCursor) =>
-        okSyncPreflightResponseForSession(sessionID, reconnectCursor),
-      );
+    getFactorySessionSyncPreflightSpy = vi
+      .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
+      .mockResolvedValue(buildSyncPreflightResponse());
     window.sessionStorage.clear();
     queryClient = new QueryClient({
       defaultOptions: {
@@ -231,7 +203,6 @@ describe("useDashboardSnapshot composer", () => {
       },
     });
     useDashboardStreamStore.setState({
-      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useDashboardSessionStore.setState({
@@ -252,11 +223,10 @@ describe("useDashboardSnapshot composer", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    getSyncPreflightSpy.mockRestore();
+    getFactorySessionSyncPreflightSpy.mockRestore();
     replayHarness.reset();
     window.sessionStorage.clear();
     useDashboardStreamStore.setState({
-      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useDashboardSessionStore.setState({
@@ -309,78 +279,66 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   it("preflights the selected session before restoring checkpoints or opening the stream", async () => {
-    const checkpoint = {
-      afterEventId: "event-2",
-      afterSequence: 2,
-      replayState: emptyReplayWorldState(SEEDED_SNAPSHOT.tick_count),
-      selectedTick: SEEDED_SNAPSHOT.tick_count,
-    };
-    const readCheckpointSpy = vi
-      .spyOn(
-        await import("../../timeline/state/timelineCheckpointPersistence"),
-        "readTimelineCheckpoint",
-      )
-      .mockResolvedValue(checkpoint);
-
-    let resolvePreflight: (() => void) | null = null;
-    let preflightCallCount = 0;
-    getSyncPreflightSpy.mockImplementation(async (_sessionID, reconnectCursor) => {
-      preflightCallCount += 1;
-      if (preflightCallCount === 1) {
-        await new Promise<void>((resolve) => {
-          resolvePreflight = resolve;
-        });
-      }
-      return okSyncPreflightResponse({
+    indexedDBRecords.set(checkpointStorageKey(), {
+      checkpoint: {
+        afterEventId: "event-2",
+        afterSequence: 2,
+        replayState: emptyReplayWorldState(SEEDED_SNAPSHOT.tick_count),
+        selectedTick: SEEDED_SNAPSHOT.tick_count,
+      },
+      schemaVersion: 3,
+      storageKey: checkpointStorageKey(),
+      streamIdentity: defaultStreamIdentity(),
+    });
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
         checkpointReusable: true,
         reconnectCursor: {
-          afterEventId: reconnectCursor?.afterEventId,
-          afterSequence: reconnectCursor?.afterSequence,
-          provided: Boolean(
-            reconnectCursor?.afterEventId ||
-              reconnectCursor?.afterSequence != null,
-          ),
+          afterEventId: "event-2",
+          afterSequence: 2,
+          provided: true,
           validForStreamGeneration: true,
         },
-      });
-    });
+      }),
+    );
 
     renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),
     });
 
-    expect(replayHarness.getStreams()).toHaveLength(0);
-    expect(readCheckpointSpy).not.toHaveBeenCalled();
-
-    await act(async () => {
-      resolvePreflight?.();
-      await Promise.resolve();
-    });
-
     await waitFor(() => {
-      expect(readCheckpointSpy).toHaveBeenCalledWith(
-        window.indexedDB,
-        resolvedDefaultStreamIdentity(),
+      expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
+        DEFAULT_FACTORY_SESSION_ID,
+        {
+          afterEventId: "event-2",
+          afterSequence: 2,
+        },
+        {
+          backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
+          logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
+        },
       );
     });
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
-
-    readCheckpointSpy.mockRestore();
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(
+      SEEDED_SNAPSHOT.tick_count,
+    );
   });
 
   it("surfaces a recoverable preflight recovery state when sync preflight cannot resolve the session", async () => {
     useFactoryTimelineStore.getState().reset();
-    getSyncPreflightSpy.mockResolvedValue({
-      checkpointReusable: false,
-      reasonCode: "session_not_found",
-      reconnectCursor: {
-        provided: false,
-        validForStreamGeneration: false,
-      },
-      requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
-    });
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: false,
+        reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,
+        reconnectCursor: {
+          provided: false,
+          validForStreamGeneration: false,
+        },
+      }),
+    );
 
     const { result } = renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),
@@ -397,6 +355,16 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   it("reopens the event stream when the selected session tab changes", async () => {
+    getFactorySessionSyncPreflightSpy.mockImplementation(async (sessionID) =>
+      buildSyncPreflightResponse({
+        factorySessionId:
+          sessionID === DEFAULT_FACTORY_SESSION_ID
+            ? RESOLVED_DEFAULT_SESSION_UUID
+            : sessionID,
+        requestedSessionId: sessionID,
+      }),
+    );
+
     renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),
     });
@@ -520,7 +488,10 @@ describe("useDashboardSnapshot composer", () => {
     });
     await waitFor(async () => {
       await expect(
-        readTimelineCheckpoint(window.indexedDB, resolvedDefaultStreamIdentity()),
+        readTimelineCheckpoint(
+          window.indexedDB,
+          defaultStreamIdentity(),
+        ),
       ).resolves.toEqual(
         expect.objectContaining({
           afterEventId: "checkpoint-event-7",
@@ -529,11 +500,27 @@ describe("useDashboardSnapshot composer", () => {
         }),
       );
     });
+    await act(async () => {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 800);
+      });
+    });
 
     unmount();
     replayHarness.reset();
     replayHarness.install();
     useFactoryTimelineStore.getState().reset();
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: true,
+        reconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: true,
+        },
+      }),
+    );
 
     renderHook(() => useDashboardSnapshot(), {
       wrapper: createWrapper(queryClient),
@@ -548,6 +535,7 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   it("ignores and deletes legacy v1 checkpoints without reopening from a stale cursor", async () => {
+    useFactoryTimelineStore.getState().reset();
     indexedDBRecords.set(checkpointStorageKey(), {
       checkpoint: {
         afterEventId: "legacy-event-7",
@@ -556,7 +544,6 @@ describe("useDashboardSnapshot composer", () => {
         selectedTick: 7,
       },
       schemaVersion: 1,
-      sessionID: DEFAULT_FACTORY_SESSION_ID,
       storageKey: checkpointStorageKey(),
     });
 
@@ -572,7 +559,7 @@ describe("useDashboardSnapshot composer", () => {
     );
     expect(useFactoryTimelineStore.getState().selectedTick).not.toBe(7);
     await expect(
-      readTimelineCheckpoint(window.indexedDB, resolvedDefaultStreamIdentity()),
+      readTimelineCheckpoint(window.indexedDB, defaultStreamIdentity()),
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
@@ -588,30 +575,18 @@ describe("useDashboardSnapshot composer", () => {
       },
       schemaVersion: 3,
       storageKey: checkpointStorageKey(),
-      streamIdentity: resolvedDefaultStreamIdentity(),
+      streamIdentity: defaultStreamIdentity(),
     });
-    getSyncPreflightSpy
-      .mockResolvedValueOnce(okSyncPreflightResponse())
-      .mockResolvedValueOnce(
-        okSyncPreflightResponse({
-          checkpointReusable: false,
-          reasonCode: "cursor_stale",
-          reconnectCursor: {
-            afterEventId: "checkpoint-event-7",
-            afterSequence: 7,
-            provided: true,
-            validForStreamGeneration: false,
-          },
-        }),
-      );
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        body: {
-          cancel: vi.fn().mockResolvedValue(undefined),
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: false,
+        reasonCode: FactorySessionSyncPreflightReasonCode.cursor_stale,
+        reconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: false,
         },
-        ok: false,
-        status: 400,
       }),
     );
 
@@ -625,82 +600,195 @@ describe("useDashboardSnapshot composer", () => {
     expect(replayHarness.getStreams()[0]?.url).toBe(
       `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
-    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    await waitFor(() => {
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    });
     await expect(
-      readTimelineCheckpoint(window.indexedDB, resolvedDefaultStreamIdentity()),
+      readTimelineCheckpoint(window.indexedDB, defaultStreamIdentity()),
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
 
-  it("reopens the stream without a stale persisted cursor after same-session refresh", async () => {
-    useFactoryTimelineStore.getState().reset();
-
-    const { rerender } = renderHook(
-      ({ refreshToken }: { refreshToken: number }) =>
-        useDashboardSnapshot({ refreshToken }),
-      {
-        initialProps: { refreshToken: 0 },
-        wrapper: createWrapper(queryClient),
-      },
+  it("remaps the ~default alias to the resolved UUID runtime identity", async () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: true,
+        factorySessionId: DEFAULT_RUNTIME_FACTORY_SESSION_ID,
+        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationId: `${DEFAULT_BACKEND_SCOPE_ID}::${DEFAULT_RUNTIME_FACTORY_SESSION_ID}`,
+      }),
     );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
 
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
-    const stream = replayHarness.getStreams()[0];
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_RUNTIME_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      DEFAULT_FACTORY_SESSION_ID,
+    );
+    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(
+      false,
+    );
+  });
 
-    await act(async () => {
-      stream.emit("message", {
-        context: {
-          eventTime: "2026-04-25T20:00:01Z",
-          sequence: 29,
-          sessionSequence: 29,
-          tick: 29,
+  it("remaps a stale factory session id through logical identity without reusing the reconnect cursor", async () => {
+    const remappedSessionID = "session-remapped-002";
+    const staleStreamIdentity = defaultStreamIdentity("session-stale-001");
+    indexedDBRecords.set(checkpointStorageKey("session-stale-001"), {
+      checkpoint: {
+        afterEventId: "checkpoint-event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+        syncIdentity: {
+          backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
+          factorySessionId: "session-stale-001",
+          logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
+          streamGenerationId: "2026-06-27T00:00:00Z",
         },
-        id: "factory-event/dispatch-completed/stale-cursor",
-        payload: {
-          factory: {
-            workTypes: [
-              {
-                name: "story",
-                states: [{ name: "new", type: "INITIAL" }],
-              },
-            ],
-            workstations: [],
-            workers: [],
-          },
+      },
+      schemaVersion: 3,
+      storageKey: checkpointStorageKey("session-stale-001"),
+      streamIdentity: staleStreamIdentity,
+    });
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: "session-stale-001",
+    });
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: false,
+        factorySessionId: remappedSessionID,
+        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: false,
         },
-        type: FACTORY_EVENT_TYPES.initialStructureRequest,
-      });
-      await new Promise<void>((resolve) => {
-        window.setTimeout(() => resolve(), 20);
-      });
-    });
+        requestedSessionId: "session-stale-001",
+        streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
+      }),
+    );
 
-    await waitFor(async () => {
-      await expect(
-        readTimelineCheckpoint(
-          window.indexedDB,
-          resolvedDefaultStreamIdentity(),
-        ),
-      ).resolves.toEqual(
-        expect.objectContaining({
-          afterEventId: "factory-event/dispatch-completed/stale-cursor",
-          afterSequence: 29,
-        }),
-      );
-    });
-
-    act(() => {
-      rerender({ refreshToken: 1 });
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
     });
 
     await waitFor(() => {
-      expect(replayHarness.getStreams()).toHaveLength(2);
+      expect(replayHarness.getStreams()).toHaveLength(1);
     });
-    expect(replayHarness.getStreams().at(-1)?.url).toBe(
-      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${remappedSessionID}/events`,
     );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      remappedSessionID,
+    );
+    expect(indexedDBRecords.has(checkpointStorageKey("session-stale-001"))).toBe(
+      false,
+    );
+  });
+
+  it("remaps a stale session using envelope stream identity when checkpoint sync identity is absent", async () => {
+    const remappedSessionID = "session-remapped-002";
+    const staleSessionID = "session-stale-001";
+    const staleStreamIdentity = defaultStreamIdentity(staleSessionID);
+    indexedDBRecords.set(checkpointStorageKey(staleSessionID), {
+      checkpoint: {
+        afterEventId: "checkpoint-event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+      },
+      schemaVersion: 3,
+      storageKey: checkpointStorageKey(staleSessionID),
+      streamIdentity: staleStreamIdentity,
+    });
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: staleSessionID,
+    });
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: false,
+        factorySessionId: remappedSessionID,
+        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: false,
+        },
+        requestedSessionId: staleSessionID,
+        streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
+        staleSessionID,
+        {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+        },
+        {
+          backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
+          logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
+        },
+      );
+    });
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${remappedSessionID}/events`,
+    );
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      remappedSessionID,
+    );
+    expect(indexedDBRecords.has(checkpointStorageKey(staleSessionID))).toBe(
+      false,
+    );
+  });
+
+  it("surfaces typed preflight recovery for unresolved logical targets", async () => {
+    getFactorySessionSyncPreflightSpy.mockResolvedValue({
+      checkpointReusable: false,
+      reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,
+      reconnectCursor: {
+        provided: false,
+        validForStreamGeneration: false,
+      },
+      requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+    });
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(result.current.preflightRecovery).toEqual({
+        reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,
+        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+      });
+    });
+    expect(result.current.error).toBeNull();
+    expect(replayHarness.getStreams()).toHaveLength(0);
   });
 });
 
@@ -720,9 +808,15 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
       ),
     );
     getSyncPreflightSpy = vi
-      .spyOn(syncPreflightAPI, "getFactorySessionSyncPreflight")
-      .mockImplementation(async (sessionID, reconnectCursor) =>
-        okSyncPreflightResponseForSession(sessionID, reconnectCursor),
+      .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
+      .mockImplementation(async (sessionID) =>
+        buildSyncPreflightResponse({
+          factorySessionId:
+            sessionID === DEFAULT_FACTORY_SESSION_ID
+              ? RESOLVED_DEFAULT_SESSION_UUID
+              : sessionID,
+          requestedSessionId: sessionID,
+        }),
       );
     window.sessionStorage.clear();
     queryClient = new QueryClient({

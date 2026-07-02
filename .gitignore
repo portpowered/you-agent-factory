@@ -45,6 +45,8 @@ factory/inputs/**
 
 ui/coverage/*
 ui/.vitest-reports/
+ui/.vitest-report-timings/
+*.test
 factory/logs/complete
 factory/logs/meta/*
 !factory/logs/meta/asks.md

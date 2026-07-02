@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
 import * as syncPreflightAPI from "../../../api/factory-sessions/sync-preflight";
-import { bootstrapDashboardSessionSyncPreflight } from "./dashboard-session-sync-preflight";
+import {
+  bootstrapDashboardSessionSyncPreflight,
+  isNonRecoverableSyncPreflightReason,
+  streamIdentityFromSyncPreflightResponse,
+} from "./dashboard-session-sync-preflight";
 
 const RESOLVED_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
 const STALE_SESSION_UUID = "deadbeef-dead-beef-dead-beefdeadbeef";
@@ -281,5 +285,112 @@ describe("bootstrapDashboardSessionSyncPreflight cursor validation", () => {
       },
     });
     expect(records.has(storageKey)).toBe(false);
+  });
+});
+
+describe("bootstrapDashboardSessionSyncPreflight manual refresh", () => {
+  let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    installIndexedDBTestDouble();
+    getSyncPreflightSpy = vi
+      .spyOn(syncPreflightAPI, "getFactorySessionSyncPreflight")
+      .mockResolvedValue(okPreflightResponse());
+  });
+
+  afterEach(() => {
+    getSyncPreflightSpy.mockRestore();
+  });
+
+  it("drops persisted checkpoints when the user refreshes a live session tab", async () => {
+    const records = installIndexedDBTestDouble();
+    const identity = resolvedStreamIdentity();
+    const storageKey = [
+      identity.backendScopeID,
+      identity.factorySessionID,
+      identity.streamGenerationID,
+    ].join("::");
+    records.set(storageKey, {
+      checkpoint: {
+        afterEventId: "event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+      },
+      schemaVersion: 3,
+      storageKey,
+      streamIdentity: identity,
+    });
+
+    await expect(
+      bootstrapDashboardSessionSyncPreflight({
+        indexedDB: window.indexedDB,
+        refreshToken: 1,
+        sessionID: DEFAULT_FACTORY_SESSION_ID,
+      }),
+    ).resolves.toMatchObject({
+      kind: "ready",
+      result: {
+        checkpoint: null,
+        reconnectCursor: undefined,
+        remappedFactorySessionId: null,
+        streamIdentity: identity,
+      },
+    });
+    expect(records.has(storageKey)).toBe(false);
+  });
+
+  it("returns recovery when manual refresh hits an unresolved session", async () => {
+    getSyncPreflightSpy.mockResolvedValue({
+      checkpointReusable: false,
+      reasonCode: "session_not_found",
+      reconnectCursor: {
+        provided: false,
+        validForStreamGeneration: false,
+      },
+      requestedSessionId: "session-missing",
+    });
+
+    await expect(
+      bootstrapDashboardSessionSyncPreflight({
+        indexedDB: window.indexedDB,
+        refreshToken: 1,
+        sessionID: "session-missing",
+      }),
+    ).resolves.toEqual({
+      kind: "recovery",
+      recovery: {
+        reasonCode: "session_not_found",
+        requestedSessionId: "session-missing",
+      },
+    });
+  });
+});
+
+describe("dashboard-session-sync-preflight stream identity helpers", () => {
+  it("normalizes sync-preflight identity fields for runtime cache keys", () => {
+    expect(
+      streamIdentityFromSyncPreflightResponse({
+        backendScopeId: "backend-scope-a",
+        checkpointReusable: true,
+        factorySessionId: RESOLVED_SESSION_UUID,
+        logicalSessionKeyId: "logical-default",
+        reasonCode: "ok",
+        reconnectCursor: {
+          provided: false,
+          validForStreamGeneration: true,
+        },
+        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationId: "2026-06-26T00:00:00Z",
+      }),
+    ).toEqual(resolvedStreamIdentity());
+  });
+
+  it("flags unresolved logical-session outcomes as non-recoverable", () => {
+    expect(isNonRecoverableSyncPreflightReason("session_not_found")).toBe(true);
+    expect(
+      isNonRecoverableSyncPreflightReason("logical_session_unresolved"),
+    ).toBe(true);
+    expect(isNonRecoverableSyncPreflightReason("ok")).toBe(false);
   });
 });

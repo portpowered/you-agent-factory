@@ -1,0 +1,6 @@
+type: string
+description: Canonical normalized factory session target kind used for logical identity.
+enum:
+  - default
+  - named
+  - provider

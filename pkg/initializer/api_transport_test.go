@@ -30,7 +30,7 @@ func TestInitializeAPITransport_RejectsMissingFactoryConfig(t *testing.T) {
 	cfg := &initializer.Config{Dir: t.TempDir()}
 
 	_, errInit := initializer.InitializeAPITransport(ctx, cfg)
-	_, errService := service.BuildFactoryService(ctx, cfg)
+	_, errService := service.BuildFactoryService(ctx, service.FactoryServiceConfigFromRuntimeHost(cfg))
 
 	if errInit == nil {
 		t.Fatal("expected InitializeAPITransport to fail without factory.json")
@@ -118,7 +118,7 @@ func TestInitializeAPITransport_ServesSessionModelAndFactoryEndpoints(t *testing
 		},
 	}
 
-	transport, err := compose.InjectAPITransport(ctx, (*service.FactoryServiceConfig)(svcCfg))
+	transport, err := compose.InjectAPITransport(ctx, svcCfg)
 	if err != nil {
 		t.Fatalf("InjectAPITransport: %v", err)
 	}

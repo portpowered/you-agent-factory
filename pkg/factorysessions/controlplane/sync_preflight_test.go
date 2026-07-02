@@ -18,10 +18,7 @@ type syncPreflightTestHost struct {
 	events      []factoryapi.FactoryEvent
 }
 
-func (h *syncPreflightTestHost) ResolveSyncPreflightTarget(
-	_ string,
-	_ *interfaces.FactorySessionLogicalResolveHint,
-) (controlplane.SyncPreflightTarget, error) {
+func (h *syncPreflightTestHost) ResolveSyncPreflightTarget(_ string, _ *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error) {
 	return h.target, h.targetErr
 }
 

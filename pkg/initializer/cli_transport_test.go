@@ -17,7 +17,7 @@ func TestInitializeCLITransport_RejectsMissingFactoryConfig(t *testing.T) {
 	cfg := &initializer.Config{Dir: t.TempDir()}
 
 	_, errInit := initializer.InitializeCLITransport(ctx, cfg)
-	_, errService := service.BuildFactoryService(ctx, cfg)
+	_, errService := service.BuildFactoryService(ctx, service.FactoryServiceConfigFromRuntimeHost(cfg))
 
 	if errInit == nil {
 		t.Fatal("expected InitializeCLITransport to fail without factory.json")
@@ -60,13 +60,13 @@ func TestInjectCLITransport_MatchesInitializeCLITransport(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	cfg := &service.FactoryServiceConfig{Dir: dir}
+	initCfg := &initializer.Config{Dir: dir}
 
-	direct, err := initializer.InitializeCLITransport(ctx, (*initializer.Config)(cfg))
+	direct, err := initializer.InitializeCLITransport(ctx, initCfg)
 	if err != nil {
 		t.Fatalf("InitializeCLITransport: %v", err)
 	}
-	wired, err := compose.InjectCLITransport(ctx, cfg)
+	wired, err := compose.InjectCLITransport(ctx, initCfg)
 	if err != nil {
 		t.Fatalf("InjectCLITransport: %v", err)
 	}

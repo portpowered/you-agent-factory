@@ -318,10 +318,10 @@ paths:
       description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
       parameters:
         - $ref: '#/components/parameters/SessionID'
-        - $ref: '#/components/parameters/AfterEventId'
-        - $ref: '#/components/parameters/AfterSequence'
         - $ref: '#/components/parameters/BackendScopeId'
         - $ref: '#/components/parameters/LogicalSessionKeyId'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
           description: Typed session sync preflight outcome for the targeted session selector.
@@ -1596,6 +1596,12 @@ components:
       $ref: './components/schemas/api/FactoryStopSummary.yaml'
     FactorySessionStreamIdentity:
       $ref: './components/schemas/api/FactorySessionStreamIdentity.yaml'
+    FactorySessionLogicalTarget:
+      $ref: './components/schemas/api/FactorySessionLogicalTarget.yaml'
+    FactorySessionLogicalTargetKind:
+      $ref: './components/schemas/api/FactorySessionLogicalTargetKind.yaml'
+    FactorySessionLogicalProviderBoundary:
+      $ref: './components/schemas/api/FactorySessionLogicalProviderBoundary.yaml'
     FactorySessionStatus:
       $ref: './components/schemas/api/FactorySessionStatus.yaml'
     FactorySessionProgress:

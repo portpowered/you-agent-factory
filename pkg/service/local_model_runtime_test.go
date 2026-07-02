@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -132,10 +131,10 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 	launcher := &serviceTestFakeProcessLauncher{healthEndpoint: healthServer.URL}
 	host := newServiceTestSupervisedModelHost(t, puller, launcher)
 	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
-	svc := newTestFactoryServiceWithOpts(runtimehost.TestHostOptions{
-		Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{}),
-	})
-	svc.SetModelAssetsForTest(puller)
+	svc := &FactoryService{
+		policy:      serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{}),
+		modelAssets: puller,
+	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		RuntimeCfg:        runtimeCfg,
 		ModelAssets:       puller,

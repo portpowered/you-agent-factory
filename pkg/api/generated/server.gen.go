@@ -325,6 +325,13 @@ const (
 	FactorySessionListScopePersisted FactorySessionListScope = "persisted"
 )
 
+// Defines values for FactorySessionLogicalTargetKind.
+const (
+	FactorySessionLogicalTargetKindDefault  FactorySessionLogicalTargetKind = "default"
+	FactorySessionLogicalTargetKindNamed    FactorySessionLogicalTargetKind = "named"
+	FactorySessionLogicalTargetKindProvider FactorySessionLogicalTargetKind = "provider"
+)
+
 // Defines values for FactorySessionResultMode.
 const (
 	FactorySessionResultModeFinal   FactorySessionResultMode = "final"
@@ -357,6 +364,7 @@ const (
 // Defines values for FactorySessionSyncPreflightReasonCode.
 const (
 	CursorStale              FactorySessionSyncPreflightReasonCode = "cursor_stale"
+	InvalidTargetReference   FactorySessionSyncPreflightReasonCode = "invalid_target_reference"
 	LogicalSessionRemap      FactorySessionSyncPreflightReasonCode = "logical_session_remap"
 	LogicalSessionUnresolved FactorySessionSyncPreflightReasonCode = "logical_session_unresolved"
 	Ok                       FactorySessionSyncPreflightReasonCode = "ok"
@@ -2543,6 +2551,38 @@ type FactorySessionLiveResult struct {
 	Status FactorySessionStatus `json:"status"`
 }
 
+// FactorySessionLogicalProviderBoundary Stable provider workspace or account boundary for a provider-backed logical session target. Values must not contain secret material.
+type FactorySessionLogicalProviderBoundary struct {
+	// Boundary Stable provider workspace or account boundary without secret material.
+	Boundary string `json:"boundary"`
+
+	// Kind Provider session kind for the normalized target.
+	Kind string `json:"kind"`
+
+	// Provider Provider identifier for the normalized target.
+	Provider string `json:"provider"`
+}
+
+// FactorySessionLogicalTarget Client-safe normalized factory session target metadata derived from canonical
+// logical target references. This shape is safe to persist for remap and does not
+// expose secrets or internal runtime identifiers.
+type FactorySessionLogicalTarget struct {
+	// FolderPath Canonical absolute folder path for the normalized factory session target within the backend scope.
+	FolderPath string `json:"folderPath"`
+
+	// Kind Canonical normalized factory session target kind used for logical identity.
+	Kind FactorySessionLogicalTargetKind `json:"kind"`
+
+	// NamedTarget Canonical named target identifier when kind is named.
+	NamedTarget *string `json:"namedTarget,omitempty"`
+
+	// ProviderBoundary Stable provider workspace or account boundary for a provider-backed logical session target. Values must not contain secret material.
+	ProviderBoundary *FactorySessionLogicalProviderBoundary `json:"providerBoundary,omitempty"`
+}
+
+// FactorySessionLogicalTargetKind Canonical normalized factory session target kind used for logical identity.
+type FactorySessionLogicalTargetKind string
+
 // FactorySessionPartialResult defines model for FactorySessionPartialResult.
 type FactorySessionPartialResult struct {
 	// CheckpointRefs Checkpoint refs associated with the current partial result.
@@ -2730,8 +2770,13 @@ type FactorySessionStreamIdentity struct {
 	// FactorySessionID Stable live Factory Session identifier for the current stream.
 	FactorySessionID string `json:"factorySessionID"`
 
-	// LogicalSessionKeyID Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+	// LogicalSessionKeyID Canonical logical-session key derived from the normalized factory session target. This remains stable across live-session remaps for the same target.
 	LogicalSessionKeyID string `json:"logicalSessionKeyID"`
+
+	// NormalizedTarget Client-safe normalized factory session target metadata derived from canonical
+	// logical target references. This shape is safe to persist for remap and does not
+	// expose secrets or internal runtime identifiers.
+	NormalizedTarget *FactorySessionLogicalTarget `json:"normalizedTarget,omitempty"`
 
 	// StreamGenerationID Stable generation identifier for the current live session stream incarnation.
 	StreamGenerationID string `json:"streamGenerationID"`
@@ -2828,6 +2873,11 @@ type FactorySessionSyncPreflightResponse struct {
 
 	// LogicalSessionKeyId Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
 	LogicalSessionKeyId *string `json:"logicalSessionKeyId,omitempty"`
+
+	// NormalizedTarget Client-safe normalized factory session target metadata derived from canonical
+	// logical target references. This shape is safe to persist for remap and does not
+	// expose secrets or internal runtime identifiers.
+	NormalizedTarget *FactorySessionLogicalTarget `json:"normalizedTarget,omitempty"`
 
 	// ReasonCode Stable backend-owned session sync preflight outcome code.
 	ReasonCode      FactorySessionSyncPreflightReasonCode      `json:"reasonCode"`
@@ -5766,17 +5816,17 @@ type GetFactorySessionResultsParams struct {
 
 // GetFactorySessionSyncPreflightBySessionIdParams defines parameters for GetFactorySessionSyncPreflightBySessionId.
 type GetFactorySessionSyncPreflightBySessionIdParams struct {
+	// BackendScopeId Optional backend scope identifier used with logicalSessionKeyId to resolve the current live Factory Session when the requested session selector is missing or stale. When provided, resolution succeeds only when it matches the active backend scope.
+	BackendScopeId *BackendScopeId `form:"backend_scope_id,omitempty" json:"backend_scope_id,omitempty"`
+
+	// LogicalSessionKeyId Optional canonical logical-session key derived from the normalized factory session target. When the requested session selector is missing or stale, resolution uses backendScopeId plus this key to locate the replacement current live Factory Session.
+	LogicalSessionKeyId *LogicalSessionKeyId `form:"logical_session_key_id,omitempty" json:"logical_session_key_id,omitempty"`
+
 	// AfterEventId Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier.
 	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
 
 	// AfterSequence Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
 	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
-
-	// BackendScopeId Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target.
-	BackendScopeId *BackendScopeId `form:"backend_scope_id,omitempty" json:"backend_scope_id,omitempty"`
-
-	// LogicalSessionKeyId Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector.
-	LogicalSessionKeyId *LogicalSessionKeyId `form:"logical_session_key_id,omitempty" json:"logical_session_key_id,omitempty"`
 }
 
 // ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
@@ -8144,22 +8194,6 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionSyncPreflightBySessionId(w h
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetFactorySessionSyncPreflightBySessionIdParams
 
-	// ------------- Optional query parameter "after_event_id" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "after_event_id", r.URL.Query(), &params.AfterEventId)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_event_id", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "after_sequence" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
-		return
-	}
-
 	// ------------- Optional query parameter "backend_scope_id" -------------
 
 	err = runtime.BindQueryParameter("form", true, false, "backend_scope_id", r.URL.Query(), &params.BackendScopeId)
@@ -8173,6 +8207,22 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionSyncPreflightBySessionId(w h
 	err = runtime.BindQueryParameter("form", true, false, "logical_session_key_id", r.URL.Query(), &params.LogicalSessionKeyId)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "logical_session_key_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_event_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_event_id", r.URL.Query(), &params.AfterEventId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_event_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
 		return
 	}
 

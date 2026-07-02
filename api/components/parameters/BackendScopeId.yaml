@@ -2,7 +2,9 @@ name: backend_scope_id
 in: query
 required: false
 description: >-
-  Persisted backend scope identifier used with logical_session_key_id to remap an
-  unknown factorySessionID to the current live session for the same logical target.
+  Optional backend scope identifier used with logicalSessionKeyId to resolve the
+  current live Factory Session when the requested session selector is missing or
+  stale. When provided, resolution succeeds only when it matches the active
+  backend scope.
 schema:
   type: string

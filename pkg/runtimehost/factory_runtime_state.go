@@ -11,19 +11,13 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
@@ -741,16 +735,6 @@ func (fs *Host) workflowID() string {
 	return fs.coordinatorPolicy().workflowID
 }
 
-func applyOperatorDefaultsToLoadedConfig(cfg *Config, loaded *factoryconfig.LoadedFactoryConfig) error {
-	if cfg == nil || loaded == nil || cfg.ReplayPath != "" {
-		return nil
-	}
-	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, cfg.OperatorDefaults); err != nil {
-		return fmt.Errorf("apply operator defaults: %w", err)
-	}
-	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
-}
-
 func validateReplayModeConfig(cfg *Config) error {
 	if cfg == nil {
 		return fmt.Errorf("factory service config is required")
@@ -764,83 +748,6 @@ func validateReplayModeConfig(cfg *Config) error {
 // ValidateReplayModeConfig validates record/replay startup inputs for core composition.
 func ValidateReplayModeConfig(cfg *Config) error {
 	return validateReplayModeConfig(cfg)
-}
-
-func loadFactoryConfigForMode(cfg *Config) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
-	if cfg.ReplayPath == "" {
-		loaded, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
-		if loaded != nil {
-			loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
-		}
-		if err != nil {
-			return loaded, nil, err
-		}
-		if err := applyOperatorDefaultsToLoadedConfig(cfg, loaded); err != nil {
-			return nil, nil, err
-		}
-		return loaded, nil, nil
-	}
-	artifact, err := replay.Load(cfg.ReplayPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load replay artifact: %w", err)
-	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(artifact.Factory)
-	if err != nil {
-		return nil, nil, fmt.Errorf("load embedded replay config: %w", err)
-	}
-	loaded, err := factoryconfig.NewLoadedFactoryConfig(runtimeCfg.FactoryDir(), runtimeCfg.Factory, runtimeCfg)
-	if err != nil {
-		return nil, nil, fmt.Errorf("build embedded replay config: %w", err)
-	}
-	loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
-	return loaded, artifact, nil
-}
-
-func warnReplayMetadataMismatches(cfg *Config, artifact *interfaces.ReplayArtifact, logger *zap.Logger) {
-	if artifact == nil || cfg == nil || cfg.Dir == "" {
-		return
-	}
-	current, err := configload.LoadRuntimeConfig(cfg.Dir, cfg.WorkstationLoader)
-	if err != nil {
-		return
-	}
-	currentFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
-		current.FactoryDir(),
-		current.FactoryConfig(),
-		current,
-		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(cfg.WorkflowID),
-	)
-	if err != nil {
-		return
-	}
-	for _, warning := range replay.FactoryMetadataWarnings(artifact.Factory, currentFactory) {
-		logger.Warn("replay artifact metadata differs from current checkout",
-			zap.String("category", replay.DivergenceCategoryConfigMismatch),
-			zap.String("metadata_key", warning.Key),
-			zap.String("artifact", warning.Artifact),
-			zap.String("current", warning.Current),
-		)
-	}
-}
-
-func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *factory_context.FactoryContext {
-	projectID := factory_context.DefaultProjectID
-	if cfg != nil && cfg.Project != "" {
-		projectID = factory_context.ResolveProjectID(cfg.Project, nil, nil)
-	}
-	if strings.TrimSpace(sessionID) == "" {
-		sessionID = factorysessions.DefaultSessionID
-	}
-	return &factory_context.FactoryContext{
-		ProjectID: projectID,
-		EnvVars:   make(map[string]string),
-		SessionID: sessionID,
-	}
-}
-
-func sessionScopedRecordPath(basePath string, sessionID string) string {
-	return runtimebuild.SessionScopedRecordPath(basePath, sessionID)
 }
 
 func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {

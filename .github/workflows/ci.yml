@@ -489,9 +489,10 @@ jobs:
         id: run_ui_coverage_shard
         continue-on-error: true
         shell: bash
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           UI_COVERAGE_SHARD: ${{ matrix.shard }}/${{ matrix.shard-total }}
+          UI_COVERAGE_MAIN_MAX_WORKERS: "2"
         run: |
           set -o pipefail
           artifact_root=".artifacts/ui-coverage-shard-${{ matrix.shard }}"
@@ -823,7 +824,7 @@ jobs:
         env:
           AGENT_FACTORY_BROWSER_ARTIFACT_DIR: ../.artifacts/ui-browser-integration/browser
         shell: bash
-        timeout-minutes: 15
+        timeout-minutes: 25
         run: |
           set -o pipefail
           artifact_root=".artifacts/ui-browser-integration"

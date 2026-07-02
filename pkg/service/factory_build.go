@@ -4,13 +4,19 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -18,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
@@ -29,20 +36,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
-)
-
-type (
-	factoryRuntimeBundle      = factoryservice.Bundle
-	liveRuntimeHandle         = factoryservice.Handle
-	modelAssetPuller          = localmodels.AssetPuller
-	localModelRuntime         = localmodels.Runtime
-	localModelResourceLimiter = localmodels.ResourceLimiter
-	managedLocalModelManager  = localmodels.Manager
 )
 
 type runtimeBundleBuildInput struct {
@@ -66,10 +64,33 @@ type runtimeBundleBuildInput struct {
 	dispatchCompleted             func(string)
 }
 
-// NewStartupLiveSessionHandle constructs the default session handle attached
-// during startup core composition.
-func NewStartupLiveSessionHandle(bundle *factoryservice.Bundle, spec *runtimebuild.SessionBuildSpec) any {
-	return runtimehost.NewStartupLiveSessionHandle(bundle, spec)
+type liveSessionState struct {
+	bundle                *factoryRuntimeBundle
+	handle                *liveRuntimeHandle
+	spec                  *runtimebuild.SessionBuildSpec
+	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
+	responseStreamsOnce   sync.Once
+	responseStreams       *factorysessions.SessionResponseStreamSet
+}
+
+// BuildFactoryService loads factory.json from the config directory, constructs
+// the petri net, factory runtime, file watcher, and session metrics.
+func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
+	core, err := BuildFactoryCore(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	service := NewFactoryServiceFromCore(core)
+	shell := FactoryServiceShell{Service: service}
+	service = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	service = AttachFactorySaveCollaborator(
+		FactoryServiceShell{Service: service},
+		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: service}, cfg),
+	)
+	return AttachSessionGatewayCollaborator(
+		FactoryServiceShell{Service: service},
+		ProvideSessionGatewayCollaborator(FactoryServiceShell{Service: service}, cfg),
+	), nil
 }
 
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
@@ -79,30 +100,117 @@ func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller
 	return production
 }
 
-// WireModelAssetPullerForCompose selects the model asset collaborator used by
-// pkg/factorycore startup composition.
-func WireModelAssetPullerForCompose(cfg *FactoryServiceConfig, production localmodels.AssetPuller) localmodels.AssetPuller {
-	return wireModelAssetPuller(cfg, production)
+type serviceCoordinatorPolicy struct {
+	dir                           string
+	executionBaseDir              string
+	runtimeMode                   interfaces.RuntimeMode
+	port                          int
+	verbose                       bool
+	runtimeInstanceID             string
+	workFile                      string
+	workflowID                    string
+	mockWorkersConfig             *factoryconfig.MockWorkersConfig
+	simpleDashboardRenderer       SimpleDashboardRenderer
+	apiServerStarter              APIServerStarter
+	apiServerReady                <-chan struct{}
+	workstationLoader             factoryconfig.WorkstationLoader
+	modelCacheDir                 string
+	runnerID                      string
+	providerOverride              workers.Provider
+	providerCommandRunnerOverride workers.CommandRunner
+	commandRunnerOverride         workers.CommandRunner
 }
 
-// CloseRuntimeBundleSinksForCompose closes startup bundle sinks when core
-// composition fails before the runtime graph is fully wired.
-func CloseRuntimeBundleSinksForCompose(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
-	return closeRuntimeBundleSinks(logSink, metricsSink)
+const (
+	runtimeMetricLifecycleStarted     = "runtime.lifecycle.started"
+	runtimeMetricLifecycleStopped     = "runtime.lifecycle.stopped"
+	runtimeMetricStateActive          = "runtime.state.active"
+	runtimeMetricStateIdle            = "runtime.state.idle"
+	runtimeMetricStatePaused          = "runtime.state.paused"
+	runtimeMetricStateFailed          = "runtime.state.failed"
+	runtimeMetricQueueInFlight        = "runtime.queue.in_flight"
+	runtimeMetricQueueSubmissionCount = "queue.submission_count"
+	runtimeMetricDispatchStarted      = "dispatch.started"
+	runtimeMetricDispatchComplete     = "dispatch.completed"
+	runtimeMetricDispatchDuration     = "dispatch.duration"
+	runtimeMetricDispatchRetries      = "dispatch.retry_count"
+	runtimeMetricDispatchCost         = "dispatch.cost"
+	runtimeMetricProviderRequest      = "provider.requested"
+	runtimeMetricProviderComplete     = "provider.completed"
+	runtimeMetricProviderFailed       = "provider.failed"
+	runtimeMetricProviderDuration     = "provider.duration"
+	runtimeMetricProviderInputTok     = "provider.input_tokens"
+	runtimeMetricProviderOutputTok    = "provider.output_tokens"
+	runtimeMetricProviderCost         = "provider.cost"
+	runtimeMetricScriptStarted        = "script.started"
+	runtimeMetricScriptComplete       = "script.completed"
+	runtimeMetricScriptDuration       = "script.duration"
+	runtimeMetricScriptTimedOut       = "script.timed_out"
+	runtimeMetricScriptFailed         = "script.failed"
+)
+
+func (fs *FactoryService) coordinatorPolicy() serviceCoordinatorPolicy {
+	if fs == nil {
+		return serviceCoordinatorPolicy{}
+	}
+	if hasExplicitServiceCoordinatorPolicy(fs.policy) {
+		return fs.policy
+	}
+	return serviceCoordinatorPolicyFromConfig(fs.cfg)
 }
 
-// ReplayFactoryModeOptionsForCompose builds replay side-effect options for core
-// composition.
-func ReplayFactoryModeOptionsForCompose(
-	replayArtifact *interfaces.ReplayArtifact,
-) (*replay.SideEffects, []factory.FactoryOption, error) {
-	return replayFactoryModeOptions(replayArtifact)
+func hasExplicitServiceCoordinatorPolicy(policy serviceCoordinatorPolicy) bool {
+	return hasExplicitServiceCoordinatorValuePolicy(policy) || hasExplicitServiceCoordinatorReferencePolicy(policy)
 }
 
-// AsRuntimeBundleForCompose converts a runtime-build product into the startup
-// bundle used by core composition.
-func AsRuntimeBundleForCompose(bundle any) *factoryservice.Bundle {
-	return asRuntimeBundle(bundle)
+func hasExplicitServiceCoordinatorValuePolicy(policy serviceCoordinatorPolicy) bool {
+	return policy.dir != "" ||
+		policy.executionBaseDir != "" ||
+		policy.runtimeMode != "" ||
+		policy.port != 0 ||
+		policy.verbose ||
+		policy.runtimeInstanceID != "" ||
+		policy.workFile != "" ||
+		policy.workflowID != "" ||
+		policy.modelCacheDir != "" ||
+		policy.runnerID != ""
+}
+
+func hasExplicitServiceCoordinatorReferencePolicy(policy serviceCoordinatorPolicy) bool {
+	return policy.mockWorkersConfig != nil ||
+		policy.simpleDashboardRenderer != nil ||
+		policy.apiServerStarter != nil ||
+		policy.apiServerReady != nil ||
+		policy.workstationLoader != nil ||
+		policy.providerOverride != nil ||
+		policy.providerCommandRunnerOverride != nil ||
+		policy.commandRunnerOverride != nil
+}
+
+func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordinatorPolicy {
+	if cfg == nil {
+		return serviceCoordinatorPolicy{}
+	}
+	return serviceCoordinatorPolicy{
+		dir:                           cfg.Dir,
+		executionBaseDir:              cfg.ExecutionBaseDir,
+		runtimeMode:                   cfg.RuntimeMode,
+		port:                          cfg.Port,
+		verbose:                       cfg.Verbose,
+		runtimeInstanceID:             cfg.RuntimeInstanceID,
+		workFile:                      cfg.WorkFile,
+		workflowID:                    cfg.WorkflowID,
+		mockWorkersConfig:             cfg.MockWorkersConfig,
+		simpleDashboardRenderer:       cfg.SimpleDashboardRenderer,
+		apiServerStarter:              cfg.APIServerStarter,
+		apiServerReady:                cfg.APIServerReady,
+		workstationLoader:             cfg.WorkstationLoader,
+		modelCacheDir:                 cfg.ModelCacheDir,
+		runnerID:                      cfg.RunnerID,
+		providerOverride:              cfg.ProviderOverride,
+		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
+		commandRunnerOverride:         cfg.CommandRunnerOverride,
+	}
 }
 
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
@@ -122,18 +230,74 @@ func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, 
 	return factoryRootDir, baseLogger, nil
 }
 
+// RuntimeLogDiagnostics describes the active runtime log selected during
+// service construction.
+type RuntimeLogDiagnostics struct {
+	Path                string
+	RootDir             string
+	StartTimeUTC        time.Time
+	MetricsPath         string
+	MetricsRootDir      string
+	MetricsStartTimeUTC time.Time
+}
+
+// RuntimeLogDiagnostics returns the selected runtime log metadata for startup
+// diagnostics without exposing the sink writer.
+func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
+	bundle := fs.currentRuntimeBundle()
+	if bundle == nil || bundle.LogSink == nil {
+		return RuntimeLogDiagnostics{}
+	}
+	return RuntimeLogDiagnostics{
+		Path:                bundle.LogSink.Path(),
+		RootDir:             bundle.LogSink.RootDir(),
+		StartTimeUTC:        bundle.LogSink.StartTimeUTC(),
+		MetricsPath:         runtimeMetricsPath(bundle.MetricsSink),
+		MetricsRootDir:      runtimeMetricsRootDir(bundle.MetricsSink),
+		MetricsStartTimeUTC: runtimeMetricsStartTime(bundle.MetricsSink),
+	}
+}
+
+func runtimeMetricsPath(sink *logging.RuntimeMetricsSink) string {
+	if sink == nil {
+		return ""
+	}
+	return sink.Path()
+}
+
+func runtimeMetricsRootDir(sink *logging.RuntimeMetricsSink) string {
+	if sink == nil {
+		return ""
+	}
+	return sink.RootDir()
+}
+
+func runtimeMetricsStartTime(sink *logging.RuntimeMetricsSink) time.Time {
+	if sink == nil {
+		return time.Time{}
+	}
+	return sink.StartTimeUTC()
+}
+
+func runtimeLogStartTimeString(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339Nano)
+}
+
 func loadFactoryConfigForService(
 	cfg *FactoryServiceConfig,
 	logger *zap.Logger,
 ) (*factoryconfig.LoadedFactoryConfig, *interfaces.ReplayArtifact, error) {
 	logger.Info("loading factory config", zap.String("dir", cfg.Dir))
-	loadedFactoryCfg, replayArtifact, err := runtimehost.LoadFactoryConfigForMode(cfg)
+	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForMode(cfg)
 	if err != nil {
 		logger.Error("failed to load factory config", zap.Error(err))
 		return nil, nil, fmt.Errorf("load factory config: %w", err)
 	}
 	runtimebuild.WarnPortableBundledReplacementReport(logger, "runtime config load replaced portable bundled files", loadedFactoryCfg.PortableBundledFileReplacements())
-	runtimehost.WarnReplayMetadataMismatches(cfg, replayArtifact, logger)
+	warnReplayMetadataMismatches(cfg, replayArtifact, logger)
 	return loadedFactoryCfg, replayArtifact, nil
 }
 
@@ -182,7 +346,7 @@ func buildRuntimeBundle(
 ) (*factoryRuntimeBundle, error) {
 	sessionID := strings.TrimSpace(input.sessionID)
 	if sessionID == "" {
-		sessionID = runtimehost.DefaultFactorySessionID
+		sessionID = defaultFactorySessionID
 	}
 	localModels := input.prefetchedLocalModels
 	if localModels.Manager == nil {
@@ -284,7 +448,7 @@ func loadRuntimeBundleWorkerOptions(
 		input.loadedFactoryCfg.FactoryConfig(),
 		effectiveFactoryRunnerID,
 		input.loadedFactoryCfg,
-		runtimehost.RuntimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
+		runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
@@ -322,11 +486,11 @@ func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localMode
 
 func localModelHooks() localmodels.Hooks {
 	return localmodels.Hooks{
-		MarkResourceWaitStarted:  runtimehost.MarkModelExecutionResourceWaitStarted,
-		MarkResourceWaitFinished: runtimehost.MarkModelExecutionResourceWaitFinished,
-		MarkLoadRequested:        runtimehost.MarkModelExecutionLoadRequested,
-		MarkLoadFinished:         runtimehost.MarkModelExecutionLoadFinished,
-		MarkLoadReused:           runtimehost.MarkModelExecutionLoadReused,
+		MarkResourceWaitStarted:  markModelExecutionResourceWaitStarted,
+		MarkResourceWaitFinished: markModelExecutionResourceWaitFinished,
+		MarkLoadRequested:        markModelExecutionLoadRequested,
+		MarkLoadFinished:         markModelExecutionLoadFinished,
+		MarkLoadReused:           markModelExecutionLoadReused,
 	}
 }
 
@@ -367,6 +531,66 @@ func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clo
 	return hostedCfg
 }
 
+func (fs *FactoryService) dashboardLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			fs.renderDashboard(ctx)
+		}
+	}
+}
+
+func (fs *FactoryService) renderDashboard(ctx context.Context) {
+	now := factory.EnsureClock(fs.clock).Now()
+	input, err := fs.buildSimpleDashboardRenderInput(ctx, now)
+	if err != nil {
+		if fs.logger != nil {
+			fs.logger.Error("simple dashboard render failed", zap.Error(err))
+		}
+		return
+	}
+	fs.cfg.SimpleDashboardRenderer(input)
+}
+
+func (fs *FactoryService) buildSimpleDashboardRenderInput(ctx context.Context, now time.Time) (SimpleDashboardRenderInput, error) {
+	es, err := fs.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return SimpleDashboardRenderInput{}, err
+	}
+	renderData, err := fs.simpleDashboardRenderData(ctx, es.TickCount, es.ActiveThrottlePauses)
+	if err != nil {
+		return SimpleDashboardRenderInput{}, err
+	}
+	return SimpleDashboardRenderInput{
+		EngineState: *es,
+		RenderData:  renderData,
+		Now:         now,
+	}, nil
+}
+
+func (fs *FactoryService) simpleDashboardRenderData(
+	ctx context.Context,
+	selectedTick int,
+	activeThrottlePauses []interfaces.ActiveThrottlePause,
+) (dashboardrender.SimpleDashboardRenderData, error) {
+	events, err := fs.GetFactoryEvents(ctx)
+	if err != nil {
+		return dashboardrender.SimpleDashboardRenderData{}, err
+	}
+	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
+	if err != nil {
+		return dashboardrender.SimpleDashboardRenderData{}, err
+	}
+	renderData := dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState)
+	renderData.ActiveThrottlePauses = projections.ProjectActiveThrottlePauses(worldState.Topology, activeThrottlePauses)
+	return renderData, nil
+}
+
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
 	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
 		return runner
@@ -393,7 +617,7 @@ func loadWorkersFromConfig(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
-	modelRecorder runtimehost.ModelEventRecorder,
+	modelRecorder modelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
@@ -478,7 +702,7 @@ func buildWorkerExecutor(
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
-	modelRecorder runtimehost.ModelEventRecorder,
+	modelRecorder modelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
@@ -534,7 +758,7 @@ func buildProviderBackedWorkerExecutor(
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
-	modelRecorder runtimehost.ModelEventRecorder,
+	modelRecorder modelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
@@ -550,7 +774,7 @@ func buildProviderBackedWorkerExecutor(
 	)
 	runner = wrapLocalModelRunner(runner, runtimeCfg, factoryCfg, def, modelDomain)
 	runner = modelDomain.Resources.WrapRunner(runner, factoryCfg, def)
-	runner = runtimehost.NewRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
+	runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 	inferenceExecutor := workerexecutor.NewAgentExecutorWithRunner(
 		runtimeCfg,
 		runner,
@@ -776,8 +1000,8 @@ func newRuntimeBuildService(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
-	progressPublisherFactory runtimehost.InferenceProgressPublisherFactory,
-	dispatchCompletionFactory runtimehost.DispatchCompletionObserverFactory,
+	progressPublisherFactory inferenceProgressPublisherFactory,
+	dispatchCompletionFactory dispatchCompletionObserverFactory,
 ) *runtimebuild.Service {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
@@ -844,6 +1068,82 @@ func asRuntimeBundle(bundle any) *factoryRuntimeBundle {
 	return bundle.(*factoryRuntimeBundle)
 }
 
+func (fs *FactoryService) defaultSessionClosedDuringStartup() bool {
+	if fs == nil || runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService {
+		return false
+	}
+	return fs.defaultSession() == nil
+}
+
+func (fs *FactoryService) handleDefaultRuntimeStartFailure(
+	ctx context.Context,
+	currentRuntime *liveRuntimeHandle,
+	startErr error,
+) error {
+	if fs.defaultSessionClosedDuringStartup() {
+		fs.clearRunState()
+		_ = fs.stopLiveRuntime(currentRuntime)
+		return nil
+	}
+	fs.clearRunState()
+	if session := fs.defaultSession(); session != nil {
+		fs.unregisterLiveSession(session.ID)
+	} else {
+		fs.unregisterLiveSession(defaultFactorySessionID)
+	}
+	stopErr := fs.stopLiveRuntime(currentRuntime)
+	if isCanceledServiceStartup(ctx, startErr) {
+		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+			return stopErr
+		}
+		return nil
+	}
+	if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
+	}
+	return fmt.Errorf("start runtime: %w", startErr)
+}
+
+const (
+	modelPullMetricAttempts      = "managed_runtime.pull.attempts"
+	modelPullMetricSuccess       = "managed_runtime.pull.success"
+	modelPullMetricFailure       = "managed_runtime.pull.failure"
+	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
+)
+
+func (fs *FactoryService) modelPullMetricsRecorder() ModelPullMetricsRecorder {
+	if fs == nil || fs.cfg == nil {
+		return nil
+	}
+	return fs.cfg.ModelPullMetricsRecorder
+}
+
+func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
+	if success != nil {
+		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
+	}
+	var providerErr *workerprovider.ProviderError
+	if errors.As(err, &providerErr) {
+		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+	}
+	return nil
+}
+
+func modelEventErrorClass(err error) string {
+	var readinessErr *apisurface.ManagedRuntimeInvocationError
+	if errors.As(err, &readinessErr) && readinessErr.ReadinessState != "" {
+		return "MANAGED_RUNTIME_" + string(readinessErr.ReadinessState)
+	}
+	var providerErr *workerprovider.ProviderError
+	if errors.As(err, &providerErr) && providerErr.Type != "" {
+		return string(providerErr.Type)
+	}
+	if err == nil {
+		return ""
+	}
+	return "MODEL_EXECUTION_FAILED"
+}
+
 type zapModelHostLogger struct {
 	logger *zap.Logger
 }
@@ -891,7 +1191,7 @@ func (a invocationMetricsRecorderAdapter) RecordMetric(name string, labels map[s
 	}
 	a.recorder.RecordInvocationMetric(InvocationMetric{
 		Name:   name,
-		Labels: runtimehost.CloneMetricLabels(labels),
+		Labels: cloneMetricLabels(labels),
 	})
 }
 
@@ -955,4 +1255,165 @@ func serviceBackendScopeID(cfg *FactoryServiceConfig) string {
 		return ""
 	}
 	return strings.TrimSpace(cfg.BackendScopeID)
+}
+
+// FactoryServiceConfigFromRuntimeHost maps initializer compose config onto the
+// service composition config. The structs are kept layout-compatible during the
+// runtimehost migration.
+func FactoryServiceConfigFromRuntimeHost(cfg *runtimehost.Config) *FactoryServiceConfig {
+	if cfg == nil {
+		return nil
+	}
+	return (*FactoryServiceConfig)(unsafe.Pointer(cfg))
+}
+
+// EnsureBackendScopeForCompose resolves backend scope before core composition.
+func EnsureBackendScopeForCompose(cfg *runtimehost.Config, logger *zap.Logger) error {
+	return ensureServiceBackendScope(FactoryServiceConfigFromRuntimeHost(cfg), logger)
+}
+
+// NewRuntimeBuildServiceForCompose constructs the runtimebuild collaborator for
+// initializer-owned core composition.
+func NewRuntimeBuildServiceForCompose(
+	cfg *runtimehost.Config,
+	clock factory.Clock,
+	baseLogger *zap.Logger,
+	localModels *LocalModelDomain,
+	sessions *factorysessions.Registry,
+) *runtimebuild.Service {
+	return newRuntimeBuildService(
+		FactoryServiceConfigFromRuntimeHost(cfg),
+		clock,
+		baseLogger,
+		localModels,
+		inferenceProgressPublisherFactory(
+			runtimehost.NewInferenceProgressPublisherFactory(sessions, baseLogger),
+		),
+		dispatchCompletionObserverFactory(
+			runtimehost.NewSessionDispatchCompletionObserverFactory(sessions),
+		),
+	)
+}
+
+// LoadFactoryConfigForStartup loads factory.json and replay metadata for compose.
+func LoadFactoryConfigForStartup(
+	cfg *runtimehost.Config,
+	root FactoryServiceRoot,
+) (FactoryConfigLoadResult, error) {
+	return LoadFactoryConfigForCompose(FactoryServiceConfigFromRuntimeHost(cfg), root)
+}
+
+// ClockForCompose selects the factory clock for the loaded replay artifact.
+func ClockForCompose(cfg *runtimehost.Config, load FactoryConfigLoadResult) factory.Clock {
+	return ServiceClockForCompose(FactoryServiceConfigFromRuntimeHost(cfg), load)
+}
+
+// HostedWorkersForCompose builds the hosted-workers collaborator from config.
+func HostedWorkersForCompose(
+	cfg *runtimehost.Config,
+	logger *zap.Logger,
+	clock factory.Clock,
+) hostedworkers.Config {
+	return NewHostedWorkersConfig(FactoryServiceConfigFromRuntimeHost(cfg), logger, clock)
+}
+
+// CloseRuntimeBundleSinksForCompose closes startup bundle sinks when compose fails.
+func CloseRuntimeBundleSinksForCompose(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+	return closeRuntimeBundleSinks(logSink, metricsSink)
+}
+
+// ReplayFactoryModeOptionsForCompose builds replay side-effect options for compose.
+func ReplayFactoryModeOptionsForCompose(
+	replayArtifact *interfaces.ReplayArtifact,
+) (*replay.SideEffects, []factory.FactoryOption, error) {
+	return replayFactoryModeOptions(replayArtifact)
+}
+
+// AsRuntimeBundleForCompose converts a runtime-build product into the startup bundle.
+func AsRuntimeBundleForCompose(bundle any) *factoryRuntimeBundle {
+	return asRuntimeBundle(bundle)
+}
+
+// NewStartupLiveSessionHandle constructs the default session handle during startup.
+func NewStartupLiveSessionHandle(bundle *factoryRuntimeBundle, spec *runtimebuild.SessionBuildSpec) any {
+	state := &liveSessionState{bundle: bundle, spec: spec}
+	if bundle != nil {
+		state.handle = &liveRuntimeHandle{Bundle: bundle}
+	}
+	return state
+}
+
+// WireModelAssetPullerForCompose selects the model asset puller for compose.
+func WireModelAssetPullerForCompose(cfg *runtimehost.Config, production modelAssetPuller) modelAssetPuller {
+	return wireModelAssetPuller(FactoryServiceConfigFromRuntimeHost(cfg), production)
+}
+
+// ModelService is the compose-facing model API collaborator.
+type ModelService = apisurface.ModelAPI
+
+// NewModelServiceFromCore constructs a model service from a composed runtime core.
+func NewModelServiceFromCore(core *runtimehost.Core) ModelService {
+	if core == nil {
+		return wireModelServiceCollaborator(nil, nil)
+	}
+	shell := FactoryServiceShell{Service: NewFactoryServiceFromCore(adaptRuntimeHostCore(core))}
+	return ProvideModelServiceCollaborator(shell, FactoryServiceConfigFromRuntimeHost(core.ServiceConfig()))
+}
+
+// NewFactoryDefinitionServiceFromCore constructs a factory definition service from a core.
+func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefinitionService {
+	if core == nil {
+		return factoryDefinitionHost{}
+	}
+	return factoryDefinitionHost{FactoryService: NewFactoryServiceFromCore(adaptRuntimeHostCore(core))}
+}
+
+// StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
+func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*interfaces.WorkerConfig, bool) {
+	if core == nil {
+		return nil, false
+	}
+	runtimeCfg := coreStartupRuntimeConfigFromRuntimeHost(core)
+	if runtimeCfg == nil {
+		return nil, false
+	}
+	return runtimeCfg.Worker(name)
+}
+
+func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {
+	if core == nil {
+		return nil
+	}
+	return &FactoryCore{
+		cfg:           FactoryServiceConfigFromRuntimeHost(core.ServiceConfig()),
+		root:          FactoryServiceRoot{FactoryRootDir: core.FactoryRootDir(), BaseLogger: core.BaseLogger()},
+		collaborators: factoryServiceCollaboratorsFromRuntimeHost(core),
+		hostedWorkers: core.HostedWorkers(),
+		clock:         core.Clock(),
+		startupBundle: asRuntimeBundle(core.StartupBundle()),
+		logger:        core.Logger(),
+		modelAssets:   core.ModelAssetPuller(),
+	}
+}
+
+func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryServiceCollaborators {
+	if core == nil {
+		return FactoryServiceCollaborators{}
+	}
+	return FactoryServiceCollaborators{
+		Sessions:       core.Sessions(),
+		LocalModels:    core.LocalModels(),
+		RuntimeBuild:   core.RuntimeBuild(),
+		WorkersScheduler: core.WorkersScheduler(),
+	}
+}
+
+func coreStartupRuntimeConfigFromRuntimeHost(core *runtimehost.Core) *factoryconfig.LoadedFactoryConfig {
+	if core == nil {
+		return nil
+	}
+	if bundle := core.StartupBundle(); bundle != nil {
+		return bundle.RuntimeCfg
+	}
+	return nil
 }

@@ -1,26 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
+import {
+  recordSessionPersistenceInvalidation,
+  silentReplayRecoveryDiagnostic,
+} from "../public";
 import {
   clearTimelineCheckpoint,
   type FactoryTimelineCheckpoint,
   persistTimelineCheckpoint,
+  readFactoryTimelineDebugOptions,
   reconnectCursorFromCheckpoint,
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSession } from "../session/dashboard-session-provider";
-import {
-  recordSessionPersistenceInvalidation,
-  silentReplayRecoveryDiagnostic,
-} from "../lib/session-persistence/diagnostics";
-import { useDashboardStreamStore } from "../state/dashboardStreamStore";
+import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
-import { useGuardedTimelineCheckpointBootstrap } from "./snapshot/useDashboardSnapshot.bootstrap";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
-import { readFactoryTimelineDebugOptions } from "../../timeline/public";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
@@ -33,10 +33,12 @@ function usePersistedTimelineCheckpoint({
   checkpoint,
   checkpointsDisabled,
   streamIdentity,
+  syncIdentity,
 }: {
   checkpoint: FactoryTimelineCheckpoint | undefined;
   checkpointsDisabled: boolean;
   streamIdentity: TimelineCheckpointStreamIdentity | null;
+  syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
 }) {
   useEffect(() => {
     if (typeof window === "undefined" || checkpointsDisabled) {
@@ -45,14 +47,19 @@ function usePersistedTimelineCheckpoint({
     const persistHandle = window.setTimeout(() => {
       void persistTimelineCheckpoint(
         window.indexedDB,
-        checkpoint,
+        checkpoint
+          ? {
+              ...checkpoint,
+              ...(syncIdentity ? { syncIdentity } : {}),
+            }
+          : undefined,
         streamIdentity,
       );
     }, 750);
     return () => {
       window.clearTimeout(persistHandle);
     };
-  }, [checkpoint, checkpointsDisabled, streamIdentity]);
+  }, [checkpoint, checkpointsDisabled, streamIdentity, syncIdentity]);
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: snapshot composition keeps preflight, checkpoint hydration, and stream wiring in one hook.
@@ -69,12 +76,6 @@ export function useDashboardSnapshot({
     (state) => state.restoreCheckpoint,
   );
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
-  const setResolvedStreamIdentity = useDashboardStreamStore(
-    (state) => state.setResolvedStreamIdentity,
-  );
-  const setBackendRuntimeCacheScope = useDashboardStreamStore(
-    (state) => state.setBackendRuntimeCacheScope,
-  );
   const { error, isInitialLoading, snapshot, streamState } =
     useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
@@ -83,10 +84,12 @@ export function useDashboardSnapshot({
     () => (rawSessionID == null ? null : `${rawSessionID}::${refreshToken}`),
     [rawSessionID, refreshToken],
   );
-  const invalidatedReconnectCursorRef = useRef(false);
+  const reconnectCursorInvalidatedRef = useRef(false);
+  const [reconnectCursorRevision, setReconnectCursorRevision] = useState(0);
+  const defaultRuntimeSessionIDRef = useRef<string | null>(null);
   const lastPersistedCheckpointRef =
     useRef<FactoryTimelineCheckpoint | null>(null);
-  const lastSessionKeyRef = useRef<string | null>(null);
+  const lastSessionIDRef = useRef<string | null>(null);
   const queuedAppendRef =
     useRef<(events: FactoryEvent[]) => void>(appendEvents);
 
@@ -100,40 +103,65 @@ export function useDashboardSnapshot({
 
   const {
     checkpointHydrated,
+    initialReconnectCursor: preflightReconnectCursor,
     preflightError,
     preflightRecovery,
     persistedCheckpoint,
     preflightReady,
+    resolvedSessionID,
     streamIdentity,
-  } = useGuardedTimelineCheckpointBootstrap({
+  } = useDashboardCheckpointPreflight({
     checkpointHydrationKey,
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
     rawSessionID,
     refreshToken,
     restoreCheckpoint,
-    setBackendRuntimeCacheScope,
-    setResolvedStreamIdentity,
   });
 
+  const effectiveSessionID = resolvedSessionID ?? rawSessionID;
+
   if (
-    lastPersistedCheckpointRef.current !== persistedCheckpoint ||
-    lastSessionKeyRef.current !== checkpointHydrationKey
+    resolvedSessionID != null &&
+    rawSessionID != null &&
+    rawSessionID === DEFAULT_FACTORY_SESSION_ID
   ) {
-    invalidatedReconnectCursorRef.current = false;
-    lastPersistedCheckpointRef.current = persistedCheckpoint;
-    lastSessionKeyRef.current = checkpointHydrationKey;
+    defaultRuntimeSessionIDRef.current = resolvedSessionID;
   }
 
+  useEffect(() => {
+    if (lastSessionIDRef.current === effectiveSessionID) {
+      return;
+    }
+    const previousSessionID = lastSessionIDRef.current;
+    lastSessionIDRef.current = effectiveSessionID;
+    const runtimeUUID = defaultRuntimeSessionIDRef.current;
+    const isDefaultRuntimeIdentityTransition =
+      runtimeUUID != null &&
+      previousSessionID != null &&
+      ((previousSessionID === DEFAULT_FACTORY_SESSION_ID &&
+        effectiveSessionID === runtimeUUID) ||
+        (previousSessionID === runtimeUUID &&
+          effectiveSessionID === DEFAULT_FACTORY_SESSION_ID));
+    if (!isDefaultRuntimeIdentityTransition) {
+      reconnectCursorInvalidatedRef.current = false;
+      setReconnectCursorRevision((revision) => revision + 1);
+    }
+  }, [effectiveSessionID]);
+
+  lastPersistedCheckpointRef.current = persistedCheckpoint;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken intentionally retriggers invalidated cursor reads on manual stream retry.
   const initialReconnectCursor = useMemo(
     () =>
-      invalidatedReconnectCursorRef.current
+      reconnectCursorInvalidatedRef.current
         ? undefined
-        : reconnectCursorFromCheckpoint(persistedCheckpoint),
-    [persistedCheckpoint],
+        : (preflightReconnectCursor ??
+          reconnectCursorFromCheckpoint(persistedCheckpoint)),
+    [persistedCheckpoint, preflightReconnectCursor, reconnectCursorRevision, refreshToken],
   );
 
   const handleInvalidReconnectCursor = useCallback(() => {
-    invalidatedReconnectCursorRef.current = true;
+    reconnectCursorInvalidatedRef.current = true;
     if (streamIdentity && rawSessionID) {
       recordSessionPersistenceInvalidation(
         silentReplayRecoveryDiagnostic(
@@ -150,10 +178,32 @@ export function useDashboardSnapshot({
     void clearTimelineCheckpoint(window.indexedDB, streamIdentity);
   }, [rawSessionID, resetTimeline, streamIdentity]);
 
+  const checkpointSyncIdentity = useMemo(() => {
+    if (
+      streamIdentity?.backendScopeID &&
+      streamIdentity.factorySessionID &&
+      streamIdentity.streamGenerationID
+    ) {
+      const logicalSessionKeyId =
+        currentReplayCheckpoint?.syncIdentity?.logicalSessionKeyId?.trim() ||
+        streamIdentity.logicalSessionKeyID?.trim();
+      if (logicalSessionKeyId) {
+        return {
+          backendScopeId: streamIdentity.backendScopeID,
+          factorySessionId: streamIdentity.factorySessionID,
+          logicalSessionKeyId,
+          streamGenerationId: streamIdentity.streamGenerationID,
+        };
+      }
+    }
+    return currentReplayCheckpoint?.syncIdentity;
+  }, [currentReplayCheckpoint?.syncIdentity, streamIdentity]);
+
   usePersistedTimelineCheckpoint({
     checkpoint: currentReplayCheckpoint,
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
     streamIdentity,
+    syncIdentity: checkpointSyncIdentity,
   });
 
   const handleStreamEvent = useCallback((event: FactoryEvent) => {
@@ -168,48 +218,47 @@ export function useDashboardSnapshot({
     enabled:
       checkpointHydrated &&
       preflightReady &&
-      rawSessionID != null &&
-      !isPaused &&
-      streamIdentity != null,
+      preflightRecovery == null &&
+      effectiveSessionID != null &&
+      !isPaused,
     initialReconnectCursor,
     locale,
     onEvent: handleStreamEvent,
     onEvents: handleStreamEvents,
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
-    sessionID: rawSessionID,
+    sessionID: effectiveSessionID,
     streamIdentity,
   });
 
   useDashboardTimelineMemoryDebug({ debugOptions, eventCount });
 
-  const preflightStatus: DashboardPreflightStatus = preflightRecovery
-    ? "non-recoverable"
-    : preflightError != null
+  const preflightStatus: DashboardPreflightStatus =
+    preflightRecovery != null
       ? "non-recoverable"
-      : checkpointHydrated && preflightReady
-        ? "success"
-        : "loading";
+      : preflightError != null
+        ? "non-recoverable"
+        : checkpointHydrated && preflightReady
+          ? "success"
+          : "loading";
 
   return useMemo(
     () => ({
-      error: preflightRecovery ? null : (preflightError ?? error),
+      error: preflightRecovery != null ? null : (preflightError ?? error),
       isInitialLoading:
         preflightRecovery == null &&
         preflightError == null &&
-        (!checkpointHydrated || !preflightReady || isInitialLoading),
+        isInitialLoading,
       preflightRecovery,
       preflightStatus,
       snapshot: preflightRecovery ? null : snapshot,
       streamState,
     }),
     [
-      checkpointHydrated,
       error,
       isInitialLoading,
       preflightError,
       preflightRecovery,
-      preflightReady,
       preflightStatus,
       snapshot,
       streamState,

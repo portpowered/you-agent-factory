@@ -19,11 +19,11 @@ import {
 import { getFactorySessionDispatchDetail } from "./dispatch-detail";
 import { getFactorySessionSyncPreflight } from "./sync-preflight";
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: factory session API contract cases share one fetch harness.
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("factory sessions API", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
 
   it("lists live factory sessions from the typed API surface", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
@@ -370,21 +370,20 @@ describe("factory sessions API", () => {
     );
   });
 
-  it("accepts stale-cursor sync preflight outcomes without treating them as transport failures", async () => {
+  it("reads the sync preflight surface with logical identity hints", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
           backendScopeId: "backend-a",
-          checkpointReusable: false,
-          factorySessionId: "session-beta",
-          logicalSessionKeyId: "logical-beta",
-          reasonCode: "cursor_stale",
+          checkpointReusable: true,
+          factorySessionId: "session-remapped",
+          logicalSessionKeyId: "lsk-named-target",
+          reasonCode: "logical_session_remap",
           reconnectCursor: {
-            afterEventId: "event-missing",
-            provided: true,
+            provided: false,
             validForStreamGeneration: false,
           },
-          requestedSessionId: "session-beta",
+          requestedSessionId: "session-stale",
           streamGenerationId: "stream-beta",
         }),
         {
@@ -398,81 +397,25 @@ describe("factory sessions API", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      getFactorySessionSyncPreflight("session-beta", {
-        afterEventId: "event-missing",
-      }),
-    ).resolves.toMatchObject({
-      checkpointReusable: false,
-      reasonCode: "cursor_stale",
-      reconnectCursor: {
-        provided: true,
-        validForStreamGeneration: false,
-      },
-    });
-  });
-
-  it("accepts missing-session sync preflight outcomes with HTTP 200", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          checkpointReusable: false,
-          reasonCode: "session_not_found",
-          reconnectCursor: {
-            provided: false,
-            validForStreamGeneration: false,
-          },
-          requestedSessionId: "live-session-missing-001",
-        }),
+      getFactorySessionSyncPreflight(
+        "session-stale",
         {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
+          afterEventId: "event-7",
+          afterSequence: 7,
         },
-      ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(
-      getFactorySessionSyncPreflight("live-session-missing-001"),
-    ).resolves.toMatchObject({
-      checkpointReusable: false,
-      reasonCode: "session_not_found",
-    });
-  });
-
-  it("accepts logical-session-remap sync preflight outcomes with the resolved identity set", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
+        {
           backendScopeId: "backend-a",
-          checkpointReusable: false,
-          factorySessionId: "session-promoted",
-          logicalSessionKeyId: "logical-default",
-          reasonCode: "logical_session_remap",
-          reconnectCursor: {
-            provided: false,
-            validForStreamGeneration: false,
-          },
-          requestedSessionId: "~default",
-          streamGenerationId: "stream-promoted",
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          status: 200,
+          logicalSessionKeyId: "lsk-named-target",
         },
       ),
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    await expect(getFactorySessionSyncPreflight("~default")).resolves.toMatchObject({
-      checkpointReusable: false,
-      factorySessionId: "session-promoted",
+    ).resolves.toMatchObject({
+      factorySessionId: "session-remapped",
       reasonCode: "logical_session_remap",
-      streamGenerationId: "stream-promoted",
     });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-stale/sync-preflight?after_event_id=event-7&after_sequence=7&backend_scope_id=backend-a&logical_session_key_id=lsk-named-target",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("rejects invalid durable artifact detail responses", async () => {
@@ -831,7 +774,9 @@ describe("factory sessions API", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+});
 
+describe("factory sessions read and durable API", () => {
   it("loads one live factory session from the typed API surface", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

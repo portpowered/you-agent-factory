@@ -6,8 +6,10 @@ import type { StreamDerivedCacheIdentity } from "../../timeline/public";
 import {
   clearDashboardSessionRuntimeQueries,
   dashboardSessionKey,
+  isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
   resetDashboardSessionScopedState,
+  sessionIDFromDashboardSessionKey,
   shouldResetDashboardSessionScopedState,
   shouldResumeFromPersistedCheckpoint,
 } from "./dashboard-session-lifecycle";
@@ -26,6 +28,57 @@ describe("dashboardSessionKey", () => {
 
   it("combines session id and refresh token", () => {
     expect(dashboardSessionKey("session-beta", 2)).toBe("session-beta::2");
+  });
+});
+
+describe("sessionIDFromDashboardSessionKey", () => {
+  it("returns null when the dashboard session key is null", () => {
+    expect(sessionIDFromDashboardSessionKey(null)).toBeNull();
+  });
+
+  it("returns the session id when no refresh suffix is present", () => {
+    expect(sessionIDFromDashboardSessionKey("session-beta")).toBe("session-beta");
+  });
+
+  it("strips the refresh token suffix from combined keys", () => {
+    expect(sessionIDFromDashboardSessionKey("session-beta::2")).toBe("session-beta");
+  });
+});
+
+describe("isDefaultToRuntimeSessionAliasRemap", () => {
+  it("returns true when the default alias remaps to a runtime UUID session", () => {
+    expect(
+      isDefaultToRuntimeSessionAliasRemap(
+        "~default",
+        "f3a2c1b0-1234-5678-9abc-def012345678",
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false when both ids are the default alias", () => {
+    expect(isDefaultToRuntimeSessionAliasRemap("~default", "~default")).toBe(
+      false,
+    );
+  });
+
+  it("returns false when switching between non-default sessions", () => {
+    expect(
+      isDefaultToRuntimeSessionAliasRemap("session-alpha", "session-beta"),
+    ).toBe(false);
+  });
+
+  it("returns false when remapping from runtime UUID back to the default alias", () => {
+    expect(
+      isDefaultToRuntimeSessionAliasRemap(
+        "f3a2c1b0-1234-5678-9abc-def012345678",
+        "~default",
+      ),
+    ).toBe(false);
+  });
+
+  it("returns false when either id is missing", () => {
+    expect(isDefaultToRuntimeSessionAliasRemap(null, "~default")).toBe(false);
+    expect(isDefaultToRuntimeSessionAliasRemap("~default", null)).toBe(false);
   });
 });
 

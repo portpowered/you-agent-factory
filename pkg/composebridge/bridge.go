@@ -3,6 +3,7 @@
 package composebridge
 
 import (
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -22,13 +23,13 @@ type (
 	Root                     = service.FactoryServiceRoot
 	ConfigLoad               = service.FactoryConfigLoadResult
 	LocalModelDomain         = service.LocalModelDomain
-	ModelService             = service.ModelService
+	ModelService             = apisurface.ModelAPI
 	FactoryDefinitionService = service.FactoryDefinitionService
 )
 
 // ResolveRoot absolutizes cfg.Dir, assigns cfg.Logger, and mints cfg.RuntimeInstanceID when empty.
 func ResolveRoot(cfg *runtimehost.Config) (Root, error) {
-	return service.ResolveFactoryServiceRoot(cfg)
+	return service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
 }
 
 // EnsureBackendScope resolves backend scope before core composition.
@@ -53,7 +54,7 @@ func HostedWorkers(cfg *runtimehost.Config, logger *zap.Logger, clock factory.Cl
 
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
 func NewLocalModelDomain(cfg *runtimehost.Config) LocalModelDomain {
-	return service.NewLocalModelDomain(cfg)
+	return service.NewLocalModelDomain(service.FactoryServiceConfigFromRuntimeHost(cfg))
 }
 
 // NewRuntimeBuildService constructs the runtimebuild collaborator for core composition.
@@ -74,7 +75,12 @@ func NewWorkersScheduler(
 	baseLogger *zap.Logger,
 	hostedWorkers hostedworkers.Config,
 ) *workersservice.Service {
-	return service.NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers)
+	return service.NewWorkersSchedulerService(
+		service.FactoryServiceConfigFromRuntimeHost(cfg),
+		clock,
+		baseLogger,
+		hostedWorkers,
+	)
 }
 
 // CloseRuntimeBundleSinks closes startup bundle sinks when composition fails.

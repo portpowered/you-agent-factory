@@ -5,16 +5,18 @@ export {
   useFactoryTimelineStore,
 } from "../state/factoryTimelineStore";
 export {
-  deleteTimelineCheckpoint,
-  clearTimelineCheckpoint,
   clearStoredTimelineCheckpointsForFactorySessionID,
+  clearTimelineCheckpointsForSession,
+  clearTimelineCheckpoint,
+  deleteTimelineCheckpoint,
   findStoredCheckpointEnvelopeByFactorySessionID,
+  peekPersistedTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
   purgeLegacyTimelineCheckpoints,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
-  reconnectCursorFromCheckpoint,
 } from "../state/timelineCheckpointPersistence";
+export { reconnectCursorFromCheckpoint } from "../state/timelineCheckpointReconnect";
 export {
   normalizeStreamDerivedCacheIdentity,
   streamDerivedCacheKeyPrefix,

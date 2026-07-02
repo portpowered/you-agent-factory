@@ -142,10 +142,10 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if !svc.ModelAssetsInitializedForTest() {
+	if svc.modelAssets == nil {
 		t.Fatal("expected BuildFactoryService to initialize modelAssets")
 	}
-	bundle := svc.CurrentRuntimeBundle()
+	bundle := svc.currentRuntimeBundle()
 	if bundle == nil {
 		t.Fatal("expected startup runtime bundle")
 	}
@@ -155,10 +155,10 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if bundle.LocalModels == nil {
 		t.Fatal("expected startup bundle to initialize localModels")
 	}
-	if svc.SessionsRegistry() == nil {
+	if svc.sessions == nil {
 		t.Fatal("expected BuildFactoryService to initialize sessions")
 	}
-	if svc.HostedWorkersForTest().Logger == nil {
+	if svc.hostedWorkers.Logger == nil {
 		t.Fatal("expected BuildFactoryService to initialize hostedWorkers logger")
 	}
 }
@@ -258,8 +258,8 @@ func startLocalModelInferenceTestServer(
 	}
 	svc := AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
 	svc = AttachFactorySaveCollaborator(
-		FactoryServiceShell{Host: svc},
-		ProvideFactorySaveCollaborator(FactoryServiceShell{Host: svc}, cfg),
+		FactoryServiceShell{Service: svc},
+		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
 	)
 
 	runErrCh := make(chan error, 1)
@@ -569,11 +569,11 @@ func TestBuildFactoryService_MockWorkersConfigPassedThrough(t *testing.T) {
 	if snap.FactoryState != string(interfaces.FactoryStateIdle) {
 		t.Errorf("expected IDLE state, got %s", snap.FactoryState)
 	}
-	if svc.CoordinatorPolicy().MockWorkersConfig() == nil {
+	if svc.coordinatorPolicy().mockWorkersConfig == nil {
 		t.Fatal("expected mock-worker config to be preserved")
 	}
-	if len(svc.CoordinatorPolicy().MockWorkersConfig().MockWorkers) != 0 {
-		t.Fatalf("mock worker count = %d, want empty default accept config", len(svc.CoordinatorPolicy().MockWorkersConfig().MockWorkers))
+	if len(svc.coordinatorPolicy().mockWorkersConfig.MockWorkers) != 0 {
+		t.Fatalf("mock worker count = %d, want empty default accept config", len(svc.coordinatorPolicy().mockWorkersConfig.MockWorkers))
 	}
 }
 
@@ -1438,9 +1438,9 @@ func executeModelWorkerProgressPublisherServiceTest(
 
 	dir, cfg := newModelWorkerProgressPublisherServiceFixture(t)
 	sessions := newModelWorkerProgressPublisherSessions(dir)
-	svc := newTestFactoryServiceWithSessions(sessions)
-	if options.newSessionResponseStream != nil {
-		svc.SetNewSessionResponseStreamForTest(options.newSessionResponseStream)
+	svc := &FactoryService{
+		sessions:                 sessions,
+		newSessionResponseStream: options.newSessionResponseStream,
 	}
 
 	logger := options.logger
@@ -1449,7 +1449,7 @@ func executeModelWorkerProgressPublisherServiceTest(
 	}
 	progressPublisher := options.progressPublisher
 	if progressPublisher == nil {
-		progressPublisher = inferenceProgressPublisher(svc, modelWorkerProgressPublisherSessionID, logger)
+		progressPublisher = svc.inferenceProgressPublisher(modelWorkerProgressPublisherSessionID, logger)
 	}
 
 	opts, err := loadWorkersFromConfig(

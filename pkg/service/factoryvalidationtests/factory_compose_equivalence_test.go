@@ -54,8 +54,8 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	}
 	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
 	composed = service.AttachFactorySaveCollaborator(
-		service.FactoryServiceShell{Host: composed},
-		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Host: composed}, composeCfg),
+		service.FactoryServiceShell{Service: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
 	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
@@ -166,8 +166,8 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	}
 	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, cfg))
 	composed = service.AttachFactorySaveCollaborator(
-		service.FactoryServiceShell{Host: composed},
-		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Host: composed}, cfg),
+		service.FactoryServiceShell{Service: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, cfg),
 	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {

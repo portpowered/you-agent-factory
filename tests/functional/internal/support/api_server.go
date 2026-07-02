@@ -15,10 +15,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"go.uber.org/zap"
 )
 
@@ -28,17 +28,17 @@ type FunctionalAPIServerConfig struct {
 	FactoryDir                string
 	UseMockWorkers            bool
 	WaitForServiceModeRuntime bool
-	Configure                 func(*initializer.Config)
+	Configure                 func(*service.FactoryServiceConfig)
 	ExtraOptions              []factory.FactoryOption
 	CaptureAPISurface         func(apisurface.APISurface)
-	CaptureService            func(*runtimehost.Host)
+	CaptureService            func(*service.FactoryService)
 	CaptureHTTPServer         func(*httptest.Server)
 	CaptureShutdown           func(context.CancelFunc, <-chan struct{})
 }
 
 type FunctionalAPIServer struct {
 	httpSrv *httptest.Server
-	service *runtimehost.Host
+	service *service.FactoryService
 	cancel  context.CancelFunc
 	done    chan struct{}
 }
@@ -51,12 +51,10 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	var handler http.Handler
 	readyCh := make(chan struct{})
 
-	serviceCfg := &initializer.Config{
-		Dir:                      cfg.FactoryDir,
-		Port:                     1,
-		Logger:                   zap.NewNop(),
-		RuntimeFileLoggingPolicy: runtimehost.RuntimeFileLoggingPolicyDisabled,
-		ExtraOptions:             cfg.ExtraOptions,
+	serviceCfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
+		Dir:          cfg.FactoryDir,
+		Port:         1,
+		ExtraOptions: cfg.ExtraOptions,
 		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
 			if cfg.CaptureAPISurface != nil {
 				cfg.CaptureAPISurface(surface)
@@ -66,7 +64,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 			<-ctx.Done()
 			return nil
 		},
-	}
+	})
 	if cfg.UseMockWorkers {
 		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
 	}
@@ -74,22 +72,17 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		cfg.Configure(serviceCfg)
 	}
 
-	transport, err := compose.InjectAPITransport(ctx, serviceCfg)
+	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
 	if err != nil {
 		cancel()
-		t.Fatalf("InjectAPITransport: %v", err)
-	}
-	svc := transport.Host.CompatibilityServiceShell()
-	if svc == nil {
-		cancel()
-		t.Fatal("InjectAPITransport: missing session runtime host")
+		t.Fatalf("InjectFactoryService: %v", err)
 	}
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := transport.Run(ctx); err != nil && err != context.Canceled {
-			fmt.Printf("functional support server: transport.Run ended: %v\n", err)
+		if err := svc.Run(ctx); err != nil && err != context.Canceled {
+			fmt.Printf("functional support server: svc.Run ended: %v\n", err)
 		}
 	}()
 
@@ -136,7 +129,7 @@ func waitForHandlerReadiness(t *testing.T, cancel context.CancelFunc, readyCh <-
 	}
 }
 
-func waitForServiceRuntimeReady(t *testing.T, cancel context.CancelFunc, svc *runtimehost.Host) {
+func waitForServiceRuntimeReady(t *testing.T, cancel context.CancelFunc, svc *service.FactoryService) {
 	t.Helper()
 
 	deadline := time.Now().Add(functionalServerReadyTimeout)

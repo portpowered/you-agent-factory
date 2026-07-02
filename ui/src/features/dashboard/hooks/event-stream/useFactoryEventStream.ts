@@ -13,10 +13,10 @@ import {
   DEFAULT_FACTORY_SESSION_ID,
   isDefaultFactorySessionID,
 } from "../../../../api/session-routing";
-import { useFactoryTimelineStore } from "../../../timeline/public";
 import {
   normalizeStreamDerivedCacheIdentity,
   type StreamDerivedCacheIdentity,
+  useFactoryTimelineStore,
 } from "../../../timeline/public";
 import {
   compactFactoryEventForTimeline,

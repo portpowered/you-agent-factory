@@ -245,6 +245,21 @@ export async function gotoDashboardAndWaitForWidgetPicker(
   await waitForDashboardWidgetPicker(page, timeoutMs);
 }
 
+/**
+ * Seed a timeline checkpoint for the next dashboard load without letting an
+ * initial shell visit clobber the fixture via debounced checkpoint persistence.
+ */
+export async function openDashboardWithSeededCheckpoint(
+  page,
+  previewURL,
+  seedCheckpoint,
+) {
+  await page.goto(previewURL, { waitUntil: "domcontentloaded" });
+  await delay(800);
+  await seedCheckpoint();
+  await page.reload({ waitUntil: "domcontentloaded" });
+}
+
 /** Open a labeled combobox within scope and choose an option by visible label. */
 export async function selectLabeledComboboxOption(scope, label, optionName) {
   await selectComboboxOption(
@@ -808,16 +823,28 @@ function buildSessionSyncPreflightResponse(
     };
   }
 
+  const reconnectCursor = {
+    provided: reconnectCursorProvided,
+    validForStreamGeneration: reconnectCursorValid,
+  };
+  if (reconnectCursorValid && typeof afterEventID === "string") {
+    reconnectCursor.afterEventId = afterEventID;
+  }
+  if (
+    reconnectCursorValid &&
+    typeof afterSequence === "number" &&
+    Number.isFinite(afterSequence)
+  ) {
+    reconnectCursor.afterSequence = afterSequence;
+  }
+
   return {
     backendScopeId: `${sessionState.session.folderPath}::browser-integration`,
     checkpointReusable: reconnectCursorValid,
     factorySessionId: resolvedFactorySessionIDForSession(sessionState.session),
     logicalSessionKeyId: logicalSessionKeyIDForSession(sessionState.session),
     reasonCode: "ok",
-    reconnectCursor: {
-      provided: reconnectCursorProvided,
-      validForStreamGeneration: reconnectCursorValid,
-    },
+    reconnectCursor,
     requestedSessionId,
     streamGenerationId: sessionState.version.physical,
   };
