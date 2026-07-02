@@ -115,7 +115,9 @@ describe("dashboard-session-sync-preflight resolution", () => {
       },
     });
   });
+});
 
+describe("dashboard-session-sync-preflight non-recoverable resolution", () => {
   it("returns non-recoverable outcomes for unresolved logical targets", () => {
     const resolution = resolveDashboardSyncPreflight(
       buildPreflightResponse({
@@ -135,6 +137,44 @@ describe("dashboard-session-sync-preflight resolution", () => {
         reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,
         requestedSessionId: "session-missing",
       },
+    });
+  });
+
+  it("treats unknown reason codes as non-recoverable", () => {
+    const resolution = resolveDashboardSyncPreflight(
+      buildPreflightResponse({
+        reasonCode: "logical_session_unresolved",
+      }),
+    );
+
+    expect(resolution).toEqual({
+      kind: "non-recoverable",
+      recovery: {
+        reasonCode: "logical_session_unresolved",
+        requestedSessionId: "session-live-001",
+      },
+    });
+  });
+
+  it("resumes cursor_stale outcomes without a reconnect cursor", () => {
+    const resolution = resolveDashboardSyncPreflight(
+      buildPreflightResponse({
+        checkpointReusable: false,
+        reasonCode: FactorySessionSyncPreflightReasonCode.cursor_stale,
+        reconnectCursor: {
+          afterEventId: "event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: false,
+        },
+      }),
+    );
+
+    expect(resolution).toMatchObject({
+      checkpointReusable: false,
+      kind: "resume",
+      reconnectCursor: undefined,
+      resolvedSessionId: "session-live-001",
     });
   });
 });
