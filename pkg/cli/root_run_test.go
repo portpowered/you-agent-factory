@@ -1006,6 +1006,36 @@ func TestRunCommand_RuntimeLogFlagsMapToRunConfig(t *testing.T) {
 	}
 }
 
+func TestRunCommand_OutputResponseStreamFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--named", "@you/goal",
+		"--output", "response-stream",
+		"ship the goal",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --output response-stream: %v", err)
+	}
+	if got.InvocationOutputMode != runcli.InvocationOutputResponseStream {
+		t.Fatalf("InvocationOutputMode = %q, want %q", got.InvocationOutputMode, runcli.InvocationOutputResponseStream)
+	}
+}
+
 func TestRunCommand_WithMockWorkersFlagMapsToRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

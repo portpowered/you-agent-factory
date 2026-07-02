@@ -111,7 +111,10 @@ primary-result behavior.
   `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
   `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
   `pkg/cli/run/run_wire_api_test.go`, and invocation wiring in
-  `pkg/cli/run/factory_invocation_input.go`. The `pkg/cli/run` package is at the
+  `pkg/cli/run/factory_invocation_input.go`. `pkg/cli/root_work.go` and
+  `pkg/cli/root_run_test.go` apply manually parsed `you run --output response-stream`
+  to `RunConfig.InvocationOutputMode` after `DisableFlagParsing` argument parsing.
+  The `pkg/cli/run` package is at the
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
@@ -269,6 +272,14 @@ primary-result behavior.
   `SESSION_LIFECYCLE_CONTROL` replay events. Reuse
   `writePackagedGoalSlowPlannerTopologyMockWorkers` when ordered drain timing
   needs observable separation between buffered submissions.
+- Named `@you/goal` response-stream boundary smoke coverage lives in
+  `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`,
+  proving real CLI `--output response-stream` still returns the packaged
+  `primaryResult`, JSON response-stream NDJSON ends with a `primary_result`
+  record, durable `FactoryEvent` history omits internal response-stream terms,
+  and generated public API artifacts stay internal-only. Reuse
+  `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
+  and `support.StartFunctionalAPIServer` when extending boundary verification.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
