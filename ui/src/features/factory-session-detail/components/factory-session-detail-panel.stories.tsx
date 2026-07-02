@@ -1,5 +1,7 @@
 import {
   FailedBridgedChildInspection as failedBridgedChildInspectionStory,
+  LiveProviderAdjacentSurfacesRegression as liveProviderAdjacentSurfacesRegressionStory,
+  LiveProviderDispatchDetailUnavailable as liveProviderDispatchDetailUnavailableStory,
   LiveProviderSuccessInspection as liveProviderSuccessInspectionStory,
 } from "../lib/factory-session-detail-panel.live-provider-story-definitions.stories.shared";
 import {
@@ -26,6 +28,12 @@ export const LiveProviderSuccessInspection = {
 };
 export const FailedBridgedChildInspection = {
   ...failedBridgedChildInspectionStory,
+};
+export const LiveProviderAdjacentSurfacesRegression = {
+  ...liveProviderAdjacentSurfacesRegressionStory,
+};
+export const LiveProviderDispatchDetailUnavailable = {
+  ...liveProviderDispatchDetailUnavailableStory,
 };
 export const DurableReplayDisclosure = { ...durableReplayDisclosureStory };
 export const DurableReplayDisclosureAwaitingApproval = {

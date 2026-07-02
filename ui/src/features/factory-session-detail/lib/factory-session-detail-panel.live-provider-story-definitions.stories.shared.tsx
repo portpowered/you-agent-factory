@@ -1,7 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, userEvent, within } from "storybook/test";
 
-import { buildSuccessfulDurableSession } from "../../../testing/factory-session-event-replay-fixtures";
+import {
+  buildSuccessfulDurableSession,
+  buildSuccessfulReplayEventStream,
+} from "../../../testing/factory-session-event-replay-fixtures";
 import {
   buildFailedBridgedChildDispatchDetail,
   buildFailedBridgedChildDispatchList,
@@ -183,4 +186,159 @@ export const FailedBridgedChildInspection = {
     ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(failedBridgedChildSessionID),
+};
+
+export const LiveProviderAdjacentSurfacesRegression = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}`,
+          response: {
+            body: buildSuccessfulDurableSession(successfulLiveProviderSessionID),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/dispatches`,
+          response: {
+            body: buildSuccessfulLiveProviderDispatchList(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/dispatches/${successfulLiveProviderDispatchID}`,
+          response: {
+            body: buildSuccessfulLiveProviderDispatchDetail(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/events`,
+          response: {
+            body: buildSuccessfulReplayEventStream(successfulLiveProviderSessionID),
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/results?mode=final`,
+          response: {
+            status: 404,
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/results?mode=partial`,
+          response: {
+            status: 404,
+          },
+        },
+      ],
+      sessionID: successfulLiveProviderSessionID,
+    },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByText("art-js-success-001 · FINAL_RESULT")).toBeTruthy();
+    expect(await canvas.findByText("Execution mode: live")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        `Provider session: ${successfulLiveProviderSessionRef.provider} / ${successfulLiveProviderSessionRef.kind} / ${successfulLiveProviderSessionRef.id}`,
+      ),
+    ).toBeTruthy();
+
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: `Expand dispatch detail for ${successfulLiveProviderDispatchID}`,
+      }),
+    );
+    expect(
+      await canvas.findByRole("link", { name: "art-js-success-001" }),
+    ).toBeTruthy();
+
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Expand Factory Event replay" }),
+    );
+    expect(await canvas.findByText("Showing 5 Factory Events.")).toBeTruthy();
+    expect(await canvas.findByText("Session started")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        `Provider session: ${successfulLiveProviderSessionRef.provider} / ${successfulLiveProviderSessionRef.kind} / ${successfulLiveProviderSessionRef.id}`,
+      ),
+    ).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
+};
+
+export const LiveProviderDispatchDetailUnavailable = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}`,
+          response: {
+            body: buildSuccessfulDurableSession(successfulLiveProviderSessionID),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/dispatches`,
+          response: {
+            body: buildSuccessfulLiveProviderDispatchList(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/dispatches/${successfulLiveProviderDispatchID}`,
+          response: {
+            status: 404,
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/results?mode=final`,
+          response: {
+            status: 404,
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulLiveProviderSessionID}/results?mode=partial`,
+          response: {
+            status: 404,
+          },
+        },
+      ],
+      sessionID: successfulLiveProviderSessionID,
+    },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByText("Execution mode: live")).toBeTruthy();
+
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: `Expand dispatch detail for ${successfulLiveProviderDispatchID}`,
+      }),
+    );
+    expect(
+      await canvas.findByText("This dispatch detail is no longer available."),
+    ).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        `Provider session: ${successfulLiveProviderSessionRef.provider} / ${successfulLiveProviderSessionRef.kind} / ${successfulLiveProviderSessionRef.id}`,
+      ),
+    ).toBeTruthy();
+    expect(
+      await canvas.findByRole("button", { name: "Expand Factory Event replay" }),
+    ).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
 };
