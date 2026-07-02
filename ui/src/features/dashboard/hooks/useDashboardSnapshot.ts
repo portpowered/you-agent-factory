@@ -16,6 +16,7 @@ import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
+import { readFactoryTimelineDebugOptions } from "../../timeline/public";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
@@ -27,13 +28,11 @@ type DashboardPreflightStatus = "loading" | "non-recoverable" | "success";
 function usePersistedTimelineCheckpoint({
   checkpoint,
   checkpointsDisabled,
-  rawSessionID,
   streamIdentity,
   syncIdentity,
 }: {
   checkpoint: FactoryTimelineCheckpoint | undefined;
   checkpointsDisabled: boolean;
-  rawSessionID: string | null;
   streamIdentity: TimelineCheckpointStreamIdentity | null;
   syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
 }) {
@@ -91,7 +90,7 @@ export function useDashboardSnapshot({
   const invalidatedReconnectCursorRef = useRef(false);
   const lastPersistedCheckpointRef =
     useRef<FactoryTimelineCheckpoint | null>(null);
-  const lastSessionIDRef = useRef<string | null>(null);
+  const lastSessionKeyRef = useRef<string | null>(null);
   const queuedAppendRef =
     useRef<(events: FactoryEvent[]) => void>(appendEvents);
 
@@ -139,9 +138,21 @@ export function useDashboardSnapshot({
 
   const handleInvalidReconnectCursor = useCallback(() => {
     invalidatedReconnectCursorRef.current = true;
+    if (streamIdentity && rawSessionID) {
+      recordSessionPersistenceInvalidation(
+        silentReplayRecoveryDiagnostic(
+          {
+            backendScopeID: streamIdentity.backendScopeID,
+            factorySessionID: streamIdentity.factorySessionID,
+            streamGenerationID: streamIdentity.streamGenerationID,
+          },
+          rawSessionID,
+        ),
+      );
+    }
     resetTimeline();
     void clearTimelineCheckpoint(window.indexedDB, streamIdentity);
-  }, [resetTimeline, streamIdentity]);
+  }, [rawSessionID, resetTimeline, streamIdentity]);
 
   const checkpointSyncIdentity = useMemo(() => {
     if (
@@ -215,10 +226,11 @@ export function useDashboardSnapshot({
         isInitialLoading,
       preflightRecovery,
       preflightStatus,
-      snapshot,
+      snapshot: preflightRecovery ? null : snapshot,
       streamState,
     }),
     [
+      checkpointHydrated,
       error,
       isInitialLoading,
       preflightError,

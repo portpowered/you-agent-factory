@@ -19,6 +19,7 @@ export interface FactorySessionSyncPreflightIdentityHints {
 export interface GetFactorySessionSyncPreflightOptions
   extends FactorySessionSyncPreflightIdentityHints {
   fetch?: typeof globalThis.fetch;
+  logicalResolve?: FactorySessionLogicalResolveHint;
 }
 
 export async function getFactorySessionSyncPreflight(

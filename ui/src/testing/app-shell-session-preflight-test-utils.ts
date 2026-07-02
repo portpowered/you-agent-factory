@@ -4,6 +4,22 @@ import type {
   FactorySession,
   FactorySessionSummary,
 } from "../api/factory-sessions/api";
+import {
+  isDefaultFactorySessionID,
+} from "../api/session-routing";
+
+export const APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID =
+  "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function resolvedFactorySessionID(summary: FactorySessionSummary): string {
+  return isDefaultFactorySessionID(summary.id)
+    ? APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID
+    : summary.id;
+}
+
+function logicalSessionKeyID(summary: FactorySessionSummary): string {
+  return `${summary.folderPath}::${summary.target.kind}${summary.target.name ? `::${summary.target.name}` : "::"}`;
+}
 
 const DEFAULT_LOGICAL_SESSION_KEY_ID =
   "lsk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -20,6 +36,18 @@ function jsonResponse(
     status,
     statusText,
   });
+}
+
+export function buildAppShellStreamIdentity(
+  summary: FactorySessionSummary,
+  snapshot: DashboardSnapshot,
+) {
+  const streamIdentity =
+    buildFactorySessionResponse(summary, snapshot).runtime.streamIdentity;
+  if (!streamIdentity) {
+    throw new Error("expected app-shell factory session stream identity");
+  }
+  return streamIdentity;
 }
 
 export function buildFactorySessionResponse(
@@ -90,23 +118,28 @@ export function handleFactorySessionPreflightRequest({
   );
   if (syncPreflightMatch) {
     const requestedSessionID = decodeURIComponent(syncPreflightMatch[1] ?? "");
+    const searchParams = new URLSearchParams(syncPreflightMatch[2] ?? "");
+    const afterSequence = searchParams.get("after_sequence");
     const sessionSummary = availableFactorySessions.find(
-      (session) => session.id === requestedSessionID,
+      (session) =>
+        session.id === requestedSessionID ||
+        (isDefaultFactorySessionID(requestedSessionID) &&
+          isDefaultFactorySessionID(session.id)),
     );
 
     if (!sessionSummary) {
-      return jsonResponse(
-        {
-          code: "FACTORY_SESSION_NOT_FOUND",
-          message: `Factory session ${requestedSessionID} was not found.`,
+      return jsonResponse({
+        checkpointReusable: false,
+        reasonCode: "session_not_found",
+        reconnectCursor: {
+          provided:
+            searchParams.has("after_event_id") || afterSequence != null,
+          validForStreamGeneration: false,
         },
-        404,
-        "Not Found",
-      );
+        requestedSessionId: requestedSessionID,
+      });
     }
 
-    const searchParams = new URLSearchParams(syncPreflightMatch[2] ?? "");
-    const afterSequence = searchParams.get("after_sequence");
     const sessionResponse = buildFactorySessionResponse(sessionSummary, snapshot);
     const streamGenerationId =
       sessionResponse.runtime.streamIdentity?.streamGenerationID ??

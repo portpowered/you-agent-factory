@@ -311,7 +311,7 @@ describe("useDashboardSnapshot composer", () => {
     );
   });
 
-  it("surfaces a recoverable offline error and skips stream open when preflight cannot resolve the session", async () => {
+  it("surfaces a recoverable preflight recovery state when sync preflight cannot resolve the session", async () => {
     useFactoryTimelineStore.getState().reset();
     getFactorySessionSyncPreflightSpy.mockRejectedValue(
       new Error("The selected session could not be resolved."),
@@ -322,16 +322,13 @@ describe("useDashboardSnapshot composer", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.error?.message).toBe(
-        "The selected session could not be resolved.",
-      );
+      expect(result.current.preflightRecovery).toEqual({
+        reasonCode: "session_not_found",
+        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+      });
     });
     expect(result.current.isInitialLoading).toBe(false);
     expect(replayHarness.getStreams()).toHaveLength(0);
-    expect(useDashboardStreamStore.getState().streamState).toMatchObject({
-      status: "offline",
-      message: "The selected session could not be resolved.",
-    });
   });
 
   it("reopens the event stream when the selected session tab changes", async () => {
@@ -350,7 +347,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
 
     act(() => {
@@ -508,7 +505,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(useFactoryTimelineStore.getState().selectedTick).toBe(7);
     });
     expect(replayHarness.getStreams().at(-1)?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
     );
   });
 
@@ -534,7 +531,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
     expect(useFactoryTimelineStore.getState().selectedTick).not.toBe(7);
     await expect(
@@ -556,8 +553,7 @@ describe("useDashboardSnapshot composer", () => {
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },
-      schemaVersion: 2,
-      sessionID: DEFAULT_FACTORY_SESSION_ID,
+      schemaVersion: 3,
       storageKey: checkpointStorageKey(),
       streamIdentity: {
         backendScopeID: DEFAULT_BACKEND_SCOPE_ID,
@@ -586,7 +582,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
     await waitFor(() => {
       expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);

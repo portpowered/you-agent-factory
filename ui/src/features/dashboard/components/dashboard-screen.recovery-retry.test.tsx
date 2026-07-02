@@ -21,6 +21,35 @@ import {
 import { DashboardScreen } from "./dashboard-screen";
 
 const replayHarness = createReplayHarness();
+const RESOLVED_DEFAULT_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function resolvedDefaultStreamIdentity() {
+  return {
+    backendScopeID: "backend-scope-a",
+    factorySessionID: RESOLVED_DEFAULT_SESSION_UUID,
+    logicalSessionKeyID: "logical-default",
+    streamGenerationID: "2026-06-26T00:00:00Z",
+  };
+}
+
+function okSyncPreflightResponse(
+  overrides: Partial<syncPreflightAPI.FactorySessionSyncPreflightResponse> = {},
+) {
+  return {
+    backendScopeId: "backend-scope-a",
+    checkpointReusable: true,
+    factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
+    logicalSessionKeyId: "logical-default",
+    reasonCode: "ok" as const,
+    reconnectCursor: {
+      provided: false,
+      validForStreamGeneration: true,
+    },
+    requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+    streamGenerationId: "2026-06-26T00:00:00Z",
+    ...overrides,
+  };
+}
 
 function StatusPanelProbe({
   detail,
@@ -155,10 +184,10 @@ describe("DashboardScreen stale-cursor retry", () => {
       });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes(`/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`)) {
+      if (url.includes(`/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`)) {
         return new Response(
           JSON.stringify({
-            factorySessionId: DEFAULT_FACTORY_SESSION_ID,
+            factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
             outcome: "CURSOR_STALE",
             retry: {
               omitAfterEventId: true,
@@ -186,6 +215,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       sessionTabOrder: [],
     });
     useDashboardStreamStore.setState({
+      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useFactoryTimelineStore.getState().reset();
@@ -205,6 +235,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       sessionTabOrder: [],
     });
     useDashboardStreamStore.setState({
+      resolvedStreamIdentity: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useFactoryTimelineStore.getState().reset();
@@ -213,16 +244,16 @@ describe("DashboardScreen stale-cursor retry", () => {
   it("retries a recovery-failed session stream without replaying the stale checkpoint cursor", async () => {
     const user = userEvent.setup();
 
-    await persistTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
-      afterEventId: "checkpoint-event-7",
-      afterSequence: 7,
-      replayState: emptyReplayWorldState(7),
-      selectedTick: 7,
-    }, {
-      backendScopeID: "backend-scope-a",
-      factorySessionID: DEFAULT_FACTORY_SESSION_ID,
-      streamGenerationID: "2026-06-26T00:00:00Z",
-    });
+    await persistTimelineCheckpoint(
+      window.indexedDB,
+      {
+        afterEventId: "checkpoint-event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+      },
+      resolvedDefaultStreamIdentity(),
+    );
 
     render(<DashboardScreen />, {
       wrapper: createWrapper(queryClient),
@@ -232,7 +263,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(replayHarness.getStreams()[0]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
     );
 
     const initialStream = replayHarness.getStreams()[0];
@@ -248,7 +279,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       expect(replayHarness.getStreams()).toHaveLength(2);
     });
     expect(replayHarness.getStreams()[1]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
 
     const replayStream = replayHarness.getStreams()[1];
@@ -274,7 +305,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       expect(replayHarness.getStreams()).toHaveLength(3);
     });
     expect(replayHarness.getStreams()[2]?.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
   });
 });

@@ -224,6 +224,11 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 	properties := schemaProperties(t, response, "FactorySessionSyncPreflightResponse")
 	assertPropertyRef(t, properties, "reasonCode", "#/components/schemas/FactorySessionSyncPreflightReasonCode")
 	assertPropertyRef(t, properties, "reconnectCursor", "#/components/schemas/FactorySessionSyncPreflightReconnectCursor")
+	for _, field := range []string{"backendScopeId", "logicalSessionKeyId", "factorySessionId", "streamGenerationId"} {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("FactorySessionSyncPreflightResponse.properties.%s is missing", field)
+		}
+	}
 
 	reasonCode := schemaObject(t, schemas, "FactorySessionSyncPreflightReasonCode")
 	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap", "invalid_target_reference", "logical_session_unresolved"})
@@ -243,6 +248,21 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 
 	reconnectCursor := schemaObject(t, schemas, "FactorySessionSyncPreflightReconnectCursor")
 	assertRequiredFields(t, reconnectCursor, "provided", "validForStreamGeneration")
+
+	for _, identityField := range []string{
+		"backendScopeId",
+		"logicalSessionKeyId",
+		"factorySessionId",
+		"streamGenerationId",
+	} {
+		property, ok := properties[identityField].(map[string]any)
+		if !ok {
+			t.Fatalf("FactorySessionSyncPreflightResponse.properties.%s is missing", identityField)
+		}
+		if property["type"] != "string" {
+			t.Fatalf("FactorySessionSyncPreflightResponse.properties.%s.type = %v, want string", identityField, property["type"])
+		}
+	}
 }
 
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {

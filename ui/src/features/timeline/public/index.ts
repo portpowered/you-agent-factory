@@ -10,6 +10,7 @@ export {
   clearTimelineCheckpoint,
   peekPersistedTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
+  purgeLegacyTimelineCheckpoints,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
 } from "../state/timelineCheckpointPersistence";
