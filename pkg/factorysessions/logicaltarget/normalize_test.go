@@ -270,77 +270,64 @@ func TestNormalizeTargetRef_RejectsInvalidAndAmbiguousReferences(t *testing.T) {
 		t.Fatalf("Abs: %v", err)
 	}
 
-	_, err = logicaltarget.NormalizeTargetRef("", absoluteFolder, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+	t.Run("missing-backend-scope", func(t *testing.T) {
+		_, err := logicaltarget.NormalizeTargetRef("", absoluteFolder, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+		assertLogicalTargetValidationError(t, err, logicaltarget.ReasonRequired, "backendScopeId")
+	})
+	t.Run("missing-folder-path", func(t *testing.T) {
+		_, err := logicaltarget.NormalizeTargetRef(testBackendScopeID, "", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+		assertLogicalTargetValidationError(t, err, logicaltarget.ReasonRequired, "folderPath")
+	})
+	t.Run("default-with-name", func(t *testing.T) {
+		_, err := logicaltarget.NormalizeTargetRef(
+			testBackendScopeID,
+			absoluteFolder,
+			factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault, Name: "beta"},
+		)
+		assertLogicalTargetValidationError(t, err, logicaltarget.ReasonAmbiguousTarget, "target")
+	})
+	t.Run("named-without-name", func(t *testing.T) {
+		_, err := logicaltarget.NormalizeTargetRef(
+			testBackendScopeID,
+			absoluteFolder,
+			factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
+		)
+		assertLogicalTargetValidationError(t, err, logicaltarget.ReasonRequired, "target.name")
+	})
+	t.Run("unsupported-kind", func(t *testing.T) {
+		_, err := logicaltarget.NormalizeTargetRef(
+			testBackendScopeID,
+			absoluteFolder,
+			factorysessions.TargetRef{Kind: "unsupported"},
+		)
+		assertLogicalTargetValidationError(t, err, logicaltarget.ReasonInvalidTarget, "target.kind")
+	})
+	t.Run("secret-provider-boundary", func(t *testing.T) {
+		_, err := logicaltarget.NormalizeProviderTarget(
+			testBackendScopeID,
+			absoluteFolder,
+			logicaltarget.ProviderBoundary{
+				Provider: "cursor",
+				Kind:     "workspace",
+				Boundary: "sk-live-secret-token",
+			},
+		)
+		assertLogicalTargetValidationError(t, err, logicaltarget.ReasonInvalidTarget, "provider.boundary")
+	})
+}
+
+func assertLogicalTargetValidationError(
+	t *testing.T,
+	err error,
+	wantReason string,
+	wantField string,
+) {
+	t.Helper()
 	if err == nil {
-		t.Fatal("missing backend scope error = nil, want required")
+		t.Fatalf("validation error = nil, want %q on %q", wantReason, wantField)
 	}
 	reason, field, ok := logicaltarget.ValidationReasonFromError(err)
-	if !ok || reason != logicaltarget.ReasonRequired || field != "backendScopeId" {
-		t.Fatalf("validation = (%q, %q, %v), want required backendScopeId", reason, field, ok)
-	}
-
-	_, err = logicaltarget.NormalizeTargetRef(testBackendScopeID, "", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
-	if err == nil {
-		t.Fatal("missing folder error = nil, want required")
-	}
-	reason, field, ok = logicaltarget.ValidationReasonFromError(err)
-	if !ok || reason != logicaltarget.ReasonRequired || field != "folderPath" {
-		t.Fatalf("validation = (%q, %q, %v), want required folderPath", reason, field, ok)
-	}
-
-	_, err = logicaltarget.NormalizeTargetRef(
-		testBackendScopeID,
-		absoluteFolder,
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault, Name: "beta"},
-	)
-	if err == nil {
-		t.Fatal("default with name error = nil, want ambiguous")
-	}
-	reason, field, ok = logicaltarget.ValidationReasonFromError(err)
-	if !ok || reason != logicaltarget.ReasonAmbiguousTarget || field != "target" {
-		t.Fatalf("validation = (%q, %q, %v), want ambiguous target", reason, field, ok)
-	}
-
-	_, err = logicaltarget.NormalizeTargetRef(
-		testBackendScopeID,
-		absoluteFolder,
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
-	)
-	if err == nil {
-		t.Fatal("named without name error = nil, want required")
-	}
-	reason, field, ok = logicaltarget.ValidationReasonFromError(err)
-	if !ok || reason != logicaltarget.ReasonRequired || field != "target.name" {
-		t.Fatalf("validation = (%q, %q, %v), want required target.name", reason, field, ok)
-	}
-
-	_, err = logicaltarget.NormalizeTargetRef(
-		testBackendScopeID,
-		absoluteFolder,
-		factorysessions.TargetRef{Kind: "unsupported"},
-	)
-	if err == nil {
-		t.Fatal("unsupported kind error = nil, want invalid")
-	}
-	reason, field, ok = logicaltarget.ValidationReasonFromError(err)
-	if !ok || reason != logicaltarget.ReasonInvalidTarget || field != "target.kind" {
-		t.Fatalf("validation = (%q, %q, %v), want invalid target.kind", reason, field, ok)
-	}
-
-	_, err = logicaltarget.NormalizeProviderTarget(
-		testBackendScopeID,
-		absoluteFolder,
-		logicaltarget.ProviderBoundary{
-			Provider: "cursor",
-			Kind:     "workspace",
-			Boundary: "sk-live-secret-token",
-		},
-	)
-	if err == nil {
-		t.Fatal("secret boundary error = nil, want invalid")
-	}
-	reason, field, ok = logicaltarget.ValidationReasonFromError(err)
-	if !ok || reason != logicaltarget.ReasonInvalidTarget || field != "provider.boundary" {
-		t.Fatalf("validation = (%q, %q, %v), want invalid provider.boundary", reason, field, ok)
+	if !ok || reason != wantReason || field != wantField {
+		t.Fatalf("validation = (%q, %q, %v), want (%q, %q, true)", reason, field, ok, wantReason, wantField)
 	}
 }

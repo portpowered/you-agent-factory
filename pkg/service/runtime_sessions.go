@@ -916,39 +916,62 @@ func (fs *FactoryService) resolveSessionSyncPreflightTarget(
 		return sessionSyncPreflightTarget{invalidTarget: true}, nil
 	}
 
-	var directSession *factorysessions.LiveSession
-	if requestedID != "" {
-		if session, err := fs.requireSession(requestedID); err == nil {
-			directSession = session
-		} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			return sessionSyncPreflightTarget{}, err
-		}
+	directSession, err := fs.lookupDirectSessionForPreflight(requestedID)
+	if err != nil {
+		return sessionSyncPreflightTarget{}, err
 	}
-
-	var logicalSession *factorysessions.LiveSession
-	if requestedLogicalSessionKeyID != "" {
-		logicalSession = fs.findLiveSessionByLogicalSessionKeyID(requestedLogicalSessionKeyID)
+	logicalSession := fs.lookupLogicalSessionForPreflight(requestedLogicalSessionKeyID)
+	if target, ok := mergeDirectAndLogicalPreflightSessions(requestedID, directSession, logicalSession); ok {
+		return target, nil
 	}
-
-	switch {
-	case directSession != nil && logicalSession != nil:
-		if directSession.ID == logicalSession.ID {
-			return sessionSyncPreflightTarget{session: directSession}, nil
-		}
-		return sessionSyncPreflightTarget{session: logicalSession, remapped: true}, nil
-	case logicalSession != nil:
-		remapped := requestedID == "" || requestedID != logicalSession.ID
-		return sessionSyncPreflightTarget{session: logicalSession, remapped: remapped}, nil
-	case directSession != nil:
-		return sessionSyncPreflightTarget{session: directSession}, nil
-	}
-
 	if requestedID == defaultFactorySessionID {
 		if session := fs.preflightDefaultSessionSuccessor(); session != nil {
 			return sessionSyncPreflightTarget{session: session, remapped: true}, nil
 		}
 	}
 	return sessionSyncPreflightTarget{}, nil
+}
+
+func (fs *FactoryService) lookupDirectSessionForPreflight(requestedID string) (*factorysessions.LiveSession, error) {
+	if requestedID == "" {
+		return nil, nil
+	}
+	session, err := fs.requireSession(requestedID)
+	if err == nil {
+		return session, nil
+	}
+	if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		return nil, nil
+	}
+	return nil, err
+}
+
+func (fs *FactoryService) lookupLogicalSessionForPreflight(requestedLogicalSessionKeyID string) *factorysessions.LiveSession {
+	if requestedLogicalSessionKeyID == "" {
+		return nil
+	}
+	return fs.findLiveSessionByLogicalSessionKeyID(requestedLogicalSessionKeyID)
+}
+
+func mergeDirectAndLogicalPreflightSessions(
+	requestedID string,
+	directSession *factorysessions.LiveSession,
+	logicalSession *factorysessions.LiveSession,
+) (sessionSyncPreflightTarget, bool) {
+	switch {
+	case directSession != nil && logicalSession != nil:
+		if directSession.ID == logicalSession.ID {
+			return sessionSyncPreflightTarget{session: directSession}, true
+		}
+		return sessionSyncPreflightTarget{session: logicalSession, remapped: true}, true
+	case logicalSession != nil:
+		remapped := requestedID == "" || requestedID != logicalSession.ID
+		return sessionSyncPreflightTarget{session: logicalSession, remapped: remapped}, true
+	case directSession != nil:
+		return sessionSyncPreflightTarget{session: directSession}, true
+	default:
+		return sessionSyncPreflightTarget{}, false
+	}
 }
 
 func (fs *FactoryService) findLiveSessionByLogicalSessionKeyID(logicalSessionKeyID string) *factorysessions.LiveSession {
