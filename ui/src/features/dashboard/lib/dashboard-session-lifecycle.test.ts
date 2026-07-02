@@ -9,6 +9,7 @@ import {
   isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
   resetDashboardSessionScopedState,
+  sessionIDFromDashboardSessionKey,
   shouldResetDashboardSessionScopedState,
   shouldResumeFromPersistedCheckpoint,
 } from "./dashboard-session-lifecycle";
@@ -27,6 +28,20 @@ describe("dashboardSessionKey", () => {
 
   it("combines session id and refresh token", () => {
     expect(dashboardSessionKey("session-beta", 2)).toBe("session-beta::2");
+  });
+});
+
+describe("sessionIDFromDashboardSessionKey", () => {
+  it("returns null when the dashboard session key is null", () => {
+    expect(sessionIDFromDashboardSessionKey(null)).toBeNull();
+  });
+
+  it("returns the session id when no refresh suffix is present", () => {
+    expect(sessionIDFromDashboardSessionKey("session-beta")).toBe("session-beta");
+  });
+
+  it("strips the refresh token suffix from combined keys", () => {
+    expect(sessionIDFromDashboardSessionKey("session-beta::2")).toBe("session-beta");
   });
 });
 

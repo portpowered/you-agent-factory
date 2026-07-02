@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
 import {
+  checkpointSyncIdentityFromPreflight,
+  isNonRecoverableSyncPreflightReasonCode,
   resolveDashboardSyncPreflight,
   shouldClearCheckpointAfterPreflight,
   shouldRemapDashboardSession,
@@ -151,5 +153,52 @@ describe("dashboard-session-sync-preflight", () => {
       backendScopeId: "backend-scope-a",
       logicalSessionKeyId: "lsk-named-target",
     });
+  });
+
+  it("falls back to stream identity hints when checkpoint sync identity is absent", () => {
+    expect(
+      syncPreflightIdentityHintsFromCheckpoint(undefined, {
+        backendScopeID: "backend-scope-b",
+        factorySessionID: "session-live",
+        logicalSessionKeyID: "lsk-folder",
+        streamGenerationID: "generation-2",
+      }),
+    ).toEqual({
+      backendScopeId: "backend-scope-b",
+    });
+  });
+
+  it("maps preflight stream identity into checkpoint sync identity", () => {
+    expect(
+      checkpointSyncIdentityFromPreflight({
+        backendScopeID: "backend-scope-a",
+        factorySessionID: "session-live-001",
+        logicalSessionKeyID: "lsk-default",
+        streamGenerationID: "generation-1",
+      }),
+    ).toEqual({
+      backendScopeId: "backend-scope-a",
+      factorySessionId: "session-live-001",
+      logicalSessionKeyId: "lsk-default",
+      streamGenerationId: "generation-1",
+    });
+  });
+
+  it("classifies non-recoverable sync-preflight reason codes", () => {
+    expect(
+      isNonRecoverableSyncPreflightReasonCode(
+        FactorySessionSyncPreflightReasonCode.session_not_found,
+      ),
+    ).toBe(true);
+    expect(
+      isNonRecoverableSyncPreflightReasonCode(
+        FactorySessionSyncPreflightReasonCode.invalid_target_reference,
+      ),
+    ).toBe(true);
+    expect(
+      isNonRecoverableSyncPreflightReasonCode(
+        FactorySessionSyncPreflightReasonCode.ok,
+      ),
+    ).toBe(false);
   });
 });
