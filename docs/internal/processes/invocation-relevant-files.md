@@ -94,7 +94,7 @@ primary-result behavior.
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`), and `cmd/factory/main.go` (`buildCLIRuntimeRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/cli/run/run_compose_test.go`, and consolidated startup parity coverage in `pkg/initializer/startup_compatibility_test.go`.
+- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`), and `cmd/factory/main.go` (`buildCLIRuntimeRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/cli/run/run_api_compose_test.go`, and consolidated startup parity plus cross-transport composition evidence in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
@@ -111,7 +111,10 @@ primary-result behavior.
   `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
   `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
   `pkg/cli/run/run_wire_api_test.go`, and invocation wiring in
-  `pkg/cli/run/factory_invocation_input.go`. The `pkg/cli/run` package is at the
+  `pkg/cli/run/factory_invocation_input.go`. `pkg/cli/root_work.go` and
+  `pkg/cli/root_run_test.go` apply manually parsed `you run --output response-stream`
+  to `RunConfig.InvocationOutputMode` after `DisableFlagParsing` argument parsing.
+  The `pkg/cli/run` package is at the
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
@@ -243,7 +246,41 @@ primary-result behavior.
 - Behavioral proof for named goal batch invocation lives in
   `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
-  legacy-materialized upgrade smoke case.
+  fresh-home materialization smoke case, a customer-edit preservation rerun
+  smoke case, and a legacy-materialized upgrade smoke case.
+- CLI/API invocation parity for packaged `@you/goal` lives in
+  `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
+  comparing live session invocation API responses with real CLI `--json` output
+  for positional, stdin, and named-factory success paths plus representative
+  empty-input and unresolved-primary-result failures. Reuse
+  `scaffoldPackagedGoalInvocationFactoryForSmoke`, `buildYouCLIBinary`, and
+  `support.StartFunctionalAPIServer` when extending parity coverage.
+- Final `@you/goal` decision-routing smoke coverage lives in
+  `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`, exercising
+  named-factory CLI `--json` outcomes for accepted, blocked, needs-human, and
+  failed classifier labels plus API-backed fixtures for interrupted routing,
+  needs_changes rework loops, and structured unknown decisions. Reuse
+  `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
+  and `support.StartFunctionalAPIServer` when extending routing verification.
+  Complement with `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
+  and `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` for
+  transitioner and topology-level routing proofs.
+- Named `@you/goal` operator-control smoke coverage lives in
+  `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
+  proving API and CLI pause/resume buffering, ordered post-resume drain via
+  plan-goal dispatch `StartTime` ordering in `DispatchHistory`, interrupted
+  inspect summaries via `session show` and `work show`, and durable
+  `SESSION_LIFECYCLE_CONTROL` replay events. Reuse
+  `writePackagedGoalSlowPlannerTopologyMockWorkers` when ordered drain timing
+  needs observable separation between buffered submissions.
+- Named `@you/goal` response-stream boundary smoke coverage lives in
+  `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`,
+  proving real CLI `--output response-stream` still returns the packaged
+  `primaryResult`, JSON response-stream NDJSON ends with a `primary_result`
+  record, durable `FactoryEvent` history omits internal response-stream terms,
+  and generated public API artifacts stay internal-only. Reuse
+  `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
+  and `support.StartFunctionalAPIServer` when extending boundary verification.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
@@ -256,9 +293,14 @@ primary-result behavior.
   worker model so customer edits to materialized `factory.json` affect the next
   invocation result.
 - `docs/reference/packaged-goal.md` is the packaged `you docs packaged-goal`
-  customer guide for `@you/goal` batch invocation, stdout primary result, and
+  customer guide for `@you/goal` batch invocation, stdout primary result, operator
+  controls during active execution, internal-only CLI response-stream scope, and
   the supported headless operator-interaction scope without widening localhost
-  listener promises.
+  listener promises. Packaged docs proof lives in
+  `pkg/cli/docs/docs_packaged_reference_test.go` and
+  `tests/functional/smoke/cli_docs_smoke_test.go`; maintainer final-verification
+  evidence for public-contract boundaries lives in
+  `docs/internal/development/plans/you-goal/api-contract-audit.md`.
 - `docs/reference/models.md` is the customer guide for `INFERENCE_RUN`,
   `INFERENCE_WORKER`, managed-runtime `/models` surfaces, local modelhost lease
   execution, and legacy `MODEL_INVOKE` / `MODEL_WORKER` migration aliases.

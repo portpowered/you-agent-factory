@@ -73,6 +73,7 @@ export interface FactorySessionDetailMessages
   failureMessageLabel: string;
   failureReasonLabel: string;
   finalResultRefLabel: string;
+  lifecycleControlStatusLabel: string;
   javascriptProjectionMissingState: string;
   javascriptTaskHeading: string;
   javascriptTaskKindLabel: string;
@@ -284,6 +285,7 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "Failure message",
     failureReasonLabel: "Failure reason",
     finalResultRefLabel: "Final result ref",
+    lifecycleControlStatusLabel: "Factory Session lifecycle",
     javascriptProjectionMissingState:
       "JavaScript workflow runtime details are not available for this session.",
     javascriptTaskHeading: "JavaScript task",
@@ -378,6 +380,7 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "失败消息",
     failureReasonLabel: "失败原因",
     finalResultRefLabel: "最终结果引用",
+    lifecycleControlStatusLabel: "工厂会话生命周期",
     javascriptProjectionMissingState:
       "此会话的 JavaScript 工作流运行时详情不可用。",
     javascriptTaskHeading: "JavaScript 任务",

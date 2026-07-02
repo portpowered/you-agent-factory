@@ -17,7 +17,7 @@ func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testi
 	host := &openTestHost{requireSession: session}
 	gateway := factorysessionservice.New(host)
 
-	response, err := gateway.GetFactorySessionSyncPreflight(context.Background(), "sess-preflight", nil)
+	response, err := gateway.GetFactorySessionSyncPreflight(context.Background(), "sess-preflight", nil, nil)
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestService_GetFactorySessionSyncPreflight_RejectsDurableSessionID(t *testi
 
 	gateway := factorysessionservice.New(&openTestHost{})
 
-	response, err := gateway.GetFactorySessionSyncPreflight(context.Background(), "dur-sess-js-run-n-001", nil)
+	response, err := gateway.GetFactorySessionSyncPreflight(context.Background(), "dur-sess-js-run-n-001", nil, nil)
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
 	}

@@ -5,23 +5,23 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   COMPONENT_CATEGORY_EXPORT_PATHS,
   COMPONENTS_PACKAGE_NAME,
-} from "youagentfactory/components";
-import stylesCss from "youagentfactory/components/styles.css?inline";
-import * as charts from "youagentfactory/components/charts";
-import * as dataDisplay from "youagentfactory/components/data-display";
-import * as feedback from "youagentfactory/components/feedback";
-import * as forms from "youagentfactory/components/forms";
-import * as graphs from "youagentfactory/components/graphs";
-import * as icons from "youagentfactory/components/icons";
-import * as layout from "youagentfactory/components/layout";
-import * as navigation from "youagentfactory/components/navigation";
-import * as overlays from "youagentfactory/components/overlays";
-import * as primitives from "youagentfactory/components/primitives";
-import * as recipes from "youagentfactory/components/recipes";
-import * as testing from "youagentfactory/components/testing";
-import * as tokens from "youagentfactory/components/tokens";
-import { cn, COMPONENTS_CATEGORY as utilitiesCategory } from "youagentfactory/components/utilities";
-import * as utilities from "youagentfactory/components/utilities";
+} from "@you-agent-factory/components";
+import stylesCss from "@you-agent-factory/components/styles.css?inline";
+import * as charts from "@you-agent-factory/components/charts";
+import * as dataDisplay from "@you-agent-factory/components/data-display";
+import * as feedback from "@you-agent-factory/components/feedback";
+import * as forms from "@you-agent-factory/components/forms";
+import * as graphs from "@you-agent-factory/components/graphs";
+import * as icons from "@you-agent-factory/components/icons";
+import * as layout from "@you-agent-factory/components/layout";
+import * as navigation from "@you-agent-factory/components/navigation";
+import * as overlays from "@you-agent-factory/components/overlays";
+import * as primitives from "@you-agent-factory/components/primitives";
+import * as recipes from "@you-agent-factory/components/recipes";
+import * as testing from "@you-agent-factory/components/testing";
+import * as tokens from "@you-agent-factory/components/tokens";
+import { cn, COMPONENTS_CATEGORY as utilitiesCategory } from "@you-agent-factory/components/utilities";
+import * as utilities from "@you-agent-factory/components/utilities";
 
 import {
   injectCompiledPackageTokenStyles,
@@ -45,7 +45,7 @@ const categoryModules = {
   tokens,
 } as const;
 
-describe("youagentfactory/components package import resolution", () => {
+describe("@you-agent-factory/components package import resolution", () => {
   let documentRoot: HTMLElement;
 
   beforeAll(async () => {
@@ -53,7 +53,7 @@ describe("youagentfactory/components package import resolution", () => {
   });
 
   it("imports the package root through the configured package path", () => {
-    expect(COMPONENTS_PACKAGE_NAME).toBe("youagentfactory/components");
+    expect(COMPONENTS_PACKAGE_NAME).toBe("@you-agent-factory/components");
   });
 
   it("imports the CSS entrypoint through the configured package path", () => {

@@ -1,1 +1,1 @@
-export { cn } from "youagentfactory/components/utilities";
+export { cn } from "@you-agent-factory/components/utilities";

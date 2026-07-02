@@ -7,26 +7,26 @@ type ComponentsPackageAlias = {
   replacement: string;
 };
 
-/** Vite/Vitest alias entries for `youagentfactory/components` root, CSS, and deep category paths. */
+/** Vite/Vitest alias entries for `@you-agent-factory/components` root, CSS, and deep category paths. */
 export function createComponentsPackageAliases(
   componentsPackageRoot: string,
 ): ComponentsPackageAlias[] {
   const aliases: ComponentsPackageAlias[] = [
     {
       // Exact root match only; a prefix alias incorrectly captures subpaths such as
-      // `youagentfactory/components/styles.css`.
-      find: /^youagentfactory\/components$/,
+      // `@you-agent-factory/components/styles.css`.
+      find: /^@you-agent-factory\/components$/,
       replacement: path.join(componentsPackageRoot, "index.ts"),
     },
     {
-      find: /^youagentfactory\/components\/styles\.css(\?.*)?$/,
+      find: /^@you-agent-factory\/components\/styles\.css(\?.*)?$/,
       replacement: path.join(componentsPackageRoot, "styles.css"),
     },
   ];
 
   for (const categoryPath of COMPONENT_CATEGORY_EXPORT_PATHS) {
     aliases.push({
-      find: `youagentfactory/components/${categoryPath}`,
+      find: `@you-agent-factory/components/${categoryPath}`,
       replacement: path.join(
         componentsPackageRoot,
         categoryPath,

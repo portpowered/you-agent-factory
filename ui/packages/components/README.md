@@ -1,4 +1,4 @@
-# youagentfactory/components
+# @you-agent-factory/components
 
 Presentation components, shared design tokens, and small utilities for building
 factory-style UIs outside the dashboard. The package is domain-free: it does not
@@ -12,13 +12,13 @@ uses a workspace link:
 ```json
 {
   "dependencies": {
-    "youagentfactory/components": "file:./packages/components"
+    "@you-agent-factory/components": "file:./packages/components"
   }
 }
 ```
 
 Published consumers should depend on the same package name
-(`youagentfactory/components`) from their chosen distribution channel.
+(`@you-agent-factory/components`) from their chosen distribution channel.
 
 Peer dependencies:
 
@@ -35,7 +35,7 @@ Import the package styles entrypoint once in your application CSS (or an
 equivalent global stylesheet hook) before rendering components:
 
 ```css
-@import "youagentfactory/components/styles.css";
+@import "@you-agent-factory/components/styles.css";
 ```
 
 With Tailwind CSS v4, a typical host `styles.css` also imports Tailwind and may
@@ -43,7 +43,7 @@ layer app-specific utilities after the package tokens:
 
 ```css
 @import "tailwindcss";
-@import "youagentfactory/components/styles.css";
+@import "@you-agent-factory/components/styles.css";
 
 /* Host-only utilities and foundation overrides */
 ```
@@ -57,18 +57,18 @@ API clients, or generated OpenAPI types to use these tokens.
 Category entrypoints are deep imports under the package name:
 
 ```ts
-import { COMPONENTS_PACKAGE_NAME } from "youagentfactory/components";
-import * as primitives from "youagentfactory/components/primitives";
-import * as forms from "youagentfactory/components/forms";
-import { cn } from "youagentfactory/components/utilities";
+import { COMPONENTS_PACKAGE_NAME } from "@you-agent-factory/components";
+import * as primitives from "@you-agent-factory/components/primitives";
+import * as forms from "@you-agent-factory/components/forms";
+import { cn } from "@you-agent-factory/components/utilities";
 ```
 
 `COMPONENTS_PACKAGE_NAME` is the stable package identifier
-(`"youagentfactory/components"`). Category paths include `primitives`, `forms`,
+(`"@you-agent-factory/components"`). Category paths include `primitives`, `forms`,
 `layout`, `feedback`, `data-display`, `navigation`, `overlays`, `charts`,
 `graphs`, `recipes`, `icons`, `utilities`, `testing`, and `tokens`.
 
-Use `cn` from `youagentfactory/components/utilities` for class name composition
+Use `cn` from `@you-agent-factory/components/utilities` for class name composition
 in component code instead of dashboard-local helpers.
 
 ## Consumer responsibilities
@@ -119,7 +119,7 @@ utility sheets.
 Some teams copy component source into their repository to customize markup or
 styles while keeping the same token foundation. Supported patterns today:
 
-1. Import `youagentfactory/components/styles.css` in the host app so copied
+1. Import `@you-agent-factory/components/styles.css` in the host app so copied
    components receive the same tokens.
 2. Copy the component files you need from the package category you depend on.
 3. Keep copied code on the package side of your boundary — do not pull in
@@ -147,7 +147,49 @@ From `ui/packages/components`:
 ```bash
 bun run typecheck
 bun run test
+bun run check:package-boundary
+bun run check:package-dependency-direction
+bun run build-storybook
+bun run verify:storybook-browser
 ```
+
+Package tests use `src/testing/vitest.setup.ts` and `src/testing/render.tsx`
+for DOM cleanup, accessible assertions, and user interactions. They do not
+require dashboard routes, providers, generated clients, API mocks, React
+Query, Zustand, Monaco, or Sonner.
+
+Package Storybook lives in `.storybook/` and discovers `src/**/*.stories.tsx`
+files. Preview decorators import the package token fixture stylesheet and
+apply `data-color-palette` locally; they do not mount dashboard session,
+i18n, API, React Query, Zustand, Monaco, or Sonner providers.
+
+`check:package-boundary` scans package production source and fails when files
+import dashboard API modules, feature modules, generated OpenAPI clients,
+dashboard i18n providers, dashboard session providers, React Query, Zustand,
+Monaco, or Sonner. Violations report the package file and import path.
+
+`check:package-dependency-direction` scans package production source and fails
+when a lower package layer imports a higher layer (for example primitives
+importing recipes) or when production source imports testing support modules.
+Violations report the package file, import path, and both source and target
+layers.
+
+From the repository root:
+
+```bash
+make ui-components-typecheck
+make ui-components-test
+make ui-components-storybook
+make ui-components-boundary
+make ui-components-dependency-direction
+make ui-components-verify
+make ui-lint
+```
+
+`make ui-components-verify` runs the full component package harness with labeled
+failure output for typecheck, tests, Storybook build, boundary checks, and
+dependency-direction checks. CI runs the same harness in the Build, Lint, and API
+workflow after dashboard lint.
 
 From the `ui` workspace root:
 

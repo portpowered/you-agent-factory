@@ -18,7 +18,7 @@ type syncPreflightTestHost struct {
 	events      []factoryapi.FactoryEvent
 }
 
-func (h *syncPreflightTestHost) ResolveSyncPreflightTarget(_ string) (controlplane.SyncPreflightTarget, error) {
+func (h *syncPreflightTestHost) ResolveSyncPreflightTarget(_ string, _ *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error) {
 	return h.target, h.targetErr
 }
 
@@ -41,6 +41,7 @@ func TestGetLiveFactorySessionSyncPreflight_DurableSessionReturnsNotFound(t *tes
 		context.Background(),
 		&syncPreflightTestHost{},
 		"dur-sess-js-run-001",
+		nil,
 		nil,
 	)
 	if err != nil {
@@ -68,6 +69,7 @@ func TestGetLiveFactorySessionSyncPreflight_RemappedDefaultReturnsLogicalSession
 		host,
 		factorysessions.DefaultSessionID,
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("GetLiveFactorySessionSyncPreflight: %v", err)
@@ -94,6 +96,7 @@ func TestGetLiveFactorySessionSyncPreflight_StaleCursorReturnsCursorStale(t *tes
 		host,
 		"session-live",
 		&interfaces.FactoryEventReconnectCursor{AfterSequence: &afterSequence},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("GetLiveFactorySessionSyncPreflight: %v", err)

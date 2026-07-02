@@ -4,6 +4,9 @@
  */
 
 @import "tailwindcss";
-@import "youagentfactory/components/styles.css";
+@import "@you-agent-factory/components/styles.css";
 
 @source "./package-token-fixture-usage.ts";
+@source inline(
+  "bg-primary text-on-surface text-body-medium text-title-large text-label-medium gap-layout-section"
+);

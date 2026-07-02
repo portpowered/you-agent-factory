@@ -1586,6 +1586,7 @@ func (s *stubSessionGateway) GetFactorySessionSyncPreflight(
 	_ context.Context,
 	sessionID string,
 	_ *interfaces.FactoryEventReconnectCursor,
+	_ *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	s.calls = append(s.calls, "get-session-sync-preflight")
 	s.sessionIDs = append(s.sessionIDs, sessionID)

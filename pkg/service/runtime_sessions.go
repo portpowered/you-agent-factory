@@ -1796,7 +1796,7 @@ type sessionGateway interface {
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
-	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor) (factoryapi.FactorySessionSyncPreflightResponse, error)
+	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor, *interfaces.FactorySessionLogicalResolveHint) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	PauseLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
@@ -1884,12 +1884,48 @@ func (h sessionGatewayHost) BuildSessionProjectionContext(
 	return h.FactoryService.buildSessionProjectionContext(ctx, session)
 }
 
-func (h sessionGatewayHost) ResolveSyncPreflightTarget(sessionID string) (controlplane.SyncPreflightTarget, error) {
+func (h sessionGatewayHost) ResolveSyncPreflightTarget(
+	sessionID string,
+	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
+) (controlplane.SyncPreflightTarget, error) {
 	if h.FactoryService == nil {
 		return controlplane.SyncPreflightTarget{}, fmt.Errorf("factory service is required")
 	}
-	target, err := h.FactoryService.resolveSessionSyncPreflightTarget(sessionID, interfaces.FactorySessionSyncPreflightOptions{})
-	return controlplane.SyncPreflightTarget{Session: target.session, Remapped: target.remapped}, err
+	options := syncPreflightOptionsFromLogicalResolve(logicalResolve)
+	target, err := h.FactoryService.resolveSessionSyncPreflightTarget(sessionID, options)
+	if err != nil {
+		return controlplane.SyncPreflightTarget{}, err
+	}
+	unresolved := target.session == nil && syncPreflightHasLogicalResolveHint(logicalResolve) && !target.invalidTarget
+	return controlplane.SyncPreflightTarget{
+		Session:    target.session,
+		Remapped:   target.remapped,
+		Unresolved: unresolved,
+	}, nil
+}
+
+func syncPreflightOptionsFromLogicalResolve(
+	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
+) interfaces.FactorySessionSyncPreflightOptions {
+	if logicalResolve == nil {
+		return interfaces.FactorySessionSyncPreflightOptions{}
+	}
+	options := interfaces.FactorySessionSyncPreflightOptions{}
+	if backendScopeID := strings.TrimSpace(logicalResolve.BackendScopeID); backendScopeID != "" {
+		options.BackendScopeID = &backendScopeID
+	}
+	if logicalSessionKeyID := strings.TrimSpace(logicalResolve.LogicalSessionKeyID); logicalSessionKeyID != "" {
+		options.LogicalSessionKeyID = &logicalSessionKeyID
+	}
+	return options
+}
+
+func syncPreflightHasLogicalResolveHint(hint *interfaces.FactorySessionLogicalResolveHint) bool {
+	if hint == nil {
+		return false
+	}
+	return strings.TrimSpace(hint.BackendScopeID) != "" &&
+		strings.TrimSpace(hint.LogicalSessionKeyID) != ""
 }
 
 func (h sessionGatewayHost) BackendScopeID() string {

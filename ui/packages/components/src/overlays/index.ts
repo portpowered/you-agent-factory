@@ -1,4 +1,4 @@
-/** Stable category path for `youagentfactory/components/overlays`. */
+/** Stable category path for `@you-agent-factory/components/overlays`. */
 export const COMPONENTS_CATEGORY = "overlays" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;

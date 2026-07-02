@@ -1,5 +1,6 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: orchestrator-aware session detail states share one fetch harness and assertion seam.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: orchestrator-aware session detail states share one fetch harness and assertion seam.
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: non-success lifecycle coverage shares one panel fetch harness with durable detail cases.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -237,6 +238,161 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getByText("$0.21")).toBeTruthy();
     expect(screen.getByText("4,400 ms")).toBeTruthy();
     expect(screen.getByText("Token budget was nearly exhausted.")).toBeTruthy();
+  });
+
+  it("shows loading state while factory session runtime data is pending", async () => {
+    let resolveFetch: (value: Response) => void = () => undefined;
+    const pendingResponse = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+    vi.mocked(globalThis.fetch).mockReturnValue(pendingResponse);
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    expect(screen.getByText("Loading factory session runtime…")).toBeTruthy();
+    expect(screen.queryByText("Dynamic workflow (JavaScript factory session)")).toBeNull();
+    expect(screen.queryByText("This factory session is no longer available.")).toBeNull();
+
+    resolveFetch(
+      jsonResponse({
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        runtime: {
+          lifecycle: {
+            startedAt: "2026-06-08T14:00:00Z",
+            updatedAt: "2026-06-08T14:05:00Z",
+          },
+          orchestratorKind: FactoryOrchestratorKind.PETRI,
+          progress: {
+            categories: {},
+            factoryState: "RUNNING",
+            inFlightCount: 0,
+            totalTokens: 0,
+          },
+          status: "IDLE",
+          usage: { resources: [] },
+        },
+        target: { kind: "named", name: "beta" },
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText("Loading factory session runtime…")).toBeNull();
+    });
+  });
+
+  it("shows a not-found state when the factory session is no longer available", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "NOT_FOUND",
+          message: "Factory session missing.",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 404,
+          statusText: "Not Found",
+        },
+      ),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-missing" />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("This factory session is no longer available."),
+      ).toBeTruthy();
+    });
+
+    expect(screen.queryByText("Loading factory session runtime…")).toBeNull();
+    expect(screen.queryByText("Factory session missing.")).toBeNull();
+  });
+
+  it("shows canonical paused Factory Session lifecycle status from the API read model", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse({
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        runtime: {
+          lifecycle: {
+            startedAt: "2026-06-08T14:00:00Z",
+            updatedAt: "2026-06-08T14:05:00Z",
+          },
+          lifecycleControlStatus: "PAUSED",
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          progress: {
+            categories: {},
+            factoryState: "PAUSED",
+            inFlightCount: 0,
+            totalTokens: 0,
+          },
+          status: "ACTIVE",
+          usage: { resources: [] },
+        },
+        target: { kind: "named", name: "beta" },
+      }),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("PAUSED")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Factory Session lifecycle")).toBeTruthy();
+  });
+
+  it("shows running Factory Session lifecycle status after a canonical resume read", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse({
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        runtime: {
+          lifecycle: {
+            startedAt: "2026-06-08T14:00:00Z",
+            updatedAt: "2026-06-08T14:10:00Z",
+          },
+          lifecycleControlStatus: "RUNNING",
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          progress: {
+            categories: {},
+            factoryState: "RUNNING",
+            inFlightCount: 1,
+            totalTokens: 0,
+          },
+          status: "ACTIVE",
+          usage: { resources: [] },
+        },
+        target: { kind: "named", name: "beta" },
+      }),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("RUNNING")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Factory Session lifecycle")).toBeTruthy();
   });
 
   it("shows Petri marking and enabled transitions without dynamic workflow shorthand", async () => {
@@ -640,6 +796,11 @@ describe("FactorySessionDetailPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("dispatch boom")).toBeTruthy();
     });
+
+    expect(screen.queryByText("Loading factory session runtime…")).toBeNull();
+    expect(
+      screen.queryByText("This factory session is no longer available."),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: "Retry loading dispatch detail" }),
     ).toBeTruthy();

@@ -90,6 +90,23 @@
       }
     },
     {
+      "includes": ["packages/components/src/**/*.harness.test.ts"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 200,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["src/api/generated/**"],
       "linter": {
         "rules": {

@@ -1,4 +1,4 @@
-/** Planned deep import paths for `youagentfactory/components` category entrypoints. */
+/** Planned deep import paths for `@you-agent-factory/components` category entrypoints. */
 export const COMPONENT_CATEGORY_EXPORT_PATHS = [
   "primitives",
   "forms",

@@ -7,7 +7,7 @@ import {
   readDocumentCssVariable,
 } from "./compile-package-token-styles";
 
-describe("youagentfactory/components token styles entrypoint", () => {
+describe("@you-agent-factory/components token styles entrypoint", () => {
   let documentRoot: HTMLElement;
 
   beforeAll(async () => {
@@ -16,9 +16,8 @@ describe("youagentfactory/components token styles entrypoint", () => {
 
   it("exposes role tokens on the document root after importing package styles", () => {
     expect(readDocumentCssVariable(documentRoot, "--color-primary")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--color-on-surface")).toBeTruthy();
-    expect(readDocumentCssVariable(documentRoot, "--color-af-text")).toBe(
-      readDocumentCssVariable(documentRoot, "--color-on-surface"),
+    expect(readDocumentCssVariable(documentRoot, "--color-on-surface")).toBe(
+      "#f7f2e8",
     );
   });
 

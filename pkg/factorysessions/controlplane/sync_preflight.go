@@ -14,13 +14,17 @@ import (
 
 // SyncPreflightTarget resolves one live session for sync-preflight reads.
 type SyncPreflightTarget struct {
-	Session  *factorysessions.LiveSession
-	Remapped bool
+	Session    *factorysessions.LiveSession
+	Remapped   bool
+	Unresolved bool
 }
 
 // SyncPreflightHost exposes composition-root seams for live session sync preflight.
 type SyncPreflightHost interface {
-	ResolveSyncPreflightTarget(sessionID string) (SyncPreflightTarget, error)
+	ResolveSyncPreflightTarget(
+		sessionID string,
+		logicalResolve *interfaces.FactorySessionLogicalResolveHint,
+	) (SyncPreflightTarget, error)
 	BackendScopeID() string
 	StreamGenerationID(session *factorysessions.LiveSession) string
 	LiveSessionEvents(session *factorysessions.LiveSession) []factoryapi.FactoryEvent
@@ -33,6 +37,7 @@ func GetLiveFactorySessionSyncPreflight(
 	host SyncPreflightHost,
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
+	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
 ) (factoryapi.FactorySessionSyncPreflightResponse, error) {
 	response := newSyncPreflightResponse(sessionID, reconnect)
 	if IsDurableExecutionSessionID(sessionID) {
@@ -43,9 +48,17 @@ func GetLiveFactorySessionSyncPreflight(
 		return factoryapi.FactorySessionSyncPreflightResponse{}, errors.New("factory session gateway is required")
 	}
 
-	resolved, err := host.ResolveSyncPreflightTarget(sessionID)
+	resolved, err := host.ResolveSyncPreflightTarget(sessionID, logicalResolve)
 	if err != nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+	}
+	if resolved.Unresolved {
+		response.ReasonCode = factoryapi.LogicalSessionUnresolved
+		if logicalResolve != nil {
+			response.BackendScopeId = stringPointer(logicalResolve.BackendScopeID)
+			response.LogicalSessionKeyId = stringPointer(logicalResolve.LogicalSessionKeyID)
+		}
+		return response, nil
 	}
 	if resolved.Session == nil {
 		response.ReasonCode = factoryapi.SessionNotFound

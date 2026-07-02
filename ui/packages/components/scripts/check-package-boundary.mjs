@@ -4,10 +4,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
+import { resolveRelativeImport } from "./resolve-relative-import.mjs";
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const packageDir = path.resolve(scriptDir, "..");
-const packageSrcDir = path.join(packageDir, "src");
-const dashboardSrcDir = path.resolve(packageDir, "..", "..", "src");
+const defaultPackageDir = path.resolve(scriptDir, "..");
+const defaultPackageSrcDir = path.join(defaultPackageDir, "src");
+const defaultDashboardSrcDir = path.resolve(defaultPackageDir, "..", "..", "src");
 const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const skippedFileSuffixes = [
   ".test.js",
@@ -16,11 +18,17 @@ const skippedFileSuffixes = [
   ".test.tsx",
   ".stories.tsx",
 ];
-const forbiddenDashboardImportPrefixes = [
-  `${dashboardSrcDir}/api/`,
-  `${dashboardSrcDir}/features/`,
-  `${dashboardSrcDir}/api/generated/`,
+const forbiddenRuntimeModules = new Set(["zustand"]);
+const forbiddenRuntimeModulePrefixes = [
+  "@tanstack/react-query",
+  "monaco-editor",
+  "@monaco-editor/react",
+  "sonner",
 ];
+
+function toPosixPath(filePath) {
+  return filePath.split(path.sep).join(path.posix.sep);
+}
 
 function shouldSkipFile(filePath) {
   if (!sourceExtensions.has(path.extname(filePath))) {
@@ -67,27 +75,104 @@ function getScriptKind(filePath) {
   return ts.ScriptKind.JS;
 }
 
-function resolveImportPath(importPath, fromFile) {
-  if (!importPath.startsWith(".")) {
+function classifyRuntimeModuleImport(specifier) {
+  if (forbiddenRuntimeModules.has(specifier)) {
+    return {
+      kind: "app-runtime-module",
+      message:
+        "Package source must not import app-only runtime modules such as Zustand.",
+    };
+  }
+
+  const forbiddenPrefix = forbiddenRuntimeModulePrefixes.find(
+    (modulePrefix) =>
+      specifier === modulePrefix || specifier.startsWith(`${modulePrefix}/`),
+  );
+  if (!forbiddenPrefix) {
     return null;
   }
 
-  const resolved = path.resolve(path.dirname(fromFile), importPath);
-  const extensions = [".ts", ".tsx", ".js", ".jsx", "/index.ts", "/index.tsx"];
-
-  for (const extension of extensions) {
-    const candidate = resolved.endsWith(extension)
-      ? resolved
-      : `${resolved}${extension}`;
-    if (candidate.startsWith(dashboardSrcDir)) {
-      return candidate;
-    }
-  }
-
-  return resolved.startsWith(dashboardSrcDir) ? resolved : null;
+  return {
+    kind: "app-runtime-module",
+    message:
+      "Package source must not import app-only runtime modules such as React Query, Monaco, or Sonner.",
+  };
 }
 
-function collectImportViolations(filePath, sourceText) {
+function classifyDashboardSrcImport(relativeToDashboardSrc) {
+  if (relativeToDashboardSrc.startsWith("api/generated/")) {
+    return {
+      kind: "generated-client-import",
+      message:
+        "Package source must not import generated OpenAPI clients from the dashboard app.",
+    };
+  }
+
+  if (relativeToDashboardSrc.startsWith("api/")) {
+    return {
+      kind: "dashboard-api-import",
+      message:
+        "Package source must not import dashboard app API modules.",
+    };
+  }
+
+  if (relativeToDashboardSrc.startsWith("features/dashboard/session/")) {
+    return {
+      kind: "dashboard-session-provider-import",
+      message:
+        "Package source must not import dashboard session providers.",
+    };
+  }
+
+  if (relativeToDashboardSrc.startsWith("features/")) {
+    return {
+      kind: "dashboard-feature-import",
+      message:
+        "Package source must not import dashboard feature modules.",
+    };
+  }
+
+  if (relativeToDashboardSrc.startsWith("i18n/")) {
+    return {
+      kind: "dashboard-i18n-import",
+      message:
+        "Package source must not import dashboard i18n providers or app locale modules.",
+    };
+  }
+
+  return null;
+}
+
+function classifyImport(specifier, filePath, dashboardSrcDir) {
+  const runtimeViolation = classifyRuntimeModuleImport(specifier);
+  if (runtimeViolation) {
+    return runtimeViolation;
+  }
+
+  const resolvedPath = resolveRelativeImport(specifier, filePath);
+  if (!resolvedPath) {
+    return null;
+  }
+
+  const relativeToDashboardSrc = toPosixPath(
+    path.relative(dashboardSrcDir, resolvedPath),
+  );
+  if (relativeToDashboardSrc.startsWith("..")) {
+    return null;
+  }
+
+  const dashboardViolation = classifyDashboardSrcImport(relativeToDashboardSrc);
+  if (!dashboardViolation) {
+    return null;
+  }
+
+  return {
+    ...dashboardViolation,
+    resolvedPath,
+  };
+}
+
+function collectImportViolations(sourceText, filePath, dashboardSrcDir) {
   const sourceFile = ts.createSourceFile(
     filePath,
     sourceText,
@@ -97,62 +182,133 @@ function collectImportViolations(filePath, sourceText) {
   );
   const violations = [];
 
-  for (const statement of sourceFile.statements) {
-    if (!ts.isImportDeclaration(statement) || !statement.moduleSpecifier) {
-      continue;
+  function recordImport(specifier) {
+    const classification = classifyImport(specifier, filePath, dashboardSrcDir);
+    if (!classification) {
+      return;
     }
 
-    if (!ts.isStringLiteral(statement.moduleSpecifier)) {
-      continue;
-    }
-
-    const importPath = statement.moduleSpecifier.text;
-    const resolvedPath = resolveImportPath(importPath, filePath);
-    if (!resolvedPath) {
-      continue;
-    }
-
-    for (const forbiddenPrefix of forbiddenDashboardImportPrefixes) {
-      if (resolvedPath.startsWith(forbiddenPrefix)) {
-        violations.push({
-          filePath,
-          importPath,
-          resolvedPath,
-        });
-      }
-    }
+    violations.push({
+      importPath: specifier,
+      kind: classification.kind,
+      message: classification.message,
+      resolvedPath: classification.resolvedPath ?? null,
+    });
   }
+
+  function visit(node) {
+    if (
+      ts.isImportDeclaration(node) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      recordImport(node.moduleSpecifier.text);
+    }
+
+    if (
+      ts.isExportDeclaration(node) &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
+      recordImport(node.moduleSpecifier.text);
+    }
+
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length === 1 &&
+      ts.isStringLiteral(node.arguments[0])
+    ) {
+      recordImport(node.arguments[0].text);
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
 
   return violations;
 }
 
-async function main() {
+function formatViolation(packageDir, filePath, violation) {
+  const relativeFilePath = toPosixPath(path.relative(packageDir, filePath));
+  const resolvedSuffix = violation.resolvedPath
+    ? ` -> ${toPosixPath(path.relative(packageDir, violation.resolvedPath))}`
+    : "";
+
+  return [
+    `- ${relativeFilePath} imports ${violation.importPath}${resolvedSuffix}`,
+    `  kind: ${violation.kind}`,
+    `  reason: ${violation.message}`,
+  ].join("\n");
+}
+
+function resolveConfiguredDirectories() {
+  return {
+    dashboardSrcDir: process.env.AGENT_FACTORY_DASHBOARD_SRC_DIR
+      ? path.resolve(process.env.AGENT_FACTORY_DASHBOARD_SRC_DIR)
+      : defaultDashboardSrcDir,
+    packageSrcDir: process.env.AGENT_FACTORY_COMPONENTS_SRC_DIR
+      ? path.resolve(process.env.AGENT_FACTORY_COMPONENTS_SRC_DIR)
+      : defaultPackageSrcDir,
+  };
+}
+
+export async function scanPackageBoundary(
+  packageSrcDir = defaultPackageSrcDir,
+  dashboardSrcDir = defaultDashboardSrcDir,
+) {
+  const packageDir = path.dirname(packageSrcDir);
   const files = await collectSourceFiles(packageSrcDir);
   const violations = [];
 
-  for (const filePath of files) {
+  for (const filePath of files.sort()) {
     const sourceText = await readFile(filePath, "utf8");
-    violations.push(...collectImportViolations(filePath, sourceText));
+    const importViolations = collectImportViolations(
+      sourceText,
+      filePath,
+      dashboardSrcDir,
+    );
+
+    for (const importViolation of importViolations) {
+      violations.push({
+        ...importViolation,
+        filePath,
+        relativeFilePath: toPosixPath(path.relative(packageDir, filePath)),
+      });
+    }
   }
 
-  if (violations.length === 0) {
+  return {
+    packageDir,
+    violations,
+  };
+}
+
+async function main() {
+  const { dashboardSrcDir, packageSrcDir } = resolveConfiguredDirectories();
+  const report = await scanPackageBoundary(packageSrcDir, dashboardSrcDir);
+
+  if (report.violations.length === 0) {
     process.stdout.write(
-      "youagentfactory/components package boundary check passed.\n",
+      "@you-agent-factory/components package boundary check passed.\n",
     );
     return;
   }
 
   process.stderr.write(
-    "youagentfactory/components package boundary check failed:\n",
+    "@you-agent-factory/components package boundary check failed:\n",
   );
 
-  for (const violation of violations) {
+  for (const violation of report.violations) {
     process.stderr.write(
-      `- ${path.relative(packageDir, violation.filePath)} imports ${violation.importPath} -> ${path.relative(packageDir, violation.resolvedPath)}\n`,
+      `${formatViolation(report.packageDir, violation.filePath, violation)}\n`,
     );
   }
 
   process.exitCode = 1;
 }
 
-await main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  await main();
+}
