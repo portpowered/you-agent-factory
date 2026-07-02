@@ -155,6 +155,38 @@ function lifecycleNoticeForBracket(
     };
   }
 
+  const reflectedLifecycleStatus =
+    bracket.lifecycle_control_status ??
+    (factoryState === "PAUSED" ? "PAUSED" : undefined);
+
+  if (reflectedLifecycleStatus === "PAUSED") {
+    const hasPartialResult =
+      bracket.result_status === "PARTIAL" ||
+      bracket.result_status === "FAILED_WITH_PARTIAL";
+    return {
+      artifactRefs,
+      resultStatus: hasPartialResult
+        ? bracket.result_status
+        : reflectedLifecycleStatus,
+      summary: bracket.paused_at ?? messages.sessionPausedLabel,
+      title: messages.sessionPausedLabel,
+    };
+  }
+
+  if (reflectedLifecycleStatus === "RUNNING") {
+    const hasPartialResult =
+      bracket.result_status === "PARTIAL" ||
+      bracket.result_status === "FAILED_WITH_PARTIAL";
+    return {
+      artifactRefs,
+      resultStatus: hasPartialResult
+        ? bracket.result_status
+        : reflectedLifecycleStatus,
+      summary: bracket.resumed_at ?? messages.sessionRunningLabel,
+      title: messages.sessionRunningLabel,
+    };
+  }
+
   if (bracket.result_status === "PARTIAL" || bracket.result_status === "FAILED_WITH_PARTIAL") {
     return {
       artifactRefs,
@@ -163,26 +195,6 @@ function lifecycleNoticeForBracket(
         bracket.result_summary?.map((part) => part.text).filter(Boolean).join(" ") ||
         messages.partialResultLabel,
       title: messages.partialResultLabel,
-    };
-  }
-
-  const reflectedLifecycleStatus =
-    bracket.lifecycle_control_status ??
-    (factoryState === "PAUSED" ? "PAUSED" : undefined);
-
-  if (reflectedLifecycleStatus === "PAUSED") {
-    return {
-      resultStatus: reflectedLifecycleStatus,
-      summary: bracket.paused_at ?? messages.sessionPausedLabel,
-      title: messages.sessionPausedLabel,
-    };
-  }
-
-  if (reflectedLifecycleStatus === "RUNNING") {
-    return {
-      resultStatus: reflectedLifecycleStatus,
-      summary: bracket.resumed_at ?? messages.sessionRunningLabel,
-      title: messages.sessionRunningLabel,
     };
   }
 

@@ -114,6 +114,52 @@ describe("DashboardSessionLifecycleBanner", () => {
     expect(screen.getAllByText("plan").length).toBeGreaterThan(0);
   });
 
+  it("shows paused lifecycle state when bracket also has a partial result", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          lifecycle_control_status: "PAUSED",
+          paused_at: "2026-06-09T12:00:02Z",
+          result_status: "PARTIAL",
+          result_summary: [{ text: "checkpoint saved before pause" }],
+          started_at: "2026-06-09T12:00:00Z",
+        }}
+        streamState={{
+          message: "Factory event stream connected.",
+          status: "live",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Factory Session paused").length).toBeGreaterThan(0);
+    expect(screen.getByText("2026-06-09T12:00:02Z")).toBeTruthy();
+    expect(screen.getByText("PARTIAL")).toBeTruthy();
+    expect(screen.queryByText("Partial result available")).toBeNull();
+  });
+
+  it("shows running lifecycle state when bracket also has a partial result", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          lifecycle_control_status: "RUNNING",
+          resumed_at: "2026-06-09T12:00:04Z",
+          result_status: "PARTIAL",
+          result_summary: [{ text: "checkpoint still available after resume" }],
+          started_at: "2026-06-09T12:00:00Z",
+        }}
+        streamState={{
+          message: "Factory event stream connected.",
+          status: "live",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Factory Session running").length).toBeGreaterThan(0);
+    expect(screen.getByText("2026-06-09T12:00:04Z")).toBeTruthy();
+    expect(screen.getByText("PARTIAL")).toBeTruthy();
+    expect(screen.queryByText("Partial result available")).toBeNull();
+  });
+
   it("shows paused Factory Session lifecycle state from replayed bracket data", () => {
     render(
       <DashboardSessionLifecycleBanner
