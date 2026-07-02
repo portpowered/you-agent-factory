@@ -149,6 +149,11 @@ bun run typecheck
 bun run test
 ```
 
+Package tests use `src/testing/vitest.setup.ts` and `src/testing/render.tsx`
+for DOM cleanup, accessible assertions, and user interactions. They do not
+require dashboard routes, providers, generated clients, API mocks, React
+Query, Zustand, Monaco, or Sonner.
+
 From the `ui` workspace root:
 
 ```bash

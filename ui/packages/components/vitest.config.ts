@@ -49,8 +49,9 @@ export default defineConfig({
     alias: createComponentsPackageAliases(componentsPackageRoot),
   },
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
+    environment: "happy-dom",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    setupFiles: ["./src/testing/vitest.setup.ts"],
     server: {
       deps: {
         inline: [/^youagentfactory\/components/],
