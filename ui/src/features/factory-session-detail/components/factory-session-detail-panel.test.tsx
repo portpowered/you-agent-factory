@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: orchestrator-aware session detail states share one fetch harness and assertion seam.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: orchestrator-aware session detail states share one fetch harness and assertion seam.
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -384,9 +385,175 @@ describe("FactorySessionDetailPanel", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText("This dispatch detail is no longer available."),
+        screen.getByText(
+          "Dispatch detail for dispatch-404 is no longer available.",
+        ),
       ).toBeTruthy();
     });
+    expect(screen.getByText("Dispatches")).toBeTruthy();
+    expect(screen.getByText("Runtime")).toBeTruthy();
+  });
+
+  it("replaces dispatch detail when selecting a different dispatch summary row", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/session-beta")) {
+        return jsonResponse({
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          runtime: {
+            dispatches: [
+              {
+                dispatchKind: "JAVASCRIPT_AGENT",
+                id: "dispatch-alpha",
+                label: "Alpha review task",
+                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                sessionId: "session-beta",
+                status: "COMPLETED",
+              },
+              {
+                dispatchKind: "JAVASCRIPT_VERIFY",
+                id: "dispatch-beta",
+                label: "Beta verify task",
+                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                sessionId: "session-beta",
+                status: "FAILED",
+              },
+            ],
+            javascript: {
+              childDispatchCounts: {
+                completed: 1,
+                queued: 0,
+                running: 0,
+              },
+              phase: "verify",
+              phases: ["plan", "verify"],
+              scriptStatus: "IDLE",
+            },
+            lifecycle: {
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:05:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            progress: {
+              categories: {},
+              factoryState: "RUNNING",
+              inFlightCount: 0,
+              totalTokens: 0,
+            },
+            status: "IDLE",
+            usage: { resources: [] },
+          },
+          target: { kind: "named", name: "beta" },
+        });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (
+        url.endsWith("/factory-sessions/session-beta/dispatches/dispatch-alpha")
+      ) {
+        return jsonResponse({
+          artifactIds: ["artifact-alpha"],
+          dispatchKind: "JAVASCRIPT_AGENT",
+          id: "dispatch-alpha",
+          javascript: {
+            executionMode: "live",
+            taskKind: "AGENT",
+            taskLabel: "Alpha review task",
+          },
+          label: "Alpha review task",
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          sessionId: "session-beta",
+          status: "COMPLETED",
+          statusTransitions: ["QUEUED", "RUNNING", "COMPLETED"],
+        });
+      }
+      if (
+        url.endsWith("/factory-sessions/session-beta/dispatches/dispatch-beta")
+      ) {
+        return jsonResponse({
+          artifactIds: ["artifact-beta"],
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          failureDetail: {
+            errorClass: "verify_error",
+            message: "Checksum mismatch on beta verify.",
+            reason: "VERIFY_ASSERTION_FAILED",
+          },
+          id: "dispatch-beta",
+          javascript: {
+            executionMode: "live",
+            taskKind: "VERIFY",
+            taskLabel: "Beta verify task",
+          },
+          label: "Beta verify task",
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          sessionId: "session-beta",
+          status: "FAILED",
+          statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Runtime")).toBeTruthy();
+    });
+
+    expect(screen.getByText("JavaScript workflow")).toBeTruthy();
+    expect(screen.getByText("verify")).toBeTruthy();
+
+    const user = userEvent.setup();
+    const alphaTrigger = screen.getByRole("button", {
+      name: "Expand dispatch detail for dispatch-alpha",
+    });
+    const betaTrigger = screen.getByRole("button", {
+      name: "Expand dispatch detail for dispatch-beta",
+    });
+
+    expect(alphaTrigger.getAttribute("aria-expanded")).toBe("false");
+    expect(betaTrigger.getAttribute("aria-expanded")).toBe("false");
+
+    await user.click(alphaTrigger);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("link", { name: "artifact-alpha" }),
+      ).toBeTruthy();
+    });
+    expect(screen.getAllByText("COMPLETED").length).toBeGreaterThan(0);
+    expect(alphaTrigger.getAttribute("aria-expanded")).toBe("true");
+    expect(betaTrigger.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen.queryByRole("link", { name: "artifact-beta" }),
+    ).toBeNull();
+    expect(screen.queryByText("Checksum mismatch on beta verify.")).toBeNull();
+
+    await user.click(betaTrigger);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("link", { name: "artifact-beta" }),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText("Checksum mismatch on beta verify.")).toBeTruthy();
+    expect(alphaTrigger.getAttribute("aria-expanded")).toBe("false");
+    expect(betaTrigger.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      screen.queryByRole("link", { name: "artifact-alpha" }),
+    ).toBeNull();
+    expect(screen.getByText("Runtime")).toBeTruthy();
+    expect(screen.getByText("JavaScript workflow")).toBeTruthy();
   });
 
   it("shows a dispatch-detail error state when the durable dispatch read fails", async () => {
@@ -473,5 +640,10 @@ describe("FactorySessionDetailPanel", () => {
     await waitFor(() => {
       expect(screen.getByText("dispatch boom")).toBeTruthy();
     });
+    expect(
+      screen.getByRole("button", { name: "Retry loading dispatch detail" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Dispatches")).toBeTruthy();
+    expect(screen.getByText("Runtime")).toBeTruthy();
   });
 });

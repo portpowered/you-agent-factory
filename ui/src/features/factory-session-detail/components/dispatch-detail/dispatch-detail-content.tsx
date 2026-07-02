@@ -2,10 +2,12 @@ import {
   ButtonLink,
   DashboardDescriptionList,
   DashboardLabel,
+  DashboardStatusPill,
   DashboardText,
 } from "../../../../components/ui";
 import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
+import { resolveFactoryDispatchStatusTone } from "../../messages/factory-session-runtime-display";
 import type { ReactNode } from "react";
 
 export function DispatchDetailContent({
@@ -65,7 +67,18 @@ function DispatchSummaryMetrics({
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       <Metric label={messages.dispatchKindLabel} value={data.dispatchKind} />
-      <Metric label={messages.dispatchStatusLabel} value={data.status} />
+      <div className="grid gap-1">
+        <DashboardLabel>{messages.dispatchStatusLabel}</DashboardLabel>
+        <DashboardStatusPill
+          size="compact"
+          tone={resolveFactoryDispatchStatusTone({
+            status: data.status,
+            warningCount: data.warnings.length,
+          })}
+        >
+          {data.status}
+        </DashboardStatusPill>
+      </div>
       {data.label ? (
         <Metric label={messages.dispatchLabelField} value={data.label} />
       ) : null}
@@ -281,7 +294,7 @@ function DispatchFailureSection({
 
   return (
     <DispatchDetailSection heading={messages.failureDetailHeading}>
-      <DashboardDescriptionList>
+      <DashboardDescriptionList aria-label={messages.failureDetailHeading}>
         <DispatchDetailItem
           code
           label={messages.failureReasonLabel}
