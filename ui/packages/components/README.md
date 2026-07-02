@@ -147,6 +147,7 @@ From `ui/packages/components`:
 ```bash
 bun run typecheck
 bun run test
+bun run check:package-boundary
 bun run build-storybook
 bun run verify:storybook-browser
 ```
@@ -160,6 +161,11 @@ Package Storybook lives in `.storybook/` and discovers `src/**/*.stories.tsx`
 files. Preview decorators import the package token fixture stylesheet and
 apply `data-color-palette` locally; they do not mount dashboard session,
 i18n, API, React Query, Zustand, Monaco, or Sonner providers.
+
+`check:package-boundary` scans package production source and fails when files
+import dashboard API modules, feature modules, generated OpenAPI clients,
+dashboard i18n providers, dashboard session providers, React Query, Zustand,
+Monaco, or Sonner. Violations report the package file and import path.
 
 From the `ui` workspace root:
 
