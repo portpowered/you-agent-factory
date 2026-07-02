@@ -48,6 +48,33 @@ const successfulDispatchFixture = {
   ],
 } satisfies FactoryDispatch;
 
+const minimalDispatchFixture = {
+  dispatchKind: "JAVASCRIPT_AGENT",
+  id: "dispatch-minimal-1",
+  orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+  sessionId: "dur-sess-js-minimal-1",
+  status: "QUEUED",
+} satisfies FactoryDispatch;
+
+const warningDispatchFixture = {
+  artifactIds: ["artifact-warning-log"],
+  dispatchKind: "JAVASCRIPT_VERIFY",
+  id: "dispatch-warning-1",
+  javascript: {
+    executionMode: "live",
+    taskKind: "VERIFY",
+  },
+  orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+  sessionId: "dur-sess-js-warning-1",
+  status: "COMPLETED",
+  warnings: [
+    {
+      code: "DISPATCH_WARNING",
+      message: "Verification completed with non-blocking warnings.",
+    },
+  ],
+} satisfies FactoryDispatch;
+
 const failedDispatchFixture = {
   artifactIds: [],
   dispatchKind: "JAVASCRIPT_VERIFY",
@@ -125,6 +152,55 @@ describe("normalizeFactorySessionDispatchDetail", () => {
         {
           code: "DISPATCH_WARNING",
           message: "Token budget was nearly exhausted.",
+        },
+      ],
+    });
+  });
+
+  it("maps a minimal durable dispatch with missing optional values into empty collections", () => {
+    expect(
+      normalizeFactorySessionDispatchDetail(minimalDispatchFixture),
+    ).toEqual({
+      artifactLinks: [],
+      dispatchID: "dispatch-minimal-1",
+      dispatchKind: "JAVASCRIPT_AGENT",
+      orchestratorKind: "JAVASCRIPT",
+      providerSessionRefs: [],
+      relatedWorkIDs: [],
+      sessionID: "dur-sess-js-minimal-1",
+      status: "QUEUED",
+      statusHistory: [],
+      warnings: [],
+    });
+  });
+
+  it("maps a completed dispatch with warnings into a failed-or-warning drilldown model", () => {
+    expect(
+      normalizeFactorySessionDispatchDetail(warningDispatchFixture),
+    ).toEqual({
+      artifactLinks: [
+        {
+          href: "/factory-sessions/dur-sess-js-warning-1/artifacts/artifact-warning-log",
+          id: "artifact-warning-log",
+        },
+      ],
+      dispatchID: "dispatch-warning-1",
+      dispatchKind: "JAVASCRIPT_VERIFY",
+      javascript: {
+        executionMode: "live",
+        taskKind: "VERIFY",
+        taskLabel: undefined,
+      },
+      orchestratorKind: "JAVASCRIPT",
+      providerSessionRefs: [],
+      relatedWorkIDs: [],
+      sessionID: "dur-sess-js-warning-1",
+      status: "COMPLETED",
+      statusHistory: [],
+      warnings: [
+        {
+          code: "DISPATCH_WARNING",
+          message: "Verification completed with non-blocking warnings.",
         },
       ],
     });
