@@ -189,11 +189,11 @@ func ruleClassifierWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 
 	for wi, ws := range cfg.Workstations {
 		basePath := fmt.Sprintf("workstations[%d](%s)", wi, ws.Name)
-		if !isClassifierWorkstation(ws) {
-			findings = append(findings, validateNonClassifierRoutes(ws, basePath)...)
+		if isClassifierWorkstation(ws) || usesGoalRoutingDecisionEnvelope(ws) {
+			findings = append(findings, validateClassifierRoutes(ws, basePath)...)
 			continue
 		}
-		findings = append(findings, validateClassifierRoutes(ws, basePath)...)
+		findings = append(findings, validateNonClassifierRoutes(ws, basePath)...)
 	}
 
 	return findings
@@ -301,6 +301,11 @@ func routeLabelFinding(routePath string, message string) Finding {
 
 func isClassifierWorkstation(ws interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(ws.Type) == interfaces.WorkstationTypeClassify
+}
+
+func usesGoalRoutingDecisionEnvelope(ws interfaces.FactoryWorkstationConfig) bool {
+	return strings.TrimSpace(ws.OutcomeFormat) == interfaces.WorkstationOutcomeFormatDecisionEnvelope &&
+		len(ws.ClassificationRoutes) > 0
 }
 
 // --- Rule: worker/workstation behavior compatibility ---
@@ -800,6 +805,48 @@ func validateBlockingFactoryLoad(cfg *interfaces.FactoryConfig) error {
 		ErrInvalidNamedFactory,
 		len(result.Targets),
 	)
+}
+
+func ruleAgentWorkerTools(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil || len(cfg.Workers) == 0 {
+		return nil
+	}
+
+	var findings []Finding
+	for workerIndex, worker := range cfg.Workers {
+		basePath := fmt.Sprintf("workers[%d](%s)", workerIndex, worker.Name)
+		if worker.AgentTools == nil {
+			continue
+		}
+		policy := strings.TrimSpace(worker.AgentTools.Policy)
+		if policy == "" {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools.policy",
+				Message:  "agent tool configuration requires an explicit policy",
+				Rule:     "agent-worker-tools-policy-required",
+			})
+			continue
+		}
+		if !interfaces.IsKnownAgentWorkerToolPolicy(policy) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools.policy",
+				Message:  fmt.Sprintf("unsupported agent tool policy %q", policy),
+				Rule:     "agent-worker-tools-policy-supported",
+			})
+			continue
+		}
+		if !interfaces.IsAgentWorkerType(worker.Type) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools",
+				Message:  "agent tool configuration is only supported on AGENT_WORKER definitions",
+				Rule:     "agent-worker-tools-worker-type",
+			})
+		}
+	}
+	return findings
 }
 
 // --- Rule: resource usage validation ---

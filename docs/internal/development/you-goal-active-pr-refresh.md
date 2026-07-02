@@ -1,6 +1,6 @@
 # `@you/goal` Active PR Refresh
 
-Last updated: 2026-06-26T09:01:51Z
+Last updated: 2026-06-29T00:00:00Z
 
 This artifact tracks the current maintainer-facing refresh for the remaining
 open `@you/goal` PR batch after the recent merges.
@@ -78,16 +78,37 @@ content narrowing, or a prerequisite merge.
 
 ### Current Boundary Checks
 
-- `Workstation.workPropagation` remains the structured object contract, not a
-  flattened enum field. The current authored schema is
-  `api/components/schemas/data-models/Workstation.yaml` with companion enum
-  `api/components/schemas/data-models/WorkPropagationMode.yaml`, and the only
-  supported mode values remain `OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT`.
+- The built-in `@you/goal` factory already carries explicit `invocationReturn`
+  behavior in `pkg/config/builtingoal/factory.json` (`EXPLICIT` policy selecting
+  terminal `goal:complete` work content as `primaryResult`). Maintainer docs
+  must not claim the built-in factory lacks `invocationReturn`.
+- `Workstation.workPropagation` is present on the current public contract, not a
+  planned follow-on delta. The structured object syntax is:
+
+  ```json
+  "workPropagation": { "mode": "PRESERVE_INPUT" }
+  ```
+
+  Omit `workPropagation` to use the default `OUTPUT_AS_PAYLOAD` behavior. The
+  authored schema is `api/components/schemas/data-models/Workstation.yaml` with
+  companion enum `api/components/schemas/data-models/WorkPropagationMode.yaml`,
+  and the only supported mode values remain `OUTPUT_AS_PAYLOAD` and
+  `PRESERVE_INPUT`.
+- `outcomeFormat: "decision-envelope"` is an explicit workstation parsing
+  switch, not automatic JSON detection. The packaged goal factory uses it on
+  `structured-review-goal`; plain `review-goal` keeps classifier/stop-token
+  routing. Authoritative envelope docs: `factory/docs/decision-envelope.md`.
 - Internal response streams remain internal-only. The current audit sources
   `docs/internal/development/plans/you-goal/api-contract-audit.md` and
   `docs/internal/processes/api-relevant-files.md` still require
   `SessionResponseStream` and `SessionResponseStreamEvent` to stay out of
   `FactoryEvent`, authored OpenAPI fragments, and generated client contracts.
+- Decision routing, interruption, blocked, needs-human, resume, inspect, and
+  batch/headless behavior are documented through existing session, work, and
+  dispatch surfaces. Customer wording lives in `docs/reference/packaged-goal.md`;
+  maintainer contract wording lives in
+  `docs/internal/development/plans/you-goal/api-contract-audit.md`. No
+  goal-specific public endpoints are added for those flows.
 - None of the remaining open PR diffs add `SessionResponseStream*` to
   `api/components/`, `api/openapi-main.yaml`, `api/openapi.yaml`, or generated
   client outputs, so the internal-stream boundary remains intact in the current

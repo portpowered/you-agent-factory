@@ -20,6 +20,35 @@ describe("useDocDetailState", () => {
     });
   });
 
+  it("loads nested doc text from the graph-editor pending factory", () => {
+    const nestedDocPath = "factory/docs/standards/review.md";
+    act(() => {
+      useGraphEditorPendingFactoryBridge.getState().setPendingFactoryDefinition({
+        name: "Current Factory",
+        supportingFiles: {
+          bundledFiles: [
+            {
+              content: { encoding: "utf-8", inline: "# Review standards\n" },
+              targetPath: nestedDocPath,
+              type: "DOC",
+            },
+          ],
+        },
+      });
+    });
+
+    const { result } = renderHook(() =>
+      useDocDetailState({ targetPath: nestedDocPath }),
+    );
+
+    expect(result.current).toEqual({
+      status: "ready",
+      displayLabel: "review.md",
+      inlineContent: "# Review standards\n",
+      targetPath: nestedDocPath,
+    });
+  });
+
   it("loads doc text from the graph-editor pending factory when the saved event factory does not list it yet", () => {
     act(() => {
       useGraphEditorPendingFactoryBridge.getState().setPendingFactoryDefinition({

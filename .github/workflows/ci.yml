@@ -2,9 +2,17 @@ name: CI
 
 on:
   pull_request:
+    paths-ignore:
+      - "README.md"
+      - "docs/internal/**"
+      - "factory/**"
   push:
     branches:
       - main
+    paths-ignore:
+      - "README.md"
+      - "docs/internal/**"
+      - "factory/**"
 
 permissions:
   contents: read
@@ -195,6 +203,10 @@ jobs:
       - name: Run dashboard lint verification
         timeout-minutes: 10
         run: make ui-lint
+
+      - name: Run component package verification harness
+        timeout-minutes: 15
+        run: make ui-components-verify
 
       - name: Run dashboard deadcode verification
         timeout-minutes: 10

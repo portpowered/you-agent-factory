@@ -27,7 +27,8 @@ const portableBundledBatchInputDirName = "BATCH"
 // discovered on disk into cfg, optionally inlining file content for API/export
 // callers that need a self-contained manifest. When discoverUnlistedDocs is
 // false and the manifest already lists DOC entries, only manifest-listed docs
-// are merged from disk so authored deletes and renames stay authoritative.
+// and nested docs under factory/docs/** subdirectories are merged from disk so
+// authored top-level deletes and renames stay authoritative.
 func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool, discoverUnlistedDocs bool) error {
 	if cfg == nil {
 		return nil
@@ -335,12 +336,23 @@ func filterCollectedPortableBundledFiles(existing, collected []interfaces.Bundle
 
 	filtered := make([]interfaces.BundledFileConfig, 0, len(collected))
 	for _, bundledFile := range collected {
-		if bundledFile.Type == interfaces.BundledFileTypeDoc && !manifestDocPaths[bundledFile.TargetPath] {
+		if bundledFile.Type == interfaces.BundledFileTypeDoc &&
+			!manifestDocPaths[bundledFile.TargetPath] &&
+			!isNestedPortableBundledDocTarget(bundledFile.TargetPath) {
 			continue
 		}
 		filtered = append(filtered, bundledFile)
 	}
 	return filtered
+}
+
+func isNestedPortableBundledDocTarget(targetPath string) bool {
+	normalized := filepath.ToSlash(strings.TrimSpace(targetPath))
+	if !strings.HasPrefix(normalized, portableBundledDocRoot) {
+		return false
+	}
+	relativePath := strings.TrimPrefix(normalized, portableBundledDocRoot)
+	return strings.Contains(relativePath, "/")
 }
 
 func manifestDocTargetPaths(bundledFiles []interfaces.BundledFileConfig) map[string]bool {

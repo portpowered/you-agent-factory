@@ -158,6 +158,13 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 	return result, nil
 }
 
+func (s *FakeService) ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error) {
+	if err := ctx.Err(); err != nil {
+		return AsyncStartResult{}, err
+	}
+	return AsyncStartResult{}, ErrUnsupportedControl
+}
+
 func (s *FakeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SessionReadResult{}, err
@@ -174,27 +181,31 @@ func (s *FakeService) GetSession(ctx context.Context, sessionID string) (Session
 }
 
 func (s *FakeService) Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlPause, req, ApproveRequest{}, RetryDispatchRequest{})
+	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlPause, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *FakeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlResume, req, ApproveRequest{}, RetryDispatchRequest{})
+	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlResume, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *FakeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{})
+	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *FakeService) Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlTerminate, req, ApproveRequest{}, RetryDispatchRequest{})
+	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlTerminate, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *FakeService) Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error) {
-	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlApprove, req.ControlRequest, req, RetryDispatchRequest{})
+	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlApprove, req.ControlRequest, req, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *FakeService) RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error) {
-	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlRetryDispatch, req.ControlRequest, ApproveRequest{}, req)
+	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlRetryDispatch, req.ControlRequest, ApproveRequest{}, req, InterruptDispatchRequest{})
+}
+
+func (s *FakeService) InterruptDispatch(ctx context.Context, sessionID string, req InterruptDispatchRequest) (LifecycleControlResult, error) {
+	return s.applyLifecycleControl(ctx, sessionID, LifecycleControlInterruptDispatch, req.ControlRequest, ApproveRequest{}, RetryDispatchRequest{}, req)
 }
 
 func (s *FakeService) GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
@@ -381,6 +392,7 @@ func validateLifecycleControlRequest(
 	control ControlRequest,
 	approve ApproveRequest,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) error {
 	switch operation {
 	case LifecycleControlApprove:
@@ -389,6 +401,10 @@ func validateLifecycleControlRequest(
 		}
 	case LifecycleControlRetryDispatch:
 		if _, err := NormalizeRetryDispatchRequest(retry); err != nil {
+			return err
+		}
+	case LifecycleControlInterruptDispatch:
+		if _, err := NormalizeInterruptDispatchRequest(interrupt); err != nil {
 			return err
 		}
 	default:
@@ -405,6 +421,7 @@ func lifecycleControlResultFromState(
 	operation LifecycleControlKind,
 	outcome LifecycleControlOutcome,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) LifecycleControlResult {
 	result := LifecycleControlResult{
 		SessionID: id,
@@ -413,11 +430,14 @@ func lifecycleControlResultFromState(
 		Status:    state.session.Status,
 		Links:     LifecycleControlLinksForSession(id, true),
 	}
-	if operation == LifecycleControlRetryDispatch {
+	switch operation {
+	case LifecycleControlRetryDispatch:
 		result.DispatchID = retry.DispatchID
 		if outcome == LifecycleControlOutcomeAccepted {
 			result.RetryDispatchID = retry.DispatchID
 		}
+	case LifecycleControlInterruptDispatch:
+		result.DispatchID = interrupt.DispatchID
 	}
 	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
 		session := cloneSessionRead(state.session)
@@ -434,6 +454,7 @@ func (s *FakeService) applyLifecycleControl(
 	control ControlRequest,
 	approve ApproveRequest,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) (LifecycleControlResult, error) {
 	if err := ctx.Err(); err != nil {
 		return LifecycleControlResult{}, err
@@ -442,7 +463,7 @@ func (s *FakeService) applyLifecycleControl(
 	if err != nil {
 		return LifecycleControlResult{}, err
 	}
-	if err := validateLifecycleControlRequest(operation, control, approve, retry); err != nil {
+	if err := validateLifecycleControlRequest(operation, control, approve, retry, interrupt); err != nil {
 		return LifecycleControlResult{}, err
 	}
 
@@ -459,7 +480,7 @@ func (s *FakeService) applyLifecycleControl(
 	var tupleHash string
 	if requestID != "" {
 		var err error
-		tupleHash, err = ControlIdempotencyTupleHash(operation, id, approve, retry)
+		tupleHash, err = ControlIdempotencyTupleHash(operation, id, approve, retry, interrupt)
 		if err != nil {
 			return LifecycleControlResult{}, err
 		}
@@ -477,13 +498,23 @@ func (s *FakeService) applyLifecycleControl(
 		}
 	}
 
-	if operation == LifecycleControlRetryDispatch {
-		if _, ok := findDispatchSummary(state.dispatches, retry.DispatchID); !ok {
+	var dispatchSummary DispatchSummary
+	switch operation {
+	case LifecycleControlRetryDispatch:
+		var ok bool
+		dispatchSummary, ok = findDispatchSummary(state.dispatches, retry.DispatchID)
+		if !ok {
+			return LifecycleControlResult{}, ErrDispatchNotFound
+		}
+	case LifecycleControlInterruptDispatch:
+		var ok bool
+		dispatchSummary, ok = findDispatchSummary(state.dispatches, interrupt.DispatchID)
+		if !ok {
 			return LifecycleControlResult{}, ErrDispatchNotFound
 		}
 	}
 
-	outcome := EvaluateLifecycleControl(operation, state.session.Status)
+	outcome := evaluateExtendedLifecycleControlOutcome(operation, state.session.Status, dispatchSummary.Status)
 	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
 		controlErr := &ControlError{
 			Operation: operation,
@@ -497,38 +528,32 @@ func (s *FakeService) applyLifecycleControl(
 
 	if outcome == LifecycleControlOutcomeAccepted {
 		previousStatus := state.session.Status
-		s.mutateSessionForControl(state, operation, retry.DispatchID)
-		switch operation {
-		case LifecycleControlPause, LifecycleControlResume:
-			occurredAt := time.Now().UTC()
-			if state.session.Lifecycle != nil && state.session.Lifecycle.PausedAt != nil && operation == LifecycleControlPause {
-				occurredAt = state.session.Lifecycle.PausedAt.UTC()
-			}
-			if state.session.Lifecycle != nil && state.session.Lifecycle.ResumedAt != nil && operation == LifecycleControlResume {
-				occurredAt = state.session.Lifecycle.ResumedAt.UTC()
-			}
-			state.events = AppendSessionLifecycleControlEvent(
-				state.events,
-				state.session,
-				previousStatus,
-				operation,
-				outcome,
-				occurredAt,
-				canonicalEventSourceFakeService,
-				control.Reason,
-			)
-		default:
-			state.events = deriveProjectionEvents(state.session, state.result)
-		}
+		s.mutateSessionForControl(state, operation, retry, interrupt)
+		state.events = appendAcceptedSessionLifecycleEventIfNeeded(
+			state.events,
+			state.session,
+			previousStatus,
+			operation,
+			outcome,
+			canonicalEventSourceFakeService,
+			control.Reason,
+		)
 	}
 
-	result := lifecycleControlResultFromState(state, id, operation, outcome, retry)
+	result := lifecycleControlResultFromState(state, id, operation, outcome, retry, interrupt)
 	storeControlReplay(s.controlReplay, requestID, tupleHash, result, nil)
 	return result, nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this fake mutation helper keeps lifecycle control state transitions together for deterministic fixtures.
-func (s *FakeService) mutateSessionForControl(state *fakeSessionState, operation LifecycleControlKind, dispatchID string) {
+func (s *FakeService) mutateSessionForControl(
+	state *fakeSessionState,
+	operation LifecycleControlKind,
+	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
+) {
+	var interruptedDispatch DispatchSummary
+	var priorDispatchStatus DispatchStatus
 	switch operation {
 	case LifecycleControlPause:
 		if state.session.Status == LifecycleStatusRunning || state.session.Status == LifecycleStatusResuming {
@@ -571,21 +596,53 @@ func (s *FakeService) mutateSessionForControl(state *fakeSessionState, operation
 	case LifecycleControlRetryDispatch:
 		if state.session.Status == LifecycleStatusFailed {
 			for index, dispatch := range state.dispatches {
-				if dispatch.ID != dispatchID {
+				if dispatch.ID != retry.DispatchID {
 					continue
 				}
 				dispatch.Status = DispatchStatusQueued
 				dispatch.Attempt++
 				state.dispatches[index] = dispatch
-				if detail, ok := state.dispatchDetails[dispatchID]; ok {
+				if detail, ok := state.dispatchDetails[retry.DispatchID]; ok {
 					detail.Status = DispatchStatusQueued
 					detail.Attempt = dispatch.Attempt
-					state.dispatchDetails[dispatchID] = detail
+					state.dispatchDetails[retry.DispatchID] = detail
 				}
 			}
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
 		}
+	case LifecycleControlInterruptDispatch:
+		if summary, ok := findDispatchSummary(state.dispatches, interrupt.DispatchID); ok {
+			interruptedDispatch = summary
+			priorDispatchStatus = summary.Status
+		}
+		state.dispatches, _ = MarkDispatchInterrupted(
+			state.dispatches,
+			nil,
+			interrupt.DispatchID,
+			interrupt,
+		)
+		if detail, ok := state.dispatchDetails[interrupt.DispatchID]; ok {
+			detail.Status = DispatchStatusInterrupted
+			if summary, ok := findDispatchSummary(state.dispatches, interrupt.DispatchID); ok {
+				detail.FailureDetail = summary.FailureDetail
+			}
+			state.dispatchDetails[interrupt.DispatchID] = detail
+		}
+	}
+	if operation == LifecycleControlPause || operation == LifecycleControlResume {
+		return
+	}
+	state.events = deriveProjectionEvents(state.session, state.result)
+	if operation == LifecycleControlInterruptDispatch && interruptedDispatch.ID != "" {
+		state.events = AppendDispatchInterruptedEvent(
+			state.events,
+			state.session,
+			interruptedDispatch,
+			interrupt,
+			priorDispatchStatus,
+			canonicalEventSourceFakeService,
+		)
 	}
 }
 

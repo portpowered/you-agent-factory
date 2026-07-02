@@ -18,6 +18,7 @@ func NewEngineStateSnapshot(
 ) interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net] {
 	return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
 		RuntimeStatus:        runtime.RuntimeStatus,
+		StreamGenerationID:   runtime.StreamGenerationID,
 		Marking:              runtime.Marking,
 		Dispatches:           runtime.Dispatches,
 		InFlightCount:        runtime.InFlightCount,

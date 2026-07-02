@@ -63,6 +63,8 @@ type MockFactory struct {
 	ListFactorySessionsErr            error
 	FactorySession                    factoryapi.FactorySession
 	GetFactorySessionErr              error
+	FactorySessionSyncPreflight       factoryapi.FactorySessionSyncPreflightResponse
+	GetFactorySessionSyncPreflightErr error
 	FactorySessionLiveResult          factoryapi.FactorySessionLiveResult
 	GetFactorySessionResultErr        error
 	FactorySessionPartialResult       factoryapi.FactorySessionPartialResult
@@ -222,6 +224,26 @@ func (m *MockFactory) RetryDurableFactorySessionDispatch(
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
 	result, err := service.RetryDispatch(ctx, sessionID, retry)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (m *MockFactory) InterruptDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.InterruptDispatch(ctx, sessionID, interrupt)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -559,7 +581,11 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 		history = replayed
 	}
 	if m.FactoryEventStream != nil {
-		return &interfaces.FactoryEventStream{History: history, Events: m.FactoryEventStream.Events}, nil
+		return &interfaces.FactoryEventStream{
+			StreamGenerationID: m.FactoryEventStream.StreamGenerationID,
+			History:            history,
+			Events:             m.FactoryEventStream.Events,
+		}, nil
 	}
 	ch := make(chan factoryapi.FactoryEvent)
 	return &interfaces.FactoryEventStream{History: history, Events: ch}, nil
@@ -680,11 +706,26 @@ func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFac
 	return m.FactorySessions, nil
 }
 
-func (m *MockFactory) GetFactorySession(_ context.Context, _ string) (factoryapi.FactorySession, error) {
+func (m *MockFactory) GetFactorySession(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
 	if m.GetFactorySessionErr != nil {
 		return factoryapi.FactorySession{}, m.GetFactorySessionErr
 	}
+	if session, err := m.sessionFactory(sessionID); err == nil && session != nil {
+		return session.FactorySession, nil
+	}
 	return m.FactorySession, nil
+}
+
+func (m *MockFactory) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	_ string,
+	_ *interfaces.FactoryEventReconnectCursor,
+	_ *interfaces.FactorySessionLogicalResolveHint,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	if m.GetFactorySessionSyncPreflightErr != nil {
+		return factoryapi.FactorySessionSyncPreflightResponse{}, m.GetFactorySessionSyncPreflightErr
+	}
+	return m.FactorySessionSyncPreflight, nil
 }
 
 func (m *MockFactory) GetFactorySessionResult(_ context.Context, _ string) (factoryapi.FactorySessionLiveResult, error) {

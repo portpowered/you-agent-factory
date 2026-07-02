@@ -5,6 +5,7 @@ import { getDashboardSessionLifecycleMessages } from "../messages/dashboard-sess
 
 export interface DashboardSessionLifecycleBannerProps {
   bracket?: DashboardSessionBracket;
+  factoryState?: string;
   locale?: string | null;
   phase?: string;
   streamState: DashboardStreamState;
@@ -12,13 +13,19 @@ export interface DashboardSessionLifecycleBannerProps {
 
 export function DashboardSessionLifecycleBanner({
   bracket,
+  factoryState,
   locale,
   phase,
   streamState,
 }: DashboardSessionLifecycleBannerProps) {
   const messages = getDashboardSessionLifecycleMessages(locale);
   const streamNotice = streamNoticeForState(streamState, messages);
-  const lifecycleNotice = lifecycleNoticeForBracket(bracket, phase, messages);
+  const lifecycleNotice = lifecycleNoticeForBracket(
+    bracket,
+    factoryState,
+    phase,
+    messages,
+  );
 
   if (!streamNotice && !lifecycleNotice) {
     return null;
@@ -73,11 +80,17 @@ function LifecycleMetric({ label, value }: { label: string; value: string }) {
 function streamNoticeForState(
   streamState: DashboardStreamState,
   messages: ReturnType<typeof getDashboardSessionLifecycleMessages>,
-): { message: string; tone: "info" | "warning" } | null {
+): { message: string; tone: "danger" | "info" | "warning" } | null {
   if (streamState.status === "reconnecting") {
     return {
       message: messages.reconnectingStreamLabel,
       tone: "info",
+    };
+  }
+  if (streamState.status === "recovery_failed") {
+    return {
+      message: streamState.message || messages.recoveryFailedStreamLabel,
+      tone: "danger",
     };
   }
   if (streamState.status === "offline") {
@@ -91,6 +104,7 @@ function streamNoticeForState(
 
 function lifecycleNoticeForBracket(
   bracket: DashboardSessionBracket | undefined,
+  factoryState: string | undefined,
   phase: string | undefined,
   messages: ReturnType<typeof getDashboardSessionLifecycleMessages>,
 ): {
@@ -99,10 +113,17 @@ function lifecycleNoticeForBracket(
   summary: string;
   title: string;
 } | null {
-  if (!bracket && !phase) {
+  if (!bracket && !phase && !factoryState) {
     return null;
   }
   if (!bracket) {
+    if (factoryState === "PAUSED") {
+      return {
+        resultStatus: factoryState,
+        summary: messages.sessionPausedLabel,
+        title: messages.lifecycleControlStatusLabel,
+      };
+    }
     return {
       summary: phase ?? "",
       title: messages.phaseLabel,
@@ -131,6 +152,38 @@ function lifecycleNoticeForBracket(
       resultStatus: bracket.result_status,
       summary: bracket.final_status ?? messages.terminalSuccessLabel,
       title: messages.completedLabel,
+    };
+  }
+
+  const reflectedLifecycleStatus =
+    bracket.lifecycle_control_status ??
+    (factoryState === "PAUSED" ? "PAUSED" : undefined);
+
+  if (reflectedLifecycleStatus === "PAUSED") {
+    const hasPartialResult =
+      bracket.result_status === "PARTIAL" ||
+      bracket.result_status === "FAILED_WITH_PARTIAL";
+    return {
+      artifactRefs,
+      resultStatus: hasPartialResult
+        ? bracket.result_status
+        : reflectedLifecycleStatus,
+      summary: bracket.paused_at ?? messages.sessionPausedLabel,
+      title: messages.sessionPausedLabel,
+    };
+  }
+
+  if (reflectedLifecycleStatus === "RUNNING") {
+    const hasPartialResult =
+      bracket.result_status === "PARTIAL" ||
+      bracket.result_status === "FAILED_WITH_PARTIAL";
+    return {
+      artifactRefs,
+      resultStatus: hasPartialResult
+        ? bracket.result_status
+        : reflectedLifecycleStatus,
+      summary: bracket.resumed_at ?? messages.sessionRunningLabel,
+      title: messages.sessionRunningLabel,
     };
   }
 

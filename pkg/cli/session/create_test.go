@@ -337,7 +337,7 @@ func TestCreate_BadRequestSurfacesAPIMessage(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
 			Message: "folder validation failed",
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}

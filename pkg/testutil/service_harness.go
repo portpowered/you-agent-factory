@@ -19,7 +19,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
 )
 
 // ServiceTestHarness wraps a FactoryService built via BuildFactoryService()
@@ -99,6 +101,22 @@ func WithMockWorkersConfig(mockCfg *factoryconfig.MockWorkersConfig) ServiceTest
 func WithRuntimeMode(mode interfaces.RuntimeMode) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {
 		cfg.serviceConfig.RuntimeMode = mode
+	}
+}
+
+// WithZapLogger sets an explicit zap logger for observability tests. The logger
+// is preserved when quiet defaults are applied afterward.
+func WithZapLogger(logger *zap.Logger) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		cfg.serviceConfig.Logger = logger
+	}
+}
+
+// WithInvocationMetricsRecorder sets an explicit invocation metrics recorder for
+// observability tests. The recorder is preserved when quiet defaults are applied.
+func WithInvocationMetricsRecorder(recorder service.InvocationMetricsRecorder) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		cfg.serviceConfig.InvocationMetricsRecorder = recorder
 	}
 }
 
@@ -195,11 +213,13 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 		serviceConfig: service.FactoryServiceConfig{
 			Dir:                      dir,
 			RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
+			SystemConfigHomeDir:      t.TempDir(),
 		},
 	}
 	for _, opt := range opts {
 		opt(cfg)
 	}
+	testdeps.Default().ApplyFactoryServiceConfig(&cfg.serviceConfig)
 
 	if cfg.asyncMode {
 		// Async mode: wrap all registered executors with the mock/custom

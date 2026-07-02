@@ -2,10 +2,13 @@ package apicontract_test
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 )
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
@@ -139,9 +142,12 @@ func assertGeneratedOpenAPISurfaceTypes(
 
 	submitResponse := factoryapi.SubmitWorkResponse{TraceId: "trace-1", RequestId: "request-1", Accepted: true}
 	sourceKind := factoryapi.InvocationInputSourceKindText
+	invocationArgs := map[string]any{"input": "hello", "tag": []any{"alpha", "beta"}}
+	invocationContent := factoryapi.WorkContent{}
 	invocationRequest := factoryapi.InvocationRequest{
-		SourceKind: sourceKind,
-		Content:    []factoryapi.WorkContentPart{},
+		SourceKind: &sourceKind,
+		Content:    &invocationContent,
+		Args:       &invocationArgs,
 	}
 	invocationResponse := factoryapi.InvocationResponse{
 		RequestId:     "invoke-1",
@@ -151,6 +157,29 @@ func assertGeneratedOpenAPISurfaceTypes(
 	}
 	invocationReturnPolicy := factoryapi.InvocationReturnPolicySubmittedWorkTerminal
 	invocationReturn := factoryapi.InvocationReturn{Policy: invocationReturnPolicy}
+	invocationSignaturePolicy := factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect
+	parameterTypeHint := factoryapi.FactoryInvocationParameterTypeHintString
+	parameterValueMode := factoryapi.FactoryInvocationParameterValueModeExact
+	bindingKind := factoryapi.FactoryInvocationParameterBindingKindNamed
+	outputContractMode := factoryapi.FactoryInvocationOutputContractModeJson
+	invocationSignature := factoryapi.FactoryInvocationSignature{
+		UnknownNamedArgumentPolicy: &invocationSignaturePolicy,
+		Parameters: &[]factoryapi.FactoryInvocationParameter{{
+			Name:      "input",
+			TypeHint:  &parameterTypeHint,
+			ValueMode: &parameterValueMode,
+			Bindings: &[]factoryapi.FactoryInvocationParameterBinding{{
+				Kind: bindingKind,
+			}},
+		}},
+		OutputContract: &factoryapi.FactoryInvocationOutputContract{
+			Mode: &outputContractMode,
+		},
+		Examples: &[]factoryapi.FactoryInvocationExample{{
+			Name: "basic",
+			Argv: &[]string{"brief.md"},
+		}},
+	}
 	upsertResponse := factoryapi.UpsertWorkRequestResponse{
 		RequestId: workRequest.RequestId,
 		TraceId:   "trace-1",
@@ -171,8 +200,72 @@ func assertGeneratedOpenAPISurfaceTypes(
 		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 
-	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
-		t.Fatal("generated OpenAPI request and response types should be usable")
+	assertGeneratedSubmitAndInvocationTypesUsable(t, submitRequest, submitResponse, invocationRequest, invocationResponse, invocationReturn)
+	assertGeneratedInvocationSignatureTypesUsable(t, invocationSignature)
+	assertGeneratedFactoryAndUpsertTypesUsable(t, workRequest, upsertResponse, namedFactory)
+	assertGeneratedWorkstationTypesUsable(t, workstation, cron)
+}
+
+func assertGeneratedSubmitAndInvocationTypesUsable(
+	t *testing.T,
+	submitRequest factoryapi.SubmitWorkRequest,
+	submitResponse factoryapi.SubmitWorkResponse,
+	invocationRequest factoryapi.InvocationRequest,
+	invocationResponse factoryapi.InvocationResponse,
+	invocationReturn factoryapi.InvocationReturn,
+) {
+	t.Helper()
+
+	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" {
+		t.Fatal("generated OpenAPI submit request and response types should be usable")
+	}
+	if invocationRequest.SourceKind == nil || *invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationRequest.Content == nil {
+		t.Fatal("generated OpenAPI invocation request types should be usable")
+	}
+	if invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal {
+		t.Fatal("generated OpenAPI invocation response and return types should be usable")
+	}
+}
+
+func assertGeneratedInvocationSignatureTypesUsable(t *testing.T, invocationSignature factoryapi.FactoryInvocationSignature) {
+	t.Helper()
+
+	if invocationSignature.UnknownNamedArgumentPolicy == nil || invocationSignature.Parameters == nil {
+		t.Fatal("generated invocation signature parameters should be usable")
+	}
+	if invocationSignature.OutputContract == nil || invocationSignature.Examples == nil {
+		t.Fatal("generated invocation signature contract and examples should be usable")
+	}
+}
+
+func assertGeneratedFactoryAndUpsertTypesUsable(
+	t *testing.T,
+	workRequest factoryapi.WorkRequest,
+	upsertResponse factoryapi.UpsertWorkRequestResponse,
+	namedFactory factoryapi.Factory,
+) {
+	t.Helper()
+
+	if workRequest.RequestId == "" || upsertResponse.RequestId == "" {
+		t.Fatal("generated work request and upsert response types should be usable")
+	}
+	if namedFactory.Name == "" || namedFactory.Workstations == nil {
+		t.Fatal("generated factory types should be usable")
+	}
+}
+
+func assertGeneratedWorkstationTypesUsable(
+	t *testing.T,
+	workstation factoryapi.Workstation,
+	cron factoryapi.WorkstationCron,
+) {
+	t.Helper()
+
+	if workstation.Behavior == nil || workstation.Type == nil {
+		t.Fatal("generated workstation types should be usable")
+	}
+	if cron.Schedule == "" || cron.TriggerAtStart == nil {
+		t.Fatal("generated workstation cron types should be usable")
 	}
 }
 
@@ -248,12 +341,12 @@ func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.
 	saveRequest := factoryapi.SaveFactoryForSessionRequest{Factory: namedFactory}
 	current := namedFactory
 	badRequest := factoryapi.CreateFactoryBadRequest{
-		Code:    factoryapi.INVALIDFACTORYNAME,
+		Code:    factoryapi.ErrorResponseCodeINVALIDFACTORYNAME,
 		Family:  factoryapi.ErrorFamilyBadRequest,
 		Message: "factory name must use lowercase letters, numbers, and hyphens",
 	}
 	conflict := factoryapi.CreateFactoryConflict{
-		Code:    factoryapi.FACTORYALREADYEXISTS,
+		Code:    factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS,
 		Family:  factoryapi.ErrorFamilyConflict,
 		Message: "factory already exists",
 	}
@@ -264,11 +357,11 @@ func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.
 	if current.Name == "" || current.Workstations == nil {
 		t.Fatal("generated current named-factory response type should be usable")
 	}
-	if badRequest.Code != factoryapi.INVALIDFACTORYNAME || badRequest.Family != factoryapi.ErrorFamilyBadRequest {
-		t.Fatalf("generated bad-request contract = %#v, want code %q and family %q", badRequest, factoryapi.INVALIDFACTORYNAME, factoryapi.ErrorFamilyBadRequest)
+	if badRequest.Code != factoryapi.ErrorResponseCodeINVALIDFACTORYNAME || badRequest.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("generated bad-request contract = %#v, want code %q and family %q", badRequest, factoryapi.ErrorResponseCodeINVALIDFACTORYNAME, factoryapi.ErrorFamilyBadRequest)
 	}
-	if conflict.Code != factoryapi.FACTORYALREADYEXISTS || conflict.Family != factoryapi.ErrorFamilyConflict {
-		t.Fatalf("generated conflict contract = %#v, want code %q and family %q", conflict, factoryapi.FACTORYALREADYEXISTS, factoryapi.ErrorFamilyConflict)
+	if conflict.Code != factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS || conflict.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("generated conflict contract = %#v, want code %q and family %q", conflict, factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS, factoryapi.ErrorFamilyConflict)
 	}
 }
 
@@ -293,6 +386,9 @@ func assertGeneratedNamedFactoryJSONShape(t *testing.T, encoded []byte) {
 	if !strings.Contains(string(encoded), `"name":"customer-support-triage"`) {
 		t.Fatalf("generated NamedFactory JSON missing canonical name field: %s", encoded)
 	}
+	if !strings.Contains(string(encoded), `"invocationSignature"`) {
+		t.Fatalf("generated NamedFactory JSON missing invocationSignature field: %s", encoded)
+	}
 	if strings.Contains(string(encoded), `"factory_name"`) {
 		t.Fatalf("generated NamedFactory JSON contains unexpected legacy field: %s", encoded)
 	}
@@ -303,6 +399,9 @@ func assertGeneratedNamedFactoryRoundTripFields(t *testing.T, namedFactory facto
 
 	if roundTripped.Name != namedFactory.Name {
 		t.Fatalf("round-tripped named factory name = %q, want %q", roundTripped.Name, namedFactory.Name)
+	}
+	if roundTripped.InvocationSignature == nil || roundTripped.InvocationSignature.Parameters == nil || len(*roundTripped.InvocationSignature.Parameters) != 1 {
+		t.Fatalf("round-tripped named factory invocationSignature = %#v, want one parameter", roundTripped.InvocationSignature)
 	}
 	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)
@@ -347,12 +446,12 @@ func assertGeneratedCurrentFactoryNotFoundJSON(t *testing.T) {
 	t.Helper()
 
 	notFound := factoryapi.CurrentFactoryNotFound{
-		Code:    factoryapi.NOTFOUND,
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		Family:  factoryapi.ErrorFamilyNotFound,
 		Message: "current factory not found",
 	}
-	if notFound.Code != factoryapi.NOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.NOTFOUND, factoryapi.ErrorFamilyNotFound)
+	if notFound.Code != factoryapi.ErrorResponseCodeNOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.ErrorResponseCodeNOTFOUND, factoryapi.ErrorFamilyNotFound)
 	}
 
 	encoded, err := json.Marshal(notFound)
@@ -365,4 +464,306 @@ func assertGeneratedCurrentFactoryNotFoundJSON(t *testing.T) {
 	if !strings.Contains(string(encoded), `"family":"NOT_FOUND"`) {
 		t.Fatalf("generated CurrentFactoryNotFound JSON missing NOT_FOUND family: %s", encoded)
 	}
+}
+type syncPreflightRecoveryFixtureCatalog struct {
+	Scenarios                []syncPreflightRecoveryScenario      `json:"scenarios"`
+	IdentityScopeComparisons []syncPreflightIdentityScopeScenario `json:"identityScopeComparisons"`
+}
+
+type syncPreflightRecoveryScenario struct {
+	ID       string                    `json:"id"`
+	Tags     syncPreflightRecoveryTags `json:"tags"`
+	Response map[string]any            `json:"response"`
+}
+
+type syncPreflightRecoveryTags struct {
+	ReasonCode         string `json:"reasonCode"`
+	CheckpointReusable string `json:"checkpointReusable,omitempty"`
+	CursorValid        string `json:"cursorValid,omitempty"`
+}
+
+type syncPreflightIdentityScopeScenario struct {
+	ID                 string         `json:"id"`
+	Previous           map[string]any `json:"previous"`
+	Current            map[string]any `json:"current"`
+	WantClassification string         `json:"wantClassification"`
+}
+
+// TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip keeps
+// sync-preflight recovery contract coverage in this file to satisfy pkg-file-count.
+func TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
+
+	seenReasonCodes := map[string]struct{}{}
+	for _, scenario := range catalog.Scenarios {
+		t.Run(scenario.ID, func(t *testing.T) {
+			assertSyncPreflightRecoveryScenarioFixture(t, doc, scenario)
+			seenReasonCodes[scenario.Tags.ReasonCode] = struct{}{}
+		})
+	}
+
+	for _, reasonCode := range []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap"} {
+		if _, ok := seenReasonCodes[reasonCode]; !ok {
+			t.Fatalf("sync preflight recovery fixture coverage for %s = missing, want scenario", reasonCode)
+		}
+	}
+}
+
+func TestOpenAPIContract_SyncPreflightIdentityScopeComparisonsDistinguishBackendAndStreamChanges(t *testing.T) {
+	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
+
+	for _, scenario := range catalog.IdentityScopeComparisons {
+		t.Run(scenario.ID, func(t *testing.T) {
+			previous := identityScopeFromFixtureMap(scenario.Previous)
+			current := identityScopeFromFixtureMap(scenario.Current)
+
+			reason, ok := sessionpersistence.ClassifyIdentityMismatch(previous, current)
+			if !ok {
+				t.Fatal("ClassifyIdentityMismatch = false, want mismatch")
+			}
+			if string(reason) != scenario.WantClassification {
+				t.Fatalf("classification = %q, want %q", reason, scenario.WantClassification)
+			}
+
+			if previous.BackendScopeID == current.BackendScopeID &&
+				scenario.WantClassification == string(sessionpersistence.ReasonBackendScopeChanged) {
+				t.Fatal("backend scope classification requires backendScopeId change")
+			}
+			if previous.StreamGenerationID == current.StreamGenerationID &&
+				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) {
+				t.Fatal("stream generation classification requires streamGenerationId change")
+			}
+			if previous.BackendScopeID != current.BackendScopeID &&
+				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) &&
+				previous.FactorySessionID == current.FactorySessionID {
+				if previous.BackendScopeID == current.BackendScopeID {
+					t.Fatal("stream-only classification should not change backendScopeId")
+				}
+			}
+		})
+	}
+}
+
+// Gate evidence for session-persistence-hardening-and-observability-005: proves the
+// verification gates still protect observable recovery behavior, not only compile-time
+// contract shape.
+func TestSessionPersistenceHardeningGateEvidence_RecoveryOutcomesControlCheckpointReuse(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
+
+	var reusableScenario *syncPreflightRecoveryScenario
+	var staleScenario *syncPreflightRecoveryScenario
+	for index := range catalog.Scenarios {
+		scenario := catalog.Scenarios[index]
+		switch scenario.Tags.ReasonCode {
+		case "ok":
+			reusableScenario = &scenario
+		case "cursor_stale":
+			staleScenario = &scenario
+		}
+	}
+	if reusableScenario == nil || staleScenario == nil {
+		t.Fatal("sync preflight recovery fixtures missing ok or cursor_stale scenario")
+	}
+
+	assertSyncPreflightRecoveryScenarioFixture(t, doc, *reusableScenario)
+	assertSyncPreflightRecoveryScenarioFixture(t, doc, *staleScenario)
+
+	var reusableResponse factoryapi.FactorySessionSyncPreflightResponse
+	assertGeneratedFixtureRoundTrip(t, reusableScenario.Response, "FactorySessionSyncPreflightResponse", func(raw []byte) {
+		decodeRoundTripJSON(t, raw, &reusableResponse, reusableScenario.ID+" reusable response")
+	})
+	var staleResponse factoryapi.FactorySessionSyncPreflightResponse
+	assertGeneratedFixtureRoundTrip(t, staleScenario.Response, "FactorySessionSyncPreflightResponse", func(raw []byte) {
+		decodeRoundTripJSON(t, raw, &staleResponse, staleScenario.ID+" stale response")
+	})
+
+	if !reusableResponse.CheckpointReusable {
+		t.Fatal("reusable recovery outcome checkpointReusable = false, want true")
+	}
+	if staleResponse.CheckpointReusable {
+		t.Fatal("stale cursor recovery outcome checkpointReusable = true, want false")
+	}
+
+	staleDiagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(staleResponse)
+	if !ok {
+		t.Fatal("stale cursor recovery outcome missing invalidation diagnostic")
+	}
+	if staleDiagnostic.Reason != sessionpersistence.ReasonCursorStale {
+		t.Fatalf("stale cursor diagnostic reason = %q, want %q", staleDiagnostic.Reason, sessionpersistence.ReasonCursorStale)
+	}
+	if staleDiagnostic.RecoveryAction != sessionpersistence.RecoveryReplayWithoutCursor {
+		t.Fatalf(
+			"stale cursor diagnostic recovery = %q, want %q",
+			staleDiagnostic.RecoveryAction,
+			sessionpersistence.RecoveryReplayWithoutCursor,
+		)
+	}
+}
+
+func assertSyncPreflightRecoveryScenarioFixture(
+	t *testing.T,
+	doc *openapi3.T,
+	scenario syncPreflightRecoveryScenario,
+) {
+	t.Helper()
+
+	assertOpenAPIFixtureValidates(t, doc, "FactorySessionSyncPreflightResponse", scenario.Response)
+	assertGeneratedFixtureRoundTrip(t, scenario.Response, "FactorySessionSyncPreflightResponse", func(raw []byte) {
+		var value factoryapi.FactorySessionSyncPreflightResponse
+		decodeRoundTripJSON(t, raw, &value, scenario.ID+" sync preflight response")
+		assertSyncPreflightRecoveryOutcome(t, scenario, value)
+	})
+}
+
+func assertSyncPreflightRecoveryOutcome(
+	t *testing.T,
+	scenario syncPreflightRecoveryScenario,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if string(response.ReasonCode) != scenario.Tags.ReasonCode {
+		t.Fatalf("%s reasonCode = %q, want %q", scenario.ID, response.ReasonCode, scenario.Tags.ReasonCode)
+	}
+
+	switch response.ReasonCode {
+	case factoryapi.Ok:
+		assertSyncPreflightOkOutcome(t, scenario.ID, response)
+	case factoryapi.CursorStale:
+		assertSyncPreflightCursorStaleOutcome(t, scenario.ID, response)
+	case factoryapi.SessionNotFound:
+		assertSyncPreflightSessionNotFoundOutcome(t, scenario.ID, response)
+	case factoryapi.LogicalSessionRemap:
+		assertSyncPreflightLogicalSessionRemapOutcome(t, scenario.ID, response)
+	default:
+		t.Fatalf("%s reasonCode = %q, want supported recovery outcome", scenario.ID, response.ReasonCode)
+	}
+
+	assertSyncPreflightInvalidationDiagnostic(t, scenario.ID, response)
+}
+
+func assertSyncPreflightOkOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if !response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = false, want true", scenarioID)
+	}
+	if !response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("%s reconnect cursor validForStreamGeneration = false, want true", scenarioID)
+	}
+	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
+		t.Fatalf("%s identity fields = %#v, want full identity set", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightCursorStaleOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
+	}
+	if response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("%s reconnect cursor validForStreamGeneration = true, want false", scenarioID)
+	}
+	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
+		t.Fatalf("%s identity fields = %#v, want full identity set for stale cursor", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightSessionNotFoundOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
+	}
+	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
+		t.Fatalf("%s identity fields = %#v, want nil for missing session", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightLogicalSessionRemapOutcome(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	if response.CheckpointReusable {
+		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
+	}
+	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
+		t.Fatalf("%s identity fields = %#v, want full identity set for remap", scenarioID, response)
+	}
+}
+
+func assertSyncPreflightInvalidationDiagnostic(
+	t *testing.T,
+	scenarioID string,
+	response factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+
+	diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response)
+	switch response.ReasonCode {
+	case factoryapi.Ok:
+		if ok {
+			t.Fatalf("%s invalidation diagnostic = %#v, want none for ok", scenarioID, diagnostic)
+		}
+	default:
+		if !ok {
+			t.Fatalf("%s invalidation diagnostic missing for %q", scenarioID, response.ReasonCode)
+		}
+	}
+}
+
+func identityScopeFromFixtureMap(payload map[string]any) sessionpersistence.IdentityScope {
+	return sessionpersistence.IdentityScope{
+		BackendScopeID:      stringFixtureValue(payload, "backendScopeId"),
+		LogicalSessionKeyID: stringFixtureValue(payload, "logicalSessionKeyId"),
+		FactorySessionID:    stringFixtureValue(payload, "factorySessionId"),
+		StreamGenerationID:  stringFixtureValue(payload, "streamGenerationId"),
+	}
+}
+
+func stringFixtureValue(payload map[string]any, key string) string {
+	value, ok := payload[key].(string)
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func loadSyncPreflightRecoveryFixtureCatalog(t *testing.T) syncPreflightRecoveryFixtureCatalog {
+	t.Helper()
+
+	fixtureBytes, err := os.ReadFile("../testdata/sync-preflight-recovery-contract-fixtures.json")
+	if err != nil {
+		t.Fatalf("read sync preflight recovery contract fixtures: %v", err)
+	}
+
+	var catalog syncPreflightRecoveryFixtureCatalog
+	if err := json.Unmarshal(fixtureBytes, &catalog); err != nil {
+		t.Fatalf("decode sync preflight recovery contract fixtures: %v", err)
+	}
+	if len(catalog.Scenarios) == 0 {
+		t.Fatal("sync preflight recovery contract fixtures contain no scenarios")
+	}
+	if len(catalog.IdentityScopeComparisons) == 0 {
+		t.Fatal("sync preflight recovery contract fixtures contain no identity scope comparisons")
+	}
+	return catalog
 }

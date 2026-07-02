@@ -80,6 +80,15 @@ export interface CurrentSelectionDetailMessages {
   scriptResponseUnavailableErrored: string;
   scriptResponseUnavailablePending: string;
   scriptResponseUnavailableSummary: string;
+  agentRunInspectionHeading: string;
+  agentRunInspectionEmpty: string;
+  agentToolPolicyLabel: string;
+  agentFailureClassLabel: string;
+  agentRecoveryActionLabel: string;
+  agentToolDiagnosticsHeading: string;
+  agentToolDiagnosticsEmpty: string;
+  agentTranscriptHeading: string;
+  agentTranscriptEmpty: string;
   selectWorkItemLabel: (workItemLabel: string) => string;
   startedAtLabel: string;
   stderrEmpty: string;
@@ -239,6 +248,17 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request yet.",
     scriptResponseUnavailableSummary:
       "Script response details are not available for this workstation request.",
+    agentRunInspectionHeading: "Agent run inspection",
+    agentRunInspectionEmpty:
+      "Agent run inspection metadata is not available for this workstation request yet.",
+    agentToolPolicyLabel: "Tool policy",
+    agentFailureClassLabel: "Failure class",
+    agentRecoveryActionLabel: "Recovery action",
+    agentToolDiagnosticsHeading: "Tool diagnostics",
+    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentTranscriptHeading: "Transcript metadata",
+    agentTranscriptEmpty:
+      "No bounded transcript metadata was recorded for this agent run.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
     startedAtLabel: "Started at",
@@ -376,6 +396,17 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request yet.",
     scriptResponseUnavailableSummary:
       "Script response details are not available for this workstation request.",
+    agentRunInspectionHeading: "Agent run inspection",
+    agentRunInspectionEmpty:
+      "Agent run inspection metadata is not available for this workstation request yet.",
+    agentToolPolicyLabel: "Tool policy",
+    agentFailureClassLabel: "Failure class",
+    agentRecoveryActionLabel: "Recovery action",
+    agentToolDiagnosticsHeading: "Tool diagnostics",
+    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentTranscriptHeading: "Transcript metadata",
+    agentTranscriptEmpty:
+      "No bounded transcript metadata was recorded for this agent run.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
     startedAtLabel: "開始時刻",
@@ -513,6 +544,17 @@ const currentSelectionDetailMessagesByLocale = {
       "Script response details are not available for this workstation request yet.",
     scriptResponseUnavailableSummary:
       "Script response details are not available for this workstation request.",
+    agentRunInspectionHeading: "Agent run inspection",
+    agentRunInspectionEmpty:
+      "Agent run inspection metadata is not available for this workstation request yet.",
+    agentToolPolicyLabel: "Tool policy",
+    agentFailureClassLabel: "Failure class",
+    agentRecoveryActionLabel: "Recovery action",
+    agentToolDiagnosticsHeading: "Tool diagnostics",
+    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentTranscriptHeading: "Transcript metadata",
+    agentTranscriptEmpty:
+      "No bounded transcript metadata was recorded for this agent run.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
     startedAtLabel: "시작 시각",
@@ -636,6 +678,17 @@ const currentSelectionDetailMessagesByLocale = {
       "此工作站请求因错误结束，因此脚本响应详情不可用。",
     scriptResponseUnavailablePending: "此工作站请求的脚本响应详情暂不可用。",
     scriptResponseUnavailableSummary: "此工作站请求没有可用的脚本响应详情。",
+    agentRunInspectionHeading: "Agent run inspection",
+    agentRunInspectionEmpty:
+      "Agent run inspection metadata is not available for this workstation request yet.",
+    agentToolPolicyLabel: "Tool policy",
+    agentFailureClassLabel: "Failure class",
+    agentRecoveryActionLabel: "Recovery action",
+    agentToolDiagnosticsHeading: "Tool diagnostics",
+    agentToolDiagnosticsEmpty: "No tool diagnostics were recorded for this agent run.",
+    agentTranscriptHeading: "Transcript metadata",
+    agentTranscriptEmpty:
+      "No bounded transcript metadata was recorded for this agent run.",
     selectWorkItemLabel: (workItemLabel: string) =>
       `选择工作项 ${workItemLabel}`,
     startedAtLabel: "开始时间",

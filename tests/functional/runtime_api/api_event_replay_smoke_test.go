@@ -18,7 +18,7 @@ func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTime
 	executor := &eventReplayBlockingExecutor{release: releaseDispatch}
 	server := startFunctionalServer(t, dir, false, factory.WithServiceMode(), factory.WithWorkerExecutor("worker-a", executor))
 
-	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{

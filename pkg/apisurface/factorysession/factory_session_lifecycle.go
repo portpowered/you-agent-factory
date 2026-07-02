@@ -58,6 +58,18 @@ func RetryDispatchRequestFromAPI(req factoryapi.FactorySessionRetryDispatchReque
 	return factorysessionexecution.NormalizeRetryDispatchRequest(retry)
 }
 
+// InterruptDispatchRequestFromAPI maps one public interrupt-dispatch request into the shared service contract.
+func InterruptDispatchRequestFromAPI(req factoryapi.FactorySessionInterruptDispatchRequest) (factorysessionexecution.InterruptDispatchRequest, error) {
+	interrupt := factorysessionexecution.InterruptDispatchRequest{
+		ControlRequest: factorysessionexecution.ControlRequest{
+			RequestID: derefString(req.RequestId),
+			Reason:    derefString(req.Reason),
+		},
+		DispatchID: req.DispatchId,
+	}
+	return factorysessionexecution.NormalizeInterruptDispatchRequest(interrupt)
+}
+
 // SessionReadResponseToAPI maps one durable session read projection to the public response shape.
 func SessionReadResponseToAPI(result factorysessionexecution.SessionReadResult) factoryapi.FactorySessionDurableReadModel {
 	response := factoryapi.FactorySessionDurableReadModel{
@@ -255,13 +267,15 @@ func sessionActionAvailabilityToAPI(actions factorysessionexecution.SessionActio
 	canTerminate := actions.CanTerminate
 	canApprove := actions.CanApprove
 	canRetryDispatch := actions.CanRetryDispatch
+	canInterruptDispatch := actions.CanInterruptDispatch
 	return &factoryapi.FactorySessionDurableActionAvailability{
-		CanPause:         &canPause,
-		CanResume:        &canResume,
-		CanCancel:        &canCancel,
-		CanTerminate:     &canTerminate,
-		CanApprove:       &canApprove,
-		CanRetryDispatch: &canRetryDispatch,
+		CanPause:             &canPause,
+		CanResume:            &canResume,
+		CanCancel:            &canCancel,
+		CanTerminate:         &canTerminate,
+		CanApprove:           &canApprove,
+		CanRetryDispatch:     &canRetryDispatch,
+		CanInterruptDispatch: &canInterruptDispatch,
 	}
 }
 
@@ -284,6 +298,9 @@ func sessionActionAvailabilityFromAPI(actions factoryapi.FactorySessionDurableAc
 	}
 	if actions.CanRetryDispatch != nil {
 		out.CanRetryDispatch = *actions.CanRetryDispatch
+	}
+	if actions.CanInterruptDispatch != nil {
+		out.CanInterruptDispatch = *actions.CanInterruptDispatch
 	}
 	return out
 }
@@ -458,7 +475,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "factory session not found",
 			Family:  factoryapi.ErrorFamilyNotFound,
-			Code:    factoryapi.NOTFOUND,
+			Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		}, true
 	}
 
@@ -466,7 +483,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "dispatch not found",
 			Family:  factoryapi.ErrorFamilyNotFound,
-			Code:    factoryapi.NOTFOUND,
+			Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		}, true
 	}
 
@@ -475,7 +492,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusBadRequest, factoryapi.ErrorResponse{
 			Message: validationErr.Message,
 			Family:  factoryapi.ErrorFamilyBadRequest,
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 		}, true
 	}
 

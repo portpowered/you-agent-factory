@@ -2,16 +2,13 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/session"
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -24,10 +21,11 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
-		{"session", "create"},
-		{"session", "delete"},
+		{"session", "dispatches"},
 		{"session", "pause"},
 		{"session", "resume"},
+		{"session", "create"},
+		{"session", "delete"},
 	} {
 		if _, _, err := root.Find(path); err != nil {
 			t.Fatalf("find %v: %v", path, err)
@@ -50,10 +48,11 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	for _, want := range []string{
 		"list",
 		"show",
-		"create",
-		"delete",
+		"dispatches",
 		"pause",
 		"resume",
+		"create",
+		"delete",
 		"you session list",
 		"you session show",
 		"you session pause",
@@ -69,121 +68,241 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	}
 }
 
-func TestSessionPauseCommand_ServerFlagExecutesLifecycleControl(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/session-beta/pause" {
-			t.Fatalf("request = %s %s, want POST /factory-sessions/session-beta/pause", r.Method, r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
-			SessionId: "session-beta",
-			Operation: factoryapi.FactorySessionLifecycleControlKindPause,
-			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-			Status:    factoryapi.FactorySessionDurableLifecycleStatusPaused,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
+func TestSessionPauseCommand_HelpDocumentsOperatorControls(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"session", "pause", "session-beta",
-		"--server", strings.TrimSuffix(srv.URL, "/"),
-	})
+	root.SetArgs([]string{"session", "pause", "--help"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute session pause --server: %v", err)
+		t.Fatalf("execute session pause --help: %v", err)
 	}
-	if got := out.String(); got != "Paused factory session session-beta\n" {
-		t.Fatalf("output = %q", got)
+
+	help := out.String()
+	for _, want := range []string{
+		"pause [session-id]",
+		"~default",
+		"session-beta",
+		"you session list --scope all",
+		"already-paused",
+		"invalid-state",
+		"not-found",
+		"unreachable-host",
+		"Factory Session",
+		"you session pause",
+		"--json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("session pause help missing %q:\n%s", want, help)
+		}
 	}
 }
 
-func TestSessionResumeCommand_JSONEmitsLifecycleControlResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/~default/resume" {
-			t.Fatalf("request = %s %s, want POST /factory-sessions/~default/resume", r.Method, r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
-			SessionId: "~default",
-			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
-			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
+func TestSessionPauseCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalPauseSession := pauseSession
+	defer func() {
+		pauseSession = originalPauseSession
+	}()
 
-	var out bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"--json", "--server", strings.TrimSuffix(srv.URL, "/"),
-		"session", "resume",
-	})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute session resume --json --server: %v", err)
+	var got session.LifecycleControlConfig
+	pauseSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
 	}
 
-	var got factoryapi.FactorySessionLifecycleControlResponse
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("decode JSON: %v\n%s", err, out.String())
-	}
-	if got.SessionId != "~default" || got.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("response = %#v", got)
-	}
-}
-
-func TestSessionPauseCommand_PortFlagRejected(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"session", "pause", "--port", "9090"})
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "pause"})
 
-	if execErr := root.Execute(); execErr == nil {
-		t.Fatal("expected --port rejection")
-	} else if !strings.Contains(execErr.Error(), "--server") {
-		t.Fatalf("error = %v, want --server guidance", execErr)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to LifecycleControlConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "" {
+		t.Fatalf("sessionId = %q, want omitted-session default routing", got.SessionID)
 	}
 }
 
-func TestSessionPauseCommand_HelpDocumentsBufferedWorkSemantics(t *testing.T) {
-	root := NewRootCommand()
-	pauseCmd, _, err := root.Find([]string{"session", "pause"})
-	if err != nil {
-		t.Fatalf("find session pause: %v", err)
-	}
-	resumeCmd, _, err := root.Find([]string{"session", "resume"})
-	if err != nil {
-		t.Fatalf("find session resume: %v", err)
+func TestSessionShowCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalShowSession := showSession
+	defer func() {
+		showSession = originalShowSession
+	}()
+
+	var got session.ShowConfig
+	showSession = func(cfg session.ShowConfig) error {
+		got = cfg
+		return nil
 	}
 
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "show", "dur-sess-js-run-n-001"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session show with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to ShowConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "dur-sess-js-run-n-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", got.SessionID)
+	}
+}
+
+func TestSessionDispatchesCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalListSessionDispatches := listSessionDispatches
+	defer func() {
+		listSessionDispatches = originalListSessionDispatches
+	}()
+
+	var got session.DispatchesConfig
+	listSessionDispatches = func(cfg session.DispatchesConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "dispatches", "dur-sess-js-run-n-001"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session dispatches with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to DispatchesConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "dur-sess-js-run-n-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", got.SessionID)
+	}
+}
+
+func TestSessionDispatchesCommand_HelpDocumentsDurableInspection(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "dispatches", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session dispatches --help: %v", err)
+	}
+
+	help := out.String()
 	for _, want := range []string{
-		"POST /factory-sessions/{session_id}/pause",
-		"preserving inbound submissions",
-		"~default",
+		"dispatches [session-id]",
+		"dur-sess-",
+		"FactorySession",
+		"Dispatch",
+		"FactoryArtifact",
+		"ListFactorySessionDispatchesResponse",
+		"you session dispatches",
 		"--json",
-		"--server",
 	} {
-		if !strings.Contains(pauseCmd.Long, want) {
-			t.Fatalf("pause long help missing %q:\n%s", want, pauseCmd.Long)
+		if !strings.Contains(help, want) {
+			t.Fatalf("session dispatches help missing %q:\n%s", want, help)
 		}
 	}
+}
+
+func TestSessionResumeCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalResumeSession := resumeSession
+	defer func() {
+		resumeSession = originalResumeSession
+	}()
+
+	var got session.LifecycleControlConfig
+	resumeSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "resume", "session-beta"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session resume with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to LifecycleControlConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("sessionId = %q, want session-beta", got.SessionID)
+	}
+}
+
+func TestSessionPauseCommand_AllowsOmittedSessionID(t *testing.T) {
+	originalPauseSession := pauseSession
+	defer func() {
+		pauseSession = originalPauseSession
+	}()
+
+	var got session.LifecycleControlConfig
+	pauseSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "pause"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause without session id: %v", err)
+	}
+	if got.SessionID != "" {
+		t.Fatalf("sessionId = %q, want omitted-session default routing", got.SessionID)
+	}
+}
+
+func TestSessionResumeCommand_HelpDocumentsOperatorControls(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "resume", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session resume --help: %v", err)
+	}
+
+	help := out.String()
 	for _, want := range []string{
-		"POST /factory-sessions/{session_id}/resume",
-		"drains ready buffered submissions",
-		"without requiring another external signal",
+		"resume [session-id]",
+		"~default",
+		"session-beta",
+		"you session list --scope all",
+		"already-running",
+		"invalid-state",
+		"not-found",
+		"unreachable-host",
+		"Factory Session",
+		"you session resume",
+		"--json",
 	} {
-		if !strings.Contains(resumeCmd.Long, want) {
-			t.Fatalf("resume long help missing %q:\n%s", want, resumeCmd.Long)
+		if !strings.Contains(help, want) {
+			t.Fatalf("session resume help missing %q:\n%s", want, help)
 		}
 	}
 }
@@ -260,6 +379,247 @@ func TestWorkMoveCommand_HelpDocumentsOperatorMove(t *testing.T) {
 			t.Fatalf("work move help missing %q:\n%s", want, help)
 		}
 	}
+}
+
+func TestWorkVisualizeCommand_HelpDocumentsReadOnlyFormatsAndRedirection(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"work", "visualize", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute work visualize --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"visualize <batch-file.json>",
+		"read-only",
+		"does not submit work",
+		"contact a running factory",
+		"render diagram images",
+		"default: mermaid",
+		"markdown-mermaid",
+		"work items",
+		"dependency relations",
+		"> my-graph.mermaid",
+		"> graph.md",
+		"--format",
+		"mermaid or markdown-mermaid",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("work visualize help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestWorkVisualizeCommand_DependentBatchWritesMermaidToStdout(t *testing.T) {
+	path := writeWorkVisualizeBatchFile(t, `{
+  "requestId": "cli-dependent",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {"name": "alpha", "workTypeName": "task"},
+    {"name": "beta", "workTypeName": "task"},
+    {"name": "gamma", "workTypeName": "task"}
+  ],
+  "relations": [
+    {"type": "DEPENDS_ON", "sourceWorkName": "beta", "targetWorkName": "alpha"},
+    {"type": "DEPENDS_ON", "sourceWorkName": "gamma", "targetWorkName": "beta"}
+  ]
+}`)
+
+	stdout, stderr, err := executeWorkVisualize(t, path)
+	if err != nil {
+		t.Fatalf("execute work visualize: %v", err)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty on success", stderr)
+	}
+	if !strings.HasPrefix(stdout, "flowchart TD\n") {
+		t.Fatalf("stdout missing flowchart header:\n%s", stdout)
+	}
+	for _, want := range []string{
+		`alpha["alpha"]`,
+		`beta["beta"]`,
+		`gamma["gamma"]`,
+		"beta --> alpha",
+		"gamma --> beta",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestWorkVisualizeCommand_IndependentWorkBatchHasStandaloneNodes(t *testing.T) {
+	path := writeWorkVisualizeBatchFile(t, `{
+  "requestId": "cli-independent",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {"name": "solo-a", "workTypeName": "task"},
+    {"name": "solo-b", "workTypeName": "task"}
+  ]
+}`)
+
+	stdout, stderr, err := executeWorkVisualize(t, path)
+	if err != nil {
+		t.Fatalf("execute work visualize: %v", err)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty on success", stderr)
+	}
+	if strings.Contains(stdout, "-->") {
+		t.Fatalf("stdout should not contain dependency edges:\n%s", stdout)
+	}
+	for _, want := range []string{`"solo-a"["solo-a"]`, `"solo-b"["solo-b"]`} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestWorkVisualizeCommand_InvalidDependencyReferenceFailsWithEmptyStdout(t *testing.T) {
+	path := writeWorkVisualizeBatchFile(t, `{
+  "requestId": "cli-unknown-dep",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {"name": "alpha", "workTypeName": "task"}
+  ],
+  "relations": [
+    {"type": "DEPENDS_ON", "sourceWorkName": "alpha", "targetWorkName": "missing"}
+  ]
+}`)
+
+	stdout, stderr, err := executeWorkVisualize(t, path)
+	if err == nil {
+		t.Fatal("expected non-zero exit for unknown dependency reference")
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty on validation failure", stdout)
+	}
+	if !strings.Contains(stderr, "unknown") && !strings.Contains(stderr, "missing") {
+		t.Fatalf("stderr = %q, want actionable dependency error", stderr)
+	}
+}
+
+func TestWorkVisualizeCommand_InvalidJSONFailsWithEmptyStdout(t *testing.T) {
+	path := writeWorkVisualizeBatchFile(t, `{not-json`)
+
+	stdout, stderr, err := executeWorkVisualize(t, path)
+	if err == nil {
+		t.Fatal("expected non-zero exit for invalid JSON")
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty on validation failure", stdout)
+	}
+	if stderr == "" {
+		t.Fatal("stderr is empty, want validation error message")
+	}
+}
+
+func TestWorkVisualizeCommand_MissingFileFailsWithEmptyStdout(t *testing.T) {
+	stdout, stderr, err := executeWorkVisualize(t, filepath.Join(t.TempDir(), "missing.json"))
+	if err == nil {
+		t.Fatal("expected non-zero exit for missing batch file")
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty on validation failure", stdout)
+	}
+	if !strings.Contains(stderr, "batch file not found") {
+		t.Fatalf("stderr = %q, want missing file error", stderr)
+	}
+}
+
+func TestWorkVisualizeCommand_MermaidAndMarkdownShareEquivalentEdges(t *testing.T) {
+	path := writeWorkVisualizeBatchFile(t, `{
+  "requestId": "cli-format-parity",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {"name": "alpha", "workTypeName": "task"},
+    {"name": "beta", "workTypeName": "task"},
+    {"name": "gamma", "workTypeName": "task"}
+  ],
+  "relations": [
+    {"type": "DEPENDS_ON", "sourceWorkName": "beta", "targetWorkName": "alpha"},
+    {"type": "DEPENDS_ON", "sourceWorkName": "gamma", "targetWorkName": "beta"}
+  ]
+}`)
+
+	mermaidStdout, mermaidStderr, err := executeWorkVisualize(t, path)
+	if err != nil {
+		t.Fatalf("execute work visualize mermaid: %v", err)
+	}
+	if mermaidStderr != "" {
+		t.Fatalf("mermaid stderr = %q, want empty on success", mermaidStderr)
+	}
+
+	markdownStdout, markdownStderr, err := executeWorkVisualize(t, "--format", "markdown-mermaid", path)
+	if err != nil {
+		t.Fatalf("execute work visualize markdown-mermaid: %v", err)
+	}
+	if markdownStderr != "" {
+		t.Fatalf("markdown stderr = %q, want empty on success", markdownStderr)
+	}
+
+	mermaidEdges := mermaidEdgeLines(mermaidStdout)
+	embedded := mermaidDiagramFromMarkdown(t, markdownStdout)
+	markdownEdges := mermaidEdgeLines(embedded)
+	if len(mermaidEdges) == 0 {
+		t.Fatalf("mermaid output missing edges:\n%s", mermaidStdout)
+	}
+	if strings.Join(mermaidEdges, "\n") != strings.Join(markdownEdges, "\n") {
+		t.Fatalf("edge mismatch:\nmermaid=%v\nmarkdown=%v", mermaidEdges, markdownEdges)
+	}
+}
+
+func executeWorkVisualize(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+
+	root := NewRootCommand()
+	var out, errOut bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&errOut)
+	cmdArgs := append([]string{"work", "visualize"}, args...)
+	root.SetArgs(cmdArgs)
+	err = root.Execute()
+	return out.String(), errOut.String(), err
+}
+
+func writeWorkVisualizeBatchFile(t *testing.T, content string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "batch.json")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func mermaidEdgeLines(diagram string) []string {
+	var edges []string
+	for _, line := range strings.Split(diagram, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "-->") {
+			edges = append(edges, line)
+		}
+	}
+	sort.Strings(edges)
+	return edges
+}
+
+func mermaidDiagramFromMarkdown(t *testing.T, markdown string) string {
+	t.Helper()
+	start := strings.Index(markdown, "```mermaid\n")
+	if start < 0 {
+		t.Fatalf("markdown missing opening mermaid fence:\n%s", markdown)
+	}
+	bodyStart := start + len("```mermaid\n")
+	rest := markdown[bodyStart:]
+	end := strings.Index(rest, "\n```")
+	if end < 0 {
+		t.Fatalf("markdown missing closing mermaid fence:\n%s", markdown)
+	}
+	return rest[:end]
 }
 
 func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {

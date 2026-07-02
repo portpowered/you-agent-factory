@@ -95,6 +95,41 @@ describe("factory bundled docs", () => {
     ]);
   });
 
+  it("lists nested DOC bundled files under factory/docs subdirectories", () => {
+    const docs = listFactoryBundledDocs({
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "# Review standards" },
+            targetPath: "factory/docs/standards/review.md",
+            type: "DOC",
+          },
+        ],
+      },
+    });
+
+    expect(docs).toEqual([
+      {
+        displayLabel: "overview.md",
+        nodeId: "doc:factory/docs/overview.md",
+        targetPath: "factory/docs/overview.md",
+      },
+      {
+        displayLabel: "review.md",
+        nodeId: "doc:factory/docs/standards/review.md",
+        targetPath: "factory/docs/standards/review.md",
+      },
+    ]);
+    expect(
+      isFactoryBundledDocTargetPath("factory/docs/standards/review.md"),
+    ).toBe(true);
+  });
+
   it("checks doc existence against the current factory definition", () => {
     const factory = {
       supportingFiles: {

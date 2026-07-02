@@ -7,7 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 )
 
 func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T) {
@@ -17,7 +17,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := t.Context()
-	cfg := &service.FactoryServiceConfig{Dir: dir}
+	cfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{Dir: dir})
 
 	built, err := service.BuildFactoryService(ctx, cfg)
 	if err != nil {
@@ -52,7 +52,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, composeCfg))
+	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
+	composed = service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell{Host: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Host: composed}, composeCfg),
+	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())
@@ -104,7 +108,7 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("core compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())
 	}
-	if built.Sessions() == nil || built.RuntimeBuild() == nil || built.StartupBundle() == nil {
+	if built.Sessions() == nil || built.RuntimeBuild() == nil || built.WorkersScheduler() == nil || built.StartupBundle() == nil {
 		t.Fatalf("BuildFactoryCore omitted required collaborators: snapshot=%+v", built.ComposeCollaboratorSnapshot())
 	}
 }
@@ -116,7 +120,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := t.Context()
-	cfg := &service.FactoryServiceConfig{
+	cfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir: dir,
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",
@@ -126,8 +130,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		},
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-		Logger:                                  zap.NewNop(),
-	}
+	})
 
 	built, err := service.BuildFactoryService(ctx, cfg)
 	if err != nil {
@@ -161,7 +164,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, cfg))
+	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, cfg))
+	composed = service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell{Host: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Host: composed}, cfg),
+	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())

@@ -18,6 +18,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -56,12 +57,17 @@ func preserveRunGlobals(t *testing.T) {
 	t.Helper()
 
 	originalBuilder := buildFactoryService
+	originalInvocationBuilder := buildFactoryInvocationService
 	originalBootstrap := bootstrapFactory
 	originalOpener := dashboardOpener
 	originalInteractive := interactiveOutput
 	originalStartAPIServer := startAPIServer
+	buildFactoryInvocationService = func(ctx context.Context, cfg *initializer.Config) (factoryServiceRunner, error) {
+		return buildFactoryService(ctx, cfg)
+	}
 	t.Cleanup(func() {
 		buildFactoryService = originalBuilder
+		buildFactoryInvocationService = originalInvocationBuilder
 		bootstrapFactory = originalBootstrap
 		dashboardOpener = originalOpener
 		interactiveOutput = originalInteractive
@@ -638,8 +644,8 @@ func assertInvocationRequestMatchesSharedResolver(
 	if request == nil {
 		t.Fatal("invocation request = nil")
 	}
-	if request.SourceKind != factoryapi.InvocationInputSourceKindText {
-		t.Fatalf("sourceKind = %q, want text", request.SourceKind)
+	if request.SourceKind == nil || *request.SourceKind != factoryapi.InvocationInputSourceKindText {
+		t.Fatalf("sourceKind = %v, want text", request.SourceKind)
 	}
 
 	sources := invocations.TextInputSources{}
@@ -660,8 +666,8 @@ func assertInvocationRequestMatchesSharedResolver(
 	if got := extractInvocationText(t, request); got != extractInvocationText(t, want) {
 		t.Fatalf("invocation text = %q, want %q", got, extractInvocationText(t, want))
 	}
-	if request.SourceKind != want.SourceKind {
-		t.Fatalf("sourceKind = %q, want %q", request.SourceKind, want.SourceKind)
+	if request.SourceKind == nil || want.SourceKind == nil || *request.SourceKind != *want.SourceKind {
+		t.Fatalf("sourceKind = %v, want %v", request.SourceKind, want.SourceKind)
 	}
 }
 
@@ -700,8 +706,8 @@ func assertEquivalentInvocationRequests(
 	if cliRequest == nil || apiRequest == nil {
 		t.Fatal("invocation request = nil")
 	}
-	if cliRequest.SourceKind != apiRequest.SourceKind {
-		t.Fatalf("sourceKind = %q, want %q", cliRequest.SourceKind, apiRequest.SourceKind)
+	if cliRequest.SourceKind == nil || apiRequest.SourceKind == nil || *cliRequest.SourceKind != *apiRequest.SourceKind {
+		t.Fatalf("sourceKind = %v, want %v", cliRequest.SourceKind, apiRequest.SourceKind)
 	}
 	if got := extractInvocationText(t, cliRequest); got != extractInvocationText(t, apiRequest) {
 		t.Fatalf("invocation text = %q, want %q", got, extractInvocationText(t, apiRequest))
@@ -724,7 +730,36 @@ func assertInvocationResponseMatchesFactoryResult(
 	if response.Status != result.Status {
 		t.Fatalf("status = %q, want %q", response.Status, result.Status)
 	}
-	assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+	if len(result.PrimaryResult) == 0 {
+		if response.PrimaryResult != nil {
+			t.Fatalf("primary result = %#v, want none", response.PrimaryResult)
+		}
+	} else {
+		assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+	}
+	assertOptionalStringPointerEquals(t, "errorCode", response.ErrorCode, result.ErrorCode)
+	assertOptionalStringPointerEquals(t, "message", response.Message, result.Message)
+	assertOptionalStringPointerEquals(t, "sessionId", response.SessionId, result.SessionID)
+	assertOptionalStringPointerEquals(t, "workId", response.WorkId, result.WorkID)
+	assertOptionalStringPointerEquals(t, "workName", response.WorkName, result.WorkName)
+	assertOptionalStringPointerEquals(t, "workState", response.WorkState, result.WorkState)
+}
+
+func assertOptionalStringPointerEquals[T ~string](t *testing.T, field string, got *T, want string) {
+	t.Helper()
+
+	if want == "" {
+		if got != nil {
+			t.Fatalf("%s = %#v, want nil", field, *got)
+		}
+		return
+	}
+	if got == nil {
+		t.Fatalf("%s = nil, want %q", field, want)
+	}
+	if string(*got) != want {
+		t.Fatalf("%s = %q, want %q", field, string(*got), want)
+	}
 }
 
 func assertGeneratedWorkContentPartsFromResponse(

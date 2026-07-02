@@ -490,8 +490,13 @@ export const SemanticWorkflow = {
       ).getByRole("img", { name: "Standard workstation" }),
     ).toBeVisible();
     await expect(
-      within(reviewButton).getByRole("img", { name: "Active" }),
-    ).toBeVisible();
+      reviewButton
+        .closest("[data-current-activity-node-type='workstation']")
+        ?.className.includes("border-af-success-border"),
+    ).toBe(true);
+    await expect(
+      within(reviewButton).queryByRole("img", { name: "Active" }),
+    ).not.toBeInTheDocument();
     await expect(await canvas.findByText("Active Story")).toBeVisible();
     await expect(
       canvas.queryByText("Workstation Definition"),
@@ -592,8 +597,14 @@ export const WorkstationOneActive = {
 
     expectFixedWorkstationDimensions(reviewNode);
     await expect(
-      within(reviewButton).getByRole("img", { name: "Active" }),
-    ).toBeVisible();
+      reviewNode.querySelector("[data-active='true']"),
+    ).toBeInTheDocument();
+    await expect(
+      reviewNode.className.includes("border-af-success-border"),
+    ).toBe(true);
+    await expect(
+      within(reviewButton).queryByRole("img", { name: "Active" }),
+    ).not.toBeInTheDocument();
     await expect(
       await canvas.findByRole("button", { name: /Active Story 1/ }),
     ).toBeVisible();

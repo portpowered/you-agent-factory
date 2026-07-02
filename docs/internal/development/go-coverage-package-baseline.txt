@@ -15,6 +15,10 @@ github.com/portpowered/infinite-you/pkg/config/inboxgitkeep
 github.com/portpowered/infinite-you/pkg/factory/runtime/buffers
 github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist
 github.com/portpowered/infinite-you/pkg/factorysessions
+github.com/portpowered/infinite-you/pkg/factorysessions/controlplane
+github.com/portpowered/infinite-you/pkg/factorysessions/dataplane
+github.com/portpowered/infinite-you/pkg/factorysessions/service
+github.com/portpowered/infinite-you/pkg/factorysessions/stream
 github.com/portpowered/infinite-you/pkg/hostedworkers
 github.com/portpowered/infinite-you/pkg/hostedworkers/linear
 github.com/portpowered/infinite-you/pkg/internal/cursorstorage
@@ -34,6 +38,7 @@ github.com/portpowered/infinite-you/pkg/packagedfactories/goal
 github.com/portpowered/infinite-you/pkg/packagedfactories/tts
 github.com/portpowered/infinite-you/pkg/replay
 github.com/portpowered/infinite-you/pkg/service
+github.com/portpowered/infinite-you/pkg/runtimehost
 github.com/portpowered/infinite-you/pkg/service/factorysave
 github.com/portpowered/infinite-you/pkg/workcontent/materialize
 github.com/portpowered/infinite-you/pkg/workers/mockworker
@@ -57,6 +62,7 @@ github.com/portpowered/infinite-you/pkg/factory
 github.com/portpowered/infinite-you/pkg/factory/events 
 github.com/portpowered/infinite-you/pkg/factory/projections 
 github.com/portpowered/infinite-you/pkg/factory/requests 
+github.com/portpowered/infinite-you/pkg/factory/service 
 github.com/portpowered/infinite-you/pkg/factory/state 
 github.com/portpowered/infinite-you/pkg/factory/subsystems 
 github.com/portpowered/infinite-you/pkg/factory/throttle 
@@ -65,7 +71,7 @@ github.com/portpowered/infinite-you/pkg/factory/validation
 github.com/portpowered/infinite-you/pkg/interfaces 
 github.com/portpowered/infinite-you/pkg/logging 
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview 
-github.com/portpowered/infinite-you/pkg/service/ingest 
+github.com/portpowered/infinite-you/pkg/factory/ingest 
 github.com/portpowered/infinite-you/pkg/service/runtimebuild 
 github.com/portpowered/infinite-you/pkg/timework 
 github.com/portpowered/infinite-you/pkg/workcontent 

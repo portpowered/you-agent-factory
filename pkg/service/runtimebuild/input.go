@@ -11,14 +11,15 @@ import (
 // SessionSpecInput is the shared constructor input for deriving one immutable
 // session build spec from service-level runtime policy plus session-owned state.
 type SessionSpecInput struct {
-	Dir                   string
-	FolderPath            string
-	SessionID             string
-	ExecutionBaseDir      string
-	LoadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
-	RuntimeInstanceID     string
-	SideEffects           *replay.SideEffects
-	AdditionalFactoryOpts []factory.FactoryOption
+	Dir                                   string
+	FolderPath                            string
+	SessionID                             string
+	ExecutionBaseDir                      string
+	LoadedFactoryCfg                      *factoryconfig.LoadedFactoryConfig
+	RuntimeInstanceID                     string
+	SideEffects                           *replay.SideEffects
+	AdditionalFactoryOpts                 []factory.FactoryOption
+	PreserveCompatibilityDefaultRecordPath bool
 }
 
 // SessionBuildSpec is the immutable input contract for constructing one

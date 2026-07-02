@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
-import { renderWithQueryClient } from "./factory-session-detail-panel.test-helpers";
+import { renderWithQueryClient } from "./test-support/factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel localized states", () => {
   beforeEach(() => {

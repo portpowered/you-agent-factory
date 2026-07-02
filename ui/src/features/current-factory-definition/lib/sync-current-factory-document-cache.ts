@@ -5,15 +5,23 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../hooks/useCurrentFactoryDefinition";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
+import { useDashboardStreamStore } from "../../dashboard/public";
 
 export function syncCurrentFactoryDocumentCache(
   queryClient: QueryClient,
   sessionID: string | null | undefined,
   document: CurrentFactoryDocument,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ): void {
-  queryClient.setQueryData(currentFactoryDocumentQueryKey(sessionID), document);
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
   queryClient.setQueryData(
-    currentFactoryDefinitionQueryKey(sessionID),
+    currentFactoryDocumentQueryKey(sessionID, resolvedStreamIdentity),
+    document,
+  );
+  queryClient.setQueryData(
+    currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
     document,
   );
 }

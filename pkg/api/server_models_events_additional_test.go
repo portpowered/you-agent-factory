@@ -14,9 +14,14 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	"go.uber.org/zap"
 )
 
 func TestReconnectCursorFromParams(t *testing.T) {
@@ -39,7 +44,8 @@ func TestReconnectCursorFromParams(t *testing.T) {
 	}
 }
 
-func TestGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
+// TestCompatibilityGetEvents_* exercises handler regressions for compatibility-only GET /events.
+func TestCompatibilityGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 	liveEvents := make(chan factoryapi.FactoryEvent, 1)
 	liveEvents <- factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest}
@@ -47,7 +53,7 @@ func TestGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 	rec := httptest.NewRecorder()
-	srv.getEvents(rec, req, func(context.Context) (*interfaces.FactoryEventStream, error) {
+	srv.getEvents(rec, req, false, func(context.Context) (*interfaces.FactoryEventStream, error) {
 		return &interfaces.FactoryEventStream{
 			History: []factoryapi.FactoryEvent{{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
 			Events:  liveEvents,
@@ -75,13 +81,14 @@ func TestGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 	}
 }
 
-func TestGetEvents_ErrorResponses(t *testing.T) {
+func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
 	tests := []struct {
 		name       string
 		writer     http.ResponseWriter
 		subscribe  func(context.Context) (*interfaces.FactoryEventStream, error)
+		session    bool
 		wantStatus int
 		wantCode   string
 		wantMsg    string
@@ -93,6 +100,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 				t.Fatal("subscribe should not be called when streaming is unsupported")
 				return nil, nil
 			},
+			session:    false,
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "INTERNAL_ERROR",
 			wantMsg:    "streaming unsupported",
@@ -103,6 +111,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, apisurface.ErrFactorySessionNotFound
 			},
+			session:    false,
 			wantStatus: http.StatusNotFound,
 			wantCode:   "NOT_FOUND",
 			wantMsg:    "factory session not found",
@@ -113,6 +122,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, factoryevents.ErrReconnectCursorNotFound
 			},
+			session:    false,
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "BAD_REQUEST",
 			wantMsg:    "invalid event reconnect cursor",
@@ -123,6 +133,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, errors.New("boom")
 			},
+			session:    false,
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "INTERNAL_ERROR",
 			wantMsg:    "failed to subscribe to factory events",
@@ -132,7 +143,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/events", nil)
-			srv.getEvents(tt.writer, req, tt.subscribe)
+			srv.getEvents(tt.writer, req, tt.session, tt.subscribe)
 
 			switch writer := tt.writer.(type) {
 			case *httptest.ResponseRecorder:
@@ -143,6 +154,37 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 				t.Fatalf("unexpected writer type %T", tt.writer)
 			}
 		})
+	}
+}
+
+func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+	liveEvents := make(chan factoryapi.FactoryEvent)
+	close(liveEvents)
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-a/events", nil)
+	rec := httptest.NewRecorder()
+	srv.getEvents(rec, req, true, func(context.Context) (*interfaces.FactoryEventStream, error) {
+		return &interfaces.FactoryEventStream{
+			BackendScopeID:      "backend-scope-001",
+			LogicalSessionKeyID: "/workspace/root::default::",
+			FactorySessionID:    "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f",
+			StreamGenerationID:  "stream-gen-live-001",
+			Events:              liveEvents,
+		}, nil
+	})
+
+	if got := rec.Header().Get(sessionEventStreamBackendScopeHeader); got != "backend-scope-001" {
+		t.Fatalf("%s = %q, want backend-scope-001", sessionEventStreamBackendScopeHeader, got)
+	}
+	if got := rec.Header().Get(sessionEventStreamLogicalSessionKeyHeader); got != "/workspace/root::default::" {
+		t.Fatalf("%s = %q, want /workspace/root::default::", sessionEventStreamLogicalSessionKeyHeader, got)
+	}
+	if got := rec.Header().Get(sessionEventStreamFactorySessionHeader); got != "f7c2a9b1-4d3e-4f8a-9b0c-1a2b3c4d5e6f" {
+		t.Fatalf("%s = %q, want resolved UUID factory session id", sessionEventStreamFactorySessionHeader, got)
+	}
+	if got := rec.Header().Get(sessionEventStreamGenerationHeader); got != "stream-gen-live-001" {
+		t.Fatalf("%s = %q, want stream-gen-live-001", sessionEventStreamGenerationHeader, got)
 	}
 }
 
@@ -257,12 +299,15 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 			wantMsg:    "model invocation operation is not supported",
 		},
 		{
-			name:       "provider_execution_failure",
-			body:       validBody,
-			invokeErr:  errors.New("provider execution failed: upstream timeout"),
-			wantStatus: http.StatusInternalServerError,
-			wantCode:   "INTERNAL_ERROR",
-			wantMsg:    "provider execution failed: upstream timeout",
+			name: "provider_execution_timeout",
+			body: validBody,
+			invokeErr: &apisurface.InferenceFailure{
+				Class:   apisurface.InferenceFailureClassTimeout,
+				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
+			},
+			wantStatus: http.StatusGatewayTimeout,
+			wantCode:   "MODEL_INFERENCE_TIMEOUT",
+			wantMsg:    "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
 		},
 		{
 			name:       "fallback_bad_request",
@@ -408,6 +453,91 @@ func assertJSONErrorResponse(t *testing.T, gotStatus int, header http.Header, bo
 	rec.HeaderMap = header
 	rec.Body.WriteString(body)
 	assertJSONError(t, rec, wantStatus, wantCode, wantMessage)
+}
+
+func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
+
+	transport, err := initializer.InitializeAPITransport(context.Background(), &initializer.Config{
+		Dir:               dir,
+		MockWorkersConfig: factoryconfig.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("InitializeAPITransport: %v", err)
+	}
+
+	srv := NewServer(transport.SessionAPISurface(), 0, zap.NewNop())
+	req := httptest.NewRequest(http.MethodGet, "/models", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /models status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	response := decodeJSONResponse[factoryapi.ListModelsResponse](t, rec)
+	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("models = %#v, want one OMNIVOICE summary", response.Results)
+	}
+}
+
+func TestInjectAPITransport_RejectsInvalidFactoryBeforeServing(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{Dir: t.TempDir()}
+
+	_, errInit := initializer.InitializeAPITransport(ctx, &initializer.Config{Dir: cfg.Dir})
+	_, errService := service.BuildFactoryService(ctx, cfg)
+
+	if errInit == nil {
+		t.Fatal("expected InitializeAPITransport to fail without factory.json")
+	}
+	if errService == nil {
+		t.Fatal("expected BuildFactoryService to fail without factory.json")
+	}
+	if errService.Error() != errInit.Error() {
+		t.Fatalf("InitializeAPITransport error = %q, want %q", errInit, errService)
+	}
+}
+
+func modelWiringFactoryConfig(includeResource bool) map[string]any {
+	worker := map[string]any{
+		"name":          "voice-local",
+		"type":          interfaces.WorkerTypeModel,
+		"modelProvider": "CODEX",
+		"model":         "OMNIVOICE_Q4_K_M",
+		"modelLocality": interfaces.ModelLocalityLocal,
+		"operations": []map[string]any{{
+			"name": "TTS",
+			"inputs": []map[string]any{{
+				"name":         "text",
+				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+				"required":     true,
+			}},
+			"outputs": []map[string]any{{
+				"name":         "audio",
+				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+			}},
+		}},
+	}
+	cfg := map[string]any{
+		"name":    "factory",
+		"workers": []map[string]any{worker},
+	}
+	if includeResource {
+		worker["resources"] = []map[string]any{{"name": "omnivoice-cache", "capacity": 1}}
+		cfg["resources"] = []map[string]any{{
+			"name":       "omnivoice-cache",
+			"type":       interfaces.ResourceTypeModel,
+			"capacity":   1,
+			"model":      "OMNIVOICE_Q4_K_M",
+			"backend":    "LLAMACPP",
+			"loadPolicy": "ON_DEMAND",
+		}}
+	}
+	return cfg
 }
 
 func TestParseCodexSessionDetails_PreservesLongMessageContent(t *testing.T) {

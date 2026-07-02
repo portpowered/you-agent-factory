@@ -6,7 +6,15 @@ import {
   getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
+import {
+  normalizeStreamDerivedCacheIdentity,
+  streamDerivedCacheKeyPrefix,
+  type StreamDerivedCacheIdentity,
+} from "../../timeline/public";
+import {
+  useDashboardSession,
+  useDashboardStreamStore,
+} from "../../dashboard/public";
 
 export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
   "current-factory-definition";
@@ -19,7 +27,16 @@ function normalizeSessionQueryKey(
 
 export function currentFactoryDefinitionQueryKey(
   sessionID: string | null | undefined,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ) {
+  const normalizedStreamIdentity =
+    normalizeStreamDerivedCacheIdentity(streamIdentity);
+  if (normalizedStreamIdentity) {
+    return [
+      CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+      ...streamDerivedCacheKeyPrefix(normalizedStreamIdentity),
+    ] as const;
+  }
   return [
     CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
     normalizeSessionQueryKey(sessionID),
@@ -31,9 +48,12 @@ export const CURRENT_FACTORY_DEFINITION_QUERY_KEY =
 
 export function useCurrentFactoryDefinition(isEnabled = true) {
   const { sessionID } = useDashboardSession();
+  const streamIdentity = useDashboardStreamStore(
+    (state) => state.resolvedStreamIdentity,
+  );
 
   return useQuery<CanonicalFactoryDefinition, CurrentFactoryDefinitionError>({
-    queryKey: currentFactoryDefinitionQueryKey(sessionID),
+    queryKey: currentFactoryDefinitionQueryKey(sessionID, streamIdentity),
     queryFn: () => getCurrentFactoryDocument({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,
@@ -44,8 +64,12 @@ export function useCurrentFactoryDefinition(isEnabled = true) {
 
 export function currentFactoryDocumentQueryKey(
   sessionID: string | null | undefined,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
 ) {
-  return [...currentFactoryDefinitionQueryKey(sessionID), "document"] as const;
+  return [
+    ...currentFactoryDefinitionQueryKey(sessionID, streamIdentity),
+    "document",
+  ] as const;
 }
 
 export const CURRENT_FACTORY_DOCUMENT_QUERY_KEY =
@@ -53,9 +77,12 @@ export const CURRENT_FACTORY_DOCUMENT_QUERY_KEY =
 
 export function useCurrentFactoryDocument(isEnabled = true) {
   const { sessionID } = useDashboardSession();
+  const streamIdentity = useDashboardStreamStore(
+    (state) => state.resolvedStreamIdentity,
+  );
 
   return useQuery<CurrentFactoryDocument, CurrentFactoryDefinitionError>({
-    queryKey: currentFactoryDocumentQueryKey(sessionID),
+    queryKey: currentFactoryDocumentQueryKey(sessionID, streamIdentity),
     queryFn: () => getCurrentFactoryDocument({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,

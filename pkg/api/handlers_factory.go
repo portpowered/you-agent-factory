@@ -316,6 +316,15 @@ func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.R
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	s.handleDurableInterruptDispatchControl(w, r, sessionID, func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionInterruptDispatchRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.InterruptDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
+	})
+}
+
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {

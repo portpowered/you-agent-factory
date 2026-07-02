@@ -6,12 +6,14 @@ import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
   expectNoBrowserErrors,
+  gotoDashboardAndWaitForWidgetPicker,
   openBrowserPage,
   selectComboboxOption,
   startBrowserPreview,
   stopBrowserPreview,
   startRealBackendBrowserHarness,
   uiInteractionTimeoutMs,
+  waitForDashboardWidgetPicker,
 } from "./browser-test-harness.mjs";
 
 // Keep this suite bounded to one real-backend proof of the existing durable
@@ -21,13 +23,8 @@ import {
 // `cd ui && bun run test:integration:durable-session-real-backend`.
 
 async function openFactorySessionWidget(page) {
-  await page
-    .getByRole("heading", { level: 1, name: "U", exact: true })
-    .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  await selectComboboxOption(
-    page.getByRole("combobox", { name: "Browse widgets" }),
-    "Factory session",
-  );
+  const browseWidgets = await waitForDashboardWidgetPicker(page);
+  await selectComboboxOption(browseWidgets, "Factory session");
   await page.getByRole("button", { name: "Add widget: Factory session" }).click();
   await page
     .getByRole("heading", {
@@ -58,11 +55,9 @@ async function assertRunningSummaryScenario(preview) {
       },
       { times: 1 },
     );
-    await browserPage.page.goto(
+    await gotoDashboardAndWaitForWidgetPicker(
+      browserPage.page,
       `${preview.previewURL}?factorySessionId=${encodeURIComponent(backend.sessionID)}`,
-      {
-        waitUntil: "domcontentloaded",
-      },
     );
     await openFactorySessionWidget(browserPage.page);
     await browserPage.page
@@ -128,11 +123,9 @@ async function assertArtifactDisclosureScenario(preview) {
       },
       { times: 1 },
     );
-    await browserPage.page.goto(
+    await gotoDashboardAndWaitForWidgetPicker(
+      browserPage.page,
       `${preview.previewURL}?factorySessionId=${encodeURIComponent(backend.sessionID)}`,
-      {
-        waitUntil: "domcontentloaded",
-      },
     );
     await openFactorySessionWidget(browserPage.page);
     await browserPage.page
@@ -207,11 +200,9 @@ async function assertDispatchDetailScenario(preview) {
       },
       { times: 1 },
     );
-    await browserPage.page.goto(
+    await gotoDashboardAndWaitForWidgetPicker(
+      browserPage.page,
       `${preview.previewURL}?factorySessionId=${encodeURIComponent(backend.sessionID)}`,
-      {
-        waitUntil: "domcontentloaded",
-      },
     );
     await openFactorySessionWidget(browserPage.page);
     await browserPage.page

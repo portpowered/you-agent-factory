@@ -28,7 +28,10 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 
 Run commands from the repository root shown above.
 
+Fresh checkouts should run `make init` once to install Bun dependencies for the dashboard (`ui/`) and the scoped components package (`ui/packages/components/`). The target requires Bun on `PATH`, stops on the first failed install, and does not require changing directories manually.
+
 ```bash
+make init
 make build
 make generate-api
 make api-smoke
@@ -52,6 +55,7 @@ make fmt
 make dashboard-verify
 make release VERSION=v1.2.3
 make ui-deps
+make ui-verify-fresh-npm-install
 make ui-build
 make ui-test
 make ui-integration-test
@@ -69,6 +73,7 @@ Run dashboard package commands from `ui/` with Bun 1.3.12+ on PATH. Root `make` 
 | Coverage thresholds and replay fixture guard | `make test-ui-coverage` | Bun covered phases via `test:coverage`, then replay check |
 | Playwright integration | `cd ui && bun run test:integration` or `make ui-integration-test` | Vitest + Playwright |
 | Unit then integration | `cd ui && bun run test` | Bun unit lane, then Vitest integration |
+| Fresh npm install proof for scoped local components | `make ui-verify-fresh-npm-install` or `cd ui && npm run verify:fresh-npm-install` | Node script runs an isolated dashboard `npm install` and asserts `@you-agent-factory/components` resolves from `packages/components` |
 | Storybook browser stories | `cd ui && bun run storybook:test-runner:ci` or `make ui-test-storybook` | Vitest Storybook project (`vitest.storybook.config.ts`) |
 
 Prefer `bun run test:unit` (or `make ui-test`) over ad hoc `bun test <paths>` for dashboard unit work so batching, exclusions, preload, and worker policy stay aligned with CI. Targeted unit proof may still use `cd ui && bun test <paths>` when a story explicitly needs one file or subtree. Storybook browser, Storybook script verifiers, and the coverage standalone dashboard-shell script phase remain Vitest-only; idea and cleanup writeups should cite `bun run test:unit`, `make ui-test`, `make test-ui-coverage`, or the Storybook Vitest commands above instead of legacy `vitest run` unit invocations.
@@ -573,7 +578,7 @@ behavior explicit inside the test that needs it.
 - Use `ui/src/components/dashboard/test-fixtures.ts` `workstationKindParityDashboardSnapshot` for browser-visible standard/repeater/cron icon checks instead of mutating `semanticWorkflowDashboardSnapshot` inline in stories or Vitest files.
 - When Storybook and Vitest need the same dashboard parity assertions, export the scenario-specific expectation catalog from `ui/src/components/dashboard/test-fixtures.ts` and derive icon expectations from shared flowchart metadata instead of restating labels or icon kinds inline.
 - The current-activity graph legend uses `DashboardFlowAxisLegend` and starts minimized by default; tests and stories that assert legend icons should expand it first with the shared `expandGraphLegend(...)` helper instead of assuming the legend panel is already rendered.
-- Canonical runtime history is exposed through `GET /events`; new API and UI history consumers should replay factory events instead of depending on dashboard snapshot routes.
+- Canonical runtime history for dashboard and Factory Session consumers is exposed through `GET /factory-sessions/{session_id}/events`; `GET /events` remains compatibility-only for process-global diagnostics. New API and UI history consumers should replay factory events from the session-scoped stream instead of depending on dashboard snapshot routes.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
 - Runtime log policy is service-configured, but each live session should own its own runtime log sink and emitted records. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
@@ -652,7 +657,7 @@ flowchart LR
   end
 
   subgraph snapshotPlane ["Dashboard snapshot plane (SSE + timeline)"]
-    SSE["GET /events SSE"]
+    SSE["GET /factory-sessions/{session_id}/events SSE"]
     TL["factoryTimelineStore"]
     WV["useDashboardWorldView"]
     SNAP["useDashboardSnapshot → DashboardSnapshot"]
@@ -667,7 +672,7 @@ ASCII equivalent:
 
 ```text
 Factory document:  GET /factory-sessions/{id}/factory → React Query → edit / save / export
-Dashboard snapshot: GET /events (SSE) → timeline store → world view → runtime overlay + timeline
+Dashboard snapshot: GET /factory-sessions/{session_id}/events (SSE) → timeline store → world view → runtime overlay + timeline
 ```
 
 Full program spec: [UI Factory Document vs Snapshot Planes](../../../tasks/prd-ui-factory-document-snapshot-planes.md).

@@ -29,6 +29,10 @@ For live session discovery and CLI routing, see `you docs sessions`. For
 - **Dynamic workflow** is shorthand for a `JAVASCRIPT` orchestrator-backed factory.
 - A dynamic workflow **run** is a live `FactorySession` with
   `runtime.orchestratorKind = JAVASCRIPT`.
+- A durable JavaScript execution inspected through `you workflow status`,
+  `you workflow result`, `you workflow dispatches`, `you workflow artifacts`,
+  `you workflow events`, API durable session reads, or the dashboard Factory
+  Session detail surface is still that same `FactorySession`.
 - Do not introduce `DynamicWorkflowRun` as a separate canonical runtime noun in
   API, CLI, dashboard, or docs.
 
@@ -81,6 +85,28 @@ runtime state for the selected live session. Petri marking and topology remain
 available through the workflow activity graph; JavaScript sessions show phase,
 checkpoint refs, child dispatch counts, artifacts, warnings, and final or
 partial result refs without raw checkpoint bodies.
+
+## Factory Event Stream
+
+`GET /factory-sessions/{session_id}/events` is the normal Server-Sent Events
+route for observing `FactoryEvent` lifecycle, dispatch, phase, checkpoint, and
+artifact facts for one `FactorySession`. Reconnect with `after_event_id` or
+`after_sequence` on that same session-scoped URL. `GET /events` is retained only
+as a **compatibility-only** process-global stream for legacy tooling—not for new
+dashboard or Factory Session integrations.
+
+## Operator Scope Boundaries
+
+The current canonical operator story is intentionally bounded:
+
+- Source validation before execution belongs to `you workflow validate` and the
+  canonical Factory preview contract (`POST /factories/preview`).
+- Durable JavaScript execution inspection belongs to `FactorySession`,
+  `Dispatch`, `FactoryArtifact`, and `FactoryEvent` reads across CLI, API,
+  dashboard, and MCP-compatible docs.
+- Replay-resume expansion, broader live-provider bridge parity, and broader MCP
+  host parity remain explicit follow-up scope, not implied capabilities of the
+  current shipped session model.
 
 ## Related Topics
 

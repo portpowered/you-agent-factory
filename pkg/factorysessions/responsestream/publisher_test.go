@@ -1,9 +1,12 @@
 package responsestream_test
 
 import (
+	"context"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
 
@@ -225,4 +228,104 @@ func TestPublisher_PublishReportsRetentionCompaction(t *testing.T) {
 	if events[0].Payload != "second" || events[1].Kind != responsestream.EventKindCompactionSignal {
 		t.Fatalf("events = %#v, want truncated progress and compaction signal", events)
 	}
+}
+
+func TestPublisher_SlowSubscriberDoesNotBlockAndReceivesCompactionSignal(t *testing.T) {
+	stream := responsestream.NewSessionResponseStreamWithClock(
+		&fixedClock{now: time.Unix(0, 0).UTC()},
+		responsestream.RetentionLimits{MaxEvents: 2},
+	)
+	publisher := responsestream.NewPublisher(stream, nil)
+
+	subscription := mustSubscribe(t, stream, 0)
+	defer subscription.Detach()
+
+	first := publisher.Publish(responsestream.Event{
+		Kind:       responsestream.EventKindResponseFragment,
+		DispatchID: "dispatch-1",
+		Payload:    "retained-1",
+	})
+	initial := mustReadNext(t, subscription, "initial")
+	if len(initial.Events) != 1 || initial.Events[0].Sequence != first.Sequence {
+		t.Fatalf("initial events = %#v, want first retained event", initial.Events)
+	}
+
+	publishAlternatingFragmentsAsync(t, publisher, 64)
+	catchUp := mustReadNext(t, subscription, "catch-up")
+	assertRetainedWindowCompaction(t, catchUp)
+
+	diagnostics := publisher.Diagnostics()
+	if diagnostics.PublishedCount != 65 {
+		t.Fatalf("published count = %d, want 65", diagnostics.PublishedCount)
+	}
+	if diagnostics.CompactionCount == 0 || diagnostics.LastCompaction == nil {
+		t.Fatalf("diagnostics = %#v, want recorded compaction", diagnostics)
+	}
+}
+
+func mustSubscribe(t *testing.T, stream *factorysessions.SessionResponseStream, sequence int64) *responsestream.Subscription {
+	t.Helper()
+
+	subscription, err := stream.Subscribe(sequence)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	return subscription
+}
+
+func mustReadNext(t *testing.T, subscription *responsestream.Subscription, label string) responsestream.ReadResult {
+	t.Helper()
+
+	result, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(%s): %v", label, err)
+	}
+	return result
+}
+
+func publishAlternatingFragmentsAsync(t *testing.T, publisher *responsestream.Publisher, count int) {
+	t.Helper()
+
+	publishDone := make(chan struct{})
+	go func() {
+		for i := 0; i < count; i++ {
+			kind := responsestream.EventKindProgressFragment
+			if i%2 != 0 {
+				kind = responsestream.EventKindResponseFragment
+			}
+			publisher.Publish(responsestream.Event{
+				Kind:       kind,
+				DispatchID: "dispatch-1",
+				Payload:    "chunk-" + strconv.Itoa(i),
+			})
+		}
+		close(publishDone)
+	}()
+
+	select {
+	case <-publishDone:
+	case <-time.After(time.Second):
+		t.Fatal("publishing stalled behind a slow subscriber")
+	}
+}
+
+func assertRetainedWindowCompaction(t *testing.T, result responsestream.ReadResult) {
+	t.Helper()
+
+	if !result.BehindRetainedWindow {
+		t.Fatalf("catch-up result = %#v, want retained-window gap signal", result)
+	}
+	if result.Compaction == nil || result.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("catch-up compaction = %#v, want truncation summary", result.Compaction)
+	}
+	for _, event := range result.Events {
+		if event.Kind != responsestream.EventKindCompactionSignal {
+			continue
+		}
+		if event.Compaction == nil {
+			t.Fatal("compaction signal missing summary")
+		}
+		return
+	}
+	t.Fatalf("catch-up events = %#v, want retained compaction signal", result.Events)
 }

@@ -25,6 +25,7 @@ import {
   renderAppWithDashboardShell,
   settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import { selectedTickTimelineEvents } from "./testing/app-shell-timeline-test-utils";
 
 const rootFactorySession: FactorySessionSummary = {
@@ -108,8 +109,9 @@ describe("App dashboard session stream tab switch", () => {
 
     const defaultStream = requireEventStream(MockEventSource.instances);
     expect(defaultStream.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
+    expect(defaultStream.url).not.toBe("/events");
 
     const defaultSlider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -262,7 +264,7 @@ describe("App dashboard session stream refresh", () => {
 
     const refreshedStream = requireEventStream(MockEventSource.instances);
     expect(refreshedStream.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
 
     await emitTimelineMessagesAct(refreshedStream, [

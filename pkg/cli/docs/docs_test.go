@@ -68,6 +68,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-fusion",
 		"packaged-goal",
 		"packaged-tts",
 		"batch-inputs",
@@ -106,6 +107,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-fusion",
 		"packaged-goal",
 		"packaged-tts",
 		"batch-inputs",
@@ -194,7 +196,8 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
-		"`packaged-goal` - Packaged @you/goal invocation",
+		"`packaged-fusion` - Packaged @you/fusion invocation",
+		"`packaged-goal` - Packaged @you/goal batch invocation",
 		"`packaged-tts` - Packaged @you/tts invocation",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
@@ -206,6 +209,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`you docs work`",
 		"`you docs sessions`",
 		"`you docs workstations`",
+		"`you docs packaged-fusion`",
 		"`you docs packaged-goal`",
 		"`you docs packaged-tts`",
 		"`you docs batch-inputs`",
@@ -541,6 +545,12 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 		"sourceWorkName",
 		"targetWorkName",
 		"requiredState",
+		"## Visualize batch dependencies (`you work visualize`)",
+		"you work visualize batch.json > my-graph.mermaid",
+		"you work visualize --format markdown-mermaid batch.json > graph.md",
+		"Graph nodes represent work items",
+		"It does not submit",
+		"render diagram images",
 	} {
 		if !strings.Contains(canonical, want) {
 			t.Fatalf("Markdown(batch-inputs) missing %q:\n%s", want, canonical)
@@ -769,6 +779,7 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+
 func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -808,6 +819,43 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_ModelsDocumentsInferenceBehavior(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("models")
+	if err != nil {
+		t.Fatalf("Markdown(models) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Models And Model Operations",
+		"INFERENCE_RUN",
+		"INFERENCE_WORKER",
+		"MODEL_INVOKE",
+		"MODEL_WORKER",
+		"## Local Managed Runtime Execution",
+		"model host",
+		"lease",
+		"WorkContent",
+		"OMNIVOICE_Q4_K_M",
+		"you models invoke",
+		"`you docs workers`",
+		"`you docs workstations`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(models) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs models`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(models) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -830,6 +878,7 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"Paused factory session",
 		"Resumed factory session",
 		"SESSION_LIFECYCLE_CONTROL",
+		"Buffered work while paused",
 		"make docs-reference-smoke",
 		"## Factory query",
 		"you factory query",
@@ -844,8 +893,16 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"POST /factory-sessions/{session_id}/invocations",
 		"INVOCATION_INPUT_SOURCE_CONFLICT",
 		"INVOCATION_INPUT_EMPTY",
+		"INVOCATION_BLOCKED",
+		"INVOCATION_NEEDS_HUMAN",
+		"INVOCATION_PAUSED",
+		"INVOCATION_INTERRUPTED",
+		"INVOCATION_RUNTIME_FAILURE",
+		"INVOCATION_TIMED_OUT",
+		"INVOCATION_CANCELED",
 		"INVOCATION_PRIMARY_RESULT_UNRESOLVED",
 		"status: TIMED_OUT",
+		"status: CANCELED",
 		"`primaryResult`",
 		`"sourceKind": "text"`,
 		`"primaryResult": [`,
@@ -889,7 +946,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-goal, packaged-tts, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-fusion, packaged-goal, packaged-tts, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

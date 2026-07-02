@@ -4,6 +4,7 @@ import { FACTORY_EVENT_TYPES } from "../api/events";
 import {
   buildReplayFixtureTimelineSnapshot,
   loadReplayFixtureEvents,
+  parseReplayFixtureEvents,
   REPLAY_FIXTURE_DIRECTORY,
   replayFixtureCatalog,
 } from "./replay-fixtures";
@@ -29,6 +30,38 @@ describe("replay fixture helpers", () => {
     expect(events.every((event) => typeof event.id === "string")).toBe(true);
   });
 
+  it("parses raw replay fixture text into trimmed typed events", () => {
+    expect(
+      parseReplayFixtureEvents(
+        [
+          "",
+          "  ",
+          JSON.stringify({
+            context: { tick: 2 },
+            id: "evt-a",
+            type: FACTORY_EVENT_TYPES.sessionStarted,
+          }),
+          "",
+          JSON.stringify({
+            context: { tick: 3 },
+            id: "evt-b",
+            type: FACTORY_EVENT_TYPES.sessionCompleted,
+          }),
+          "",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        id: "evt-a",
+        type: FACTORY_EVENT_TYPES.sessionStarted,
+      }),
+      expect.objectContaining({
+        id: "evt-b",
+        type: FACTORY_EVENT_TYPES.sessionCompleted,
+      }),
+    ]);
+  });
+
   it("builds timeline snapshots through the canonical replay projection seam", () => {
     const snapshot = buildReplayFixtureTimelineSnapshot(
       "runtimeConfigInterfaceConsolidation",
@@ -43,6 +76,18 @@ describe("replay fixture helpers", () => {
     );
   });
 
+  it("derives the latest tick when no replay snapshot tick is provided", () => {
+    const snapshot = buildReplayFixtureTimelineSnapshot("baseline");
+    const latestTick = Math.max(
+      ...loadReplayFixtureEvents("baseline").map((event) => event.context.tick),
+    );
+
+    expect(snapshot.tick_count).toBeGreaterThan(0);
+    expect(snapshot.tick_count).toBe(latestTick);
+  });
+});
+
+describe("replay fixture projections", () => {
   it("preserves setup-workspace python3 script requests and task handoff evidence", () => {
     const events = loadReplayFixtureEvents(
       "runtimeConfigInterfaceConsolidation",
@@ -107,5 +152,11 @@ describe("replay fixture helpers", () => {
       "Rejected Story",
       "Reworked Story",
     ]);
+  });
+
+  it("rejects unknown replay fixture ids at the helper boundary", () => {
+    expect(() =>
+      loadReplayFixtureEvents("unknown-fixture" as keyof typeof replayFixtureCatalog),
+    ).toThrowError("Unknown replay fixture: unknown-fixture");
   });
 });

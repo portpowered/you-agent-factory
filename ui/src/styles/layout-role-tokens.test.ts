@@ -6,7 +6,16 @@ import { describe, expect, it } from "vitest";
 import { DASHBOARD_LAYOUT_CONTRACT } from "../components/ui/dashboard-layout";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
-const layoutTokensPath = path.join(stylesDir, "layout-role-tokens.css");
+const packageStylesDir = path.resolve(
+  stylesDir,
+  "..",
+  "..",
+  "packages",
+  "components",
+  "src",
+  "styles",
+);
+const layoutTokensPath = path.join(packageStylesDir, "layout-role-tokens.css");
 const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
 const dialogSourcePath = path.join(
   stylesDir,
@@ -54,9 +63,9 @@ describe("layout-role-tokens (US-007)", () => {
     expect(layoutSource).toContain("--spacing-layout-inset-card:");
   });
 
-  it("imports layout tokens from styles.css", () => {
+  it("imports layout tokens from the component package styles entrypoint", () => {
     expect(stylesSource).toContain(
-      '@import "./styles/layout-role-tokens.css";',
+      '@import "@you-agent-factory/components/styles.css";',
     );
   });
 

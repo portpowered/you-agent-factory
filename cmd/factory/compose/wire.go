@@ -9,7 +9,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 )
 
-// InjectFactoryService is the wireinject entry for the factory composition root.
+// InjectFactoryService is the legacy wireinject entry retained for compose
+// equivalence tests. New transport composition must use InjectAPITransport,
+// InjectCLITransport, or InjectMCPTransport from pkg/initializer instead.
 func InjectFactoryService(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
@@ -22,6 +24,7 @@ func InjectFactoryService(
 		provideFactoryConfigLoad,
 		provideServiceClock,
 		provideRuntimeBuildService,
+		provideWorkersSchedulerService,
 		provideFactoryServiceCollaborators,
 		provideHostedWorkersConfig,
 		provideFactoryCore,

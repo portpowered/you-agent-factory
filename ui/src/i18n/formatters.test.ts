@@ -64,7 +64,7 @@ describe("shared locale date and time formatters", () => {
 });
 
 describe("shared locale duration and relative-time formatters", () => {
-  it("formats count-sensitive labels, durations, and relative values", () => {
+  it("formats count-sensitive labels and compact durations", () => {
     expect(
       formatCount(
         1,
@@ -98,6 +98,96 @@ describe("shared locale duration and relative-time formatters", () => {
     expect(formatDuration(192_000, "zh-CN")).toBe("3分 12秒");
     expect(formatDuration(192_000, "ja")).toBe("3分 12秒");
     expect(formatDuration(192_000, "ko")).toBe("3분 12초");
+  });
+
+  it("formats graph durations with truthful overflow behavior", () => {
+    expect(formatDuration(10_000, "en", { style: "graph" })).toBe("10s");
+    expect(formatDuration(780_000, "en", { style: "graph" })).toBe("13m");
+    expect(formatDuration(3_600_000, "en", { style: "graph" })).toBe("1h");
+    expect(formatDuration(7_440_000, "en", { style: "graph" })).toBe("2h");
+    expect(formatDuration(450, "en", { style: "graph" })).toBe("0s");
+    expect(formatDuration(36_000_000, "zh-CN", { style: "graph" })).toBe(
+      "10时",
+    );
+    expect(formatDuration(780_000, "zh-CN", { style: "graph" })).toBe("13分");
+    expect(formatDuration(10_000, "zh-CN", { style: "graph" })).toBe("10秒");
+    expect(formatDuration(36_000_000, "ja", { style: "graph" })).toBe("10時");
+    expect(formatDuration(780_000, "ja", { style: "graph" })).toBe("13分");
+    expect(formatDuration(10_000, "ja", { style: "graph" })).toBe("10秒");
+    expect(formatDuration(36_000_000, "ko", { style: "graph" })).toBe("10시");
+    expect(formatDuration(780_000, "ko", { style: "graph" })).toBe("13분");
+    expect(formatDuration(10_000, "ko", { style: "graph" })).toBe("10초");
+    expect(formatDuration(360_000_000, "en", { style: "graph" })).toBe("4d");
+    expect(formatDuration(360_000_000, "zh-CN", { style: "graph" })).toBe(
+      "4天",
+    );
+    expect(formatDuration(360_000_000, "ja", { style: "graph" })).toBe("4日");
+    expect(formatDuration(360_000_000, "ko", { style: "graph" })).toBe("4일");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "en", {
+        style: "graph",
+      }),
+    ).toBe("1c");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "zh-CN", {
+        style: "graph",
+      }),
+    ).toBe("1世纪");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "ja", {
+        style: "graph",
+      }),
+    ).toBe("1世紀");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "ko", {
+        style: "graph",
+      }),
+    ).toBe("1세기");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "en", {
+        style: "graph",
+      }),
+    ).toBe("1q");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "zh-CN", {
+        style: "graph",
+      }),
+    ).toBe("1万");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "ja", {
+        style: "graph",
+      }),
+    ).toBe("1万");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "ko", {
+        style: "graph",
+      }),
+    ).toBe("1만");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "en", {
+        style: "graph",
+      }),
+    ).toBe("1M");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "zh-CN", {
+        style: "graph",
+      }),
+    ).toBe("1百万");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "ja", {
+        style: "graph",
+      }),
+    ).toBe("1百万");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "ko", {
+        style: "graph",
+      }),
+    ).toBe("1백만");
+  });
+});
+
+describe("shared locale verbose duration and fallback behavior", () => {
+  it("formats verbose durations and relative values", () => {
     expect(
       formatDuration(7_440_000, "en", {
         style: "verbose",

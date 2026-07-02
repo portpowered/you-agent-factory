@@ -161,8 +161,21 @@ func TestBuildReconnectReplay_ReconstructsDispatchStateWithoutSessionCompleted(t
 	if worldState.SessionBracket != nil && worldState.SessionBracket.Terminal {
 		t.Fatalf("session bracket = %#v, want reconnect replay without SESSION_COMPLETED", worldState.SessionBracket)
 	}
-	if worldState.JavaScriptRuntime == nil || worldState.JavaScriptRuntime.CompletedDispatches != 1 {
-		t.Fatalf("javascript runtime = %#v, want one completed dispatch from reconnect replay", worldState.JavaScriptRuntime)
+	if worldState.JavaScriptRuntime == nil {
+		t.Fatalf("javascript runtime = nil, want reconnect replay dispatch state")
+	}
+	if worldState.JavaScriptRuntime.CompletedDispatches != 0 {
+		t.Fatalf("javascript runtime completed dispatches = %d, want zero after interrupted dispatch suppresses late reconciliation", worldState.JavaScriptRuntime.CompletedDispatches)
+	}
+	if len(worldState.JavaScriptRuntime.Dispatches) != 1 {
+		t.Fatalf("javascript runtime dispatches = %#v, want one interrupted dispatch", worldState.JavaScriptRuntime.Dispatches)
+	}
+	dispatch := worldState.JavaScriptRuntime.Dispatches[0]
+	if dispatch.Status != string(factoryapi.FactoryDispatchStatusINTERRUPTED) {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED after replay suppression", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Message != "provider disconnected" {
+		t.Fatalf("dispatch failure detail = %#v, want provider disconnected interruption reason", dispatch.FailureDetail)
 	}
 }
 

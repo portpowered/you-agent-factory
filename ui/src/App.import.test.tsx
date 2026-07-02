@@ -6,8 +6,10 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { FactoryOrchestratorKind } from "./api/generated/openapi";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   createDeferredPromise,
   currentNamedFactoryExportResponse,
@@ -17,8 +19,10 @@ import {
 } from "./testing/app-shell-export-test-utils";
 import {
   baselineSnapshot,
+  chainRenderAppFetchMock,
   createFactoryImportValue,
   createFileDropTransfer,
+  DEFAULT_FACTORY_SESSION_ID,
   importedFactorySnapshot,
   jsonResponse,
   MockEventSource,
@@ -35,6 +39,45 @@ const incrementedSessionFactoryVersion = {
   logical: "10",
   physical: "2026-05-18T14:25:00.001Z",
 } as const;
+
+function buildFactorySessionGetResponse() {
+  return {
+    factoryDir: "/workspace/default",
+    folderPath: "/workspace",
+    id: DEFAULT_FACTORY_SESSION_ID,
+    isDefault: true,
+    project: "default",
+    runtime: {
+      lifecycle: {
+        startedAt: "2026-06-26T00:00:00Z",
+        updatedAt: "2026-06-26T00:00:00Z",
+      },
+      orchestratorKind: FactoryOrchestratorKind.PETRI,
+      progress: {
+        categories: {
+          failed: 0,
+          initial: 0,
+          processing: 0,
+          terminal: 0,
+        },
+        factoryState: "IDLE",
+        inFlightCount: 0,
+        totalTokens: 0,
+      },
+      status: "IDLE",
+      streamIdentity: {
+        backendScopeID: "/workspace::test-backend",
+        factorySessionID: "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+        logicalSessionKeyID: "/workspace::default::",
+        streamGenerationID: "2026-06-26T00:00:00Z",
+      },
+      usage: { resources: [] },
+    },
+    target: {
+      kind: "default",
+    },
+  };
+}
 
 function expectNoRetiredDashboardBranding(): void {
   expect(screen.queryByText(/finite you/i)).toBeNull();
@@ -124,22 +167,21 @@ describe("App shell import flows", () => {
       snapshot: importedFactorySnapshot,
     });
 
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path = resolveFetchPath(input);
-        const method = resolveFetchMethod(input, init);
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (path === "/factory-sessions/~default" && method === "GET") {
+        return jsonResponse(buildFactorySessionGetResponse());
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "GET") {
-          return jsonResponse(currentSessionFactory);
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+        return jsonResponse(currentSessionFactory);
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          return activationDeferred.promise;
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+        return activationDeferred.promise;
+      }
 
-        throw new Error(`unexpected fetch for ${path} (${method})`);
-      },
-    );
+      return undefined;
+    });
 
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",
@@ -227,29 +269,28 @@ describe("App shell import flows", () => {
       snapshot: importedFactorySnapshot,
     });
 
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path = resolveFetchPath(input);
-        const method = resolveFetchMethod(input, init);
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (path === "/factory-sessions/~default" && method === "GET") {
+        return jsonResponse(buildFactorySessionGetResponse());
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "GET") {
-          return jsonResponse(currentSessionFactory);
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+        return jsonResponse(currentSessionFactory);
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          return jsonResponse({
-            name: "Dropped Factory",
-            ...importValue.factory,
-            version: {
-              logical: "1",
-              physical: "2026-05-18T14:41:00Z",
-            },
-          });
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+        return jsonResponse({
+          name: "Dropped Factory",
+          ...importValue.factory,
+          version: {
+            logical: "1",
+            physical: "2026-05-18T14:41:00Z",
+          },
+        });
+      }
 
-        throw new Error(`unexpected fetch for ${path} (${method})`);
-      },
-    );
+      return undefined;
+    });
 
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",
@@ -323,28 +364,27 @@ describe("App shell import flows", () => {
       timelineEvents: exportTimelineEvents,
     });
 
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path = resolveFetchPath(input);
-        const method = resolveFetchMethod(input, init);
+    chainRenderAppFetchMock(fetchMock, async (path, method, _input, init) => {
+      if (path === "/factory-sessions/~default" && method === "GET") {
+        return jsonResponse(buildFactorySessionGetResponse());
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "GET") {
-          return jsonResponse({
-            ...currentNamedFactoryExportResponse,
-            version: defaultSessionFactoryVersion,
-          });
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+        return jsonResponse({
+          ...currentNamedFactoryExportResponse,
+          version: defaultSessionFactoryVersion,
+        });
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          const parsed = JSON.parse(String(init?.body)) as {
-            factory?: typeof currentNamedFactoryExportResponse;
-          };
-          return jsonResponse(parsed.factory ?? parsed);
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+        const parsed = JSON.parse(String(init?.body)) as {
+          factory?: typeof currentNamedFactoryExportResponse;
+        };
+        return jsonResponse(parsed.factory ?? parsed);
+      }
 
-        throw new Error(`unexpected fetch for ${path} (${method})`);
-      },
-    );
+      return undefined;
+    });
 
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",
@@ -383,7 +423,14 @@ describe("App shell import flows", () => {
     });
     expectNoPostFactoriesActivation(fetchMock);
     await waitFor(() => {
-      expect(MockEventSource.instances.length).toBeGreaterThan(0);
+      const sessionPreflightCount = fetchMock.mock.calls.filter(([url, init]) => {
+        const path = resolveFetchPath(url);
+        return (
+          path.startsWith("/factory-sessions/~default/sync-preflight") &&
+          resolveFetchMethod(url, init) === "GET"
+        );
+      }).length;
+      expect(sessionPreflightCount).toBeGreaterThanOrEqual(2);
     });
 
     const refreshedStream = MockEventSource.instances.at(-1);
@@ -395,10 +442,12 @@ describe("App shell import flows", () => {
       refreshedStream.emit("snapshot", importedFactorySnapshot);
     });
 
-    expect(
-      await screen.findByRole("button", {
-        name: "Select Review workstation",
-      }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      const state = useFactoryTimelineStore.getState();
+      expect(state.selectedTick).toBe(importedFactorySnapshot.tick_count);
+      expect(state.worldViewCache[state.selectedTick]?.factory_state).toBe(
+        importedFactorySnapshot.factory_state,
+      );
+    });
   });
 });

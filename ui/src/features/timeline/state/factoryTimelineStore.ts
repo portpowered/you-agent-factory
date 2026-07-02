@@ -32,6 +32,7 @@ import type { WorldState } from "./timeline/types";
 export type {
   FactoryTimelineCheckpoint,
   FactoryTimelineMode,
+  FactoryTimelineSyncIdentity,
 } from "./timeline/storeState";
 
 export function buildFactoryTimelineSnapshot(

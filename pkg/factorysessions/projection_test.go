@@ -81,6 +81,7 @@ func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t
 
 func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(t *testing.T) {
 	now := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
+	startedAt := now.Add(-5 * time.Minute)
 	argsSchema := json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"}}}`)
 	defaultPolicy := json.RawMessage(`{"maxAgents":3}`)
 	runtime := ProjectRuntime(ProjectionContext{
@@ -113,11 +114,319 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 			RunningDispatches:   2,
 			CompletedDispatches: 4,
 		},
-		Now: now,
+		BackendScopeID:   "backend-scope-1",
+		RuntimeStartedAt: startedAt,
+		Now:              now,
 	})
 	assertJavaScriptWorkflowSessionProjection(t, runtime)
 	if runtime.Budgets == nil || runtime.Budgets.MaxAgents == nil || *runtime.Budgets.MaxAgents != 3 {
 		t.Fatalf("budgets = %#v, want maxAgents=3", runtime.Budgets)
+	}
+	if runtime.StreamIdentity == nil {
+		t.Fatal("stream identity = nil, want identity for javascript session")
+	}
+	if runtime.StreamIdentity.BackendScopeID != "backend-scope-1" ||
+		runtime.StreamIdentity.LogicalSessionKeyID != "::default::" ||
+		runtime.StreamIdentity.FactorySessionID != "session-js" ||
+		runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("stream identity = %#v, want stable backend/logical/session/start tuple", runtime.StreamIdentity)
+	}
+}
+
+func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGenerationID(t *testing.T) {
+	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
+	startedAt := now.Add(-10 * time.Minute)
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "session-js", Project: "dynamic-workflow"},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "dynamic-workflow",
+			Orchestrator: &interfaces.FactoryOrchestratorConfig{
+				Kind: interfaces.OrchestratorKindJavaScript,
+				JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+					Dialect:   "workflow-v1",
+					SourceRef: "factory/workflows/review.js",
+				},
+			},
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			StreamGenerationID: "stream-from-snapshot",
+		},
+		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
+			Phase:        "review",
+			Phases:       []string{"plan", "review"},
+			ArgsDigest:   "sha256:args-digest",
+			ScriptStatus: "RUNNING",
+		},
+		BackendScopeID:   "backend-scope-1",
+		RuntimeStartedAt: startedAt,
+		Now:              now,
+	})
+	if runtime.StreamIdentity == nil {
+		t.Fatal("stream identity = nil, want identity for javascript session")
+	}
+	if runtime.StreamIdentity.StreamGenerationID != "stream-from-snapshot" {
+		t.Fatalf("stream generation id = %q, want snapshot token", runtime.StreamIdentity.StreamGenerationID)
+	}
+}
+
+func TestProjectRuntime_PausedSessionIncludesStopSummary(t *testing.T) {
+	now := time.Date(2026, 6, 27, 8, 15, 0, 0, time.UTC)
+	token := &interfaces.Token{
+		ID:      "tok-goal-review",
+		PlaceID: "goal:review",
+		Color: interfaces.TokenColor{
+			Name:       "Resume draft",
+			WorkID:     "work-goal-1",
+			WorkTypeID: "goal",
+			TraceID:    "trace-goal-1",
+		},
+		CreatedAt: now.Add(-2 * time.Minute),
+		EnteredAt: now.Add(-1 * time.Minute),
+	}
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "session-paused"},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "goal",
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			RuntimeStatus:          interfaces.RuntimeStatusIdle,
+			FactoryState:           "PAUSED",
+			LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusPaused),
+			Marking:                petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-review": token}},
+			Topology:               &state.Net{Places: map[string]*petri.Place{"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"}}},
+		},
+		Now: now,
+	})
+	if runtime.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want paused summary")
+	}
+	if runtime.StopSummary.StopKind != factoryapi.FactoryStopKind("PAUSED") {
+		t.Fatalf("stop kind = %q, want PAUSED", runtime.StopSummary.StopKind)
+	}
+	if runtime.StopSummary.WorkId == nil || *runtime.StopSummary.WorkId != "work-goal-1" {
+		t.Fatalf("stopSummary.workId = %#v, want work-goal-1", runtime.StopSummary.WorkId)
+	}
+	if runtime.StopSummary.WorkState == nil || *runtime.StopSummary.WorkState != "goal:review" {
+		t.Fatalf("stopSummary.workState = %#v, want goal:review", runtime.StopSummary.WorkState)
+	}
+	if runtime.StopSummary.SessionLifecycleStatus == nil || *runtime.StopSummary.SessionLifecycleStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("stopSummary.lifecycle = %#v, want PAUSED", runtime.StopSummary.SessionLifecycleStatus)
+	}
+}
+
+func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testing.T) {
+	now := time.Date(2026, 6, 27, 8, 30, 0, 0, time.UTC)
+	testCases := []struct {
+		name               string
+		placeID            string
+		stateName          string
+		wantStop           factoryapi.FactoryStopKind
+		wantSummary        string
+		wantDispatchStatus factoryapi.FactoryDispatchStatus
+		lastError          string
+	}{
+		{name: "blocked", placeID: "goal:blocked", stateName: "blocked", wantStop: factoryapi.FactoryStopKind("BLOCKED"), wantSummary: "provider timeout", wantDispatchStatus: factoryapi.FactoryDispatchStatusFAILED},
+		{name: "needs-human", placeID: "goal:needs-human", stateName: "needs-human", wantStop: factoryapi.FactoryStopKind("NEEDS_HUMAN"), wantSummary: "awaiting operator approval", wantDispatchStatus: factoryapi.FactoryDispatchStatusFAILED},
+		{name: "interrupted", placeID: "goal:interrupted", stateName: "interrupted", wantStop: factoryapi.FactoryStopKind("INTERRUPTED"), wantSummary: "Operator interrupted review after partial output was available.", wantDispatchStatus: factoryapi.FactoryDispatchStatusINTERRUPTED, lastError: "Operator interrupted review after partial output was available."},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			token := &interfaces.Token{
+				ID:      "tok-goal-stop",
+				PlaceID: tc.placeID,
+				Color: interfaces.TokenColor{
+					Name:       "Recover goal",
+					WorkID:     "work-goal-stop",
+					WorkTypeID: "goal",
+					TraceID:    "trace-goal-stop",
+				},
+				CreatedAt: now.Add(-2 * time.Minute),
+				EnteredAt: now.Add(-1 * time.Minute),
+				History: interfaces.TokenHistory{
+					LastError: tc.lastError,
+				},
+			}
+			runtime := ProjectRuntime(ProjectionContext{
+				Session: &LiveSession{ID: "session-stop"},
+				FactoryCfg: &interfaces.FactoryConfig{
+					Name: "goal",
+				},
+				Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+					RuntimeStatus: interfaces.RuntimeStatusIdle,
+					FactoryState:  "RUNNING",
+					Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-stop": token}},
+					Topology:      &state.Net{Places: map[string]*petri.Place{tc.placeID: {ID: tc.placeID, TypeID: "goal", State: tc.stateName}}},
+					DispatchHistory: []interfaces.CompletedDispatch{{
+						DispatchID:      "dispatch-stop-1",
+						TransitionID:    "execute-goal",
+						WorkstationName: "execute-goal",
+						Outcome:         interfaces.OutcomeFailed,
+						Reason:          tc.wantSummary,
+						EndTime:         now,
+						ConsumedTokens:  []interfaces.Token{{Color: interfaces.TokenColor{WorkID: "work-goal-stop"}}},
+					}},
+				},
+				Now: now,
+			})
+			if runtime.StopSummary == nil {
+				t.Fatal("stopSummary = nil, want work-level stop summary")
+			}
+			assertWorkStateStopSummary(t, runtime.StopSummary, tc.placeID, tc.wantStop, tc.wantDispatchStatus, tc.wantSummary)
+		})
+	}
+}
+
+func assertWorkStateStopSummary(
+	t *testing.T,
+	summary *factoryapi.FactoryStopSummary,
+	wantPlaceID string,
+	wantStop factoryapi.FactoryStopKind,
+	wantDispatchStatus factoryapi.FactoryDispatchStatus,
+	wantSummary string,
+) {
+	t.Helper()
+
+	if summary.StopKind != wantStop {
+		t.Fatalf("stop kind = %q, want %q", summary.StopKind, wantStop)
+	}
+	if summary.WorkState == nil || *summary.WorkState != wantPlaceID {
+		t.Fatalf("stopSummary.workState = %#v, want %s", summary.WorkState, wantPlaceID)
+	}
+	if summary.LatestDispatch == nil || summary.LatestDispatch.DispatchId != "dispatch-stop-1" {
+		t.Fatalf("latestDispatch = %#v, want dispatch-stop-1", summary.LatestDispatch)
+	}
+	if summary.LatestDispatch.Status != wantDispatchStatus {
+		t.Fatalf("latestDispatch.status = %q, want %q", summary.LatestDispatch.Status, wantDispatchStatus)
+	}
+	if summary.LatestResultSummary == nil || *summary.LatestResultSummary != wantSummary {
+		t.Fatalf("latestResultSummary = %#v, want %q", summary.LatestResultSummary, wantSummary)
+	}
+	if summary.SuggestedRecoverySurface == nil || strings.TrimSpace(*summary.SuggestedRecoverySurface) == "" {
+		t.Fatalf("suggestedRecoverySurface = %#v, want operator recovery guidance", summary.SuggestedRecoverySurface)
+	}
+	if summary.SuggestedRecoveryAction == nil || strings.TrimSpace(*summary.SuggestedRecoveryAction) == "" {
+		t.Fatalf("suggestedRecoveryAction = %#v, want operator next step", summary.SuggestedRecoveryAction)
+	}
+}
+
+func TestProjectRuntime_InterruptedSessionIncludesStopSummary(t *testing.T) {
+	now := time.Date(2026, 6, 27, 8, 45, 0, 0, time.UTC)
+	token := &interfaces.Token{
+		ID:      "tok-goal-interrupted",
+		PlaceID: "goal:review",
+		Color: interfaces.TokenColor{
+			Name:       "Interrupted goal",
+			WorkID:     "work-goal-interrupted",
+			WorkTypeID: "goal",
+		},
+		CreatedAt: now.Add(-2 * time.Minute),
+		EnteredAt: now.Add(-1 * time.Minute),
+	}
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "session-interrupted"},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "goal",
+			Orchestrator: &interfaces.FactoryOrchestratorConfig{
+				Kind: interfaces.OrchestratorKindJavaScript,
+				JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+					Dialect:   "workflow-v1",
+					SourceRef: "factory/workflows/goal.js",
+				},
+			},
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking:  petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-interrupted": token}},
+			Topology: &state.Net{Places: map[string]*petri.Place{"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"}}},
+		},
+		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
+			ScriptStatus: "INTERRUPTED",
+			Dispatches: []interfaces.FactorySessionDispatchState{{
+				ID:             "dispatch-js-1",
+				Status:         "INTERRUPTED",
+				DispatchKind:   string(factoryapi.FactoryDispatchKindJAVASCRIPTAGENT),
+				Label:          "review child",
+				RelatedWorkIDs: []string{"work-goal-interrupted"},
+				FailureDetail: &interfaces.FactorySessionDispatchFailureDetail{
+					Reason:  "operator_interrupt",
+					Message: "Operator interrupted the dispatch",
+				},
+			}},
+		},
+		Now: now,
+	})
+	if runtime.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want interrupted summary")
+	}
+	if runtime.StopSummary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("stop kind = %q, want INTERRUPTED", runtime.StopSummary.StopKind)
+	}
+	if runtime.StopSummary.LatestDispatch == nil || runtime.StopSummary.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED {
+		t.Fatalf("latestDispatch = %#v, want interrupted dispatch", runtime.StopSummary.LatestDispatch)
+	}
+	if runtime.StopSummary.WorkId == nil || *runtime.StopSummary.WorkId != "work-goal-interrupted" {
+		t.Fatalf("stopSummary.workId = %#v, want work-goal-interrupted", runtime.StopSummary.WorkId)
+	}
+}
+
+func TestProjectRuntime_InterruptedSessionWithoutMatchingRelatedWorkLeavesWorkContextEmpty(t *testing.T) {
+	now := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
+	token := &interfaces.Token{
+		ID:      "tok-goal-review",
+		PlaceID: "goal:review",
+		Color: interfaces.TokenColor{
+			Name:       "Nearby goal",
+			WorkID:     "work-goal-review",
+			WorkTypeID: "goal",
+		},
+		CreatedAt: now.Add(-2 * time.Minute),
+		EnteredAt: now.Add(-1 * time.Minute),
+	}
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "session-interrupted-unmatched"},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "goal",
+			Orchestrator: &interfaces.FactoryOrchestratorConfig{
+				Kind: interfaces.OrchestratorKindJavaScript,
+				JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+					Dialect:   "workflow-v1",
+					SourceRef: "factory/workflows/goal.js",
+				},
+			},
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking:  petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-review": token}},
+			Topology: &state.Net{Places: map[string]*petri.Place{"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"}}},
+		},
+		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
+			ScriptStatus: "INTERRUPTED",
+			Dispatches: []interfaces.FactorySessionDispatchState{{
+				ID:             "dispatch-js-unmatched",
+				Status:         "INTERRUPTED",
+				DispatchKind:   string(factoryapi.FactoryDispatchKindJAVASCRIPTAGENT),
+				Label:          "review child",
+				RelatedWorkIDs: []string{"work-missing"},
+				FailureDetail: &interfaces.FactorySessionDispatchFailureDetail{
+					Reason:  "operator_interrupt",
+					Message: "Operator interrupted the dispatch",
+				},
+			}},
+		},
+		Now: now,
+	})
+	if runtime.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want interrupted summary")
+	}
+	if runtime.StopSummary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("stop kind = %q, want INTERRUPTED", runtime.StopSummary.StopKind)
+	}
+	if runtime.StopSummary.WorkId != nil {
+		t.Fatalf("stopSummary.workId = %#v, want nil when related work cannot be matched", runtime.StopSummary.WorkId)
+	}
+	if runtime.StopSummary.WorkName != nil {
+		t.Fatalf("stopSummary.workName = %#v, want nil when related work cannot be matched", runtime.StopSummary.WorkName)
+	}
+	if runtime.StopSummary.WorkState != nil {
+		t.Fatalf("stopSummary.workState = %#v, want nil when related work cannot be matched", runtime.StopSummary.WorkState)
 	}
 }
 
@@ -242,7 +551,7 @@ func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *tes
 			},
 		},
 		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
-			Phase:      "review",
+			Phase:        "review",
 			ScriptStatus: "RUNNING",
 			Dispatches: []interfaces.FactorySessionDispatchState{{
 				ID:           "dispatch-agent-1",
@@ -261,14 +570,14 @@ func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *tes
 				},
 			}},
 			Artifacts: []interfaces.FactorySessionArtifactState{{
-				ID:         "artifact-child-1",
-				Kind:       string(factoryapi.FactoryArtifactKindCHILDRESULT),
-				Visibility: string(factoryapi.FactoryArtifactVisibilityPUBLIC),
-				Label:      "Child result",
-				Summary:    "Agent output summary",
-				AuditMode:  string(factoryapi.FactoryArtifactAuditModeREDACTED),
+				ID:          "artifact-child-1",
+				Kind:        string(factoryapi.FactoryArtifactKindCHILDRESULT),
+				Visibility:  string(factoryapi.FactoryArtifactVisibilityPUBLIC),
+				Label:       "Child result",
+				Summary:     "Agent output summary",
+				AuditMode:   string(factoryapi.FactoryArtifactAuditModeREDACTED),
 				ContentHash: "sha256:child-result",
-				SizeBytes:  128,
+				SizeBytes:   128,
 				RedactionCounts: map[string]int{
 					"secrets": 1,
 				},

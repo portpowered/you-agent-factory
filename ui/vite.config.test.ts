@@ -16,6 +16,7 @@ describe("dashboard Vite config", () => {
     const expectedProxyPaths = [
       "/work",
       "^/factory-sessions/[^/]+/work$",
+      "^/factory-sessions/[^/]+/invocations$",
       "^/work-requests/[^/]+$",
       "^/factory-sessions/[^/]+/work-requests/[^/]+$",
       "^/work/[^/]+$",

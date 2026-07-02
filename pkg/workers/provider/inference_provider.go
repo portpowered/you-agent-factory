@@ -92,6 +92,14 @@ func WithProviderCommandRunner(runner CommandRunner) ScriptWrapProviderOption {
 	}
 }
 
+// WithInferenceProgressPublisher injects the internal session-stream publisher
+// used for additive provider progress and terminal stream markers.
+func WithInferenceProgressPublisher(publisher InferenceProgressPublisher) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) {
+		p.progressPublisher = publisher
+	}
+}
+
 // WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
 func WithMaterializeOptions(opts *materialize.Options) ScriptWrapProviderOption {
 	return func(p *ScriptWrapProvider) {
@@ -111,6 +119,8 @@ type ScriptWrapProvider struct {
 	// Logger is the structured logger for inference diagnostics. Nil disables logging.
 	Logger logging.Logger
 	exec   CommandRunner
+
+	progressPublisher InferenceProgressPublisher
 }
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
@@ -195,19 +205,23 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		logger.Error("inferencer: request failed",
 			cursorFailureLogFields(req, cursorProvider, result,
 				"error", err.Error())...)
-		return interfaces.InferenceResponse{}, normalizeProviderExecutionError(
+		providerErr := normalizeProviderExecutionError(
 			req.ModelProvider, result, err, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+		return interfaces.InferenceResponse{}, providerErr
 	}
 	if result.ExitCode != 0 {
 		logger.Error("inferencer: request failed",
 			cursorFailureLogFields(req, cursorProvider, result,
 				"exit_code", result.ExitCode)...)
-		return interfaces.InferenceResponse{}, normalizeProviderExitFailure(
+		providerErr := normalizeProviderExitFailure(
 			req.ModelProvider, result, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+		return interfaces.InferenceResponse{}, providerErr
 	}
 
 	if cursorProvider {
@@ -221,6 +235,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
 			"output_len", len(content))...)
+	p.publishCompletedFragment(req.Dispatch.DispatchID, providerSession)
 
 	return interfaces.InferenceResponse{
 		Content:         content,
@@ -365,13 +380,15 @@ func (p *ScriptWrapProvider) completeCursorInference(
 			cursorFailureLogFields(req, true, result,
 				"error", parseErr.Message)...)
 		failureDiagnostics := cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
+		providerErr := newProviderErrorWithDiagnostics(
 			parseErr.Type,
 			parseErr.Message,
 			parseErr.Cause,
 			effectiveProviderSession(req, result),
 			failureDiagnostics,
 		)
+		p.publishFailureFragment(req.Dispatch.DispatchID, effectiveProviderSession(req, result), providerErr)
+		return interfaces.InferenceResponse{}, providerErr
 	}
 	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
 	logger.Debug("inference results:",
@@ -381,11 +398,34 @@ func (p *ScriptWrapProvider) completeCursorInference(
 			"dispatcher", string(req.ModelProvider),
 			"output_len", len(parsed.Content),
 			"session_id", parsed.ProviderSession.ID)...)
+	p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
 	return interfaces.InferenceResponse{
 		Content:         parsed.Content,
 		ProviderSession: parsed.ProviderSession,
 		Diagnostics:     diagnostics,
 	}, nil
+}
+
+func (p *ScriptWrapProvider) publishCompletedFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata) {
+	if p == nil || p.progressPublisher == nil {
+		return
+	}
+	p.progressPublisher(CompletedFragment(dispatchID, providerSession))
+}
+
+func (p *ScriptWrapProvider) publishFailureFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, err error) {
+	if p == nil || p.progressPublisher == nil {
+		return
+	}
+	message := ""
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		message = strings.TrimSpace(providerErr.Message)
+	}
+	if message == "" && err != nil {
+		message = strings.TrimSpace(err.Error())
+	}
+	p.progressPublisher(FailedFragment(dispatchID, providerSession, message))
 }
 
 func formatProviderCommandFailure(provider string, result CommandResult, err error) string {
@@ -448,87 +488,3 @@ func effectiveProviderSession(req interfaces.ProviderInferenceRequest, result Co
 }
 
 var _ Provider = (*ScriptWrapProvider)(nil)
-
-const (
-	ProgressFragmentKind = "PROGRESS_FRAGMENT"
-	ResponseFragmentKind = "RESPONSE_FRAGMENT"
-)
-
-// InferenceProgressFragment is the provider-boundary shape for transient internal
-// session progress that must not enter canonical factory event history.
-type InferenceProgressFragment struct {
-	DispatchID         string
-	Kind               string
-	Payload            string
-	ProviderSessionRef *interfaces.ProviderSessionMetadata
-}
-
-// InferenceProgressPublisher receives provider progress fragments for one live
-// Factory Session internal response stream.
-type InferenceProgressPublisher func(fragment InferenceProgressFragment)
-
-// ProgressFragment builds one ordered progress fragment for a dispatch.
-func ProgressFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, payload string) InferenceProgressFragment {
-	return InferenceProgressFragment{
-		DispatchID:         strings.TrimSpace(dispatchID),
-		Kind:               ProgressFragmentKind,
-		Payload:            payload,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(providerSession),
-	}
-}
-
-// ResponseFragment builds one ordered response fragment for a dispatch.
-func ResponseFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, payload string) InferenceProgressFragment {
-	return InferenceProgressFragment{
-		DispatchID:         strings.TrimSpace(dispatchID),
-		Kind:               ResponseFragmentKind,
-		Payload:            payload,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(providerSession),
-	}
-}
-
-// InferenceProgressPublishingCommandRunner publishes internal response-stream
-// fragments while provider subprocess stdout/stderr grow.
-type InferenceProgressPublishingCommandRunner struct {
-	Publisher InferenceProgressPublisher
-	Logger    logging.Logger
-}
-
-// Run executes the provider subprocess and publishes incremental stdout/stderr
-// fragments into the configured internal session response stream.
-func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
-	if r.Publisher == nil {
-		return workerprocess.ExecCommandRunner{}.Run(ctx, req)
-	}
-	dispatchID := strings.TrimSpace(req.DispatchID)
-	return workerprocess.StreamingExecCommandRunner{
-		Observer: func(stream string, chunk []byte) {
-			if len(chunk) == 0 {
-				return
-			}
-			payload := string(chunk)
-			switch stream {
-			case workerprocess.OutputStreamStdout:
-				r.Publisher(ResponseFragment(dispatchID, nil, payload))
-			case workerprocess.OutputStreamStderr:
-				r.Publisher(ProgressFragment(dispatchID, nil, payload))
-			}
-		},
-		Logger: logging.EnsureLogger(r.Logger),
-	}.Run(ctx, req)
-}
-
-// NewInferenceProgressPublishingCommandRunner constructs a provider command
-// runner that publishes internal response-stream fragments during subprocess IO.
-func NewInferenceProgressPublishingCommandRunner(
-	publisher InferenceProgressPublisher,
-	logger logging.Logger,
-) CommandRunner {
-	if publisher == nil {
-		return workerprocess.ExecCommandRunner{}
-	}
-	return InferenceProgressPublishingCommandRunner{
-		Publisher: publisher,
-		Logger:    logger,
-	}
-}

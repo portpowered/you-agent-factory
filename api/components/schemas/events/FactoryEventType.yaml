@@ -16,6 +16,7 @@ x-enum-varnames:
   - FactoryEventTypeInferenceResponse
   - FactoryEventTypeScriptRequest
   - FactoryEventTypeScriptResponse
+  - FactoryEventTypeAgentRunResponse
   - FactoryEventTypeDispatchResponse
   - FactoryEventTypeWorkStateChange
   - FactoryEventTypeFactoryStateResponse
@@ -47,6 +48,7 @@ enum:
   - INFERENCE_RESPONSE
   - SCRIPT_REQUEST
   - SCRIPT_RESPONSE
+  - AGENT_RUN_RESPONSE
   - DISPATCH_RESPONSE
   - WORK_STATE_CHANGE
   - FACTORY_STATE_RESPONSE
@@ -78,6 +80,7 @@ x-enum-descriptions:
   - A model-worker provider attempt returned from the provider boundary.
   - A script-backed worker is about to invoke one concrete command attempt.
   - A script-backed worker command attempt returned or failed before a normal exit.
+  - An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
   - A workstation response finished processing and produced an outcome.
   - A work item moved between authored marking states.
   - The factory lifecycle state response was recorded.

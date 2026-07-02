@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
+import { Button } from "../../../components/ui";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardStatusPanel } from "./dashboard-status-panel";
 
@@ -61,5 +62,19 @@ describe("DashboardStatusPanel", () => {
       screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
     ).toBeTruthy();
     expect(screen.getByText("U").className).not.toContain("sr-only");
+  });
+
+  it("renders optional recovery actions below the detail copy", () => {
+    render(
+      <DashboardStatusPanel
+        actions={<Button>Retry clean replay</Button>}
+        detail="Checkpoint reset required."
+        title="Session recovery required"
+        tone="error"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Retry clean replay" })).toBeTruthy();
+    expect(screen.getByText("Checkpoint reset required.")).toBeTruthy();
   });
 });

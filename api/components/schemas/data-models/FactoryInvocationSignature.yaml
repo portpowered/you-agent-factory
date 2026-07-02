@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+description: >-
+  Canonical callable argument contract for invoking one factory. When present,
+  CLI, API, dashboard, docs, and packaged-factory surfaces should discover and
+  normalize invocation inputs from this shared schema instead of transport- or
+  factory-specific argument definitions.
+properties:
+  parameters:
+    type: array
+    description: Declared invocation parameters keyed by canonical parameter name.
+    items:
+      $ref: './FactoryInvocationParameter.yaml'
+  unknownNamedArgumentPolicy:
+    $ref: './FactoryInvocationUnknownNamedArgumentPolicy.yaml'
+    description: Policy for named inputs that do not match any declared parameter binding.
+  outputContract:
+    $ref: './FactoryInvocationOutputContract.yaml'
+    description: Optional customer-facing hint for the factory's primary output shape.
+  examples:
+    type: array
+    description: Example invocations rendered in docs, help, and inspection surfaces.
+    items:
+      $ref: './FactoryInvocationExample.yaml'

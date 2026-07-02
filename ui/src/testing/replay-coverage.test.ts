@@ -46,6 +46,16 @@ describe("replay coverage reporting", () => {
     );
   });
 
+  it("renders uncovered surfaces as none yet in the markdown matrix", () => {
+    const markdown = formatReplayCoverageReportMarkdown(
+      buildReplayCoverageReport(),
+    );
+
+    expect(markdown).toContain(
+      "| `script-request-history` | gap | none yet | Replay-driven mixed script and inference request-history rendering. |",
+    );
+  });
+
   it("reuses the replay coverage catalog for browser integration scenarios", () => {
     expect(
       listBrowserIntegrationReplayScenarios().map((scenario) => scenario.id),
@@ -70,6 +80,36 @@ describe("replay coverage reporting", () => {
   it("keeps replay coverage metadata internally consistent", () => {
     expect(validateReplayCoverageReport(buildReplayCoverageReport())).toEqual(
       [],
+    );
+  });
+
+  it("reports invalid scenario and surface metadata explicitly", () => {
+    const report = buildReplayCoverageReport();
+    const invalidReport = structuredClone(report);
+
+    invalidReport.scenarios[0] = {
+      ...invalidReport.scenarios[0],
+      surfaces: [],
+      verificationLayers: [],
+    };
+    invalidReport.scenarios[1] = {
+      ...invalidReport.scenarios[1],
+      surfaces: ["unknown-surface"],
+    };
+    invalidReport.surfaces[0] = {
+      ...invalidReport.surfaces[0],
+      scenarios: ["missing-scenario"],
+      status: "gap",
+    };
+
+    expect(validateReplayCoverageReport(invalidReport)).toEqual(
+      expect.arrayContaining([
+        "Scenario 'baseline' is missing verification layers.",
+        "Scenario 'baseline' is missing covered surfaces.",
+        "Scenario 'failureAnalysis' references unknown surface 'unknown-surface'.",
+        "Surface 'dashboard-shell' has status 'gap' but should be 'covered'.",
+        "Surface 'dashboard-shell' references unknown scenario 'missing-scenario'.",
+      ]),
     );
   });
 });

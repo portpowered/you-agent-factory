@@ -4,8 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -321,7 +319,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				ModelProvider: string(interfaces.ModelProviderCursor),
 				UserMessage:   "summarize the workspace",
 			},
-			want: []string{"-p", "--output-format", "json", "summarize the workspace"},
+			want: []string{"-p", "--output-format", "stream-json", "--stream-partial-output", "summarize the workspace"},
 		},
 		{
 			name: "WithModelSessionAndForce",
@@ -332,7 +330,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				UserMessage:   "run the tests",
 			},
 			skipPermissions: true,
-			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "json", "run the tests"},
+			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "stream-json", "--stream-partial-output", "run the tests"},
 		},
 		{
 			name: "WithWorkspace",
@@ -341,7 +339,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				WorkingDirectory: "/tmp/project",
 				UserMessage:      "inspect the repo",
 			},
-			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "json", "inspect the repo"},
+			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "stream-json", "--stream-partial-output", "inspect the repo"},
 		},
 	}
 
@@ -802,14 +800,12 @@ func assertProviderExitFailureClassification(t *testing.T, behavior providerBeha
 
 func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(t *testing.T) {
 	t.Parallel()
-
 	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		Model:         "openai/gpt-5",
 		OpenCodeAgent: "implementer",
 		WorkerType:    interfaces.WorkerTypeModel,
 	})
-
 	if got := diagnostics.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
 		t.Fatalf("opencode_agent = %q, want implementer", got)
 	}
@@ -817,13 +813,11 @@ func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(
 
 func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testing.T) {
 	t.Parallel()
-
 	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		Model:         "openai/gpt-5",
 		WorkerType:    interfaces.WorkerTypeModel,
 	})
-
 	if _, ok := diagnostics.Provider.RequestMetadata["opencode_agent"]; ok {
 		t.Fatalf("request metadata = %#v, want opencode_agent omitted", diagnostics.Provider.RequestMetadata)
 	}
@@ -831,67 +825,12 @@ func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testi
 
 func TestWorkDiagnosticsForInferenceRequest_SafeProjectionPreservesOpenCodeAgent(t *testing.T) {
 	t.Parallel()
-
 	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		OpenCodeAgent: "implementer",
 	})
 	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
-
 	if got := safe.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
 		t.Fatalf("safe opencode_agent = %q, want implementer", got)
-	}
-}
-
-func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *testing.T) {
-	t.Parallel()
-
-	scriptPath := filepath.Join(t.TempDir(), "stream.sh")
-	script := "#!/bin/sh\necho stdout-chunk\necho stderr-chunk 1>&2\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
-
-	var publishedMu sync.Mutex
-	var published []InferenceProgressFragment
-	runner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
-		publishedMu.Lock()
-		published = append(published, fragment)
-		publishedMu.Unlock()
-	}, nil)
-
-	result, err := runner.Run(context.Background(), CommandRequest{
-		Command:    scriptPath,
-		DispatchID: "dispatch-stream-1",
-	})
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if !strings.Contains(string(result.Stdout), "stdout-chunk") {
-		t.Fatalf("stdout = %q, want stdout-chunk", result.Stdout)
-	}
-	publishedMu.Lock()
-	defer publishedMu.Unlock()
-	if len(published) < 2 {
-		t.Fatalf("published events = %d, want at least 2", len(published))
-	}
-
-	var sawResponse bool
-	var sawProgress bool
-	for _, fragment := range published {
-		if fragment.DispatchID != "dispatch-stream-1" {
-			t.Fatalf("dispatch = %q, want dispatch-stream-1", fragment.DispatchID)
-		}
-		switch fragment.Kind {
-		case ResponseFragmentKind:
-			sawResponse = true
-		case ProgressFragmentKind:
-			sawProgress = true
-		default:
-			t.Fatalf("unexpected kind %q", fragment.Kind)
-		}
-	}
-	if !sawResponse || !sawProgress {
-		t.Fatalf("published fragments = %#v, want both response and progress kinds", published)
 	}
 }

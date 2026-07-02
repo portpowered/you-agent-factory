@@ -97,9 +97,13 @@ with pristine embedded content.
 
 Edit distinguishing fields such as:
 
-- `workers/tts-executor/AGENTS.md` prompt body
-- `workstations/execute-tts/AGENTS.md` workstation prompt
+- `workers/tts-executor/AGENTS.md` inference worker operation context
+- `workstations/execute-tts/AGENTS.md` workstation routing or binding notes
 - `factory.json` worker model or resource settings
+
+The default factory is inference behavior (`INFERENCE_WORKER` plus
+`INFERENCE_RUN`), not an agent loop. Do not add agent-loop fields such as
+`onContinue` or repeater routing when customizing TTS behavior.
 
 The next `you run --named @you/tts` invocation loads the edited on-disk factory
 immediately. No reinstall, cache clear, or special reload step is required.

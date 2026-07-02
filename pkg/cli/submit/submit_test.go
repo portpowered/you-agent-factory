@@ -769,7 +769,7 @@ func TestSubmit_JSONModeDoesNotEmitSuccessOnFailure(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
 			Message: "invalid payload",
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 			Family:  factoryapi.ErrorFamilyBadRequest,
 		}); err != nil {
 			t.Errorf("encode error response: %v", err)

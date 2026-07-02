@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
@@ -208,10 +209,10 @@ func TestFactoryService_BuildSimpleDashboardRenderInputProjectsSelectedTickFromE
 		engineState:   engineState,
 		factoryEvents: dashboardProjectionEventsForTest(t, dispatch),
 	}
-	svc := &FactoryService{logger: zap.NewNop()}
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: mock})
+	svc := runtimehost.NewTestHost(runtimehost.TestHostOptions{Logger: zap.NewNop()})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: mock})
 
-	input, err := svc.buildSimpleDashboardRenderInput(context.Background(), time.Now())
+	input, err := svc.BuildSimpleDashboardRenderInput(context.Background(), time.Now())
 	if err != nil {
 		t.Fatalf("buildSimpleDashboardRenderInput: %v", err)
 	}
@@ -274,14 +275,14 @@ func TestFactoryService_RenderDashboardLogsEventProjectionErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			core, observedLogs := observer.New(zap.ErrorLevel)
 			renderCalls := 0
-			svc := &FactoryService{
-				policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{
+			svc := runtimehost.NewTestHost(runtimehost.TestHostOptions{
+				Policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{
 					SimpleDashboardRenderer: func(SimpleDashboardRenderInput) { renderCalls++ },
 				}),
-				logger: zap.New(core),
-			}
+				Logger: zap.New(core),
+			})
 			bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-				factory: &aggregateSnapshotFactory{
+				Factory: &aggregateSnapshotFactory{
 					engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 						Topology:  &state.Net{ID: "aggregate-topology"},
 						TickCount: 1,
@@ -291,7 +292,7 @@ func TestFactoryService_RenderDashboardLogsEventProjectionErrors(t *testing.T) {
 				},
 			})
 
-			svc.renderDashboard(context.Background())
+			svc.RenderDashboard(context.Background())
 
 			if renderCalls != 0 {
 				t.Fatalf("renderer calls = %d, want 0 after projection error", renderCalls)
@@ -342,19 +343,20 @@ func TestBuildFactoryService_ConfigWithAllOptions(t *testing.T) {
 	}
 
 	// Verify config was preserved.
-	if svc.coordinatorPolicy().mockWorkersConfig == nil {
+	cfg := svc.ServiceConfig()
+	if cfg == nil || cfg.MockWorkersConfig == nil {
 		t.Error("expected MockWorkersConfig to be set")
 	}
-	if svc.coordinatorPolicy().port != 9999 {
-		t.Errorf("expected Port 9999, got %d", svc.coordinatorPolicy().port)
+	if cfg == nil || cfg.Port != 9999 {
+		t.Errorf("expected Port 9999, got %d", cfg.Port)
 	}
-	if svc.coordinatorPolicy().workFile != workFile {
-		t.Errorf("expected WorkFile %q, got %q", workFile, svc.coordinatorPolicy().workFile)
+	if cfg == nil || cfg.WorkFile != workFile {
+		t.Errorf("expected WorkFile %q, got %q", workFile, cfg.WorkFile)
 	}
-	if svc.coordinatorPolicy().simpleDashboardRenderer == nil {
+	if cfg == nil || cfg.SimpleDashboardRenderer == nil {
 		t.Error("expected SimpleDashboardRenderer to be set")
 	}
-	if svc.coordinatorPolicy().apiServerStarter == nil {
+	if cfg == nil || cfg.APIServerStarter == nil {
 		t.Error("expected APIServerStarter to be set")
 	}
 
@@ -669,7 +671,7 @@ func renderSimpleDashboardForTest(
 	rendered <-chan SimpleDashboardRenderInput,
 ) SimpleDashboardRenderInput {
 	t.Helper()
-	svc.renderDashboard(context.Background())
+	svc.RenderDashboard(context.Background())
 	select {
 	case input := <-rendered:
 		return input

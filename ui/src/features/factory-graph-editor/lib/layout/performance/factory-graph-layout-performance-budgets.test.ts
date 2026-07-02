@@ -21,6 +21,10 @@ describe("factory graph layout performance budgets", () => {
     expect(
       FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.stressThousand.initialProjectionMs,
     ).toBe(90_000);
+    expect(
+      FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.stressThousand
+        .saveLayoutRecomputationMs,
+    ).toBe(125);
   });
 
   it("measures median async operation duration with warmup and iterations", async () => {

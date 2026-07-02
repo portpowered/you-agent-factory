@@ -61,3 +61,7 @@ export function useDashboardSession(): SessionScope {
 
   return scope;
 }
+
+export function useSetDashboardSessionID(): (sessionID: string | null) => void {
+  return useDashboardSessionStore((state) => state.setSelectedSessionID);
+}

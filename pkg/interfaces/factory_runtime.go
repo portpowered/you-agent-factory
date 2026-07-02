@@ -41,6 +41,7 @@ type SubmitRequest struct {
 	Tags                     map[string]string `json:"tags"`
 	Relations                []Relation        `json:"relations"`
 	ExecutionID              string            `json:"executionId,omitempty"`
+	InvocationArguments      *InvocationArguments
 }
 
 // WorkRequestType identifies the canonical request contract accepted by factory submit surfaces.
@@ -121,6 +122,29 @@ const (
 	WorkContentPartTypeJSON   WorkContentPartType = "JSON"
 	WorkContentPartTypeBinary WorkContentPartType = "BINARY"
 )
+
+// InvocationArguments carries transport-independent invocation parameter
+// normalization data through runtime-only work and dispatch paths.
+type InvocationArguments struct {
+	Arguments map[string]InvocationArgument `json:"-"`
+}
+
+// InvocationArgument is one canonical invocation parameter value bundle keyed
+// by authored internal parameter name.
+type InvocationArgument struct {
+	Values    []string                   `json:"-"`
+	ValueMode string                     `json:"-"`
+	Sensitive bool                       `json:"-"`
+	Sources   []InvocationArgumentSource `json:"-"`
+}
+
+// InvocationArgumentSource records where one canonical invocation parameter was
+// resolved from without exposing raw values.
+type InvocationArgumentSource struct {
+	Kind   string `json:"-"`
+	Name   string `json:"-"`
+	Redact bool   `json:"-"`
+}
 
 // CanonicalEventTime normalizes runtime event boundary timestamps to UTC while
 // preserving zero values so optional/fallback handling remains explicit.
@@ -311,12 +335,13 @@ const (
 // EngineStateSnapshot is a unified point-in-time snapshot of the full engine
 // state: runtime state, factory lifecycle, session metrics, and uptime.
 type EngineStateSnapshot[TMarking any, TTopology any] struct {
-	RuntimeStatus   RuntimeStatus             `json:"runtime_status"`
-	Marking         TMarking                  `json:"marking"`
-	Dispatches      map[string]*DispatchEntry `json:"dispatches"`
-	InFlightCount   int                       `json:"in_flight_count"`
-	Results         []WorkResult              `json:"results"`
-	DispatchHistory []CompletedDispatch       `json:"dispatch_history"`
+	RuntimeStatus      RuntimeStatus             `json:"runtime_status"`
+	StreamGenerationID string                    `json:"stream_generation_id,omitempty"`
+	Marking            TMarking                  `json:"marking"`
+	Dispatches         map[string]*DispatchEntry `json:"dispatches"`
+	InFlightCount      int                       `json:"in_flight_count"`
+	Results            []WorkResult              `json:"results"`
+	DispatchHistory    []CompletedDispatch       `json:"dispatch_history"`
 	// ActiveThrottlePauses exposes active provider/model pause windows owned by
 	// dispatcher policy for tests and observability reconstruction.
 	ActiveThrottlePauses []ActiveThrottlePause `json:"active_throttle_pauses,omitempty"`
@@ -342,6 +367,7 @@ type EngineStateSnapshot[TMarking any, TTopology any] struct {
 func (s EngineStateSnapshot[TMarking, TTopology]) RuntimeStateSnapshot() EngineStateSnapshot[TMarking, TTopology] {
 	return EngineStateSnapshot[TMarking, TTopology]{
 		RuntimeStatus:        s.RuntimeStatus,
+		StreamGenerationID:   s.StreamGenerationID,
 		Marking:              s.Marking,
 		Dispatches:           s.Dispatches,
 		InFlightCount:        s.InFlightCount,
@@ -499,14 +525,14 @@ type FactorySessionJavaScriptCheckpointRef struct {
 // FactorySessionJavaScriptRuntimeState carries JavaScript orchestrator runtime
 // projection fields for one factory session.
 type FactorySessionJavaScriptRuntimeState struct {
-	Phase               string                                `json:"phase"`
-	Phases              []string                              `json:"phases"`
-	ArgsDigest          string                                `json:"argsDigest"`
+	Phase               string                                  `json:"phase"`
+	Phases              []string                                `json:"phases"`
+	ArgsDigest          string                                  `json:"argsDigest"`
 	Checkpoints         []FactorySessionJavaScriptCheckpointRef `json:"checkpoints"`
-	ScriptStatus        string                                `json:"scriptStatus"`
-	QueuedDispatches    int                                   `json:"queuedDispatches"`
-	RunningDispatches   int                                   `json:"runningDispatches"`
-	CompletedDispatches int                                   `json:"completedDispatches"`
+	ScriptStatus        string                                  `json:"scriptStatus"`
+	QueuedDispatches    int                                     `json:"queuedDispatches"`
+	RunningDispatches   int                                     `json:"runningDispatches"`
+	CompletedDispatches int                                     `json:"completedDispatches"`
 	Dispatches          []FactorySessionDispatchState           `json:"dispatches,omitempty"`
 	Artifacts           []FactorySessionArtifactState           `json:"artifacts,omitempty"`
 	PrimaryResult       []WorkContentPart                       `json:"primaryResult,omitempty"`

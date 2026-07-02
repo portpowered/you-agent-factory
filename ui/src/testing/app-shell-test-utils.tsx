@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, type Mock, vi } from "vitest";
+import { afterEach, beforeEach, expect, vi } from "vitest";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
@@ -20,23 +20,32 @@ import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-
 import { reloadDashboardLayoutFromStorage } from "../features/bento/hooks/useDashboardLayout";
 import { useDashboardBentoStore } from "../features/bento/state/dashboardBentoStore";
 import {
+  currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
   useCurrentFactoryDocument,
 } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
 import {
-  createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import {
+  chainRenderAppFetchMock,
+  type FetchMock,
+  type RenderAppFetchOverride,
+} from "./app-shell-fetch-test-utils";
+import {
   defaultFactorySessionSummary,
   fetchRequestPath,
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
+import {
+  buildAppShellStreamIdentity,
+  handleFactorySessionPreflightRequest,
+} from "./app-shell-session-preflight-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import {
   seedTimelineSnapshot,
@@ -48,6 +57,16 @@ import {
   mockGetSessionFactory,
   sessionFactoryDocumentFromSnapshot,
 } from "./session-factory-mocks";
+
+export {
+  chainRenderAppFetchMock,
+  fetchCallPaths,
+  jsonResponse,
+  lastFetchCallBody,
+  nonPromptTemplateFetchPaths,
+  type FetchMock,
+  type RenderAppFetchOverride,
+} from "./app-shell-fetch-test-utils";
 
 export {
   renderWithDashboardSessionTest,
@@ -106,10 +125,6 @@ interface RenderAppOptions {
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
-type FetchMock = Mock<
-  (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
->;
-
 interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
@@ -119,7 +134,6 @@ let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
-
 export const terminalSnapshot = {
   ...semanticWorkflowDashboardSnapshot,
   tick_count: 4,
@@ -230,6 +244,7 @@ export function renderApp({
   traceFixtures = {},
   workstationRequestsByDispatchID = {},
 }: RenderAppOptions): RenderAppResult {
+  const availableFactorySessions = factorySessions ?? [defaultFactorySessionSummary];
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -240,9 +255,31 @@ export function renderApp({
   });
   queryClients.push(queryClient);
   if (seedCurrentFactoryDocument) {
+    const resolvedSessionID = sessionID ?? DEFAULT_FACTORY_SESSION_ID;
+    const sessionSummary =
+      availableFactorySessions.find((session) => session.id === resolvedSessionID) ??
+      availableFactorySessions[0];
+    if (!sessionSummary) {
+      throw new Error("expected at least one factory session summary for app-shell seeding");
+    }
+    const currentFactoryDocument = sessionFactoryDocumentFromSnapshot(snapshot);
+    const streamIdentity = buildAppShellStreamIdentity(sessionSummary, snapshot);
+
     queryClient.setQueryData(
-      currentFactoryDocumentQueryKey(sessionID ?? DEFAULT_FACTORY_SESSION_ID),
-      sessionFactoryDocumentFromSnapshot(snapshot),
+      currentFactoryDocumentQueryKey(resolvedSessionID, streamIdentity),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDefinitionQueryKey(resolvedSessionID, streamIdentity),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(resolvedSessionID),
+      currentFactoryDocument,
+    );
+    queryClient.setQueryData(
+      currentFactoryDefinitionQueryKey(resolvedSessionID),
+      currentFactoryDocument,
     );
   }
 
@@ -252,11 +289,14 @@ export function renderApp({
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = fetchRequestPath(input);
         const method = (init?.method ?? "GET").toUpperCase();
-
-        if (path === "/factory-sessions") {
-          return jsonResponse({
-            sessions: factorySessions ?? [defaultFactorySessionSummary],
-          });
+        const preflightResponse = handleFactorySessionPreflightRequest({
+          availableFactorySessions,
+          method,
+          path,
+          snapshot,
+        });
+        if (preflightResponse) {
+          return preflightResponse;
         }
 
         if (
@@ -315,88 +355,6 @@ export async function renderAppWithDashboardShell(
   return result;
 }
 
-export function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
-  return fetchMock.mock.calls.map(([input]) =>
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? `${input.pathname}${input.search}`
-        : input.url,
-  );
-}
-
-export function nonPromptTemplateFetchPaths(
-  fetchMock: ReturnType<typeof vi.fn>,
-) {
-  return fetchCallPaths(fetchMock).filter(
-    (path) =>
-      !path.includes("/prompt-template-contract") &&
-      !path.includes("/prompt-template-validation") &&
-      path !== "/factory-sessions" &&
-      !path.endsWith("/factory"),
-  );
-}
-
-export type RenderAppFetchOverride = (
-  path: string,
-  method: string,
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response | undefined>;
-
-export function chainRenderAppFetchMock(
-  fetchMock: FetchMock,
-  override: RenderAppFetchOverride,
-): void {
-  const defaultHandler = fetchMock.getMockImplementation();
-  if (defaultHandler == null) {
-    throw new Error("fetchMock has no default implementation");
-  }
-
-  fetchMock.mockImplementation(async (input, init) => {
-    const path = fetchRequestPath(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const overridden = await override(path, method, input, init);
-    if (overridden !== undefined) {
-      return overridden;
-    }
-
-    return defaultHandler(input, init);
-  });
-}
-
-export function lastFetchCallBody(
-  fetchMock: FetchMock,
-  predicate: (path: string, method: string) => boolean,
-): unknown {
-  for (let index = fetchMock.mock.calls.length - 1; index >= 0; index -= 1) {
-    const [input, init] = fetchMock.mock.calls[index] ?? [];
-    const path = fetchRequestPath(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    if (!predicate(path, method)) {
-      continue;
-    }
-
-    return JSON.parse(String(init?.body ?? "{}"));
-  }
-
-  throw new Error("No matching fetch call found");
-}
-
-export function jsonResponse(
-  body: unknown,
-  status = 200,
-  statusText?: string,
-): Response {
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    status,
-    statusText,
-  });
-}
-
 export function createFactoryImportValue(): FactoryPngImportValue {
   return {
     factory: {
@@ -446,6 +404,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });
+    useDashboardStreamStore.getState().resetStreamState();
     resetCurrentFactoryDocumentMock();
   });
 
@@ -461,9 +420,7 @@ export function registerAppDashboardTestLifecycle(): void {
     useExportDialogStore.setState({
       isExportDialogOpen: false,
     });
-    useDashboardStreamStore.setState({
-      streamState: createDefaultDashboardStreamState(),
-    });
+    useDashboardStreamStore.getState().resetStreamState();
     useDashboardSessionStore.setState({
       selectedSessionID: "~default",
     });

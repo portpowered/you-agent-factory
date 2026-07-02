@@ -50,6 +50,11 @@ func TestShow_HumanOutputRendersJavaScriptFactorySession(t *testing.T) {
 		"Factory session:\tsession-beta",
 		"Orchestrator kind:\tJAVASCRIPT",
 		"Session started:\t",
+		"Stop summary:\tkind=INTERRUPTED session=session-beta work=Review child [work-review-1] state=goal:review",
+		"Stop dispatch:\tdispatch-1 status=INTERRUPTED kind=JAVASCRIPT_AGENT workstation=review child",
+		"Stop result:\tDispatch interrupted while waiting for review output",
+		"Recovery surface:\texisting dispatch retry, work repair, or session workflow controls",
+		"Recovery action:\tInspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery.",
 		"Dispatch:\tdispatch-1 (review child) status=RECONCILED kind=JAVASCRIPT_AGENT",
 		"Artifact ref:\tartifact-1 (review output) kind=CHILD_RESULT visibility=PUBLIC",
 		"Partial result ref:\tartifact-partial (FINDING)",
@@ -193,6 +198,12 @@ func sampleFactorySession() factoryapi.FactorySession {
 	label := "plan"
 	dispatchLabel := "review child"
 	artifactLabel := "review output"
+	workName := "Review child"
+	workID := "work-review-1"
+	workState := "goal:review"
+	stopResult := "Dispatch interrupted while waiting for review output"
+	recoverySurface := "existing dispatch retry, work repair, or session workflow controls"
+	recoveryAction := "Inspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery."
 	startedAt := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
 	return factoryapi.FactorySession{
@@ -210,6 +221,22 @@ func sampleFactorySession() factoryapi.FactorySession {
 			Lifecycle: factoryapi.FactorySessionLifecycle{
 				StartedAt: startedAt,
 				UpdatedAt: updatedAt,
+			},
+			StopSummary: &factoryapi.FactoryStopSummary{
+				SessionId:                "session-beta",
+				StopKind:                 factoryapi.FactoryStopKind("INTERRUPTED"),
+				WorkId:                   &workID,
+				WorkName:                 &workName,
+				WorkState:                &workState,
+				LatestResultSummary:      &stopResult,
+				SuggestedRecoverySurface: &recoverySurface,
+				SuggestedRecoveryAction:  &recoveryAction,
+				LatestDispatch: &factoryapi.FactoryStopDispatchSummary{
+					DispatchId:      "dispatch-1",
+					Status:          factoryapi.FactoryDispatchStatusINTERRUPTED,
+					DispatchKind:    factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+					WorkstationName: &dispatchLabel,
+				},
 			},
 			Artifacts: &[]factoryapi.FactoryArtifact{{
 				Id:         "artifact-1",
@@ -231,8 +258,8 @@ func sampleFactorySession() factoryapi.FactorySession {
 			},
 			Usage: factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
 			Javascript: &factoryapi.FactorySessionJavaScriptProjection{
-				Phase:  &phase,
-				Phases: []string{"plan", "review"},
+				Phase:        &phase,
+				Phases:       []string{"plan", "review"},
 				ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusIDLE,
 				ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
 					Queued:    1,
@@ -248,6 +275,200 @@ func sampleFactorySession() factoryapi.FactorySession {
 		},
 	}
 }
+
+func TestShow_DurableSessionJSONUsesDurableReadModel(t *testing.T) {
+	interruptedAt := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/factory-sessions/dur-sess-js-interrupted-001"; got != want {
+			t.Fatalf("path = %q, want %q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionDurableReadModel{
+			SessionId:        "dur-sess-js-interrupted-001",
+			Status:           factoryapi.FactorySessionDurableLifecycleStatusInterrupted,
+			OrchestratorKind: factoryapi.JAVASCRIPT,
+			Lifecycle: &factoryapi.FactorySessionDurableLifecycleTimestamps{
+				InterruptedAt: &interruptedAt,
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := Show(ShowConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-js-interrupted-001",
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Show durable JSON: %v", err)
+	}
+
+	var session factoryapi.FactorySessionDurableReadModel
+	if err := json.Unmarshal(out.Bytes(), &session); err != nil {
+		t.Fatalf("decode durable JSON: %v", err)
+	}
+	if session.SessionId != "dur-sess-js-interrupted-001" {
+		t.Fatalf("sessionId = %q", session.SessionId)
+	}
+	if session.Status != factoryapi.FactorySessionDurableLifecycleStatusInterrupted {
+		t.Fatalf("status = %q, want INTERRUPTED", session.Status)
+	}
+}
+
+func TestShow_DurableSessionHumanOutputRendersLifecycleContinuity(t *testing.T) {
+	interruptedAt := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
+	resumedAt := time.Date(2026, 6, 30, 12, 5, 0, 0, time.UTC)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionDurableReadModel{
+			SessionId:        "dur-sess-js-interrupted-001",
+			Status:           factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+			OrchestratorKind: factoryapi.JAVASCRIPT,
+			Lifecycle: &factoryapi.FactorySessionDurableLifecycleTimestamps{
+				InterruptedAt: &interruptedAt,
+				ResumedAt:     &resumedAt,
+			},
+			ResultSummary: &factoryapi.FactorySessionDurableResultSummary{
+				ResultStatus: factoryapi.FactorySessionResultStatusFinal,
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := Show(ShowConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-js-interrupted-001",
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Show durable human: %v", err)
+	}
+
+	output := out.String()
+	for _, want := range []string{
+		"Factory session:\tdur-sess-js-interrupted-001",
+		"Lifecycle status:\tSUCCEEDED",
+		"Interrupted at:\t2026-06-30T12:00:00Z",
+		"Resumed at:\t2026-06-30T12:05:00Z",
+		"Result status:\tFINAL",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestDispatches_DurableSessionJSONUsesListFactorySessionDispatchesResponse(t *testing.T) {
+	label := "step-one"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.Path, "/factory-sessions/dur-sess-js-interrupted-001/dispatches"; got != want {
+			t.Fatalf("path = %q, want %q", got, want)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionDispatchesResponse{
+			SessionId: "dur-sess-js-interrupted-001",
+			Dispatches: []factoryapi.FactorySessionDispatchSummary{
+				{
+					Id:           "dispatch-1",
+					Status:       factoryapi.FactoryDispatchStatusCOMPLETED,
+					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+					Label:        &label,
+				},
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := Dispatches(DispatchesConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-js-interrupted-001",
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Dispatches durable JSON: %v", err)
+	}
+
+	var listed factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(out.Bytes(), &listed); err != nil {
+		t.Fatalf("decode dispatches JSON: %v", err)
+	}
+	if listed.SessionId != "dur-sess-js-interrupted-001" {
+		t.Fatalf("sessionId = %q", listed.SessionId)
+	}
+	if len(listed.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one dispatch", listed.Dispatches)
+	}
+}
+
+func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionDispatchesResponse{
+			SessionId: "dur-sess-js-interrupted-001",
+			Dispatches: []factoryapi.FactorySessionDispatchSummary{
+				{
+					Id:           "dispatch-1",
+					Status:       factoryapi.FactoryDispatchStatusCOMPLETED,
+					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+				},
+				{
+					Id:           "dispatch-2",
+					Status:       factoryapi.FactoryDispatchStatusINTERRUPTED,
+					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+				},
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := Dispatches(DispatchesConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-js-interrupted-001",
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Dispatches durable human: %v", err)
+	}
+
+	output := out.String()
+	for _, want := range []string{
+		"Factory session dur-sess-js-interrupted-001 dispatches (2):",
+		"- dispatch-1 COMPLETED JAVASCRIPT_AGENT",
+		"- dispatch-2 INTERRUPTED JAVASCRIPT_AGENT",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestDispatches_RejectsNonDurableSessionID(t *testing.T) {
+	err := Dispatches(DispatchesConfig{
+		Server:    "http://127.0.0.1:1",
+		SessionID: "session-beta",
+		Output:    ioDiscard{},
+	})
+	if err == nil {
+		t.Fatal("expected error for non-durable session id")
+	}
+	if !strings.Contains(err.Error(), "dur-sess-*") {
+		t.Fatalf("error = %q, want durable session requirement", err.Error())
+	}
+}
+
+type ioDiscard struct{}
+
+func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }
 
 func samplePetriFactorySession() factoryapi.FactorySession {
 	return factoryapi.FactorySession{

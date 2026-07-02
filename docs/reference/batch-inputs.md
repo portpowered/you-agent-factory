@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-03
+last-modified: 2026-07-01
 doc-id: agent-factory/guides/batch-inputs
 ---
 
@@ -454,6 +454,35 @@ Avoid setting tag names that begin with `_work_`. The factory writes
 Declare batch relations by name. Do not use `targetWorkId` in submitted batch
 relations; target work IDs are resolved during normalization and may appear in
 events after submission.
+
+## Visualize batch dependencies (`you work visualize`)
+
+Inspect declared work dependencies in a local batch file without submitting it
+to a factory. The command is **read-only**: it parses the batch JSON from disk,
+derives a dependency graph, and writes diagram text to stdout. It does not submit
+work, contact a running factory, or render diagram images directly.
+
+Graph nodes represent work items from `works[]`. Directed edges represent
+declared batch relations (`DEPENDS_ON` and `PARENT_CHILD`) using
+`sourceWorkName` → `targetWorkName` semantics from the batch file.
+
+| Output | Command |
+|--------|---------|
+| Raw Mermaid `flowchart` (default) | `you work visualize <batch-file.json>` |
+| Markdown with fenced `mermaid` block | `you work visualize --format markdown-mermaid <batch-file.json>` |
+
+Redirect stdout to save the diagram for your own renderer or docs tooling:
+
+```text
+you work visualize batch.json > my-graph.mermaid
+you work visualize --format markdown-mermaid batch.json > graph.md
+```
+
+On success, graph output goes to stdout and diagnostics go to stderr. Invalid
+JSON, unsupported batch shape, missing files, and unsupported `--format` values
+exit non-zero with an empty stdout graph.
+
+See `you docs relationships` for relation semantics and validation rules.
 
 ## Validation Checklist
 

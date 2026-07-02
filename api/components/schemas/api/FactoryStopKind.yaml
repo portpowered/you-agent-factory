@@ -1,0 +1,7 @@
+type: string
+description: Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+enum:
+  - PAUSED
+  - BLOCKED
+  - NEEDS_HUMAN
+  - INTERRUPTED

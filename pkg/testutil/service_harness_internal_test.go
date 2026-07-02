@@ -12,7 +12,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
+	"go.uber.org/zap/zapcore"
 )
+
+type waitUntilCancelExecutor struct{}
+
+func (waitUntilCancelExecutor) Execute(ctx context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	<-ctx.Done()
+	return interfaces.WorkResult{Outcome: interfaces.OutcomeFailed}, ctx.Err()
+}
 
 func TestServiceTestHarnessMarkingFallsBackToCachedSnapshot(t *testing.T) {
 	cfg := PipelineConfig(1, "processor")
@@ -42,6 +52,63 @@ func TestServiceTestHarnessMarkingFallsBackToCachedSnapshot(t *testing.T) {
 	}
 	if got := len(snap.TokensInPlace("task:init")); got != 0 {
 		t.Fatalf("TokensInPlace(task:init) = %d, want 0", got)
+	}
+}
+
+func TestNewServiceTestHarness_WithZapLogger_PreservesCapturingLoggerThroughRun(t *testing.T) {
+	cfg := PipelineConfig(1, "processor")
+	dir := ScaffoldFactoryDir(t, cfg)
+	logDir := t.TempDir()
+
+	capturingLogger, observed := testdeps.CapturingZapLogger(zapcore.InfoLevel)
+	h := NewServiceTestHarness(t, dir,
+		WithZapLogger(capturingLogger),
+		WithRuntimeFileLoggingEnabled(true),
+		WithRuntimeLogDir(logDir),
+		WithRuntimeInstanceID("harness-capture"),
+	)
+	h.MockWorker("processor", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+
+	if err := h.SubmitWork("task", []byte(`{"title":"capture harness logger"}`)); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
+	h.RunUntilComplete(t, 5*time.Second)
+
+	logs := observed.FilterMessage("factory started").All()
+	if len(logs) != 1 {
+		t.Fatalf("factory started logs = %d, want 1", len(logs))
+	}
+}
+
+func TestNewServiceTestHarness_WithInvocationMetricsRecorder_RecordsSessionInvocationMetrics(t *testing.T) {
+	cfg := PipelineConfig(1, "processor")
+	dir := ScaffoldFactoryDir(t, cfg)
+
+	recorder := testdeps.NewRecordingInvocationMetrics()
+	h := NewServiceTestHarness(t, dir,
+		WithInvocationMetricsRecorder(recorder),
+		WithRunAsync(),
+	)
+	h.SetCustomExecutor("processor", waitUntilCancelExecutor{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := h.SubmitWork("task", []byte(`{"title":"keep runtime available for invocation metrics"}`)); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
+
+	errCh := h.RunInBackground(ctx)
+	if err := h.WaitForRuntimeAvailability(ctx, errCh); err != nil {
+		t.Fatalf("WaitForRuntimeAvailability: %v", err)
+	}
+
+	_, err := h.svc.InvokeFactorySession(ctx, runtimehost.DefaultFactorySessionID, factoryapi.InvocationRequest{})
+	if err == nil {
+		t.Fatal("InvokeFactorySession() error = nil, want invocation error")
+	}
+	if !recorder.Contains(runtimehost.InvocationMetricNormalizationAttempts, nil) {
+		t.Fatalf("expected %q invocation metric via harness recorder", runtimehost.InvocationMetricNormalizationAttempts)
 	}
 }
 

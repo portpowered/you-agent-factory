@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 )
 
 const defaultAudioContentType = "audio/wav"
@@ -64,7 +65,7 @@ func BackendLabelFromWorker(worker *interfaces.WorkerConfig) string {
 // and returns canonical text work content for invocation primary-result selection.
 // When backendLabel is empty, the packaged factory default backend label is used.
 func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel string) ([]interfaces.WorkContentPart, error) {
-	audioParts, err := parseAudioWorkContentOutput(output)
+	audioParts, err := audioPartsFromInferenceOutput(output)
 	if err != nil {
 		return nil, err
 	}
@@ -108,25 +109,22 @@ func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel st
 	}}, nil
 }
 
-func parseAudioWorkContentOutput(output string) ([]interfaces.WorkContentPart, error) {
-	trimmed := strings.TrimSpace(output)
-	if trimmed == "" {
-		return nil, fmt.Errorf("tts worker output is empty")
+func audioPartsFromInferenceOutput(output string) ([]interfaces.WorkContentPart, error) {
+	parts, err := invocations.WorkContentFromInferenceOutput(output, interfaces.ModelOperation{
+		Name: "TTS",
+		Outputs: []interfaces.ModelOperationSlot{{
+			Name:         "audio",
+			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+		}},
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	var parts []interfaces.WorkContentPart
-	if err := json.Unmarshal([]byte(trimmed), &parts); err == nil {
-		return audioPartsOnly(parts), nil
+	audio := audioPartsOnly(parts)
+	if len(audio) == 0 {
+		return nil, fmt.Errorf("tts worker output did not include audio content")
 	}
-
-	var envelope struct {
-		Content []interfaces.WorkContentPart `json:"content"`
-	}
-	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) > 0 {
-		return audioPartsOnly(envelope.Content), nil
-	}
-
-	return nil, fmt.Errorf("tts worker output is not audio work content JSON")
+	return audio, nil
 }
 
 func audioPartsOnly(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {

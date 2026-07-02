@@ -2,6 +2,7 @@ package factorysave
 
 import (
 	"context"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -29,5 +30,29 @@ type Host interface {
 	SerializeNamedFactoryUpsertResponse(
 		name factoryapi.FactoryName,
 		runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	) (factoryapi.Factory, error)
+	RequireFreshEditableFactoryVersionAtRoot(
+		rootDir string,
+		name factoryapi.FactoryName,
+		baseVersion *factoryapi.HybridLogicalTimestamp,
+	) error
+	NextEditableFactoryVersion(
+		current *factoryapi.HybridLogicalTimestamp,
+		now time.Time,
+	) factoryapi.HybridLogicalTimestamp
+	PreparePersistedFactoryPayload(
+		segment string,
+		factory factoryapi.Factory,
+		version factoryapi.HybridLogicalTimestamp,
+	) (*factoryconfig.PreparedFactoryLayoutPayload, error)
+	SaveReplaceCurrentForSession(
+		ctx context.Context,
+		sessionID string,
+		request factoryapi.Factory,
+	) (factoryapi.Factory, error)
+	SaveUpsertNamedAndActivateForSession(
+		ctx context.Context,
+		sessionID string,
+		request factoryapi.Factory,
 	) (factoryapi.Factory, error)
 }

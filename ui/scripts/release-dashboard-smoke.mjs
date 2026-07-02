@@ -14,12 +14,13 @@ function assetPath(pathname) {
 
 function livePath(pathname) {
   return (
-    pathname === "/events" ||
     pathname === "/status" ||
     pathname === "/work" ||
     /^\/factory-sessions\/[^/]+\/(events|status|work)$/.test(pathname)
   );
 }
+
+const sessionEventsPathPattern = /^\/factory-sessions\/[^/]+\/events$/;
 
 const RETIRED_BRAND_PATTERNS = [/finite you/i, /Infinite You/i];
 
@@ -184,12 +185,12 @@ async function main() {
         "dashboard did not request any embedded /dashboard/ui/assets resources",
       );
     }
-    const eventStreamPath = observedLivePaths.find(
-      (pathname) => pathname === "/events" || pathname.endsWith("/events"),
+    const eventStreamPath = observedLivePaths.find((pathname) =>
+      sessionEventsPathPattern.test(pathname),
     );
     if (!eventStreamPath) {
       throw new Error(
-        "dashboard did not establish a live event stream request",
+        "dashboard did not establish a session-scoped live event stream request",
       );
     }
 

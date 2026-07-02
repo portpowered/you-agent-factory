@@ -49,6 +49,22 @@ func NormalizeRetryDispatchRequest(req RetryDispatchRequest) (RetryDispatchReque
 	}, nil
 }
 
+// NormalizeInterruptDispatchRequest validates one durable interrupt-dispatch request.
+func NormalizeInterruptDispatchRequest(req InterruptDispatchRequest) (InterruptDispatchRequest, error) {
+	base, err := NormalizeControlRequest(req.ControlRequest)
+	if err != nil {
+		return InterruptDispatchRequest{}, err
+	}
+	dispatchID := strings.TrimSpace(req.DispatchID)
+	if dispatchID == "" {
+		return InterruptDispatchRequest{}, NewValidationError("dispatchId", "dispatchId is required")
+	}
+	return InterruptDispatchRequest{
+		ControlRequest: base,
+		DispatchID:     dispatchID,
+	}, nil
+}
+
 // NormalizeSessionID validates one durable session identifier for read/control calls.
 func NormalizeSessionID(sessionID string) (string, error) {
 	trimmed := strings.TrimSpace(sessionID)
@@ -124,8 +140,9 @@ func ControlIdempotencyTupleHash(
 	sessionID string,
 	approve ApproveRequest,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) (string, error) {
-	document, err := normalizeControlIdempotencyDocument(operation, sessionID, approve, retry)
+	document, err := normalizeControlIdempotencyDocument(operation, sessionID, approve, retry, interrupt)
 	if err != nil {
 		return "", err
 	}
@@ -154,6 +171,7 @@ func normalizeControlIdempotencyDocument(
 	sessionID string,
 	approve ApproveRequest,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) (controlIdempotencyDocument, error) {
 	trimmedSessionID := strings.TrimSpace(sessionID)
 	if trimmedSessionID == "" {
@@ -179,24 +197,33 @@ func normalizeControlIdempotencyDocument(
 		document.DispatchID = normalized.DispatchID
 		document.ForceNewAttempt = normalized.ForceNewAttempt
 		document.ResetAttemptCount = normalized.ResetAttemptCount
+	case LifecycleControlInterruptDispatch:
+		normalized, err := NormalizeInterruptDispatchRequest(interrupt)
+		if err != nil {
+			return controlIdempotencyDocument{}, err
+		}
+		document.DispatchID = normalized.DispatchID
 	}
 	return document, nil
 }
 
 func (s *JavaScriptRuntimeService) Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlPause, req, ApproveRequest{}, RetryDispatchRequest{})
+	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlPause, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *JavaScriptRuntimeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlResume, req, ApproveRequest{}, RetryDispatchRequest{})
+	if result, handled, err := s.resumeInterruptedSessionViaLifecycleControl(ctx, sessionID, req); handled {
+		return result, err
+	}
+	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlResume, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *JavaScriptRuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{})
+	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *JavaScriptRuntimeService) Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlTerminate, req, ApproveRequest{}, RetryDispatchRequest{})
+	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlTerminate, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 
 func (s *JavaScriptRuntimeService) Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error) {
@@ -211,6 +238,7 @@ func (s *JavaScriptRuntimeService) Approve(ctx context.Context, sessionID string
 		normalized.ControlRequest,
 		normalized,
 		RetryDispatchRequest{},
+		InterruptDispatchRequest{},
 	)
 }
 
@@ -225,6 +253,23 @@ func (s *JavaScriptRuntimeService) RetryDispatch(ctx context.Context, sessionID 
 		LifecycleControlRetryDispatch,
 		normalized.ControlRequest,
 		ApproveRequest{},
+		normalized,
+		InterruptDispatchRequest{},
+	)
+}
+
+func (s *JavaScriptRuntimeService) InterruptDispatch(ctx context.Context, sessionID string, req InterruptDispatchRequest) (LifecycleControlResult, error) {
+	normalized, err := NormalizeInterruptDispatchRequest(req)
+	if err != nil {
+		return LifecycleControlResult{}, err
+	}
+	return s.applyRuntimeExtendedLifecycleControl(
+		ctx,
+		sessionID,
+		LifecycleControlInterruptDispatch,
+		normalized.ControlRequest,
+		ApproveRequest{},
+		RetryDispatchRequest{},
 		normalized,
 	)
 }
@@ -244,13 +289,14 @@ func lookupRuntimeExtendedControlReplay(
 	control ControlRequest,
 	approve ApproveRequest,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 	currentStatus LifecycleStatus,
 ) runtimeExtendedControlReplayLookup {
 	requestID := strings.TrimSpace(control.RequestID)
 	if requestID == "" {
 		return runtimeExtendedControlReplayLookup{}
 	}
-	tupleHash, err := ControlIdempotencyTupleHash(operation, sessionID, approve, retry)
+	tupleHash, err := ControlIdempotencyTupleHash(operation, sessionID, approve, retry, interrupt)
 	if err != nil {
 		return runtimeExtendedControlReplayLookup{requestID: requestID, err: err, stop: true}
 	}
@@ -272,7 +318,97 @@ func lookupRuntimeExtendedControlReplay(
 	return runtimeExtendedControlReplayLookup{requestID: requestID, tupleHash: tupleHash}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this runtime control path keeps validation, replay, accepted mutation, and event append together on one seam.
+func lookupExtendedControlDispatch(
+	operation LifecycleControlKind,
+	state *runtimeSessionState,
+	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
+) (DispatchSummary, error) {
+	switch operation {
+	case LifecycleControlRetryDispatch:
+		dispatchSummary, ok := findDispatchSummary(state.dispatches, retry.DispatchID)
+		if !ok {
+			return DispatchSummary{}, ErrDispatchNotFound
+		}
+		return dispatchSummary, nil
+	case LifecycleControlInterruptDispatch:
+		dispatchSummary, ok := findDispatchSummary(state.dispatches, interrupt.DispatchID)
+		if !ok {
+			return DispatchSummary{}, ErrDispatchNotFound
+		}
+		return dispatchSummary, nil
+	default:
+		return DispatchSummary{}, nil
+	}
+}
+
+func evaluateExtendedLifecycleControlOutcome(
+	operation LifecycleControlKind,
+	sessionStatus LifecycleStatus,
+	dispatchStatus DispatchStatus,
+) LifecycleControlOutcome {
+	if operation == LifecycleControlInterruptDispatch {
+		return EvaluateInterruptDispatchControl(sessionStatus, dispatchStatus)
+	}
+	return EvaluateLifecycleControl(operation, sessionStatus)
+}
+
+func (s *JavaScriptRuntimeService) recordAcceptedRuntimeInterrupt(
+	state *runtimeSessionState,
+	dispatchSummary DispatchSummary,
+	interrupt InterruptDispatchRequest,
+) {
+	priorDispatchStatus := dispatchSummary.Status
+	if applyRuntimeAcceptedLifecycleControl(s, state, LifecycleControlInterruptDispatch, RetryDispatchRequest{}, interrupt) && state.runCancel != nil {
+		state.runCancel()
+	}
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
+	state.events = AppendDispatchInterruptedEvent(
+		state.events,
+		state.session,
+		dispatchSummary,
+		interrupt,
+		priorDispatchStatus,
+		canonicalEventSourceRuntimeService,
+	)
+}
+
+func lifecycleControlEventOccurredAt(session SessionReadResult, operation LifecycleControlKind) time.Time {
+	occurredAt := time.Now().UTC()
+	if operation == LifecycleControlPause && session.Lifecycle != nil && session.Lifecycle.PausedAt != nil {
+		return session.Lifecycle.PausedAt.UTC()
+	}
+	if operation == LifecycleControlResume && session.Lifecycle != nil && session.Lifecycle.ResumedAt != nil {
+		return session.Lifecycle.ResumedAt.UTC()
+	}
+	return occurredAt
+}
+
+func appendAcceptedSessionLifecycleEventIfNeeded(
+	events []json.RawMessage,
+	session SessionReadResult,
+	previousStatus LifecycleStatus,
+	operation LifecycleControlKind,
+	outcome LifecycleControlOutcome,
+	source string,
+	reason string,
+) []json.RawMessage {
+	if operation != LifecycleControlPause && operation != LifecycleControlResume {
+		return events
+	}
+	return AppendSessionLifecycleControlEvent(
+		events,
+		session,
+		previousStatus,
+		operation,
+		outcome,
+		lifecycleControlEventOccurredAt(session, operation),
+		source,
+		reason,
+	)
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime control helper keeps dispatch-targeted lifecycle validation and replay together on one seam.
 func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	ctx context.Context,
 	sessionID string,
@@ -280,6 +416,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	control ControlRequest,
 	approve ApproveRequest,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) (LifecycleControlResult, error) {
 	if err := ctx.Err(); err != nil {
 		return LifecycleControlResult{}, err
@@ -288,7 +425,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	if err != nil {
 		return LifecycleControlResult{}, err
 	}
-	if err := validateLifecycleControlRequest(operation, control, approve, retry); err != nil {
+	if err := validateLifecycleControlRequest(operation, control, approve, retry, interrupt); err != nil {
 		return LifecycleControlResult{}, err
 	}
 
@@ -307,6 +444,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		control,
 		approve,
 		retry,
+		interrupt,
 		state.session.Status,
 	)
 	if replay.stop {
@@ -316,13 +454,16 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		return replay.result, nil
 	}
 
-	if operation == LifecycleControlRetryDispatch {
-		if _, ok := findDispatchSummary(state.dispatches, retry.DispatchID); !ok {
-			return LifecycleControlResult{}, ErrDispatchNotFound
+	var dispatchSummary DispatchSummary
+	if operation == LifecycleControlRetryDispatch || operation == LifecycleControlInterruptDispatch {
+		var lookupErr error
+		dispatchSummary, lookupErr = lookupExtendedControlDispatch(operation, state, retry, interrupt)
+		if lookupErr != nil {
+			return LifecycleControlResult{}, lookupErr
 		}
 	}
 
-	outcome := EvaluateLifecycleControl(operation, state.session.Status)
+	outcome := evaluateExtendedLifecycleControlOutcome(operation, state.session.Status, dispatchSummary.Status)
 	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
 		controlErr := &ControlError{
 			Operation: operation,
@@ -336,35 +477,30 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 
 	if outcome == LifecycleControlOutcomeAccepted {
 		previousStatus := state.session.Status
-		interruptRuntime := applyRuntimeAcceptedLifecycleControl(s, state, operation, retry)
-		if interruptRuntime && state.runCancel != nil {
-			state.runCancel()
-		}
-		switch operation {
-		case LifecycleControlPause, LifecycleControlResume:
-			occurredAt := time.Now().UTC()
-			if operation == LifecycleControlPause && state.session.Lifecycle != nil && state.session.Lifecycle.PausedAt != nil {
-				occurredAt = state.session.Lifecycle.PausedAt.UTC()
+		if operation == LifecycleControlInterruptDispatch {
+			s.recordAcceptedRuntimeInterrupt(state, dispatchSummary, interrupt)
+		} else {
+			interruptRuntime := applyRuntimeAcceptedLifecycleControl(s, state, operation, retry, interrupt)
+			if interruptRuntime && state.runCancel != nil {
+				state.runCancel()
 			}
-			if operation == LifecycleControlResume && state.session.Lifecycle != nil && state.session.Lifecycle.ResumedAt != nil {
-				occurredAt = state.session.Lifecycle.ResumedAt.UTC()
+			if operation == LifecycleControlPause || operation == LifecycleControlResume {
+				state.events = appendAcceptedSessionLifecycleEventIfNeeded(
+					state.events,
+					state.session,
+					previousStatus,
+					operation,
+					outcome,
+					canonicalEventSourceRuntimeService,
+					control.Reason,
+				)
+			} else {
+				state.events = rebuildRuntimeSessionCanonicalEvents(state)
 			}
-			state.events = AppendSessionLifecycleControlEvent(
-				state.events,
-				state.session,
-				previousStatus,
-				operation,
-				outcome,
-				occurredAt,
-				canonicalEventSourceRuntimeService,
-				control.Reason,
-			)
-		default:
-			state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 		}
 	}
 
-	result := runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry)
+	result := runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry, interrupt)
 	storeControlReplay(s.controlReplay, replay.requestID, replay.tupleHash, result, nil)
 	return result, nil
 }
@@ -375,6 +511,7 @@ func applyRuntimeAcceptedLifecycleControl(
 	state *runtimeSessionState,
 	operation LifecycleControlKind,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) bool {
 	interruptRuntime := false
 	switch operation {
@@ -436,6 +573,14 @@ func applyRuntimeAcceptedLifecycleControl(
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
 		}
+	case LifecycleControlInterruptDispatch:
+		state.dispatches, state.dispatchStatusTransitions = MarkDispatchInterrupted(
+			state.dispatches,
+			state.dispatchStatusTransitions,
+			interrupt.DispatchID,
+			interrupt,
+		)
+		interruptRuntime = true
 	}
 	return interruptRuntime
 }
@@ -446,6 +591,7 @@ func runtimeExtendedLifecycleControlResultFromState(
 	operation LifecycleControlKind,
 	outcome LifecycleControlOutcome,
 	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
 ) LifecycleControlResult {
 	result := LifecycleControlResult{
 		SessionID: id,
@@ -454,11 +600,14 @@ func runtimeExtendedLifecycleControlResultFromState(
 		Status:    state.session.Status,
 		Links:     LifecycleControlLinksForSession(id, true),
 	}
-	if operation == LifecycleControlRetryDispatch {
+	switch operation {
+	case LifecycleControlRetryDispatch:
 		result.DispatchID = retry.DispatchID
 		if outcome == LifecycleControlOutcomeAccepted {
 			result.RetryDispatchID = retry.DispatchID
 		}
+	case LifecycleControlInterruptDispatch:
+		result.DispatchID = interrupt.DispatchID
 	}
 	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
 		session := cloneSessionRead(state.session)

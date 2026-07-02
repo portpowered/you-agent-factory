@@ -490,7 +490,7 @@ func (s *JavaScriptRuntimeService) projectSyncWaitTimeout(sessionID string, canc
 	} else {
 		state.session.ResultSummary.ResultStatus = string(ResultStatusNotReady)
 	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 	snapshot := cloneRuntimeSessionState(state)
 	s.mu.Unlock()
 

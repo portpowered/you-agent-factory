@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -830,8 +831,9 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/goal": BuiltInGoalFactoryJSON,
-	"@you/tts":  BuiltInTTSFactoryJSON,
+	"@you/fusion": BuiltInFusionFactoryJSON,
+	"@you/goal":   BuiltInGoalFactoryJSON,
+	"@you/tts":    BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
@@ -918,15 +920,101 @@ func canonicalNamedFactoryName(name string) (string, error) {
 	return NamedFactoryLayoutSegmentToName(segment)
 }
 
+const legacyPromptWorkIDTemplateMarker = "{{ .WorkID }}"
+const legacyPromptWorkIDTemplateReplacement = "{{ (index .Inputs 0).WorkID }}"
+
 func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
 	if err == nil {
-		return factoryDir, true, nil
+		upgradedDir, upgradeErr := upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, name, factoryDir)
+		if upgradeErr != nil {
+			return "", false, upgradeErr
+		}
+		return upgradedDir, true, nil
 	}
 	if errors.Is(err, ErrNamedFactoryNotFound) {
 		return "", false, nil
 	}
 	return "", false, err
+}
+
+func upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, canonicalName, factoryDir string) (string, error) {
+	payload, ok := builtInNamedFactoryCatalog[canonicalName]
+	if !ok || bytes.Contains(payload, []byte(legacyPromptWorkIDTemplateMarker)) {
+		return factoryDir, nil
+	}
+	upgradePaths, err := materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir)
+	if err != nil {
+		return "", fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err)
+	}
+	if len(upgradePaths) == 0 {
+		return factoryDir, nil
+	}
+	if err := replaceLegacyPromptWorkIDAliasInFiles(upgradePaths); err != nil {
+		return "", fmt.Errorf("upgrade materialized built-in named factory %q in %s: %w", canonicalName, rootDir, err)
+	}
+	return factoryDir, nil
+}
+
+func materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir string) ([]string, error) {
+	loaded, err := LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]struct{}{}
+	for _, workstation := range loaded.WorkstationConfigs() {
+		if workstation == nil {
+			continue
+		}
+		if !strings.Contains(workstation.Body, legacyPromptWorkIDTemplateMarker) &&
+			!strings.Contains(workstation.PromptTemplate, legacyPromptWorkIDTemplateMarker) {
+			continue
+		}
+		paths[filepath.Join(factoryDir, interfaces.FactoryConfigFile)] = struct{}{}
+		segment, err := safeFactoryLayoutSegment("workstation", workstation.Name)
+		if err != nil {
+			return nil, err
+		}
+		workstationDir := filepath.Join(factoryDir, interfaces.WorkstationsDir, segment)
+		paths[filepath.Join(workstationDir, interfaces.FactoryAgentsFileName)] = struct{}{}
+		if workstation.PromptFile != "" {
+			promptPath, err := safePromptFilePath(workstationDir, workstation.PromptFile)
+			if err != nil {
+				return nil, err
+			}
+			paths[promptPath] = struct{}{}
+		}
+	}
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	ordered := make([]string, 0, len(paths))
+	for path := range paths {
+		ordered = append(ordered, path)
+	}
+	sort.Strings(ordered)
+	return ordered, nil
+}
+
+func replaceLegacyPromptWorkIDAliasInFiles(paths []string) error {
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		updated := strings.ReplaceAll(
+			string(data),
+			legacyPromptWorkIDTemplateMarker,
+			legacyPromptWorkIDTemplateReplacement,
+		)
+		if updated == string(data) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {
@@ -944,7 +1032,11 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		if err := requireFactoryConfig(targetDir); err != nil {
 			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
 		}
-		return targetDir, true, nil
+		upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, targetDir)
+		if err != nil {
+			return "", false, err
+		}
+		return upgradedDir, true, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
 	}
@@ -956,8 +1048,184 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 	return factoryDir, true, nil
 }
 
-// BuiltInGoalFactoryJSON is the canonical runnable @you/goal packaged factory payload.
 var BuiltInGoalFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
+
+// BuiltInFusionFactoryJSON is the canonical runnable @you/fusion packaged factory payload.
+var BuiltInFusionFactoryJSON = []byte(`{
+  "name": "@you/fusion",
+  "id": "builtin-fusion",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "input",
+        "description": "Text request to run through the two-stage fusion flow.",
+        "required": true,
+        "bindings": [
+          {"kind": "POSITIONAL", "position": 1},
+          {"kind": "STDIN"}
+        ]
+      },
+      {
+        "name": "output",
+        "description": "Optional output-path hint for file-oriented callers.",
+        "externalName": "output",
+        "aliases": ["o"],
+        "typeHint": "FILE_PATH",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "firstProvider",
+        "description": "Optional provider override for the first fusion pass.",
+        "externalName": "first-provider",
+        "aliases": ["p1"],
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "secondProvider",
+        "description": "Optional provider override for the second fusion pass.",
+        "externalName": "second-provider",
+        "aliases": ["p2"],
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "firstModel",
+        "description": "Optional model override for the first fusion pass.",
+        "externalName": "first-model",
+        "aliases": ["m1"],
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "secondModel",
+        "description": "Optional model override for the second fusion pass.",
+        "externalName": "second-model",
+        "aliases": ["m2"],
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "firstEffort",
+        "description": "Reasoning effort hint for the first fusion pass.",
+        "externalName": "first-effort",
+        "aliases": ["e1"],
+        "choices": ["low", "medium", "high"],
+        "defaultValue": "medium",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "secondEffort",
+        "description": "Reasoning effort hint for the second fusion pass.",
+        "externalName": "second-effort",
+        "aliases": ["e2"],
+        "choices": ["low", "medium", "high"],
+        "defaultValue": "medium",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      }
+    ],
+    "outputContract": {
+      "mode": "FILE",
+      "pathParameter": "output",
+      "contentType": "text/markdown",
+      "fileExtension": ".md",
+      "description": "When output is supplied, callers can treat the refined answer as file-oriented markdown content."
+    },
+    "examples": [
+      {
+        "name": "positional-input-with-provider-overrides",
+        "argv": [
+          "Draft a release summary",
+          "--first-provider=CLAUDE",
+          "--second-provider=CODEX",
+          "--output",
+          "fusion-summary.md"
+        ]
+      },
+      {
+        "name": "stdin-input-with-model-overrides",
+        "argv": [
+          "--first-model",
+          "claude-sonnet-4-20250514",
+          "--second-model",
+          "gpt-5"
+        ],
+        "stdin": "Draft a release summary"
+      }
+    ]
+  },
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "draft", "type": "PROCESSING"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "resources": [],
+  "workers": [
+    {
+      "name": "fusion-drafter",
+      "type": "AGENT_WORKER",
+      "modelProvider": "${firstProvider}",
+      "model": "${firstModel}",
+      "body": "First-stage drafter for @you/fusion.\nReasoning effort: ${firstEffort}"
+    },
+    {
+      "name": "fusion-refiner",
+      "type": "AGENT_WORKER",
+      "modelProvider": "${secondProvider}",
+      "model": "${secondModel}",
+      "body": "Second-stage refiner for @you/fusion.\nReasoning effort: ${secondEffort}"
+    }
+  ],
+  "workstations": [
+    {
+      "name": "draft-fusion",
+      "type": "AGENT_RUN",
+      "worker": "fusion-drafter",
+      "inputs": [
+        {"workType": "task", "state": "init"}
+      ],
+      "outputs": [
+        {"workType": "task", "state": "draft"}
+      ],
+      "onFailure": [
+        {"workType": "task", "state": "failed"}
+      ],
+      "body": "Create a strong first draft for the request.\n\nRequest:\n${input}"
+    },
+    {
+      "name": "refine-fusion",
+      "type": "AGENT_RUN",
+      "worker": "fusion-refiner",
+      "inputs": [
+        {"workType": "task", "state": "draft"}
+      ],
+      "outputs": [
+        {"workType": "task", "state": "complete"}
+      ],
+      "onFailure": [
+        {"workType": "task", "state": "failed"}
+      ],
+      "body": "Refine the current draft into the final response for the same request.\n\nOriginal request:\n${input}"
+    }
+  ]
+}`)
 
 // BuiltInTTSFactoryJSON is the canonical runnable @you/tts packaged factory payload.
 var BuiltInTTSFactoryJSON = []byte(`{

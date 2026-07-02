@@ -779,6 +779,11 @@ func assertDispatchListFieldsPreserved(t *testing.T, fixture map[string]any, map
 		if mapped.Dispatches[index].ProviderSessionRefs == nil || len(*mapped.Dispatches[index].ProviderSessionRefs) != len(refs) {
 			t.Fatalf("dispatch[%d] providerSessionRefs = %#v, want %d refs", index, mapped.Dispatches[index].ProviderSessionRefs, len(refs))
 		}
+		if fixtureJavaScript, ok := fixtureRow["javascript"].(map[string]any); ok && fixtureJavaScript["executionMode"] != nil {
+			if mapped.Dispatches[index].Javascript == nil || mapped.Dispatches[index].Javascript.ExecutionMode == nil || *mapped.Dispatches[index].Javascript.ExecutionMode != stringValue(fixtureJavaScript, "executionMode") {
+				t.Fatalf("dispatch[%d] javascript.executionMode = %#v, want %q", index, mapped.Dispatches[index].Javascript, stringValue(fixtureJavaScript, "executionMode"))
+			}
+		}
 	}
 }
 

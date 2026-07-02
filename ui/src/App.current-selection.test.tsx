@@ -14,11 +14,11 @@ import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-f
 import { DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS } from "./features/bento/hooks/dashboardLayoutSchema";
 import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import {
-  MockEventSource,
   registerAppDashboardTestLifecycle,
   renderApp,
   terminalSnapshot,
 } from "./testing/app-shell-test-utils";
+import { seedTimelineSnapshot } from "./testing/app-shell-timeline-seed-utils";
 
 vi.mock(
   "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
@@ -275,7 +275,11 @@ describe("App current selection", () => {
         readyDispatchWorkstationRequestsByDispatchID,
     });
 
-    fireEvent.click(getActiveStorySelectionButton());
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Select work item Active Story",
+      }),
+    );
 
     const workDetail = await screen.findByRole("article", {
       name: "Current selection",
@@ -470,7 +474,11 @@ describe("App current selection", () => {
         traceFixtures: activeStoryTraceFixtures,
       });
 
-      fireEvent.click(getActiveStorySelectionButton());
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Select work item Active Story",
+        }),
+      );
 
       const dashboardGrid = screen.getByRole("region", {
         name: "you-agent-factory bento board",
@@ -502,7 +510,11 @@ describe("App current selection", () => {
         traceFixtures: activeStoryTraceFixtures,
       });
 
-      fireEvent.click(getActiveStorySelectionButton());
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Select work item Active Story",
+        }),
+      );
 
       const dashboardGrid = screen.getByRole("region", {
         name: "you-agent-factory bento board",
@@ -548,16 +560,14 @@ describe("App current selection", () => {
       );
 
       const movedStyle = traceGridItem.getAttribute("style");
-      const stream = MockEventSource.instances[0];
-      if (!stream) {
-        throw new Error("expected dashboard stream to be opened");
-      }
-
       act(() => {
-        stream.emit("snapshot", {
+        seedTimelineSnapshot(
+          {
           ...semanticWorkflowDashboardSnapshot,
-          tick_count: semanticWorkflowDashboardSnapshot.tick_count + 1,
-        } satisfies DashboardSnapshot);
+            tick_count: semanticWorkflowDashboardSnapshot.tick_count + 1,
+          } satisfies DashboardSnapshot,
+          activeStoryTraceFixtures,
+        );
       });
 
       await waitFor(() => {

@@ -14,17 +14,18 @@ import (
 // network, and shell globals are not injected; forbidden host access is rejected
 // before execution.
 type runtimeGlobals struct {
-	vm            *goja.Runtime
-	policy        workflowpolicy.EffectivePolicy
-	sessionID     string
-	ctx           context.Context
-	records       *recordCollector
-	childExecutor ChildExecutor
-	onArtifact    func(kind string, content json.RawMessage) error
-	finalValue    goja.Value
-	finalSet      bool
-	returned      goja.Value
-	returnedSet   bool
+	vm                    *goja.Runtime
+	policy                workflowpolicy.EffectivePolicy
+	sessionID             string
+	ctx                   context.Context
+	records               *recordCollector
+	childExecutor         ChildExecutor
+	onArtifact            func(kind string, content json.RawMessage) error
+	resumeCheckpointState map[string]any
+	finalValue            goja.Value
+	finalSet              bool
+	returned              goja.Value
+	returnedSet           bool
 }
 
 func (g *runtimeGlobals) bindArgs(argsValue goja.Value) {
@@ -33,6 +34,13 @@ func (g *runtimeGlobals) bindArgs(argsValue goja.Value) {
 
 func (g *runtimeGlobals) bindMeta(meta map[string]any) {
 	g.vm.Set("meta", g.vm.ToValue(meta))
+}
+
+func (g *runtimeGlobals) bindResumeCheckpointState(resume *ResumeContext) {
+	if resume == nil {
+		return
+	}
+	g.resumeCheckpointState = cloneJSONMap(resume.CheckpointState)
 }
 
 func (g *runtimeGlobals) bindWorkflowAPI() error {

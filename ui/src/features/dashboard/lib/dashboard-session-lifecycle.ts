@@ -1,13 +1,53 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import {
+  CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
+  currentFactoryDefinitionQueryKey,
+  currentFactoryDocumentQueryKey,
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../../current-selection/base/public";
+import {
+  FACTORY_SESSION_DETAIL_QUERY_KEY,
+  factorySessionDetailQueryKey,
+} from "../../factory-session-detail/public";
+import type { StreamDerivedCacheIdentity } from "../../timeline/public";
+import { useDashboardStreamStore } from "../state/dashboardStreamStore";
+
+export type FactoryDefinitionQueryResetMode = "invalidate" | "remove";
 
 export function dashboardSessionKey(
   sessionID: string | null,
   refreshToken: number,
 ): string | null {
   return sessionID == null ? null : `${sessionID}::${refreshToken}`;
+}
+
+export function sessionIDFromDashboardSessionKey(
+  sessionKey: string | null,
+): string | null {
+  if (sessionKey == null) {
+    return null;
+  }
+  const separatorIndex = sessionKey.lastIndexOf("::");
+  return separatorIndex === -1 ? sessionKey : sessionKey.slice(0, separatorIndex);
+}
+
+export function shouldResumeFromPersistedCheckpoint({
+  previousSessionKey,
+  refreshToken,
+  sessionID,
+}: {
+  previousSessionKey: string | null;
+  refreshToken: number;
+  sessionID: string | null;
+}): boolean {
+  if (refreshToken === 0) {
+    return true;
+  }
+  if (sessionID == null || previousSessionKey == null) {
+    return false;
+  }
+  return sessionIDFromDashboardSessionKey(previousSessionKey) !== sessionID;
 }
 
 export function shouldResetDashboardSessionScopedState({
@@ -30,12 +70,70 @@ export function resetDashboardSessionScopedState(
   resetStreamState: (locale?: string | null) => void,
   resetTimeline: () => void,
   locale?: string | null,
+  factoryDefinitionQueryResetMode: FactoryDefinitionQueryResetMode = "remove",
 ): void {
   resetTimeline();
   resetStreamState(locale);
   resetSelectionHistoryStore();
-  queryClient.removeQueries({
+  const queryFilter = {
     queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
     exact: false,
+  } as const;
+  if (factoryDefinitionQueryResetMode === "invalidate") {
+    void queryClient.invalidateQueries(queryFilter);
+    return;
+  }
+  queryClient.removeQueries(queryFilter);
+  queryClient.removeQueries({
+    queryKey: FACTORY_SESSION_DETAIL_QUERY_KEY,
+    exact: false,
+  });
+}
+
+function resolveSessionRuntimeCacheScope(
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+): string | null {
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
+  return (
+    resolvedStreamIdentity?.backendScopeID ??
+    useDashboardStreamStore.getState().backendRuntimeCacheScope
+  );
+}
+
+export { factorySessionDetailQueryKey } from "../../factory-session-detail/public";
+
+export function clearDashboardSessionRuntimeQueries(
+  queryClient: QueryClient,
+  sessionID: string,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+): void {
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
+  const backendScopeID = resolveSessionRuntimeCacheScope(resolvedStreamIdentity);
+  queryClient.removeQueries({
+    queryKey: currentFactoryDefinitionQueryKey(sessionID, resolvedStreamIdentity),
+    exact: false,
+  });
+  queryClient.removeQueries({
+    queryKey: factorySessionDetailQueryKey(sessionID, backendScopeID),
+    exact: false,
+  });
+}
+
+export function recoverDashboardSessionScopedState(
+  queryClient: QueryClient,
+  sessionID: string,
+  resetTimeline: () => void,
+  streamIdentity?: StreamDerivedCacheIdentity | null,
+): void {
+  resetTimeline();
+  resetSelectionHistoryStore();
+  clearDashboardSessionRuntimeQueries(queryClient, sessionID, streamIdentity);
+  const resolvedStreamIdentity =
+    streamIdentity ?? useDashboardStreamStore.getState().resolvedStreamIdentity;
+  queryClient.removeQueries({
+    queryKey: currentFactoryDocumentQueryKey(sessionID, resolvedStreamIdentity),
+    exact: true,
   });
 }

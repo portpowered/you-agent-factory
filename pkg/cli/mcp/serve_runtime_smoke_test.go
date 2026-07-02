@@ -3,6 +3,7 @@ package mcpcli_test
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 )
 
 const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP serve smoke fixture: terminal async completion.
+// runtimeSmokeProjectRoot removes persisted factory state before t.TempDir cleanup.
 return {
   label: meta.name,
   description: meta.description,
@@ -23,20 +25,33 @@ return {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity runtime smoke keeps discovery, async start, polling, and result assertions on one documented stdio path.
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
-	projectRoot := t.TempDir()
-	client, stdinWrite, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
+	projectRoot := runtimeSmokeProjectRoot(t)
+	client, shutdown, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
 	assertInstallSmokeInitialize(t, client)
 	assertInstallSmokeDiscovery(t, client)
 
 	sessionID := assertRuntimeSmokeAsyncStart(t, client)
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
-	closeRunServeSmokeServer(t, stdinWrite, serveErr)
+	waitRuntimeSmokeTerminalCompletion(t, client, sessionID)
+	shutdown()
+	closeRunServeSmokeServer(t, nil, serveErr)
+}
+
+func runtimeSmokeProjectRoot(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	t.Cleanup(func() {
+		// Remove the full project root before t.TempDir teardown so runtime-backed
+		// durable-session persistence cannot leave the temp directory non-empty on Linux CI.
+		_ = os.RemoveAll(projectRoot)
+	})
+	return projectRoot
 }
 
 func startRunServeRuntimeSmokeServer(
 	t *testing.T,
 	projectRoot string,
-) (*stdioMCPClient, *os.File, <-chan error) {
+) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
@@ -54,7 +69,6 @@ func startRunServeRuntimeSmokeServer(
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -65,7 +79,37 @@ func startRunServeRuntimeSmokeServer(
 			Stdout:        stdoutWrite,
 		})
 	}()
-	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, serveErr
+
+	var shutdownOnce sync.Once
+	shutdown := func() {
+		shutdownOnce.Do(func() {
+			cancel()
+			_ = stdinWrite.Close()
+		})
+	}
+	t.Cleanup(shutdown)
+
+	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr
+}
+
+func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, sessionID string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	mode := factoryapi.FactorySessionResultModeFinal
+	for time.Now().Before(deadline) {
+		status := runtimeSmokeSessionStatus(t, client, sessionID)
+		switch status {
+		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
+			assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
+			return
+		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
+			time.Sleep(10 * time.Millisecond)
+			continue
+		default:
+			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED before runtime smoke shutdown", status)
+		}
+	}
+	t.Fatalf("session %s did not reach SUCCEEDED within 5s before runtime smoke shutdown", sessionID)
 }
 
 func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient) string {

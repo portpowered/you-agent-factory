@@ -355,7 +355,7 @@ func TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode(t *testing.T) {
 	resp := saveCurrentFactoryDefinitionExpectStatus(t, server.URL(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid bundled doc layout save response")
-	if errResp.Code != factoryapi.INVALIDFACTORY {
+	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
 	if errResp.Targets == nil || !hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeLayoutUnknownNodeReference) {

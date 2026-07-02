@@ -16,7 +16,6 @@ import {
   chainRenderAppFetchMock,
   jsonResponse,
   lastFetchCallBody,
-  MockEventSource,
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
   renderApp,
@@ -24,6 +23,7 @@ import {
   terminalSnapshot,
   waitForDashboardShell,
 } from "./testing/app-shell-test-utils";
+import { seedTimelineSnapshot } from "./testing/app-shell-timeline-seed-utils";
 import { isSessionFactoryRequest } from "./testing/session-factory-mocks";
 
 describe("App follow-up flows", () => {
@@ -427,14 +427,8 @@ describe("App follow-up flows", () => {
       renderApp({ snapshot: baselineSnapshot });
 
       await waitForDashboardShell();
-      const stream = MockEventSource.instances[0];
-      if (!stream) {
-        throw new Error("expected dashboard stream to be opened");
-      }
-
       act(() => {
-        stream.onopen?.(new Event("open"));
-        stream.emit("snapshot", {
+        seedTimelineSnapshot({
           ...baselineSnapshot,
           runtime: {
             ...baselineSnapshot.runtime,

@@ -27,6 +27,8 @@ in `you docs workers`, workstation-only routing and prompt fields in
   declares the same operation and a compatible input and output contract.
 - Legacy `MODEL_INVOKE` and `MODEL_WORKER` remain accepted during the
   migration window and project to the same inference behavior.
+- Harnessless one-shot model calls use `INFERENCE_WORKER` and `INFERENCE_RUN`
+  instead of agent-loop workstation fields.
 - Model invocation input and output use canonical ordered `WorkContent`.
   Existing lowercase `text` and `image` parts remain valid at the API
   boundary, while new multimodal parts should use uppercase public types such
@@ -280,6 +282,35 @@ Cross-factory local-model throttling is enforced by the running service with
 canonical model metadata, not only by one factory-local resource name. That
 means two concurrently running factories that both target the same local model
 still share one process-level local capacity boundary.
+
+## Local Managed Runtime Execution
+
+Local `INFERENCE_WORKER` and `INFERENCE_RUN` pairs borrow ready model capacity
+from the process-wide model host. Local `AGENT_WORKER` and `AGENT_RUN` pairs
+use the same lease boundary for agent-loop model calls. Factory sessions
+dispatch inference and agent work and select primary results; they do not own
+supervised backend subprocess lifecycle for managed local models.
+
+| Concern | Owner |
+| --- | --- |
+| Managed asset cache, pull or install, and readiness projection | Running service model host |
+| Supervised `LLAMACPP` startup, health, and idle unload | Running service model host |
+| Inference dispatch, agent-run dispatch, lifecycle events, and primary-result selection | Factory session runtime |
+| Concurrent local model use for one managed runtime identity | Host leases bounded by `MODEL` resource `capacity` |
+| Agent transcript and tool diagnostics | Factory-session dispatch inspection (`you docs sessions`) |
+
+`POST /models/{model_name}/invocations`, factory-session invocation, factory-session
+`INFERENCE_RUN` dispatch, and local `AGENT_RUN` dispatches for supported models
+share one request-shaping, readiness-gating, lease-acquisition, and canonical
+`WorkContent` output path where the operation or worker contract supports it.
+Legacy `MODEL_WORKER` and `MODEL_INVOKE` names project to the same inference
+behavior during the migration window. Legacy `MODEL_WORKSTATION` projects to
+agent-run behavior when paired with a compatible agent worker.
+
+OmniVoice TTS through `LLAMACPP` is the current packaged local inference
+example. Other supported local text operations use the same managed-runtime and
+lease boundary when the worker declares a compatible operation with
+`modelLocality: LOCAL`.
 
 ## `/models` API And CLI Surface
 

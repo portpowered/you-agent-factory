@@ -52,6 +52,26 @@ func TestOpenAPIContract_GeneratedModelsOmitLegacyConfig(t *testing.T) {
 	}
 }
 
+func TestOpenAPIContract_PublicArtifactsOmitInternalResponseStreamTerms(t *testing.T) {
+	paths := []string{
+		"../../../api/openapi.yaml",
+		"../generated/server.gen.go",
+		"../../generatedclient/client.gen.go",
+		"../../../ui/src/api/generated/openapi.ts",
+	}
+
+	for _, path := range paths {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read public artifact %s: %v", path, err)
+			}
+			assertTextOmitsInternalResponseStreamTerms(t, string(data))
+		})
+	}
+}
+
 func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	schema := doc.Components.Schemas["RunRequestEventPayload"].Value
@@ -78,7 +98,7 @@ func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 		"FactoryEvent", "FactoryEventContext", "FactoryEventType", "DispatchConsumedWorkRef", "DispatchRequestEventMetadata",
 		"RunRequestEventPayload", "InitialStructureRequestEventPayload", "FactoryChangeEventPayload", "WorkRequestEventPayload",
 		"RelationshipChangeRequestEventPayload", "DispatchRequestEventPayload", "ModelRequestEventPayload", "ModelResponseEventPayload", "InferenceRequestEventPayload", "InferenceResponseEventPayload",
-		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
+		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "AgentRunResponseEventPayload", "SafeAgentRunDiagnostic", "AgentRunToolDiagnosticEntry", "AgentRunTranscriptEntry", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
 		"DispatchResponseEventPayload", "WorkStateChangeEventPayload", "WorkStateChangeSource",
 		"FactoryStateResponseEventPayload", "RunResponseEventPayload",
 		"FactoryEventSessionResultStatus", "OrchestratorPhaseStatus", "CheckpointResumabilityStatus", "DispatchReconciliationSource",
@@ -648,4 +668,131 @@ func assertJSONKeysPresent(t *testing.T, object map[string]any, name string, key
 			t.Fatalf("%s.%s is missing", name, key)
 		}
 	}
+}
+
+func assertDurableSessionFixtureInspectionEventLinksAreSessionScoped(t *testing.T, scenario durableSessionContractScenario) {
+	t.Helper()
+
+	sessionID, _ := scenario.Session["sessionId"].(string)
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
+	}
+	wantEventsLink := "/factory-sessions/" + sessionID + "/events"
+
+	for _, container := range []map[string]any{
+		scenario.AsyncResponse,
+		scenario.SyncResponse,
+		scenario.Session,
+		scenario.LifecycleControl,
+	} {
+		if container == nil {
+			continue
+		}
+		links, ok := container["links"].(map[string]any)
+		if !ok {
+			continue
+		}
+		eventsLink, ok := links["events"].(string)
+		if !ok || strings.TrimSpace(eventsLink) == "" {
+			continue
+		}
+		if eventsLink != wantEventsLink {
+			t.Fatalf(
+				"%s fixture links.events = %q, want session-scoped %q (not compatibility-only GET /events)",
+				scenario.ID,
+				eventsLink,
+				wantEventsLink,
+			)
+		}
+	}
+}
+
+func assertDurableSessionScenarioEventFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {
+	t.Helper()
+	if len(scenario.Events) == 0 {
+		return
+	}
+	for index, event := range scenario.Events {
+		assertOpenAPIFixtureValidates(t, doc, "FactoryEvent", event)
+		assertGeneratedFixtureRoundTrip(t, event, "FactoryEvent", func(raw []byte) {
+			var value generated.FactoryEvent
+			decodeRoundTripJSON(t, raw, &value, scenario.ID+" event")
+		})
+		assertCanonicalFactoryEventFixtureEntry(t, doc, index, event)
+	}
+}
+
+func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	eventsOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
+	if got, _ := eventsOperation["operationId"].(string); got != "getEventsBySessionId" {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
+	}
+	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
+	assertResponseSchemaRef(t, eventsOperation, "200", "#/components/schemas/FactorySessionEventStreamRecovery")
+	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
+	parameters, ok := eventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.parameters is missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
+
+	description, _ := eventsOperation["description"].(string)
+	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale"} {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
+		}
+	}
+	for _, fragment := range []string{"canonical", "dashboard", "factory session", "durable replay"} {
+		if !strings.Contains(strings.ToLower(description), fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document canonical session-scoped stream guidance %q, got %q", fragment, description)
+		}
+	}
+
+	globalEventsOperation := pathOperation(t, paths, "/events", "get")
+	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
+	globalDescription, _ := globalEventsOperation["description"].(string)
+	for _, fragment := range []string{"compatibility-only", "get /factory-sessions/{session_id}/events", "dashboard", "factory session"} {
+		if !strings.Contains(strings.ToLower(globalDescription), fragment) {
+			t.Fatalf("paths./events.get.description must document compatibility-only session-scoped migration guidance %q, got %q", fragment, globalDescription)
+		}
+	}
+	if strings.Contains(strings.ToLower(globalDescription), "canonical dashboard") {
+		t.Fatalf("paths./events.get.description must not present GET /events as the canonical dashboard stream, got %q", globalDescription)
+	}
+	assertResponseRef(t, globalEventsOperation, "400", "#/components/responses/BadRequest")
+	globalParameters, ok := globalEventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./events.get.parameters is missing")
+	}
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterSequence")
+
+	factoryEvent := schemaObject(t, schemas, "FactoryEvent")
+	assertRequiredFields(t, factoryEvent, "schemaVersion", "id", "type", "context", "payload")
+	factoryEventProperties := schemaProperties(t, factoryEvent, "FactoryEvent")
+	assertPropertyRef(t, factoryEventProperties, "type", "#/components/schemas/FactoryEventType")
+	assertPropertyRef(t, factoryEventProperties, "context", "#/components/schemas/FactoryEventContext")
+
+	eventContext := schemaObject(t, schemas, "FactoryEventContext")
+	eventContextProperties := schemaProperties(t, eventContext, "FactoryEventContext")
+	assertSchemaPropertiesPresent(t, eventContextProperties, "FactoryEventContext", "sessionId", "sessionSequence", "orchestratorKind")
+
+	recoverySchema := schemaObject(t, schemas, "FactorySessionEventStreamRecovery")
+	assertRequiredFields(t, recoverySchema, "factorySessionId", "outcome", "retry")
+	recoveryProperties := schemaProperties(t, recoverySchema, "FactorySessionEventStreamRecovery")
+	assertPropertyRef(t, recoveryProperties, "outcome", "#/components/schemas/FactorySessionEventStreamRecoveryOutcome")
+	assertPropertyRef(t, recoveryProperties, "retry", "#/components/schemas/FactorySessionEventStreamRecoveryRetry")
+
+	recoveryRetrySchema := schemaObject(t, schemas, "FactorySessionEventStreamRecoveryRetry")
+	assertRequiredFields(t, recoveryRetrySchema, "omitAfterEventId", "omitAfterSequence")
+
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionEventStreamRecoveryOutcome"), "FactorySessionEventStreamRecoveryOutcome", []string{
+		"STREAM_READY", "CURSOR_STALE", "UNKNOWN_SESSION", "INTERNAL_ERROR",
+	})
 }

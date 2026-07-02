@@ -34,6 +34,49 @@ func TestLoadFileDefaults_MalformedFileNamesPath(t *testing.T) {
 	}
 }
 
+func TestParseFileDefaults_AcceptsBackendScopeIDAlongsideDefaults(t *testing.T) {
+	defaults, err := ParseFileDefaults([]byte(`{
+		"backendScopeID": "local-11111111-1111-4111-8111-111111111111",
+		"defaults": {
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5-codex"
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("ParseFileDefaults() error = %v", err)
+	}
+	if defaults.WorkerModelProvider != "codex" {
+		t.Fatalf("provider = %q, want codex", defaults.WorkerModelProvider)
+	}
+	if defaults.WorkerModel != "gpt-5-codex" {
+		t.Fatalf("model = %q, want gpt-5-codex", defaults.WorkerModel)
+	}
+}
+
+func TestLoadFileDefaults_AcceptsBackendScopeIDAlongsideDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{
+		"backendScopeID": "local-22222222-2222-4222-8222-222222222222",
+		"defaults": {
+			"workerModelProvider": "claude",
+			"workerModel": "claude-sonnet"
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	defaults, err := LoadFileDefaults(path)
+	if err != nil {
+		t.Fatalf("LoadFileDefaults() error = %v", err)
+	}
+	if defaults.WorkerModelProvider != "claude" {
+		t.Fatalf("provider = %q, want claude", defaults.WorkerModelProvider)
+	}
+	if defaults.WorkerModel != "claude-sonnet" {
+		t.Fatalf("model = %q, want claude-sonnet", defaults.WorkerModel)
+	}
+}
+
 func TestParseFileDefaults_AcceptsWorkerModelDefaults(t *testing.T) {
 	defaults, err := ParseFileDefaults([]byte(`{
 		"defaults": {
