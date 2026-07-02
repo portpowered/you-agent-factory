@@ -32,7 +32,7 @@ function buildPreflightResponse(
   };
 }
 
-describe("dashboard-session-sync-preflight", () => {
+describe("dashboard-session-sync-preflight resolution", () => {
   it("resolves same-stream resume with a validated reconnect cursor", () => {
     const resolution = resolveDashboardSyncPreflight(buildPreflightResponse());
 
@@ -137,7 +137,9 @@ describe("dashboard-session-sync-preflight", () => {
       },
     });
   });
+});
 
+describe("dashboard-session-sync-preflight helpers", () => {
   it("extracts logical identity hints from persisted checkpoint sync identity", () => {
     expect(
       syncPreflightIdentityHintsFromCheckpoint(

@@ -30,36 +30,35 @@ function buildPreflightResponse(
   };
 }
 
-describe("runDashboardCheckpointPreflight", () => {
-  let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
-  let peekCheckpointSpy: ReturnType<typeof vi.spyOn>;
-  let clearCheckpointsSpy: ReturnType<typeof vi.spyOn>;
-  let readCheckpointSpy: ReturnType<typeof vi.spyOn>;
+function installPreflightMocks() {
   const queryClient = {
     removeQueries: vi.fn(),
   };
+  const getSyncPreflightSpy = vi
+    .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
+    .mockResolvedValue(buildPreflightResponse());
+  const peekCheckpointSpy = vi
+    .spyOn(timelinePublic, "peekPersistedTimelineCheckpoint")
+    .mockResolvedValue(null);
+  const clearCheckpointsSpy = vi
+    .spyOn(timelinePublic, "clearTimelineCheckpointsForSession")
+    .mockResolvedValue(undefined);
 
-  beforeEach(() => {
-    getSyncPreflightSpy = vi
-      .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
-      .mockResolvedValue(buildPreflightResponse());
-    peekCheckpointSpy = vi
-      .spyOn(timelinePublic, "peekPersistedTimelineCheckpoint")
-      .mockResolvedValue(null);
-    clearCheckpointsSpy = vi
-      .spyOn(timelinePublic, "clearTimelineCheckpointsForSession")
-      .mockResolvedValue(undefined);
-    readCheckpointSpy = vi
-      .spyOn(timelinePublic, "readTimelineCheckpoint")
-      .mockResolvedValue(null);
-    queryClient.removeQueries.mockReset();
-  });
+  return {
+    clearCheckpointsSpy,
+    getSyncPreflightSpy,
+    peekCheckpointSpy,
+    queryClient,
+  };
+}
 
+describe("runDashboardCheckpointPreflight alias remap", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it("keeps the default alias in session store while resolving runtime UUID streams", async () => {
+    const { queryClient } = installPreflightMocks();
     const onRemapSessionID = vi.fn();
 
     const hydration = await runDashboardCheckpointPreflight({
@@ -81,6 +80,7 @@ describe("runDashboardCheckpointPreflight", () => {
   });
 
   it("remaps the selected session id for logical session replacement", async () => {
+    const { getSyncPreflightSpy, queryClient } = installPreflightMocks();
     const onRemapSessionID = vi.fn();
     getSyncPreflightSpy.mockResolvedValue(
       buildPreflightResponse({
@@ -106,6 +106,22 @@ describe("runDashboardCheckpointPreflight", () => {
     expect(onRemapSessionID).toHaveBeenCalledWith("session-remapped-002");
     expect(hydration.initialReconnectCursor).toBeUndefined();
     expect(hydration.resolvedSessionID).toBe("session-remapped-002");
+  });
+});
+
+describe("runDashboardCheckpointPreflight recovery", () => {
+  let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
+  let peekCheckpointSpy: ReturnType<typeof vi.spyOn>;
+  let clearCheckpointsSpy: ReturnType<typeof vi.spyOn>;
+  let queryClient: ReturnType<typeof installPreflightMocks>["queryClient"];
+
+  beforeEach(() => {
+    ({ clearCheckpointsSpy, getSyncPreflightSpy, peekCheckpointSpy, queryClient } =
+      installPreflightMocks());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("drops reconnect cursors when persisted stream identity does not match preflight", async () => {

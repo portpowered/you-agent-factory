@@ -67,6 +67,15 @@ describe("isDefaultToRuntimeSessionAliasRemap", () => {
     ).toBe(false);
   });
 
+  it("returns false when remapping from runtime UUID back to the default alias", () => {
+    expect(
+      isDefaultToRuntimeSessionAliasRemap(
+        "f3a2c1b0-1234-5678-9abc-def012345678",
+        "~default",
+      ),
+    ).toBe(false);
+  });
+
   it("returns false when either id is missing", () => {
     expect(isDefaultToRuntimeSessionAliasRemap(null, "~default")).toBe(false);
     expect(isDefaultToRuntimeSessionAliasRemap("~default", null)).toBe(false);
