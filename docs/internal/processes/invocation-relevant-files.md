@@ -262,6 +262,13 @@ primary-result behavior.
   Complement with `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
   and `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` for
   transitioner and topology-level routing proofs.
+- Named `@you/goal` operator-control smoke coverage lives in
+  `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
+  proving API and CLI pause/resume buffering, ordered post-resume drain,
+  interrupted inspect summaries via `session show` and `work show`, and durable
+  `SESSION_LIFECYCLE_CONTROL` replay events. Reuse
+  `writePackagedGoalSlowPlannerTopologyMockWorkers` when ordered drain timing
+  needs observable separation between buffered submissions.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
