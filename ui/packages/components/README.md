@@ -148,6 +148,7 @@ From `ui/packages/components`:
 bun run typecheck
 bun run test
 bun run check:package-boundary
+bun run check:package-dependency-direction
 bun run build-storybook
 bun run verify:storybook-browser
 ```
@@ -166,6 +167,12 @@ i18n, API, React Query, Zustand, Monaco, or Sonner providers.
 import dashboard API modules, feature modules, generated OpenAPI clients,
 dashboard i18n providers, dashboard session providers, React Query, Zustand,
 Monaco, or Sonner. Violations report the package file and import path.
+
+`check:package-dependency-direction` scans package production source and fails
+when a lower package layer imports a higher layer (for example primitives
+importing recipes) or when production source imports testing support modules.
+Violations report the package file, import path, and both source and target
+layers.
 
 From the `ui` workspace root:
 

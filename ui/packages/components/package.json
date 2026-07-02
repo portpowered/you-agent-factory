@@ -73,8 +73,9 @@
   "scripts": {
     "build-storybook": "storybook build --loglevel warn",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "check:package-dependency-direction": "node scripts/check-package-dependency-direction.mjs",
     "storybook": "storybook dev -p 6017",
-    "test": "vitest run --config vitest.config.ts && bun run check:package-boundary",
+    "test": "vitest run --config vitest.config.ts && bun run check:package-boundary && bun run check:package-dependency-direction",
     "typecheck": "tsc -b --noEmit --pretty false",
     "verify:storybook-browser": "node scripts/verify-package-storybook-browser.mjs"
   },
