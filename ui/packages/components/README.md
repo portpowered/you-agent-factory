@@ -147,12 +147,19 @@ From `ui/packages/components`:
 ```bash
 bun run typecheck
 bun run test
+bun run build-storybook
+bun run verify:storybook-browser
 ```
 
 Package tests use `src/testing/vitest.setup.ts` and `src/testing/render.tsx`
 for DOM cleanup, accessible assertions, and user interactions. They do not
 require dashboard routes, providers, generated clients, API mocks, React
 Query, Zustand, Monaco, or Sonner.
+
+Package Storybook lives in `.storybook/` and discovers `src/**/*.stories.tsx`
+files. Preview decorators import the package token fixture stylesheet and
+apply `data-color-palette` locally; they do not mount dashboard session,
+i18n, API, React Query, Zustand, Monaco, or Sonner providers.
 
 From the `ui` workspace root:
 
