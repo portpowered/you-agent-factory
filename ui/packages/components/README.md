@@ -147,7 +147,49 @@ From `ui/packages/components`:
 ```bash
 bun run typecheck
 bun run test
+bun run check:package-boundary
+bun run check:package-dependency-direction
+bun run build-storybook
+bun run verify:storybook-browser
 ```
+
+Package tests use `src/testing/vitest.setup.ts` and `src/testing/render.tsx`
+for DOM cleanup, accessible assertions, and user interactions. They do not
+require dashboard routes, providers, generated clients, API mocks, React
+Query, Zustand, Monaco, or Sonner.
+
+Package Storybook lives in `.storybook/` and discovers `src/**/*.stories.tsx`
+files. Preview decorators import the package token fixture stylesheet and
+apply `data-color-palette` locally; they do not mount dashboard session,
+i18n, API, React Query, Zustand, Monaco, or Sonner providers.
+
+`check:package-boundary` scans package production source and fails when files
+import dashboard API modules, feature modules, generated OpenAPI clients,
+dashboard i18n providers, dashboard session providers, React Query, Zustand,
+Monaco, or Sonner. Violations report the package file and import path.
+
+`check:package-dependency-direction` scans package production source and fails
+when a lower package layer imports a higher layer (for example primitives
+importing recipes) or when production source imports testing support modules.
+Violations report the package file, import path, and both source and target
+layers.
+
+From the repository root:
+
+```bash
+make ui-components-typecheck
+make ui-components-test
+make ui-components-storybook
+make ui-components-boundary
+make ui-components-dependency-direction
+make ui-components-verify
+make ui-lint
+```
+
+`make ui-components-verify` runs the full component package harness with labeled
+failure output for typecheck, tests, Storybook build, boundary checks, and
+dependency-direction checks. CI runs the same harness in the Build, Lint, and API
+workflow after dashboard lint.
 
 From the `ui` workspace root:
 

@@ -28,6 +28,10 @@
     "src/**/*.test.tsx",
     "src/**/*.stories.tsx",
     "src/features/bento/components/dashboard-bento-story-shared.tsx",
-    "packages/components/src/**/*.test.ts"
+    "packages/components/src/**/*.test.ts",
+    "packages/components/src/**/*.test.tsx",
+    "packages/components/src/**/*.harness.test.ts",
+    "packages/components/src/**/*.stories.tsx",
+    "packages/components/src/testing/vitest.setup.ts"
   ]
 }

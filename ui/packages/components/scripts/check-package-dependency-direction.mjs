@@ -9,7 +9,7 @@ import { resolveRelativeImport } from "./resolve-relative-import.mjs";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPackageDir = path.resolve(scriptDir, "..");
 const defaultPackageSrcDir = path.join(defaultPackageDir, "src");
-const defaultDashboardSrcDir = path.resolve(defaultPackageDir, "..", "..", "src");
+const packageImportPrefix = "@you-agent-factory/components";
 const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
 const skippedFileSuffixes = [
   ".test.js",
@@ -18,13 +18,29 @@ const skippedFileSuffixes = [
   ".test.tsx",
   ".stories.tsx",
 ];
-const forbiddenRuntimeModules = new Set(["zustand"]);
-const forbiddenRuntimeModulePrefixes = [
-  "@tanstack/react-query",
-  "monaco-editor",
-  "@monaco-editor/react",
-  "sonner",
-];
+const infrastructureSourceFiles = new Set([
+  "category-paths.ts",
+  "index.ts",
+  "vite-aliases.ts",
+  "styles.css",
+]);
+const packageLayerRanks = {
+  tokens: 0,
+  styles: 0,
+  utilities: 1,
+  icons: 1,
+  primitives: 2,
+  forms: 3,
+  layout: 3,
+  feedback: 3,
+  "data-display": 3,
+  navigation: 3,
+  overlays: 3,
+  charts: 4,
+  graphs: 4,
+  recipes: 5,
+};
+const testingLayerName = "testing";
 
 function toPosixPath(filePath) {
   return filePath.split(path.sep).join(path.posix.sep);
@@ -75,78 +91,85 @@ function getScriptKind(filePath) {
   return ts.ScriptKind.JS;
 }
 
-function classifyRuntimeModuleImport(specifier) {
-  if (forbiddenRuntimeModules.has(specifier)) {
-    return {
-      kind: "app-runtime-module",
-      message:
-        "Package source must not import app-only runtime modules such as Zustand.",
-    };
+function getLayerRank(layerName) {
+  if (layerName === testingLayerName) {
+    return Object.values(packageLayerRanks).length;
   }
 
-  const forbiddenPrefix = forbiddenRuntimeModulePrefixes.find(
-    (modulePrefix) =>
-      specifier === modulePrefix || specifier.startsWith(`${modulePrefix}/`),
-  );
-  if (!forbiddenPrefix) {
-    return null;
-  }
-
-  return {
-    kind: "app-runtime-module",
-    message:
-      "Package source must not import app-only runtime modules such as React Query, Monaco, or Sonner.",
-  };
+  return packageLayerRanks[layerName] ?? null;
 }
 
-function classifyDashboardSrcImport(relativeToDashboardSrc) {
-  if (relativeToDashboardSrc.startsWith("api/generated/")) {
-    return {
-      kind: "generated-client-import",
-      message:
-        "Package source must not import generated OpenAPI clients from the dashboard app.",
-    };
+function classifyPackageLayerForRelativePath(relativeToPackageSrc) {
+  const [segment] = relativeToPackageSrc.split("/");
+
+  if (segment === "styles") {
+    return "styles";
   }
 
-  if (relativeToDashboardSrc.startsWith("api/")) {
-    return {
-      kind: "dashboard-api-import",
-      message:
-        "Package source must not import dashboard app API modules.",
-    };
+  if (segment === testingLayerName) {
+    return testingLayerName;
   }
 
-  if (relativeToDashboardSrc.startsWith("features/dashboard/session/")) {
-    return {
-      kind: "dashboard-session-provider-import",
-      message:
-        "Package source must not import dashboard session providers.",
-    };
-  }
-
-  if (relativeToDashboardSrc.startsWith("features/")) {
-    return {
-      kind: "dashboard-feature-import",
-      message:
-        "Package source must not import dashboard feature modules.",
-    };
-  }
-
-  if (relativeToDashboardSrc.startsWith("i18n/")) {
-    return {
-      kind: "dashboard-i18n-import",
-      message:
-        "Package source must not import dashboard i18n providers or app locale modules.",
-    };
+  if (Object.hasOwn(packageLayerRanks, segment)) {
+    return segment;
   }
 
   return null;
 }
 
-function classifyImport(specifier, filePath, dashboardSrcDir) {
-  const runtimeViolation = classifyRuntimeModuleImport(specifier);
-  if (runtimeViolation) {
-    return runtimeViolation;
+function classifyPackageLayerForFile(filePath, packageSrcDir) {
+  const relativeToPackageSrc = toPosixPath(path.relative(packageSrcDir, filePath));
+
+  if (infrastructureSourceFiles.has(relativeToPackageSrc)) {
+    return "infrastructure";
+  }
+
+  return classifyPackageLayerForRelativePath(relativeToPackageSrc);
+}
+
+function classifyPackageImport(specifier) {
+  if (
+    specifier === packageImportPrefix ||
+    specifier.startsWith(`${packageImportPrefix}/styles.css`)
+  ) {
+    return "infrastructure";
+  }
+
+  if (!specifier.startsWith(`${packageImportPrefix}/`)) {
+    return null;
+  }
+
+  const remainder = specifier.slice(`${packageImportPrefix}/`.length);
+  const [categoryPath] = remainder.split("/");
+
+  if (categoryPath === testingLayerName) {
+    return testingLayerName;
+  }
+
+  if (Object.hasOwn(packageLayerRanks, categoryPath)) {
+    return categoryPath;
+  }
+
+  return null;
+}
+
+function classifyResolvedPackagePath(resolvedPath, packageSrcDir) {
+  const relativeToPackageSrc = toPosixPath(path.relative(packageSrcDir, resolvedPath));
+
+  if (relativeToPackageSrc.startsWith("..")) {
+    return null;
+  }
+
+  return classifyPackageLayerForRelativePath(relativeToPackageSrc);
+}
+
+function classifyImport(specifier, filePath, packageSrcDir) {
+  const packageLayer = classifyPackageImport(specifier);
+  if (packageLayer) {
+    return {
+      layer: packageLayer,
+      resolvedPath: null,
+    };
   }
 
   const resolvedPath = resolveRelativeImport(specifier, filePath);
@@ -154,25 +177,56 @@ function classifyImport(specifier, filePath, dashboardSrcDir) {
     return null;
   }
 
-  const relativeToDashboardSrc = toPosixPath(
-    path.relative(dashboardSrcDir, resolvedPath),
-  );
-  if (relativeToDashboardSrc.startsWith("..")) {
-    return null;
-  }
-
-  const dashboardViolation = classifyDashboardSrcImport(relativeToDashboardSrc);
-  if (!dashboardViolation) {
+  const layer = classifyResolvedPackagePath(resolvedPath, packageSrcDir);
+  if (!layer) {
     return null;
   }
 
   return {
-    ...dashboardViolation,
+    layer,
     resolvedPath,
   };
 }
 
-function collectImportViolations(sourceText, filePath, dashboardSrcDir) {
+function classifyDependencyViolation(sourceLayer, targetLayer) {
+  if (sourceLayer === "infrastructure" || targetLayer === "infrastructure") {
+    return null;
+  }
+
+  if (
+    sourceLayer !== testingLayerName &&
+    targetLayer === testingLayerName
+  ) {
+    return {
+      kind: "testing-support-import",
+      message:
+        "Package production source must not import testing support modules.",
+    };
+  }
+
+  const sourceRank = getLayerRank(sourceLayer);
+  const targetRank = getLayerRank(targetLayer);
+
+  if (sourceRank === null || targetRank === null) {
+    return null;
+  }
+
+  if (targetRank > sourceRank) {
+    return {
+      kind: "package-layer-violation",
+      message: `Package layer "${sourceLayer}" must not import higher layer "${targetLayer}".`,
+    };
+  }
+
+  return null;
+}
+
+function collectImportViolations(sourceText, filePath, packageSrcDir) {
+  const sourceLayer = classifyPackageLayerForFile(filePath, packageSrcDir);
+  if (sourceLayer === "infrastructure") {
+    return [];
+  }
+
   const sourceFile = ts.createSourceFile(
     filePath,
     sourceText,
@@ -183,16 +237,26 @@ function collectImportViolations(sourceText, filePath, dashboardSrcDir) {
   const violations = [];
 
   function recordImport(specifier) {
-    const classification = classifyImport(specifier, filePath, dashboardSrcDir);
+    const classification = classifyImport(specifier, filePath, packageSrcDir);
     if (!classification) {
+      return;
+    }
+
+    const violation = classifyDependencyViolation(
+      sourceLayer,
+      classification.layer,
+    );
+    if (!violation) {
       return;
     }
 
     violations.push({
       importPath: specifier,
-      kind: classification.kind,
-      message: classification.message,
+      kind: violation.kind,
+      message: violation.message,
       resolvedPath: classification.resolvedPath ?? null,
+      sourceLayer,
+      targetLayer: classification.layer,
     });
   }
 
@@ -239,24 +303,22 @@ function formatViolation(packageDir, filePath, violation) {
   return [
     `- ${relativeFilePath} imports ${violation.importPath}${resolvedSuffix}`,
     `  kind: ${violation.kind}`,
+    `  source layer: ${violation.sourceLayer}`,
+    `  target layer: ${violation.targetLayer}`,
     `  reason: ${violation.message}`,
   ].join("\n");
 }
 
 function resolveConfiguredDirectories() {
   return {
-    dashboardSrcDir: process.env.AGENT_FACTORY_DASHBOARD_SRC_DIR
-      ? path.resolve(process.env.AGENT_FACTORY_DASHBOARD_SRC_DIR)
-      : defaultDashboardSrcDir,
     packageSrcDir: process.env.AGENT_FACTORY_COMPONENTS_SRC_DIR
       ? path.resolve(process.env.AGENT_FACTORY_COMPONENTS_SRC_DIR)
       : defaultPackageSrcDir,
   };
 }
 
-export async function scanPackageBoundary(
+export async function scanPackageDependencyDirection(
   packageSrcDir = defaultPackageSrcDir,
-  dashboardSrcDir = defaultDashboardSrcDir,
 ) {
   const packageDir = path.dirname(packageSrcDir);
   const files = await collectSourceFiles(packageSrcDir);
@@ -267,7 +329,7 @@ export async function scanPackageBoundary(
     const importViolations = collectImportViolations(
       sourceText,
       filePath,
-      dashboardSrcDir,
+      packageSrcDir,
     );
 
     for (const importViolation of importViolations) {
@@ -286,18 +348,18 @@ export async function scanPackageBoundary(
 }
 
 async function main() {
-  const { dashboardSrcDir, packageSrcDir } = resolveConfiguredDirectories();
-  const report = await scanPackageBoundary(packageSrcDir, dashboardSrcDir);
+  const { packageSrcDir } = resolveConfiguredDirectories();
+  const report = await scanPackageDependencyDirection(packageSrcDir);
 
   if (report.violations.length === 0) {
     process.stdout.write(
-      "@you-agent-factory/components package boundary check passed.\n",
+      "@you-agent-factory/components package dependency-direction check passed.\n",
     );
     return;
   }
 
   process.stderr.write(
-    "@you-agent-factory/components package boundary check failed:\n",
+    "@you-agent-factory/components package dependency-direction check failed:\n",
   );
 
   for (const violation of report.violations) {
