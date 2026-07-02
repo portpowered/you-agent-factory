@@ -22,6 +22,14 @@ const (
 	RuntimeFileLoggingPolicyDisabled RuntimeFileLoggingPolicy = "disabled"
 )
 
+// RuntimeMetricsPolicy controls whether bundle construction creates a runtime metrics sink.
+type RuntimeMetricsPolicy string
+
+const (
+	RuntimeMetricsPolicyEnabled  RuntimeMetricsPolicy = "enabled"
+	RuntimeMetricsPolicyDisabled RuntimeMetricsPolicy = "disabled"
+)
+
 // Config carries host-level settings required to build one runnable runtime bundle.
 type Config struct {
 	RunnerID                                string
@@ -31,6 +39,7 @@ type Config struct {
 	RuntimeLogDir                           string
 	RuntimeLogConfig                        logging.RuntimeLogConfig
 	RuntimeFileLoggingPolicy                RuntimeFileLoggingPolicy
+	RuntimeMetricsPolicy                    RuntimeMetricsPolicy
 	RuntimeMetricsDir                       string
 	RuntimeMetricsConfig                    logging.RuntimeMetricsConfig
 	RecordPath                              string
@@ -144,6 +153,7 @@ type HostConfigInput struct {
 	RuntimeLogDir                           string
 	RuntimeLogConfig                        logging.RuntimeLogConfig
 	RuntimeFileLoggingPolicy                RuntimeFileLoggingPolicy
+	RuntimeMetricsPolicy                    RuntimeMetricsPolicy
 	RuntimeMetricsDir                       string
 	RuntimeMetricsConfig                    logging.RuntimeMetricsConfig
 	RecordPath                              string
@@ -173,6 +183,7 @@ func ConfigFromHostInput(input HostConfigInput) Config {
 		RuntimeLogDir:                           input.RuntimeLogDir,
 		RuntimeLogConfig:                        input.RuntimeLogConfig,
 		RuntimeFileLoggingPolicy:                input.RuntimeFileLoggingPolicy,
+		RuntimeMetricsPolicy:                    input.RuntimeMetricsPolicy,
 		RuntimeMetricsDir:                       input.RuntimeMetricsDir,
 		RuntimeMetricsConfig:                    input.RuntimeMetricsConfig,
 		RecordPath:                              input.RecordPath,

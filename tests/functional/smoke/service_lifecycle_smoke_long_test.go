@@ -15,8 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 func TestServiceLifecycle_InitInputCompletesThroughFactoryService(t *testing.T) {
@@ -68,12 +68,11 @@ func TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline(t *testing
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	svc, err := service.BuildFactoryService(ctx, &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(ctx, testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:               dir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
 		WorkFile:          workFilePath,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
@@ -240,11 +239,10 @@ func writeParallelIsolationSeed(t *testing.T, dir, payload string) {
 func buildFunctionalService(t *testing.T, ctx context.Context, dir string) *service.FactoryService {
 	t.Helper()
 
-	svc, err := service.BuildFactoryService(ctx, &service.FactoryServiceConfig{
+	svc, err := service.BuildFactoryService(ctx, testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:               dir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}

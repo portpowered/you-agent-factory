@@ -88,6 +88,7 @@ type (
 	SimpleDashboardRenderer     = runtimehost.SimpleDashboardRenderer
 	APIServerStarter            = runtimehost.APIServerStarter
 	RuntimeFileLoggingPolicy    = runtimehost.RuntimeFileLoggingPolicy
+	RuntimeMetricsPolicy        = runtimehost.RuntimeMetricsPolicy
 	RuntimeLogDiagnostics       = runtimehost.RuntimeLogDiagnostics
 	InvocationMetricsRecorder   = runtimehost.InvocationMetricsRecorder
 	InvocationMetric            = runtimehost.InvocationMetric
@@ -104,6 +105,8 @@ var (
 const (
 	RuntimeFileLoggingPolicyEnabled  = runtimehost.RuntimeFileLoggingPolicyEnabled
 	RuntimeFileLoggingPolicyDisabled = runtimehost.RuntimeFileLoggingPolicyDisabled
+	RuntimeMetricsPolicyEnabled      = runtimehost.RuntimeMetricsPolicyEnabled
+	RuntimeMetricsPolicyDisabled     = runtimehost.RuntimeMetricsPolicyDisabled
 )
 
 type (
