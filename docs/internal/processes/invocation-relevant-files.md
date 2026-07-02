@@ -245,6 +245,13 @@ primary-result behavior.
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
   fresh-home materialization smoke case, a customer-edit preservation rerun
   smoke case, and a legacy-materialized upgrade smoke case.
+- CLI/API invocation parity for packaged `@you/goal` lives in
+  `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
+  comparing live session invocation API responses with real CLI `--json` output
+  for positional, stdin, and named-factory success paths plus representative
+  empty-input and unresolved-primary-result failures. Reuse
+  `scaffoldPackagedGoalInvocationFactoryForSmoke`, `buildYouCLIBinary`, and
+  `support.StartFunctionalAPIServer` when extending parity coverage.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
