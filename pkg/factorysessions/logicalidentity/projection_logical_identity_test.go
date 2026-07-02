@@ -1,7 +1,6 @@
-package factorysessions_test
+package logicalidentity_test
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -78,10 +77,6 @@ func TestProjectRuntime_JavaScriptWorkflowSessionStreamIdentityIncludesLogicalFi
 func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGenerationIDWithLogicalFields(t *testing.T) {
 	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
 	startedAt := now.Add(-10 * time.Minute)
-	argsSchema := json.RawMessage(`{"type":"object"}`)
-	defaultPolicy := json.RawMessage(`{"maxAgents":3}`)
-	_ = argsSchema
-	_ = defaultPolicy
 	runtime := factorysessions.ProjectRuntime(withProjectionLogicalIdentity(factorysessions.ProjectionContext{
 		Session: &factorysessions.LiveSession{
 			ID:      "session-js",
