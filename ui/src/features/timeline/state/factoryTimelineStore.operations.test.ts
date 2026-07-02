@@ -1,7 +1,7 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: timeline store operation and session lifecycle replay cases share fixture events.
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
-import { canonicalSessionLifecycleReplayEvents } from "../../../testing/session-lifecycle-replay-fixtures";
+import { canonicalSessionLifecycleControlReplayEvents, canonicalSessionLifecycleReplayEvents } from "../../../testing/session-lifecycle-replay-fixtures";
 import {
   buildFactoryTimelineSnapshot,
   useFactoryTimelineStore,
@@ -221,5 +221,31 @@ describe("factory timeline store operations", () => {
       session_id: "session-alpha",
     });
     expect(runningSnapshot.runtime.session.has_data).toBe(true);
+  });
+
+  it("rebuilds paused and resumed session bracket lifecycle from SESSION_LIFECYCLE_CONTROL replay events", () => {
+    const store = useFactoryTimelineStore.getState();
+    store.replaceEvents([...canonicalSessionLifecycleControlReplayEvents]);
+
+    const pausedSnapshot = buildFactoryTimelineSnapshot(
+      useFactoryTimelineStore.getState().events,
+      2,
+    );
+    expect(pausedSnapshot.runtime.session.bracket).toMatchObject({
+      lifecycle_control_status: "PAUSED",
+      paused_at: "2026-06-09T12:00:02Z",
+      session_id: "session-alpha",
+    });
+
+    const runningSnapshot = buildFactoryTimelineSnapshot(
+      useFactoryTimelineStore.getState().events,
+      3,
+    );
+    expect(runningSnapshot.runtime.session.bracket).toMatchObject({
+      lifecycle_control_status: "RUNNING",
+      paused_at: "2026-06-09T12:00:02Z",
+      resumed_at: "2026-06-09T12:00:04Z",
+      session_id: "session-alpha",
+    });
   });
 });

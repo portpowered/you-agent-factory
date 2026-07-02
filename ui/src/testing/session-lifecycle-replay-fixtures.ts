@@ -58,8 +58,42 @@ export const sessionLifecycleResumedEvent = sessionLifecycleReplayEvent(
   },
 );
 
+export const sessionLifecycleControlPauseEvent = sessionLifecycleReplayEvent(
+  FACTORY_EVENT_TYPES.sessionLifecycleControl,
+  "session-lifecycle-control/session-alpha/2",
+  2,
+  2,
+  {
+    newStatus: "PAUSED",
+    occurredAt: "2026-06-09T12:00:02Z",
+    operation: "PAUSE",
+    outcome: "ACCEPTED",
+    previousStatus: "RUNNING",
+  },
+);
+
+export const sessionLifecycleControlResumeEvent = sessionLifecycleReplayEvent(
+  FACTORY_EVENT_TYPES.sessionLifecycleControl,
+  "session-lifecycle-control/session-alpha/3",
+  3,
+  3,
+  {
+    newStatus: "RUNNING",
+    occurredAt: "2026-06-09T12:00:04Z",
+    operation: "RESUME",
+    outcome: "ACCEPTED",
+    previousStatus: "PAUSED",
+  },
+);
+
 export const canonicalSessionLifecycleReplayEvents = [
   sessionLifecycleStartedEvent,
   sessionLifecyclePausedEvent,
   sessionLifecycleResumedEvent,
+] as const;
+
+export const canonicalSessionLifecycleControlReplayEvents = [
+  sessionLifecycleStartedEvent,
+  sessionLifecycleControlPauseEvent,
+  sessionLifecycleControlResumeEvent,
 ] as const;

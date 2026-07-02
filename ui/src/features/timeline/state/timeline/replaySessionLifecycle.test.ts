@@ -93,6 +93,87 @@ describe("reconstructWorldState session lifecycle replay", () => {
   });
 });
 
+describe("reconstructWorldState SESSION_LIFECYCLE_CONTROL replay", () => {
+  it("reconstructs paused and resumed lifecycle control status from SESSION_LIFECYCLE_CONTROL events", () => {
+    const events = [
+      lifecycleEvent(FACTORY_EVENT_TYPES.sessionStarted, "started", 1, 1, {
+        factoryId: "factory-alpha",
+        sourceRef: "workflow/main.js",
+        startedAt: "2026-06-09T12:00:00Z",
+      }),
+      lifecycleEvent(
+        FACTORY_EVENT_TYPES.sessionLifecycleControl,
+        "session-lifecycle-control/session-alpha/2",
+        2,
+        2,
+        {
+          newStatus: "PAUSED",
+          occurredAt: "2026-06-09T12:00:02Z",
+          operation: "PAUSE",
+          outcome: "ACCEPTED",
+          previousStatus: "RUNNING",
+        },
+      ),
+      lifecycleEvent(
+        FACTORY_EVENT_TYPES.sessionLifecycleControl,
+        "session-lifecycle-control/session-alpha/3",
+        3,
+        3,
+        {
+          newStatus: "RUNNING",
+          occurredAt: "2026-06-09T12:00:04Z",
+          operation: "RESUME",
+          outcome: "ACCEPTED",
+          previousStatus: "PAUSED",
+        },
+      ),
+    ];
+
+    const pausedState = reconstructWorldState(events, 2);
+    expect(pausedState.sessionBracket).toMatchObject({
+      lifecycle_control_status: "PAUSED",
+      paused_at: "2026-06-09T12:00:02Z",
+      session_id: "session-alpha",
+    });
+
+    const runningState = reconstructWorldState(events, 3);
+    expect(runningState.sessionBracket).toMatchObject({
+      lifecycle_control_status: "RUNNING",
+      resumed_at: "2026-06-09T12:00:04Z",
+      session_id: "session-alpha",
+    });
+  });
+
+  it("ignores non-accepted SESSION_LIFECYCLE_CONTROL outcomes", () => {
+    const events = [
+      lifecycleEvent(FACTORY_EVENT_TYPES.sessionStarted, "started", 1, 1, {
+        factoryId: "factory-alpha",
+        startedAt: "2026-06-09T12:00:00Z",
+      }),
+      lifecycleEvent(
+        FACTORY_EVENT_TYPES.sessionLifecycleControl,
+        "session-lifecycle-control/session-alpha/2",
+        2,
+        2,
+        {
+          newStatus: "PAUSED",
+          occurredAt: "2026-06-09T12:00:02Z",
+          operation: "PAUSE",
+          outcome: "NO_OP",
+          previousStatus: "PAUSED",
+        },
+      ),
+    ];
+
+    const state = reconstructWorldState(events, 2);
+    expect(state.sessionBracket).toMatchObject({
+      session_id: "session-alpha",
+    });
+    expect(state.sessionBracket?.lifecycle_control_status).toBeUndefined();
+    expect(state.sessionBracket?.paused_at).toBeUndefined();
+  });
+});
+
 describe("reconstructWorldState dispatch and artifact replay", () => {
   it("reconstructs orchestrator phase, dispatch lifecycle, and artifact events", () => {
     const events = [

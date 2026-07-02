@@ -20,6 +20,7 @@ export const FACTORY_EVENT_TYPES = {
   sessionStarted: "SESSION_STARTED",
   sessionPaused: "SESSION_PAUSED",
   sessionResumed: "SESSION_RESUMED",
+  sessionLifecycleControl: "SESSION_LIFECYCLE_CONTROL",
   sessionResultUpdated: "SESSION_RESULT_UPDATED",
   sessionCompleted: "SESSION_COMPLETED",
   orchestratorPhaseChanged: "ORCHESTRATOR_PHASE_CHANGED",
