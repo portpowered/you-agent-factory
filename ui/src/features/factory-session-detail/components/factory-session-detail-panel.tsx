@@ -120,6 +120,12 @@ function FactorySessionRuntimeSections({
             locale,
           )}
         />
+        {runtime.lifecycleControlStatus ? (
+          <Metric
+            label={messages.lifecycleControlStatusLabel}
+            value={runtime.lifecycleControlStatus}
+          />
+        ) : null}
       </div>
 
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (

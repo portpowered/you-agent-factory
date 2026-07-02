@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dashboard shell loading, error, and success paths share one snapshot harness.
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -76,6 +77,12 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(
     ({ refreshToken = 0 }: { refreshToken?: number } = {}) =>
       dashboardSnapshotResolver?.(refreshToken) ?? dashboardSnapshotState,
+  ),
+}));
+
+vi.mock("./dashboard-session-lifecycle-banner", () => ({
+  DashboardSessionLifecycleBanner: () => (
+    <section data-testid="dashboard-session-lifecycle-banner-probe" />
   ),
 }));
 

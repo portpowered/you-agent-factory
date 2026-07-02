@@ -878,6 +878,7 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"Paused factory session",
 		"Resumed factory session",
 		"SESSION_LIFECYCLE_CONTROL",
+		"Buffered work while paused",
 		"make docs-reference-smoke",
 		"## Factory query",
 		"you factory query",

@@ -12,6 +12,7 @@ import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { useDashboardWorldView } from "../hooks/useDashboardWorldView";
 import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
+import { DashboardSessionLifecycleBanner } from "./dashboard-session-lifecycle-banner";
 
 const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
 
@@ -134,6 +135,14 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
       <DashboardHeader locale={locale} />
+
+      <DashboardSessionLifecycleBanner
+        bracket={snapshot.runtime?.session?.bracket}
+        factoryState={snapshot.factory_state}
+        locale={resolvedLocale}
+        streamState={streamState}
+      />
+
       <DashboardBento locale={locale} />
       <DashboardExportDialog locale={locale} />
     </main>
