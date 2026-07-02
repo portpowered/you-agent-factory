@@ -101,3 +101,14 @@ func TestDeriveLogicalSessionKeyID_DoesNotDependOnFactorySessionAllocation(t *te
 		t.Fatalf("key changed across allocations: %q vs %q", firstAllocation, secondAllocation)
 	}
 }
+
+func TestIsLogicalSessionKeyID_RejectsNonOpaqueValues(t *testing.T) {
+	t.Parallel()
+
+	if logicaltarget.IsLogicalSessionKeyID("") {
+		t.Fatal("IsLogicalSessionKeyID(\"\") = true, want false")
+	}
+	if logicaltarget.IsLogicalSessionKeyID("folder::default::") {
+		t.Fatal("IsLogicalSessionKeyID(legacy join) = true, want false")
+	}
+}

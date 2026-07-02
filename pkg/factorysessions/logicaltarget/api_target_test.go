@@ -77,3 +77,23 @@ func TestAPILogicalTargetFromSession(t *testing.T) {
 		t.Fatalf("kind = %q", target.Kind)
 	}
 }
+
+func TestAPILogicalTargetFromSession_NilSessionAndInvalidTarget(t *testing.T) {
+	t.Parallel()
+
+	target, err := APILogicalTargetFromSession("scope-1", nil)
+	if err != nil || target != nil {
+		t.Fatalf("APILogicalTargetFromSession(nil) = (%#v, %v), want nil,nil", target, err)
+	}
+
+	invalidSession := &factorysessions.LiveSession{
+		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
+		Target: factorysessions.TargetRef{
+			Kind: factorysessions.TargetKindNamed,
+			Name: "",
+		},
+	}
+	if _, err := APILogicalTargetFromSession("scope-1", invalidSession); err == nil {
+		t.Fatal("APILogicalTargetFromSession(invalid named target) = nil, want validation error")
+	}
+}
