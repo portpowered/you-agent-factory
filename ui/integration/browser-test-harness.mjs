@@ -322,7 +322,7 @@ async function browserDistReady() {
   }
 }
 
-async function findAvailablePort() {
+export async function findAvailablePort() {
   const probe = http.createServer();
   await new Promise((resolve, reject) => {
     probe.once("error", reject);
