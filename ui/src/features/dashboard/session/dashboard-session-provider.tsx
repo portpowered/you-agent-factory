@@ -67,7 +67,3 @@ export function useRemapDashboardSelectedSession(): (
 ) => void {
   return useDashboardSessionStore((state) => state.setSelectedSessionID);
 }
-
-export function useSetDashboardSessionID(): (sessionID: string | null) => void {
-  return useDashboardSessionStore((state) => state.setSelectedSessionID);
-}
