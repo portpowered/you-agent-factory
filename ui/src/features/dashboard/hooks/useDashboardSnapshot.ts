@@ -185,7 +185,8 @@ export function useDashboardSnapshot({
       streamIdentity.streamGenerationID
     ) {
       const logicalSessionKeyId =
-        currentReplayCheckpoint?.syncIdentity?.logicalSessionKeyId?.trim();
+        currentReplayCheckpoint?.syncIdentity?.logicalSessionKeyId?.trim() ||
+        streamIdentity.logicalSessionKeyID?.trim();
       if (logicalSessionKeyId) {
         return {
           backendScopeId: streamIdentity.backendScopeID,

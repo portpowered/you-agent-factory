@@ -315,6 +315,7 @@ describe("useDashboardSnapshot composer", () => {
         },
         {
           backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
+          logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
         },
       );
     });
@@ -695,6 +696,72 @@ describe("useDashboardSnapshot composer", () => {
       remappedSessionID,
     );
     expect(indexedDBRecords.has(checkpointStorageKey("session-stale-001"))).toBe(
+      false,
+    );
+  });
+
+  it("remaps a stale session using envelope stream identity when checkpoint sync identity is absent", async () => {
+    const remappedSessionID = "session-remapped-002";
+    const staleSessionID = "session-stale-001";
+    const staleStreamIdentity = defaultStreamIdentity(staleSessionID);
+    indexedDBRecords.set(checkpointStorageKey(staleSessionID), {
+      checkpoint: {
+        afterEventId: "checkpoint-event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+      },
+      schemaVersion: 3,
+      storageKey: checkpointStorageKey(staleSessionID),
+      streamIdentity: staleStreamIdentity,
+    });
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: staleSessionID,
+    });
+    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+      buildSyncPreflightResponse({
+        checkpointReusable: false,
+        factorySessionId: remappedSessionID,
+        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reconnectCursor: {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: false,
+        },
+        requestedSessionId: staleSessionID,
+        streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
+        staleSessionID,
+        {
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+        },
+        {
+          backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
+          logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
+        },
+      );
+    });
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${remappedSessionID}/events`,
+    );
+    expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+      remappedSessionID,
+    );
+    expect(indexedDBRecords.has(checkpointStorageKey(staleSessionID))).toBe(
       false,
     );
   });

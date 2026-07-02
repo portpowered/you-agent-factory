@@ -83,6 +83,67 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
     });
   });
 
+  it("sends logical identity hints from envelope stream identity when checkpoint sync identity is absent", async () => {
+    const { getSyncPreflightSpy, queryClient } = installPreflightMocks();
+    const staleSessionID = "session-stale-001";
+    const remappedSessionID = "session-remapped-002";
+    const logicalSessionKeyID = "lsk-named-target";
+    vi.spyOn(timelinePublic, "peekPersistedTimelineCheckpoint").mockResolvedValue({
+      checkpoint: {
+        afterEventId: "event-7",
+        afterSequence: 7,
+        replayState: {} as never,
+        selectedTick: 7,
+      },
+      streamIdentity: {
+        backendScopeID: "backend-scope-a",
+        factorySessionID: staleSessionID,
+        logicalSessionKeyID,
+        streamGenerationID: "generation-stale",
+      },
+    });
+    getSyncPreflightSpy.mockResolvedValue(
+      buildPreflightResponse({
+        checkpointReusable: false,
+        factorySessionId: remappedSessionID,
+        logicalSessionKeyId: logicalSessionKeyID,
+        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reconnectCursor: {
+          afterEventId: "event-7",
+          afterSequence: 7,
+          provided: true,
+          validForStreamGeneration: false,
+        },
+        requestedSessionId: staleSessionID,
+        streamGenerationId: "generation-live",
+      }),
+    );
+    const onRemapSessionID = vi.fn();
+
+    const hydration = await runDashboardCheckpointPreflight({
+      onRemapSessionID,
+      onStreamOffline: vi.fn(),
+      queryClient: queryClient as never,
+      rawSessionID: staleSessionID,
+      restoreCheckpoint: vi.fn(),
+    });
+
+    expect(getSyncPreflightSpy).toHaveBeenCalledWith(
+      staleSessionID,
+      {
+        afterEventId: "event-7",
+        afterSequence: 7,
+      },
+      {
+        backendScopeId: "backend-scope-a",
+        logicalSessionKeyId: logicalSessionKeyID,
+      },
+    );
+    expect(onRemapSessionID).toHaveBeenCalledWith(remappedSessionID);
+    expect(hydration.initialReconnectCursor).toBeUndefined();
+    expect(hydration.resolvedSessionID).toBe(remappedSessionID);
+  });
+
   it("remaps the selected session id for logical session replacement", async () => {
     const { getSyncPreflightSpy, queryClient } = installPreflightMocks();
     const onRemapSessionID = vi.fn();

@@ -207,6 +207,29 @@ describe("dashboard-session-sync-preflight helpers", () => {
       }),
     ).toEqual({
       backendScopeId: "backend-scope-b",
+      logicalSessionKeyId: "lsk-folder",
+    });
+  });
+
+  it("prefers checkpoint sync identity logical key over envelope stream identity", () => {
+    expect(
+      syncPreflightIdentityHintsFromCheckpoint(
+        {
+          backendScopeId: "backend-scope-a",
+          factorySessionId: "session-stale-001",
+          logicalSessionKeyId: "lsk-checkpoint",
+          streamGenerationId: "generation-1",
+        },
+        {
+          backendScopeID: "backend-scope-b",
+          factorySessionID: "session-live",
+          logicalSessionKeyID: "lsk-envelope",
+          streamGenerationID: "generation-2",
+        },
+      ),
+    ).toEqual({
+      backendScopeId: "backend-scope-a",
+      logicalSessionKeyId: "lsk-checkpoint",
     });
   });
 

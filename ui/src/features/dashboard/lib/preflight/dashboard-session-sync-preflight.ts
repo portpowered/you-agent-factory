@@ -54,7 +54,8 @@ export function syncPreflightIdentityHintsFromCheckpoint(
     checkpointSyncIdentity?.backendScopeId?.trim() ||
     streamIdentity?.backendScopeID?.trim();
   const logicalSessionKeyId =
-    checkpointSyncIdentity?.logicalSessionKeyId?.trim();
+    checkpointSyncIdentity?.logicalSessionKeyId?.trim() ||
+    streamIdentity?.logicalSessionKeyID?.trim();
 
   return {
     ...(backendScopeId ? { backendScopeId } : {}),
