@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -201,6 +202,7 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 	for _, opt := range opts {
 		opt(cfg)
 	}
+	testdeps.Default().ApplyFactoryServiceConfig(&cfg.serviceConfig)
 
 	if cfg.asyncMode {
 		// Async mode: wrap all registered executors with the mock/custom
