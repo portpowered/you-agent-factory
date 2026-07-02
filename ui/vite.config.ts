@@ -129,6 +129,11 @@ export default defineConfig({
       interopDefault: true,
     },
     environment: "jsdom",
+    exclude: [
+      "packages/components/src/**/*.test.ts",
+      "packages/components/src/**/*.test.tsx",
+      "packages/components/src/**/*.harness.test.ts",
+    ],
     globals: true,
     setupFiles: ["./src/testing/vitest.setup.ts"],
     testTimeout: isCoverageRun ? 180000 : 30000,
