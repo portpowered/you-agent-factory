@@ -1,6 +1,6 @@
-// Package service provides compatibility aliases and composition helpers for the
-// extracted runtime host. Authoritative runtime/session ownership lives in
-// pkg/runtimehost.
+// Package service provides compatibility aliases and legacy wire helpers for the
+// extracted runtime host. Authoritative composition lives in pkg/initializer and
+// pkg/composebridge; runtime/session ownership lives in pkg/runtimehost.
 package service
 
 import (

@@ -19,6 +19,7 @@ func TestTransportComposition_DoesNotUseRootServiceShell(t *testing.T) {
 		"cmd/factory/compose/api_transport.go",
 		"cmd/factory/compose/cli_transport.go",
 		"cmd/factory/compose/mcp_transport.go",
+		"cmd/factory/compose/runtime_runner.go",
 		"pkg/cli/mcp/serve.go",
 		"tests/functional/internal/support/api_server.go",
 		"tests/functional/internal/support/cmd/browser_api_harness/main.go",
@@ -27,6 +28,7 @@ func TestTransportComposition_DoesNotUseRootServiceShell(t *testing.T) {
 		"compose.InjectFactoryService(",
 		"service.BuildFactoryService(",
 		"InjectFactoryService(ctx",
+		"github.com/portpowered/infinite-you/pkg/service",
 	}
 
 	for _, rel := range files {
@@ -52,10 +54,13 @@ func TestInitializerComposition_DoesNotDelegateToServiceBuildFactoryCore(t *test
 
 	repoRoot := repoRootFromTest(t)
 	files := []string{
+		"pkg/initializer/core.go",
+		"pkg/initializer/compose_core.go",
 		"pkg/initializer/services.go",
 		"pkg/initializer/api_transport.go",
 		"pkg/initializer/cli_transport.go",
 		"pkg/initializer/mcp_transport.go",
+		"pkg/initializer/runtime_host.go",
 	}
 	forbidden := []string{
 		"service.BuildFactoryCore(",

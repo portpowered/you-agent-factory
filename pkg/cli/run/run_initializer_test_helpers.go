@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 )
 
 // setInitializerRuntimeBuilder wires Run through the same initializer transport
@@ -15,7 +15,7 @@ func setInitializerRuntimeBuilder(t *testing.T) func() {
 	t.Helper()
 
 	originalBuilder := buildFactoryService
-	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildFactoryService = func(ctx context.Context, cfg *initializer.Config) (factoryServiceRunner, error) {
 		runner, err := compose.InjectRuntimeRunner(ctx, cfg)
 		if err != nil {
 			return nil, err

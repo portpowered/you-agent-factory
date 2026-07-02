@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/pkg/cli"
 	"github.com/portpowered/infinite-you/pkg/cli/run"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 )
 
 var executeCLI = cli.Execute
@@ -18,7 +18,7 @@ func main() {
 	executeCLI()
 }
 
-func buildCLIRuntimeRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (run.RuntimeRunner, error) {
+func buildCLIRuntimeRunner(ctx context.Context, cfg *initializer.Config) (run.RuntimeRunner, error) {
 	runner, err := compose.InjectRuntimeRunner(ctx, cfg)
 	if err != nil {
 		return nil, err

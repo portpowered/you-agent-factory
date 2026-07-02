@@ -5,7 +5,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
-	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 // LocalRuntimeRunner is the session/runtime seam used by local in-process CLI
@@ -27,9 +26,9 @@ func NewSessionRuntimeHostFromCore(core *Core, cfg *Config) *SessionRuntimeHost 
 		return nil
 	}
 	shell := runtimehost.HostShell{Host: runtimehost.NewHostFromCore(core)}
-	host := service.AttachFactorySaveCollaborator(
-		service.FactoryServiceShell(shell),
-		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell(shell), cfg),
+	host := runtimehost.AttachFactorySaveCollaborator(
+		shell,
+		runtimehost.ProvideFactorySaveCollaborator(shell, cfg),
 	)
 	return &SessionRuntimeHost{host: host}
 }
@@ -59,9 +58,9 @@ func (h *SessionRuntimeHost) LocalRuntimeRunner() LocalRuntimeRunner {
 	return h.host
 }
 
-// CompatibilityServiceShell exposes the temporary FactoryService shell for
-// legacy harness callbacks. New transport code must not depend on this method.
-func (h *SessionRuntimeHost) CompatibilityServiceShell() *service.FactoryService {
+// CompatibilityServiceShell exposes the temporary runtime host shell for legacy
+// harness callbacks. New transport code must not depend on this method.
+func (h *SessionRuntimeHost) CompatibilityServiceShell() *runtimehost.Host {
 	if h == nil {
 		return nil
 	}

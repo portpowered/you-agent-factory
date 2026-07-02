@@ -5,12 +5,11 @@ import (
 	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 // InjectRuntimeRunner composes initializer transport for Run startup. Service-mode
 // API hosting (Port > 0) uses InjectAPITransport; batch local runs use InjectCLITransport.
-func InjectRuntimeRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (initializer.LocalRuntimeRunner, error) {
+func InjectRuntimeRunner(ctx context.Context, cfg *initializer.Config) (initializer.LocalRuntimeRunner, error) {
 	if cfg != nil && cfg.Port > 0 {
 		transport, err := InjectAPITransport(ctx, cfg)
 		if err != nil {
