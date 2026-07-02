@@ -19,13 +19,12 @@ func main() {
 }
 
 func buildCLIRuntimeRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (run.RuntimeRunner, error) {
-	transport, err := compose.InjectCLITransport(ctx, cfg)
+	runner, err := compose.InjectRuntimeRunner(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	runner := transport.Runner()
 	if runner == nil {
-		return nil, errors.New("initializer CLI transport missing runtime runner")
+		return nil, errors.New("initializer runtime runner missing")
 	}
 	return runner, nil
 }
