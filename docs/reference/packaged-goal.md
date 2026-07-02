@@ -56,13 +56,12 @@ dashboard startup output. That flag affects operator chatter only; it does not
 change invocation input resolution or primary-result selection.
 
 Use `--output response-stream` on supported one-shot `@you/goal` invocations when
-the CLI owns the live runtime and you want live internal session response-stream
-progress instead of waiting silently for the final `primaryResult`. This mode
-subscribes only to internal `SessionResponseStream` data exposed by the local
-runtime; it does not tail provider-native stdout. Unsupported run shapes such as
-`--continuously`, replay mode, or non-invocation `you run` paths return
-`INVOCATION_OUTPUT_UNSUPPORTED`. When the runtime path cannot attach to an
-internal response stream, the CLI falls back to primary-result-only stdout.
+the CLI owns the live runtime and you want live progress fragments instead of
+waiting silently for the final `primaryResult`. This mode streams progress from
+the local runtime session; it does not tail provider-native stdout. Unsupported
+run shapes such as `--continuously`, replay mode, or non-invocation `you run`
+paths return `INVOCATION_OUTPUT_UNSUPPORTED`. When the runtime path cannot attach
+to a live progress stream, the CLI falls back to primary-result-only stdout.
 
 This guide documents the supported headless **operator-interaction** claim for
 the normal batch success path. It does **not** promise that batch invocation

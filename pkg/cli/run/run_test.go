@@ -18,6 +18,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -56,12 +57,17 @@ func preserveRunGlobals(t *testing.T) {
 	t.Helper()
 
 	originalBuilder := buildFactoryService
+	originalInvocationBuilder := buildFactoryInvocationService
 	originalBootstrap := bootstrapFactory
 	originalOpener := dashboardOpener
 	originalInteractive := interactiveOutput
 	originalStartAPIServer := startAPIServer
+	buildFactoryInvocationService = func(ctx context.Context, cfg *initializer.Config) (factoryServiceRunner, error) {
+		return buildFactoryService(ctx, cfg)
+	}
 	t.Cleanup(func() {
 		buildFactoryService = originalBuilder
+		buildFactoryInvocationService = originalInvocationBuilder
 		bootstrapFactory = originalBootstrap
 		dashboardOpener = originalOpener
 		interactiveOutput = originalInteractive

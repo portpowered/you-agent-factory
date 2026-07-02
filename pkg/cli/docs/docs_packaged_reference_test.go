@@ -61,7 +61,7 @@ func TestMarkdown_PackagedGoalReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you session pause",
 		"SESSION_LIFECYCLE_CONTROL",
 		"`--output response-stream`",
-		"SessionResponseStream",
+		"live progress fragments",
 		"## Inspect-first recovery flow",
 		"FactorySession",
 		"goal-planner/AGENTS.md",

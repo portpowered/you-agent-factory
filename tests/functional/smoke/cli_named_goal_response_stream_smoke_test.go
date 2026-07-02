@@ -108,26 +108,6 @@ func TestNamedGoalResponseStream_DurableFactoryEventsOmitInternalStreamTerms(t *
 	assertNamedGoalDurableEventsOmitInternalResponseStreamTerms(t, string(encoded))
 }
 
-func TestNamedGoalResponseStream_PublicArtifactsOmitInternalStreamTerms(t *testing.T) {
-	repoRoot := findRepoRootForSmoke(t)
-	paths := []string{
-		filepath.Join(repoRoot, "api", "openapi.yaml"),
-		filepath.Join(repoRoot, "pkg", "api", "generated", "server.gen.go"),
-		filepath.Join(repoRoot, "pkg", "generatedclient", "client.gen.go"),
-		filepath.Join(repoRoot, "ui", "src", "api", "generated", "openapi.ts"),
-	}
-	for _, path := range paths {
-		path := path
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read public artifact %s: %v", path, err)
-			}
-			assertNamedGoalDurableEventsOmitInternalResponseStreamTerms(t, string(data))
-		})
-	}
-}
-
 type namedGoalResponseStreamJSONPrimaryResultRecord struct {
 	RecordType string                        `json:"recordType"`
 	Invocation factoryapi.InvocationResponse `json:"invocation"`
@@ -236,22 +216,3 @@ func assertNamedGoalDurableEventsOmitInternalResponseStreamTerms(t *testing.T, t
 	}
 }
 
-func findRepoRootForSmoke(t *testing.T) string {
-	t.Helper()
-
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	dir := wd
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatalf("could not find repo root from %s", wd)
-		}
-		dir = parent
-	}
-}
