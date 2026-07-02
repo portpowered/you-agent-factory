@@ -22,10 +22,12 @@ async function openFactorySessionWidget(page) {
   await page
     .getByRole("heading", { level: 1, name: "U", exact: true })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  await selectComboboxOption(
-    page.getByRole("combobox", { name: "Browse widgets" }),
-    "Factory session",
-  );
+  const browseWidgets = page.getByRole("combobox", { name: "Browse widgets" });
+  await browseWidgets.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  await selectComboboxOption(browseWidgets, "Factory session");
   await page.getByRole("button", { name: "Add widget: Factory session" }).click();
   await page
     .getByRole("heading", {

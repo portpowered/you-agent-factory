@@ -38,6 +38,7 @@ github.com/portpowered/infinite-you/pkg/packagedfactories/goal
 github.com/portpowered/infinite-you/pkg/packagedfactories/tts
 github.com/portpowered/infinite-you/pkg/replay
 github.com/portpowered/infinite-you/pkg/service
+github.com/portpowered/infinite-you/pkg/runtimehost
 github.com/portpowered/infinite-you/pkg/service/factorysave
 github.com/portpowered/infinite-you/pkg/workcontent/materialize
 github.com/portpowered/infinite-you/pkg/workers/mockworker

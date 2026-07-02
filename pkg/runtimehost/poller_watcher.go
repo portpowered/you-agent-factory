@@ -1,4 +1,4 @@
-package service
+package runtimehost
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 
 type workRequestSubmitter func(context.Context, interfaces.WorkRequest) error
 
-func (fs *FactoryService) startSchedulerSidecarsForRuntime(
+func (fs *Host) startSchedulerSidecarsForRuntime(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	factoryDir string,
@@ -40,7 +40,7 @@ func (fs *FactoryService) startSchedulerSidecarsForRuntime(
 	)
 }
 
-func (fs *FactoryService) requireWorkersScheduler() *workersservice.Service {
+func (fs *Host) requireWorkersScheduler() *workersservice.Service {
 	if fs == nil {
 		return workersservice.New(workersservice.Config{})
 	}
@@ -75,7 +75,7 @@ func (fs *FactoryService) requireWorkersScheduler() *workersservice.Service {
 	})
 }
 
-func (fs *FactoryService) submitCronTick(
+func (fs *Host) submitCronTick(
 	ctx context.Context,
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
@@ -97,14 +97,14 @@ func (fs *FactoryService) submitCronTick(
 	)
 }
 
-func (fs *FactoryService) cronWorkflowIdentity(factoryDir string) string {
+func (fs *Host) cronWorkflowIdentity(factoryDir string) string {
 	return fs.requireWorkersScheduler().WorkflowIdentityForFactoryDir(factoryDir)
 }
 
 // NewWorkersSchedulerService constructs the workers scheduling collaborator for
 // runtime-host poller and cron supervision.
 func NewWorkersSchedulerService(
-	cfg *FactoryServiceConfig,
+	cfg *Config,
 	clock factory.Clock,
 	logger *zap.Logger,
 	hostedWorkers hostedworkers.Config,

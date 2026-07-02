@@ -64,7 +64,7 @@ func main() {
 
 	svc, handler, serviceDone, err := startFactoryService(ctx, logger, cfg, projectRoot)
 	if err != nil {
-		fatalf("InjectFactoryService: %v", err)
+		fatalf("InjectAPITransport: %v", err)
 	}
 
 	httpServer, err := startHTTPServer(cfg.apiPort, handler)
@@ -156,14 +156,18 @@ func startFactoryService(
 		},
 	}
 
-	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
+	transport, err := compose.InjectAPITransport(ctx, serviceCfg)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	svc := transport.Host.CompatibilityServiceShell()
+	if svc == nil {
+		return nil, nil, nil, fmt.Errorf("initializer API transport missing session runtime host")
 	}
 
 	serviceDone := make(chan error, 1)
 	go func() {
-		serviceDone <- svc.Run(ctx)
+		serviceDone <- transport.Run(ctx)
 	}()
 
 	if err := waitForAPIHandler(readyCh, serviceDone); err != nil {

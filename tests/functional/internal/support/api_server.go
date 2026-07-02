@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"go.uber.org/zap"
 )
 
@@ -50,12 +51,10 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	var handler http.Handler
 	readyCh := make(chan struct{})
 
-	serviceCfg := &service.FactoryServiceConfig{
-		Dir:                      cfg.FactoryDir,
-		Port:                     1,
-		Logger:                   zap.NewNop(),
-		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
-		ExtraOptions:             cfg.ExtraOptions,
+	serviceCfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
+		Dir:          cfg.FactoryDir,
+		Port:         1,
+		ExtraOptions: cfg.ExtraOptions,
 		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
 			if cfg.CaptureAPISurface != nil {
 				cfg.CaptureAPISurface(surface)
@@ -65,7 +64,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 			<-ctx.Done()
 			return nil
 		},
-	}
+	})
 	if cfg.UseMockWorkers {
 		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
 	}
@@ -73,17 +72,22 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		cfg.Configure(serviceCfg)
 	}
 
-	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
+	transport, err := compose.InjectAPITransport(ctx, serviceCfg)
 	if err != nil {
 		cancel()
-		t.Fatalf("InjectFactoryService: %v", err)
+		t.Fatalf("InjectAPITransport: %v", err)
+	}
+	svc := transport.Host.CompatibilityServiceShell()
+	if svc == nil {
+		cancel()
+		t.Fatal("InjectAPITransport: missing session runtime host")
 	}
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := svc.Run(ctx); err != nil && err != context.Canceled {
-			fmt.Printf("functional support server: svc.Run ended: %v\n", err)
+		if err := transport.Run(ctx); err != nil && err != context.Canceled {
+			fmt.Printf("functional support server: transport.Run ended: %v\n", err)
 		}
 	}()
 

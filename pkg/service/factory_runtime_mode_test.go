@@ -29,7 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/factorysave"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -170,7 +170,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureLifecycleAndStateTr
 	}()
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
-	session := svc.sessionByID(defaultFactorySessionID)
+	session := svc.SessionByID(defaultFactorySessionID)
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.MetricsSink == nil {
 		t.Fatal("default session runtime metrics sink is unavailable")
 	}
@@ -278,7 +278,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t 
 	go func() { errCh <- svc.Run(runCtx) }()
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
-	session := svc.sessionByID(defaultFactorySessionID)
+	session := svc.SessionByID(defaultFactorySessionID)
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.MetricsSink == nil {
 		t.Fatal("default session runtime metrics sink is unavailable")
 	}
@@ -421,7 +421,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 	go func() { errCh <- svc.Run(runCtx) }()
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
-	session := svc.sessionByID(defaultFactorySessionID)
+	session := svc.SessionByID(defaultFactorySessionID)
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.MetricsSink == nil {
 		t.Fatal("default session runtime metrics sink is unavailable")
 	}
@@ -551,7 +551,7 @@ func TestBuildFactoryService_ServiceModeContinuesWhenRuntimeMetricsSinkUnavailab
 	go func() { errCh <- svc.Run(runCtx) }()
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup without metrics sink")
-	session := svc.sessionByID(defaultFactorySessionID)
+	session := svc.SessionByID(defaultFactorySessionID)
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("default session runtime is unavailable")
 	}
@@ -937,7 +937,7 @@ func TestBuildFactoryService_InvalidWorkFile(t *testing.T) {
 	}
 
 	// submitWorkFile should fail for nonexistent file.
-	err = svc.submitWorkFile(ctx)
+	err = svc.SubmitWorkFile(ctx)
 	if err == nil {
 		t.Fatal("expected error for nonexistent work file")
 	}
@@ -972,7 +972,7 @@ func TestBuildFactoryService_WorkFileRejectsRetiredTargetStateAlias(t *testing.T
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	err = svc.submitWorkFile(context.Background())
+	err = svc.SubmitWorkFile(context.Background())
 	if err == nil {
 		t.Fatal("expected retired target_state alias to fail")
 	}
@@ -1011,7 +1011,7 @@ func TestBuildFactoryService_WorkFileRejectsConflictingTraceAliases(t *testing.T
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	err = svc.submitWorkFile(context.Background())
+	err = svc.SubmitWorkFile(context.Background())
 	if err == nil {
 		t.Fatal("expected conflicting trace aliases to fail")
 	}
@@ -1039,15 +1039,15 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.coordinatorPolicy().runtimeMode != interfaces.RuntimeModeService {
-		t.Fatalf("service runtime mode = %q, want %q", svc.coordinatorPolicy().runtimeMode, interfaces.RuntimeModeService)
+	if cfg := svc.ServiceConfig(); cfg == nil || cfg.RuntimeMode != interfaces.RuntimeModeService {
+		t.Fatalf("service runtime mode = %q, want %q", cfg.RuntimeMode, interfaces.RuntimeModeService)
 	}
-	if svc.coordinatorPolicy().dir != alphaDir {
-		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
+	if cfg := svc.ServiceConfig(); cfg == nil || cfg.Dir != alphaDir {
+		t.Fatalf("service dir = %q, want %q", cfg.Dir, alphaDir)
 	}
 
 	createReplacementWatchChannel(t, betaDir, "task", "activated")
-	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
+	replacement, err := svc.BuildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
@@ -1099,7 +1099,7 @@ func TestBuildReplacementFactoryRuntime_WiresLocalModelDelegationSeam(t *testing
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
+	replacement, err := svc.BuildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
@@ -1136,7 +1136,7 @@ func TestBuildFactoryService_StartupRuntimeBundleMatchesLiveHandleShape(t *testi
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	bundle := svc.currentRuntimeBundle()
+	bundle := svc.CurrentRuntimeBundle()
 	if bundle == nil {
 		t.Fatal("currentRuntimeBundle = nil, want startup bundle before Run")
 	}
@@ -1169,8 +1169,8 @@ func TestFactoryService_Run_ClearsStartupBundleAfterDefaultRegisters(t *testing.
 	}
 	runFactoryServiceWithCleanup(t, svc)
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
-	defaultHandle := liveSessionHandle(svc.defaultSession())
-	if bundle := svc.currentRuntimeBundle(); bundle == nil || defaultHandle == nil || bundle != defaultHandle.Bundle {
+	defaultHandle := liveSessionHandle(svc.DefaultSession())
+	if bundle := svc.CurrentRuntimeBundle(); bundle == nil || defaultHandle == nil || bundle != defaultHandle.Bundle {
 		t.Fatal("currentRuntimeBundle should resolve only through the default session handle after Run")
 	}
 }
@@ -1192,22 +1192,22 @@ func TestBuildFactoryService_PreservesSessionsRegistryAcrossRuntimeReplacement(t
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.sessions == nil {
+	if svc.SessionsRegistry() == nil {
 		t.Fatal("expected factorysessions.Registry on FactoryService")
 	}
-	if svc.runtimeBuild == nil {
+	if svc.RuntimeBuildService() == nil {
 		t.Fatal("expected runtimebuild.Service on FactoryService")
 	}
-	registryBefore := svc.sessions
+	registryBefore := svc.SessionsRegistry()
 
-	if _, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID); err != nil {
+	if _, err := svc.BuildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID); err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
-	if svc.sessions != registryBefore {
+	if svc.SessionsRegistry() != registryBefore {
 		t.Fatal("buildReplacementFactoryRuntime replaced sessions registry; session ownership should stay on FactoryService")
 	}
-	if svc.coordinatorPolicy().dir != alphaDir {
-		t.Fatalf("service dir = %q, want unchanged %q until activation", svc.coordinatorPolicy().dir, alphaDir)
+	if cfg := svc.ServiceConfig(); cfg == nil || cfg.Dir != alphaDir {
+		t.Fatalf("service dir = %q, want unchanged %q until activation", cfg.Dir, alphaDir)
 	}
 }
 
@@ -1227,42 +1227,37 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.sessions == nil {
+	snapshot := svc.ComposeCollaboratorSnapshot()
+	if !snapshot.SessionsInitialized {
 		t.Fatal("expected explicit factorysessions.Registry collaborator")
 	}
-	if svc.runtimeBuild == nil {
+	if !snapshot.RuntimeBuildInitialized {
 		t.Fatal("expected explicit runtimebuild.Service collaborator")
 	}
-	if svc.modelService == nil {
+	if !snapshot.ModelServiceInitialized {
 		t.Fatal("expected explicit model service collaborator")
 	}
-	if _, ok := svc.modelService.(*modelsservice.Service); !ok {
-		t.Fatalf("modelService type = %T, want *modelsservice.Service for production wiring", svc.modelService)
-	}
-	if svc.factorySave == nil {
+	if !snapshot.FactorySaveInitialized {
 		t.Fatal("expected explicit factorysave collaborator")
 	}
-	if svc.definitions == nil {
+	if !snapshot.DefinitionsInitialized {
 		t.Fatal("expected explicit factory definition collaborator")
 	}
-	if _, ok := svc.factorySave.(*factorysave.Service); !ok {
-		t.Fatalf("factorySave type = %T, want *factorysave.Service for production wiring", svc.factorySave)
-	}
-	if svc.hostedWorkers.Logger == nil {
+	if !snapshot.HostedWorkersLoggerReady {
 		t.Fatal("expected explicit hostedworkers.Config collaborator with logger")
 	}
-	if svc.modelAssets == nil {
+	if !snapshot.ModelAssetsInitialized {
 		t.Fatal("expected explicit localmodels asset puller collaborator")
 	}
-	defaultSessionSpec := liveSessionBuildSpec(svc.defaultSession())
+	defaultSessionSpec := runtimehost.LiveSessionBuildSpec(svc.DefaultSession())
 	if defaultSessionSpec == nil {
 		t.Fatal("expected default session build spec")
 	}
 	if defaultSessionSpec.LoadedFactoryCfg == nil {
 		t.Fatal("default session build spec loaded config = nil")
 	}
-	if svc.coordinatorPolicy().dir != alphaDir {
-		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
+	if cfg := svc.ServiceConfig(); cfg == nil || cfg.Dir != alphaDir {
+		t.Fatalf("service dir = %q, want %q", cfg.Dir, alphaDir)
 	}
 }
 
@@ -1283,11 +1278,10 @@ func TestBuildFactoryService_WiresSessionGatewayCollaborator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.sessionGateway == nil {
+	if gateway := svc.SessionGatewayCollaborator(); gateway == nil {
 		t.Fatal("expected session gateway collaborator on FactoryService")
-	}
-	if _, ok := svc.sessionGateway.(*factorysessionservice.Service); !ok {
-		t.Fatalf("session gateway type = %T, want *factorysessionservice.Service", svc.sessionGateway)
+	} else if _, ok := gateway.(*factorysessionservice.Service); !ok {
+		t.Fatalf("session gateway type = %T, want *factorysessionservice.Service", gateway)
 	}
 }
 
@@ -1295,7 +1289,7 @@ func TestFactoryService_SaveFactoryForSession_DelegatesToInjectedFactorySave(t *
 	t.Parallel()
 
 	stub := &recordingFactorySaveSaver{}
-	svc := &FactoryService{factorySave: stub}
+	svc := newTestFactoryServiceWithFactorySave(stub)
 	request := factoryapi.Factory{
 		Name: factoryapi.FactoryName("story-save"),
 	}
@@ -1349,7 +1343,7 @@ func TestFactoryService_GetCurrentFactory_DelegatesToInjectedDefinitions(t *test
 	stub := &recordingFactoryDefinitions{
 		namedFactory: factoryapi.Factory{Name: factoryapi.FactoryName("delegated-current")},
 	}
-	svc := &FactoryService{definitions: stub}
+	svc := newTestFactoryServiceWithDefinitions(stub)
 
 	got, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
@@ -1370,7 +1364,7 @@ func TestFactoryService_GetCurrentFactoryForSession_DelegatesToInjectedDefinitio
 	stub := &recordingFactoryDefinitions{
 		sessionFactory: factoryapi.Factory{Name: factoryapi.FactoryName("delegated-session")},
 	}
-	svc := &FactoryService{definitions: stub}
+	svc := newTestFactoryServiceWithDefinitions(stub)
 
 	got, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
 	if err != nil {
@@ -1463,17 +1457,16 @@ func TestFactoryService_PullModel_DelegatesToInjectedModelAssets(t *testing.T) {
 }
 
 func newModelCatalogServiceForTest(runtimeCfg *factoryconfig.LoadedFactoryConfig, puller modelAssetPuller) *FactoryService {
-	svc := &FactoryService{
-		sessions:    factorysessions.NewRegistry(),
-		modelAssets: puller,
-	}
-	svc.sessions.Upsert(factorysessions.NewLiveSession(
+	svc := newTestFactoryService()
+	svc.SetSessionsForTest(factorysessions.NewRegistry())
+	svc.SetModelAssetsForTest(puller)
+	svc.SessionsRegistry().Upsert(factorysessions.NewLiveSession(
 		defaultFactorySessionID,
 		"",
 		"",
 		"",
 		FactorySessionTargetRef{},
-		&liveSessionState{spec: &runtimebuild.SessionBuildSpec{LoadedFactoryCfg: runtimeCfg}},
+		runtimehost.NewLiveSessionStateForTest(&runtimebuild.SessionBuildSpec{LoadedFactoryCfg: runtimeCfg}),
 		true,
 		"",
 	), true)
@@ -1798,36 +1791,36 @@ func (s *stubFactoryCoordinator) GetCurrentFactoryForSession(_ context.Context, 
 	return s.currentFactory, nil
 }
 
-func (s *stubFactoryCoordinator) startDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error) {
+func (s *stubFactoryCoordinator) StartDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error) {
 	s.calls = append(s.calls, "start-default-runtime")
 	return &liveRuntimeHandle{}, nil
 }
 
-func (s *stubFactoryCoordinator) startBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error {
+func (s *stubFactoryCoordinator) StartBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error {
 	s.calls = append(s.calls, "start-background-session")
 	return nil
 }
 
-func (s *stubFactoryCoordinator) startLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error {
+func (s *stubFactoryCoordinator) StartLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error {
 	s.calls = append(s.calls, "start-sidecars")
 	return nil
 }
 
-func (s *stubFactoryCoordinator) stopLiveRuntimeSidecars(*liveRuntimeHandle) {
+func (s *stubFactoryCoordinator) StopLiveRuntimeSidecars(*liveRuntimeHandle) {
 	s.calls = append(s.calls, "stop-sidecars")
 }
 
-func (s *stubFactoryCoordinator) stopLiveRuntime(*liveRuntimeHandle) error {
+func (s *stubFactoryCoordinator) StopLiveRuntime(*liveRuntimeHandle) error {
 	s.calls = append(s.calls, "stop-runtime")
 	return nil
 }
 
-func (s *stubFactoryCoordinator) shutdownOtherLiveSessions(*liveRuntimeHandle) error {
+func (s *stubFactoryCoordinator) ShutdownOtherLiveSessions(*liveRuntimeHandle) error {
 	s.calls = append(s.calls, "shutdown-other-sessions")
 	return nil
 }
 
-func (s *stubFactoryCoordinator) replaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error {
+func (s *stubFactoryCoordinator) ReplaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error {
 	s.calls = append(s.calls, "replace-session-runtime")
 	return nil
 }
@@ -1842,7 +1835,8 @@ func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 		pullResult:   apisurface.ModelPullResult{ModelName: "pull-model"},
 		invokeResult: apisurface.ModelInvocationResult{ModelName: "invoke-model"},
 	}
-	svc := &FactoryService{modelService: stub}
+	svc := newTestFactoryService()
+	svc.SetModelServiceForTest(stub)
 
 	listed, err := svc.ListModels(context.Background())
 	if err != nil {
@@ -1887,13 +1881,80 @@ func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 func TestWireModelServiceCollaborator_UsesModelsServiceByDefault(t *testing.T) {
 	t.Parallel()
 
-	api := wireModelServiceCollaborator(nil, nil)
+	api := runtimehost.WireModelServiceCollaborator(nil, nil)
 	if _, ok := api.(*modelsservice.Service); !ok {
 		t.Fatalf("wireModelServiceCollaborator(nil) type = %T, want *modelsservice.Service", api)
 	}
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this delegation test keeps the session-lifecycle facade sequence and collaborator assertions together on one compatibility seam.
+func invokeLifecycleDelegationMethods(
+	t *testing.T,
+	svc *FactoryService,
+) (factoryapi.ListFactorySessionsResponse, factoryapi.Factory, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
+	t.Helper()
+	ctx := context.Background()
+	listed, err := svc.ListFactorySessions(ctx)
+	if err != nil {
+		t.Fatalf("ListFactorySessions: %v", err)
+	}
+	folderPath := "/tmp/factory"
+	if _, err := svc.OpenFactorySession(ctx, factoryapi.OpenFactorySessionRequest{FolderPath: folderPath}); err != nil {
+		t.Fatalf("OpenFactorySession: %v", err)
+	}
+	if _, err := svc.OpenFactorySessionFromFolder(ctx, folderPath, nil, false, false); err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+	}
+	if err := svc.CloseFactorySession(ctx, "session-a"); err != nil {
+		t.Fatalf("CloseFactorySession: %v", err)
+	}
+	if _, err := svc.PauseLiveFactorySession(ctx, "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+	if _, err := svc.ResumeLiveFactorySession(ctx, "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
+	if _, err := svc.PauseDurableFactorySession(ctx, "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseDurableFactorySession: %v", err)
+	}
+	if _, err := svc.CancelDurableFactorySession(ctx, "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("CancelDurableFactorySession: %v", err)
+	}
+	if _, err := svc.GetFactorySessionSyncPreflight(ctx, "session-a", nil, nil); err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
+	}
+	if _, err := svc.GetFactorySessionResult(ctx, "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionResult: %v", err)
+	}
+	if _, err := svc.GetFactorySessionPartialResult(ctx, "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionPartialResult: %v", err)
+	}
+	if _, err := svc.SubscribeSessionResponseStream("session-a", "dispatch-1", 0); err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
+	if err := svc.ActivateNamedFactory(ctx, "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory: %v", err)
+	}
+	current, err := svc.GetCurrentFactoryForSession(ctx, "session-a")
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if _, err := svc.SubmitWorkRequestForSession(ctx, "session-a", interfaces.WorkRequest{}); err != nil {
+		t.Fatalf("SubmitWorkRequestForSession: %v", err)
+	}
+	if _, err := svc.MoveWorkForSession(ctx, "session-a", "work-1", "done", "request-2"); err != nil {
+		t.Fatalf("MoveWorkForSession: %v", err)
+	}
+	if _, err := svc.SubscribeFactoryEventsForSession(ctx, "session-a", nil); err != nil {
+		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
+	}
+	snapshot, err := svc.GetEngineStateSnapshotForSession(ctx, "session-a")
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
+	}
+	return listed, current, snapshot
+}
+
 func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	t.Parallel()
 
@@ -1911,66 +1972,12 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	definitions := &recordingFactoryDefinitions{
 		sessionFactory: factoryapi.Factory{Name: "beta"},
 	}
-	svc := &FactoryService{coordinator: stub, definitions: definitions, sessionGateway: gatewayStub}
+	svc := newTestFactoryService()
+	svc.SetCoordinatorForTest(stub)
+	svc.SetDefinitionsForTest(definitions)
+	svc.SetSessionGatewayForTest(gatewayStub)
 
-	listed, err := svc.ListFactorySessions(context.Background())
-	if err != nil {
-		t.Fatalf("ListFactorySessions: %v", err)
-	}
-	folderPath := "/tmp/factory"
-	if _, err := svc.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{FolderPath: folderPath}); err != nil {
-		t.Fatalf("OpenFactorySession: %v", err)
-	}
-	if _, err := svc.OpenFactorySessionFromFolder(context.Background(), folderPath, nil, false, false); err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
-	}
-	if err := svc.CloseFactorySession(context.Background(), "session-a"); err != nil {
-		t.Fatalf("CloseFactorySession: %v", err)
-	}
-	if _, err := svc.PauseLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("PauseLiveFactorySession: %v", err)
-	}
-	if _, err := svc.ResumeLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("ResumeLiveFactorySession: %v", err)
-	}
-	if _, err := svc.PauseDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("PauseDurableFactorySession: %v", err)
-	}
-	if _, err := svc.CancelDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("CancelDurableFactorySession: %v", err)
-	}
-	if _, err := svc.GetFactorySessionSyncPreflight(context.Background(), "session-a", nil, nil); err != nil {
-		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
-	}
-	if _, err := svc.GetFactorySessionResult(context.Background(), "session-a"); err != nil {
-		t.Fatalf("GetFactorySessionResult: %v", err)
-	}
-	if _, err := svc.GetFactorySessionPartialResult(context.Background(), "session-a"); err != nil {
-		t.Fatalf("GetFactorySessionPartialResult: %v", err)
-	}
-	if _, err := svc.SubscribeSessionResponseStream("session-a", "dispatch-1", 0); err != nil {
-		t.Fatalf("SubscribeSessionResponseStream: %v", err)
-	}
-	if err := svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
-		t.Fatalf("ActivateNamedFactory: %v", err)
-	}
-	current, err := svc.GetCurrentFactoryForSession(context.Background(), "session-a")
-	if err != nil {
-		t.Fatalf("GetCurrentFactoryForSession: %v", err)
-	}
-	if _, err := svc.SubmitWorkRequestForSession(context.Background(), "session-a", interfaces.WorkRequest{}); err != nil {
-		t.Fatalf("SubmitWorkRequestForSession: %v", err)
-	}
-	if _, err := svc.MoveWorkForSession(context.Background(), "session-a", "work-1", "done", "request-2"); err != nil {
-		t.Fatalf("MoveWorkForSession: %v", err)
-	}
-	if _, err := svc.SubscribeFactoryEventsForSession(context.Background(), "session-a", nil); err != nil {
-		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
-	}
-	snapshot, err := svc.GetEngineStateSnapshotForSession(context.Background(), "session-a")
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
-	}
+	listed, current, snapshot := invokeLifecycleDelegationMethods(t, svc)
 
 	if len(listed.Sessions) != 1 || listed.Sessions[0].Id != "session-a" {
 		t.Fatalf("ListFactorySessions result = %#v, want delegated session summary", listed)
@@ -2011,14 +2018,14 @@ func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.sessions == nil {
+	if svc.SessionsRegistry() == nil {
 		t.Fatal("expected factorysessions.Registry on FactoryService")
 	}
-	if svc.coordinatorPolicy().dir != alphaDir {
-		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
+	if cfg := svc.ServiceConfig(); cfg == nil || cfg.Dir != alphaDir {
+		t.Fatalf("service dir = %q, want %q", cfg.Dir, alphaDir)
 	}
-	if svc.sessions.Count() != 1 {
-		t.Fatalf("sessions.Count() = %d before Run, want seeded default session", svc.sessions.Count())
+	if svc.SessionsRegistry().Count() != 1 {
+		t.Fatalf("sessions.Count() = %d before Run, want seeded default session", svc.SessionsRegistry().Count())
 	}
 }
 
@@ -2038,8 +2045,8 @@ func TestFactoryService_Run_RegistersDefaultSessionInRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.sessions.Count() != 1 {
-		t.Fatalf("sessions.Count() = %d before Run, want seeded default session", svc.sessions.Count())
+	if svc.SessionsRegistry().Count() != 1 {
+		t.Fatalf("sessions.Count() = %d before Run, want seeded default session", svc.SessionsRegistry().Count())
 	}
 
 	runFactoryServiceWithCleanup(t, svc)
@@ -2071,7 +2078,7 @@ func runFactoryServiceWithCleanup(t *testing.T, svc *FactoryService) {
 func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, rootDir, alphaDir string) {
 	t.Helper()
 
-	defaultSession := svc.defaultSession()
+	defaultSession := svc.DefaultSession()
 	if defaultSession == nil {
 		t.Fatal("defaultSession = nil after Run, want ~default registry entry")
 	}
@@ -2099,18 +2106,18 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 		t.Fatalf("default live handle runtime dir = %q, want %q", defaultHandle.Bundle.Dir, alphaDir)
 	}
 
-	runState := svc.currentRunState()
+	runState := svc.CurrentRunState()
 	if runState == nil {
 		t.Fatal("runState = nil after Run, want default session run state")
 	}
-	if runState.sessionID == factorysessions.DefaultSessionID {
-		t.Fatalf("runState.sessionID = %q, want resolved uuid", runState.sessionID)
+	if runState.SessionID() == factorysessions.DefaultSessionID {
+		t.Fatalf("runState.sessionID = %q, want resolved uuid", runState.SessionID())
 	}
-	assertResolvedDefaultLiveSessionID(t, runState.sessionID)
-	if current := svc.currentSession(); current == nil || current.ID != runState.sessionID {
-		t.Fatalf("currentSession = %#v, want selected %q", current, runState.sessionID)
+	assertResolvedDefaultLiveSessionID(t, runState.SessionID())
+	if current := svc.CurrentSession(); current == nil || current.ID != runState.SessionID() {
+		t.Fatalf("currentSession = %#v, want selected %q", current, runState.SessionID())
 	}
-	if bundle := svc.currentRuntimeBundle(); bundle != defaultHandle.Bundle {
+	if bundle := svc.CurrentRuntimeBundle(); bundle != defaultHandle.Bundle {
 		t.Fatal("currentRuntimeBundle should resolve through the default session registry handle after Run")
 	}
 }
@@ -2169,7 +2176,7 @@ func TestFactoryService_GetEngineStateSnapshot_DelegatesToFactoryAggregateSnapsh
 		TickCount:     7,
 	}
 	mock := &aggregateSnapshotFactory{engineState: expected}
-	svc := &FactoryService{}
+	svc := newTestFactoryService()
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: mock})
 
 	got, err := svc.GetEngineStateSnapshot(context.Background())
@@ -2533,7 +2540,7 @@ func TestBuildFactoryService_AppliesOperatorDefaultsToOmittedModelWorkerFields(t
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	runtimeCfg := svc.currentRuntimeConfig()
+	runtimeCfg := svc.CurrentRuntimeConfig()
 	if runtimeCfg == nil {
 		t.Fatal("expected current runtime config")
 	}
@@ -2593,7 +2600,7 @@ func TestBuildFactoryService_PreservesAuthoredModelWorkerFieldsOverOperatorDefau
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	worker, ok := svc.currentRuntimeConfig().Worker("executor")
+	worker, ok := svc.CurrentRuntimeConfig().Worker("executor")
 	if !ok {
 		t.Fatal("expected executor worker")
 	}
@@ -2628,7 +2635,7 @@ func TestBuildReplacementFactoryRuntime_AppliesOperatorDefaults(t *testing.T) {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	alphaWorker, ok := svc.currentRuntimeConfig().Worker("executor")
+	alphaWorker, ok := svc.CurrentRuntimeConfig().Worker("executor")
 	if !ok {
 		t.Fatal("expected alpha executor worker")
 	}
@@ -2636,7 +2643,7 @@ func TestBuildReplacementFactoryRuntime_AppliesOperatorDefaults(t *testing.T) {
 		t.Fatalf("alpha modelProvider = %q, want codex", alphaWorker.ModelProvider)
 	}
 
-	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
+	replacement, err := svc.BuildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
 	if err != nil {
 		t.Fatalf("buildReplacementFactoryRuntime: %v", err)
 	}
@@ -2739,11 +2746,11 @@ func TestBuildFactoryService_StartupModelHostMatchesRuntimeBundle(t *testing.T) 
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	startupHost := svc.core.ModelHost()
+	startupHost := svc.Core().ModelHost()
 	if startupHost == nil {
 		t.Fatal("startup model host = nil")
 	}
-	if svc.startupBundle != nil && svc.startupBundle.ModelHost != startupHost {
+	if bundle := svc.StartupBundle(); bundle != nil && bundle.ModelHost != startupHost {
 		t.Fatal("startup bundle model host does not match service collaborator host")
 	}
 }

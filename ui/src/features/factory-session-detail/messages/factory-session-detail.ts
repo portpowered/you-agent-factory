@@ -45,8 +45,9 @@ export interface FactorySessionDetailMessages
   dispatchAttemptLabel: string;
   dispatchDetailErrorState: string;
   dispatchDetailHeading: string;
-  dispatchDetailMissingState: string;
+  dispatchDetailMissingState: (dispatchID: string) => string;
   dispatchDetailLoadingState: string;
+  dispatchDetailRetryLabel: string;
   dispatchExecutionModeSummary: (mode: string) => string;
   dispatchKindLabel: string;
   dispatchLabelField: string;
@@ -257,7 +258,9 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailErrorState: "The dispatch detail could not be loaded.",
     dispatchDetailHeading: "Dispatch detail",
     dispatchDetailLoadingState: "Loading dispatch detail…",
-    dispatchDetailMissingState: "This dispatch detail is no longer available.",
+    dispatchDetailMissingState: (dispatchID) =>
+      `Dispatch detail for ${dispatchID} is no longer available.`,
+    dispatchDetailRetryLabel: "Retry loading dispatch detail",
     dispatchExecutionModeSummary: (mode) => `Execution mode: ${mode}`,
     dispatchKindLabel: "Dispatch kind",
     dispatchLabelField: "Dispatch label",
@@ -352,7 +355,9 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailErrorState: "无法加载调度详情。",
     dispatchDetailHeading: "调度详情",
     dispatchDetailLoadingState: "正在加载调度详情…",
-    dispatchDetailMissingState: "此调度详情已不可用。",
+    dispatchDetailMissingState: (dispatchID) =>
+      `${dispatchID} 的调度详情已不可用。`,
+    dispatchDetailRetryLabel: "重试加载调度详情",
     dispatchExecutionModeSummary: (mode) => `执行模式：${mode}`,
     dispatchKindLabel: "调度类型",
     dispatchLabelField: "调度标签",
