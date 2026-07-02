@@ -28,7 +28,10 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 
 Run commands from the repository root shown above.
 
+Fresh checkouts should run `make init` once to install Bun dependencies for the dashboard (`ui/`) and the scoped components package (`ui/packages/components/`). The target requires Bun on `PATH`, stops on the first failed install, and does not require changing directories manually.
+
 ```bash
+make init
 make build
 make generate-api
 make api-smoke
