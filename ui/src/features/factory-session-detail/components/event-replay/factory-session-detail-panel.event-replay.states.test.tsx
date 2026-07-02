@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildSuccessfulDurableSession,
   buildWarningDurableSession,
+  buildEmptyReplayEventStream,
   successfulReplaySessionID,
   warningReplaySessionID,
 } from "../../../../testing/factory-session-event-replay-fixtures";
@@ -82,15 +83,12 @@ describe("FactorySessionDetailPanel event replay disclosure loading and empty st
         return jsonResponse(buildSuccessfulDurableSession());
       }
       if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)) {
-        return new Response(
-          [": keepalive", "", "event: ping", "data: ignored", ""].join("\n"),
-          {
-            headers: {
-              "Content-Type": "text/event-stream",
-            },
-            status: 200,
+        return new Response(buildEmptyReplayEventStream(), {
+          headers: {
+            "Content-Type": "text/event-stream",
           },
-        );
+          status: 200,
+        });
       }
       return new Response("not found", { status: 404 });
     });

@@ -4,6 +4,8 @@ export const successfulReplaySessionID = "dur-sess-js-success-002";
 export const warningReplaySessionID = "dur-sess-js-warning-003";
 export const awaitingReplaySessionID = "dur-sess-js-awaiting-001";
 export const unavailableReplaySessionID = "dur-sess-js-unavailable-003";
+export const emptyReplaySessionID = "dur-sess-js-empty-004";
+export const errorReplaySessionID = "dur-sess-js-error-005";
 
 export function buildSuccessfulDurableSession(sessionId = successfulReplaySessionID) {
   return {
@@ -284,6 +286,10 @@ export function buildWarningReplayEventStream(
     })}`,
     "",
   ].join("\n");
+}
+
+export function buildEmptyReplayEventStream() {
+  return [": keepalive", "", "event: ping", "data: ignored", ""].join("\n");
 }
 
 export function buildAwaitingReplayEventStream(
