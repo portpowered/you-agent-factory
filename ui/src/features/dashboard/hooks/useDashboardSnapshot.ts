@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import {
@@ -14,6 +14,7 @@ import {
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
@@ -83,7 +84,9 @@ export function useDashboardSnapshot({
     () => (rawSessionID == null ? null : `${rawSessionID}::${refreshToken}`),
     [rawSessionID, refreshToken],
   );
-  const invalidatedReconnectCursorRef = useRef(false);
+  const reconnectCursorInvalidatedRef = useRef(false);
+  const [reconnectCursorRevision, setReconnectCursorRevision] = useState(0);
+  const defaultRuntimeSessionIDRef = useRef<string | null>(null);
   const lastPersistedCheckpointRef =
     useRef<FactoryTimelineCheckpoint | null>(null);
   const lastSessionIDRef = useRef<string | null>(null);
@@ -117,23 +120,48 @@ export function useDashboardSnapshot({
 
   const effectiveSessionID = resolvedSessionID ?? rawSessionID;
 
-  if (lastSessionIDRef.current !== effectiveSessionID) {
-    invalidatedReconnectCursorRef.current = false;
-    lastSessionIDRef.current = effectiveSessionID;
+  if (
+    resolvedSessionID != null &&
+    rawSessionID != null &&
+    rawSessionID === DEFAULT_FACTORY_SESSION_ID
+  ) {
+    defaultRuntimeSessionIDRef.current = resolvedSessionID;
   }
+
+  useEffect(() => {
+    if (lastSessionIDRef.current === effectiveSessionID) {
+      return;
+    }
+    const previousSessionID = lastSessionIDRef.current;
+    lastSessionIDRef.current = effectiveSessionID;
+    const runtimeUUID = defaultRuntimeSessionIDRef.current;
+    const isDefaultRuntimeIdentityTransition =
+      runtimeUUID != null &&
+      previousSessionID != null &&
+      ((previousSessionID === DEFAULT_FACTORY_SESSION_ID &&
+        effectiveSessionID === runtimeUUID) ||
+        (previousSessionID === runtimeUUID &&
+          effectiveSessionID === DEFAULT_FACTORY_SESSION_ID));
+    if (!isDefaultRuntimeIdentityTransition) {
+      reconnectCursorInvalidatedRef.current = false;
+      setReconnectCursorRevision((revision) => revision + 1);
+    }
+  }, [effectiveSessionID]);
+
   lastPersistedCheckpointRef.current = persistedCheckpoint;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken intentionally retriggers invalidated cursor reads on manual stream retry.
   const initialReconnectCursor = useMemo(
     () =>
-      invalidatedReconnectCursorRef.current
+      reconnectCursorInvalidatedRef.current
         ? undefined
         : (preflightReconnectCursor ??
           reconnectCursorFromCheckpoint(persistedCheckpoint)),
-    [persistedCheckpoint, preflightReconnectCursor],
+    [persistedCheckpoint, preflightReconnectCursor, reconnectCursorRevision, refreshToken],
   );
 
   const handleInvalidReconnectCursor = useCallback(() => {
-    invalidatedReconnectCursorRef.current = true;
+    reconnectCursorInvalidatedRef.current = true;
     if (streamIdentity && rawSessionID) {
       recordSessionPersistenceInvalidation(
         silentReplayRecoveryDiagnostic(

@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { getFactorySessionSyncPreflight } from "../../../../api/factory-sessions";
 import type { FactoryTimelineCheckpoint } from "../../../timeline/public";
 import {
@@ -18,6 +19,7 @@ import {
 import {
   checkpointSyncIdentityFromPreflight,
   type DashboardSessionRecoveryState,
+  type DashboardSyncPreflightResolution,
   resolveDashboardSyncPreflight,
   shouldClearCheckpointAfterPreflight,
   syncPreflightIdentityHintsFromCheckpoint,
@@ -50,6 +52,170 @@ export interface DashboardCheckpointPreflightHydration {
   preflightRecovery: DashboardSessionRecoveryState | null;
   resolvedSessionID: string | null;
   streamIdentity: TimelineCheckpointStreamIdentity | null;
+}
+
+type ResumePreflightResolution = Extract<
+  DashboardSyncPreflightResolution,
+  { kind: "resume" }
+>;
+
+async function clearRequestedSessionCheckpoint(
+  queryClient: QueryClient,
+  requestedSessionId: string,
+): Promise<void> {
+  await clearTimelineCheckpointsForSession(
+    window.indexedDB,
+    requestedSessionId,
+  );
+  recoverDashboardSessionScopedState(
+    queryClient,
+    requestedSessionId,
+    () => {},
+  );
+}
+
+async function reconcileReconnectCursor({
+  peekedStreamIdentity,
+  queryClient,
+  requestedSessionId,
+  resolvedStreamIdentity,
+  validatedReconnectCursor,
+}: {
+  peekedStreamIdentity: TimelineCheckpointStreamIdentity | null | undefined;
+  queryClient: QueryClient;
+  requestedSessionId: string;
+  resolvedStreamIdentity: TimelineCheckpointStreamIdentity;
+  validatedReconnectCursor: ResumePreflightResolution["reconnectCursor"];
+}): Promise<ResumePreflightResolution["reconnectCursor"]> {
+  if (
+    peekedStreamIdentity != null &&
+    !storedCheckpointMatchesResolvedStream(
+      peekedStreamIdentity,
+      resolvedStreamIdentity,
+    )
+  ) {
+    await clearRequestedSessionCheckpoint(queryClient, requestedSessionId);
+    return undefined;
+  }
+  return validatedReconnectCursor;
+}
+
+async function loadRestoredCheckpoint({
+  checkpointReusable,
+  checkpointStreamIdentity,
+  queryClient,
+  reconnectCursorForStream,
+  requestedSessionId,
+  resolvedSessionId,
+  resolvedStreamIdentity,
+  response,
+  restoreCheckpoint,
+}: {
+  checkpointReusable: boolean;
+  checkpointStreamIdentity: TimelineCheckpointStreamIdentity;
+  queryClient: QueryClient;
+  reconnectCursorForStream: ResumePreflightResolution["reconnectCursor"];
+  requestedSessionId: string;
+  resolvedSessionId: string;
+  resolvedStreamIdentity: TimelineCheckpointStreamIdentity;
+  response: FactorySessionSyncPreflightResponse;
+  restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+}): Promise<FactoryTimelineCheckpoint | null> {
+  if (shouldClearCheckpointAfterPreflight(response)) {
+    await clearRequestedSessionCheckpoint(queryClient, requestedSessionId);
+    if (resolvedSessionId !== requestedSessionId) {
+      clearDashboardSessionRuntimeQueries(queryClient, requestedSessionId);
+    }
+  }
+
+  let checkpoint: FactoryTimelineCheckpoint | null = null;
+  if (checkpointReusable && reconnectCursorForStream) {
+    checkpoint = await readTimelineCheckpoint(
+      window.indexedDB,
+      checkpointStreamIdentity,
+    );
+  }
+
+  if (checkpoint) {
+    restoreCheckpoint({
+      ...checkpoint,
+      syncIdentity: checkpointSyncIdentityFromPreflight(resolvedStreamIdentity),
+    });
+  }
+
+  return checkpoint;
+}
+
+async function hydrateResumePreflight({
+  onRemapSessionID,
+  peekedCheckpoint,
+  queryClient,
+  resolution,
+  response,
+  restoreCheckpoint,
+}: {
+  onRemapSessionID: (sessionID: string) => void;
+  peekedCheckpoint: Awaited<
+    ReturnType<typeof peekPersistedTimelineCheckpoint>
+  >;
+  queryClient: QueryClient;
+  resolution: ResumePreflightResolution;
+  response: FactorySessionSyncPreflightResponse;
+  restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+}): Promise<DashboardCheckpointPreflightHydration> {
+  const {
+    checkpointReusable,
+    reconnectCursor: validatedReconnectCursor,
+    requestedSessionId,
+    resolvedSessionId,
+    streamIdentity: resolvedStreamIdentity,
+  } = resolution;
+
+  const checkpointStreamIdentity: TimelineCheckpointStreamIdentity = {
+    backendScopeID: resolvedStreamIdentity.backendScopeID,
+    factorySessionID: resolvedStreamIdentity.factorySessionID,
+    logicalSessionKeyID: resolvedStreamIdentity.logicalSessionKeyID,
+    streamGenerationID: resolvedStreamIdentity.streamGenerationID,
+  };
+
+  const reconnectCursorForStream = await reconcileReconnectCursor({
+    peekedStreamIdentity: peekedCheckpoint?.streamIdentity,
+    queryClient,
+    requestedSessionId,
+    resolvedStreamIdentity: checkpointStreamIdentity,
+    validatedReconnectCursor,
+  });
+
+  const checkpoint = await loadRestoredCheckpoint({
+    checkpointReusable,
+    checkpointStreamIdentity,
+    queryClient,
+    reconnectCursorForStream,
+    requestedSessionId,
+    resolvedSessionId,
+    resolvedStreamIdentity: checkpointStreamIdentity,
+    response,
+    restoreCheckpoint,
+  });
+
+  if (
+    resolvedSessionId !== requestedSessionId &&
+    !isDefaultToRuntimeSessionAliasRemap(
+      requestedSessionId,
+      resolvedSessionId,
+    )
+  ) {
+    onRemapSessionID(resolvedSessionId);
+  }
+
+  return {
+    initialReconnectCursor: reconnectCursorForStream,
+    persistedCheckpoint: checkpoint,
+    preflightError: null,
+    preflightRecovery: null,
+    resolvedSessionID: resolvedSessionId,
+    streamIdentity: checkpointStreamIdentity,
+  };
 }
 
 export async function runDashboardCheckpointPreflight({
@@ -99,94 +265,14 @@ export async function runDashboardCheckpointPreflight({
       };
     }
 
-    const {
-      checkpointReusable,
-      reconnectCursor: validatedReconnectCursor,
-      requestedSessionId,
-      resolvedSessionId,
-      streamIdentity: resolvedStreamIdentity,
-    } = resolution;
-
-    const checkpointStreamIdentity: TimelineCheckpointStreamIdentity = {
-      backendScopeID: resolvedStreamIdentity.backendScopeID,
-      factorySessionID: resolvedStreamIdentity.factorySessionID,
-      logicalSessionKeyID: resolvedStreamIdentity.logicalSessionKeyID,
-      streamGenerationID: resolvedStreamIdentity.streamGenerationID,
-    };
-
-    let reconnectCursorForStream = validatedReconnectCursor;
-    if (
-      peekedCheckpoint?.streamIdentity != null &&
-      !storedCheckpointMatchesResolvedStream(
-        peekedCheckpoint.streamIdentity,
-        checkpointStreamIdentity,
-      )
-    ) {
-      await clearTimelineCheckpointsForSession(
-        window.indexedDB,
-        requestedSessionId,
-      );
-      recoverDashboardSessionScopedState(
-        queryClient,
-        requestedSessionId,
-        () => {},
-      );
-      reconnectCursorForStream = undefined;
-    }
-
-    if (shouldClearCheckpointAfterPreflight(response)) {
-      await clearTimelineCheckpointsForSession(
-        window.indexedDB,
-        requestedSessionId,
-      );
-      recoverDashboardSessionScopedState(
-        queryClient,
-        requestedSessionId,
-        () => {},
-      );
-      if (resolvedSessionId !== requestedSessionId) {
-        clearDashboardSessionRuntimeQueries(
-          queryClient,
-          requestedSessionId,
-        );
-      }
-    }
-
-    let checkpoint: FactoryTimelineCheckpoint | null = null;
-    if (checkpointReusable && reconnectCursorForStream) {
-      checkpoint = await readTimelineCheckpoint(
-        window.indexedDB,
-        checkpointStreamIdentity,
-      );
-    }
-
-    if (checkpoint) {
-      restoreCheckpoint({
-        ...checkpoint,
-        syncIdentity: checkpointSyncIdentityFromPreflight(
-          resolvedStreamIdentity,
-        ),
-      });
-    }
-
-    if (
-      resolvedSessionId !== requestedSessionId &&
-      !isDefaultToRuntimeSessionAliasRemap(
-        requestedSessionId,
-        resolvedSessionId,
-      )
-    ) {
-      onRemapSessionID(resolvedSessionId);
-    }
-
-    return {
-      initialReconnectCursor: reconnectCursorForStream,
-      persistedCheckpoint: checkpoint,
-      preflightError: null,
-      preflightRecovery: null,
-      resolvedSessionID: resolvedSessionId,
-      streamIdentity: checkpointStreamIdentity,
-    };
+    return hydrateResumePreflight({
+      onRemapSessionID,
+      peekedCheckpoint,
+      queryClient,
+      resolution,
+      response,
+      restoreCheckpoint,
+    });
   } catch (preflightFailure: unknown) {
     await clearTimelineCheckpointsForSession(window.indexedDB, rawSessionID);
     const message =

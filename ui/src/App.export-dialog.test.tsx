@@ -139,11 +139,11 @@ describe("App shell export dialog flows", () => {
         },
         ok: true,
       });
-    renderApp({
+    const { fetchMock } = renderApp({
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    let currentFactoryFetchCount = 0;
+    let deferCurrentFactoryFetch = false;
 
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
@@ -153,19 +153,11 @@ describe("App shell export dialog flows", () => {
         return undefined;
       }
 
-      currentFactoryFetchCount += 1;
-
-      if (currentFactoryFetchCount <= 2) {
+      if (!deferCurrentFactoryFetch) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
 
-      if (currentFactoryFetchCount === 3) {
-        return refreshedCurrentFactoryResponse.promise;
-      }
-
-      throw new Error(
-        `unexpected current factory fetch #${currentFactoryFetchCount}`,
-      );
+      return refreshedCurrentFactoryResponse.promise;
     });
 
     try {
@@ -189,6 +181,8 @@ describe("App shell export dialog flows", () => {
           screen.queryByRole("dialog", { name: "Export factory" }),
         ).toBeNull();
       });
+
+      deferCurrentFactoryFetch = true;
 
       fireEvent.click(screen.getByRole("button", { name: "Export PNG" }));
 

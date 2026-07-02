@@ -32,25 +32,6 @@ function resolvedDefaultStreamIdentity() {
   };
 }
 
-function okSyncPreflightResponse(
-  overrides: Partial<factorySessionsAPI.FactorySessionSyncPreflightResponse> = {},
-) {
-  return {
-    backendScopeId: "backend-scope-a",
-    checkpointReusable: true,
-    factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
-    logicalSessionKeyId: "logical-default",
-    reasonCode: "ok" as const,
-    reconnectCursor: {
-      provided: false,
-      validForStreamGeneration: true,
-    },
-    requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
-    streamGenerationId: "2026-06-26T00:00:00Z",
-    ...overrides,
-  };
-}
-
 function StatusPanelProbe({
   detail,
   title,
@@ -170,8 +151,8 @@ describe("DashboardScreen stale-cursor retry", () => {
       .mockResolvedValue({
         backendScopeId: "backend-scope-a",
         checkpointReusable: true,
-        factorySessionId: DEFAULT_FACTORY_SESSION_ID,
-        logicalSessionKeyId: "lsk-default-folder",
+        factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
+        logicalSessionKeyId: "logical-default",
         reasonCode: FactorySessionSyncPreflightReasonCode.ok,
         reconnectCursor: {
           afterEventId: "checkpoint-event-7",

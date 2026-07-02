@@ -5,7 +5,6 @@ import { shouldResetDashboardRuntimeScopedState } from "../lib/backend-scope/bac
 import {
   dashboardSessionKey,
   type FactoryDefinitionQueryResetMode,
-  isDefaultFactorySessionAliasRemap,
   resetDashboardSessionScopedState,
   sessionIDFromDashboardSessionKey,
   shouldResetDashboardSessionScopedState,
@@ -72,9 +71,6 @@ export function useDashboardSessionLifecycle({
     }
 
     const previousSessionID = sessionIDFromDashboardSessionKey(previousSessionKey);
-    if (isDefaultFactorySessionAliasRemap(previousSessionID, sessionID)) {
-      return;
-    }
     resetLocalizedSessionState(
       previousSessionID !== null && previousSessionID === sessionID
         ? "invalidate"
