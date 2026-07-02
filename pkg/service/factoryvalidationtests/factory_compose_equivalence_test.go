@@ -52,7 +52,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, composeCfg))
+	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
+	composed = service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell{Service: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
+	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())
@@ -104,7 +108,7 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("core compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())
 	}
-	if built.Sessions() == nil || built.RuntimeBuild() == nil || built.StartupBundle() == nil {
+	if built.Sessions() == nil || built.RuntimeBuild() == nil || built.WorkersScheduler() == nil || built.StartupBundle() == nil {
 		t.Fatalf("BuildFactoryCore omitted required collaborators: snapshot=%+v", built.ComposeCollaboratorSnapshot())
 	}
 }
@@ -161,7 +165,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, cfg))
+	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, cfg))
+	composed = service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell{Service: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, cfg),
+	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())

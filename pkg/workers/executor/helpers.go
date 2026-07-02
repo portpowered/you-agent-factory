@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -290,3 +291,82 @@ func stringSlicePtr(values ...string) *[]string {
 	cloned := append([]string(nil), values...)
 	return &cloned
 }
+
+func firstImageContentPart(rawTokens []any) (int, int, interfaces.WorkContentPart, bool) {
+	for tokenIndex, token := range cloneInputTokens(rawTokens) {
+		for partIndex, part := range token.Color.Content {
+			if part.Type == interfaces.WorkContentPartTypeImage {
+				return tokenIndex, partIndex, part, true
+			}
+		}
+	}
+	return 0, 0, interfaces.WorkContentPart{}, false
+}
+
+func unsupportedImageContentError(rawTokens []any, executionPath string) error {
+	tokenIndex, partIndex, part, ok := firstImageContentPart(rawTokens)
+	if !ok {
+		return nil
+	}
+	if part.File == "" {
+		return fmt.Errorf("input_tokens[%d].color.content[%d]: image content is not supported by %s; configure modelProvider codex for image-capable execution", tokenIndex, partIndex, executionPath)
+	}
+	return fmt.Errorf("input_tokens[%d].color.content[%d].file: image content %q is not supported by %s; configure modelProvider codex for image-capable execution", tokenIndex, partIndex, part.File, executionPath)
+}
+
+const (
+	WorkLogEventWorkerPoolSubmitted         = "worker_pool.submitted"
+	WorkLogEventWorkerPoolExecutorEntered   = "worker_pool.executor_entered"
+	WorkLogEventWorkerPoolResponseSubmitted = "worker_pool.response_submitted"
+	WorkLogEventCommandRunnerRequested      = "command_runner.requested"
+	WorkLogEventCommandRunnerCompleted      = "command_runner.completed"
+	WorkLogEventCommandRunnerRequestDetails = "command_runner.request_details"
+	WorkLogEventCommandRunnerOutputDetails  = "command_runner.output_details"
+)
+
+// WorkLogFields returns stable structured log fields for work-scoped runtime
+// records. Empty strings are intentional so unavailable IDs remain explicit.
+func WorkLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
+	fields := []any{
+		"request_id", metadata.RequestID,
+		"trace_id", metadata.TraceID,
+		"work_id", primaryWorkID(metadata.WorkIDs),
+		"work_ids", cloneWorkIDs(metadata.WorkIDs),
+	}
+	return append(fields, keysAndValues...)
+}
+
+func primaryWorkID(workIDs []string) string {
+	for _, workID := range workIDs {
+		if workID != "" {
+			return workID
+		}
+	}
+	return ""
+}
+
+func cloneWorkIDs(workIDs []string) []string {
+	if workIDs == nil {
+		return []string{}
+	}
+	return append([]string(nil), workIDs...)
+}
+
+// NoopExecutor is a WorkerExecutor that always returns OutcomeAccepted
+// without calling any LLM or script. It is used as a fallback when no
+// AGENTS.md is configured for a worker, allowing tests to exercise the
+// petri-net topology without providing real worker configuration.
+type NoopExecutor struct{}
+
+// Execute implements WorkerExecutor. It propagates the first input token's
+// color and returns OutcomeAccepted immediately.
+func (n *NoopExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	return interfaces.WorkResult{
+		DispatchID:   d.DispatchID,
+		TransitionID: d.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+	}, nil
+}
+
+// Compile-time check.
+var _ WorkerExecutor = (*NoopExecutor)(nil)

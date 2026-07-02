@@ -236,6 +236,58 @@ func TestValidateFactory_PreservesCanonicalStructuralCodesFromCrossPathFixture(t
 	}
 }
 
+func TestValidateFactory_RejectsInvalidInvocationSignature(t *testing.T) {
+	t.Parallel()
+
+	srv := newAPITestServer(&testutil.MockFactory{})
+	body := `{
+		"name":"signature-invalid",
+		"invocationSignature":{
+			"unknownNamedArgumentPolicy":"COLLECT",
+			"parameters":[
+				{
+					"name":"items",
+					"externalName":"items",
+					"valueMode":"REPEATED",
+					"bindings":[{"kind":"NAMED"}]
+				}
+			],
+			"outputContract":{
+				"mode":"FILE",
+				"pathParameter":"missing-output"
+			}
+		},
+		"workTypes":[{"name":"task","states":[
+			{"name":"queued","type":"INITIAL"},
+			{"name":"done","type":"TERMINAL"},
+			{"name":"failed","type":"FAILED"}
+		]}],
+		"workers":[{"name":"worker-a","type":"INFERENCE_WORKER","model":"${missing}"}],
+		"workstations":[{
+			"name":"process",
+			"worker":"worker-a",
+			"inputs":[{"workType":"task","state":"queued"}],
+			"outputs":[{"workType":"task","state":"done"}],
+			"onFailure":[{"workType":"task","state":"failed"}],
+			"body":"Use ${items}"
+		}]
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
+	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureUnknownOutputPathParameter)
+	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidInterpolationReference)
+	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureIncompatibleInterpolationReference)
+}
+
 func assertConfigFindingRule(t *testing.T, findings []factoryconfig.Finding, rule string) {
 	t.Helper()
 	for _, finding := range findings {
@@ -298,7 +350,7 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -341,7 +393,7 @@ func TestUpsertNamedFactory_ReturnsTopologyValidationTargets(t *testing.T) {
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -373,7 +425,7 @@ func TestUpsertNamedFactory_RejectsInvalidFactoryPayloadWithTargets(t *testing.T
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -413,7 +465,7 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -463,7 +515,7 @@ func TestUpsertNamedFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)

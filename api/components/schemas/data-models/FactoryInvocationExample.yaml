@@ -1,0 +1,20 @@
+type: object
+additionalProperties: false
+required:
+  - name
+description: One example invocation for docs, help, and packaged-factory inspection.
+properties:
+  name:
+    type: string
+    description: Stable example name.
+  description:
+    type: string
+    description: Customer-facing explanation of what the example does.
+  argv:
+    type: array
+    description: CLI-style argument vector rendered after factory selection.
+    items:
+      type: string
+  stdin:
+    type: string
+    description: Example stdin payload when the signature routes stdin into one parameter.

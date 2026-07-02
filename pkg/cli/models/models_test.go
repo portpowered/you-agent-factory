@@ -218,6 +218,29 @@ func TestInvoke_AudioNotFoundUsesFriendlyError(t *testing.T) {
 	}
 }
 
+func TestInvoke_JSONSurfacesClassifiedLoadingFailureFromAPI(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = io.WriteString(w, `{"message":"model \"OMNIVOICE_Q4_K_M\" is still loading: wait for the managed runtime to finish loading and retry the invocation","family":"CLIENT_ERROR","code":"MODEL_RUNTIME_LOADING"}`)
+	}))
+	defer server.Close()
+
+	err := Invoke(InvokeConfig{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+		Text:      "hello world",
+		Server:    strings.TrimSuffix(server.URL, "/"),
+		JSON:      true,
+		Output:    io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected loading failure")
+	}
+	if !strings.Contains(err.Error(), "wait for the managed runtime to finish loading") {
+		t.Fatalf("error = %q, want loading guidance", err.Error())
+	}
+}
+
 func TestInvoke_AudioUnreachableUsesEndpointMessage(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	err := Invoke(InvokeConfig{

@@ -573,7 +573,7 @@ behavior explicit inside the test that needs it.
 - Use `ui/src/components/dashboard/test-fixtures.ts` `workstationKindParityDashboardSnapshot` for browser-visible standard/repeater/cron icon checks instead of mutating `semanticWorkflowDashboardSnapshot` inline in stories or Vitest files.
 - When Storybook and Vitest need the same dashboard parity assertions, export the scenario-specific expectation catalog from `ui/src/components/dashboard/test-fixtures.ts` and derive icon expectations from shared flowchart metadata instead of restating labels or icon kinds inline.
 - The current-activity graph legend uses `DashboardFlowAxisLegend` and starts minimized by default; tests and stories that assert legend icons should expand it first with the shared `expandGraphLegend(...)` helper instead of assuming the legend panel is already rendered.
-- Canonical runtime history is exposed through `GET /events`; new API and UI history consumers should replay factory events instead of depending on dashboard snapshot routes.
+- Canonical runtime history for dashboard and Factory Session consumers is exposed through `GET /factory-sessions/{session_id}/events`; `GET /events` remains compatibility-only for process-global diagnostics. New API and UI history consumers should replay factory events from the session-scoped stream instead of depending on dashboard snapshot routes.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
 - Runtime log policy is service-configured, but each live session should own its own runtime log sink and emitted records. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
@@ -652,7 +652,7 @@ flowchart LR
   end
 
   subgraph snapshotPlane ["Dashboard snapshot plane (SSE + timeline)"]
-    SSE["GET /events SSE"]
+    SSE["GET /factory-sessions/{session_id}/events SSE"]
     TL["factoryTimelineStore"]
     WV["useDashboardWorldView"]
     SNAP["useDashboardSnapshot → DashboardSnapshot"]
@@ -667,7 +667,7 @@ ASCII equivalent:
 
 ```text
 Factory document:  GET /factory-sessions/{id}/factory → React Query → edit / save / export
-Dashboard snapshot: GET /events (SSE) → timeline store → world view → runtime overlay + timeline
+Dashboard snapshot: GET /factory-sessions/{session_id}/events (SSE) → timeline store → world view → runtime overlay + timeline
 ```
 
 Full program spec: [UI Factory Document vs Snapshot Planes](../../../tasks/prd-ui-factory-document-snapshot-planes.md).

@@ -36,7 +36,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`guards` - Workstation, input, and factory guards",
 		"`relationships` - Batch DEPENDS_ON",
 		"`work` - Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts",
-		"`sessions` - Live factory sessions: session list, session show, factory query, status API, dashboard URL, and run modes",
+		"`sessions` - Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
 		"`batch-inputs` - Batch input files",
@@ -95,9 +95,9 @@ func TestDocsCommand_BatchAndRelationshipTopicsUseOpenAPICamelCaseFieldNames(t *
 	t.Parallel()
 
 	cases := []struct {
-		topic   string
-		want    []string
-		absent  []string
+		topic  string
+		want   []string
+		absent []string
 	}{
 		{
 			topic: "batch-inputs",
@@ -165,7 +165,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-goal, packaged-tts, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-fusion, packaged-goal, packaged-tts, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {

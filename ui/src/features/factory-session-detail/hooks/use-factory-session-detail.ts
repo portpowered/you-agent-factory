@@ -1,22 +1,36 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import type {
+  FactorySession,
+  FactorySessionDurableReadModel,
+  FactorySessionLiveResult,
+  FactorySessionPartialResult,
+  FactorySessionsAPIError,
+} from "../../../api/factory-sessions";
 import {
-  type FactorySession,
-  type FactorySessionLiveResult,
-  type FactorySessionPartialResult,
-  type FactorySessionsAPIError,
-  getFactorySession,
-  getFactorySessionPartialResult,
-  getFactorySessionResult,
-} from "../../../api/factory-sessions/api";
-import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
+  scopedRuntimeQueryKey,
+  useDashboardStreamStore,
+} from "../../dashboard/public/runtime-cache-scope";
+import { loadFactorySessionDetailData } from "./load-factory-session-detail-data";
 
 export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
   "factory-session-detail",
 ] as const;
 
+export function factorySessionDetailQueryKey(
+  sessionID: string | null,
+  backendScopeID?: string | null,
+) {
+  return scopedRuntimeQueryKey(
+    FACTORY_SESSION_DETAIL_QUERY_KEY,
+    sessionID,
+    backendScopeID,
+  );
+}
+
 export interface FactorySessionDetailData {
+  durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
   session: FactorySession;
@@ -32,28 +46,20 @@ export type FactorySessionDetailViewState =
 export function useFactorySessionDetail(
   sessionID: string | null,
 ): FactorySessionDetailViewState {
+  const backendRuntimeCacheScope = useDashboardStreamStore(
+    (state) => state.backendRuntimeCacheScope,
+  );
   const query = useQuery<FactorySessionDetailData, FactorySessionsAPIError>({
-    queryKey: [...FACTORY_SESSION_DETAIL_QUERY_KEY, sessionID ?? ""],
+    queryKey: factorySessionDetailQueryKey(
+      sessionID,
+      backendRuntimeCacheScope,
+    ),
     queryFn: async () => {
       if (sessionID === null || sessionID.trim() === "") {
         throw new Error("Factory session detail requires a selected session id.");
       }
 
-      const session = await getFactorySession(sessionID);
-      if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
-        return { session };
-      }
-
-      const [result, partialResult] = await Promise.all([
-        getFactorySessionResult(sessionID).catch(() => undefined),
-        getFactorySessionPartialResult(sessionID).catch(() => undefined),
-      ]);
-
-      return {
-        partialResult,
-        result,
-        session,
-      };
+      return loadFactorySessionDetailData(sessionID);
     },
     enabled: sessionID !== null && sessionID.trim() !== "",
     gcTime: 0,
@@ -66,7 +72,7 @@ export function useFactorySessionDetail(
       return { status: "idle" };
     }
 
-    if (query.isPending || query.isFetching) {
+    if (query.isPending || (query.isFetching && !query.data)) {
       return { status: "loading" };
     }
 

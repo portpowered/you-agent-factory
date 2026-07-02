@@ -493,8 +493,10 @@
         "attempt": 1,
         "javascript": {
           "taskKind": "VERIFY",
-          "taskLabel": "verify-release"
-        }
+          "taskLabel": "verify-release",
+          "executionMode": "live"
+        },
+        "statusTransitions": ["QUEUED", "RUNNING"]
       },
       "artifacts": [],
       "result": {
@@ -789,6 +791,11 @@
           "dispatchKind": "JAVASCRIPT_VERIFY",
           "label": "verify",
           "attempt": 1,
+          "javascript": {
+            "taskKind": "VERIFY",
+            "taskLabel": "verify",
+            "executionMode": "live"
+          },
           "failureDetail": {
             "reason": "VERIFY_ASSERTION_FAILED",
             "message": "Expected release manifest checksum."
@@ -805,8 +812,10 @@
         "attempt": 1,
         "javascript": {
           "taskKind": "VERIFY",
-          "taskLabel": "verify"
+          "taskLabel": "verify",
+          "executionMode": "live"
         },
+        "statusTransitions": ["QUEUED", "RUNNING", "FAILED"],
         "failureDetail": {
           "reason": "VERIFY_ASSERTION_FAILED",
           "message": "Expected release manifest checksum."
@@ -920,8 +929,10 @@
         "attempt": 1,
         "javascript": {
           "taskKind": "AGENT",
-          "taskLabel": "audit"
-        }
+          "taskLabel": "audit",
+          "executionMode": "live"
+        },
+        "statusTransitions": ["QUEUED", "RUNNING"]
       },
       "artifacts": [],
       "result": {
@@ -1127,6 +1138,18 @@
           "dispatchKind": "JAVASCRIPT_VERIFY",
           "label": "verify-docs",
           "attempt": 1,
+          "providerSessionRefs": [
+            {
+              "provider": "codex",
+              "kind": "session_id",
+              "id": "resp-docs-refresh-001"
+            }
+          ],
+          "javascript": {
+            "taskKind": "VERIFY",
+            "taskLabel": "verify-docs",
+            "executionMode": "live"
+          },
           "outputArtifactIds": [
             "art-js-success-001"
           ]
@@ -1145,8 +1168,17 @@
         ],
         "javascript": {
           "taskKind": "VERIFY",
-          "taskLabel": "verify-docs"
-        }
+          "taskLabel": "verify-docs",
+          "executionMode": "live"
+        },
+        "providerSessionRefs": [
+          {
+            "provider": "codex",
+            "kind": "session_id",
+            "id": "resp-docs-refresh-001"
+          }
+        ],
+        "statusTransitions": ["QUEUED", "RUNNING", "COMPLETED"]
       },
       "artifacts": [
         {

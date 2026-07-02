@@ -1,8 +1,12 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dashboard shell loading, error, and success paths share one snapshot harness.
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 
 import { AppLocaleProvider, useAppLocale } from "../../../i18n";
+import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
+import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
 import { DashboardScreen } from "./dashboard-screen";
 
 const EXPECTED_DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
@@ -14,11 +18,16 @@ const VIEWPORT_HEIGHT_CLAMP_CLASS_PATTERN =
 let dashboardSnapshotState: ReturnType<
   typeof import("../hooks/useDashboardSnapshot").useDashboardSnapshot
 >;
+let dashboardSnapshotResolver:
+  | ((refreshToken: number) => typeof dashboardSnapshotState)
+  | null;
 
 function StatusPanelProbe({
+  actions,
   detail,
   title,
 }: {
+  actions?: ReactNode;
   detail?: string;
   title: string;
 }) {
@@ -28,6 +37,7 @@ function StatusPanelProbe({
     <section data-locale={locale}>
       <h1>{title}</h1>
       {detail ? <p>{detail}</p> : null}
+      {actions}
     </section>
   );
 }
@@ -53,16 +63,21 @@ vi.mock("../../header/public", () => ({
     return <header>Dashboard header {resolvedLocale}</header>;
   },
   DashboardStatusPanel: ({
+    actions,
     detail,
     title,
   }: {
+    actions?: ReactNode;
     detail?: string;
     title: string;
-  }) => <StatusPanelProbe detail={detail} title={title} />,
+  }) => <StatusPanelProbe actions={actions} detail={detail} title={title} />,
 }));
 
 vi.mock("../hooks/useDashboardSnapshot", () => ({
-  useDashboardSnapshot: vi.fn(() => dashboardSnapshotState),
+  useDashboardSnapshot: vi.fn(
+    ({ refreshToken = 0 }: { refreshToken?: number } = {}) =>
+      dashboardSnapshotResolver?.(refreshToken) ?? dashboardSnapshotState,
+  ),
 }));
 
 vi.mock("./dashboard-session-lifecycle-banner", () => ({
@@ -104,17 +119,24 @@ function expectNoNestedDashboardScrollOwnerBetweenBentoAndShell() {
   expectDashboardShellContract();
 }
 
-describe("DashboardScreen", () => {
+describe("DashboardScreen loading and error states", () => {
   beforeEach(() => {
+    dashboardSnapshotResolver = null;
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
       snapshot: null,
       streamState: {
-        message: "Connecting to factory events...",
+        message: "Loading factory events...",
         status: "connecting",
       },
     };
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
   });
 
   it("uses the tighter dashboard shell spacing while loading", () => {
@@ -133,9 +155,11 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: null,
       streamState: {
-        message: "Factory event stream unavailable.",
+        message: "Factory event stream disconnected. Showing last event state.",
         status: "offline",
       },
     };
@@ -167,9 +191,11 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: null,
       streamState: {
-        message: "Factory event stream unavailable.",
+        message: "Factory event stream disconnected. Showing last event state.",
         status: "offline",
       },
     };
@@ -185,11 +211,30 @@ describe("DashboardScreen", () => {
       }),
     ).toBeTruthy();
   });
+});
+
+describe("DashboardScreen content states", () => {
+  beforeEach(() => {
+    dashboardSnapshotResolver = null;
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
+      snapshot: null,
+      streamState: {
+        message: "Loading factory events...",
+        status: "connecting",
+      },
+    };
+  });
 
   it("renders the dashboard content inside the tighter shell spacing on success", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
       streamState: {
         message: "Factory event stream connected.",
@@ -213,6 +258,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
       streamState: {
         message: "Factory event stream connected.",
@@ -230,6 +277,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: null,
       streamState: {
         message: "Factory event stream connected.",
@@ -252,6 +301,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
       streamState: {
         message: "Factory event stream connected.",
@@ -264,5 +315,112 @@ describe("DashboardScreen", () => {
     expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
+  });
+});
+
+describe("DashboardScreen recovery states", () => {
+  beforeEach(() => {
+    dashboardSnapshotResolver = null;
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
+      snapshot: null,
+      streamState: {
+        message: "Loading factory events...",
+        status: "connecting",
+      },
+    };
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+  });
+
+  it("shows a recoverable replay failure state and retries the session stream", async () => {
+    const user = userEvent.setup();
+    const messages = getHeaderControlsMessages("en");
+    const recoveryMessages = getDashboardRecoveryMessages("en");
+    dashboardSnapshotResolver = (refreshToken) =>
+      refreshToken === 0
+        ? {
+            error: new Error(
+              "The dashboard could not restore this session automatically.",
+            ),
+            isInitialLoading: false,
+            preflightRecovery: null,
+            preflightStatus: "success",
+            snapshot: null,
+            streamState: {
+              message:
+                "The dashboard could not restore this session automatically.",
+              status: "recovery_failed",
+            },
+          }
+        : {
+            error: null,
+            isInitialLoading: true,
+            preflightRecovery: null,
+            preflightStatus: "loading",
+            snapshot: null,
+            streamState: {
+              message: "Loading factory events...",
+              status: "connecting",
+            },
+          };
+
+    render(<DashboardScreen />);
+
+    expect(
+      screen.getByRole("heading", {
+        name: recoveryMessages.recoveryFailedTitle,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(recoveryMessages.recoveryFailedDetail),
+    ).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: recoveryMessages.recoveryFailedRetryLabel,
+      }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
+    ).toBeTruthy();
+  });
+
+  it("renders a recoverable preflight reset state instead of the generic offline error", () => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: false,
+      preflightRecovery: {
+        reasonCode: "session_not_found",
+        requestedSessionId: "session-review",
+      },
+      preflightStatus: "non-recoverable",
+      snapshot: null,
+      streamState: {
+        message: "Factory event stream disconnected. Showing last event state.",
+        status: "offline",
+      },
+    };
+
+    render(<DashboardScreen />);
+
+    expectDashboardShellContract();
+    expect(screen.getByText("Dashboard header en")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Session recovery required" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/could not resolve the live session for "session-review"/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Retry clean replay" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Dashboard bento en")).toBeNull();
   });
 });

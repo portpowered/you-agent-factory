@@ -3,11 +3,11 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { compile } from "@tailwindcss/node";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { applyDocumentColorPalette } from "../theme/app-color-palette";
 import { COLOR_PALETTE_IDS } from "../theme/color-palette";
+import { compileDashboardStyles } from "../test-support/compile-dashboard-styles";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
 const uiRoot = path.resolve(stylesDir, "../..");
@@ -65,13 +65,8 @@ function contrastRatio(
 
 describe("theme role migration regression (US-010)", () => {
   beforeAll(async () => {
-    const source = readFileSync(stylesSourcePath, "utf8");
-    const compiled = await compile(source, {
-      base: path.dirname(stylesSourcePath),
-      from: stylesSourcePath,
-      onDependency: () => {},
-    });
-    injectCompiledRootRules(compiled.build([]));
+    const compiledCss = await compileDashboardStyles(stylesSourcePath);
+    injectCompiledRootRules(compiledCss);
   });
 
   it("exposes Material role tokens on the document root", () => {

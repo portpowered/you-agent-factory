@@ -218,7 +218,7 @@ func run(cfg config) (coverageResult, error) {
 		localPackageSummaryReport += "\n" + localPackageStderr
 	}
 
-	baselinePackages, err := readPackageCoverageBaseline(filepath.Join(repoRoot, cfg.packageCoverageBaselinePath()))
+	baselinePackages, err := packageCoverageBaselinePackages(cfg, repoRoot)
 	if err != nil {
 		return coverageResult{}, err
 	}
@@ -231,6 +231,14 @@ func run(cfg config) (coverageResult, error) {
 	return result, nil
 }
 
+func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]struct{}, error) {
+	baselinePath := cfg.packageCoverageBaselinePath()
+	if !filepath.IsAbs(baselinePath) {
+		baselinePath = filepath.Join(repoRoot, baselinePath)
+	}
+	return readPackageCoverageBaseline(baselinePath)
+}
+
 func runGoTestCoverageLane(args []string, failurePrefix string) (string, string, error) {
 	testCmd := execCommand("go", args...)
 	testCmd.Env = os.Environ()
@@ -239,16 +247,28 @@ func runGoTestCoverageLane(args []string, failurePrefix string) (string, string,
 	testCmd.Stdout = &stdout
 	testCmd.Stderr = &stderr
 	if err := testCmd.Run(); err != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			detail = strings.TrimSpace(stdout.String())
-		}
+		detail := mergeGoTestFailureDetail(stderr.String(), stdout.String())
 		if detail != "" {
 			return "", "", fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
 		}
 		return "", "", fmt.Errorf("%s: %w", failurePrefix, err)
 	}
 	return stdout.String(), stderr.String(), nil
+}
+
+func mergeGoTestFailureDetail(stderr string, stdout string) string {
+	stderr = strings.TrimSpace(stderr)
+	stdout = strings.TrimSpace(stdout)
+	switch {
+	case stdout == "":
+		return stderr
+	case stderr == "":
+		return stdout
+	case strings.Contains(stdout, "\nFAIL") || strings.Contains(stdout, "--- FAIL:"):
+		return stdout + "\n" + stderr
+	default:
+		return stderr + "\n" + stdout
+	}
 }
 
 func resolveCoverageLane(cfg config) ([]string, []string, error) {

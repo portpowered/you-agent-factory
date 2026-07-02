@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -23,9 +23,6 @@ const (
 	// EnvDefaultWorkerModel is the environment variable for the default worker
 	// model override.
 	EnvDefaultWorkerModel = "YOU_DEFAULT_WORKER_MODEL"
-
-	defaultConfigHomeDir  = ".you-agent-factory"
-	defaultConfigFileName = "config.json"
 )
 
 // Source identifies which precedence layer supplied an effective default value.
@@ -69,7 +66,7 @@ type FlagOverrides struct {
 
 // DefaultConfigPath returns the default operator config file path for homeDir.
 func DefaultConfigPath(homeDir string) string {
-	return filepath.Join(homeDir, defaultConfigHomeDir, defaultConfigFileName)
+	return defaultpaths.OperatorConfigPath(homeDir)
 }
 
 // LoadFileDefaults reads operator defaults from path. A missing file returns
@@ -95,7 +92,8 @@ func ParseFileDefaults(data []byte) (Defaults, error) {
 	decoder.DisallowUnknownFields()
 
 	var cfg struct {
-		Defaults Defaults `json:"defaults"`
+		BackendScopeID string   `json:"backendScopeID"`
+		Defaults       Defaults `json:"defaults"`
 	}
 	if err := decoder.Decode(&cfg); err != nil {
 		return Defaults{}, fmt.Errorf("decode operator config JSON: %w", err)

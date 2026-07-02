@@ -2,6 +2,7 @@ package operatordefaultsruntime
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -9,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+var exactInvocationInterpolationPattern = regexp.MustCompile(`^\$\{([A-Za-z0-9_.-]+)\}$`)
 
 // ApplyToLoadedConfig fills omitted model-provider worker modelProvider and model
 // fields from operator defaults in the in-memory effective runtime config. Authored
@@ -40,7 +43,7 @@ func ValidateModelWorkerRuntimeProviders(loaded *config.LoadedFactoryConfig) err
 		if !isModelWorkerType(worker.Type) {
 			continue
 		}
-		if err := validateModelWorkerProvider(worker.Name, worker.ModelProvider); err != nil {
+		if err := validateModelWorkerProvider(factoryCfg.InvocationSignature, worker.Name, worker.ModelProvider); err != nil {
 			return err
 		}
 	}
@@ -86,9 +89,12 @@ func operatorDefaultProviderInternal(canonicalPublic string) (string, error) {
 	return string(internal), nil
 }
 
-func validateModelWorkerProvider(workerName, modelProvider string) error {
+func validateModelWorkerProvider(signature *interfaces.InvocationSignatureConfig, workerName, modelProvider string) error {
 	trimmed := strings.TrimSpace(modelProvider)
 	if trimmed == "" {
+		return nil
+	}
+	if invocationInterpolationParameterName(signature, trimmed) != "" {
 		return nil
 	}
 	if interfaces.IsSymbolicWorkerModelProviderDefault(trimmed) {
@@ -129,4 +135,21 @@ func isSupportedRuntimeModelProvider(value string) bool {
 		}
 	}
 	return false
+}
+
+func invocationInterpolationParameterName(signature *interfaces.InvocationSignatureConfig, value string) string {
+	if signature == nil {
+		return ""
+	}
+	match := exactInvocationInterpolationPattern.FindStringSubmatch(strings.TrimSpace(value))
+	if len(match) != 2 {
+		return ""
+	}
+	name := strings.TrimSpace(match[1])
+	for _, parameter := range signature.Parameters {
+		if strings.TrimSpace(parameter.Name) == name {
+			return name
+		}
+	}
+	return ""
 }

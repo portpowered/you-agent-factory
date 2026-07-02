@@ -30,6 +30,7 @@ describe("factoryTimelineDebug options and compaction", () => {
   it("uses empty search when browser window is undefined", () => {
     expect(readFactoryTimelineDebugOptions(undefined)).toEqual({
       compactEventText: false,
+      disableTimelineCheckpoint: false,
       maxEventTextChars: 2_048,
       memoryDebug: false,
     });
@@ -40,11 +41,12 @@ describe("factoryTimelineDebug options and compaction", () => {
       readFactoryTimelineDebugOptions({
         location: {
           search:
-            "?afCompactEventText=1&afMemoryDebug=true&afMaxEventTextChars=128",
+            "?afCompactEventText=1&afMemoryDebug=true&afDisableTimelineCheckpoint=1&afMaxEventTextChars=128",
         },
       }),
     ).toEqual({
       compactEventText: true,
+      disableTimelineCheckpoint: true,
       maxEventTextChars: 128,
       memoryDebug: true,
     });
@@ -60,6 +62,7 @@ describe("factoryTimelineDebug options and compaction", () => {
       }),
     ).toEqual({
       compactEventText: false,
+      disableTimelineCheckpoint: false,
       maxEventTextChars: 2_048,
       memoryDebug: false,
     });
@@ -69,6 +72,7 @@ describe("factoryTimelineDebug options and compaction", () => {
     expect(
       compactFactoryEventForTimeline(BASE_EVENT, {
         compactEventText: false,
+        disableTimelineCheckpoint: false,
         maxEventTextChars: 12,
         memoryDebug: false,
       }),
@@ -84,6 +88,7 @@ describe("factoryTimelineDebug options and compaction", () => {
     expect(
       compactFactoryEventForTimeline(event, {
         compactEventText: true,
+        disableTimelineCheckpoint: false,
         maxEventTextChars: 12,
         memoryDebug: false,
       }),
@@ -93,6 +98,7 @@ describe("factoryTimelineDebug options and compaction", () => {
   it("compacts heavy event text fields without mutating the original event", () => {
     const compacted = compactFactoryEventForTimeline(BASE_EVENT, {
       compactEventText: true,
+      disableTimelineCheckpoint: false,
       maxEventTextChars: 12,
       memoryDebug: false,
     });
@@ -124,6 +130,7 @@ describe("factoryTimelineDebug options and compaction", () => {
     expect(
       compactFactoryEventForTimeline(event, {
         compactEventText: true,
+        disableTimelineCheckpoint: false,
         maxEventTextChars: 2_048,
         memoryDebug: false,
       }),
@@ -288,6 +295,7 @@ describe("factoryTimelineDebug global install", () => {
       }),
       {
         compactEventText: false,
+        disableTimelineCheckpoint: false,
         maxEventTextChars: 2_048,
         memoryDebug: true,
       },

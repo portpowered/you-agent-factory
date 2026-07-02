@@ -11,6 +11,7 @@ import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStr
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
 import { currentSessionFactoryExportAPIResponse } from "./testing/app-shell-export-test-utils";
 import {
+  chainRenderAppFetchMock,
   createFactoryImportValue,
   createFileDropTransfer,
   jsonResponse,
@@ -34,19 +35,15 @@ describe("App shell locale and toolbar flows", () => {
       snapshot: terminalSnapshot,
     });
 
-    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const path =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? `${input.pathname}${input.search}`
-            : input.url;
-
-      if (path === "/factory-sessions/~default/factory") {
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (
+        method === "GET" &&
+        path === "/factory-sessions/~default/factory"
+      ) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
 
-      throw new Error(`unexpected fetch for ${path}`);
+      return undefined;
     });
 
     const englishToolbar = await screen.findByRole("region", {

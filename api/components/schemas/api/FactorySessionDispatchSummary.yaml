@@ -5,8 +5,9 @@ required:
   - status
   - dispatchKind
 description: >-
-  Durable factory-session dispatch summary for list responses. Exposes neutral
-  dispatch fields without requiring orchestrator-specific projections.
+  Durable factory-session dispatch summary for list responses. Exposes shared
+  dispatch fields plus bounded orchestrator-specific inspection data when
+  available.
 properties:
   id:
     type: string
@@ -53,3 +54,5 @@ properties:
     description: Artifact identifiers produced by the dispatch.
   failureDetail:
     $ref: '../data-models/FactoryDispatchFailureDetail.yaml'
+  javascript:
+    $ref: '../data-models/FactoryDispatchJavaScriptProjection.yaml'

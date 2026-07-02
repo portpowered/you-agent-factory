@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+description: Interrupt request for one active durable factory-session dispatch.
+required:
+  - dispatchId
+properties:
+  requestId:
+    type: string
+    description: >-
+      Optional idempotency key for one lifecycle control request. Replaying the
+      same requestId with the same operation and target must return the prior
+      control outcome instead of applying a second mutation.
+  reason:
+    type: string
+    description: Optional operator-provided reason for audit and diagnostics.
+  dispatchId:
+    type: string
+    description: Stable dispatch identifier to interrupt within the targeted session.

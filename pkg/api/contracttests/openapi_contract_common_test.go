@@ -24,6 +24,7 @@ var canonicalFactoryEventTypeValues = []string{
 	"INFERENCE_RESPONSE",
 	"SCRIPT_REQUEST",
 	"SCRIPT_RESPONSE",
+	"AGENT_RUN_RESPONSE",
 	"DISPATCH_RESPONSE",
 	"WORK_STATE_CHANGE",
 	"FACTORY_STATE_RESPONSE",
@@ -33,6 +34,7 @@ var canonicalFactoryEventTypeValues = []string{
 	"SESSION_RESUMED",
 	"SESSION_RESULT_UPDATED",
 	"SESSION_COMPLETED",
+	"SESSION_LIFECYCLE_CONTROL",
 	"ORCHESTRATOR_PHASE_CHANGED",
 	"ORCHESTRATOR_CHECKPOINT_WRITTEN",
 	"DISPATCH_QUEUED",
@@ -85,6 +87,10 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"InferenceResponseEventPayload",
 	"ScriptRequestEventPayload",
 	"ScriptResponseEventPayload",
+	"AgentRunResponseEventPayload",
+	"SafeAgentRunDiagnostic",
+	"AgentRunToolDiagnosticEntry",
+	"AgentRunTranscriptEntry",
 	"ScriptExecutionOutcome",
 	"ScriptFailureType",
 	"DispatchResponseEventPayload",
@@ -101,6 +107,7 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"SessionResumedEventPayload",
 	"SessionResultUpdatedEventPayload",
 	"SessionCompletedEventPayload",
+	"SessionLifecycleControlEventPayload",
 	"OrchestratorPhaseChangedEventPayload",
 	"OrchestratorCheckpointWrittenEventPayload",
 	"DispatchQueuedEventPayload",
@@ -124,6 +131,7 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/InferenceResponseEventPayload",
 	"#/components/schemas/ScriptRequestEventPayload",
 	"#/components/schemas/ScriptResponseEventPayload",
+	"#/components/schemas/AgentRunResponseEventPayload",
 	"#/components/schemas/DispatchResponseEventPayload",
 	"#/components/schemas/WorkStateChangeEventPayload",
 	"#/components/schemas/FactoryStateResponseEventPayload",
@@ -133,6 +141,7 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/SessionResumedEventPayload",
 	"#/components/schemas/SessionResultUpdatedEventPayload",
 	"#/components/schemas/SessionCompletedEventPayload",
+	"#/components/schemas/SessionLifecycleControlEventPayload",
 	"#/components/schemas/OrchestratorPhaseChangedEventPayload",
 	"#/components/schemas/OrchestratorCheckpointWrittenEventPayload",
 	"#/components/schemas/DispatchQueuedEventPayload",
@@ -156,6 +165,7 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"INFERENCE_RESPONSE":          "InferenceResponseEventPayload",
 	"SCRIPT_REQUEST":              "ScriptRequestEventPayload",
 	"SCRIPT_RESPONSE":             "ScriptResponseEventPayload",
+	"AGENT_RUN_RESPONSE":          "AgentRunResponseEventPayload",
 	"DISPATCH_RESPONSE":           "DispatchResponseEventPayload",
 	"WORK_STATE_CHANGE":           "WorkStateChangeEventPayload",
 	"FACTORY_STATE_RESPONSE":      "FactoryStateResponseEventPayload",
@@ -165,6 +175,7 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"SESSION_RESUMED":             "SessionResumedEventPayload",
 	"SESSION_RESULT_UPDATED":      "SessionResultUpdatedEventPayload",
 	"SESSION_COMPLETED":           "SessionCompletedEventPayload",
+	"SESSION_LIFECYCLE_CONTROL":   "SessionLifecycleControlEventPayload",
 	"ORCHESTRATOR_PHASE_CHANGED":  "OrchestratorPhaseChangedEventPayload",
 	"ORCHESTRATOR_CHECKPOINT_WRITTEN": "OrchestratorCheckpointWrittenEventPayload",
 	"DISPATCH_QUEUED":             "DispatchQueuedEventPayload",
@@ -679,6 +690,7 @@ func assertWorkstationRequestProjectionSchemasPresent(t *testing.T, schemas map[
 		"FactoryWorldWorkstationRequestProjectionSlice",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldAgentRunInspectionView",
 		"FactoryWorldWorkstationRequestView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
@@ -762,6 +774,7 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
 	assertPropertyRef(t, responsePayloadProperties, "scriptResponse", "#/components/schemas/FactoryWorldScriptResponseView")
+	assertPropertyRef(t, responsePayloadProperties, "agentRunInspection", "#/components/schemas/FactoryWorldAgentRunInspectionView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
 	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
@@ -778,6 +791,10 @@ func assertWorkstationRequestScriptBoundarySchemas(t *testing.T, schemas map[str
 	scriptResponsePayload := schemaObject(t, schemas, "FactoryWorldScriptResponseView")
 	scriptResponsePayloadProperties := schemaProperties(t, scriptResponsePayload, "FactoryWorldScriptResponseView")
 	assertSchemaPropertiesPresent(t, scriptResponsePayloadProperties, "FactoryWorldScriptResponseView", "scriptRequestId", "attempt", "outcome", "stdout", "stderr", "durationMillis", "exitCode", "failureType")
+
+	agentRunInspectionPayload := schemaObject(t, schemas, "FactoryWorldAgentRunInspectionView")
+	agentRunInspectionPayloadProperties := schemaProperties(t, agentRunInspectionPayload, "FactoryWorldAgentRunInspectionView")
+	assertSchemaPropertiesPresent(t, agentRunInspectionPayloadProperties, "FactoryWorldAgentRunInspectionView", "executionBehavior", "failureClass", "recoveryAction", "toolPolicy", "toolCallCount", "toolDiagnostics", "transcript")
 }
 
 func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any) {
@@ -826,6 +843,33 @@ func assertEventStreamSchemaRef(t *testing.T, operation map[string]any, wantRef 
 	}
 	if xEventSchema != wantRef {
 		t.Fatalf("operation.responses.200.content.text/event-stream.x-event-schema = %q, want %s", xEventSchema, wantRef)
+	}
+}
+
+func assertResponseHeaderString(t *testing.T, operation map[string]any, status string, headerName string) {
+	t.Helper()
+	responses, ok := operation["responses"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses is missing")
+	}
+	response, ok := responses[status].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s is missing", status)
+	}
+	headers, ok := response["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s.headers is missing", status)
+	}
+	header, ok := headers[headerName].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s.headers.%s is missing", status, headerName)
+	}
+	schema, ok := header["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s.headers.%s.schema is missing", status, headerName)
+	}
+	if got, ok := schema["type"].(string); !ok || got != "string" {
+		t.Fatalf("operation.responses.%s.headers.%s.schema.type = %v, want string", status, headerName, schema["type"])
 	}
 }
 
@@ -945,4 +989,3 @@ func assertResponseExampleCodeFamilies(t *testing.T, responses map[string]any, r
 		}
 	}
 }
-

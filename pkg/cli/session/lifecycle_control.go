@@ -1,6 +1,8 @@
+// Package session implements factory-session lifecycle command behavior.
 package session
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,7 +15,6 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
@@ -24,7 +25,8 @@ const lifecycleControlRequestTimeout = 10 * time.Second
 type LifecycleControlConfig struct {
 	Server      string
 	SessionID   string
-	Operation   string
+	RequestID   string
+	Reason      string
 	JSON        bool
 	Verbose     bool
 	Debug       bool
@@ -32,51 +34,77 @@ type LifecycleControlConfig struct {
 	Diagnostics io.Writer
 }
 
-// Pause requests POST /factory-sessions/{session_id}/pause on a running host.
+// LifecycleControlRejectedError reports a typed lifecycle-control rejection returned
+// by the API with a FactorySessionLifecycleControlResponse body.
+type LifecycleControlRejectedError struct {
+	Response factoryapi.FactorySessionLifecycleControlResponse
+}
+
+func (e *LifecycleControlRejectedError) Error() string {
+	if e == nil {
+		return ""
+	}
+	detail := ""
+	if e.Response.Detail != nil && strings.TrimSpace(*e.Response.Detail) != "" {
+		detail = ": " + strings.TrimSpace(*e.Response.Detail)
+	}
+	return fmt.Sprintf(
+		"factory session %s %s rejected (%s)%s",
+		e.Response.SessionId,
+		strings.ToLower(string(e.Response.Operation)),
+		e.Response.Outcome,
+		detail,
+	)
+}
+
+// Pause requests pause for one factory session through POST /factory-sessions/{session_id}/pause.
 func Pause(cfg LifecycleControlConfig) error {
-	cfg.Operation = "pause"
-	return lifecycleControl(cfg)
+	return invokeLifecycleControl(cfg, factoryapi.FactorySessionLifecycleControlKindPause, "pause")
 }
 
-// Resume requests POST /factory-sessions/{session_id}/resume on a running host.
+// Resume requests resume for one factory session through POST /factory-sessions/{session_id}/resume.
 func Resume(cfg LifecycleControlConfig) error {
-	cfg.Operation = "resume"
-	return lifecycleControl(cfg)
+	return invokeLifecycleControl(cfg, factoryapi.FactorySessionLifecycleControlKindResume, "resume")
 }
 
-func lifecycleControl(cfg LifecycleControlConfig) error {
+func invokeLifecycleControl(
+	cfg LifecycleControlConfig,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+	operationLabel string,
+) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
 
-	operation := strings.TrimSpace(cfg.Operation)
-	if operation == "" {
-		return fmt.Errorf("lifecycle control operation is required")
-	}
-
-	endpoint, err := lifecycleControlEndpoint(cfg)
+	endpoint, err := lifecycleControlEndpoint(cfg, operationLabel)
 	if err != nil {
 		return err
 	}
-	sessionID := resolvedSessionID(cfg.SessionID)
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
 		"session %s request endpointPath=%s endpoint=%s server=%s session=%s",
-		operation,
+		operationLabel,
 		endpoint.Path,
 		endpoint.String(),
 		cfg.Server,
-		clidiag.SessionLabel(sessionID),
+		clidiag.SessionLabel(cfg.SessionID),
 	)
+
+	body, err := lifecycleControlRequestBody(cfg)
+	if err != nil {
+		return err
+	}
 
 	client := &http.Client{Timeout: lifecycleControlRequestTimeout}
 	started := time.Now()
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint.String(), strings.NewReader("{}"))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint.String(), body)
 	if err != nil {
-		return fmt.Errorf("build session %s request: %w", operation, err)
+		return fmt.Errorf("build factory session %s request: %w", operationLabel, err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -84,7 +112,7 @@ func lifecycleControl(cfg LifecycleControlConfig) error {
 			cfg.Diagnostics,
 			cfg.Verbose,
 			"session %s response endpointPath=%s error=unreachable durationMillis=%d",
-			operation,
+			operationLabel,
 			endpoint.Path,
 			time.Since(started).Milliseconds(),
 		)
@@ -92,130 +120,132 @@ func lifecycleControl(cfg LifecycleControlConfig) error {
 	}
 	defer resp.Body.Close()
 
-	var result factoryapi.FactorySessionLifecycleControlResponse
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"session %s response endpointPath=%s status=%d durationMillis=%d",
+		operationLabel,
+		endpoint.Path,
+		resp.StatusCode,
+		time.Since(started).Milliseconds(),
+	)
+
 	switch resp.StatusCode {
 	case http.StatusOK, http.StatusAccepted:
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			return fmt.Errorf("parse session %s response: %w", operation, err)
+		var response factoryapi.FactorySessionLifecycleControlResponse
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return fmt.Errorf("parse factory session %s response: %w", operationLabel, err)
 		}
-		clidiag.Printf(
-			cfg.Diagnostics,
-			cfg.Verbose,
-			"session %s response endpointPath=%s status=%d durationMillis=%d sessionId=%s outcome=%s status=%s",
-			operation,
-			endpoint.Path,
-			resp.StatusCode,
-			time.Since(started).Milliseconds(),
-			result.SessionId,
-			result.Outcome,
-			result.Status,
-		)
-		if cfg.JSON {
-			return json.NewEncoder(cfg.Output).Encode(result)
-		}
-		return renderLifecycleControlSuccess(cfg.Output, operation, result)
-	case http.StatusNotFound:
-		return lifecycleControlNotFoundError(sessionID, resp)
+		return renderLifecycleControlOutcome(cfg, response)
 	case http.StatusConflict:
-		return lifecycleControlConflictError(operation, resp)
+		var response factoryapi.FactorySessionLifecycleControlResponse
+		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+			return lifecycleControlStatusError(operationLabel, resp)
+		}
+		if writeErr := writeLifecycleControlResponse(cfg, response); writeErr != nil {
+			return writeErr
+		}
+		return &LifecycleControlRejectedError{Response: response}
+	case http.StatusNotFound:
+		return lifecycleControlNotFoundError(cfg.SessionID, resp)
 	default:
-		return lifecycleControlStatusError(operation, resp)
+		return lifecycleControlStatusError(operationLabel, resp)
 	}
 }
 
-func lifecycleControlEndpoint(cfg LifecycleControlConfig) (url.URL, error) {
-	endpointPath := sessionpath.ScopedPath("/"+strings.TrimSpace(cfg.Operation), cfg.SessionID)
+func lifecycleControlEndpoint(cfg LifecycleControlConfig, operationLabel string) (url.URL, error) {
+	endpointPath := sessionpath.ScopedPath("/"+operationLabel, cfg.SessionID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
 		return url.URL{}, err
 	}
 	endpoint, err := url.Parse(endpointURL)
 	if err != nil {
-		return url.URL{}, fmt.Errorf("parse session %s endpoint: %w", cfg.Operation, err)
+		return url.URL{}, fmt.Errorf("parse session %s endpoint: %w", operationLabel, err)
 	}
 	return *endpoint, nil
 }
 
-func renderLifecycleControlSuccess(
-	output io.Writer,
-	operation string,
-	result factoryapi.FactorySessionLifecycleControlResponse,
-) error {
-	var line string
-	switch result.Outcome {
-	case factoryapi.FactorySessionLifecycleControlOutcomeNoOp:
-		line = fmt.Sprintf(
-			"Factory session %s already %s (outcome=%s status=%s)",
-			result.SessionId,
-			lifecycleControlStateLabel(operation),
-			result.Outcome,
-			result.Status,
-		)
-	default:
-		line = fmt.Sprintf(
-			"%s factory session %s (outcome=%s status=%s)",
-			lifecycleControlAppliedLabel(operation),
-			result.SessionId,
-			result.Outcome,
-			result.Status,
-		)
+func lifecycleControlRequestBody(cfg LifecycleControlConfig) (io.Reader, error) {
+	requestID := strings.TrimSpace(cfg.RequestID)
+	reason := strings.TrimSpace(cfg.Reason)
+	if requestID == "" && reason == "" {
+		return nil, nil
 	}
-	_, err := fmt.Fprintln(output, line)
+	req := factoryapi.FactorySessionLifecycleControlRequest{}
+	if requestID != "" {
+		req.RequestId = &requestID
+	}
+	if reason != "" {
+		req.Reason = &reason
+	}
+	encoded, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal lifecycle control request: %w", err)
+	}
+	return bytes.NewReader(encoded), nil
+}
+
+func renderLifecycleControlOutcome(
+	cfg LifecycleControlConfig,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+) error {
+	if err := writeLifecycleControlResponse(cfg, response); err != nil {
+		return err
+	}
+	switch response.Outcome {
+	case factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		factoryapi.FactorySessionLifecycleControlOutcomeNoOp:
+		return nil
+	default:
+		return &LifecycleControlRejectedError{Response: response}
+	}
+}
+
+func writeLifecycleControlResponse(
+	cfg LifecycleControlConfig,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+) error {
+	if cfg.JSON {
+		return json.NewEncoder(cfg.Output).Encode(response)
+	}
+	_, err := fmt.Fprintln(cfg.Output, lifecycleControlHumanLine(response))
 	return err
 }
 
-func lifecycleControlAppliedLabel(operation string) string {
-	switch strings.TrimSpace(operation) {
-	case "resume":
-		return "Resumed"
-	default:
-		return "Paused"
-	}
-}
-
-func lifecycleControlStateLabel(operation string) string {
-	switch strings.TrimSpace(operation) {
-	case "resume":
-		return "running"
-	default:
-		return "paused"
-	}
-}
-
 func lifecycleControlNotFoundError(sessionID string, resp *http.Response) error {
-	if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-		return fmt.Errorf("factory session %q not found: %s", sessionID, errResp.Message)
+	label := resolvedLifecycleControlSessionID(sessionID)
+	if errResp, ok := decodeLifecycleControlAPIError(resp); ok {
+		return fmt.Errorf("factory session %q not found: %s", label, errResp.Message)
 	}
-	return fmt.Errorf("factory session %q not found", sessionID)
+	return fmt.Errorf("factory session %q not found", label)
 }
 
-func lifecycleControlConflictError(operation string, resp *http.Response) error {
-	var controlResp factoryapi.FactorySessionLifecycleControlResponse
-	if json.NewDecoder(resp.Body).Decode(&controlResp) == nil && controlResp.SessionId != "" {
-		detail := ""
-		if controlResp.Detail != nil {
-			detail = strings.TrimSpace(*controlResp.Detail)
-		}
-		if detail != "" {
-			return fmt.Errorf("session %s rejected (%s): %s", operation, controlResp.Outcome, detail)
-		}
-		return fmt.Errorf(
-			"session %s rejected (%s): session %s is %s",
-			operation,
-			controlResp.Outcome,
-			controlResp.SessionId,
-			controlResp.Status,
-		)
+func lifecycleControlStatusError(operationLabel string, resp *http.Response) error {
+	if errResp, ok := decodeLifecycleControlAPIError(resp); ok {
+		return fmt.Errorf("factory session %s failed (%d): %s", operationLabel, resp.StatusCode, errResp.Message)
 	}
-	if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-		return fmt.Errorf("session %s failed (409): %s", operation, errResp.Message)
-	}
-	return fmt.Errorf("session %s failed (409)", operation)
+	return fmt.Errorf("factory session %s failed (%d)", operationLabel, resp.StatusCode)
 }
 
-func lifecycleControlStatusError(operation string, resp *http.Response) error {
-	if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-		return fmt.Errorf("session %s failed (%d): %s", operation, resp.StatusCode, errResp.Message)
+func decodeLifecycleControlAPIError(resp *http.Response) (factoryapi.ErrorResponse, bool) {
+	if resp == nil || resp.Body == nil {
+		return factoryapi.ErrorResponse{}, false
 	}
-	return fmt.Errorf("session %s failed (%d)", operation, resp.StatusCode)
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		return factoryapi.ErrorResponse{}, false
+	}
+	if errResp.Message == "" {
+		return errResp, false
+	}
+	return errResp, true
+}
+
+func resolvedLifecycleControlSessionID(sessionID string) string {
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return sessionpath.DefaultFactorySessionID
+	}
+	return id
 }

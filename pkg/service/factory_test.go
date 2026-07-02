@@ -13,17 +13,21 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -37,6 +41,116 @@ import (
 
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
 const serviceStreamedRecordingTimeout = 5 * time.Second
+
+func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsInterruptedClassification(t *testing.T) {
+	t.Parallel()
+
+	work := interfaces.FactoryWorkItem{
+		ID:          "work-root",
+		WorkTypeID:  "goal",
+		State:       "review",
+		DisplayName: "Interrupted goal",
+		PlaceID:     "goal:review",
+	}
+	worldState := interfaces.FactoryWorldState{
+		PayloadLineage: interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-1": {
+				RequestID: "request-1",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				WorkItems: []interfaces.FactoryWorkItem{work},
+			},
+		},
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		JavaScriptRuntime: &interfaces.FactorySessionJavaScriptRuntimeState{
+			Dispatches: []interfaces.FactorySessionDispatchState{{
+				ID:             "dispatch-1",
+				Status:         "INTERRUPTED",
+				RelatedWorkIDs: []string{work.ID},
+			}},
+		},
+	}
+
+	svc := &FactoryService{logger: zap.NewNop()}
+	result := svc.resolveInvocationWaitTerminal(
+		"session-js-1",
+		sessionInvocationWaitInput{RequestID: "request-1"},
+		worldState,
+		false,
+		nil,
+	)
+
+	if result.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", result.Status)
+	}
+	if result.ErrorCode != "INVOCATION_INTERRUPTED" {
+		t.Fatalf("errorCode = %q, want INVOCATION_INTERRUPTED", result.ErrorCode)
+	}
+	if !strings.Contains(result.Message, `dispatch "dispatch-1"`) || !strings.Contains(result.Message, `work "Interrupted goal"`) {
+		t.Fatalf("message = %q, want interrupted dispatch and work detail", result.Message)
+	}
+	if result.SessionID != "session-js-1" || result.WorkID != "work-root" || result.WorkName != "Interrupted goal" || result.WorkState != "goal:review" {
+		t.Fatalf("result context = %#v, want session/work context populated", result)
+	}
+}
+
+func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsFailedClassification(t *testing.T) {
+	t.Parallel()
+
+	work := interfaces.FactoryWorkItem{
+		ID:          "work-root",
+		WorkTypeID:  "goal",
+		State:       "failed",
+		DisplayName: "Failed goal",
+		PlaceID:     "goal:failed",
+	}
+	worldState := interfaces.FactoryWorldState{
+		PayloadLineage: interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-1": {
+				RequestID: "request-1",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				WorkItems: []interfaces.FactoryWorkItem{{
+					ID:          "work-root",
+					WorkTypeID:  "goal",
+					State:       "init",
+					DisplayName: "Failed goal",
+					PlaceID:     "goal:init",
+				}},
+			},
+		},
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			work.ID: {WorkItem: work, Status: "FAILED"},
+		},
+	}
+
+	svc := &FactoryService{logger: zap.NewNop()}
+	result := svc.resolveInvocationWaitTerminal(
+		"session-failed-1",
+		sessionInvocationWaitInput{RequestID: "request-1"},
+		worldState,
+		false,
+		nil,
+	)
+
+	if result.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", result.Status)
+	}
+	if result.ErrorCode != "INVOCATION_RUNTIME_FAILURE" {
+		t.Fatalf("errorCode = %q, want INVOCATION_RUNTIME_FAILURE", result.ErrorCode)
+	}
+	if !strings.Contains(result.Message, `work "Failed goal"`) || !strings.Contains(result.Message, `state "goal:failed"`) {
+		t.Fatalf("message = %q, want failed work and state detail", result.Message)
+	}
+}
 
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
@@ -218,6 +332,194 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 	return generated
 }
 
+func TestResolveSessionInvocationInput_SignatureArgsNormalizeNamedInputs(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+			"mode":  []any{"fast", "review"},
+		},
+	}
+
+	resolved, err := resolveSessionInvocationInput(signatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.Source != invocationInputSourceStructuredArgs {
+		t.Fatalf("source = %q, want %q", resolved.Source, invocationInputSourceStructuredArgs)
+	}
+	if len(resolved.Content) != 0 {
+		t.Fatalf("content = %#v, want no compatibility content", resolved.Content)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if values := resolved.NormalizedArguments.Arguments["input"].Values; len(values) != 1 || values[0] != "hello" {
+		t.Fatalf("input values = %#v, want [hello]", values)
+	}
+	if values := resolved.NormalizedArguments.Arguments["mode"].Values; len(values) != 2 || values[0] != "fast" || values[1] != "review" {
+		t.Fatalf("mode values = %#v, want [fast review]", values)
+	}
+}
+
+func TestResolveSessionInvocationInput_SignatureArgsRejectMissingRequiredInput(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"mode": "fast",
+		},
+	}
+
+	_, err := resolveSessionInvocationInput(signatureInvocationFactoryConfig(), request)
+	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeMissingRequiredInput)
+}
+
+func TestResolveSessionInvocationInput_EmptyStructuredArgsStillUseSignature(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{},
+	}
+
+	resolved, err := resolveSessionInvocationInput(optionalSignatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.Source != invocationInputSourceStructuredArgs {
+		t.Fatalf("source = %q, want %q", resolved.Source, invocationInputSourceStructuredArgs)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if len(resolved.NormalizedArguments.Arguments) != 1 {
+		t.Fatalf("normalized args = %#v, want defaulted optional args", resolved.NormalizedArguments.Arguments)
+	}
+	if values := resolved.NormalizedArguments.Arguments["mode"].Values; len(values) != 1 || values[0] != "fast" {
+		t.Fatalf("mode values = %#v, want [fast]", values)
+	}
+}
+
+func TestResolveSessionInvocationInput_StructuredArgsAcceptPositionalOnlyParameterKeys(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	resolved, err := resolveSessionInvocationInput(positionalOnlySignatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if values := resolved.NormalizedArguments.Arguments["input"].Values; len(values) != 1 || values[0] != "hello" {
+		t.Fatalf("input values = %#v, want [hello]", values)
+	}
+	if source := resolved.NormalizedArguments.Arguments["input"].Sources[0]; source.Kind != invocations.ArgumentSourceKindStructured {
+		t.Fatalf("input source kind = %q, want %q", source.Kind, invocations.ArgumentSourceKindStructured)
+	}
+}
+
+func TestResolveSessionInvocationInput_SignatureArgsRejectCompatibilityContentMix(t *testing.T) {
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := invocationTextContent(t, "legacy compatibility text")
+	request := factoryapi.InvocationRequest{
+		SourceKind: &sourceKind,
+		Content:    &content,
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	_, err := resolveSessionInvocationInput(signatureInvocationFactoryConfig(), request)
+	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeSourceConflict)
+}
+
+func TestResolveSessionInvocationInput_RejectsStructuredArgsWithoutActiveSignature(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	_, err := resolveSessionInvocationInput(&interfaces.FactoryConfig{}, request)
+	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeInvalidActiveSignature)
+}
+
+func signatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{
+				{
+					Name:     "input",
+					Required: true,
+					Bindings: []interfaces.InvocationParameterBindingConfig{{
+						Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+					}},
+				},
+				{
+					Name:      "mode",
+					ValueMode: string(factoryapi.FactoryInvocationParameterValueModeRepeated),
+					Bindings: []interfaces.InvocationParameterBindingConfig{{
+						Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+					}},
+				},
+			},
+		},
+	}
+}
+
+func optionalSignatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:         "mode",
+				DefaultValue: "fast",
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
+		},
+	}
+}
+
+func positionalOnlySignatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:     "input",
+				Required: true,
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind:     string(factoryapi.FactoryInvocationParameterBindingKindPositional),
+					Position: 1,
+				}},
+			}},
+		},
+	}
+}
+
+func invocationTextContent(t *testing.T, text string) factoryapi.WorkContent {
+	t.Helper()
+
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: text,
+	}); err != nil {
+		t.Fatalf("build invocation text content: %v", err)
+	}
+	return factoryapi.WorkContent{part}
+}
+
+func assertSessionInvocationArgumentErrorCode(t *testing.T, err error, want invocations.ArgumentErrorCode) {
+	t.Helper()
+
+	var argumentErr *invocations.ArgumentError
+	if !errors.As(err, &argumentErr) {
+		t.Fatalf("error = %v, want ArgumentError", err)
+	}
+	if argumentErr.Code != want {
+		t.Fatalf("code = %q, want %q", argumentErr.Code, want)
+	}
+}
+
 func withServicePayloadVersion(t *testing.T, payload []byte, version factoryapi.HybridLogicalTimestamp) []byte {
 	t.Helper()
 
@@ -270,6 +572,7 @@ type aggregateSnapshotFactory struct {
 	engineState              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	engineStateErr           error
 	engineStateSnapshotCalls int
+	streamGenerationID       string
 	factoryEvents            []factoryapi.FactoryEvent
 	factoryEventsErr         error
 	factoryEventsCalls       int
@@ -298,7 +601,14 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	return result, nil
 }
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	streamGenerationID := strings.TrimSpace(f.streamGenerationID)
+	if streamGenerationID == "" && f.engineState != nil {
+		streamGenerationID = strings.TrimSpace(f.engineState.StreamGenerationID)
+	}
+	return &interfaces.FactoryEventStream{
+		StreamGenerationID: streamGenerationID,
+		Events:             make(chan factoryapi.FactoryEvent),
+	}, nil
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
 func (f *aggregateSnapshotFactory) Resume(context.Context) error { return nil }
@@ -376,7 +686,7 @@ func TestFactoryService_WaitToComplete_DelegatesToActiveRuntime(t *testing.T) {
 	waitCh := make(chan struct{})
 	svc := &FactoryService{}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		factory: &aggregateSnapshotFactory{
+		Factory: &aggregateSnapshotFactory{
 			waitToComplete: waitCh,
 		},
 	})
@@ -408,21 +718,20 @@ func TestFactoryService_ObserveRuntimeMetrics_EmitsFailedLifecycleMetric(t *test
 	})
 
 	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:     factoryStub,
-			metricsSink: metricsSink,
-			logger:      zap.NewNop(),
+		Bundle: &factoryRuntimeBundle{
+			Factory:     factoryStub,
+			MetricsSink: metricsSink,
+			Logger:      zap.NewNop(),
 		},
-		runDone: make(chan struct{}),
+		RunDone: make(chan struct{}),
 	}
 
 	observerCtx, cancelObserver := context.WithCancel(context.Background())
 	defer cancelObserver()
 
 	done := make(chan struct{})
-	svc := &FactoryService{}
 	go func() {
-		svc.observeRuntimeMetrics(observerCtx, handle)
+		factoryservice.ObserveRuntimeMetrics(observerCtx, handle)
 		close(done)
 	}()
 
@@ -434,7 +743,7 @@ func TestFactoryService_ObserveRuntimeMetrics_EmitsFailedLifecycleMetric(t *test
 		RuntimeStatus: interfaces.RuntimeStatusFinished,
 		FactoryState:  string(interfaces.FactoryStateFailed),
 	})
-	handle.setRunResult(fmt.Errorf("run failed"))
+	handle.SetRunResult(fmt.Errorf("run failed"))
 
 	select {
 	case <-done:
@@ -492,13 +801,13 @@ func startRuntimeMetricsShutdownTestHandle(
 	t.Cleanup(runCancel)
 
 	handle := &liveRuntimeHandle{
-		runtime: &factoryRuntimeBundle{
-			factory:     factoryStub,
-			metricsSink: metricsSink,
-			logger:      zap.NewNop(),
+		Bundle: &factoryRuntimeBundle{
+			Factory:     factoryStub,
+			MetricsSink: metricsSink,
+			Logger:      zap.NewNop(),
 		},
-		runDone:   make(chan struct{}),
-		runCancel: runCancel,
+		RunDone:   make(chan struct{}),
+		RunCancel: runCancel,
 	}
 
 	svc := &FactoryService{}
@@ -519,19 +828,19 @@ func TestRuntimeStopOutcome_PrefersTerminalResultOverForcedCancel(t *testing.T) 
 		FactoryState:  string(interfaces.FactoryStateRunning),
 	}
 
-	outcome, reason := runtimeStopOutcome(finished, nil, true)
+	outcome, reason := factoryservice.RuntimeStopOutcome(finished, nil, true)
 	if outcome != "completed" || reason != "" {
-		t.Fatalf("runtimeStopOutcome(finished, nil, forcedCancel=true) = (%q, %q), want (completed, \"\")", outcome, reason)
+		t.Fatalf("RuntimeStopOutcome(finished, nil, forcedCancel=true) = (%q, %q), want (completed, \"\")", outcome, reason)
 	}
 
-	outcome, reason = runtimeStopOutcome(active, context.Canceled, false)
+	outcome, reason = factoryservice.RuntimeStopOutcome(active, context.Canceled, false)
 	if outcome != "canceled" || reason != "" {
-		t.Fatalf("runtimeStopOutcome(active, context.Canceled, false) = (%q, %q), want (canceled, \"\")", outcome, reason)
+		t.Fatalf("RuntimeStopOutcome(active, context.Canceled, false) = (%q, %q), want (canceled, \"\")", outcome, reason)
 	}
 
-	outcome, reason = runtimeStopOutcome(active, nil, true)
+	outcome, reason = factoryservice.RuntimeStopOutcome(active, nil, true)
 	if outcome != "canceled" || reason != "" {
-		t.Fatalf("runtimeStopOutcome(active, nil, forcedCancel=true) = (%q, %q), want (canceled, \"\")", outcome, reason)
+		t.Fatalf("RuntimeStopOutcome(active, nil, forcedCancel=true) = (%q, %q), want (canceled, \"\")", outcome, reason)
 	}
 }
 
@@ -541,7 +850,7 @@ func TestFactoryService_StopLiveRuntime_EmitsCompletedLifecycleMetricThroughShut
 		FactoryState:  string(interfaces.FactoryStateRunning),
 	})
 
-	handle.setRunResult(nil)
+	handle.SetRunResult(nil)
 	if err := svc.stopLiveRuntime(handle); err != nil {
 		t.Fatalf("stopLiveRuntime: %v", err)
 	}
@@ -560,7 +869,7 @@ func TestFactoryService_StopLiveRuntime_EmitsCanceledLifecycleMetricThroughShutd
 
 	go func() {
 		time.Sleep(20 * time.Millisecond)
-		handle.setRunResult(context.Canceled)
+		handle.SetRunResult(context.Canceled)
 	}()
 
 	if err := svc.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
@@ -586,7 +895,7 @@ func TestFactoryService_StopLiveRuntime_EmitsCompletedWhenNaturalCompletionRaces
 			RuntimeStatus: interfaces.RuntimeStatusFinished,
 			FactoryState:  string(interfaces.FactoryStateRunning),
 		})
-		handle.setRunResult(nil)
+		handle.SetRunResult(nil)
 	}()
 
 	stopDone := make(chan error, 1)
@@ -611,7 +920,7 @@ func TestFactoryService_StopLiveRuntime_EmitsFailedLifecycleMetricThroughShutdow
 		FactoryState:  string(interfaces.FactoryStateFailed),
 	})
 
-	handle.setRunResult(fmt.Errorf("execution failed"))
+	handle.SetRunResult(fmt.Errorf("execution failed"))
 	if err := svc.stopLiveRuntime(handle); err == nil {
 		t.Fatal("stopLiveRuntime error = nil, want execution failure")
 	}
@@ -629,13 +938,13 @@ func TestFactoryService_Pause_RequiresActiveRuntimeAndWrapsPauseErrors(t *testin
 		t.Fatalf("Pause without runtime error = %v, want runtime unavailable", err)
 	}
 
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}})
 	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "pause factory: pause failed") {
 		t.Fatalf("Pause wrapped error = %v, want wrapped pause failure", err)
 	}
 
 	svc = &FactoryService{}
-	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: &aggregateSnapshotFactory{}})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{Factory: &aggregateSnapshotFactory{}})
 	if err := svc.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause success error = %v", err)
 	}
@@ -655,15 +964,15 @@ func TestFactoryService_CurrentRuntimeBundleAndDirComparisonHelpers(t *testing.T
 	mockFactory := &aggregateSnapshotFactory{}
 	runtimeCfg := &config.LoadedFactoryConfig{}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		dir:        "C:/factory",
-		factory:    mockFactory,
-		runtimeCfg: runtimeCfg,
+		Dir:        "C:/factory",
+		Factory:    mockFactory,
+		RuntimeCfg: runtimeCfg,
 	})
 	bundle := svc.currentRuntimeBundle()
 	if bundle == nil {
 		t.Fatal("expected populated currentRuntimeBundle")
 	}
-	if bundle.dir != svc.coordinatorPolicy().dir || bundle.factory != mockFactory || bundle.runtimeCfg != runtimeCfg {
+	if bundle.Dir != svc.coordinatorPolicy().dir || bundle.Factory != mockFactory || bundle.RuntimeCfg != runtimeCfg {
 		t.Fatalf("currentRuntimeBundle = %#v, want startup bundle fields", bundle)
 	}
 
@@ -676,24 +985,24 @@ func TestFactoryService_CurrentRuntimeBundleAndDirComparisonHelpers(t *testing.T
 }
 
 func TestLiveRuntimeHandle_CompletionHelpers(t *testing.T) {
-	if !(*liveRuntimeHandle)(nil).completed() {
+	if !(*liveRuntimeHandle)(nil).Completed() {
 		t.Fatal("nil liveRuntimeHandle should report completed")
 	}
-	if err := (*liveRuntimeHandle)(nil).wait(); err != nil {
+	if err := (*liveRuntimeHandle)(nil).Wait(); err != nil {
 		t.Fatalf("nil liveRuntimeHandle wait error = %v, want nil", err)
 	}
 
 	handle := &liveRuntimeHandle{
-		runDone: make(chan struct{}),
+		RunDone: make(chan struct{}),
 	}
-	if handle.completed() {
+	if handle.Completed() {
 		t.Fatal("open runDone should report incomplete")
 	}
-	handle.setRunResult(fmt.Errorf("run failed"))
-	if !handle.completed() {
+	handle.SetRunResult(fmt.Errorf("run failed"))
+	if !handle.Completed() {
 		t.Fatal("closed runDone should report completed")
 	}
-	if err := handle.wait(); err == nil || err.Error() != "run failed" {
+	if err := handle.Wait(); err == nil || err.Error() != "run failed" {
 		t.Fatalf("wait error = %v, want run failed", err)
 	}
 }
@@ -758,6 +1067,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		RuntimeMetricsDir: runtimeMetricsDir,
 		RecordPath:        options.recordPath,
 		ExtraOptions:      options.extraOptions,
+		SystemConfigHomeDir: t.TempDir(),
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
@@ -844,18 +1154,18 @@ func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
 		if bundle == nil {
 			return
 		}
-		if bundle.logSink != nil {
-			if _, seen := closed[bundle.logSink]; !seen {
-				closed[bundle.logSink] = struct{}{}
-				if err := bundle.logSink.Close(); err != nil {
+		if bundle.LogSink != nil {
+			if _, seen := closed[bundle.LogSink]; !seen {
+				closed[bundle.LogSink] = struct{}{}
+				if err := bundle.LogSink.Close(); err != nil {
 					t.Fatalf("logSink.Close: %v", err)
 				}
 			}
 		}
-		if bundle.metricsSink != nil {
-			if _, seen := closedMetrics[bundle.metricsSink]; !seen {
-				closedMetrics[bundle.metricsSink] = struct{}{}
-				if err := bundle.metricsSink.Close(); err != nil {
+		if bundle.MetricsSink != nil {
+			if _, seen := closedMetrics[bundle.MetricsSink]; !seen {
+				closedMetrics[bundle.MetricsSink] = struct{}{}
+				if err := bundle.MetricsSink.Close(); err != nil {
 					t.Fatalf("metricsSink.Close: %v", err)
 				}
 			}
@@ -867,7 +1177,7 @@ func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
 			session := svc.sessionByID(sessionID)
 			handle := liveSessionHandle(session)
 			if handle != nil {
-				closeBundle(handle.runtime)
+				closeBundle(handle.Bundle)
 			}
 		}
 	}
@@ -890,9 +1200,9 @@ func (h *runningSessionService) openFactorySession(t *testing.T, factoryName str
 func (h *runningSessionService) requireSession(t *testing.T, sessionID string) *liveFactorySession {
 	t.Helper()
 
-	session := h.svc.sessionByID(sessionID)
-	if session == nil {
-		t.Fatalf("expected session %q to be registered; got ids %v", sessionID, h.svc.sessions.IDs())
+	session, err := h.svc.requireSession(sessionID)
+	if err != nil {
+		t.Fatalf("expected session %q to be registered; got ids %v: %v", sessionID, h.svc.sessions.IDs(), err)
 	}
 	return session
 }
@@ -919,28 +1229,28 @@ func assertSessionWorkIsolation(t *testing.T, expectations []sessionWorkExpectat
 func assertSessionArtifactIsolation(t *testing.T, session *liveFactorySession, wantWork string, forbiddenWork map[string]string) {
 	t.Helper()
 
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("expected live session runtime")
 	}
 
-	runtimeBundle := liveSessionHandle(session).runtime
-	artifact, err := replay.Load(runtimeBundle.recordPath)
+	runtimeBundle := liveSessionHandle(session).Bundle
+	artifact, err := replay.Load(runtimeBundle.RecordPath)
 	if err != nil {
-		t.Fatalf("Load(%s): %v", runtimeBundle.recordPath, err)
+		t.Fatalf("Load(%s): %v", runtimeBundle.RecordPath, err)
 	}
 	payload, err := json.Marshal(artifact.Events)
 	if err != nil {
-		t.Fatalf("Marshal(%s events): %v", runtimeBundle.recordPath, err)
+		t.Fatalf("Marshal(%s events): %v", runtimeBundle.RecordPath, err)
 	}
 	if !strings.Contains(string(payload), wantWork) {
-		t.Fatalf("artifact %s did not contain session work %q: %s", runtimeBundle.recordPath, wantWork, string(payload))
+		t.Fatalf("artifact %s did not contain session work %q: %s", runtimeBundle.RecordPath, wantWork, string(payload))
 	}
 	for otherSessionID, otherWork := range forbiddenWork {
 		if otherSessionID == session.ID {
 			continue
 		}
 		if strings.Contains(string(payload), otherWork) {
-			t.Fatalf("artifact %s leaked work %q from session %s: %s", runtimeBundle.recordPath, otherWork, otherSessionID, string(payload))
+			t.Fatalf("artifact %s leaked work %q from session %s: %s", runtimeBundle.RecordPath, otherWork, otherSessionID, string(payload))
 		}
 	}
 }
@@ -948,12 +1258,12 @@ func assertSessionArtifactIsolation(t *testing.T, session *liveFactorySession, w
 func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 	t.Helper()
 
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("expected live session runtime")
 	}
 
-	runtimeBundle := liveSessionHandle(session).runtime
-	logPath := runtimeBundle.logSink.Path()
+	runtimeBundle := liveSessionHandle(session).Bundle
+	logPath := runtimeBundle.LogSink.Path()
 	if logPath == "" {
 		t.Fatalf("session %s runtime log path is empty", session.ID)
 	}
@@ -968,11 +1278,11 @@ func assertSessionRuntimeLogRecord(t *testing.T, session *liveFactorySession) {
 			t.Fatalf("runtime log %s contained record for session %#v, want only %q in %#v", logPath, record["session_id"], session.ID, record)
 		}
 		foundSessionRecord = true
-		if record["folder_path"] != runtimeBundle.folderPath {
-			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.ID, record["folder_path"], runtimeBundle.folderPath, record)
+		if record["folder_path"] != runtimeBundle.FolderPath {
+			t.Fatalf("session %s folder_path = %#v, want %q in %#v", session.ID, record["folder_path"], runtimeBundle.FolderPath, record)
 		}
-		if record["factory_dir"] != runtimeBundle.dir {
-			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.ID, record["factory_dir"], runtimeBundle.dir, record)
+		if record["factory_dir"] != runtimeBundle.Dir {
+			t.Fatalf("session %s factory_dir = %#v, want %q in %#v", session.ID, record["factory_dir"], runtimeBundle.Dir, record)
 		}
 		if record["runtime_instance_id"] == "" {
 			t.Fatalf("session %s runtime_instance_id missing in %#v", session.ID, record)
@@ -988,15 +1298,15 @@ func assertSessionRuntimeLogPathsAreDistinct(t *testing.T, runtimeLogRoot string
 
 	seenPaths := make(map[string]string, len(sessions))
 	for _, session := range sessions {
-		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.logSink == nil {
+		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.LogSink == nil {
 			t.Fatal("expected live session runtime log sink")
 		}
-		path := liveSessionHandle(session).runtime.logSink.Path()
+		path := liveSessionHandle(session).Bundle.LogSink.Path()
 		if path == "" {
 			t.Fatalf("session %s runtime log path is empty", session.ID)
 		}
-		if liveSessionHandle(session).runtime.logSink.RootDir() != runtimeLogRoot {
-			t.Fatalf("session %s runtime log root = %q, want %q", session.ID, liveSessionHandle(session).runtime.logSink.RootDir(), runtimeLogRoot)
+		if liveSessionHandle(session).Bundle.LogSink.RootDir() != runtimeLogRoot {
+			t.Fatalf("session %s runtime log root = %q, want %q", session.ID, liveSessionHandle(session).Bundle.LogSink.RootDir(), runtimeLogRoot)
 		}
 		if otherSessionID, ok := seenPaths[path]; ok {
 			t.Fatalf("sessions %s and %s shared runtime log path %q", otherSessionID, session.ID, path)
@@ -1010,15 +1320,15 @@ func assertSessionRuntimeMetricsPathsAreDistinct(t *testing.T, metricsRoot strin
 
 	seenPaths := make(map[string]string, len(sessions))
 	for _, session := range sessions {
-		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil || liveSessionHandle(session).Bundle.MetricsSink == nil {
 			t.Fatal("expected live session runtime metrics sink")
 		}
-		path := liveSessionHandle(session).runtime.metricsSink.Path()
+		path := liveSessionHandle(session).Bundle.MetricsSink.Path()
 		if path == "" {
 			t.Fatalf("session %s runtime metrics path is empty", session.ID)
 		}
-		if liveSessionHandle(session).runtime.metricsSink.RootDir() != metricsRoot {
-			t.Fatalf("session %s runtime metrics root = %q, want %q", session.ID, liveSessionHandle(session).runtime.metricsSink.RootDir(), metricsRoot)
+		if liveSessionHandle(session).Bundle.MetricsSink.RootDir() != metricsRoot {
+			t.Fatalf("session %s runtime metrics root = %q, want %q", session.ID, liveSessionHandle(session).Bundle.MetricsSink.RootDir(), metricsRoot)
 		}
 		if otherSessionID, ok := seenPaths[path]; ok {
 			t.Fatalf("sessions %s and %s shared runtime metrics path %q", otherSessionID, session.ID, path)
@@ -1027,7 +1337,12 @@ func assertSessionRuntimeMetricsPathsAreDistinct(t *testing.T, metricsRoot strin
 		if sessionComponent == "" {
 			sessionComponent = "unknown"
 		}
-		if !strings.Contains(filepath.Base(path), "-"+sessionComponent+"-") {
+		baseName := filepath.Base(path)
+		if session.IsDefault {
+			if !strings.Contains(baseName, "-default-") && !strings.Contains(baseName, "-"+sessionComponent+"-") {
+				t.Fatalf("session %s runtime metrics path %q does not include default session marker", session.ID, path)
+			}
+		} else if !strings.Contains(baseName, "-"+sessionComponent+"-") {
 			t.Fatalf("session %s runtime metrics path %q does not include session ID", session.ID, path)
 		}
 		seenPaths[path] = session.ID
@@ -1071,8 +1386,8 @@ func waitForSessionRuntimeStatus(
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		session := svc.sessionByID(sessionID)
-		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).runtime != nil {
-			snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).Bundle != nil {
+			snap, err := liveSessionHandle(session).Bundle.Factory.GetEngineStateSnapshot(context.Background())
 			if err == nil && snap.RuntimeStatus == want {
 				return
 			}
@@ -1095,8 +1410,8 @@ func waitForSessionFactoryState(
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		session := svc.sessionByID(sessionID)
-		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).runtime != nil {
-			snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).Bundle != nil {
+			snap, err := liveSessionHandle(session).Bundle.Factory.GetEngineStateSnapshot(context.Background())
 			if err == nil && snap.FactoryState == string(want) {
 				return
 			}
@@ -1191,7 +1506,7 @@ func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceI
 func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workType, workID, traceID string) {
 	t.Helper()
 
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("live session runtime is required")
 	}
 	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
@@ -1201,7 +1516,7 @@ func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workTy
 		TraceID:    traceID,
 		Payload:    []byte(`{"title":"` + workID + `"}`),
 	}})
-	if _, err := liveSessionHandle(session).runtime.factory.SubmitWorkRequest(context.Background(), request); err != nil {
+	if _, err := liveSessionHandle(session).Bundle.Factory.SubmitWorkRequest(context.Background(), request); err != nil {
 		t.Fatalf("SubmitWorkRequest(%s): %v", workID, err)
 	}
 }
@@ -1240,7 +1555,7 @@ func assertSessionRemainsLive(t *testing.T, svc *FactoryService, sessionID strin
 		t.Fatalf("%s is not registered", label)
 	}
 	select {
-	case <-liveSessionHandle(session).runDone:
+	case <-liveSessionHandle(session).RunDone:
 		t.Fatalf("%s stopped unexpectedly", label)
 	case <-time.After(wait):
 	}
@@ -1269,10 +1584,10 @@ func assertSessionEventsDoNotContain(t *testing.T, session *liveFactorySession, 
 func sessionEventsContain(t *testing.T, session *liveFactorySession, want string) bool {
 	t.Helper()
 
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("live session runtime is required")
 	}
-	events, err := liveSessionHandle(session).runtime.factory.GetFactoryEvents(context.Background())
+	events, err := liveSessionHandle(session).Bundle.Factory.GetFactoryEvents(context.Background())
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
@@ -1307,13 +1622,13 @@ func TestBuildFactoryService_LoadsFromFactoryJSON(t *testing.T) {
 	if bundle == nil {
 		t.Fatal("expected startup runtime bundle")
 	}
-	if bundle.net == nil {
+	if bundle.Net == nil {
 		t.Fatal("expected non-nil net")
 	}
-	if _, ok := bundle.net.WorkTypes["task"]; !ok {
+	if _, ok := bundle.Net.WorkTypes["task"]; !ok {
 		t.Error("expected 'task' work type in net topology")
 	}
-	if bundle.factory == nil {
+	if bundle.Factory == nil {
 		t.Fatal("expected non-nil factory")
 	}
 
@@ -1538,7 +1853,7 @@ func TestFactoryService_ActivateNamedFactory_RejectsNonIdleRuntime(t *testing.T)
 		logger: zap.NewNop(),
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		factory: &aggregateSnapshotFactory{
+		Factory: &aggregateSnapshotFactory{
 			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 				RuntimeStatus: interfaces.RuntimeStatusActive,
 			},
@@ -1570,8 +1885,8 @@ func TestFactoryService_RequireIdleRuntime_TargetsActiveRunSession(t *testing.T)
 		sessions: factorysessions.NewRegistry(),
 		logger:   zap.NewNop(),
 	}
-	defaultHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{factory: idleFactory}}
-	betaHandle := &liveRuntimeHandle{runtime: &factoryRuntimeBundle{factory: activeFactory}}
+	defaultHandle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{Factory: idleFactory}}
+	betaHandle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{Factory: activeFactory}}
 	svc.registerLiveSession(defaultFactorySessionID, defaultHandle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}, false)
@@ -1825,7 +2140,7 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 	}
 	if bundle := svc.currentRuntimeBundle(); bundle != nil {
 		defer func() {
-			if err := closeRuntimeBundleSinks(bundle.logSink, bundle.metricsSink); err != nil {
+			if err := closeRuntimeBundleSinks(bundle.LogSink, bundle.MetricsSink); err != nil {
 				t.Fatalf("Close(runtime artifact sinks): %v", err)
 			}
 		}()
@@ -2591,6 +2906,129 @@ func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesF
 	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
 }
 
+func TestFactoryService_GetCurrentFactory_CollectsNestedFactoryDocsFromDisk(t *testing.T) {
+	const nestedDocPath = "factory/docs/standards/review.md"
+	const nestedDocBody = "# Review standards\n"
+
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "standards", "review.md"), nestedDocBody)
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+
+	got := serviceBundledFilesByTarget(t, current)
+	if entry, ok := got[nestedDocPath]; !ok {
+		t.Fatalf("current factory bundled files = %#v, want nested doc %q", got, nestedDocPath)
+	} else {
+		assertServiceBundledFactoryEntry(t, entry, factoryapi.BundledFileTypeDOC, nestedDocPath, nestedDocBody)
+	}
+	assertServiceBundledFactoryEntry(t, got["factory/docs/README.md"], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+}
+
+func TestFactoryService_GetCurrentFactory_ManifestAuthoritativeDocsExcludeUnlistedTopLevelOrphans(t *testing.T) {
+	const nestedDocPath = "factory/docs/standards/review.md"
+	const nestedDocBody = "# Review standards\n"
+	const orphanDocPath = "factory/docs/orphan.md"
+
+	rootDir := t.TempDir()
+	payload, err := json.Marshal(map[string]any{
+		"name": "alpha",
+		"id":   "alpha",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":          "worker-a",
+			"type":          "MODEL_WORKER",
+			"modelProvider": "CODEX",
+			"model":         "gpt-5-codex",
+			"body":          "You are worker alpha.",
+		}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			"type":      "MODEL_WORKSTATION",
+			"body":      "Do the alpha work.",
+		}},
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{{
+				"type":       "DOC",
+				"targetPath": "factory/docs/README.md",
+				"content": map[string]any{
+					"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
+					"inline":   "# Portable factory\n",
+				},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal named factory payload: %v", err)
+	}
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "orphan.md"), "orphan content\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "standards", "review.md"), nestedDocBody)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+
+	got := serviceBundledFilesByTarget(t, current)
+	if _, ok := got[orphanDocPath]; ok {
+		t.Fatalf("current factory bundled files = %#v, want unlisted top-level orphan doc excluded", got)
+	}
+	assertServiceBundledFactoryEntry(t, got["factory/docs/README.md"], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, got[nestedDocPath], factoryapi.BundledFileTypeDOC, nestedDocPath, nestedDocBody)
+}
+
 func TestFactoryService_GetCurrentFactory_InlinesPortableFilesAndStarterInputs(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -2871,6 +3309,118 @@ func TestFactoryService_OpenFactorySession_ValidateOnlyMapsInitsNewFactoryToAPIR
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscoveryAcrossRunnableEmptyAndBrokenFolders(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	emptyDir := filepath.Join(harness.rootDir, "empty")
+	if err := os.Mkdir(emptyDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(empty): %v", err)
+	}
+
+	brokenDir := filepath.Join(harness.rootDir, "broken")
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", brokenDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(brokenDir, interfaces.FactoryConfigFile), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatalf("WriteFile(broken factory.json): %v", err)
+	}
+
+	before := harness.svc.sessions.Count()
+	assertValidateRunnableDiscovery(t, harness, before)
+	assertOpenRunnableDiscovery(t, harness, before+1)
+	assertValidateEmptyDiscovery(t, harness, emptyDir, before+1)
+	assertOpenEmptyDiscoveryFailure(t, harness, emptyDir, before+1)
+	assertValidateBrokenDiscoveryFailure(t, harness, brokenDir, before+1)
+	assertOpenBrokenDiscoveryFailure(t, harness, brokenDir, before+1)
+}
+
+func assertValidateRunnableDiscovery(t *testing.T, harness *runningSessionService, wantSessionCount int) {
+	t.Helper()
+
+	validateRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate runnable): %v", err)
+	}
+	if validateRunnable == nil || validateRunnable.InitsNewFactory || len(validateRunnable.Targets) == 0 || validateRunnable.SessionID != "" {
+		t.Fatalf("validate runnable result = %#v, want discovered targets without session or init-new-factory", validateRunnable)
+	}
+	assertLiveSessionCount(t, harness, "validate runnable", wantSessionCount)
+}
+
+func assertOpenRunnableDiscovery(t *testing.T, harness *runningSessionService, wantSessionCount int) {
+	t.Helper()
+
+	openRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(open runnable): %v", err)
+	}
+	if openRunnable == nil || openRunnable.SessionID == "" {
+		t.Fatalf("open runnable result = %#v, want session id", openRunnable)
+	}
+	assertLiveSessionCount(t, harness, "open runnable", wantSessionCount)
+}
+
+func assertValidateEmptyDiscovery(t *testing.T, harness *runningSessionService, emptyDir string, wantSessionCount int) {
+	t.Helper()
+
+	validateEmpty, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate empty): %v", err)
+	}
+	if validateEmpty == nil || !validateEmpty.InitsNewFactory || validateEmpty.FolderPath != emptyDir {
+		t.Fatalf("validate empty result = %#v, want init-new-factory metadata", validateEmpty)
+	}
+	assertLiveSessionCount(t, harness, "validate empty", wantSessionCount)
+}
+
+func assertOpenEmptyDiscoveryFailure(t *testing.T, harness *runningSessionService, emptyDir string, wantSessionCount int) {
+	t.Helper()
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false, false); err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open empty) error = nil, want not-runnable failure")
+	} else {
+		assertFactorySessionValidationTarget(t, err, "not_runnable", "folderPath")
+	}
+	assertLiveSessionCount(t, harness, "open empty", wantSessionCount)
+}
+
+func assertValidateBrokenDiscoveryFailure(t *testing.T, harness *runningSessionService, brokenDir string, wantSessionCount int) {
+	t.Helper()
+
+	validateBroken, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(validate broken) error = nil, want config-load failure")
+	}
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+	if validateBroken != nil {
+		t.Fatalf("validate broken result = %#v, want no init-new-factory fallback", validateBroken)
+	}
+	assertLiveSessionCount(t, harness, "validate broken", wantSessionCount)
+}
+
+func assertOpenBrokenDiscoveryFailure(t *testing.T, harness *runningSessionService, brokenDir string, wantSessionCount int) {
+	t.Helper()
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false); err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want config-load failure")
+	} else {
+		assertFactorySessionConfigLoadFailure(t, err, "default")
+	}
+	assertLiveSessionCount(t, harness, "open broken", wantSessionCount)
+}
+
+func assertLiveSessionCount(t *testing.T, harness *runningSessionService, label string, want int) {
+	t.Helper()
+
+	if got := harness.svc.sessions.Count(); got != want {
+		t.Fatalf("%s mutated live sessions to %d, want %d", label, got, want)
+	}
+}
+
 func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyRunnableFolderOmitsInitsNewFactory(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
@@ -3091,8 +3641,8 @@ func assertNestedInitSessionMetadata(t *testing.T, session *factorysessions.Live
 	if session.FactoryDir != nestedFactoryDir {
 		t.Fatalf("session factory dir = %q, want %q", session.FactoryDir, nestedFactoryDir)
 	}
-	if liveSessionHandle(session).runtime.dir != nestedFactoryDir {
-		t.Fatalf("session runtime dir = %q, want %q", liveSessionHandle(session).runtime.dir, nestedFactoryDir)
+	if liveSessionHandle(session).Bundle.Dir != nestedFactoryDir {
+		t.Fatalf("session runtime dir = %q, want %q", liveSessionHandle(session).Bundle.Dir, nestedFactoryDir)
 	}
 }
 
@@ -3311,6 +3861,126 @@ func TestFactoryService_OpenFactorySession_InitNewFactoryRejectsValidateOnlyComb
 	} else {
 		assertFactorySessionValidationTarget(t, err, factorysessions.ValidationReasonRequired, "initNewFactory")
 	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_LogsBrokenDiscoveryTargetForValidateAndOpen(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	logCore, observedLogs := observer.New(zap.ErrorLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	brokenDir := filepath.Join(rootDir, "broken")
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", brokenDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(brokenDir, interfaces.FactoryConfigFile), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatalf("WriteFile(broken factory.json): %v", err)
+	}
+	resolvedBrokenDir, err := filepath.Abs(brokenDir)
+	if err != nil {
+		t.Fatalf("Abs(%s): %v", brokenDir, err)
+	}
+	resolvedBrokenDir = filepath.Clean(resolvedBrokenDir)
+
+	validateResult, err := svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(validate broken) error = nil, want config-load failure")
+	}
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+	if validateResult != nil {
+		t.Fatalf("validate result = %#v, want no init-new-factory fallback on broken config", validateResult)
+	}
+
+	_, err = svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want config-load failure")
+	}
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+
+	matchingLogs := 0
+	for _, entry := range observedLogs.FilterMessage("factory session discovery target runtime config load failed").All() {
+		if !observedLogFieldEquals(entry, "target_factory_dir", resolvedBrokenDir) {
+			continue
+		}
+		matchingLogs++
+		assertObservedLogFieldPresent(t, entry, "submitted_folder_path")
+		assertLogField(t, entry, "target_kind", string(factorysessions.TargetKindDefault))
+		assertLogField(t, entry, "target_display_name", "default")
+		assertObservedLogFieldContains(t, entry, "failure_summary", "unexpected end of JSON input")
+	}
+	if matchingLogs != 2 {
+		t.Fatalf("matching discovery failure logs = %d, want 2", matchingLogs)
+	}
+}
+
+func TestFactoryService_ProbeFactorySessionTarget_DoesNotLogSuccessfulProbe(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	logCore, observedLogs := observer.New(zap.ErrorLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	target, ok, failure := svc.probeFactorySessionTarget(rootDir, rootDir, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+	if !ok {
+		t.Fatal("probeFactorySessionTarget(valid root) = false, want runnable target")
+	}
+	if failure != nil {
+		t.Fatalf("probeFactorySessionTarget(valid root) failure = %#v, want nil", failure)
+	}
+	if target.FactoryDir == "" {
+		t.Fatalf("probeFactorySessionTarget(valid root) = %#v, want populated target", target)
+	}
+	if got := len(observedLogs.FilterMessage("factory session discovery target runtime config load failed").All()); got != 0 {
+		t.Fatalf("discovery failure logs = %d, want 0", got)
+	}
+}
+
+func assertObservedLogFieldContains(t *testing.T, entry observer.LoggedEntry, key, want string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if field.Key != key {
+			continue
+		}
+		if strings.Contains(field.String, want) {
+			return
+		}
+		t.Fatalf("log field %q = %q, want substring %q", key, field.String, want)
+	}
+	t.Fatalf("log field %q missing from %#v", key, entry.Context)
+}
+
+func observedLogFieldEquals(entry observer.LoggedEntry, key, want string) bool {
+	for _, field := range entry.Context {
+		if field.Key == key && field.String == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertObservedLogFieldPresent(t *testing.T, entry observer.LoggedEntry, key string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if field.Key == key && strings.TrimSpace(field.String) != "" {
+			return
+		}
+	}
+	t.Fatalf("log field %q missing or empty in %#v", key, entry.Context)
 }
 
 func normalizeInitFactoryJSON(t *testing.T, raw string) string {
@@ -3633,9 +4303,9 @@ func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testi
 		modelAssets: puller,
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		runtimeCfg:  runtimeCfg,
-		modelAssets: puller,
-		localModels: newManagedLocalModelManager(puller, runtime),
+		RuntimeCfg:  runtimeCfg,
+		ModelAssets: puller,
+		LocalModels: newManagedLocalModelManager(puller, runtime),
 	})
 
 	pullResult, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -3687,9 +4357,9 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := newModelService(modelServiceDependencies{
-		runtimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		modelAssetPuller: func() modelAssetPuller {
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: func() localmodels.AssetPuller {
 			return &managedPullMetricsAssetPuller{
 				result: apisurface.ModelPullResult{
 					ModelName: "OMNIVOICE_Q4_K_M",
@@ -3705,7 +4375,9 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 				},
 			}
 		},
-		modelPullMetrics: func() ModelPullMetricsRecorder { return recorder },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			return modelPullMetricsTestAdapter{inner: recorder}
+		},
 	})
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
@@ -3741,14 +4413,16 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := newModelService(modelServiceDependencies{
-		runtimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		modelAssetPuller: func() modelAssetPuller {
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: func() localmodels.AssetPuller {
 			return &managedPullMetricsAssetPuller{
 				err: apisurface.ErrManagedRuntimeSourceFetchFailed,
 			}
 		},
-		modelPullMetrics: func() ModelPullMetricsRecorder { return recorder },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			return modelPullMetricsTestAdapter{inner: recorder}
+		},
 	})
 
 	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -3781,6 +4455,14 @@ func (r *capturingModelPullMetricsRecorder) RecordModelPullMetric(metric Invocat
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics = append(r.metrics, metric)
+}
+
+type modelPullMetricsTestAdapter struct {
+	inner *capturingModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsTestAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(InvocationMetric{Name: metric.Name, Labels: metric.Labels})
 }
 
 func (r *capturingModelPullMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
@@ -3839,6 +4521,166 @@ func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric Invoc
 	r.metrics = append(r.metrics, metric)
 }
 
+func (r *capturingInvocationMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
+	t.Helper()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, metric := range r.metrics {
+		if metric.Name != name {
+			continue
+		}
+		match := true
+		for key, value := range labels {
+			if metric.Labels[key] != value {
+				match = false
+				break
+			}
+		}
+		if match {
+			return
+		}
+	}
+	t.Fatalf("metrics %#v do not contain %q with labels %#v", r.metrics, name, labels)
+}
+
+func TestInvokeFactorySession_RecordsNormalizationFailureTelemetry(t *testing.T) {
+	t.Parallel()
+
+	recorder := &capturingInvocationMetricsRecorder{}
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name:    "sig-factory",
+		Project: "factory-argument-signatures",
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:     "input",
+				Required: true,
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{InvocationMetricsRecorder: recorder},
+		logger: zap.New(logCore),
+	}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{RuntimeCfg: runtimeCfg})
+
+	_, err := svc.InvokeFactorySession(context.Background(), defaultFactorySessionID, factoryapi.InvocationRequest{
+		Args: &map[string]any{"mode": "fast"},
+	})
+	if err == nil {
+		t.Fatal("expected missing required input error")
+	}
+
+	signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature)
+	recorder.assertContainsMetric(t, invocationMetricNormalizationAttempts, map[string]string{
+		"input_source":    string(invocationInputSourceStructuredArgs),
+		"factory_name":    factoryCfg.Name,
+		"factory_project": factoryCfg.Project,
+		"signature_hash":  signatureHash,
+	})
+	recorder.assertContainsMetric(t, invocationMetricNormalizationFailure, map[string]string{
+		"input_source":    string(invocationInputSourceStructuredArgs),
+		"factory_name":    factoryCfg.Name,
+		"factory_project": factoryCfg.Project,
+		"signature_hash":  signatureHash,
+		"error_code":      string(invocations.ArgumentErrorCodeUnknownArgument),
+	})
+
+	entries := observedLogs.FilterMessage("factory session invocation argument failure").AllUntimed()
+	if len(entries) != 1 {
+		t.Fatalf("argument failure logs = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["factory_name"] != factoryCfg.Name || fields["factory_project"] != factoryCfg.Project {
+		t.Fatalf("factory fields = %#v, want %q/%q", fields, factoryCfg.Name, factoryCfg.Project)
+	}
+	if fields["error_code"] != string(invocations.ArgumentErrorCodeUnknownArgument) {
+		t.Fatalf("error_code = %#v, want %q", fields["error_code"], invocations.ArgumentErrorCodeUnknownArgument)
+	}
+	if fields["argument_key"] != "mode" {
+		t.Fatalf("argument_key = %#v, want mode", fields["argument_key"])
+	}
+	if value, ok := fields["signature_hash"].(string); !ok || value == "" {
+		t.Fatalf("signature_hash = %#v, want non-empty string", fields["signature_hash"])
+	}
+}
+
+func TestInvokeFactorySession_InterpolationFailureLogsRedactedArgumentDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	recorder := &capturingInvocationMetricsRecorder{}
+	logCore, observedLogs := observer.New(zap.WarnLevel)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name:    "sig-factory",
+		Project: "factory-argument-signatures",
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:      "apiKey",
+				Sensitive: true,
+				ValueMode: string(factoryapi.FactoryInvocationParameterValueModeRepeated),
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
+			OutputContract: &interfaces.InvocationOutputContractConfig{
+				PathParameter: "apiKey",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{
+		cfg:    &FactoryServiceConfig{InvocationMetricsRecorder: recorder},
+		logger: zap.New(logCore),
+	}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{RuntimeCfg: runtimeCfg})
+
+	_, err := svc.InvokeFactorySession(context.Background(), defaultFactorySessionID, factoryapi.InvocationRequest{
+		Args: &map[string]any{"apiKey": []any{"super-secret", "second-secret"}},
+	})
+	if err == nil {
+		t.Fatal("expected interpolation validation error")
+	}
+
+	signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature)
+	recorder.assertContainsMetric(t, invocationMetricInterpolationFailure, map[string]string{
+		"input_source":    string(invocationInputSourceStructuredArgs),
+		"factory_name":    factoryCfg.Name,
+		"factory_project": factoryCfg.Project,
+		"signature_hash":  signatureHash,
+		"error_code":      string(invocations.ArgumentErrorCodeInvalidInterpolation),
+	})
+
+	entries := observedLogs.FilterMessage("factory session invocation argument failure").AllUntimed()
+	if len(entries) != 1 {
+		t.Fatalf("argument failure logs = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["argument_name"] != "apiKey" {
+		t.Fatalf("argument_name = %#v, want apiKey", fields["argument_name"])
+	}
+	if fields["argument_value_redacted"] != true {
+		t.Fatalf("argument_value_redacted = %#v, want true", fields["argument_value_redacted"])
+	}
+	if fields["argument_value_count"] != int64(2) {
+		t.Fatalf("argument_value_count = %#v, want 2", fields["argument_value_count"])
+	}
+	if strings.Contains(entries[0].Message, "super-secret") {
+		t.Fatalf("log message leaked sensitive value: %#v", entries[0])
+	}
+	if strings.Contains(fmt.Sprint(fields), "super-secret") || strings.Contains(fmt.Sprint(fields), "second-secret") {
+		t.Fatalf("log fields leaked sensitive values: %#v", fields)
+	}
+	for _, metric := range recorder.metrics {
+		if strings.Contains(fmt.Sprint(metric), "super-secret") || strings.Contains(fmt.Sprint(metric), "second-secret") {
+			t.Fatalf("metrics leaked sensitive values: %#v", recorder.metrics)
+		}
+	}
+}
+
 func TestResolveFactoryServiceRoot_AssignsLoggerAndRuntimeInstanceID(t *testing.T) {
 	t.Parallel()
 
@@ -3878,9 +4720,9 @@ func TestFactoryService_GetCurrentNamedFactory_FallsBackToLiveRuntimeWhenPointer
 		cfg:            &FactoryServiceConfig{Dir: rootDir},
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		dir:        rootDir,
-		folderPath: rootDir,
-		runtimeCfg: runtimeCfg,
+		Dir:        rootDir,
+		FolderPath: rootDir,
+		RuntimeCfg: runtimeCfg,
 	})
 
 	current, err := svc.GetCurrentNamedFactory(context.Background())
@@ -3938,26 +4780,29 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 
 	core := &FactoryCore{
 		collaborators: FactoryServiceCollaborators{
-			Sessions:     factorysessions.NewRegistry(),
-			LocalModels:  localModelDomain{manager: &managedLocalModelManager{}},
-			RuntimeBuild: &runtimebuild.Service{},
+			Sessions:         factorysessions.NewRegistry(),
+			LocalModels:      localModelDomain{Manager: &managedLocalModelManager{}},
+			RuntimeBuild:     &runtimebuild.Service{},
+			WorkersScheduler: workersservice.New(workersservice.Config{}),
 		},
 		hostedWorkers: hostedworkers.Config{Logger: zap.NewNop()},
 		startupBundle: &factoryRuntimeBundle{
-			modelResources: newLocalModelResourceLimiter(),
-			localModels:    &managedLocalModelManager{},
+			ModelResources: newLocalModelResourceLimiter(),
+			LocalModels:    &managedLocalModelManager{},
 		},
 		modelAssets: staticModelAssetPuller{},
 	}
 
 	svc := NewFactoryServiceFromCore(core)
+	shell := FactoryServiceShell{Service: svc}
+	svc = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, core.cfg))
 	svc.factorySave = &recordingFactorySaveSaver{}
 
 	snapshot := svc.ComposeCollaboratorSnapshot()
-	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.LocalModelsInitialized {
+	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.WorkersSchedulerInitialized || !snapshot.LocalModelsInitialized {
 		t.Fatalf("snapshot missing core collaborators: %+v", snapshot)
 	}
-	if !snapshot.ModelAssetsInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {
+	if !snapshot.ModelAssetsInitialized || !snapshot.ModelServiceInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {
 		t.Fatalf("snapshot missing service collaborators: %+v", snapshot)
 	}
 	if !snapshot.HostedWorkersLoggerReady || !snapshot.BundleModelResources || !snapshot.BundleLocalModels {
@@ -3991,8 +4836,8 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 
 	svc := &FactoryService{
 		startupBundle: &factoryRuntimeBundle{
-			logSink:     logSink,
-			metricsSink: metricsSink,
+			LogSink:     logSink,
+			MetricsSink: metricsSink,
 		},
 	}
 
@@ -4005,6 +4850,30 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 	}
 	if !diagnostics.StartTimeUTC.Equal(logSink.StartTimeUTC()) || !diagnostics.MetricsStartTimeUTC.Equal(metricsSink.StartTimeUTC()) {
 		t.Fatalf("diagnostic start times = %#v", diagnostics)
+	}
+}
+
+func TestRuntimeSessionBaseLogger_PreservesBaseLoggerWhenFileLoggingDisabled(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := runtimebuild.NewSessionLogger(runtimeSessionBaseLogger(zap.New(core), nil), "session-1", "/tmp/folder", "/tmp/factory")
+
+	logger.Info("session logger still active")
+
+	entries := observed.FilterMessage("session logger still active").All()
+	if len(entries) != 1 {
+		t.Fatalf("session logger entry count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if got := fields["session_id"]; got != "session-1" {
+		t.Fatalf("session_id = %#v, want session-1", got)
+	}
+	if got := fields["folder_path"]; got != "/tmp/folder" {
+		t.Fatalf("folder_path = %#v, want /tmp/folder", got)
+	}
+	if got := fields["factory_dir"]; got != "/tmp/factory" {
+		t.Fatalf("factory_dir = %#v, want /tmp/factory", got)
 	}
 }
 
@@ -4105,46 +4974,5 @@ func testModelHostMetricsAndDiagnosticsBranches(t *testing.T) {
 	diagnostics := modelHostDiagnostics(&FactoryServiceConfig{InvocationMetricsRecorder: recorder}, zap.NewNop())
 	if diagnostics.Logger == nil || diagnostics.Metrics == nil {
 		t.Fatalf("modelHostDiagnostics = %#v, want logger and metrics", diagnostics)
-	}
-}
-
-func TestScriptMetricHelpers_PreferFailureMetadataAndDiagnostics(t *testing.T) {
-	t.Parallel()
-
-	timeoutResult := interfaces.WorkResult{
-		FailureMetadata: &interfaces.WorkFailureMetadata{Type: interfaces.WorkFailureTypeTimeout},
-	}
-	if !scriptMetricTimedOut(timeoutResult) {
-		t.Fatal("expected timeout result to report timed out")
-	}
-	if got := scriptMetricFailureReason(timeoutResult); got != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("failure reason = %q, want %q", got, interfaces.WorkFailureTypeTimeout)
-	}
-
-	commandResult := interfaces.WorkResult{
-		Outcome: interfaces.OutcomeRejected,
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Command: &interfaces.CommandDiagnostic{
-				ExitCode: 7,
-				Duration: 250 * time.Millisecond,
-			},
-		},
-	}
-	if got := scriptMetricFailureReason(commandResult); got != "exit_code" {
-		t.Fatalf("failure reason = %q, want exit_code", got)
-	}
-	if duration, ok := scriptMetricDurationMilliseconds(commandResult); !ok || duration != 250 {
-		t.Fatalf("command duration = %v, %v want 250, true", duration, ok)
-	}
-
-	outcomeResult := interfaces.WorkResult{
-		Outcome: interfaces.OutcomeContinue,
-		Metrics: interfaces.WorkMetrics{Duration: 125 * time.Millisecond},
-	}
-	if duration, ok := scriptMetricDurationMilliseconds(outcomeResult); !ok || duration != 125 {
-		t.Fatalf("metrics duration = %v, %v want 125, true", duration, ok)
-	}
-	if got := scriptMetricFailureReason(outcomeResult); got != string(interfaces.OutcomeContinue) {
-		t.Fatalf("fallback failure reason = %q, want %q", got, interfaces.OutcomeContinue)
 	}
 }

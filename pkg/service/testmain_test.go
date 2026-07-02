@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -14,6 +15,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -22,8 +24,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -84,7 +88,7 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 		},
 	}
 
-	server, shutdown := startLocalModelHTTPTestServer(t, runtime)
+	server, launcher, _, shutdown := startLocalModelInferenceTestServer(t, runtime)
 	defer shutdown()
 	defer server.Close()
 
@@ -108,8 +112,14 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	}
 	decoded := invokeLocalModelHTTP(t, server, body)
 	assertLocalModelHTTPInvocationResponse(t, decoded, audioPath)
+	if launcher.startCount() != 1 {
+		t.Fatalf("supervised process start count = %d, want 1 shared host runtime", launcher.startCount())
+	}
 	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
 		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
+	}
+	if got := runtime.lastLoadServingEndpoint(); got != launcher.healthEndpoint {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", got, launcher.healthEndpoint)
 	}
 }
 
@@ -139,10 +149,10 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if bundle == nil {
 		t.Fatal("expected startup runtime bundle")
 	}
-	if bundle.modelResources == nil {
+	if bundle.ModelResources == nil {
 		t.Fatal("expected startup bundle to initialize modelResources")
 	}
-	if bundle.localModels == nil {
+	if bundle.LocalModels == nil {
 		t.Fatal("expected startup bundle to initialize localModels")
 	}
 	if svc.sessions == nil {
@@ -178,7 +188,10 @@ func TestBuildHostedWorkersConfig_DelegatesServiceConfigFields(t *testing.T) {
 	}
 }
 
-func startLocalModelHTTPTestServer(t *testing.T, runtime *fakeLocalModelRuntime) (*httptest.Server, func()) {
+func startLocalModelInferenceTestServer(
+	t *testing.T,
+	runtime *fakeLocalModelRuntime,
+) (*httptest.Server, *serviceTestFakeProcessLauncher, *FactoryService, func()) {
 	t.Helper()
 	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -187,35 +200,67 @@ func startLocalModelHTTPTestServer(t *testing.T, runtime *fakeLocalModelRuntime)
 	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfigWithHealthEndpoint(healthServer.URL))
 	writeLocalModelLongTestWorkerConfig(t, dir)
 	writeLocalModelLongTestWorkstationConfig(t, dir)
+
+	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
+	domain := modelHostBackedLocalModelDomain(t, puller, launcher, runtime)
+
 	ctx, cancel := context.WithCancel(context.Background())
-	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
+	cfg := &FactoryServiceConfig{
 		Dir:                                     dir,
 		RuntimeMode:                             interfaces.RuntimeModeService,
 		Port:                                    1,
 		Logger:                                  zap.NewNop(),
 		LocalModelRuntimeOverride:               runtime,
+		ModelAssets:                             puller,
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	}
+	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
 		cancel()
 		healthServer.Close()
-		t.Fatalf("BuildFactoryService: %v", err)
+		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
 	}
-	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
-	svc.modelAssets = puller
-	host := newServiceTestSupervisedModelHost(t, puller, launcher)
-	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
-	if svc.core != nil {
-		svc.core.collaborators.LocalModels.host = host
-		svc.core.collaborators.LocalModels.assets = puller
+	load, err := LoadFactoryConfigForCompose(cfg, root)
+	if err != nil {
+		cancel()
+		healthServer.Close()
+		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
-	if bundle := liveSessionBundle(svc.defaultSession()); bundle != nil {
-		bundle.modelAssets = puller
-		bundle.localModelRuntime = runtime
-		bundle.localModels = newManagedLocalModelManager(puller, runtime)
-		bundle.modelHost = host
-		bundle.leaseExecution = leaseExec
+	clock := ServiceClockForCompose(cfg, load)
+	sessions := NewFactorySessionsRegistry()
+	startupLocalModels := domain
+	collaborators := FactoryServiceCollaborators{
+		Sessions:    sessions,
+		LocalModels: domain,
+		RuntimeBuild: newRuntimeBuildService(
+			cfg,
+			clock,
+			root.BaseLogger,
+			&startupLocalModels,
+			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
+			newSessionDispatchCompletionObserverFactory(sessions),
+		),
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfig(cfg, root.BaseLogger, clock)),
 	}
+	shell, err := ComposeFactoryService(
+		ctx,
+		cfg,
+		root,
+		collaborators,
+		load,
+		clock,
+		buildHostedWorkersConfig(cfg, root.BaseLogger, clock),
+	)
+	if err != nil {
+		cancel()
+		healthServer.Close()
+		t.Fatalf("ComposeFactoryService: %v", err)
+	}
+	svc := AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	svc = AttachFactorySaveCollaborator(
+		FactoryServiceShell{Service: svc},
+		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
+	)
 
 	runErrCh := make(chan error, 1)
 	go func() { runErrCh <- svc.Run(ctx) }()
@@ -229,7 +274,7 @@ func startLocalModelHTTPTestServer(t *testing.T, runtime *fakeLocalModelRuntime)
 		}
 		healthServer.Close()
 	}
-	return server, shutdown
+	return server, launcher, svc, shutdown
 }
 
 func invokeLocalModelHTTP(t *testing.T, server *httptest.Server, body []byte) factoryapi.ModelInvocationResponse {
@@ -299,7 +344,8 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 	cfg := &interfaces.FactoryConfig{
 		Name: "omnivoice-local-model-test",
 		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "speech",
+			Name:             "speech",
+			HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault},
 			States: []interfaces.StateConfig{
 				{Name: "init", Type: interfaces.StateTypeInitial},
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
@@ -316,7 +362,7 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 		}},
 		Workers: []interfaces.WorkerConfig{{
 			Name:          "tts-worker",
-			Type:          interfaces.WorkerTypeModel,
+			Type:          interfaces.WorkerTypeInference,
 			Model:         "OMNIVOICE_Q4_K_M",
 			ModelProvider: interfaces.RunnerIDCodex,
 			ModelLocality: interfaces.ModelLocalityLocal,
@@ -340,7 +386,7 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 		}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "speak",
-			Type:           interfaces.WorkstationTypeInvoke,
+			Type:           interfaces.WorkstationTypeInference,
 			WorkerTypeName: "tts-worker",
 			Operation:      "TTS",
 			OperationBindings: []interfaces.ModelOperationBinding{{
@@ -1033,6 +1079,7 @@ type providerCommandRunnerRecorder struct {
 	mu       sync.Mutex
 	requests []workers.CommandRequest
 	result   workers.CommandResult
+	err      error
 }
 
 func (r *providerCommandRunnerRecorder) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
@@ -1040,7 +1087,7 @@ func (r *providerCommandRunnerRecorder) Run(_ context.Context, req workers.Comma
 	defer r.mu.Unlock()
 
 	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
-	return r.result, nil
+	return r.result, r.err
 }
 
 func (r *providerCommandRunnerRecorder) Requests() []workers.CommandRequest {
@@ -1190,8 +1237,12 @@ You are a helpful assistant.
 	if !ok {
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
-	if _, ok := wsExec.Executor.(*workers.AgentExecutor); !ok {
-		t.Fatalf("expected wrapped executor to be *workers.AgentExecutor, got %T", wsExec.Executor)
+	router, ok := wsExec.Executor.(*workerexecutor.WorkstationBehaviorRouter)
+	if !ok {
+		t.Fatalf("expected wrapped executor to be *executor.WorkstationBehaviorRouter, got %T", wsExec.Executor)
+	}
+	if _, ok := router.InferenceExecutor.(*workers.AgentExecutor); !ok {
+		t.Fatalf("expected inference executor to be *workers.AgentExecutor, got %T", router.InferenceExecutor)
 	}
 
 	workerDef, ok := wsExec.RuntimeConfig.Worker("worker-a")
@@ -1281,6 +1332,230 @@ You are a helpful assistant.
 	assertCanonicalModelWorkerExecutionResult(t, result)
 	assertCanonicalProviderCommandRequests(t, runner.Requests())
 	assertRecordedInferenceEvents(t, recorded)
+}
+
+func TestLoadWorkersFromConfig_ModelWorkerProgressPublisherLeavesCanonicalEventsUnchanged(t *testing.T) {
+	var published []workerprovider.InferenceProgressFragment
+	result, err, recorded := executeModelWorkerProgressPublisherServiceTest(t, modelWorkerProgressPublisherServiceTestOptions{
+		commandResult: workers.CommandResult{
+			Stdout: []byte("provider-output COMPLETE"),
+			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
+		},
+		progressPublisher: func(fragment workerprovider.InferenceProgressFragment) {
+			published = append(published, fragment)
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertCanonicalModelWorkerExecutionResult(t, result)
+	assertRecordedInferenceEvents(t, recorded)
+	if len(published) != 1 {
+		t.Fatalf("published fragments = %#v, want one terminal completion marker", published)
+	}
+	if published[0].Kind != workerprovider.CompletedFragmentKind {
+		t.Fatalf("published kind = %q, want %q", published[0].Kind, workerprovider.CompletedFragmentKind)
+	}
+	if published[0].DispatchID != "d-model-worker-provider-progress" {
+		t.Fatalf("dispatch id = %q, want d-model-worker-provider-progress", published[0].DispatchID)
+	}
+	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != "sess_codex_123" {
+		t.Fatalf("provider session ref = %#v, want sess_codex_123", published[0].ProviderSessionRef)
+	}
+}
+
+func TestLoadWorkersFromConfig_ModelWorkerProgressPublisherPanicLeavesSuccessfulOutcomeUnchanged(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	result, err, recorded := executeModelWorkerProgressPublisherServiceTest(t, modelWorkerProgressPublisherServiceTestOptions{
+		commandResult: workers.CommandResult{
+			Stdout: []byte("provider-output COMPLETE"),
+			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
+		},
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			panic("stream build boom")
+		},
+		logger: zap.New(core),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertCanonicalModelWorkerExecutionResult(t, result)
+	assertRecordedInferenceEvents(t, recorded)
+	entry := findObservedLog(t, observed, "internal provider progress publication degraded")
+	assertLogField(t, entry, "reason", "PUBLISH_PANIC")
+	assertLogField(t, entry, "dispatch_id", "d-model-worker-provider-progress")
+}
+
+func TestLoadWorkersFromConfig_ModelWorkerProgressPublisherPanicLeavesProviderFailureUnchanged(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	result, err, recorded := executeModelWorkerProgressPublisherServiceTest(t, modelWorkerProgressPublisherServiceTestOptions{
+		commandErr: errors.New("provider subprocess failed"),
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			panic("stream build boom")
+		},
+		logger: zap.New(core),
+	})
+	if err != nil {
+		t.Fatalf("unexpected execution error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("result outcome = %q, want failed provider result", result.Outcome)
+	}
+	if strings.TrimSpace(result.Error) == "" || !strings.Contains(result.Error, "provider subprocess failed") {
+		t.Fatalf("result error = %q, want provider failure message", result.Error)
+	}
+	assertRecordedInferenceEvents(t, recorded)
+
+	entry := findObservedLog(t, observed, "internal provider progress publication degraded")
+	assertLogField(t, entry, "reason", "PUBLISH_PANIC")
+	assertLogField(t, entry, "dispatch_id", "d-model-worker-provider-progress")
+}
+
+type modelWorkerProgressPublisherServiceTestOptions struct {
+	commandResult            workers.CommandResult
+	commandErr               error
+	newSessionResponseStream func() *factorysessions.SessionResponseStream
+	progressPublisher        workerprovider.InferenceProgressPublisher
+	logger                   *zap.Logger
+}
+
+func executeModelWorkerProgressPublisherServiceTest(
+	t *testing.T,
+	options modelWorkerProgressPublisherServiceTestOptions,
+) (interfaces.WorkResult, error, []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	runner := &providerCommandRunnerRecorder{
+		result: options.commandResult,
+		err:    options.commandErr,
+	}
+	recorded := make([]factoryapi.FactoryEvent, 0, 2)
+	recorder := func(event factoryapi.FactoryEvent) {
+		recorded = append(recorded, event)
+	}
+
+	dir, cfg := newModelWorkerProgressPublisherServiceFixture(t)
+	sessions := newModelWorkerProgressPublisherSessions(dir)
+	svc := &FactoryService{
+		sessions:                 sessions,
+		newSessionResponseStream: options.newSessionResponseStream,
+	}
+
+	logger := options.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	progressPublisher := options.progressPublisher
+	if progressPublisher == nil {
+		progressPublisher = svc.inferenceProgressPublisher(modelWorkerProgressPublisherSessionID, logger)
+	}
+
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		nil,
+		progressPublisher,
+		runner,
+		nil,
+		nil,
+		recorder,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, execErr := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      modelWorkerProgressPublisherDispatchID,
+		TransitionID:    "t-model-worker-provider-progress",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens:     workers.InputTokens(modelWorkerProgressPublisherToken()),
+	})
+	assertCanonicalProviderCommandRequests(t, runner.Requests())
+	return result, execErr, recorded
+}
+
+const (
+	modelWorkerProgressPublisherSessionID  = "session-provider-progress-publication"
+	modelWorkerProgressPublisherDispatchID = "d-model-worker-provider-progress"
+)
+
+func newModelWorkerProgressPublisherServiceFixture(t *testing.T) (string, *factoryconfig.LoadedFactoryConfig) {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gpt-5.4
+executorProvider: script_wrap
+modelProvider: codex
+stopToken: COMPLETE
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+	return dir, cfg
+}
+
+func newModelWorkerProgressPublisherSessions(dir string) *factorysessions.Registry {
+	sessions := factorysessions.NewRegistry()
+	sessions.Upsert(factorysessions.NewLiveSession(
+		modelWorkerProgressPublisherSessionID,
+		dir,
+		dir,
+		dir,
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		filepath.Base(dir),
+	), true)
+	return sessions
+}
+
+func modelWorkerProgressPublisherToken() interfaces.Token {
+	return interfaces.Token{
+		ID: "tok-model-worker-provider-progress",
+		Color: interfaces.TokenColor{
+			WorkID:  "work-model-worker-provider-progress",
+			Payload: []byte("helpful input"),
+		},
+	}
 }
 
 // backendsizecheck:ignore-function this dual-locality integration test keeps the full model-invoke execution assertion path in one place.
@@ -1379,11 +1654,13 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		nil,
 		nil,
 		nil,
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets:    staticModelAssetPuller{cache: cache},
-			runtime:   runtime,
-			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		nil,
+		nil,
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets:    staticModelAssetPuller{cache: cache},
+			Runtime:   runtime,
+			Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 		},
 	)
 	if err != nil {
@@ -1464,7 +1741,7 @@ func assertModelInvokeAcceptedAudioOutput(t *testing.T, output string, audioPath
 
 func modelInvokeExecutionFixture(t *testing.T, model string, modelLocality string) (*providerCallRecorder, *workers.WorkstationExecutor) {
 	t.Helper()
-	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: "audio-ready"}}}
+	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
 	factoryCfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "speak", WorkerTypeName: "tts-worker"}},
 		Workers:      []interfaces.WorkerConfig{{Name: "tts-worker"}},
@@ -2033,13 +2310,15 @@ func loadWorkersFromConfigForServiceTest(
 		logging.NoopLogger{},
 		false,
 		providerOverride,
+		nil,
 		providerCommandRunner,
 		commandRunner,
 		scriptRecorder,
 		inferenceRecorder,
 		nil,
 		nil,
-		localModelDomain{},
+		nil,
+		LocalModelDomain{},
 	)
 }
 
@@ -2288,7 +2567,7 @@ func taxonomyModelInvokeExecutionFixtureFromRuntimeConfig(
 ) (*providerCallRecorder, *workers.WorkstationExecutor) {
 	t.Helper()
 
-	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: "audio-ready"}}}
+	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(
 		t,
 		"",
@@ -2355,13 +2634,15 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		nil,
 		nil,
+		nil,
 		history.RecordModelEvent,
+		nil,
 		func() time.Time { return eventTime },
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets:    staticModelAssetPuller{cache: cache},
-			runtime:   runtime,
-			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets:    staticModelAssetPuller{cache: cache},
+			Runtime:   runtime,
+			Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 		},
 	)
 	if err != nil {
@@ -2518,4 +2799,350 @@ func taxonomyRuntimeFindTargetByCode(t *testing.T, targets []factoryvalidation.T
 	}
 	t.Fatalf("target with code %q not found in %#v", code, targets)
 	return factoryvalidation.Target{}
+}
+func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) {
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	runtime := &fakeLocalModelRuntime{
+		response: interfaces.InferenceResponse{
+			Content: mustMarshalAudioContentResponse(t, audioPath),
+		},
+	}
+	cache := localModelTestCacheLayout(t)
+	puller := staticModelAssetPuller{cache: cache}
+	launcher := &serviceTestFakeProcessLauncher{healthEndpoint: healthServer.URL}
+	domain := modelHostBackedLocalModelDomain(t, puller, launcher, runtime)
+
+	factoryCfg := inferenceModelHostFactoryConfig()
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, inferenceModelHostRuntimeWorkers(healthServer.URL), map[string]*interfaces.FactoryWorkstationConfig{
+		"speak": inferenceModelHostWorkstation(),
+	})
+
+	opts, err := loadWorkersFromConfig(
+		"",
+		factoryCfg,
+		"",
+		runtimeCfg,
+		nil,
+		logging.NoopLogger{},
+		true,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		domain,
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+	exec, ok := fc.WorkerExecutors["tts-worker"]
+	if !ok {
+		t.Fatal("expected tts-worker executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, err := wsExec.Execute(context.Background(), inferenceModelHostDispatch())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	assertModelInvokeAcceptedAudioOutput(t, result.Output, audioPath)
+	if launcher.startCount() != 1 {
+		t.Fatalf("supervised process start count = %d, want 1 shared host runtime", launcher.startCount())
+	}
+	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
+		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
+	}
+	if got := runtime.lastLoadServingEndpoint(); got != healthServer.URL {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", got, healthServer.URL)
+	}
+}
+
+func TestFactorySessionInvocation_LocalLlamaCppInferenceUsesModelHostLeases(t *testing.T) {
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	runtime := &fakeLocalModelRuntime{
+		response: interfaces.InferenceResponse{
+			Content: mustMarshalAudioContentResponse(t, audioPath),
+		},
+	}
+
+	server, launcher, svc, shutdown := startLocalModelInferenceTestServer(t, runtime)
+	defer shutdown()
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{
+		mustGeneratedLocalModelHTTPTextPart(t, "hello factory session inference"),
+	}
+
+	result, err := svc.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, factoryapi.InvocationRequest{
+		SourceKind: &sourceKind,
+		Content:    &content,
+	})
+	if err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation status = %q, want COMPLETED (error=%q message=%q work=%q state=%q)", result.Status, result.ErrorCode, result.Message, result.WorkName, result.WorkState)
+	}
+	if len(result.PrimaryResult) == 0 {
+		t.Fatalf("primaryResult = %#v, want invocation to participate in primary-result selection", result.PrimaryResult)
+	}
+	events, err := svc.GetFactoryEvents(ctx)
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	assertModelHostInferenceEventsInHistory(t, events, audioPath)
+	if launcher.startCount() != 1 {
+		t.Fatalf("supervised process start count = %d, want 1 shared host runtime", launcher.startCount())
+	}
+	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
+		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
+	}
+	if got := runtime.lastLoadServingEndpoint(); got != launcher.healthEndpoint {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", got, launcher.healthEndpoint)
+	}
+}
+
+func TestWorkerWorkstationTaxonomyRuntime_InferenceWorkerUsesModelHostLeases(t *testing.T) {
+	t.Parallel()
+
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	runtime := &fakeLocalModelRuntime{
+		response: interfaces.InferenceResponse{
+			Content: mustMarshalAudioContentResponse(t, audioPath),
+		},
+	}
+	cfg := mustTaxonomyRuntimeFactoryConfigFromOpenAPI(
+		t,
+		interfaces.WorkerTypeInference,
+		interfaces.WorkstationTypeInference,
+		interfaces.WorkerTypeModel,
+		interfaces.WorkstationTypeInvoke,
+	)
+	wsExec, launcher := taxonomyOmniVoiceInferenceWorkstationExecutorWithModelHost(t, runtime, cfg, healthServer.URL)
+
+	result, err := wsExec.Execute(context.Background(), modelInvokeDispatch())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	assertModelInvokeAcceptedAudioOutput(t, result.Output, audioPath)
+	if launcher.startCount() != 1 {
+		t.Fatalf("supervised process start count = %d, want 1 shared host runtime", launcher.startCount())
+	}
+	if got := runtime.lastLoadServingEndpoint(); got != healthServer.URL {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", got, healthServer.URL)
+	}
+}
+
+func modelHostBackedLocalModelDomain(
+	t *testing.T,
+	puller modelAssetPuller,
+	launcher *serviceTestFakeProcessLauncher,
+	runtime *fakeLocalModelRuntime,
+) localModelDomain {
+	t.Helper()
+	host := newServiceTestSupervisedModelHost(t, puller, launcher)
+	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
+	return LocalModelDomain{
+		Resources:      newLocalModelResourceLimiter(),
+		Assets:         puller,
+		Runtime:        runtime,
+		Manager:        newManagedLocalModelManager(puller, runtime),
+		Host:           host,
+		LeaseExecution: leaseExec,
+	}
+}
+
+func inferenceModelHostFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		Resources: []interfaces.ResourceConfig{{
+			Name:       "omnivoice-cache",
+			Type:       interfaces.ResourceTypeModel,
+			Capacity:   1,
+			Model:      "OMNIVOICE_Q4_K_M",
+			Backend:    "LLAMACPP",
+			LoadPolicy: "ON_DEMAND",
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "speak",
+			WorkerTypeName: "tts-worker",
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name: "tts-worker",
+		}},
+	}
+}
+
+func inferenceModelHostRuntimeWorkers(healthEndpoint string) map[string]*interfaces.WorkerConfig {
+	worker := &interfaces.WorkerConfig{
+		Name:          "tts-worker",
+		Type:          interfaces.WorkerTypeInference,
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelProvider: interfaces.RunnerIDCodex,
+		ModelLocality: interfaces.ModelLocalityLocal,
+		Resources: []interfaces.ResourceConfig{{
+			Name:     "omnivoice-cache",
+			Capacity: 1,
+		}},
+		Operations: []interfaces.ModelOperation{{
+			Name: "TTS",
+			Inputs: []interfaces.ModelOperationSlot{{
+				Name:         "text",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				Required:     true,
+			}},
+			Outputs: []interfaces.ModelOperationSlot{{
+				Name:         "audio",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			}},
+		}},
+	}
+	if strings.TrimSpace(healthEndpoint) != "" {
+		worker.Args = []string{"--health-endpoint", healthEndpoint}
+	}
+	return map[string]*interfaces.WorkerConfig{"tts-worker": worker}
+}
+
+func inferenceModelHostWorkstation() *interfaces.FactoryWorkstationConfig {
+	return &interfaces.FactoryWorkstationConfig{
+		Name:           "speak",
+		Type:           interfaces.WorkstationTypeInference,
+		WorkerTypeName: "tts-worker",
+		Operation:      "TTS",
+		OperationBindings: []interfaces.ModelOperationBinding{{
+			Slot: "text",
+			Selector: &interfaces.ModelOperationBindingSelector{
+				Label: "utterance",
+				Type:  interfaces.ModelOperationContentTypeText,
+			},
+		}},
+	}
+}
+
+func inferenceModelHostDispatch() interfaces.WorkDispatch {
+	return interfaces.WorkDispatch{
+		DispatchID:      "dispatch-inference-lease",
+		TransitionID:    "transition-inference-lease",
+		WorkerType:      "tts-worker",
+		WorkstationName: "speak",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "token-inference-lease",
+			Color: interfaces.TokenColor{
+				WorkID: "work-inference-lease",
+				Content: []interfaces.WorkContentPart{{
+					Type:  interfaces.WorkContentPartTypeText,
+					Label: "utterance",
+					Text:  "hello inference lease",
+				}},
+			},
+		}),
+	}
+}
+
+func taxonomyOmniVoiceInferenceWorkstationExecutorWithModelHost(
+	t *testing.T,
+	runtime *fakeLocalModelRuntime,
+	cfg *interfaces.FactoryConfig,
+	healthEndpoint string,
+) (*workers.WorkstationExecutor, *serviceTestFakeProcessLauncher) {
+	t.Helper()
+
+	cache := localModelTestCacheLayout(t)
+	puller := staticModelAssetPuller{cache: cache}
+	launcher := &serviceTestFakeProcessLauncher{healthEndpoint: healthEndpoint}
+	domain := modelHostBackedLocalModelDomain(t, puller, launcher, runtime)
+	factoryCfg := localModelFactoryConfig()
+	runtimeWorkers := inferenceModelHostRuntimeWorkers(healthEndpoint)
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, runtimeWorkers, map[string]*interfaces.FactoryWorkstationConfig{
+		"speak": taxonomyRuntimeModelInvokeWorkstation(cfg.Workstations[0].Type),
+	})
+	eventTime := taxonomyRuntimeEventTime()
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
+	opts, err := loadWorkersFromConfig(
+		"",
+		factoryCfg,
+		"",
+		runtimeCfg,
+		nil,
+		logging.NoopLogger{},
+		true,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		history.RecordModelEvent,
+		nil,
+		func() time.Time { return eventTime },
+		domain,
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+	exec, ok := fc.WorkerExecutors["tts-worker"]
+	if !ok {
+		t.Fatal("expected tts-worker executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+	return wsExec, launcher
+}
+
+func (r *fakeLocalModelRuntime) lastLoadServingEndpoint() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.loads) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(r.loads[0].ServingEndpoint)
+}
+
+func assertModelHostInferenceEventsInHistory(t *testing.T, events []factoryapi.FactoryEvent, audioPath string) {
+	t.Helper()
+	modelEvents := make([]factoryapi.FactoryEvent, 0, 2)
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeModelRequest || event.Type == factoryapi.FactoryEventTypeModelResponse {
+			modelEvents = append(modelEvents, event)
+		}
+	}
+	assertRecordedLocalModelExecutionEvents(t, modelEvents, audioPath)
 }

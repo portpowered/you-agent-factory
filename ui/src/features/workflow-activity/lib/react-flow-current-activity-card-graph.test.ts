@@ -2086,6 +2086,61 @@ describe("current activity graph active item labels", () => {
     expect(scriptNode?.data).not.toHaveProperty("onSelectDoc");
   });
 
+  it("renders nested bundled docs as distinct selectable doc nodes", async () => {
+    const nestedDocPath = "factory/docs/standards/review.md";
+    const factory = {
+      ...baseFactoryDefinition,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Review standards" },
+            targetPath: nestedDocPath,
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const onSelectDoc = vi.fn();
+
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        graphLayout.edges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-06-08T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectDoc,
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "doc", targetPath: nestedDocPath },
+      snapshot: buildSampleFactorySnapshot(factory),
+    });
+
+    const docNode = nodes.find((node) => node.id === `doc:${nestedDocPath}`);
+
+    expect(docNode).toMatchObject({
+      type: "doc",
+      data: {
+        displayLabel: "review.md",
+        fileType: "DOC",
+        kind: "doc",
+        onSelectDoc,
+        selectedDoc: true,
+        targetPath: nestedDocPath,
+      },
+    });
+  });
+
   it("updates doc nodes when the saved factory document changes", async () => {
     const factory = {
       ...baseFactoryDefinition,

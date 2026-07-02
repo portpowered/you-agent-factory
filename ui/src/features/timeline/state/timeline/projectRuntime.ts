@@ -10,6 +10,7 @@ import { projectWorkMoveOperationsByWorkID } from "./projectWorkMoveOperations";
 import { projectRuntimeWorkstationRequests } from "./projectWorkstationRequests";
 import { uniqueSorted } from "./shared";
 import { isSystemTimePlace, isSystemTimeWorkItem } from "./systemTime";
+import { hydrateInferenceAttemptsByDispatchID } from "./text-blobs/timelineTextBlobs";
 import type { ReplayWorldState, WorldDispatch } from "./types";
 import { workItemRefsForIDs } from "./workItemRef";
 
@@ -36,7 +37,10 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
       activeDispatches.map((dispatch) => dispatch.transitionID),
     ),
     inference_attempts_by_dispatch_id: cloneInferenceAttemptsByDispatchID(
-      state.inferenceAttemptsByDispatchID,
+      hydrateInferenceAttemptsByDispatchID(
+        state.inferenceAttemptsByDispatchID,
+        state.textBlobsByID,
+      ),
     ),
     in_flight_dispatch_count: activeDispatchIDs.length,
     place_token_counts: Object.fromEntries(
@@ -54,6 +58,7 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
       payloadLineage: state.payloadLineage,
       scriptRequestsByDispatchID: state.scriptRequestsByDispatchID,
       scriptResponsesByDispatchID: state.scriptResponsesByDispatchID,
+      textBlobsByID: state.textBlobsByID,
       workItemsByID: state.workItemsByID,
     }),
     work_move_operations_by_work_id: projectWorkMoveOperationsByWorkID(

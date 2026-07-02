@@ -10,6 +10,7 @@ export interface DashboardSessionLifecycleMessages {
   lifecycleControlStatusLabel: string;
   partialResultLabel: string;
   phaseLabel: string;
+  recoveryFailedStreamLabel: string;
   reconnectingStreamLabel: string;
   resultStatusLabel: string;
   sessionPausedLabel: string;
@@ -27,6 +28,8 @@ const dashboardSessionLifecycleMessagesByLocale = {
     lifecycleControlStatusLabel: "Factory Session lifecycle",
     partialResultLabel: "Partial result available",
     phaseLabel: "Current phase",
+    recoveryFailedStreamLabel:
+      "The dashboard could not restore this session automatically.",
     reconnectingStreamLabel: "Reconnecting event stream",
     resultStatusLabel: "Result status",
     sessionPausedLabel: "Factory Session paused",
@@ -42,6 +45,7 @@ const dashboardSessionLifecycleMessagesByLocale = {
     lifecycleControlStatusLabel: "工厂会话生命周期",
     partialResultLabel: "部分结果可用",
     phaseLabel: "当前阶段",
+    recoveryFailedStreamLabel: "仪表板无法自动恢复此会话。",
     reconnectingStreamLabel: "正在重新连接事件流",
     resultStatusLabel: "结果状态",
     sessionPausedLabel: "工厂会话已暂停",

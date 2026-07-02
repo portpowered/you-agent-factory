@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -51,6 +52,7 @@ type FactoryEventHistory struct {
 	factoryRunner       string
 	initialFactory      *factoryapi.Factory
 	now                 func() time.Time
+	streamGenerationID  string
 	events              []factoryapi.FactoryEvent
 	recorders           []func(factoryapi.FactoryEvent)
 	nextID              int
@@ -71,11 +73,23 @@ func NewFactoryEventHistory(net *state.Net, now func() time.Time, runtimeConfigs
 		now = time.Now
 	}
 	return &FactoryEventHistory{
-		net:           net,
-		runtimeConfig: interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...),
-		now:           now,
-		streams:       make(map[int]*eventHistorySubscription),
+		net:                net,
+		runtimeConfig:      interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...),
+		now:                now,
+		streamGenerationID: uuid.NewString(),
+		streams:            make(map[int]*eventHistorySubscription),
 	}
+}
+
+// StreamGenerationID returns the stable opaque identifier for this live event
+// history instance.
+func (h *FactoryEventHistory) StreamGenerationID() string {
+	if h == nil {
+		return ""
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.streamGenerationID
 }
 
 // SetFactoryRunnerOverride preserves the effective factory-level runner
@@ -129,6 +143,7 @@ func (h *FactoryEventHistory) Subscribe(
 	h.mu.Lock()
 	events := make([]factoryapi.FactoryEvent, len(h.events))
 	copy(events, h.events)
+	streamGenerationID := h.streamGenerationID
 	if reconnect != nil {
 		replayed, err := BuildReconnectReplay(events, *reconnect, scope)
 		if err != nil {
@@ -169,7 +184,11 @@ func (h *FactoryEventHistory) Subscribe(
 		}
 	}()
 
-	return interfaces.FactoryEventStream{History: events, Events: subscription.events}, nil
+	return interfaces.FactoryEventStream{
+		StreamGenerationID: streamGenerationID,
+		History:            events,
+		Events:             subscription.events,
+	}, nil
 }
 
 // AddGeneratedRecorder registers a callback invoked for every future generated
@@ -426,6 +445,16 @@ func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
 	h.appendGenerated(event)
 }
 
+// RecordAgentRunEvent appends an agent-run boundary event to the same
+// canonical history used for dispatch and replay events.
+func (h *FactoryEventHistory) RecordAgentRunEvent(event factoryapi.FactoryEvent) {
+	if h == nil || !isAgentRunEventType(event.Type) {
+		return
+	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
+	h.appendGenerated(event)
+}
+
 // AppendRecordedEvent appends one already-shaped canonical event into the
 // history so callers can bridge runtime-owned events into a wider stream.
 func (h *FactoryEventHistory) AppendRecordedEvent(event factoryapi.FactoryEvent) {
@@ -593,6 +622,8 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromSessionResultUpdatedEventPayload(typed)
 	case factoryapi.SessionCompletedEventPayload:
 		err = out.FromSessionCompletedEventPayload(typed)
+	case factoryapi.SessionLifecycleControlEventPayload:
+		err = out.FromSessionLifecycleControlEventPayload(typed)
 	case factoryapi.SessionPausedEventPayload:
 		err = out.FromSessionPausedEventPayload(typed)
 	case factoryapi.SessionResumedEventPayload:
@@ -770,11 +801,16 @@ func isScriptEventType(eventType factoryapi.FactoryEventType) bool {
 	}
 }
 
+func isAgentRunEventType(eventType factoryapi.FactoryEventType) bool {
+	return eventType == factoryapi.FactoryEventTypeAgentRunResponse
+}
+
 func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 	currentChainingTraceID := token.Color.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
 	}
+	_, stateValue := splitPlaceID(token.PlaceID)
 	return interfaces.FactoryWorkItem{
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
@@ -785,6 +821,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 		TraceID:                  token.Color.TraceID,
 		Content:                  append([]interfaces.WorkContentPart(nil), token.Color.Content...),
 		ParentID:                 token.Color.ParentID,
+		State:                    stateValue,
 		PlaceID:                  token.PlaceID,
 		Tags:                     cloneStringMap(token.Color.Tags),
 	}

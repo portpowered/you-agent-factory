@@ -720,3 +720,185 @@ func assertProjectedFields(t *testing.T, projected map[string]any, want map[stri
 		}
 	}
 }
+func TestResumingChildExecutor_ReplaysCompletedDispatchWithoutCallingBase(t *testing.T) {
+	base := &countingChildExecutor{}
+	resume := workflowruntime.ResumeContext{
+		CompletedDispatchIDs: []string{"dispatch-1"},
+		CompletedChildResults: map[string]workflowruntime.ChildExecutionResult{
+			"dispatch-1": {
+				DispatchID:    "dispatch-1",
+				ChildIndex:    1,
+				Status:        workflowruntime.ChildDispatchStatusCompleted,
+				ExecutionMode: workflowruntime.ChildExecutionModeFake,
+				Output: map[string]any{
+					"text": "cached:first",
+				},
+			},
+		},
+	}
+	executor := workflowruntime.NewResumingChildExecutor(base, resume)
+
+	first, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{Label: "step-one"})
+	if err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+	if first.Output["text"] != "cached:first" {
+		t.Fatalf("first output = %#v, want cached:first", first.Output)
+	}
+	if base.calls != 0 {
+		t.Fatalf("base calls after replay = %d, want 0", base.calls)
+	}
+
+	second, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{Label: "step-two"})
+	if err != nil {
+		t.Fatalf("second Execute() error = %v", err)
+	}
+	if second.DispatchID != "dispatch-2" {
+		t.Fatalf("second dispatchId = %q, want dispatch-2", second.DispatchID)
+	}
+	if base.calls != 1 {
+		t.Fatalf("base calls after second dispatch = %d, want 1", base.calls)
+	}
+}
+
+func TestRun_ResumeStateIsUndefinedOnFreshRun(t *testing.T) {
+	source := readFixture(t, "resumable-checkpoint-state-branch.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "resumable-checkpoint-state-branch.workflow.js",
+		SessionID: "session-resume-state-fresh",
+		Args:      marshalArgs(t, map[string]any{}),
+		Metadata:  map[string]string{"name": "resumable-checkpoint-state-branch"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome := runSuccessful(t, req)
+	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
+	if projected["path"] != "fresh" {
+		t.Fatalf("projected path = %#v, want fresh", projected["path"])
+	}
+}
+
+func TestRun_ResumeStateRehydratesCheckpointFactsForControlFlow(t *testing.T) {
+	source := readFixture(t, "resumable-checkpoint-state-branch.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "resumable-checkpoint-state-branch.workflow.js",
+		SessionID: "session-resume-state-rehydrated",
+		Args:      marshalArgs(t, map[string]any{}),
+		Metadata:  map[string]string{"name": "resumable-checkpoint-state-branch"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+		Resume: &workflowruntime.ResumeContext{
+			CompletedDispatchIDs: []string{"dispatch-1"},
+			CompletedChildResults: map[string]workflowruntime.ChildExecutionResult{
+				"dispatch-1": {
+					DispatchID:    "dispatch-1",
+					ChildIndex:    1,
+					Status:        workflowruntime.ChildDispatchStatusCompleted,
+					ExecutionMode: workflowruntime.ChildExecutionModeFake,
+					Output: map[string]any{
+						"text":  "cached:first",
+						"label": "step-one",
+					},
+				},
+			},
+			CheckpointState: map[string]any{
+				"step":       float64(1),
+				"firstLabel": "step-one",
+			},
+		},
+	}
+
+	outcome := runSuccessful(t, req)
+	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
+	if projected["path"] != "from-checkpoint" {
+		t.Fatalf("projected path = %#v, want from-checkpoint", projected["path"])
+	}
+	if projected["step"] != float64(1) {
+		t.Fatalf("projected step = %#v, want 1", projected["step"])
+	}
+	if projected["firstLabel"] != "step-one" {
+		t.Fatalf("projected firstLabel = %#v, want step-one", projected["firstLabel"])
+	}
+}
+
+func TestResumingChildExecutor_StartsAtNextPendingDispatchWhenCheckpointStatePresent(t *testing.T) {
+	base := &countingChildExecutor{}
+	resume := workflowruntime.ResumeContext{
+		CompletedDispatchIDs: []string{"dispatch-1"},
+		CompletedChildResults: map[string]workflowruntime.ChildExecutionResult{
+			"dispatch-1": {
+				DispatchID: "dispatch-1",
+				Status:     workflowruntime.ChildDispatchStatusCompleted,
+				Output:     map[string]any{"text": "cached:first"},
+			},
+		},
+		CheckpointState: map[string]any{"step": float64(1)},
+	}
+	executor := workflowruntime.NewResumingChildExecutor(base, resume)
+
+	result, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{Label: "step-two"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.DispatchID != "dispatch-2" {
+		t.Fatalf("dispatchId = %q, want dispatch-2", result.DispatchID)
+	}
+	if base.calls != 1 {
+		t.Fatalf("base calls = %d, want 1 fresh pending dispatch", base.calls)
+	}
+}
+
+type countingChildExecutor struct {
+	calls int
+}
+
+func (c *countingChildExecutor) Execute(_ context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+	c.calls++
+	dispatchID := "dispatch-2"
+	if req.ReservedIdentity != nil && req.ReservedIdentity.DispatchID != "" {
+		dispatchID = req.ReservedIdentity.DispatchID
+	}
+	return workflowruntime.ChildExecutionResult{
+		DispatchID:    dispatchID,
+		ChildIndex:    2,
+		Status:        workflowruntime.ChildDispatchStatusCompleted,
+		ExecutionMode: workflowruntime.ChildExecutionModeFake,
+		Output: map[string]any{
+			"text":  "fresh:second",
+			"label": req.Label,
+		},
+	}, nil
+}
+
+func TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput(t *testing.T) {
+	storedOutput := map[string]any{
+		"text":  "live:resumable:step-one",
+		"label": "step-one",
+	}
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				ChildIndex:    1,
+				Status:        workflowruntime.ChildDispatchStatusCompleted,
+				Label:         "step-one",
+				ExecutionMode: workflowruntime.ChildExecutionModeLive,
+				Output:        storedOutput,
+			},
+		},
+	}
+
+	completed := workflowruntime.CompletedChildResultsFromRecords(records)
+	result, ok := completed["dispatch-1"]
+	if !ok {
+		t.Fatal("expected completed child result for dispatch-1")
+	}
+	if result.Output["text"] != "live:resumable:step-one" {
+		t.Fatalf("restored output text = %#v, want live:resumable:step-one", result.Output["text"])
+	}
+	if result.ExecutionMode != workflowruntime.ChildExecutionModeLive {
+		t.Fatalf("executionMode = %q, want live-provider", result.ExecutionMode)
+	}
+}

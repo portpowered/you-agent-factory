@@ -8,3 +8,6 @@ properties:
   taskLabel:
     type: string
     description: Customer-visible label for the JavaScript workflow task.
+  executionMode:
+    type: string
+    description: Durable child execution mode recorded for the JavaScript workflow task when available.

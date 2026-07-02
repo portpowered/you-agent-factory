@@ -3,7 +3,6 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -29,6 +29,11 @@ type runtimeSessionState struct {
 	dispatchJavaScript        map[string]DispatchJavaScriptProjection
 	dispatchStatusTransitions map[string][]DispatchStatus
 	artifacts                 []ArtifactSummary
+	runtimeRecords            []workflowruntime.RuntimeRecord
+	checkpointSummary         *jsstore.CheckpointSummary
+	startRequest              *StartRequest
+	resolvedSource            ResolvedSource
+	sourceContent             string
 	events                    []json.RawMessage
 	runCancel                 context.CancelFunc
 }
@@ -81,7 +86,12 @@ func projectRuntimeSessionState(
 		}
 		projectRuntimeFailure(&state.session, &state.result, outcome)
 	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result, RuntimeDispatchEventInput{
+		Dispatches:                state.dispatches,
+		DispatchStatusTransitions: state.dispatchStatusTransitions,
+		DispatchJavaScript:        state.dispatchJavaScript,
+		Artifacts:                 state.artifacts,
+	})
 	return state
 }
 
@@ -127,7 +137,12 @@ func projectRuntimeRunningSessionState(
 		session: session,
 		result:  result,
 	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result, RuntimeDispatchEventInput{
+		Dispatches:                state.dispatches,
+		DispatchStatusTransitions: state.dispatchStatusTransitions,
+		DispatchJavaScript:        state.dispatchJavaScript,
+		Artifacts:                 state.artifacts,
+	})
 	return state
 }
 
@@ -276,6 +291,9 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	reserved.state.result = running.result
 	reserved.state.events = running.events
 	reserved.state.runCancel = runCancel
+	reserved.state.startRequest = cloneStartRequest(normalized)
+	reserved.state.resolvedSource = resolved
+	reserved.state.sourceContent = sourceContent
 	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.Unlock()
 
@@ -456,6 +474,9 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 			if js, ok := state.dispatchJavaScript[dispatchID]; ok {
 				projection := js
 				detail.JavaScript = &projection
+			} else if summary.JavaScript != nil {
+				projection := *summary.JavaScript
+				detail.JavaScript = &projection
 			}
 			return detail, nil
 		}
@@ -622,6 +643,13 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 		s.mu.Unlock()
 		return
 	}
+	if len(state.runtimeRecords) > 0 {
+		if len(outcome.Records) == 0 {
+			outcome.Records = cloneRuntimeRecords(state.runtimeRecords)
+		} else if len(outcome.Records) < len(state.runtimeRecords) {
+			outcome.Records = mergeRuntimeRecords(state.runtimeRecords, outcome.Records)
+		}
+	}
 	if err != nil {
 		failureOutcome := workflowruntime.Outcome{
 			OK: false,
@@ -631,23 +659,40 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 			},
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
-		s.applyTerminalRuntimeState(state, terminal, startedAt)
-		persistState := cloneRuntimeSessionState(state)
-		s.mu.Unlock()
-		_ = s.persistTerminalSessionState(persistState)
+		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
+		state.runtimeRecords = mergeRuntimeRecords(state.runtimeRecords, failureOutcome.Records)
+		if state.session.Status == LifecycleStatusInterrupted {
+			state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
+		}
+		s.unlockRuntimeSessionAfterPersistence(state)
 		return
 	}
 
 	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
-	s.applyTerminalRuntimeState(state, terminal, startedAt)
-	persistState := cloneRuntimeSessionState(state)
-	s.mu.Unlock()
-	_ = s.persistTerminalSessionState(persistState)
+	s.applyTerminalRuntimeState(state, terminal, outcome, startedAt)
+	state.runtimeRecords = mergeRuntimeRecords(state.runtimeRecords, outcome.Records)
+	if state.session.Status == LifecycleStatusInterrupted {
+		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
+	}
+	s.unlockRuntimeSessionAfterPersistence(state)
 }
 
-func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(state *runtimeSessionState, terminal runtimeSessionState, startedAt time.Time) {
+func (s *JavaScriptRuntimeService) unlockRuntimeSessionAfterPersistence(state *runtimeSessionState) {
+	persistState := cloneRuntimeSessionState(state)
+	if shouldPersistSessionSnapshot(persistState) {
+		_ = s.persistSessionSnapshot(persistState)
+	}
+	s.mu.Unlock()
+}
+
+func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
+	state *runtimeSessionState,
+	terminal runtimeSessionState,
+	outcome workflowruntime.Outcome,
+	startedAt time.Time,
+) {
 	finishedAt := time.Now().UTC()
-	applyRuntimeSessionFields(state, terminal)
+	applyTerminalRuntimeProjection(state, terminal, outcome)
 	if state.session.Lifecycle == nil {
 		state.session.Lifecycle = &LifecycleTimestamps{}
 	}
@@ -738,6 +783,11 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		dispatchJavaScript:        cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
 		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
 		artifacts:                 cloneArtifactSummaries(state.artifacts),
+		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
+		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
+		startRequest:              cloneStartRequestPtr(state.startRequest),
+		resolvedSource:            state.resolvedSource,
+		sourceContent:             state.sourceContent,
 	}
 	if len(state.events) > 0 {
 		cloned.events = make([]json.RawMessage, len(state.events))
@@ -830,9 +880,86 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowrunti
 	provider := s.provider
 	return workflowruntime.Hooks{
 		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
-			return livechild.NewProviderChildExecutor(sessionID, provider, records)
+			return livechild.NewProviderChildExecutor(
+				sessionID,
+				provider,
+				runtimeSessionChildRecordSink{
+					base: records,
+					appendRecord: func(record workflowruntime.RuntimeRecord) {
+						s.applyRunningRuntimeRecord(sessionID, record)
+					},
+				},
+			)
 		},
 	}
+}
+
+type runtimeSessionChildRecordSink struct {
+	base         workflowruntime.ChildRecordSink
+	appendRecord func(workflowruntime.RuntimeRecord)
+}
+
+func (s runtimeSessionChildRecordSink) Append(record workflowruntime.RuntimeRecord) {
+	s.base.Append(record)
+	if s.appendRecord != nil {
+		s.appendRecord(record)
+	}
+}
+
+func (s runtimeSessionChildRecordSink) AppendChildDispatch(base workflowruntime.ChildDispatchRecord, status string) {
+	record := base
+	record.Status = status
+	s.Append(workflowruntime.RuntimeRecord{
+		Kind:          workflowruntime.RecordKindChildDispatch,
+		ChildDispatch: &record,
+	})
+}
+
+func (s runtimeSessionChildRecordSink) NextChildDispatchIdentity() (dispatchID string, childIndex int) {
+	return s.base.NextChildDispatchIdentity()
+}
+
+func (s runtimeSessionChildRecordSink) NextChildArtifactID() string {
+	return s.base.NextChildArtifactID()
+}
+
+func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, record workflowruntime.RuntimeRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		return
+	}
+	preservedInterrupted := snapshotInterruptedDispatches(state)
+	state.runtimeRecords = append(state.runtimeRecords, cloneRuntimeRecord(record))
+	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, time.Now().UTC())
+	if record.Kind == workflowruntime.RecordKindCheckpoint && record.Checkpoint != nil {
+		state.checkpointSummary = jsstore.BuildCheckpointSummary(jsstore.CheckpointSummaryInput{
+			SessionID:       sessionID,
+			CheckpointID:    record.Checkpoint.ID,
+			Label:           record.Checkpoint.Label,
+			Phase:           strings.TrimSpace(projection.Phase),
+			SourceHash:      strings.TrimSpace(state.session.SourceHash),
+			PolicyHash:      strings.TrimSpace(state.session.Policy.EffectiveHash),
+			CreatedAt:       time.Now().UTC(),
+			CheckpointState: record.Checkpoint.State,
+			Records:         state.runtimeRecords,
+		})
+	}
+	state.dispatches = cloneDispatchSummaries(projection.Dispatches)
+	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(projection.DispatchJavaScript)
+	state.dispatchStatusTransitions = cloneDispatchStatusTransitions(projection.DispatchStatusTransitions)
+	state.artifacts = cloneArtifactSummaries(projection.Artifacts)
+	if phase := strings.TrimSpace(projection.Phase); phase != "" {
+		state.session.Phase = phase
+	}
+	progress := projection.Progress
+	state.session.Progress = &progress
+	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
+	state.session.ArtifactCount = len(state.session.ArtifactRefs)
+	restoreInterruptedDispatchResultSuppression(state, preservedInterrupted)
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 }
 
 func validateLiveChildExecutorConfig(mode string, provider workers.Provider) error {
@@ -841,72 +968,6 @@ func validateLiveChildExecutorConfig(mode string, provider workers.Provider) err
 	}
 	if provider == nil {
 		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
-	}
-	return nil
-}
-
-func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
-	snapshot := PersistedRuntimeSessionState{
-		Session:    cloneSessionRead(state.session),
-		Result:     cloneResultRead(state.result),
-		Dispatches: cloneDispatchSummaries(state.dispatches),
-		Artifacts:  cloneArtifactSummaries(state.artifacts),
-	}
-	if len(state.dispatchJavaScript) > 0 {
-		snapshot.DispatchJavaScript = cloneDispatchJavaScriptProjections(state.dispatchJavaScript)
-	}
-	if len(state.dispatchStatusTransitions) > 0 {
-		snapshot.DispatchStatusTransitions = cloneDispatchStatusTransitions(state.dispatchStatusTransitions)
-	}
-	if len(state.events) > 0 {
-		snapshot.Events = make([]json.RawMessage, len(state.events))
-		for i, event := range state.events {
-			snapshot.Events[i] = append(json.RawMessage(nil), event...)
-		}
-	}
-	return snapshot
-}
-
-func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) runtimeSessionState {
-	state := runtimeSessionState{
-		session:    cloneSessionRead(snapshot.Session),
-		result:     cloneResultRead(snapshot.Result),
-		dispatches: cloneDispatchSummaries(snapshot.Dispatches),
-		artifacts:  cloneArtifactSummaries(snapshot.Artifacts),
-	}
-	if len(snapshot.DispatchJavaScript) > 0 {
-		state.dispatchJavaScript = cloneDispatchJavaScriptProjections(snapshot.DispatchJavaScript)
-	}
-	if len(snapshot.DispatchStatusTransitions) > 0 {
-		state.dispatchStatusTransitions = cloneDispatchStatusTransitions(snapshot.DispatchStatusTransitions)
-	}
-	if len(snapshot.Events) > 0 {
-		state.events = make([]json.RawMessage, len(snapshot.Events))
-		for i, event := range snapshot.Events {
-			state.events[i] = append(json.RawMessage(nil), event...)
-		}
-	}
-	return state
-}
-
-func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSessionState) error {
-	if s.sessionPersistDir == "" {
-		return nil
-	}
-	if !IsTerminalLifecycleStatus(state.session.Status) {
-		return nil
-	}
-	sessionID := strings.TrimSpace(state.session.SessionID)
-	if sessionID == "" {
-		return nil
-	}
-	snapshot := persistedSnapshotFromRuntimeState(state)
-	encoded, err := json.MarshalIndent(snapshot, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal durable session snapshot: %w", err)
-	}
-	if err := runtimepersist.SaveBytes(s.sessionPersistDir, sessionID, encoded); err != nil {
-		return fmt.Errorf("persist durable session state: %w", err)
 	}
 	return nil
 }

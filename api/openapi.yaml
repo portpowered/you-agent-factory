@@ -87,7 +87,7 @@ paths:
         - Work
       operationId: invokeFactorySessionBySessionId
       summary: Invoke one factory session and return its primary result
-      description: Live-session compatibility API for text-first invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+      description: Live-session compatibility API for invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Requests may use legacy text-first compatibility content or structured invocationSignature args. Structured args normalize through the shared backend argument resolver, while content preserves the legacy compatibility carrier. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -228,8 +228,8 @@ paths:
       tags:
         - Runtime
       operationId: getEvents
-      summary: Stream factory events
-      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+      summary: Stream process-global factory events (compatibility-only)
+      description: Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. Dashboard clients must open GET /factory-sessions/{session_id}/events with the resolved UUID factorySessionID instead; this route does not carry session identity handshakes and must not govern default-session dashboard recovery. New Factory Session and durable replay consumers should use the session-scoped route so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
       parameters:
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
@@ -252,24 +252,66 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Canonical event stream for dashboard, Factory Session, and durable replay traffic. Streams factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
-          description: Factory event stream for the targeted session.
+          description: Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json.
+          headers:
+            X-Factory-Session-Backend-Scope-Id:
+              description: Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
+            X-Factory-Session-Logical-Session-Key-Id:
+              description: Stable logical session key for the resolved Factory Session target within the current backend scope. Compare this handshake header with session-sync or preflight `logicalSessionKeyId` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
+            X-Factory-Session-Factory-Session-Id:
+              description: Resolved UUID Factory Session identifier for the current live event history. Compare this handshake header with session-sync or preflight `factorySessionId` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
+            X-Factory-Session-Stream-Generation-Id:
+              description: Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
           content:
             text/event-stream:
               schema:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
               x-event-schema: '#/components/schemas/FactoryEvent'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionEventStreamRecovery'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/sync-preflight:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactorySessionSyncPreflightBySessionId
+      summary: Validate cached session sync state for one session
+      description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
+        - $ref: '#/components/parameters/BackendScopeId'
+        - $ref: '#/components/parameters/LogicalSessionKeyId'
+      responses:
+        '200':
+          description: Typed session sync preflight outcome for the targeted session selector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionSyncPreflightResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /status:
@@ -786,8 +828,8 @@ paths:
       tags:
         - Factory
       operationId: pauseFactorySession
-      summary: Pause one factory session
-      description: Pauses one live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+      summary: Pause one Factory Session
+      description: Pauses one live or durable Factory Session while preserving inspectable partial results, dispatches, artifacts, and buffered inbound submissions or completed worker results. Live workspace sessions use the same route family as durable execution sessions. Automatic progression stops until resume. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -822,8 +864,8 @@ paths:
       tags:
         - Factory
       operationId: resumeFactorySession
-      summary: Resume one factory session
-      description: Resumes one paused live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+      summary: Resume one Factory Session
+      description: Resumes one paused live or durable Factory Session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Wakes the runtime internally and drains ready buffered submissions and completed worker results without requiring a new external signal. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -949,6 +991,42 @@ paths:
                 $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
         '202':
           description: Retry-dispatch control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/interrupt-dispatch:
+    post:
+      tags:
+        - Factory
+      operationId: interruptFactorySessionDispatch
+      summary: Interrupt one active durable factory session dispatch
+      description: Interrupts one active dispatch within the targeted durable factory session. The response links the interruption to the session and dispatch state and preserves inspectable partial results, dispatches, and artifacts after the control operation.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionInterruptDispatchRequest'
+      responses:
+        '200':
+          description: Interrupt dispatch applied immediately or produced a typed no-op outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Interrupt-dispatch control request accepted asynchronously.
           content:
             application/json:
               schema:
@@ -1318,6 +1396,20 @@ components:
       schema:
         type: integer
         minimum: 0
+    BackendScopeId:
+      name: backend_scope_id
+      in: query
+      required: false
+      description: Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target.
+      schema:
+        type: string
+    LogicalSessionKeyId:
+      name: logical_session_key_id
+      in: query
+      required: false
+      description: Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector.
+      schema:
+        type: string
   responses:
     BadRequest:
       description: Request payload or parameter was invalid.
@@ -1619,16 +1711,17 @@ components:
     InvocationRequest:
       type: object
       additionalProperties: false
-      required:
-        - sourceKind
-        - content
       properties:
         sourceKind:
           $ref: '#/components/schemas/InvocationInputSourceKind'
-          description: Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice.
+          description: Compatibility input source category selected by the API caller when `content` is supplied. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice.
         content:
           $ref: '#/components/schemas/WorkContent'
-          description: Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions.
+          description: 'Canonical text-first compatibility invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. When `args` is omitted, `content` and `sourceKind: text` preserve the legacy invocation contract.'
+        args:
+          type: object
+          additionalProperties: true
+          description: Optional structured invocation arguments keyed by parameter name, externalName, or alias. Values must decode as a string or an array of strings. Signature-backed runtimes normalize these values through the shared backend argument resolver. Compatibility `content` requests should omit `args`.
         requestId:
           type: string
           description: Optional caller-supplied idempotency key for the invocation request.
@@ -1661,6 +1754,10 @@ components:
           type: string
           description: Stable machine-readable invocation failure code when status is not `COMPLETED`.
           enum:
+            - INVOCATION_BLOCKED
+            - INVOCATION_INTERRUPTED
+            - INVOCATION_NEEDS_HUMAN
+            - INVOCATION_PAUSED
             - INVOCATION_PRIMARY_RESULT_UNRESOLVED
             - INVOCATION_TIMED_OUT
             - INVOCATION_CANCELED
@@ -1670,6 +1767,18 @@ components:
         message:
           type: string
           description: Human-readable failure summary when status is not `COMPLETED`.
+        sessionId:
+          type: string
+          description: Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
+        workId:
+          type: string
+          description: Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition.
+        workName:
+          type: string
+          description: Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition.
+        workState:
+          type: string
+          description: Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
     InvocationTerminalStatus:
       type: string
       description: Terminal status for a factory-session invocation.
@@ -2529,6 +2638,7 @@ components:
           description: Stable machine-readable error code.
           enum:
             - BAD_REQUEST
+            - FACTORY_SESSION_CONFIG_LOAD_FAILED
             - INVALID_FACTORY_NAME
             - FACTORY_ALREADY_EXISTS
             - INVALID_FACTORY
@@ -2541,6 +2651,7 @@ components:
             - INTERNAL_ERROR
           x-enum-descriptions:
             - Request payload or parameter validation failed.
+            - Factory session discovery found a readable factory target whose config could not be loaded.
             - Named factory name validation failed.
             - Submitted named factory already exists.
             - Submitted named factory payload failed validation.
@@ -2731,6 +2842,12 @@ components:
           $ref: '#/components/schemas/FactorySessionUsage'
         lifecycle:
           $ref: '#/components/schemas/FactorySessionLifecycle'
+        stopSummary:
+          $ref: '#/components/schemas/FactoryStopSummary'
+          description: Canonical stopped-state summary for paused, blocked, needs-human, and interrupted inspection paths on the existing Factory Session surface.
+        streamIdentity:
+          $ref: '#/components/schemas/FactorySessionStreamIdentity'
+          description: Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints.
         petri:
           $ref: '#/components/schemas/FactorySessionPetriProjection'
         javascript:
@@ -2745,6 +2862,97 @@ components:
           items:
             $ref: '#/components/schemas/FactoryArtifact'
           description: Shared artifact projections for the session runtime.
+    FactoryStopKind:
+      type: string
+      description: Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+      enum:
+        - PAUSED
+        - BLOCKED
+        - NEEDS_HUMAN
+        - INTERRUPTED
+    FactoryStopDispatchSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - dispatchId
+        - status
+        - dispatchKind
+      properties:
+        dispatchId:
+          type: string
+          description: Stable dispatch identifier that most directly explains the stopped state.
+        status:
+          $ref: '#/components/schemas/FactoryDispatchStatus'
+        dispatchKind:
+          $ref: '#/components/schemas/FactoryDispatchKind'
+        workstationName:
+          type: string
+          description: Customer-authored workstation name when one existing workstation run explains the stop.
+        failureReason:
+          type: string
+          description: Stable failure or interruption reason when one is available from the latest relevant dispatch.
+        failureMessage:
+          type: string
+          description: Human-readable failure or interruption detail from the latest relevant dispatch when available.
+    FactoryStopSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - stopKind
+        - sessionId
+      properties:
+        stopKind:
+          $ref: '#/components/schemas/FactoryStopKind'
+        sessionId:
+          type: string
+          description: Stable Factory Session identifier that owns the stopped work.
+        workId:
+          type: string
+          description: Relevant work identifier when one work item best explains the stop.
+        workName:
+          type: string
+          description: Relevant work name when one work item best explains the stop.
+        workTypeName:
+          type: string
+          description: Relevant work type name when one work item best explains the stop.
+        workState:
+          type: string
+          description: Current authored work state label such as `goal:blocked` when one work item best explains the stop.
+        sessionLifecycleStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Session lifecycle-control status when the stop is explained by pause or another session-level lifecycle condition.
+        latestDispatch:
+          $ref: '#/components/schemas/FactoryStopDispatchSummary'
+        latestResultSummary:
+          type: string
+          description: Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.
+        suggestedRecoverySurface:
+          type: string
+          description: Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route.
+        suggestedRecoveryAction:
+          type: string
+          description: Human-readable next step that names the existing work or session action the operator should take to recover or continue automation.
+    FactorySessionStreamIdentity:
+      type: object
+      additionalProperties: false
+      required:
+        - backendScopeID
+        - logicalSessionKeyID
+        - factorySessionID
+        - streamGenerationID
+      properties:
+        backendScopeID:
+          type: string
+          description: Stable backend process or scope identity for the current live session stream.
+        logicalSessionKeyID:
+          type: string
+          description: Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+        factorySessionID:
+          type: string
+          description: Stable live Factory Session identifier for the current stream.
+        streamGenerationID:
+          type: string
+          description: Stable generation identifier for the current live session stream incarnation.
     FactorySessionStatus:
       type: string
       description: Canonical lifecycle status for one live factory session runtime.
@@ -2932,6 +3140,69 @@ components:
           type: integer
           minimum: 0
           description: Child dispatches that have completed.
+    FactorySessionSyncPreflightResponse:
+      type: object
+      description: |
+        Typed session sync preflight response used before restoring cached dashboard
+        checkpoint state or opening the session event stream with a reconnect cursor.
+      additionalProperties: false
+      required:
+        - requestedSessionId
+        - reasonCode
+        - checkpointReusable
+        - reconnectCursor
+      properties:
+        requestedSessionId:
+          type: string
+          description: Session selector requested by the client. This may be `~default`.
+        reasonCode:
+          $ref: '#/components/schemas/FactorySessionSyncPreflightReasonCode'
+        backendScopeId:
+          type: string
+          description: Canonical backend scope identifier for the current server-owned session cache and event history scope.
+        logicalSessionKeyId:
+          type: string
+          description: Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+        factorySessionId:
+          type: string
+          description: Resolved live Factory Session identifier for the current preflight target. Clients must persist this value rather than treating `~default` as a durable session identifier.
+        streamGenerationId:
+          type: string
+          description: Canonical event-stream generation identifier for the resolved live Factory Session.
+        checkpointReusable:
+          type: boolean
+          description: True when cached stream-derived checkpoint state is safe to restore for the resolved identity set.
+        reconnectCursor:
+          $ref: '#/components/schemas/FactorySessionSyncPreflightReconnectCursor'
+    FactorySessionSyncPreflightReasonCode:
+      type: string
+      description: Stable backend-owned session sync preflight outcome code.
+      enum:
+        - ok
+        - cursor_stale
+        - session_not_found
+        - logical_session_remap
+        - logical_session_unresolved
+    FactorySessionSyncPreflightReconnectCursor:
+      type: object
+      additionalProperties: false
+      required:
+        - provided
+        - validForStreamGeneration
+      properties:
+        provided:
+          type: boolean
+          description: True when the client supplied at least one reconnect cursor field for validation.
+        validForStreamGeneration:
+          type: boolean
+          description: True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session.
+        afterEventId:
+          type: string
+          description: Optional acknowledged FactoryEvent.id supplied by the client.
+        afterSequence:
+          type: integer
+          format: int64
+          description: Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.
     FactorySessionLiveResult:
       type: object
       additionalProperties: false
@@ -3022,7 +3293,7 @@ components:
         - id
         - status
         - dispatchKind
-      description: Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections.
+      description: Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
       properties:
         id:
           type: string
@@ -3069,6 +3340,8 @@ components:
           description: Artifact identifiers produced by the dispatch.
         failureDetail:
           $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+        javascript:
+          $ref: '#/components/schemas/FactoryDispatchJavaScriptProjection'
     ListFactorySessionDispatchesResponse:
       type: object
       additionalProperties: false
@@ -3290,6 +3563,11 @@ components:
           items:
             type: string
           description: Artifact identifiers produced by the dispatch.
+        statusTransitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryDispatchStatus'
+          description: Ordered durable status history observed for the dispatch.
         usage:
           $ref: '#/components/schemas/FactoryDispatchUsage'
         warnings:
@@ -3339,16 +3617,19 @@ components:
         - RUNNING
         - COMPLETED
         - FAILED
+        - INTERRUPTED
       x-enum-varnames:
         - FactoryDispatchStatusQUEUED
         - FactoryDispatchStatusRUNNING
         - FactoryDispatchStatusCOMPLETED
         - FactoryDispatchStatusFAILED
+        - FactoryDispatchStatusINTERRUPTED
       x-enum-descriptions:
         - Dispatch is waiting to start.
         - Dispatch is currently executing.
         - Dispatch completed successfully.
         - Dispatch failed or was rejected.
+        - Dispatch was interrupted before normal completion.
     FactoryDispatchJavaScriptTaskKind:
       type: string
       description: JavaScript workflow task kind for one child dispatch.
@@ -3399,6 +3680,9 @@ components:
         taskLabel:
           type: string
           description: Customer-visible label for the JavaScript workflow task.
+        executionMode:
+          type: string
+          description: Durable child execution mode recorded for the JavaScript workflow task when available.
     FactoryDispatchUsage:
       type: object
       additionalProperties: false
@@ -3708,6 +3992,32 @@ components:
           type: string
           format: date-time
           description: When the Factory Session returned to RUNNING.
+    SessionLifecycleControlEventPayload:
+      type: object
+      additionalProperties: false
+      description: Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+      required:
+        - operation
+        - outcome
+        - previousStatus
+        - newStatus
+        - occurredAt
+      properties:
+        operation:
+          $ref: '#/components/schemas/FactorySessionLifecycleControlKind'
+        outcome:
+          $ref: '#/components/schemas/FactorySessionLifecycleControlOutcome'
+        previousStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+        newStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+        occurredAt:
+          type: string
+          format: date-time
+          description: When the lifecycle control took effect.
+        reason:
+          type: string
+          description: Optional operator-provided reason for the control request.
     SessionResultUpdatedEventPayload:
       type: object
       additionalProperties: false
@@ -4211,6 +4521,9 @@ components:
         canRetryDispatch:
           type: boolean
           description: True when retry-dispatch is currently valid for the session status.
+        canInterruptDispatch:
+          type: boolean
+          description: True when interrupt-dispatch is currently valid for the session status.
     FactorySessionDurableResultSummary:
       type: object
       additionalProperties: false
@@ -4402,6 +4715,52 @@ components:
         - Resolve a workflow file using documented workflow search order.
         - Resolve a workflow by authored workflow name using documented search order.
         - Resolve inline workflow source supplied directly in the execution request.
+    FactorySessionEventStreamRecovery:
+      type: object
+      additionalProperties: false
+      required:
+        - factorySessionId
+        - outcome
+        - retry
+      properties:
+        factorySessionId:
+          type: string
+          description: Session identifier for the event stream being probed.
+        outcome:
+          $ref: '#/components/schemas/FactorySessionEventStreamRecoveryOutcome'
+        retry:
+          $ref: '#/components/schemas/FactorySessionEventStreamRecoveryRetry'
+      example:
+        factorySessionId: session-alpha
+        outcome: CURSOR_STALE
+        retry:
+          omitAfterEventId: true
+          omitAfterSequence: true
+    FactorySessionEventStreamRecoveryOutcome:
+      type: string
+      description: Structured session event reconnect probe outcome for one session-scoped event stream.
+      enum:
+        - STREAM_READY
+        - CURSOR_STALE
+        - UNKNOWN_SESSION
+        - INTERNAL_ERROR
+      example: CURSOR_STALE
+    FactorySessionEventStreamRecoveryRetry:
+      type: object
+      additionalProperties: false
+      required:
+        - omitAfterEventId
+        - omitAfterSequence
+      properties:
+        omitAfterEventId:
+          type: boolean
+          description: True when the next reconnect must omit after_event_id and replay from the start of the session stream.
+        omitAfterSequence:
+          type: boolean
+          description: True when the next reconnect must omit after_sequence and replay from the start of the session stream.
+      example:
+        omitAfterEventId: true
+        omitAfterSequence: true
     FactorySessionExecutionInlineWorkflow:
       type: object
       additionalProperties: false
@@ -4653,6 +5012,7 @@ components:
         - CANCEL
         - TERMINATE
         - RETRY_DISPATCH
+        - INTERRUPT_DISPATCH
       x-enum-varnames:
         - FactorySessionLifecycleControlKindApprove
         - FactorySessionLifecycleControlKindPause
@@ -4660,13 +5020,15 @@ components:
         - FactorySessionLifecycleControlKindCancel
         - FactorySessionLifecycleControlKindTerminate
         - FactorySessionLifecycleControlKindRetryDispatch
+        - FactorySessionLifecycleControlKindInterruptDispatch
       x-enum-descriptions:
         - Approve requested orchestrator policy so execution can proceed.
-        - Pause active durable session scheduling while preserving inspectable state.
-        - Resume a paused durable session.
+        - Pause active Factory Session scheduling while preserving inspectable state and buffered work.
+        - Resume a paused Factory Session and drain ready buffered work.
         - Request graceful cancellation while preserving partial results and artifacts.
         - Forcefully terminate a durable session while preserving inspectable state.
         - Retry one failed or interrupted dispatch within the targeted session.
+        - Interrupt one active dispatch within the targeted session.
     FactorySessionLifecycleControlOutcome:
       type: string
       description: Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
@@ -4763,6 +5125,22 @@ components:
           type: boolean
           description: When true, reset the dispatch attempt counter before retrying. Runtimes may ignore this when policy forbids attempt resets.
           default: false
+    FactorySessionInterruptDispatchRequest:
+      type: object
+      additionalProperties: false
+      description: Interrupt request for one active durable factory-session dispatch.
+      required:
+        - dispatchId
+      properties:
+        requestId:
+          type: string
+          description: Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation.
+        reason:
+          type: string
+          description: Optional operator-provided reason for audit and diagnostics.
+        dispatchId:
+          type: string
+          description: Stable dispatch identifier to interrupt within the targeted session.
     FactorySessionLifecycleControlResponse:
       type: object
       additionalProperties: false
@@ -5216,6 +5594,32 @@ components:
           $ref: '#/components/schemas/StringMap'
         responseMetadata:
           $ref: '#/components/schemas/StringMap'
+    FactoryWorldInvocationDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        signatureHash:
+          type: string
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryWorldInvocationParameterDiagnostic'
+    FactoryWorldInvocationParameterDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        sourceKinds:
+          type: array
+          items:
+            type: string
+        valueCount:
+          type: integer
+          format: int64
+          minimum: 0
+        redacted:
+          type: boolean
     FactoryWorldWorkDiagnostics:
       type: object
       additionalProperties: false
@@ -5224,6 +5628,10 @@ components:
           $ref: '#/components/schemas/FactoryWorldRenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/FactoryWorldProviderDiagnostic'
+        agentRun:
+          $ref: '#/components/schemas/SafeAgentRunDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/FactoryWorldInvocationDiagnostic'
     FactoryWorldWorkItemRef:
       type: object
       additionalProperties: false
@@ -5364,6 +5772,38 @@ components:
           type: integer
         failureType:
           type: string
+    FactoryWorldAgentRunInspectionView:
+      type: object
+      additionalProperties: false
+      description: Customer-visible agent-run inspection for one workstation dispatch response.
+      properties:
+        executionBehavior:
+          type: string
+          description: Stable execution behavior marker for agent-loop runs.
+        failureClass:
+          type: string
+          description: Stable agent-run failure class when execution failed.
+        recoveryAction:
+          type: string
+          description: Customer-visible recovery guidance for actionable agent-run failures.
+        toolPolicy:
+          type: string
+          description: Effective agent tool policy for the run.
+        toolCallCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of recorded tool lifecycle events for the run.
+        toolDiagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunToolDiagnosticEntry'
+          description: Bounded tool diagnostics separate from final agent output.
+        transcript:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunTranscriptEntry'
+          description: Bounded transcript metadata separate from tool diagnostics and final output.
     FactoryWorldSelectedRunnerView:
       type: object
       additionalProperties: false
@@ -5490,6 +5930,8 @@ components:
           type: string
         scriptResponse:
           $ref: '#/components/schemas/FactoryWorldScriptResponseView'
+        agentRunInspection:
+          $ref: '#/components/schemas/FactoryWorldAgentRunInspectionView'
         endTime:
           type: string
           format: date-time
@@ -5565,6 +6007,7 @@ components:
             - $ref: '#/components/schemas/InferenceResponseEventPayload'
             - $ref: '#/components/schemas/ScriptRequestEventPayload'
             - $ref: '#/components/schemas/ScriptResponseEventPayload'
+            - $ref: '#/components/schemas/AgentRunResponseEventPayload'
             - $ref: '#/components/schemas/DispatchResponseEventPayload'
             - $ref: '#/components/schemas/WorkStateChangeEventPayload'
             - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
@@ -5574,6 +6017,7 @@ components:
             - $ref: '#/components/schemas/SessionResumedEventPayload'
             - $ref: '#/components/schemas/SessionResultUpdatedEventPayload'
             - $ref: '#/components/schemas/SessionCompletedEventPayload'
+            - $ref: '#/components/schemas/SessionLifecycleControlEventPayload'
             - $ref: '#/components/schemas/OrchestratorPhaseChangedEventPayload'
             - $ref: '#/components/schemas/OrchestratorCheckpointWrittenEventPayload'
             - $ref: '#/components/schemas/DispatchQueuedEventPayload'
@@ -5598,6 +6042,7 @@ components:
         - FactoryEventTypeInferenceResponse
         - FactoryEventTypeScriptRequest
         - FactoryEventTypeScriptResponse
+        - FactoryEventTypeAgentRunResponse
         - FactoryEventTypeDispatchResponse
         - FactoryEventTypeWorkStateChange
         - FactoryEventTypeFactoryStateResponse
@@ -5607,6 +6052,7 @@ components:
         - FactoryEventTypeSessionResumed
         - FactoryEventTypeSessionResultUpdated
         - FactoryEventTypeSessionCompleted
+        - FactoryEventTypeSessionLifecycleControl
         - FactoryEventTypeOrchestratorPhaseChanged
         - FactoryEventTypeOrchestratorCheckpointWritten
         - FactoryEventTypeDispatchQueued
@@ -5628,6 +6074,7 @@ components:
         - INFERENCE_RESPONSE
         - SCRIPT_REQUEST
         - SCRIPT_RESPONSE
+        - AGENT_RUN_RESPONSE
         - DISPATCH_RESPONSE
         - WORK_STATE_CHANGE
         - FACTORY_STATE_RESPONSE
@@ -5637,6 +6084,7 @@ components:
         - SESSION_RESUMED
         - SESSION_RESULT_UPDATED
         - SESSION_COMPLETED
+        - SESSION_LIFECYCLE_CONTROL
         - ORCHESTRATOR_PHASE_CHANGED
         - ORCHESTRATOR_CHECKPOINT_WRITTEN
         - DISPATCH_QUEUED
@@ -5658,6 +6106,7 @@ components:
         - A model-worker provider attempt returned from the provider boundary.
         - A script-backed worker is about to invoke one concrete command attempt.
         - A script-backed worker command attempt returned or failed before a normal exit.
+        - An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
         - A workstation response finished processing and produced an outcome.
         - A work item moved between authored marking states.
         - The factory lifecycle state response was recorded.
@@ -5667,6 +6116,7 @@ components:
         - A Factory Session lifecycle resume control transitioned the session into RUNNING.
         - Partial or final customer-visible session result availability was recorded.
         - Durable factory session execution reached a terminal lifecycle state.
+        - Durable factory session lifecycle control was applied or recorded for replay.
         - An orchestrator workflow phase transition was recorded.
         - An orchestrator checkpoint reference was recorded without exposing raw VM state.
         - A child dispatch was queued for execution.
@@ -6148,6 +6598,27 @@ components:
           description: Process exit code when the command returned one.
         failureType:
           $ref: '#/components/schemas/ScriptFailureType'
+    AgentRunResponseEventPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - agentRunId
+        - outcome
+        - durationMillis
+      description: Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
+      properties:
+        agentRunId:
+          type: string
+          description: Stable identifier for this agent-run boundary event.
+        outcome:
+          $ref: '#/components/schemas/WorkOutcome'
+        durationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Agent-loop execution duration in milliseconds.
+        diagnostics:
+          $ref: '#/components/schemas/SafeWorkDiagnostics'
     DispatchResponseEventPayload:
       type: object
       additionalProperties: false
@@ -6424,6 +6895,8 @@ components:
           $ref: '#/components/schemas/RenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/ProviderDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/InvocationDiagnostic'
         command:
           $ref: '#/components/schemas/CommandDiagnostic'
         panic:
@@ -6452,6 +6925,32 @@ components:
           $ref: '#/components/schemas/StringMap'
         responseMetadata:
           $ref: '#/components/schemas/StringMap'
+    InvocationDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        signatureHash:
+          type: string
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvocationParameterDiagnostic'
+    InvocationParameterDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        sourceKinds:
+          type: array
+          items:
+            type: string
+        valueCount:
+          type: integer
+          format: int64
+          minimum: 0
+        redacted:
+          type: boolean
     CommandDiagnostic:
       type: object
       additionalProperties: false
@@ -6508,6 +7007,71 @@ components:
           $ref: '#/components/schemas/RenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/ProviderDiagnostic'
+        agentRun:
+          $ref: '#/components/schemas/SafeAgentRunDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/InvocationDiagnostic'
+    SafeAgentRunDiagnostic:
+      type: object
+      additionalProperties: false
+      description: Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+      properties:
+        executionBehavior:
+          type: string
+          description: Stable execution behavior marker for agent-loop runs.
+          enum:
+            - agent_run
+          x-enum-descriptions:
+            - Agent-loop execution through AGENT_RUN workstations.
+        failureClass:
+          type: string
+          description: Stable agent-run failure class when execution failed.
+        recoveryAction:
+          type: string
+          description: Customer-visible recovery guidance for actionable agent-run failures.
+        toolPolicy:
+          type: string
+          description: Effective agent tool policy for the run.
+        toolCallCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of recorded tool lifecycle events for the run.
+        toolDiagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunToolDiagnosticEntry'
+          description: Bounded tool diagnostics separate from final agent output.
+        transcript:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunTranscriptEntry'
+          description: Bounded transcript metadata separate from tool diagnostics and final output.
+    AgentRunToolDiagnosticEntry:
+      type: object
+      additionalProperties: false
+      description: Bounded summary for one agent tool lifecycle event.
+      properties:
+        toolName:
+          type: string
+          description: Tool name invoked by the agent loop.
+        phase:
+          type: string
+          description: Tool lifecycle phase such as start, success, failure, or denied.
+        detail:
+          type: string
+          description: Safe diagnostic detail without raw process output or secrets.
+    AgentRunTranscriptEntry:
+      type: object
+      additionalProperties: false
+      description: Bounded transcript metadata for one agent-loop message without exposing full prompt bodies.
+      properties:
+        role:
+          type: string
+          description: Message role such as system, user, assistant, or tool.
+        summary:
+          type: string
+          description: Bounded summary of the message content for inspection.
     WallClock:
       type: object
       additionalProperties: false
@@ -6707,6 +7271,9 @@ components:
         invocationReturn:
           $ref: '#/components/schemas/InvocationReturn'
           description: Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
+        invocationSignature:
+          $ref: '#/components/schemas/FactoryInvocationSignature'
+          description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -6813,6 +7380,223 @@ components:
         inline:
           type: string
           description: Inline JavaScript workflow source text.
+    FactoryInvocationSignature:
+      type: object
+      additionalProperties: false
+      description: Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+      properties:
+        parameters:
+          type: array
+          description: Declared invocation parameters keyed by canonical parameter name.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationParameter'
+        unknownNamedArgumentPolicy:
+          $ref: '#/components/schemas/FactoryInvocationUnknownNamedArgumentPolicy'
+          description: Policy for named inputs that do not match any declared parameter binding.
+        outputContract:
+          $ref: '#/components/schemas/FactoryInvocationOutputContract'
+          description: Optional customer-facing hint for the factory's primary output shape.
+        examples:
+          type: array
+          description: Example invocations rendered in docs, help, and inspection surfaces.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationExample'
+    FactoryInvocationParameter:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One canonical invocation parameter declared on a factory.
+      properties:
+        name:
+          type: string
+          description: Internal canonical parameter name used for normalized argument maps and interpolation.
+        description:
+          type: string
+          description: Customer-facing description rendered in help, docs, and form controls.
+        externalName:
+          type: string
+          description: Preferred named-argument key shown to callers, such as `output`.
+        aliases:
+          type: array
+          description: Additional accepted named-argument keys that normalize to this parameter.
+          items:
+            type: string
+        typeHint:
+          $ref: '#/components/schemas/FactoryInvocationParameterTypeHint'
+          description: String-first hint that guides parsing, docs, and dashboard form selection.
+        valueMode:
+          $ref: '#/components/schemas/FactoryInvocationParameterValueMode'
+          description: Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
+        required:
+          type: boolean
+          description: When true, invocation normalization must reject requests that omit this parameter.
+        sensitive:
+          type: boolean
+          description: When true, diagnostics must preserve names and source metadata but redact concrete values.
+        choices:
+          type: array
+          description: Optional allowed string values for this parameter.
+          items:
+            type: string
+        defaultValue:
+          type: string
+          description: Default string value used when an omitted parameter resolves to one effective value.
+        defaultValues:
+          type: array
+          description: Default string values used when an omitted parameter resolves to multiple effective values.
+          items:
+            type: string
+        bindings:
+          type: array
+          description: Accepted invocation bindings for this parameter across positional, named, and stdin sources.
+          items:
+            $ref: '#/components/schemas/FactoryInvocationParameterBinding'
+    FactoryInvocationParameterBinding:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      description: One public binding that exposes a parameter to callers.
+      properties:
+        kind:
+          $ref: '#/components/schemas/FactoryInvocationParameterBindingKind'
+          description: Binding kind used to route invocation input into the parameter.
+        position:
+          type: integer
+          minimum: 1
+          description: 1-based positional slot used when kind is POSITIONAL.
+    FactoryInvocationParameterBindingKind:
+      type: string
+      description: Public invocation binding kinds supported by factory signatures.
+      x-enum-varnames:
+        - FactoryInvocationParameterBindingKindPositional
+        - FactoryInvocationParameterBindingKindNamed
+        - FactoryInvocationParameterBindingKindStdin
+        - FactoryInvocationParameterBindingKindNamedRest
+      enum:
+        - POSITIONAL
+        - NAMED
+        - STDIN
+        - NAMED_REST
+      x-enum-descriptions:
+        - Consume a positional CLI-style argument at a declared 1-based slot.
+        - Consume one named argument key matched through the parameter's externalName or aliases.
+        - Consume invocation stdin routed into one declared parameter.
+        - Collect otherwise-unbound named arguments into one rest-style parameter.
+    FactoryInvocationParameterTypeHint:
+      type: string
+      description: String-first parsing and UI hint for one factory invocation parameter.
+      x-enum-varnames:
+        - FactoryInvocationParameterTypeHintString
+        - FactoryInvocationParameterTypeHintPath
+        - FactoryInvocationParameterTypeHintFilePath
+        - FactoryInvocationParameterTypeHintDirectoryPath
+        - FactoryInvocationParameterTypeHintNumberString
+        - FactoryInvocationParameterTypeHintBooleanString
+      enum:
+        - STRING
+        - PATH
+        - FILE_PATH
+        - DIRECTORY_PATH
+        - NUMBER_STRING
+        - BOOLEAN_STRING
+      x-enum-descriptions:
+        - Generic free-form string input.
+        - Path-like string input with no stronger file or directory guarantee.
+        - File path string input.
+        - Directory path string input.
+        - Numeric value encoded as a string for transport parity.
+        - Boolean value encoded as a string with CLI-friendly flag behavior.
+    FactoryInvocationParameterValueMode:
+      type: string
+      description: Declares how one invocation parameter consumes one or more string values.
+      x-enum-varnames:
+        - FactoryInvocationParameterValueModeExact
+        - FactoryInvocationParameterValueModeRepeated
+        - FactoryInvocationParameterValueModeVariadic
+        - FactoryInvocationParameterValueModeFileContents
+      enum:
+        - EXACT
+        - REPEATED
+        - VARIADIC
+        - FILE_CONTENTS
+      x-enum-descriptions:
+        - Consume exactly one effective string value.
+        - Consume zero or more repeated effective string values.
+        - Consume positional overflow values as one variadic parameter.
+        - Resolve supplied path values to file contents before interpolation.
+    FactoryInvocationUnknownNamedArgumentPolicy:
+      type: string
+      description: Policy for named inputs that do not match any declared parameter binding.
+      x-enum-varnames:
+        - FactoryInvocationUnknownNamedArgumentPolicyReject
+        - FactoryInvocationUnknownNamedArgumentPolicyAllow
+        - FactoryInvocationUnknownNamedArgumentPolicyCollect
+      enum:
+        - REJECT
+        - ALLOW
+        - COLLECT
+      x-enum-descriptions:
+        - Reject unknown named arguments during normalization.
+        - Preserve unknown named arguments for compatibility handling.
+        - Route unknown named arguments into one declared NAMED_REST parameter.
+    FactoryInvocationOutputContract:
+      type: object
+      additionalProperties: false
+      description: Customer-facing output hint for a factory invocation signature.
+      properties:
+        mode:
+          $ref: '#/components/schemas/FactoryInvocationOutputContractMode'
+          description: High-level output contract mode exposed to callers.
+        pathParameter:
+          type: string
+          description: Parameter name that controls the destination path when the factory writes output to disk.
+        contentType:
+          type: string
+          description: Output media type hint for docs, API consumers, and dashboard affordances.
+        fileExtension:
+          type: string
+          description: Suggested file extension when the output mode writes a file.
+        description:
+          type: string
+          description: Human-readable summary of the primary output contract.
+    FactoryInvocationOutputContractMode:
+      type: string
+      description: High-level output shape hint exposed by a factory invocation signature.
+      x-enum-varnames:
+        - FactoryInvocationOutputContractModeInline
+        - FactoryInvocationOutputContractModeFile
+        - FactoryInvocationOutputContractModeJson
+      enum:
+        - INLINE
+        - FILE
+        - JSON
+      x-enum-descriptions:
+        - The primary result is expected inline in the invocation response.
+        - The primary result is expected to be written to a caller-supplied file path.
+        - The primary result is expected to be structured JSON-like content.
+    FactoryInvocationExample:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      description: One example invocation for docs, help, and packaged-factory inspection.
+      properties:
+        name:
+          type: string
+          description: Stable example name.
+        description:
+          type: string
+          description: Customer-facing explanation of what the example does.
+        argv:
+          type: array
+          description: CLI-style argument vector rendered after factory selection.
+          items:
+            type: string
+        stdin:
+          type: string
+          description: Example stdin payload when the signature routes stdin into one parameter.
     InvocationReturn:
       type: object
       additionalProperties: false
@@ -7141,9 +7925,33 @@ components:
         linear:
           $ref: '#/components/schemas/HostedLinearWorkerConfig'
           description: Provider-specific configuration for the built-in hosted LINEAR worker.
+        agentTools:
+          $ref: '#/components/schemas/AgentWorkerToolsConfig'
+          description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools.
         body:
           type: string
           description: Inline worker instructions or script body when the worker is authored directly in factory config.
+    AgentWorkerToolsConfig:
+      type: object
+      additionalProperties: false
+      description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+      required:
+        - policy
+      properties:
+        policy:
+          $ref: '#/components/schemas/AgentWorkerToolPolicy'
+          description: Required executor policy for agent-loop tool use on this worker.
+    AgentWorkerToolPolicy:
+      type: string
+      description: Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+      enum:
+        - DISABLED
+        - READ_ONLY
+        - ENABLED
+      x-enum-varnames:
+        - AgentWorkerToolPolicyDISABLED
+        - AgentWorkerToolPolicyREADONLY
+        - AgentWorkerToolPolicyENABLED
     WorkerType:
       type: string
       description: Worker implementation families supported by the public factory-config contract.
@@ -7163,7 +7971,7 @@ components:
         - HOSTED_WORKER
       x-enum-descriptions:
         - Inference worker that performs one bounded model operation through the configured provider or managed runtime.
-        - Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
+        - Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
         - Script-backed worker that executes a configured command instead of calling a model provider.
         - Poller worker that watches an external source and emits work through repository-owned hosted runtime code.
         - Legacy alias for inference-worker behavior during the migration window.
@@ -7351,6 +8159,9 @@ components:
         outputSchema:
           type: string
           description: JSON schema string used to validate or parse structured model output when configured.
+        outcomeFormat:
+          $ref: '#/components/schemas/WorkstationOutcomeFormat'
+          description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
         limits:
           $ref: '#/components/schemas/WorkstationLimits'
           description: Retry and execution ceilings applied to this workstation.
@@ -7420,6 +8231,15 @@ components:
         env:
           $ref: '#/components/schemas/StringMap'
           description: Environment variables added to the workstation execution context.
+    WorkstationOutcomeFormat:
+      type: string
+      description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+      x-enum-varnames:
+        - WorkstationOutcomeFormatDecisionEnvelope
+      enum:
+        - decision-envelope
+      x-enum-descriptions:
+        - Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
     ClassificationRoute:
       type: object
       additionalProperties: false
@@ -7488,7 +8308,7 @@ components:
         - CLASSIFIER_WORKSTATION
       x-enum-descriptions:
         - One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
-        - Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+        - Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
         - Script-run workstation that executes deterministic command or script behavior through a script worker.
         - Poller-run workstation that supervises ingress polling through a poller worker.
         - Legacy alias for agent-run behavior during the migration window.
@@ -8211,6 +9031,9 @@ components:
           description: Current outbound relationships attached to this listed source work item when returned by read APIs.
           items:
             $ref: '#/components/schemas/Relation'
+        stopSummary:
+          $ref: '#/components/schemas/FactoryStopSummary'
+          description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
     WorkContent:
       type: array
       description: Ordered canonical content parts for one work item.

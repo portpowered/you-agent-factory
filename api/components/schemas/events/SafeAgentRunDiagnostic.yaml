@@ -1,0 +1,35 @@
+type: object
+additionalProperties: false
+description: Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+properties:
+  executionBehavior:
+    type: string
+    description: Stable execution behavior marker for agent-loop runs.
+    enum:
+      - agent_run
+    x-enum-descriptions:
+      - Agent-loop execution through AGENT_RUN workstations.
+  failureClass:
+    type: string
+    description: Stable agent-run failure class when execution failed.
+  recoveryAction:
+    type: string
+    description: Customer-visible recovery guidance for actionable agent-run failures.
+  toolPolicy:
+    type: string
+    description: Effective agent tool policy for the run.
+  toolCallCount:
+    type: integer
+    format: int32
+    minimum: 0
+    description: Number of recorded tool lifecycle events for the run.
+  toolDiagnostics:
+    type: array
+    items:
+      $ref: './AgentRunToolDiagnosticEntry.yaml'
+    description: Bounded tool diagnostics separate from final agent output.
+  transcript:
+    type: array
+    items:
+      $ref: './AgentRunTranscriptEntry.yaml'
+    description: Bounded transcript metadata separate from tool diagnostics and final output.

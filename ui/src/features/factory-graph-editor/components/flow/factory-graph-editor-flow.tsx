@@ -41,7 +41,7 @@ const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
   resource: activityGraphNodeSurfaceClassName("resource"),
   worker: activityGraphNodeSurfaceClassName("info"),
   workstation: activityGraphNodeSurfaceClassName("workstation"),
-  "work-type": "border-outline bg-surface-container-low",
+  "work-type": activityGraphNodeSurfaceClassName("info"),
   "work-state": activityGraphNodeSurfaceClassName("workState"),
 };
 
@@ -260,7 +260,7 @@ function FactoryGraphEditorWorkerNodeView({
             />
           </span>
           <div className="grid min-w-0 gap-px overflow-hidden">
-            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-on-tertiary-container">
+            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
               {data.kindLabel}
             </span>
             <p

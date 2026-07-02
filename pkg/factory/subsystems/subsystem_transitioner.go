@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -240,7 +239,11 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		mutations = append(reconcileMutations, mutations...)
 	}
 	mutations = append(mutations, t.releaseResourceTokensOnFailureMutations(resolved.outcome, result.TransitionID, consumedTokens, arcs, now)...)
-	mutations = append(mutations, t.getSpawnedWorkMutations(resolved, now)...)
+	spawnedMutations, err := t.getSpawnedWorkMutations(workstationDef, inputColors, resolved, now)
+	if err != nil {
+		return nil, interfaces.CompletedDispatch{}, nil, err
+	}
+	mutations = append(mutations, spawnedMutations...)
 	mutations = append(mutations, t.createFanoutGuardToken(inputColors, resolved, now)...)
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
@@ -299,11 +302,22 @@ func completedDispatchReason(result resolvedWorkResult) string {
 
 func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition *petri.Transition, resolved resolvedWorkResult) ([]petri.Arc, resolvedWorkResult, error) {
 	workstation, ok := workstationconfig.Workstation(currentTransition, t.runtimeConfig)
+	if ok && workstation != nil && goal.UsesGoalRoutingDecisionEnvelope(workstation) {
+		if resolved.outcome == interfaces.OutcomeAccepted {
+			return matchClassificationLabelArcs(currentTransition, resolved.selectedClassificationLabel, resolved, "decision %q did not match any authored routing route")
+		}
+		arcs, err := calculateArcs(currentTransition, resolved.outcome)
+		return arcs, resolved, err
+	}
 	if !ok || workstation == nil || workstation.Type != interfaces.WorkstationTypeClassify || resolved.outcome != interfaces.OutcomeAccepted {
 		arcs, err := calculateArcs(currentTransition, resolved.outcome)
 		return arcs, resolved, err
 	}
 
+	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
+}
+
+func matchClassificationLabelArcs(currentTransition *petri.Transition, label string, resolved resolvedWorkResult, unknownLabelFmt string) ([]petri.Arc, resolvedWorkResult, error) {
 	matchedArcs := make([]petri.Arc, 0, len(currentTransition.OutputArcs))
 	matchedRoute := false
 	for _, arc := range currentTransition.OutputArcs {
@@ -311,18 +325,22 @@ func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition
 			matchedArcs = append(matchedArcs, arc)
 			continue
 		}
-		if arc.ClassificationLabel == resolved.output {
+		if arc.ClassificationLabel == label {
 			matchedRoute = true
 			matchedArcs = append(matchedArcs, arc)
 		}
 	}
 	if matchedRoute {
-		resolved.selectedClassificationLabel = resolved.output
+		resolved.selectedClassificationLabel = label
 		return matchedArcs, resolved, nil
 	}
 
 	resolved.outcome = interfaces.OutcomeFailed
-	resolved.err = fmt.Sprintf("classifier label %q did not match any authored classification route", resolved.output)
+	if label == "" {
+		resolved.err = "decision envelope: routing label is required"
+	} else {
+		resolved.err = fmt.Sprintf(unknownLabelFmt, label)
+	}
 	resolved.selectedClassificationLabel = ""
 	arcs, err := calculateArcs(currentTransition, resolved.outcome)
 	return arcs, resolved, err
@@ -418,21 +436,23 @@ func cloneRuntimeTokenColors(colors []interfaces.TokenColor) []interfaces.TokenC
 		cloned[i].Relations = factory.CloneRuntimeRelations(colors[i].Relations)
 		cloned[i].Content = interfaces.CloneWorkContentParts(colors[i].Content)
 		cloned[i].Payload = factory.CloneRuntimePayload(colors[i].Payload)
+		cloned[i].InvocationArguments = interfaces.CloneInvocationArguments(colors[i].InvocationArguments)
 	}
 	return cloned
 }
 
 func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResult, runtimeConfig interfaces.RuntimeWorkstationLookup) resolvedWorkResult {
 	resolved := resolvedWorkResult{
-		dispatchID:         result.DispatchID,
-		transitionID:       result.TransitionID,
-		outcome:            result.Outcome,
-		output:             result.Output,
-		spawnedWork:        cloneRuntimeTokenColors(result.SpawnedWork),
-		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
-		err:                result.Error,
-		feedback:           result.Feedback,
-		failureMetadata:    result.FailureMetadata,
+		dispatchID:                  result.DispatchID,
+		transitionID:                result.TransitionID,
+		outcome:                     result.Outcome,
+		output:                      result.Output,
+		selectedClassificationLabel: result.SelectedClassificationLabel,
+		spawnedWork:                 cloneRuntimeTokenColors(result.SpawnedWork),
+		recordedOutputWork:          cloneFactoryWorkItems(result.RecordedOutputWork),
+		err:                         result.Error,
+		feedback:                    result.Feedback,
+		failureMetadata:             result.FailureMetadata,
 	}
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
@@ -628,14 +648,29 @@ func arcCoverageCount(arc petri.Arc) int {
 	return 1
 }
 
-func (t *TransitionerSubsystem) getSpawnedWorkMutations(result resolvedWorkResult, now time.Time) []interfaces.MarkingMutation {
-	// Implementation for getting spawned work mutations
+func (t *TransitionerSubsystem) getSpawnedWorkMutations(
+	workstation *interfaces.FactoryWorkstationConfig,
+	inputColors []interfaces.TokenColor,
+	result resolvedWorkResult,
+	now time.Time,
+) ([]interfaces.MarkingMutation, error) {
 	mutations := []interfaces.MarkingMutation{}
+	workPropagationMode := workstationconfig.WorkPropagationMode(workstation)
+	workstationName := ""
+	if workstation != nil {
+		workstationName = workstation.Name
+	}
 	for i := range result.spawnedWork {
-		spawnMuts := t.createSpawnedTokens(&result.spawnedWork[i], result.transitionID, now)
+		spawnColor := interfaces.CloneTokenColor(result.spawnedWork[i])
+		if workPropagationMode == interfaces.WorkPropagationModePreserveInput {
+			if err := token_transformer.ApplyPreservedInputToColor(&spawnColor, inputColors, spawnColor.WorkTypeID, workstationName); err != nil {
+				return nil, err
+			}
+		}
+		spawnMuts := t.createSpawnedTokens(&spawnColor, result.transitionID, now)
 		mutations = append(mutations, spawnMuts...)
 	}
-	return mutations
+	return mutations, nil
 }
 
 func calculateArcs(currentTransition *petri.Transition, outcome interfaces.WorkOutcome) ([]petri.Arc, error) {
@@ -681,6 +716,10 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 	mutations := make([]interfaces.MarkingMutation, 0)
 	workOutputIndex := 0
 	workPropagationMode := workstationconfig.WorkPropagationMode(in.workstation)
+	workstationName := ""
+	if in.workstation != nil {
+		workstationName = in.workstation.Name
+	}
 	for arcIdx, arc := range in.arcs {
 		baseInput := token_transformer.OutputTokenInput{
 			ArcIndex:            arcIdx,
@@ -689,6 +728,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			InputColors:         in.inputColors,
 			Output:              in.result.output,
 			WorkPropagationMode: workPropagationMode,
+			WorkstationName:     workstationName,
 			Outcome:             in.result.outcome,
 			TransitionID:        in.result.transitionID,
 			Error:               in.result.err,
@@ -791,6 +831,9 @@ func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interface
 	if len(recorded.Tags) > 0 {
 		token.Color.Tags = cloneTags(recorded.Tags)
 	}
+	if len(recorded.Content) > 0 {
+		token.Color.Content = interfaces.CloneWorkContentParts(recorded.Content)
+	}
 }
 
 func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
@@ -890,85 +933,4 @@ func tokenColorsFromTokens(tokens []interfaces.Token) []interfaces.TokenColor {
 		colors[i] = token.Color
 	}
 	return colors
-}
-
-func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColor {
-	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource && inputs[i].WorkTypeID != interfaces.SystemTimeWorkTypeID {
-			return &inputs[i]
-		}
-	}
-	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource {
-			return &inputs[i]
-		}
-	}
-	return nil
-}
-
-func applyPackagedTTSInvocationMetadata(
-	token *interfaces.Token,
-	workstation *interfaces.FactoryWorkstationConfig,
-	workerOutput string,
-	inputColors []interfaces.TokenColor,
-	runtimeConfig interfaces.RuntimeWorkstationLookup,
-) error {
-	if token == nil || !tts.ShouldFormatInvocationMetadata(workstation) {
-		return nil
-	}
-
-	traceID := ""
-	if source := firstNonResourceInput(inputColors); source != nil {
-		traceID = strings.TrimSpace(source.TraceID)
-	}
-
-	backendLabel := ""
-	if workstation != nil && runtimeConfig != nil {
-		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
-			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
-				backendLabel = tts.BackendLabelFromWorker(worker)
-			}
-		}
-	}
-
-	metadataContent, err := tts.MetadataContentFromWorkerOutput(workerOutput, traceID, "", backendLabel)
-	if err != nil {
-		return fmt.Errorf("shape packaged tts invocation metadata: %w", err)
-	}
-
-	token.Color.Content = metadataContent
-	token.Color.Payload = nil
-	return nil
-}
-
-func applyPackagedGoalInvocationSummary(
-	token *interfaces.Token,
-	workstation *interfaces.FactoryWorkstationConfig,
-	workerOutput string,
-	runtimeConfig interfaces.RuntimeWorkstationLookup,
-) error {
-	if token == nil || !goal.ShouldFormatInvocationSummary(workstation) {
-		return nil
-	}
-	if strings.TrimSpace(workerOutput) == "" {
-		return nil
-	}
-
-	stopToken := ""
-	if workstation != nil && runtimeConfig != nil {
-		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
-			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
-				stopToken = strings.TrimSpace(worker.StopToken)
-			}
-		}
-	}
-
-	summaryContent, err := goal.SummaryContentFromWorkerOutput(workerOutput, stopToken)
-	if err != nil {
-		return fmt.Errorf("shape packaged goal invocation summary: %w", err)
-	}
-
-	token.Color.Content = summaryContent
-	token.Color.Payload = nil
-	return nil
 }

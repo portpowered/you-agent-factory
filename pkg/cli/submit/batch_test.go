@@ -825,6 +825,35 @@ func TestSubmitBatch_DryRunLocalAgentCliRuntimeBatchExample(t *testing.T) {
 	}
 }
 
+func TestSubmitBatch_DryRunFactoryDocsBatchInputExample(t *testing.T) {
+	path := testutil.MustRepoPath(t, "factory/docs/batch-input-example.json")
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:      []string{path},
+		DryRun:    true,
+		SessionID: "c803e7f7-1361-4ba6-bb2b-b5c9cfeb2754",
+		Server:    "http://127.0.0.1:1",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch dry-run on factory docs batch input example: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"requestId: planner-docs-live-session-example-20260620",
+		"work count: 4",
+		"relationCount: 3",
+		"planner-docs-live-session-loopback",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func writeBatchFile(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "batch.json")

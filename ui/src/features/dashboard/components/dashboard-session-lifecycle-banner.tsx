@@ -80,11 +80,17 @@ function LifecycleMetric({ label, value }: { label: string; value: string }) {
 function streamNoticeForState(
   streamState: DashboardStreamState,
   messages: ReturnType<typeof getDashboardSessionLifecycleMessages>,
-): { message: string; tone: "info" | "warning" } | null {
+): { message: string; tone: "danger" | "info" | "warning" } | null {
   if (streamState.status === "reconnecting") {
     return {
       message: messages.reconnectingStreamLabel,
       tone: "info",
+    };
+  }
+  if (streamState.status === "recovery_failed") {
+    return {
+      message: streamState.message || messages.recoveryFailedStreamLabel,
+      tone: "danger",
     };
   }
   if (streamState.status === "offline") {

@@ -1,5 +1,6 @@
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
+import { emptyReplayWorldState } from "./replayWorldStateSupport";
 import {
   appendTimelineEvents,
   cacheWithSnapshot,
@@ -51,6 +52,10 @@ function snapshotForTick(tick: number): WorldState {
 }
 
 const deps: TimelineStoreStateDeps = {
+  buildFactoryTimelineProjection: (_events, tick) => ({
+    replayState: emptyReplayWorldState(tick),
+    worldState: snapshotForTick(tick),
+  }),
   buildFactoryTimelineSnapshot: (_events, tick) => snapshotForTick(tick),
   orderedEvents: (events) =>
     [...events].sort((left, right) => left.context.tick - right.context.tick),

@@ -93,11 +93,11 @@ func (a *sourceAnalyzer) inspectDot(dot *js.DotExpr) {
 	if !ok {
 		return
 	}
-	if msg, forbidden := forbiddenRootGlobals[root]; forbidden {
-		a.addIssue(CodeForbiddenHostAccess, msg+" via "+root+"."+member, dot)
+	if rootVar, isVar := dot.X.(*js.Var); isVar && isDeclaredLocalBinding(rootVar) {
 		return
 	}
-	if rootVar, ok := dot.X.(*js.Var); ok && rootVar.Decl != js.NoDecl {
+	if msg, forbidden := forbiddenRootGlobals[root]; forbidden {
+		a.addIssue(CodeForbiddenHostAccess, msg+" via "+root+"."+member, dot)
 		return
 	}
 	switch root {
@@ -111,8 +111,18 @@ func (a *sourceAnalyzer) inspectDot(dot *js.DotExpr) {
 	}
 }
 
+func isDeclaredLocalBinding(v *js.Var) bool {
+	for v != nil {
+		if v.Decl != js.NoDecl {
+			return true
+		}
+		v = v.Link
+	}
+	return false
+}
+
 func (a *sourceAnalyzer) inspectIdentifierUse(v *js.Var) {
-	if v.Decl != js.NoDecl {
+	if isDeclaredLocalBinding(v) {
 		return
 	}
 	name := string(v.Name())

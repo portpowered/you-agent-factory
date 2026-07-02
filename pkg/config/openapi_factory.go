@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -14,6 +15,7 @@ import (
 )
 
 var defaultFactoryConfigMapper = NewFactoryConfigMapper()
+var invocationInterpolationPlaceholderPattern = regexp.MustCompile(`^\$\{[A-Za-z0-9_.-]+\}$`)
 
 // GeneratedFactoryFromOpenAPIJSON converts an OpenAPI-compatible factory JSON
 // payload into the generated Factory boundary model.
@@ -334,7 +336,7 @@ func normalizeFactoryWorkerEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "type", fmt.Sprintf("workers[%d].type", i), interfaces.StrictPublicFactoryWorkerType); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
+		if err := normalizeFactoryEnumObjectFieldWithNormalizerAllowingInvocationInterpolation(worker, "modelProvider", fmt.Sprintf("workers[%d].modelProvider", i), interfaces.StrictPublicFactoryWorkerModelProvider); err != nil {
 			return err
 		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(worker, "provider", fmt.Sprintf("workers[%d].provider", i), interfaces.StrictPublicFactoryHostedWorkerProvider); err != nil {
@@ -557,6 +559,9 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
 			return err
 		}
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "outcomeFormat", fmt.Sprintf("workstations[%d].outcomeFormat", i), interfaces.StrictPublicFactoryWorkstationOutcomeFormat); err != nil {
+			return err
+		}
 		if err := normalizeFactoryModelOperationName(workstation, "operation", fmt.Sprintf("workstations[%d].operation", i)); err != nil {
 			return err
 		}
@@ -656,6 +661,25 @@ func normalizeFactoryEnumObjectFieldWithNormalizer(container map[string]any, key
 		return fmt.Errorf("%s: %w", fieldPath, err)
 	}
 	return nil
+}
+
+func normalizeFactoryEnumObjectFieldWithNormalizerAllowingInvocationInterpolation(container map[string]any, key string, fieldPath string, normalize func(string) string) error {
+	raw, ok := container[key]
+	if !ok {
+		return nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return nil
+	}
+	if isInvocationInterpolationPlaceholder(value) {
+		return nil
+	}
+	return normalizeFactoryEnumObjectFieldWithNormalizer(container, key, fieldPath, normalize)
+}
+
+func isInvocationInterpolationPlaceholder(value string) bool {
+	return invocationInterpolationPlaceholderPattern.MatchString(strings.TrimSpace(value))
 }
 
 func normalizeRuntimeResourceRequirements(container map[string]any, key string) {
@@ -792,10 +816,10 @@ type (
 )
 
 const (
-	MockWorkerRunTypeAccept                     = mockworkers.MockWorkerRunTypeAccept
-	MockWorkerRunTypeScript                     = mockworkers.MockWorkerRunTypeScript
-	MockWorkerRunTypeReject                     = mockworkers.MockWorkerRunTypeReject
-	MockWorkerUnmatchedDispatchPolicyAccept     = mockworkers.MockWorkerUnmatchedDispatchPolicyAccept
+	MockWorkerRunTypeAccept                      = mockworkers.MockWorkerRunTypeAccept
+	MockWorkerRunTypeScript                      = mockworkers.MockWorkerRunTypeScript
+	MockWorkerRunTypeReject                      = mockworkers.MockWorkerRunTypeReject
+	MockWorkerUnmatchedDispatchPolicyAccept      = mockworkers.MockWorkerUnmatchedDispatchPolicyAccept
 	MockWorkerUnmatchedDispatchPolicyPassthrough = mockworkers.MockWorkerUnmatchedDispatchPolicyPassthrough
 )
 

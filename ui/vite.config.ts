@@ -1,12 +1,22 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react-swc";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
+import { createComponentsPackageAliases } from "./packages/components/src/vite-aliases";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
+const componentsPackageRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "packages/components/src",
+);
 const isCoverageRun = process.argv.includes("--coverage");
+const profileSourceMaps =
+  process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "true" ||
+  process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "1";
 const isVitestRun =
   process.argv.includes("vitest") || process.env.VITEST === "true";
 const monacoEditorPlugin =
@@ -42,10 +52,12 @@ const currentFactoryPromptTemplateProxyPaths = [
 const proxiedAPIPaths = [
   "/work",
   "^/factory-sessions/[^/]+/work$",
+  "^/factory-sessions/[^/]+/invocations$",
   "^/work-requests/[^/]+$",
   "^/factory-sessions/[^/]+/work-requests/[^/]+$",
   "^/work/[^/]+$",
   "^/factory-sessions/[^/]+/work/[^/]+$",
+  // Compatibility-only: retain process-global /events proxying for legacy tooling.
   "/events",
   "^/factory-sessions/[^/]+/events$",
   "/status",
@@ -78,6 +90,7 @@ export default defineConfig({
         entryFileNames: "assets/[name].js",
       },
     },
+    sourcemap: profileSourceMaps,
   },
   esbuild: {
     jsxDev: false,
@@ -97,6 +110,9 @@ export default defineConfig({
         ]
       : []),
   ],
+  resolve: {
+    alias: createComponentsPackageAliases(componentsPackageRoot),
+  },
   server: {
     host: true,
     port: 4173,

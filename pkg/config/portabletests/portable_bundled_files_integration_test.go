@@ -12,6 +12,72 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestPortableBundledFiles_FlattenAndLoadIncludeNestedDocsUnderFactoryDocs(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+
+	const nestedDocPath = "factory/docs/standards/review.md"
+	const nestedDocBody = "# Review standards\n"
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, "docs", "standards", "review.md"), nestedDocBody)
+
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-roundtrip-factory",
+  "supportingFiles":{
+    "bundledFiles":[
+      {"type":"DOC","targetPath":"factory/docs/README.md","content":{}}
+    ]
+  },
+  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "workers": [{"name":"executor"}],
+  "workstations": [{
+    "name":"execute-story",
+    "worker":"executor",
+    "inputs":[{"workType":"task","state":"init"}],
+    "outputs":[{"workType":"task","state":"complete"}],
+    "onFailure":[{"workType":"task","state":"failed"}]
+  }]
+}`)
+
+	flattened, err := factoryconfig.FlattenFactoryConfig(sourceDir)
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(flattened)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.ResourceManifest == nil {
+		t.Fatal("expected flattened config to include resourceManifest")
+	}
+	assertBundledFileRoundTripEntry(
+		t,
+		findPortableBundledFileByTarget(t, cfg.ResourceManifest.BundledFiles, nestedDocPath),
+		interfaces.BundledFileTypeDoc,
+		nestedDocPath,
+		nestedDocBody,
+	)
+
+	portableDir := t.TempDir()
+	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(portablePath, flattened, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", portablePath, err)
+	}
+	copyPortableBundledDiskBackedExport(t, projectDir, sourceDir, portableDir)
+	copyPortableBundledExportFile(t, filepath.Join(sourceDir, "docs", "standards", "review.md"), filepath.Join(portableDir, "docs", "standards", "review.md"))
+
+	loaded, err := factoryconfig.LoadRuntimeConfig(portableDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(nested docs): %v", err)
+	}
+	if loaded.FactoryConfig() == nil || loaded.FactoryConfig().ResourceManifest == nil {
+		t.Fatal("expected loaded config to include resourceManifest")
+	}
+	nested := findPortableBundledFileByTarget(t, loaded.FactoryConfig().ResourceManifest.BundledFiles, nestedDocPath)
+	if nested.TargetPath != nestedDocPath {
+		t.Fatalf("loaded nested doc target = %q, want %q", nested.TargetPath, nestedDocPath)
+	}
+	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "docs", "standards", "review.md"), nestedDocBody)
+}
+
 func TestPortableBundledFiles_FlattenOmitsGitkeepFromExportPayload(t *testing.T) {
 	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
 
@@ -632,6 +698,18 @@ func assertPortableBundledFilesExcludeGitkeep(t *testing.T, bundledFiles []inter
 			t.Fatalf("bundled file targetPath must not include .gitkeep: %#v", bundledFile)
 		}
 	}
+}
+
+func findPortableBundledFileByTarget(t *testing.T, bundledFiles []interfaces.BundledFileConfig, targetPath string) interfaces.BundledFileConfig {
+	t.Helper()
+
+	for _, bundledFile := range bundledFiles {
+		if bundledFile.TargetPath == targetPath {
+			return bundledFile
+		}
+	}
+	t.Fatalf("bundled files missing target %q: %#v", targetPath, bundledFiles)
+	return interfaces.BundledFileConfig{}
 }
 
 func assertBundledFileRoundTripEntry(t *testing.T, bundledFile interfaces.BundledFileConfig, wantType, wantTargetPath, wantInline string) {

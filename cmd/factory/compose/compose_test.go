@@ -2,8 +2,10 @@ package compose_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
@@ -64,6 +66,41 @@ func TestInjectFactoryService_BuildsMinimalFactory(t *testing.T) {
 	}
 	if svc == nil {
 		t.Fatal("expected non-nil FactoryService")
+	}
+}
+
+func TestInjectFactoryService_ResolvesBackendScopeBeforeSessionIdentity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{"name":"wire-backend-scope","workTypes":[]}`), 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+	homeDir := t.TempDir()
+
+	_, err := compose.InjectFactoryService(context.Background(), &service.FactoryServiceConfig{
+		Dir:                                     dir,
+		Logger:                                  zap.NewNop(),
+		SystemConfigHomeDir:                     homeDir,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("InjectFactoryService: %v", err)
+	}
+
+	configPath := filepath.Join(homeDir, ".you-agent-factory", "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", configPath, err)
+	}
+	var persisted struct {
+		BackendScopeID string `json:"backendScopeID"`
+	}
+	if err := json.Unmarshal(data, &persisted); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if !strings.HasPrefix(persisted.BackendScopeID, "local-") {
+		t.Fatalf("persisted backendScopeID = %q, want local-<uuid>", persisted.BackendScopeID)
 	}
 }
 

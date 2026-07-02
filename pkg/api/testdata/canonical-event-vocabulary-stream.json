@@ -303,6 +303,34 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-agent-run-response",
+    "type": "AGENT_RUN_RESPONSE",
+    "context": {
+      "sequence": 11,
+      "tick": 2,
+      "eventTime": "2026-04-21T12:00:06.750Z",
+      "dispatchId": "dispatch-agent-1",
+      "workIds": [
+        "work-1"
+      ]
+    },
+    "payload": {
+      "agentRunId": "agent-run-1",
+      "outcome": "ACCEPTED",
+      "durationMillis": 420,
+      "diagnostics": {
+        "agentRun": {
+          "executionBehavior": "agent_run",
+          "toolPolicy": "DISABLED",
+          "toolCallCount": 0,
+          "toolDiagnostics": [],
+          "transcript": []
+        }
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-dispatch-response",
     "type": "DISPATCH_RESPONSE",
     "context": {
@@ -459,6 +487,28 @@
           "text": "Planning summary"
         }
       ]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-lifecycle-control",
+    "type": "SESSION_LIFECYCLE_CONTROL",
+    "context": {
+      "sequence": 18,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:10Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 2,
+      "orchestratorKind": "JAVASCRIPT",
+      "source": "api"
+    },
+    "payload": {
+      "operation": "PAUSE",
+      "outcome": "ACCEPTED",
+      "previousStatus": "RUNNING",
+      "newStatus": "PAUSED",
+      "occurredAt": "2026-04-21T12:00:10Z",
+      "reason": "operator requested pause"
     }
   },
   {

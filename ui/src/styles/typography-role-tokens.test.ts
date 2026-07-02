@@ -9,14 +9,29 @@ import {
 } from "../components/ui/dashboard-typography";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
-const typographyTokensPath = path.join(stylesDir, "typography-role-tokens.css");
+const packageStylesDir = path.resolve(
+  stylesDir,
+  "..",
+  "..",
+  "packages",
+  "components",
+  "src",
+  "styles",
+);
+const typographyTokensPath = path.join(
+  packageStylesDir,
+  "typography-role-tokens.css",
+);
 const typographyUtilitiesPath = path.join(
   stylesDir,
   "typography-role-utilities.css",
 );
-const textColorTokensPath = path.join(stylesDir, "text-color-role-tokens.css");
+const textColorTokensPath = path.join(
+  packageStylesDir,
+  "text-color-role-tokens.css",
+);
 const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
-const roleTokensSourcePath = path.join(stylesDir, "color-role-tokens.css");
+const roleTokensSourcePath = path.join(packageStylesDir, "color-role-tokens.css");
 
 const MATERIAL_SCALE_FAMILIES = [
   "display",

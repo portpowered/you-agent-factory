@@ -32,6 +32,7 @@ const (
 	TopicMCPHosts           Topic = "mcp-hosts"
 	TopicOrchestrators      Topic = "orchestrators"
 	TopicMCP                Topic = "mcp"
+	TopicPackagedFusion     Topic = "packaged-fusion"
 	TopicPackagedGoal       Topic = "packaged-goal"
 	TopicPackagedTTS        Topic = "packaged-tts"
 	TopicBatchInputs        Topic = "batch-inputs"
@@ -60,6 +61,7 @@ const (
 	referenceMCPHostsPath           = "mcp-hosts.md"
 	referenceOrchestratorsPath      = "orchestrators.md"
 	referenceMCPPath                = "mcp.md"
+	referencePackagedFusionPath     = "packaged-fusion.md"
 	referencePackagedGoalPath       = "packaged-goal.md"
 	referencePackagedTTSPath        = "packaged-tts.md"
 	referenceBatchInputsPath        = "batch-inputs.md"
@@ -83,7 +85,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
 	{topic: TopicWork, description: "Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
-	{topic: TopicSessions, description: "Live factory sessions: session list, session show, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
+	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicMCPHosts, description: "Dynamic workflow MCP host setup: you mcp serve, stdio transport, tool catalog, and practical host examples.", path: referenceMCPHostsPath, displayOrder: 36},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
 	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 38},
@@ -91,8 +93,9 @@ var topicDocuments = []topicDocument{
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath, displayOrder: 70},
-	{topic: TopicPackagedGoal, description: "Packaged @you/goal invocation, materialization path, and on-disk editability.", path: referencePackagedGoalPath, displayOrder: 71},
-	{topic: TopicPackagedTTS, description: "Packaged @you/tts invocation, materialization path, metadata result, and on-disk editability.", path: referencePackagedTTSPath, displayOrder: 72},
+	{topic: TopicPackagedFusion, description: "Packaged @you/fusion invocation, signature-aware help, materialization path, and editability.", path: referencePackagedFusionPath, displayOrder: 71},
+	{topic: TopicPackagedGoal, description: "Packaged @you/goal batch invocation, stdout primary result, materialization path, and headless operator-interaction scope.", path: referencePackagedGoalPath, displayOrder: 72},
+	{topic: TopicPackagedTTS, description: "Packaged @you/tts invocation, materialization path, metadata result, and on-disk editability.", path: referencePackagedTTSPath, displayOrder: 73},
 	{topic: TopicBatchInputs, description: "Batch input files, request shape, dependencies, and validation.", path: referenceBatchInputsPath, displayOrder: 80, aliases: []Topic{TopicBatchWorkAlias}},
 	{topic: TopicTemplates, description: "Prompt template variables, context fields, and Go template behavior.", path: referenceTemplatesPath, displayOrder: 90},
 }

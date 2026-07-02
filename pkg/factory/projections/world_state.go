@@ -52,13 +52,14 @@ func ReconstructFactoryWorldState(events []factoryapi.FactoryEvent, selectedTick
 }
 
 type factoryWorldReducer struct {
-	stateValue   interfaces.FactoryWorldState
-	placeTokens  map[string]map[string]struct{}
-	tokenPlaces  map[string]string
-	tokenWorkIDs map[string]string
-	tokenKinds   map[string]string
-	placeCats    map[string]string
-	workPlaces   map[string]string
+	stateValue              interfaces.FactoryWorldState
+	placeTokens             map[string]map[string]struct{}
+	tokenPlaces             map[string]string
+	tokenWorkIDs            map[string]string
+	tokenKinds              map[string]string
+	placeCats               map[string]string
+	workPlaces              map[string]string
+	interruptedDispatchIDs  map[string]struct{}
 }
 
 func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
@@ -76,6 +77,7 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 			InferenceAttemptsByDispatchID: make(map[string]map[string]interfaces.FactoryWorldInferenceAttempt),
 			ScriptRequestsByDispatchID:    make(map[string]map[string]interfaces.FactoryWorldScriptRequest),
 			ScriptResponsesByDispatchID:   make(map[string]map[string]interfaces.FactoryWorldScriptResponse),
+			AgentRunResponsesByDispatchID: make(map[string]map[string]interfaces.FactoryWorldAgentRunResponse),
 			PlaceOccupancyByID:            make(map[string]interfaces.FactoryPlaceOccupancy),
 			ActiveDispatches:              make(map[string]interfaces.FactoryWorldDispatch),
 			TracesByID:                    make(map[string]interfaces.FactoryWorldTrace),
@@ -85,8 +87,9 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 		tokenPlaces:  make(map[string]string),
 		tokenWorkIDs: make(map[string]string),
 		tokenKinds:   make(map[string]string),
-		placeCats:    make(map[string]string),
-		workPlaces:   make(map[string]string),
+		placeCats:              make(map[string]string),
+		workPlaces:             make(map[string]string),
+		interruptedDispatchIDs: make(map[string]struct{}),
 	}
 }
 
@@ -112,6 +115,8 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		return r.applyScriptRequestEvent(event)
 	case factoryapi.FactoryEventTypeScriptResponse:
 		return r.applyScriptResponseEvent(event)
+	case factoryapi.FactoryEventTypeAgentRunResponse:
+		return r.applyAgentRunResponseEvent(event)
 	case factoryapi.FactoryEventTypeDispatchResponse:
 		return r.applyDispatchResponseEvent(event)
 	case factoryapi.FactoryEventTypeFactoryStateResponse:
@@ -240,6 +245,15 @@ func (r *factoryWorldReducer) applyScriptResponseEvent(event factoryapi.FactoryE
 		return err
 	}
 	r.applyScriptResponse(event, payload)
+	return nil
+}
+
+func (r *factoryWorldReducer) applyAgentRunResponseEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsAgentRunResponseEventPayload()
+	if err != nil {
+		return err
+	}
+	r.applyAgentRunResponse(event, payload)
 	return nil
 }
 
@@ -630,6 +644,21 @@ func (r *factoryWorldReducer) failedPlaceForWorkType(workTypeID string) string {
 		if placeMatchesWorkType(place, workTypeID) && place.Category == "FAILED" {
 			return place.ID
 		}
+	}
+	return ""
+}
+
+func (r *factoryWorldReducer) placeForWorkTypeState(workTypeID string, stateValue string) string {
+	for _, place := range r.stateValue.Topology.Places {
+		if !placeMatchesWorkType(place, workTypeID) {
+			continue
+		}
+		if place.State == stateValue {
+			return place.ID
+		}
+	}
+	if workTypeID != "" && stateValue != "" {
+		return workTypeID + ":" + stateValue
 	}
 	return ""
 }

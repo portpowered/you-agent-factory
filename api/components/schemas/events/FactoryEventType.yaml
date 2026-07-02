@@ -16,6 +16,7 @@ x-enum-varnames:
   - FactoryEventTypeInferenceResponse
   - FactoryEventTypeScriptRequest
   - FactoryEventTypeScriptResponse
+  - FactoryEventTypeAgentRunResponse
   - FactoryEventTypeDispatchResponse
   - FactoryEventTypeWorkStateChange
   - FactoryEventTypeFactoryStateResponse
@@ -25,6 +26,7 @@ x-enum-varnames:
   - FactoryEventTypeSessionResumed
   - FactoryEventTypeSessionResultUpdated
   - FactoryEventTypeSessionCompleted
+  - FactoryEventTypeSessionLifecycleControl
   - FactoryEventTypeOrchestratorPhaseChanged
   - FactoryEventTypeOrchestratorCheckpointWritten
   - FactoryEventTypeDispatchQueued
@@ -46,6 +48,7 @@ enum:
   - INFERENCE_RESPONSE
   - SCRIPT_REQUEST
   - SCRIPT_RESPONSE
+  - AGENT_RUN_RESPONSE
   - DISPATCH_RESPONSE
   - WORK_STATE_CHANGE
   - FACTORY_STATE_RESPONSE
@@ -55,6 +58,7 @@ enum:
   - SESSION_RESUMED
   - SESSION_RESULT_UPDATED
   - SESSION_COMPLETED
+  - SESSION_LIFECYCLE_CONTROL
   - ORCHESTRATOR_PHASE_CHANGED
   - ORCHESTRATOR_CHECKPOINT_WRITTEN
   - DISPATCH_QUEUED
@@ -76,6 +80,7 @@ x-enum-descriptions:
   - A model-worker provider attempt returned from the provider boundary.
   - A script-backed worker is about to invoke one concrete command attempt.
   - A script-backed worker command attempt returned or failed before a normal exit.
+  - An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
   - A workstation response finished processing and produced an outcome.
   - A work item moved between authored marking states.
   - The factory lifecycle state response was recorded.
@@ -85,6 +90,7 @@ x-enum-descriptions:
   - A Factory Session lifecycle resume control transitioned the session into RUNNING.
   - Partial or final customer-visible session result availability was recorded.
   - Durable factory session execution reached a terminal lifecycle state.
+  - Durable factory session lifecycle control was applied or recorded for replay.
   - An orchestrator workflow phase transition was recorded.
   - An orchestrator checkpoint reference was recorded without exposing raw VM state.
   - A child dispatch was queued for execution.

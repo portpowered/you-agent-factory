@@ -163,3 +163,25 @@ describe("doc-editable-values", () => {
     ).toBeNull();
   });
 });
+
+describe("doc-editable-values nested docs", () => {
+  it("resolves editable values for nested bundled DOC entries", () => {
+    const nestedDocPath = "factory/docs/standards/review.md";
+    const factory = factoryWithBundledFiles({
+      bundledFiles: [
+        {
+          content: { encoding: "utf-8", inline: "# Review standards\n" },
+          targetPath: nestedDocPath,
+          type: "DOC",
+        },
+      ],
+    });
+
+    expect(resolveEditableDocValues(factory, nestedDocPath)).toEqual({
+      fileName: "standards/review.md",
+      inlineContent: "# Review standards\n",
+      targetPath: nestedDocPath,
+    });
+    expect(listFactoryDocTargetPaths(factory)).toEqual([nestedDocPath]);
+  });
+});

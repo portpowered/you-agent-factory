@@ -10,6 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -18,7 +19,7 @@ import (
 
 func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 	sessionRoot := t.TempDir()
-	payload := []byte(`{"name":"alpha","id":"alpha-runtime","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	payload := []byte(`{"name":"alpha","id":"alpha-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if _, err := configpersist.PersistNamedFactory(sessionRoot, "alpha", payload); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
@@ -104,7 +105,7 @@ func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 
 func TestSaveNamedCurrentFactoryForSession_CoercesDriftedPayloadName(t *testing.T) {
 	sessionRoot := t.TempDir()
-	payload := []byte(`{"name":"alpha","id":"alpha-runtime","workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	payload := []byte(`{"name":"alpha","id":"alpha-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
 	if _, err := configpersist.PersistNamedFactory(sessionRoot, "alpha", payload); err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
 	}
@@ -241,6 +242,49 @@ func (h *splitLayoutNamedSaveHost) SerializeNamedFactoryUpsertResponse(factoryap
 	return factoryapi.Factory{}, nil
 }
 
+func (h *splitLayoutNamedSaveHost) RequireFreshEditableFactoryVersionAtRoot(
+	rootDir string,
+	name factoryapi.FactoryName,
+	baseVersion *factoryapi.HybridLogicalTimestamp,
+) error {
+	currentVersion, err := h.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return err
+	}
+	return requireFreshEditableFactoryVersion(baseVersion, currentVersion)
+}
+
+func (h *splitLayoutNamedSaveHost) NextEditableFactoryVersion(
+	current *factoryapi.HybridLogicalTimestamp,
+	now time.Time,
+) factoryapi.HybridLogicalTimestamp {
+	return nextEditableFactoryVersion(current, now)
+}
+
+func (h *splitLayoutNamedSaveHost) PreparePersistedFactoryPayload(
+	segment string,
+	factory factoryapi.Factory,
+	version factoryapi.HybridLogicalTimestamp,
+) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
+	return preparePersistedFactoryPayload(segment, factory, version)
+}
+
+func (h *splitLayoutNamedSaveHost) SaveReplaceCurrentForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+}
+
+func (h *splitLayoutNamedSaveHost) SaveUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+}
+
 func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testing.T) {
 	sessionRoot := t.TempDir()
 	host := &upsertNamedSaveHost{
@@ -371,7 +415,11 @@ func (h *upsertNamedSaveHost) CurrentFactoryDefinitionVersionAtRoot(string, fact
 }
 
 func (h *upsertNamedSaveHost) SessionRuntimeConfig(string) (*factoryconfig.LoadedFactoryConfig, error) {
-	return nil, nil
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(h.sessionRootDir, "imported-target")
+	if err != nil {
+		return nil, err
+	}
+	return configload.LoadRuntimeConfig(factoryDir, nil)
 }
 
 func (h *upsertNamedSaveHost) SerializeNamedFactoryUpsertResponse(
@@ -381,4 +429,47 @@ func (h *upsertNamedSaveHost) SerializeNamedFactoryUpsertResponse(
 	serialized := h.serialized
 	serialized.Name = name
 	return serialized, nil
+}
+
+func (h *upsertNamedSaveHost) RequireFreshEditableFactoryVersionAtRoot(
+	rootDir string,
+	name factoryapi.FactoryName,
+	baseVersion *factoryapi.HybridLogicalTimestamp,
+) error {
+	currentVersion, err := h.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
+	if err != nil {
+		return err
+	}
+	return requireFreshEditableFactoryVersion(baseVersion, currentVersion)
+}
+
+func (h *upsertNamedSaveHost) NextEditableFactoryVersion(
+	current *factoryapi.HybridLogicalTimestamp,
+	now time.Time,
+) factoryapi.HybridLogicalTimestamp {
+	return nextEditableFactoryVersion(current, now)
+}
+
+func (h *upsertNamedSaveHost) PreparePersistedFactoryPayload(
+	segment string,
+	factory factoryapi.Factory,
+	version factoryapi.HybridLogicalTimestamp,
+) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
+	return preparePersistedFactoryPayload(segment, factory, version)
+}
+
+func (h *upsertNamedSaveHost) SaveReplaceCurrentForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+}
+
+func (h *upsertNamedSaveHost) SaveUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
 }

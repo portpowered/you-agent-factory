@@ -376,6 +376,66 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 	}
 }
 
+func TestTransitioner_PreserveInput_SpawnedWorkKeepsConsumedWorkData(t *testing.T) {
+	now := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
+	net := workerBatchTestNet()
+	net.Transitions["t1"].Name = "spawner"
+
+	transitioner := NewTransitioner(net, nil,
+		WithTransitionerClock(func() time.Time { return now }),
+		WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"spawner": {
+					WorkPropagation: &interfaces.WorkPropagationConfig{
+						Mode: interfaces.WorkPropagationModePreserveInput,
+					},
+				},
+			},
+		}),
+	)
+
+	snapshot := workerBatchSnapshot("worker-output")
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Payload = []byte("input-payload")
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Tags = map[string]string{"objective": "goal-1"}
+	snapshot.Results[0].SpawnedWork = []interfaces.TokenColor{
+		{WorkID: "child-1", WorkTypeID: "child", DataType: interfaces.DataTypeWork, ParentID: "work-source"},
+		{WorkID: "child-2", WorkTypeID: "child", DataType: interfaces.DataTypeWork, ParentID: "work-source"},
+	}
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected transitioner result")
+	}
+
+	childTokens := make([]*interfaces.Token, 0, 2)
+	for i := range result.Mutations {
+		if result.Mutations[i].ToPlace == "child:init" {
+			childTokens = append(childTokens, result.Mutations[i].NewToken)
+		}
+	}
+	if len(childTokens) != 2 {
+		t.Fatalf("spawned child count = %d, want 2", len(childTokens))
+	}
+	for i, child := range childTokens {
+		if string(child.Color.Payload) != "input-payload" {
+			t.Fatalf("child %d payload = %q, want input-payload", i, child.Color.Payload)
+		}
+		if len(child.Color.Content) != 1 || child.Color.Content[0].Text != "input-content" {
+			t.Fatalf("child %d content = %#v, want preserved input content", i, child.Color.Content)
+		}
+		if child.Color.Tags["objective"] != "goal-1" {
+			t.Fatalf("child %d tags = %#v, want preserved input tags", i, child.Color.Tags)
+		}
+	}
+}
+
 func TestTransitioner_SpawnedWorkRelationsRemainDetachedFromResultMutation(t *testing.T) {
 	now := time.Date(2026, time.May, 24, 2, 0, 0, 0, time.UTC)
 	net := workerBatchTestNet()

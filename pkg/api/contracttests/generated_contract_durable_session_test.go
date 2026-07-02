@@ -11,9 +11,9 @@ import (
 )
 
 type durableSessionContractFixtureCatalog struct {
-	Scenarios        []durableSessionContractScenario       `json:"scenarios"`
+	Scenarios        []durableSessionContractScenario      `json:"scenarios"`
 	IdempotentReplay durableSessionIdempotentReplayFixture `json:"idempotentReplay"`
-	ListResponse     map[string]any                         `json:"listResponse"`
+	ListResponse     map[string]any                        `json:"listResponse"`
 }
 
 type durableSessionContractScenario struct {
@@ -41,19 +41,19 @@ type durableSessionContractTags struct {
 }
 
 type durableSessionIdempotentReplayFixture struct {
-	ExecutionRequest   map[string]any `json:"executionRequest"`
-	AsyncResponse      map[string]any `json:"asyncResponse"`
+	ExecutionRequest    map[string]any `json:"executionRequest"`
+	AsyncResponse       map[string]any `json:"asyncResponse"`
 	ReplayAsyncResponse map[string]any `json:"replayAsyncResponse"`
 }
 
 func TestGeneratedDurableSessionDispatchArtifactContracts_NotFoundJSON(t *testing.T) {
 	notFound := factoryapi.ErrorResponse{
-		Code:    factoryapi.NOTFOUND,
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		Family:  factoryapi.ErrorFamilyNotFound,
 		Message: "factory session not found",
 	}
-	if notFound.Code != factoryapi.NOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.NOTFOUND, factoryapi.ErrorFamilyNotFound)
+	if notFound.Code != factoryapi.ErrorResponseCodeNOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.ErrorResponseCodeNOTFOUND, factoryapi.ErrorFamilyNotFound)
 	}
 
 	encoded, err := json.Marshal(notFound)
@@ -151,6 +151,7 @@ func assertDurableSessionScenarioFixture(t *testing.T, doc *openapi3.T, scenario
 	}
 
 	assertDurableSessionScenarioEventFixtures(t, doc, scenario)
+	assertDurableSessionFixtureInspectionEventLinksAreSessionScoped(t, scenario)
 
 	assertDurableSessionFixtureOmitsHostPaths(t, scenario)
 }
@@ -193,21 +194,6 @@ func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *ope
 			decodeRoundTripJSON(t, raw, &value, scenario.ID+" artifact detail")
 			assertArtifactRetrievalRefSafe(t, value.ContentRef)
 		})
-	}
-}
-
-func assertDurableSessionScenarioEventFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {
-	t.Helper()
-	if len(scenario.Events) == 0 {
-		return
-	}
-	for index, event := range scenario.Events {
-		assertOpenAPIFixtureValidates(t, doc, "FactoryEvent", event)
-		assertGeneratedFixtureRoundTrip(t, event, "FactoryEvent", func(raw []byte) {
-			var value factoryapi.FactoryEvent
-			decodeRoundTripJSON(t, raw, &value, scenario.ID+" event")
-		})
-		assertCanonicalFactoryEventFixtureEntry(t, doc, index, event)
 	}
 }
 
@@ -709,11 +695,12 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 	assertPropertyRef(t, dispatchSummaryProperties, "dispatchKind", "#/components/schemas/FactoryDispatchKind")
 	assertPropertyRef(t, dispatchSummaryProperties, "usage", "#/components/schemas/FactoryDispatchUsage")
 	assertPropertyRef(t, dispatchSummaryProperties, "failureDetail", "#/components/schemas/FactoryDispatchFailureDetail")
+	assertPropertyRef(t, dispatchSummaryProperties, "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
 	assertArrayItemRef(t, dispatchSummaryProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
 	assertArrayItemRef(t, dispatchSummaryProperties, "warnings", "#/components/schemas/FactoryDispatchWarning")
 	assertSchemaPropertiesPresent(t, dispatchSummaryProperties, "FactorySessionDispatchSummary",
 		"id", "status", "dispatchKind", "phase", "label", "attempt", "runnerId", "model", "provider",
-		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail")
+		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail", "javascript")
 
 	dispatchDetailSchema := schemaObject(t, schemas, "FactoryDispatch")
 	dispatchDetailProperties := schemaProperties(t, dispatchDetailSchema, "FactoryDispatch")
@@ -764,6 +751,7 @@ func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas ma
 		{"/factory-sessions/{session_id}/cancel", "cancelFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
 		{"/factory-sessions/{session_id}/terminate", "terminateFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
 		{"/factory-sessions/{session_id}/retry-dispatch", "retryFactorySessionDispatch", "#/components/schemas/FactorySessionRetryDispatchRequest", true},
+		{"/factory-sessions/{session_id}/interrupt-dispatch", "interruptFactorySessionDispatch", "#/components/schemas/FactorySessionInterruptDispatchRequest", true},
 	}
 	for _, route := range lifecycleRoutes {
 		operation := pathOperation(t, paths, route.path, "post")
@@ -783,6 +771,11 @@ func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas ma
 	assertRequestSchemaRef(t, retryOperation, "#/components/schemas/FactorySessionRetryDispatchRequest")
 	retryRequestSchema := schemaObject(t, schemas, "FactorySessionRetryDispatchRequest")
 	assertRequiredFields(t, retryRequestSchema, "dispatchId")
+
+	interruptOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/interrupt-dispatch", "post")
+	assertRequestSchemaRef(t, interruptOperation, "#/components/schemas/FactorySessionInterruptDispatchRequest")
+	interruptRequestSchema := schemaObject(t, schemas, "FactorySessionInterruptDispatchRequest")
+	assertRequiredFields(t, interruptRequestSchema, "dispatchId")
 
 	controlResponseSchema := schemaObject(t, schemas, "FactorySessionLifecycleControlResponse")
 	assertRequiredFields(t, controlResponseSchema, "sessionId", "operation", "outcome", "status")
@@ -807,135 +800,9 @@ func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas ma
 		"session", "results", "dispatches", "artifacts", "events", "status")
 
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionLifecycleControlKind"), "FactorySessionLifecycleControlKind", []string{
-		"APPROVE", "PAUSE", "RESUME", "CANCEL", "TERMINATE", "RETRY_DISPATCH",
+		"APPROVE", "PAUSE", "RESUME", "CANCEL", "TERMINATE", "RETRY_DISPATCH", "INTERRUPT_DISPATCH",
 	})
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionLifecycleControlOutcome"), "FactorySessionLifecycleControlOutcome", []string{
 		"ACCEPTED", "NO_OP", "INVALID_STATE", "TERMINAL_SESSION", "CONFLICT",
 	})
-}
-
-func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
-	t.Helper()
-
-	eventsOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
-	if got, _ := eventsOperation["operationId"].(string); got != "getEventsBySessionId" {
-		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
-	}
-	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
-	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
-	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
-	parameters, ok := eventsOperation["parameters"].([]any)
-	if !ok {
-		t.Fatalf("paths./factory-sessions/{session_id}/events.get.parameters is missing")
-	}
-	assertParameterRef(t, parameters, "#/components/parameters/SessionID")
-	assertParameterRef(t, parameters, "#/components/parameters/AfterEventId")
-	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
-
-	description, _ := eventsOperation["description"].(string)
-	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence"} {
-		if !strings.Contains(description, fragment) {
-			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
-		}
-	}
-
-	globalEventsOperation := pathOperation(t, paths, "/events", "get")
-	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
-	assertResponseRef(t, globalEventsOperation, "400", "#/components/responses/BadRequest")
-	globalParameters, ok := globalEventsOperation["parameters"].([]any)
-	if !ok {
-		t.Fatalf("paths./events.get.parameters is missing")
-	}
-	assertParameterRef(t, globalParameters, "#/components/parameters/AfterEventId")
-	assertParameterRef(t, globalParameters, "#/components/parameters/AfterSequence")
-
-	factoryEvent := schemaObject(t, schemas, "FactoryEvent")
-	assertRequiredFields(t, factoryEvent, "schemaVersion", "id", "type", "context", "payload")
-	factoryEventProperties := schemaProperties(t, factoryEvent, "FactoryEvent")
-	assertPropertyRef(t, factoryEventProperties, "type", "#/components/schemas/FactoryEventType")
-	assertPropertyRef(t, factoryEventProperties, "context", "#/components/schemas/FactoryEventContext")
-
-	eventContext := schemaObject(t, schemas, "FactoryEventContext")
-	eventContextProperties := schemaProperties(t, eventContext, "FactoryEventContext")
-	assertSchemaPropertiesPresent(t, eventContextProperties, "FactoryEventContext", "sessionId", "sessionSequence", "orchestratorKind")
-}
-
-func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) {
-	t.Helper()
-
-	requiredRoutes := map[string][]string{
-		"/factory-sessions/async":                                 {"post"},
-		"/factory-sessions/sync":                                  {"post"},
-		"/factory-sessions":                                         {"get"},
-		"/factory-sessions/{session_id}":                            {"get"},
-		"/factory-sessions/{session_id}/results":                    {"get"},
-		"/factory-sessions/{session_id}/events":                     {"get"},
-		"/factory-sessions/{session_id}/dispatches":                 {"get"},
-		"/factory-sessions/{session_id}/dispatches/{dispatch_id}":   {"get"},
-		"/factory-sessions/{session_id}/artifacts":                  {"get"},
-		"/factory-sessions/{session_id}/artifacts/{artifact_id}":    {"get"},
-		"/factory-sessions/{session_id}/approve":                    {"post"},
-		"/factory-sessions/{session_id}/pause":                      {"post"},
-		"/factory-sessions/{session_id}/resume":                     {"post"},
-		"/factory-sessions/{session_id}/cancel":                     {"post"},
-		"/factory-sessions/{session_id}/terminate":                  {"post"},
-		"/factory-sessions/{session_id}/retry-dispatch":             {"post"},
-	}
-	for path, methods := range requiredRoutes {
-		pathItem, ok := paths[path].(map[string]any)
-		if !ok {
-			t.Fatalf("paths.%s is missing for real-backend session API slice", path)
-		}
-		for _, method := range methods {
-			if _, ok := pathItem[method].(map[string]any); !ok {
-				t.Fatalf("paths.%s.%s is missing for real-backend session API slice", path, method)
-			}
-		}
-	}
-
-	for path := range paths {
-		lower := strings.ToLower(path)
-		if strings.Contains(lower, "workflow-run") || strings.Contains(lower, "workflow-runs") {
-			t.Fatalf("paths.%s must not introduce standalone workflow-run API routes", path)
-		}
-	}
-}
-
-func assertDeferredRealBackendSessionRouteFamilies(t *testing.T, paths map[string]any) {
-	t.Helper()
-
-	deferredRoutes := map[string][]string{}
-	inScopeRoutes := map[string]struct{}{
-		"/factory-sessions/async":                                   {},
-		"/factory-sessions/sync":                                    {},
-		"/factory-sessions":                                         {},
-		"/factory-sessions/{session_id}":                            {},
-		"/factory-sessions/{session_id}/results":                    {},
-		"/factory-sessions/{session_id}/events":                     {},
-		"/factory-sessions/{session_id}/dispatches":                 {},
-		"/factory-sessions/{session_id}/dispatches/{dispatch_id}":   {},
-		"/factory-sessions/{session_id}/artifacts":                  {},
-		"/factory-sessions/{session_id}/artifacts/{artifact_id}":    {},
-		"/factory-sessions/{session_id}/approve":                    {},
-		"/factory-sessions/{session_id}/pause":                      {},
-		"/factory-sessions/{session_id}/resume":                     {},
-		"/factory-sessions/{session_id}/cancel":                     {},
-		"/factory-sessions/{session_id}/terminate":                  {},
-		"/factory-sessions/{session_id}/retry-dispatch":             {},
-	}
-
-	for path, methods := range deferredRoutes {
-		if _, inScope := inScopeRoutes[path]; inScope {
-			t.Fatalf("paths.%s is both in-scope and deferred for the real-backend API slice", path)
-		}
-		pathItem, ok := paths[path].(map[string]any)
-		if !ok {
-			t.Fatalf("paths.%s is missing for deferred real-backend session route family", path)
-		}
-		for _, method := range methods {
-			if _, ok := pathItem[method].(map[string]any); !ok {
-				t.Fatalf("paths.%s.%s is missing for deferred real-backend session route family", path, method)
-			}
-		}
-	}
 }

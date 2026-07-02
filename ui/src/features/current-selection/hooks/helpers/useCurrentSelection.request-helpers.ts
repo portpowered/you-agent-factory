@@ -6,6 +6,8 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
+import { toDashboardAgentRunInspection } from "../../../../api/dashboard/agent-run-inspection-types";
+import { enrichWorkstationRequestWithWorkstationType } from "./useCurrentSelection.workstation-type-helpers";
 
 export type DispatchWorkstationRequest =
   | DashboardRuntimeWorkstationRequest
@@ -27,11 +29,17 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
     | Record<string, DashboardWorkstationRequest>
     | undefined,
 ): Record<string, DashboardWorkstationRequest> | undefined {
+  const inferenceAttemptsByDispatchID =
+    snapshot?.runtime.inference_attempts_by_dispatch_id;
   if (
     workstationRequestsByDispatchID &&
     Object.keys(workstationRequestsByDispatchID).length > 0
   ) {
-    return workstationRequestsByDispatchID;
+    const hydrated = hydrateProjectedInferenceAttempts(
+      workstationRequestsByDispatchID,
+      inferenceAttemptsByDispatchID,
+    );
+    return enrichProjectedWorkstationRequests(hydrated, snapshot);
   }
 
   if (!snapshot?.runtime.workstation_requests_by_dispatch_id) {
@@ -42,13 +50,70 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
     Object.entries(snapshot.runtime.workstation_requests_by_dispatch_id).map(
       ([dispatchID, request]) => [
         dispatchID,
-        toDashboardWorkstationRequest(
-          request,
-          snapshot.runtime.inference_attempts_by_dispatch_id?.[dispatchID],
+        enrichWorkstationRequestWithWorkstationType(
+          toDashboardWorkstationRequest(
+            request,
+            inferenceAttemptsByDispatchID?.[dispatchID],
+          ),
+          snapshot,
         ),
       ],
     ),
   );
+}
+
+function enrichProjectedWorkstationRequests(
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>,
+  snapshot: DashboardSnapshot | null | undefined,
+): Record<string, DashboardWorkstationRequest> {
+  let changed = false;
+  const entries = Object.entries(workstationRequestsByDispatchID).map(
+    ([dispatchID, request]) => {
+      const enriched = enrichWorkstationRequestWithWorkstationType(
+        request,
+        snapshot,
+      );
+      if (enriched !== request) {
+        changed = true;
+      }
+      return [dispatchID, enriched] as const;
+    },
+  );
+
+  return changed ? Object.fromEntries(entries) : workstationRequestsByDispatchID;
+}
+
+function hydrateProjectedInferenceAttempts(
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>,
+  inferenceAttemptsByDispatchID:
+    | Record<string, Record<string, DashboardInferenceAttempt>>
+    | undefined,
+): Record<string, DashboardWorkstationRequest> {
+  if (!inferenceAttemptsByDispatchID) {
+    return workstationRequestsByDispatchID;
+  }
+
+  let hydrated = false;
+  const entries = Object.entries(workstationRequestsByDispatchID).map(
+    ([dispatchID, request]) => {
+      const attempts = inferenceAttemptsByDispatchID[dispatchID];
+      if (request.inference_attempts.length > 0 || !attempts) {
+        return [dispatchID, request] as const;
+      }
+      hydrated = true;
+      return [
+        dispatchID,
+        {
+          ...request,
+          inference_attempts: sortInferenceAttempts(attempts),
+        },
+      ] as const;
+    },
+  );
+
+  return hydrated
+    ? Object.fromEntries(entries)
+    : workstationRequestsByDispatchID;
 }
 
 export function filterProviderSessionAttempts(
@@ -244,6 +309,9 @@ export function toDashboardWorkstationRequest(
       request.request.scriptRequest ?? request.request.script_request,
     script_response:
       request.response?.scriptResponse ?? request.response?.script_response,
+    agent_run_inspection: toDashboardAgentRunInspection(
+      request.response?.agentRunInspection ?? request.response?.agent_run_inspection,
+    ),
     started_at: request.request.startedAt ?? request.request.started_at,
     total_duration_millis:
       request.response?.durationMillis ?? request.response?.duration_millis,

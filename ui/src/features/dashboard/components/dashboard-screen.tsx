@@ -1,14 +1,16 @@
+import { Button } from "../../../components/ui";
 import { useAppLocale } from "../../../i18n";
 import { DashboardBento } from "../../bento/public";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
-import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import {
   DashboardExportDialog,
   DashboardHeader,
   DashboardStatusPanel,
 } from "../../header/public";
+import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { useDashboardWorldView } from "../hooks/useDashboardWorldView";
+import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { DashboardSessionLifecycleBanner } from "./dashboard-session-lifecycle-banner";
 
@@ -28,13 +30,18 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
 
 function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
+  const incrementRefreshToken = useDashboardBentoStore(
+    (state) => state.incrementRefreshToken,
+  );
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
-  const { snapshot, isInitialLoading, error, streamState } = useDashboardSnapshot({
-    locale: resolvedLocale,
-    refreshToken,
-  });
+  const { snapshot, isInitialLoading, error, preflightRecovery, streamState } =
+    useDashboardSnapshot({
+      locale: resolvedLocale,
+      refreshToken,
+    });
   useDashboardWorldView();
   const messages = getHeaderControlsMessages(resolvedLocale);
+  const recoveryMessages = getDashboardRecoveryMessages(resolvedLocale);
 
   if (isInitialLoading) {
     return (
@@ -47,7 +54,60 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
     );
   }
 
+  if (preflightRecovery) {
+    const recoveryCopy = copyForPreflightRecovery(
+      preflightRecovery,
+      recoveryMessages,
+    );
+
+    return (
+      <main className={DASHBOARD_SHELL_CLASS}>
+        <DashboardHeader locale={locale} />
+        <DashboardStatusPanel
+          actions={
+            <Button
+              aria-label={recoveryMessages.preflightRetryAction}
+              onClick={incrementRefreshToken}
+              tone="outline"
+            >
+              {recoveryMessages.preflightRetryAction}
+            </Button>
+          }
+          detail={recoveryCopy.detail}
+          locale={resolvedLocale}
+          title={recoveryCopy.title}
+          tone="error"
+        />
+      </main>
+    );
+  }
+
   if (error instanceof Error) {
+    if (streamState.status === "recovery_failed") {
+      return (
+        <main className={DASHBOARD_SHELL_CLASS}>
+          <DashboardStatusPanel
+            detail={recoveryMessages.recoveryFailedDetail}
+            locale={resolvedLocale}
+            title={recoveryMessages.recoveryFailedTitle}
+            tone="error"
+          />
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={incrementRefreshToken}>
+              {recoveryMessages.recoveryFailedRetryLabel}
+            </Button>
+            <Button
+              onClick={() => {
+                window.location.reload();
+              }}
+              tone="outline"
+            >
+              {recoveryMessages.recoveryFailedRefreshLabel}
+            </Button>
+          </div>
+        </main>
+      );
+    }
     return (
       <main className={DASHBOARD_SHELL_CLASS}>
         <DashboardStatusPanel
@@ -87,4 +147,33 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
       <DashboardExportDialog locale={locale} />
     </main>
   );
+}
+
+function copyForPreflightRecovery(
+  recovery: NonNullable<
+    ReturnType<typeof useDashboardSnapshot>["preflightRecovery"]
+  >,
+  messages: ReturnType<typeof getDashboardRecoveryMessages>,
+): { detail: string; title: string } {
+  if (recovery.reasonCode === "session_not_found") {
+    return {
+      detail: messages.sessionNotFoundDetailTemplate.replace(
+        "{{sessionId}}",
+        recovery.requestedSessionId,
+      ),
+      title: messages.sessionNotFoundTitle,
+    };
+  }
+
+  if (recovery.reasonCode === "logical_session_unresolved") {
+    return {
+      detail: messages.logicalSessionUnresolvedDetail,
+      title: messages.logicalSessionUnresolvedTitle,
+    };
+  }
+
+  return {
+    detail: messages.unknownRecoveryDetail,
+    title: messages.unknownRecoveryTitle,
+  };
 }

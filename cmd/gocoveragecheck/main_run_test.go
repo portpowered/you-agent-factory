@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -128,14 +129,14 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min:             100.1,
-		packageBaseline: emptyPackageCoverageBaselinePath(t),
+		min: 100.1,
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 		}, ","),
-		packages: "./pkg/config",
+		packages:        "./pkg/config",
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
@@ -183,14 +184,14 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min:             80,
-		packageBaseline: emptyPackageCoverageBaselinePath(t),
+		min: 80,
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 		}, ","),
-		packages: "./pkg/config",
+		packages:        "./pkg/config",
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
@@ -596,6 +597,47 @@ func TestRepoRootDirFindsNearestAncestorWithGoMod(t *testing.T) {
 	}
 }
 
+func tempDirOutsideRepo(t *testing.T) string {
+	t.Helper()
+
+	repoRoot := testutil.CanonicalPath(testutil.MustRepoRoot(t))
+	candidates := []string{os.TempDir()}
+	if runtime.GOOS != "windows" {
+		candidates = append(candidates, "/tmp")
+	}
+
+	for _, base := range candidates {
+		tempRoot, err := os.MkdirTemp(base, "gocoveragecheck-*")
+		if err != nil {
+			continue
+		}
+		canonicalTemp := testutil.CanonicalPath(tempRoot)
+		if isPathWithin(canonicalTemp, repoRoot) {
+			if removeErr := os.RemoveAll(tempRoot); removeErr != nil {
+				t.Fatalf("remove in-repo temp dir %q: %v", tempRoot, removeErr)
+			}
+			continue
+		}
+		t.Cleanup(func() {
+			if removeErr := os.RemoveAll(tempRoot); removeErr != nil {
+				t.Fatalf("remove temp dir %q: %v", tempRoot, removeErr)
+			}
+		})
+		return tempRoot
+	}
+
+	t.Fatal("could not create temp dir outside repository")
+	return ""
+}
+
+func isPathWithin(child, parent string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func TestRepoRootDirFailsWhenNoGoModExists(t *testing.T) {
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -607,7 +649,7 @@ func TestRepoRootDirFailsWhenNoGoModExists(t *testing.T) {
 		}
 	}()
 
-	workingDir := filepath.Join(t.TempDir(), "pkg", "service")
+	workingDir := filepath.Join(tempDirOutsideRepo(t), "pkg", "service")
 	if err := os.MkdirAll(workingDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}

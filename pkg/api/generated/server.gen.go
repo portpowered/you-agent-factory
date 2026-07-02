@@ -14,6 +14,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 )
 
+// Defines values for AgentWorkerToolPolicy.
+const (
+	AgentWorkerToolPolicyDISABLED AgentWorkerToolPolicy = "DISABLED"
+	AgentWorkerToolPolicyENABLED  AgentWorkerToolPolicy = "ENABLED"
+	AgentWorkerToolPolicyREADONLY AgentWorkerToolPolicy = "READ_ONLY"
+)
+
 // Defines values for BundledFileType.
 const (
 	BundledFileTypeDOC        BundledFileType = "DOC"
@@ -52,17 +59,18 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	BADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
-	EXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
-	FACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	FACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
-	FACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
-	INTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
-	INVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
-	INVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
-	MOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-	NOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
-	STALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeBADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeFACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	ErrorResponseCodeFACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
+	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeINTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
+	ErrorResponseCodeINVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
+	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryArtifactAuditMode.
@@ -113,10 +121,11 @@ const (
 
 // Defines values for FactoryDispatchStatus.
 const (
-	FactoryDispatchStatusCOMPLETED FactoryDispatchStatus = "COMPLETED"
-	FactoryDispatchStatusFAILED    FactoryDispatchStatus = "FAILED"
-	FactoryDispatchStatusQUEUED    FactoryDispatchStatus = "QUEUED"
-	FactoryDispatchStatusRUNNING   FactoryDispatchStatus = "RUNNING"
+	FactoryDispatchStatusCOMPLETED   FactoryDispatchStatus = "COMPLETED"
+	FactoryDispatchStatusFAILED      FactoryDispatchStatus = "FAILED"
+	FactoryDispatchStatusINTERRUPTED FactoryDispatchStatus = "INTERRUPTED"
+	FactoryDispatchStatusQUEUED      FactoryDispatchStatus = "QUEUED"
+	FactoryDispatchStatusRUNNING     FactoryDispatchStatus = "RUNNING"
 )
 
 // Defines values for FactoryEventSchemaVersion.
@@ -135,6 +144,7 @@ const (
 
 // Defines values for FactoryEventType.
 const (
+	FactoryEventTypeAgentRunResponse              FactoryEventType = "AGENT_RUN_RESPONSE"
 	FactoryEventTypeArtifactCreated               FactoryEventType = "ARTIFACT_CREATED"
 	FactoryEventTypeDispatchInterrupted           FactoryEventType = "DISPATCH_INTERRUPTED"
 	FactoryEventTypeDispatchQueued                FactoryEventType = "DISPATCH_QUEUED"
@@ -158,12 +168,53 @@ const (
 	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
 	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
 	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionLifecycleControl       FactoryEventType = "SESSION_LIFECYCLE_CONTROL"
 	FactoryEventTypeSessionPaused                 FactoryEventType = "SESSION_PAUSED"
 	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
 	FactoryEventTypeSessionResumed                FactoryEventType = "SESSION_RESUMED"
 	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
 	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
+)
+
+// Defines values for FactoryInvocationOutputContractMode.
+const (
+	FactoryInvocationOutputContractModeFile   FactoryInvocationOutputContractMode = "FILE"
+	FactoryInvocationOutputContractModeInline FactoryInvocationOutputContractMode = "INLINE"
+	FactoryInvocationOutputContractModeJson   FactoryInvocationOutputContractMode = "JSON"
+)
+
+// Defines values for FactoryInvocationParameterBindingKind.
+const (
+	FactoryInvocationParameterBindingKindNamed      FactoryInvocationParameterBindingKind = "NAMED"
+	FactoryInvocationParameterBindingKindNamedRest  FactoryInvocationParameterBindingKind = "NAMED_REST"
+	FactoryInvocationParameterBindingKindPositional FactoryInvocationParameterBindingKind = "POSITIONAL"
+	FactoryInvocationParameterBindingKindStdin      FactoryInvocationParameterBindingKind = "STDIN"
+)
+
+// Defines values for FactoryInvocationParameterTypeHint.
+const (
+	FactoryInvocationParameterTypeHintBooleanString FactoryInvocationParameterTypeHint = "BOOLEAN_STRING"
+	FactoryInvocationParameterTypeHintDirectoryPath FactoryInvocationParameterTypeHint = "DIRECTORY_PATH"
+	FactoryInvocationParameterTypeHintFilePath      FactoryInvocationParameterTypeHint = "FILE_PATH"
+	FactoryInvocationParameterTypeHintNumberString  FactoryInvocationParameterTypeHint = "NUMBER_STRING"
+	FactoryInvocationParameterTypeHintPath          FactoryInvocationParameterTypeHint = "PATH"
+	FactoryInvocationParameterTypeHintString        FactoryInvocationParameterTypeHint = "STRING"
+)
+
+// Defines values for FactoryInvocationParameterValueMode.
+const (
+	FactoryInvocationParameterValueModeExact        FactoryInvocationParameterValueMode = "EXACT"
+	FactoryInvocationParameterValueModeFileContents FactoryInvocationParameterValueMode = "FILE_CONTENTS"
+	FactoryInvocationParameterValueModeRepeated     FactoryInvocationParameterValueMode = "REPEATED"
+	FactoryInvocationParameterValueModeVariadic     FactoryInvocationParameterValueMode = "VARIADIC"
+)
+
+// Defines values for FactoryInvocationUnknownNamedArgumentPolicy.
+const (
+	FactoryInvocationUnknownNamedArgumentPolicyAllow   FactoryInvocationUnknownNamedArgumentPolicy = "ALLOW"
+	FactoryInvocationUnknownNamedArgumentPolicyCollect FactoryInvocationUnknownNamedArgumentPolicy = "COLLECT"
+	FactoryInvocationUnknownNamedArgumentPolicyReject  FactoryInvocationUnknownNamedArgumentPolicy = "REJECT"
 )
 
 // Defines values for FactoryLayoutPreferencesDirection.
@@ -221,6 +272,14 @@ const (
 	FactorySessionDurableLifecycleStatusTimedOut         FactorySessionDurableLifecycleStatus = "TIMED_OUT"
 )
 
+// Defines values for FactorySessionEventStreamRecoveryOutcome.
+const (
+	FactorySessionEventStreamRecoveryOutcomeCURSORSTALE    FactorySessionEventStreamRecoveryOutcome = "CURSOR_STALE"
+	FactorySessionEventStreamRecoveryOutcomeINTERNALERROR  FactorySessionEventStreamRecoveryOutcome = "INTERNAL_ERROR"
+	FactorySessionEventStreamRecoveryOutcomeSTREAMREADY    FactorySessionEventStreamRecoveryOutcome = "STREAM_READY"
+	FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION FactorySessionEventStreamRecoveryOutcome = "UNKNOWN_SESSION"
+)
+
 // Defines values for FactorySessionExecutionSourceKind.
 const (
 	FactorySessionExecutionSourceKindFactoryId      FactorySessionExecutionSourceKind = "FACTORY_ID"
@@ -241,12 +300,13 @@ const (
 
 // Defines values for FactorySessionLifecycleControlKind.
 const (
-	FactorySessionLifecycleControlKindApprove       FactorySessionLifecycleControlKind = "APPROVE"
-	FactorySessionLifecycleControlKindCancel        FactorySessionLifecycleControlKind = "CANCEL"
-	FactorySessionLifecycleControlKindPause         FactorySessionLifecycleControlKind = "PAUSE"
-	FactorySessionLifecycleControlKindResume        FactorySessionLifecycleControlKind = "RESUME"
-	FactorySessionLifecycleControlKindRetryDispatch FactorySessionLifecycleControlKind = "RETRY_DISPATCH"
-	FactorySessionLifecycleControlKindTerminate     FactorySessionLifecycleControlKind = "TERMINATE"
+	FactorySessionLifecycleControlKindApprove           FactorySessionLifecycleControlKind = "APPROVE"
+	FactorySessionLifecycleControlKindCancel            FactorySessionLifecycleControlKind = "CANCEL"
+	FactorySessionLifecycleControlKindInterruptDispatch FactorySessionLifecycleControlKind = "INTERRUPT_DISPATCH"
+	FactorySessionLifecycleControlKindPause             FactorySessionLifecycleControlKind = "PAUSE"
+	FactorySessionLifecycleControlKindResume            FactorySessionLifecycleControlKind = "RESUME"
+	FactorySessionLifecycleControlKindRetryDispatch     FactorySessionLifecycleControlKind = "RETRY_DISPATCH"
+	FactorySessionLifecycleControlKindTerminate         FactorySessionLifecycleControlKind = "TERMINATE"
 )
 
 // Defines values for FactorySessionLifecycleControlOutcome.
@@ -294,6 +354,15 @@ const (
 	FactorySessionSyncExecutionOutcomeTimedOut     FactorySessionSyncExecutionOutcome = "TIMED_OUT"
 )
 
+// Defines values for FactorySessionSyncPreflightReasonCode.
+const (
+	CursorStale              FactorySessionSyncPreflightReasonCode = "cursor_stale"
+	LogicalSessionRemap      FactorySessionSyncPreflightReasonCode = "logical_session_remap"
+	LogicalSessionUnresolved FactorySessionSyncPreflightReasonCode = "logical_session_unresolved"
+	Ok                       FactorySessionSyncPreflightReasonCode = "ok"
+	SessionNotFound          FactorySessionSyncPreflightReasonCode = "session_not_found"
+)
+
 // Defines values for FactorySessionTargetRefKind.
 const (
 	FactorySessionTargetRefKindDefault FactorySessionTargetRefKind = "default"
@@ -316,6 +385,14 @@ const (
 	FactoryStateIdle      FactoryState = "IDLE"
 	FactoryStatePaused    FactoryState = "PAUSED"
 	FactoryStateRunning   FactoryState = "RUNNING"
+)
+
+// Defines values for FactoryStopKind.
+const (
+	BLOCKED     FactoryStopKind = "BLOCKED"
+	INTERRUPTED FactoryStopKind = "INTERRUPTED"
+	NEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
+	PAUSED      FactoryStopKind = "PAUSED"
 )
 
 // Defines values for FactoryValidationSeverity.
@@ -426,7 +503,11 @@ const (
 
 // Defines values for InvocationResponseErrorCode.
 const (
+	INVOCATIONBLOCKED                 InvocationResponseErrorCode = "INVOCATION_BLOCKED"
 	INVOCATIONCANCELED                InvocationResponseErrorCode = "INVOCATION_CANCELED"
+	INVOCATIONINTERRUPTED             InvocationResponseErrorCode = "INVOCATION_INTERRUPTED"
+	INVOCATIONNEEDSHUMAN              InvocationResponseErrorCode = "INVOCATION_NEEDS_HUMAN"
+	INVOCATIONPAUSED                  InvocationResponseErrorCode = "INVOCATION_PAUSED"
 	INVOCATIONPRIMARYRESULTUNRESOLVED InvocationResponseErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
 	INVOCATIONRUNTIMEFAILURE          InvocationResponseErrorCode = "INVOCATION_RUNTIME_FAILURE"
 	INVOCATIONTIMEDOUT                InvocationResponseErrorCode = "INVOCATION_TIMED_OUT"
@@ -595,6 +676,11 @@ const (
 	RunnerSelectionSourceWorkstation    RunnerSelectionSource = "workstation"
 )
 
+// Defines values for SafeAgentRunDiagnosticExecutionBehavior.
+const (
+	AgentRun SafeAgentRunDiagnosticExecutionBehavior = "agent_run"
+)
+
 // Defines values for ScriptExecutionOutcome.
 const (
 	ScriptExecutionOutcomeFailedExitCode ScriptExecutionOutcome = "FAILED_EXIT_CODE"
@@ -725,6 +811,11 @@ const (
 	WorkstationKindStandard WorkstationKind = "STANDARD"
 )
 
+// Defines values for WorkstationOutcomeFormat.
+const (
+	WorkstationOutcomeFormatDecisionEnvelope WorkstationOutcomeFormat = "decision-envelope"
+)
+
 // Defines values for WorkstationType.
 const (
 	WorkstationTypeAgentRun              WorkstationType = "AGENT_RUN"
@@ -746,6 +837,51 @@ const (
 const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
+
+// AgentRunResponseEventPayload Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
+type AgentRunResponseEventPayload struct {
+	// AgentRunId Stable identifier for this agent-run boundary event.
+	AgentRunId string `json:"agentRunId"`
+
+	// Diagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
+	Diagnostics *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+
+	// DurationMillis Agent-loop execution duration in milliseconds.
+	DurationMillis int64 `json:"durationMillis"`
+
+	// Outcome Result category returned by a workstation execution.
+	Outcome WorkOutcome `json:"outcome"`
+}
+
+// AgentRunToolDiagnosticEntry Bounded summary for one agent tool lifecycle event.
+type AgentRunToolDiagnosticEntry struct {
+	// Detail Safe diagnostic detail without raw process output or secrets.
+	Detail *string `json:"detail,omitempty"`
+
+	// Phase Tool lifecycle phase such as start, success, failure, or denied.
+	Phase *string `json:"phase,omitempty"`
+
+	// ToolName Tool name invoked by the agent loop.
+	ToolName *string `json:"toolName,omitempty"`
+}
+
+// AgentRunTranscriptEntry Bounded transcript metadata for one agent-loop message without exposing full prompt bodies.
+type AgentRunTranscriptEntry struct {
+	// Role Message role such as system, user, assistant, or tool.
+	Role *string `json:"role,omitempty"`
+
+	// Summary Bounded summary of the message content for inspection.
+	Summary *string `json:"summary,omitempty"`
+}
+
+// AgentWorkerToolPolicy Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+type AgentWorkerToolPolicy string
+
+// AgentWorkerToolsConfig Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+type AgentWorkerToolsConfig struct {
+	// Policy Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+	Policy AgentWorkerToolPolicy `json:"policy"`
+}
 
 // ArtifactCreatedEventPayload Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload.
 type ArtifactCreatedEventPayload struct {
@@ -1010,6 +1146,9 @@ type Factory struct {
 	// InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
 	InvocationReturn *InvocationReturn `json:"invocationReturn,omitempty"`
 
+	// InvocationSignature Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+	InvocationSignature *FactoryInvocationSignature `json:"invocationSignature,omitempty"`
+
 	// Layout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
 	Layout   *FactoryLayout `json:"layout,omitempty"`
 	Metadata *StringMap     `json:"metadata,omitempty"`
@@ -1177,9 +1316,12 @@ type FactoryDispatch struct {
 	SessionId string `json:"sessionId"`
 
 	// Status Canonical dispatch lifecycle status shared across orchestrators.
-	Status   FactoryDispatchStatus     `json:"status"`
-	Usage    *FactoryDispatchUsage     `json:"usage,omitempty"`
-	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
+	Status FactoryDispatchStatus `json:"status"`
+
+	// StatusTransitions Ordered durable status history observed for the dispatch.
+	StatusTransitions *[]FactoryDispatchStatus  `json:"statusTransitions,omitempty"`
+	Usage             *FactoryDispatchUsage     `json:"usage,omitempty"`
+	Warnings          *[]FactoryDispatchWarning `json:"warnings,omitempty"`
 }
 
 // FactoryDispatchFailureDetail defines model for FactoryDispatchFailureDetail.
@@ -1196,6 +1338,9 @@ type FactoryDispatchFailureDetail struct {
 
 // FactoryDispatchJavaScriptProjection defines model for FactoryDispatchJavaScriptProjection.
 type FactoryDispatchJavaScriptProjection struct {
+	// ExecutionMode Durable child execution mode recorded for the JavaScript workflow task when available.
+	ExecutionMode *string `json:"executionMode,omitempty"`
+
 	// TaskKind JavaScript workflow task kind for one child dispatch.
 	TaskKind FactoryDispatchJavaScriptTaskKind `json:"taskKind"`
 
@@ -1340,6 +1485,117 @@ type FactoryGuard struct {
 	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
 	Type GuardType `json:"type"`
 }
+
+// FactoryInvocationExample One example invocation for docs, help, and packaged-factory inspection.
+type FactoryInvocationExample struct {
+	// Argv CLI-style argument vector rendered after factory selection.
+	Argv *[]string `json:"argv,omitempty"`
+
+	// Description Customer-facing explanation of what the example does.
+	Description *string `json:"description,omitempty"`
+
+	// Name Stable example name.
+	Name string `json:"name"`
+
+	// Stdin Example stdin payload when the signature routes stdin into one parameter.
+	Stdin *string `json:"stdin,omitempty"`
+}
+
+// FactoryInvocationOutputContract Customer-facing output hint for a factory invocation signature.
+type FactoryInvocationOutputContract struct {
+	// ContentType Output media type hint for docs, API consumers, and dashboard affordances.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Description Human-readable summary of the primary output contract.
+	Description *string `json:"description,omitempty"`
+
+	// FileExtension Suggested file extension when the output mode writes a file.
+	FileExtension *string `json:"fileExtension,omitempty"`
+
+	// Mode High-level output shape hint exposed by a factory invocation signature.
+	Mode *FactoryInvocationOutputContractMode `json:"mode,omitempty"`
+
+	// PathParameter Parameter name that controls the destination path when the factory writes output to disk.
+	PathParameter *string `json:"pathParameter,omitempty"`
+}
+
+// FactoryInvocationOutputContractMode High-level output shape hint exposed by a factory invocation signature.
+type FactoryInvocationOutputContractMode string
+
+// FactoryInvocationParameter One canonical invocation parameter declared on a factory.
+type FactoryInvocationParameter struct {
+	// Aliases Additional accepted named-argument keys that normalize to this parameter.
+	Aliases *[]string `json:"aliases,omitempty"`
+
+	// Bindings Accepted invocation bindings for this parameter across positional, named, and stdin sources.
+	Bindings *[]FactoryInvocationParameterBinding `json:"bindings,omitempty"`
+
+	// Choices Optional allowed string values for this parameter.
+	Choices *[]string `json:"choices,omitempty"`
+
+	// DefaultValue Default string value used when an omitted parameter resolves to one effective value.
+	DefaultValue *string `json:"defaultValue,omitempty"`
+
+	// DefaultValues Default string values used when an omitted parameter resolves to multiple effective values.
+	DefaultValues *[]string `json:"defaultValues,omitempty"`
+
+	// Description Customer-facing description rendered in help, docs, and form controls.
+	Description *string `json:"description,omitempty"`
+
+	// ExternalName Preferred named-argument key shown to callers, such as `output`.
+	ExternalName *string `json:"externalName,omitempty"`
+
+	// Name Internal canonical parameter name used for normalized argument maps and interpolation.
+	Name string `json:"name"`
+
+	// Required When true, invocation normalization must reject requests that omit this parameter.
+	Required *bool `json:"required,omitempty"`
+
+	// Sensitive When true, diagnostics must preserve names and source metadata but redact concrete values.
+	Sensitive *bool `json:"sensitive,omitempty"`
+
+	// TypeHint String-first parsing and UI hint for one factory invocation parameter.
+	TypeHint *FactoryInvocationParameterTypeHint `json:"typeHint,omitempty"`
+
+	// ValueMode Declares how one invocation parameter consumes one or more string values.
+	ValueMode *FactoryInvocationParameterValueMode `json:"valueMode,omitempty"`
+}
+
+// FactoryInvocationParameterBinding One public binding that exposes a parameter to callers.
+type FactoryInvocationParameterBinding struct {
+	// Kind Public invocation binding kinds supported by factory signatures.
+	Kind FactoryInvocationParameterBindingKind `json:"kind"`
+
+	// Position 1-based positional slot used when kind is POSITIONAL.
+	Position *int `json:"position,omitempty"`
+}
+
+// FactoryInvocationParameterBindingKind Public invocation binding kinds supported by factory signatures.
+type FactoryInvocationParameterBindingKind string
+
+// FactoryInvocationParameterTypeHint String-first parsing and UI hint for one factory invocation parameter.
+type FactoryInvocationParameterTypeHint string
+
+// FactoryInvocationParameterValueMode Declares how one invocation parameter consumes one or more string values.
+type FactoryInvocationParameterValueMode string
+
+// FactoryInvocationSignature Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+type FactoryInvocationSignature struct {
+	// Examples Example invocations rendered in docs, help, and inspection surfaces.
+	Examples *[]FactoryInvocationExample `json:"examples,omitempty"`
+
+	// OutputContract Customer-facing output hint for a factory invocation signature.
+	OutputContract *FactoryInvocationOutputContract `json:"outputContract,omitempty"`
+
+	// Parameters Declared invocation parameters keyed by canonical parameter name.
+	Parameters *[]FactoryInvocationParameter `json:"parameters,omitempty"`
+
+	// UnknownNamedArgumentPolicy Policy for named inputs that do not match any declared parameter binding.
+	UnknownNamedArgumentPolicy *FactoryInvocationUnknownNamedArgumentPolicy `json:"unknownNamedArgumentPolicy,omitempty"`
+}
+
+// FactoryInvocationUnknownNamedArgumentPolicy Policy for named inputs that do not match any declared parameter binding.
+type FactoryInvocationUnknownNamedArgumentPolicy string
 
 // FactoryLayout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
 type FactoryLayout struct {
@@ -1711,7 +1967,7 @@ type FactorySessionBudgets struct {
 	MaxAgents *int `json:"maxAgents,omitempty"`
 }
 
-// FactorySessionDispatchSummary Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections.
+// FactorySessionDispatchSummary Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
 type FactorySessionDispatchSummary struct {
 	// Attempt One-based attempt number for retried dispatches.
 	Attempt *int32 `json:"attempt,omitempty"`
@@ -1721,7 +1977,8 @@ type FactorySessionDispatchSummary struct {
 	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
 
 	// Id Stable dispatch identifier.
-	Id string `json:"id"`
+	Id         string                               `json:"id"`
+	Javascript *FactoryDispatchJavaScriptProjection `json:"javascript,omitempty"`
 
 	// Label Customer-visible dispatch label.
 	Label *string `json:"label,omitempty"`
@@ -1757,6 +2014,9 @@ type FactorySessionDurableActionAvailability struct {
 
 	// CanCancel True when cancel is currently valid for the session status.
 	CanCancel *bool `json:"canCancel,omitempty"`
+
+	// CanInterruptDispatch True when interrupt-dispatch is currently valid for the session status.
+	CanInterruptDispatch *bool `json:"canInterruptDispatch,omitempty"`
 
 	// CanPause True when pause is currently valid for the session status.
 	CanPause *bool `json:"canPause,omitempty"`
@@ -1978,6 +2238,28 @@ type FactorySessionEffectivePolicy struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// FactorySessionEventStreamRecovery defines model for FactorySessionEventStreamRecovery.
+type FactorySessionEventStreamRecovery struct {
+	// FactorySessionId Session identifier for the event stream being probed.
+	FactorySessionId string `json:"factorySessionId"`
+
+	// Outcome Structured session event reconnect probe outcome for one session-scoped event stream.
+	Outcome FactorySessionEventStreamRecoveryOutcome `json:"outcome"`
+	Retry   FactorySessionEventStreamRecoveryRetry   `json:"retry"`
+}
+
+// FactorySessionEventStreamRecoveryOutcome Structured session event reconnect probe outcome for one session-scoped event stream.
+type FactorySessionEventStreamRecoveryOutcome string
+
+// FactorySessionEventStreamRecoveryRetry defines model for FactorySessionEventStreamRecoveryRetry.
+type FactorySessionEventStreamRecoveryRetry struct {
+	// OmitAfterEventId True when the next reconnect must omit after_event_id and replay from the start of the session stream.
+	OmitAfterEventId bool `json:"omitAfterEventId"`
+
+	// OmitAfterSequence True when the next reconnect must omit after_sequence and replay from the start of the session stream.
+	OmitAfterSequence bool `json:"omitAfterSequence"`
+}
+
 // FactorySessionExecutionInlineWorkflow Inline workflow source carried directly in a durable execution request.
 type FactorySessionExecutionInlineWorkflow struct {
 	// Dialect Optional JavaScript workflow dialect label for the inline source.
@@ -2096,6 +2378,18 @@ type FactorySessionExecutionWaitOptions struct {
 // FactorySessionGetResponse Factory session inspection response. Live workspace sessions return the existing FactorySession projection. Durable execution sessions return the durable read model.
 type FactorySessionGetResponse struct {
 	union json.RawMessage
+}
+
+// FactorySessionInterruptDispatchRequest Interrupt request for one active durable factory-session dispatch.
+type FactorySessionInterruptDispatchRequest struct {
+	// DispatchId Stable dispatch identifier to interrupt within the targeted session.
+	DispatchId string `json:"dispatchId"`
+
+	// Reason Optional operator-provided reason for audit and diagnostics.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestId Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation.
+	RequestId *string `json:"requestId,omitempty"`
 }
 
 // FactorySessionJavaScriptCheckpointRef defines model for FactorySessionJavaScriptCheckpointRef.
@@ -2419,12 +2713,29 @@ type FactorySessionRuntime struct {
 	SourceRef *string `json:"sourceRef,omitempty"`
 
 	// Status Canonical lifecycle status for one live factory session runtime.
-	Status FactorySessionStatus `json:"status"`
-	Usage  FactorySessionUsage  `json:"usage"`
+	Status         FactorySessionStatus          `json:"status"`
+	StopSummary    *FactoryStopSummary           `json:"stopSummary,omitempty"`
+	StreamIdentity *FactorySessionStreamIdentity `json:"streamIdentity,omitempty"`
+	Usage          FactorySessionUsage           `json:"usage"`
 }
 
 // FactorySessionStatus Canonical lifecycle status for one live factory session runtime.
 type FactorySessionStatus string
+
+// FactorySessionStreamIdentity defines model for FactorySessionStreamIdentity.
+type FactorySessionStreamIdentity struct {
+	// BackendScopeID Stable backend process or scope identity for the current live session stream.
+	BackendScopeID string `json:"backendScopeID"`
+
+	// FactorySessionID Stable live Factory Session identifier for the current stream.
+	FactorySessionID string `json:"factorySessionID"`
+
+	// LogicalSessionKeyID Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+	LogicalSessionKeyID string `json:"logicalSessionKeyID"`
+
+	// StreamGenerationID Stable generation identifier for the current live session stream incarnation.
+	StreamGenerationID string `json:"streamGenerationID"`
+}
 
 // FactorySessionSummary defines model for FactorySessionSummary.
 type FactorySessionSummary struct {
@@ -2485,6 +2796,50 @@ type FactorySessionSyncExecutionResponse struct {
 	TimedOut *bool `json:"timedOut,omitempty"`
 }
 
+// FactorySessionSyncPreflightReasonCode Stable backend-owned session sync preflight outcome code.
+type FactorySessionSyncPreflightReasonCode string
+
+// FactorySessionSyncPreflightReconnectCursor defines model for FactorySessionSyncPreflightReconnectCursor.
+type FactorySessionSyncPreflightReconnectCursor struct {
+	// AfterEventId Optional acknowledged FactoryEvent.id supplied by the client.
+	AfterEventId *string `json:"afterEventId,omitempty"`
+
+	// AfterSequence Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.
+	AfterSequence *int64 `json:"afterSequence,omitempty"`
+
+	// Provided True when the client supplied at least one reconnect cursor field for validation.
+	Provided bool `json:"provided"`
+
+	// ValidForStreamGeneration True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session.
+	ValidForStreamGeneration bool `json:"validForStreamGeneration"`
+}
+
+// FactorySessionSyncPreflightResponse Typed session sync preflight response used before restoring cached dashboard
+// checkpoint state or opening the session event stream with a reconnect cursor.
+type FactorySessionSyncPreflightResponse struct {
+	// BackendScopeId Canonical backend scope identifier for the current server-owned session cache and event history scope.
+	BackendScopeId *string `json:"backendScopeId,omitempty"`
+
+	// CheckpointReusable True when cached stream-derived checkpoint state is safe to restore for the resolved identity set.
+	CheckpointReusable bool `json:"checkpointReusable"`
+
+	// FactorySessionId Resolved live Factory Session identifier for the current preflight target. Clients must persist this value rather than treating `~default` as a durable session identifier.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
+	// LogicalSessionKeyId Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+	LogicalSessionKeyId *string `json:"logicalSessionKeyId,omitempty"`
+
+	// ReasonCode Stable backend-owned session sync preflight outcome code.
+	ReasonCode      FactorySessionSyncPreflightReasonCode      `json:"reasonCode"`
+	ReconnectCursor FactorySessionSyncPreflightReconnectCursor `json:"reconnectCursor"`
+
+	// RequestedSessionId Session selector requested by the client. This may be `~default`.
+	RequestedSessionId string `json:"requestedSessionId"`
+
+	// StreamGenerationId Canonical event-stream generation identifier for the resolved live Factory Session.
+	StreamGenerationId *string `json:"streamGenerationId,omitempty"`
+}
+
 // FactorySessionTarget defines model for FactorySessionTarget.
 type FactorySessionTarget struct {
 	FactoryDir string                  `json:"factoryDir"`
@@ -2525,6 +2880,65 @@ type FactoryStateResponseEventPayload struct {
 	State FactoryState `json:"state"`
 }
 
+// FactoryStopDispatchSummary defines model for FactoryStopDispatchSummary.
+type FactoryStopDispatchSummary struct {
+	// DispatchId Stable dispatch identifier that most directly explains the stopped state.
+	DispatchId string `json:"dispatchId"`
+
+	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
+
+	// FailureMessage Human-readable failure or interruption detail from the latest relevant dispatch when available.
+	FailureMessage *string `json:"failureMessage,omitempty"`
+
+	// FailureReason Stable failure or interruption reason when one is available from the latest relevant dispatch.
+	FailureReason *string `json:"failureReason,omitempty"`
+
+	// Status Canonical dispatch lifecycle status shared across orchestrators.
+	Status FactoryDispatchStatus `json:"status"`
+
+	// WorkstationName Customer-authored workstation name when one existing workstation run explains the stop.
+	WorkstationName *string `json:"workstationName,omitempty"`
+}
+
+// FactoryStopKind Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+type FactoryStopKind string
+
+// FactoryStopSummary defines model for FactoryStopSummary.
+type FactoryStopSummary struct {
+	LatestDispatch *FactoryStopDispatchSummary `json:"latestDispatch,omitempty"`
+
+	// LatestResultSummary Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.
+	LatestResultSummary *string `json:"latestResultSummary,omitempty"`
+
+	// SessionId Stable Factory Session identifier that owns the stopped work.
+	SessionId string `json:"sessionId"`
+
+	// SessionLifecycleStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	SessionLifecycleStatus *FactorySessionDurableLifecycleStatus `json:"sessionLifecycleStatus,omitempty"`
+
+	// StopKind Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+	StopKind FactoryStopKind `json:"stopKind"`
+
+	// SuggestedRecoveryAction Human-readable next step that names the existing work or session action the operator should take to recover or continue automation.
+	SuggestedRecoveryAction *string `json:"suggestedRecoveryAction,omitempty"`
+
+	// SuggestedRecoverySurface Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route.
+	SuggestedRecoverySurface *string `json:"suggestedRecoverySurface,omitempty"`
+
+	// WorkId Relevant work identifier when one work item best explains the stop.
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkName Relevant work name when one work item best explains the stop.
+	WorkName *string `json:"workName,omitempty"`
+
+	// WorkState Current authored work state label such as `goal:blocked` when one work item best explains the stop.
+	WorkState *string `json:"workState,omitempty"`
+
+	// WorkTypeName Relevant work type name when one work item best explains the stop.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
+}
+
 // FactoryValidationResult defines model for FactoryValidationResult.
 type FactoryValidationResult struct {
 	// Targets Canonical validation targets for the submitted factory definition.
@@ -2563,6 +2977,44 @@ type FactoryValidationTarget struct {
 	// Severity Validation severity for one factory validation target.
 	Severity FactoryValidationSeverity `json:"severity"`
 	Subject  FactoryValidationSubject  `json:"subject"`
+}
+
+// FactoryWorldAgentRunInspectionView Customer-visible agent-run inspection for one workstation dispatch response.
+type FactoryWorldAgentRunInspectionView struct {
+	// ExecutionBehavior Stable execution behavior marker for agent-loop runs.
+	ExecutionBehavior *string `json:"executionBehavior,omitempty"`
+
+	// FailureClass Stable agent-run failure class when execution failed.
+	FailureClass *string `json:"failureClass,omitempty"`
+
+	// RecoveryAction Customer-visible recovery guidance for actionable agent-run failures.
+	RecoveryAction *string `json:"recoveryAction,omitempty"`
+
+	// ToolCallCount Number of recorded tool lifecycle events for the run.
+	ToolCallCount *int32 `json:"toolCallCount,omitempty"`
+
+	// ToolDiagnostics Bounded tool diagnostics separate from final agent output.
+	ToolDiagnostics *[]AgentRunToolDiagnosticEntry `json:"toolDiagnostics,omitempty"`
+
+	// ToolPolicy Effective agent tool policy for the run.
+	ToolPolicy *string `json:"toolPolicy,omitempty"`
+
+	// Transcript Bounded transcript metadata separate from tool diagnostics and final output.
+	Transcript *[]AgentRunTranscriptEntry `json:"transcript,omitempty"`
+}
+
+// FactoryWorldInvocationDiagnostic defines model for FactoryWorldInvocationDiagnostic.
+type FactoryWorldInvocationDiagnostic struct {
+	Parameters    *[]FactoryWorldInvocationParameterDiagnostic `json:"parameters,omitempty"`
+	SignatureHash *string                                      `json:"signatureHash,omitempty"`
+}
+
+// FactoryWorldInvocationParameterDiagnostic defines model for FactoryWorldInvocationParameterDiagnostic.
+type FactoryWorldInvocationParameterDiagnostic struct {
+	Name        *string   `json:"name,omitempty"`
+	Redacted    *bool     `json:"redacted,omitempty"`
+	SourceKinds *[]string `json:"sourceKinds,omitempty"`
+	ValueCount  *int64    `json:"valueCount,omitempty"`
 }
 
 // FactoryWorldMutationView defines model for FactoryWorldMutationView.
@@ -2660,6 +3112,9 @@ type FactoryWorldTokenView struct {
 
 // FactoryWorldWorkDiagnostics defines model for FactoryWorldWorkDiagnostics.
 type FactoryWorldWorkDiagnostics struct {
+	// AgentRun Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+	AgentRun       *SafeAgentRunDiagnostic               `json:"agentRun,omitempty"`
+	Invocation     *FactoryWorldInvocationDiagnostic     `json:"invocation,omitempty"`
 	Provider       *FactoryWorldProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *FactoryWorldRenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
@@ -2743,17 +3198,19 @@ type FactoryWorldWorkstationRequestRequestView struct {
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
-	DurationMillis              *int64                          `json:"durationMillis,omitempty"`
-	EndTime                     *time.Time                      `json:"endTime,omitempty"`
-	FailureMessage              *string                         `json:"failureMessage,omitempty"`
-	FailureReason               *string                         `json:"failureReason,omitempty"`
-	Feedback                    *string                         `json:"feedback,omitempty"`
-	Outcome                     *string                         `json:"outcome,omitempty"`
-	OutputMutations             *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
-	OutputWorkItems             *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
-	Runner                      *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
-	ScriptResponse              *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
-	SelectedClassificationLabel *string                         `json:"selectedClassificationLabel,omitempty"`
+	// AgentRunInspection Customer-visible agent-run inspection for one workstation dispatch response.
+	AgentRunInspection          *FactoryWorldAgentRunInspectionView `json:"agentRunInspection,omitempty"`
+	DurationMillis              *int64                              `json:"durationMillis,omitempty"`
+	EndTime                     *time.Time                          `json:"endTime,omitempty"`
+	FailureMessage              *string                             `json:"failureMessage,omitempty"`
+	FailureReason               *string                             `json:"failureReason,omitempty"`
+	Feedback                    *string                             `json:"feedback,omitempty"`
+	Outcome                     *string                             `json:"outcome,omitempty"`
+	OutputMutations             *[]FactoryWorldMutationView         `json:"outputMutations,omitempty"`
+	OutputWorkItems             *[]FactoryWorldWorkItemRef          `json:"outputWorkItems,omitempty"`
+	Runner                      *FactoryWorldSelectedRunnerView     `json:"runner,omitempty"`
+	ScriptResponse              *FactoryWorldScriptResponseView     `json:"scriptResponse,omitempty"`
+	SelectedClassificationLabel *string                             `json:"selectedClassificationLabel,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestView defines model for FactoryWorldWorkstationRequestView.
@@ -2922,19 +3379,36 @@ type InputType struct {
 // IntegerMap defines model for IntegerMap.
 type IntegerMap map[string]int
 
+// InvocationDiagnostic defines model for InvocationDiagnostic.
+type InvocationDiagnostic struct {
+	Parameters    *[]InvocationParameterDiagnostic `json:"parameters,omitempty"`
+	SignatureHash *string                          `json:"signatureHash,omitempty"`
+}
+
 // InvocationInputSourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
 type InvocationInputSourceKind string
 
+// InvocationParameterDiagnostic defines model for InvocationParameterDiagnostic.
+type InvocationParameterDiagnostic struct {
+	Name        *string   `json:"name,omitempty"`
+	Redacted    *bool     `json:"redacted,omitempty"`
+	SourceKinds *[]string `json:"sourceKinds,omitempty"`
+	ValueCount  *int64    `json:"valueCount,omitempty"`
+}
+
 // InvocationRequest defines model for InvocationRequest.
 type InvocationRequest struct {
+	// Args Optional structured invocation arguments keyed by parameter name, externalName, or alias. Values must decode as a string or an array of strings. Signature-backed runtimes normalize these values through the shared backend argument resolver. Compatibility `content` requests should omit `args`.
+	Args *map[string]interface{} `json:"args,omitempty"`
+
 	// Content Ordered canonical content parts for one work item.
-	Content WorkContent `json:"content"`
+	Content *WorkContent `json:"content,omitempty"`
 
 	// RequestId Optional caller-supplied idempotency key for the invocation request.
 	RequestId *string `json:"requestId,omitempty"`
 
 	// SourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
-	SourceKind InvocationInputSourceKind `json:"sourceKind"`
+	SourceKind *InvocationInputSourceKind `json:"sourceKind,omitempty"`
 
 	// TimeoutMillis Optional caller timeout budget in milliseconds for waiting on the primary result.
 	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
@@ -2954,11 +3428,23 @@ type InvocationResponse struct {
 	// RequestId Stable invocation request identifier assigned or accepted by the server.
 	RequestId string `json:"requestId"`
 
+	// SessionId Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
+	SessionId *string `json:"sessionId,omitempty"`
+
 	// Status Terminal status for a factory-session invocation.
 	Status InvocationTerminalStatus `json:"status"`
 
 	// TraceId Trace identifier for the work submitted by this invocation.
 	TraceId string `json:"traceId"`
+
+	// WorkId Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition.
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkName Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition.
+	WorkName *string `json:"workName,omitempty"`
+
+	// WorkState Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
+	WorkState *string `json:"workState,omitempty"`
 }
 
 // InvocationResponseErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
@@ -3987,8 +4473,38 @@ type RunnerID string
 // RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
 type RunnerSelectionSource string
 
+// SafeAgentRunDiagnostic Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+type SafeAgentRunDiagnostic struct {
+	// ExecutionBehavior Stable execution behavior marker for agent-loop runs.
+	ExecutionBehavior *SafeAgentRunDiagnosticExecutionBehavior `json:"executionBehavior,omitempty"`
+
+	// FailureClass Stable agent-run failure class when execution failed.
+	FailureClass *string `json:"failureClass,omitempty"`
+
+	// RecoveryAction Customer-visible recovery guidance for actionable agent-run failures.
+	RecoveryAction *string `json:"recoveryAction,omitempty"`
+
+	// ToolCallCount Number of recorded tool lifecycle events for the run.
+	ToolCallCount *int32 `json:"toolCallCount,omitempty"`
+
+	// ToolDiagnostics Bounded tool diagnostics separate from final agent output.
+	ToolDiagnostics *[]AgentRunToolDiagnosticEntry `json:"toolDiagnostics,omitempty"`
+
+	// ToolPolicy Effective agent tool policy for the run.
+	ToolPolicy *string `json:"toolPolicy,omitempty"`
+
+	// Transcript Bounded transcript metadata separate from tool diagnostics and final output.
+	Transcript *[]AgentRunTranscriptEntry `json:"transcript,omitempty"`
+}
+
+// SafeAgentRunDiagnosticExecutionBehavior Stable execution behavior marker for agent-loop runs.
+type SafeAgentRunDiagnosticExecutionBehavior string
+
 // SafeWorkDiagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
 type SafeWorkDiagnostics struct {
+	// AgentRun Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+	AgentRun       *SafeAgentRunDiagnostic   `json:"agentRun,omitempty"`
+	Invocation     *InvocationDiagnostic     `json:"invocation,omitempty"`
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
@@ -4072,6 +4588,27 @@ type SessionCompletedEventPayload struct {
 
 	// ResultStatus Customer-visible session result availability for result update events.
 	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
+}
+
+// SessionLifecycleControlEventPayload Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+type SessionLifecycleControlEventPayload struct {
+	// NewStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	NewStatus FactorySessionDurableLifecycleStatus `json:"newStatus"`
+
+	// OccurredAt When the lifecycle control took effect.
+	OccurredAt time.Time `json:"occurredAt"`
+
+	// Operation Durable factory-session lifecycle control operation requested by the client.
+	Operation FactorySessionLifecycleControlKind `json:"operation"`
+
+	// Outcome Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
+	Outcome FactorySessionLifecycleControlOutcome `json:"outcome"`
+
+	// PreviousStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	PreviousStatus FactorySessionDurableLifecycleStatus `json:"previousStatus"`
+
+	// Reason Optional operator-provided reason for the control request.
+	Reason *string `json:"reason,omitempty"`
 }
 
 // SessionPausedEventPayload Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
@@ -4426,8 +4963,9 @@ type Work struct {
 	RequestId *string `json:"requestId,omitempty"`
 
 	// State A lifecycle state that a work item can occupy inside one work type.
-	State *WorkState `json:"state,omitempty"`
-	Tags  *StringMap `json:"tags,omitempty"`
+	State       *WorkState          `json:"state,omitempty"`
+	StopSummary *FactoryStopSummary `json:"stopSummary,omitempty"`
+	Tags        *StringMap          `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`
@@ -4541,6 +5079,7 @@ type WorkContentURLProperty = string
 // WorkDiagnostics defines model for WorkDiagnostics.
 type WorkDiagnostics struct {
 	Command        *CommandDiagnostic        `json:"command,omitempty"`
+	Invocation     *InvocationDiagnostic     `json:"invocation,omitempty"`
 	Metadata       *StringMap                `json:"metadata,omitempty"`
 	Panic          *PanicDiagnostic          `json:"panic,omitempty"`
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
@@ -4747,6 +5286,9 @@ type WorkTypeHandlingBehavior string
 
 // Worker A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
 type Worker struct {
+	// AgentTools Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+	AgentTools *AgentWorkerToolsConfig `json:"agentTools,omitempty"`
+
 	// Args Additional command arguments passed to the configured command.
 	Args *[]string `json:"args,omitempty"`
 
@@ -4991,6 +5533,9 @@ type Workstation struct {
 	// OperationBindings Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
 	OperationBindings *[]WorkstationOperationBinding `json:"operationBindings,omitempty"`
 
+	// OutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+	OutcomeFormat *WorkstationOutcomeFormat `json:"outcomeFormat,omitempty"`
+
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
 
@@ -5094,6 +5639,9 @@ type WorkstationOperationBindingSelector struct {
 	Type *ModelOperationContentType `json:"type,omitempty"`
 }
 
+// WorkstationOutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+type WorkstationOutcomeFormat string
+
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string
 
@@ -5106,11 +5654,17 @@ type AfterSequence = int
 // ArtifactID defines model for ArtifactID.
 type ArtifactID = string
 
+// BackendScopeId defines model for BackendScopeId.
+type BackendScopeId = string
+
 // DispatchID defines model for DispatchID.
 type DispatchID = string
 
 // FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
 type FactorySessionResultIncludeArtifacts = bool
+
+// LogicalSessionKeyId defines model for LogicalSessionKeyId.
+type LogicalSessionKeyId = string
 
 // MaxResults defines model for MaxResults.
 type MaxResults = int
@@ -5210,6 +5764,21 @@ type GetFactorySessionResultsParams struct {
 	IncludeArtifacts *FactorySessionResultIncludeArtifacts `form:"includeArtifacts,omitempty" json:"includeArtifacts,omitempty"`
 }
 
+// GetFactorySessionSyncPreflightBySessionIdParams defines parameters for GetFactorySessionSyncPreflightBySessionId.
+type GetFactorySessionSyncPreflightBySessionIdParams struct {
+	// AfterEventId Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier.
+	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
+
+	// AfterSequence Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// BackendScopeId Persisted backend scope identifier used with logical_session_key_id to remap an unknown factorySessionID to the current live session for the same logical target.
+	BackendScopeId *BackendScopeId `form:"backend_scope_id,omitempty" json:"backend_scope_id,omitempty"`
+
+	// LogicalSessionKeyId Canonical logical-session key used with backend_scope_id to remap an unknown factorySessionID to the current live session for the same folder and target selector.
+	LogicalSessionKeyId *LogicalSessionKeyId `form:"logical_session_key_id,omitempty" json:"logical_session_key_id,omitempty"`
+}
+
 // ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
 type ListWorkBySessionIdParams struct {
 	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
@@ -5275,6 +5844,9 @@ type SaveCurrentFactoryBySessionIdJSONRequestBody = SaveFactoryForSessionRequest
 
 // ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplateBySessionId for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody = PromptTemplateValidationRequest
+
+// InterruptFactorySessionDispatchJSONRequestBody defines body for InterruptFactorySessionDispatch for application/json ContentType.
+type InterruptFactorySessionDispatchJSONRequestBody = FactorySessionInterruptDispatchRequest
 
 // InvokeFactorySessionBySessionIdJSONRequestBody defines body for InvokeFactorySessionBySessionId for application/json ContentType.
 type InvokeFactorySessionBySessionIdJSONRequestBody = InvocationRequest
@@ -5760,6 +6332,32 @@ func (t *FactoryEvent_Payload) MergeScriptResponseEventPayload(v ScriptResponseE
 	return err
 }
 
+// AsAgentRunResponseEventPayload returns the union data inside the FactoryEvent_Payload as a AgentRunResponseEventPayload
+func (t FactoryEvent_Payload) AsAgentRunResponseEventPayload() (AgentRunResponseEventPayload, error) {
+	var body AgentRunResponseEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAgentRunResponseEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided AgentRunResponseEventPayload
+func (t *FactoryEvent_Payload) FromAgentRunResponseEventPayload(v AgentRunResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAgentRunResponseEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided AgentRunResponseEventPayload
+func (t *FactoryEvent_Payload) MergeAgentRunResponseEventPayload(v AgentRunResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsDispatchResponseEventPayload returns the union data inside the FactoryEvent_Payload as a DispatchResponseEventPayload
 func (t FactoryEvent_Payload) AsDispatchResponseEventPayload() (DispatchResponseEventPayload, error) {
 	var body DispatchResponseEventPayload
@@ -5984,6 +6582,32 @@ func (t *FactoryEvent_Payload) FromSessionCompletedEventPayload(v SessionComplet
 
 // MergeSessionCompletedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionCompletedEventPayload
 func (t *FactoryEvent_Payload) MergeSessionCompletedEventPayload(v SessionCompletedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionLifecycleControlEventPayload returns the union data inside the FactoryEvent_Payload as a SessionLifecycleControlEventPayload
+func (t FactoryEvent_Payload) AsSessionLifecycleControlEventPayload() (SessionLifecycleControlEventPayload, error) {
+	var body SessionLifecycleControlEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionLifecycleControlEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionLifecycleControlEventPayload
+func (t *FactoryEvent_Payload) FromSessionLifecycleControlEventPayload(v SessionLifecycleControlEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionLifecycleControlEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionLifecycleControlEventPayload
+func (t *FactoryEvent_Payload) MergeSessionLifecycleControlEventPayload(v SessionLifecycleControlEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -6618,7 +7242,7 @@ func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Stream factory events
+	// Stream process-global factory events (compatibility-only)
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams)
 	// Preview JavaScript orchestrator factory source
@@ -6675,13 +7299,16 @@ type ServerInterface interface {
 	// Validate workstation prompt template
 	// (POST /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation)
 	ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workstationName string)
+	// Interrupt one active durable factory session dispatch
+	// (POST /factory-sessions/{session_id}/interrupt-dispatch)
+	InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Invoke one factory session and return its primary result
 	// (POST /factory-sessions/{session_id}/invocations)
 	InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get one factory session partial result
 	// (GET /factory-sessions/{session_id}/partial-result)
 	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Pause one factory session
+	// Pause one Factory Session
 	// (POST /factory-sessions/{session_id}/pause)
 	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get one live factory session result
@@ -6690,7 +7317,7 @@ type ServerInterface interface {
 	// Get durable factory session results
 	// (GET /factory-sessions/{session_id}/results)
 	GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionResultsParams)
-	// Resume one factory session
+	// Resume one Factory Session
 	// (POST /factory-sessions/{session_id}/resume)
 	ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Retry one durable factory session dispatch
@@ -6699,6 +7326,9 @@ type ServerInterface interface {
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Validate cached session sync state for one session
+	// (GET /factory-sessions/{session_id}/sync-preflight)
+	GetFactorySessionSyncPreflightBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionSyncPreflightBySessionIdParams)
 	// Terminate one durable factory session
 	// (POST /factory-sessions/{session_id}/terminate)
 	TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -7253,6 +7883,31 @@ func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTempla
 	handler.ServeHTTP(w, r)
 }
 
+// InterruptFactorySessionDispatch operation middleware
+func (siw *ServerInterfaceWrapper) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InterruptFactorySessionDispatch(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // InvokeFactorySessionBySessionId operation middleware
 func (siw *ServerInterfaceWrapper) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request) {
 
@@ -7463,6 +8118,66 @@ func (siw *ServerInterfaceWrapper) GetStatusBySessionId(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetStatusBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionSyncPreflightBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionSyncPreflightBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFactorySessionSyncPreflightBySessionIdParams
+
+	// ------------- Optional query parameter "after_event_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_event_id", r.URL.Query(), &params.AfterEventId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_event_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "backend_scope_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "backend_scope_id", r.URL.Query(), &params.BackendScopeId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "backend_scope_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "logical_session_key_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "logical_session_key_id", r.URL.Query(), &params.LogicalSessionKeyId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "logical_session_key_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionSyncPreflightBySessionId(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8087,6 +8802,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId).Methods("POST")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/interrupt-dispatch", wrapper.InterruptFactorySessionDispatch).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/invocations", wrapper.InvokeFactorySessionBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/partial-result", wrapper.GetFactorySessionPartialResult).Methods("GET")
@@ -8102,6 +8819,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/retry-dispatch", wrapper.RetryFactorySessionDispatch).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/sync-preflight", wrapper.GetFactorySessionSyncPreflightBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/terminate", wrapper.TerminateFactorySession).Methods("POST")
 

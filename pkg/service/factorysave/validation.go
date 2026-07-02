@@ -2,91 +2,91 @@ package factorysave
 
 import (
 	"context"
-	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 )
 
-func requireFreshEditableFactoryVersionAtRoot(
-	host Host,
-	baseVersion *factoryapi.HybridLogicalTimestamp,
-	rootDir string,
-	name factoryapi.FactoryName,
-) error {
-	if baseVersion == nil {
-		return fmt.Errorf("%w: save request must include an advanced factory version", apisurface.ErrFactoryVersionStale)
-	}
-	currentVersion, err := host.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
-	if err != nil {
-		return err
-	}
-	if !isEditableFactoryVersionAdvanced(*baseVersion, currentVersion) {
-		return fmt.Errorf("%w: submitted version logical=%d physical=%s must advance current logical=%d physical=%s",
-			apisurface.ErrFactoryVersionStale,
-			baseVersion.Logical,
-			baseVersion.Physical.UTC().Format(time.RFC3339Nano),
-			currentVersion.Logical,
-			currentVersion.Physical.UTC().Format(time.RFC3339Nano),
-		)
-	}
+type validationDefinitionHost struct {
+	workstationLoader factoryconfig.WorkstationLoader
+}
+
+func (validationDefinitionHost) PersistRootDir() string { return "" }
+
+func (h validationDefinitionHost) WorkstationLoader() factoryconfig.WorkstationLoader {
+	return h.workstationLoader
+}
+
+func (validationDefinitionHost) CurrentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
 	return nil
 }
 
-func nextEditableFactoryVersion(
-	current *factoryapi.HybridLogicalTimestamp,
-	now time.Time,
-) factoryapi.HybridLogicalTimestamp {
-	physical := now.UTC()
-	logical := int64(1)
-	if current != nil {
-		logical = current.Logical.Int64() + 1
-		if !physical.After(current.Physical.UTC()) {
-			physical = current.Physical.UTC().Add(time.Nanosecond)
-		}
-	}
-	return factoryapi.HybridLogicalTimestamp{
-		Logical:  apitypes.Int64String(logical),
-		Physical: physical,
-	}
+func (validationDefinitionHost) WorkflowID() string { return "" }
+
+func (validationDefinitionHost) RequireSession(string) (*factorysessions.LiveSession, error) {
+	return nil, nil
 }
 
-func isEditableFactoryVersionAdvanced(candidate, current factoryapi.HybridLogicalTimestamp) bool {
-	return candidate.Logical > current.Logical && candidate.Physical.UTC().After(current.Physical.UTC())
+func (validationDefinitionHost) SessionRuntimeConfig(string) (*factoryconfig.LoadedFactoryConfig, error) {
+	return nil, nil
+}
+
+func (validationDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession) string {
+	return ""
+}
+
+func (validationDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, nil
+}
+
+func (validationDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
+
+func (validationDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error {
+	return nil
+}
+
+func (validationDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+	return nil
+}
+
+func (validationDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
+	return nil, nil
+}
+
+func (validationDefinitionHost) SaveNow() time.Time { return time.Time{} }
+
+func (validationDefinitionHost) RunSessionID() string { return "" }
+
+func (validationDefinitionHost) SessionForActivation(string) *factorysessions.LiveSession {
+	return nil
+}
+
+func (validationDefinitionHost) NamedFactoryActivationPaths(*factorysessions.LiveSession) (string, string) {
+	return "", ""
+}
+
+func (validationDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Context, string, *factorysessions.LiveSession) error {
+	return nil
+}
+
+func (validationDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorysessions.LiveSession, string, string, string, string) error {
+	return nil
 }
 
 func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLoader factoryconfig.WorkstationLoader) error {
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), submitted, factoryvalidation.Options{
-		Profile:           factoryvalidation.ProfilePrePersist,
-		WorkstationLoader: workstationLoader,
-	})
-	if err != nil {
-		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
-	}
-	if !result.HasBlockingTargets() {
-		return nil
-	}
-	return topologyValidationErrorFromTargets(result.BlockingTargets())
-}
-
-func topologyValidationErrorFromTargets(targets []factoryvalidation.Target) *apisurface.TopologyValidationError {
-	return apisurface.NewTopologyValidationError(
-		"Factory topology contains invalid graph references.",
-		factoryvalidation.ToValidationTargets(targets),
-	)
+	return factorydefinition.New(validationDefinitionHost{
+		workstationLoader: workstationLoader,
+	}).ValidateEditableFactoryTopology(submitted)
 }
 
 func validateUpsertNamedFactoryRequest(
 	request factoryapi.Factory,
 	workstationLoader factoryconfig.WorkstationLoader,
 ) error {
-	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
-		return err
-	}
-	return validateEditableFactoryTopology(request, workstationLoader)
+	return factorydefinition.New(validationDefinitionHost{
+		workstationLoader: workstationLoader,
+	}).ValidateUpsertNamedFactoryRequest(request)
 }

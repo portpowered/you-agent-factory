@@ -82,6 +82,23 @@ describe("DashboardSessionLifecycleBanner", () => {
     expect(screen.getByText("execute")).toBeTruthy();
   });
 
+  it("shows replay recovery failure as a distinct stream notice", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        streamState={{
+          message: "The dashboard could not restore this session automatically.",
+          status: "recovery_failed",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "The dashboard could not restore this session automatically.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("shows phase-only lifecycle notice when bracket data is absent", () => {
     render(
       <DashboardSessionLifecycleBanner

@@ -90,7 +90,7 @@ func TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath(t *
 	)
 	var legacyErr factoryapi.ErrorResponse
 	decodeJSONResponse(t, legacyResp, &legacyErr, "decode legacy work type error response")
-	if legacyErr.Code != factoryapi.BADREQUEST {
+	if legacyErr.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("active-factory drift: legacy work type error code = %q, want BAD_REQUEST", legacyErr.Code)
 	}
 }

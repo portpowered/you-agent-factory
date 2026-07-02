@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -31,6 +32,24 @@ func minimalFactoryConfig() map[string]any {
 	return factoryfixtures.MinimalFactoryConfig()
 }
 
+func assertResolvedDefaultLiveSessionID(t *testing.T, sessionID string) {
+	t.Helper()
+	if sessionID == factorysessions.DefaultSessionID {
+		t.Fatalf("session id = %q, want resolved uuid", sessionID)
+	}
+	if _, err := uuid.Parse(sessionID); err != nil {
+		t.Fatalf("session id = %q, want uuid: %v", sessionID, err)
+	}
+}
+
+func assertSingleDefaultSessionIDs(t *testing.T, ids []string) {
+	t.Helper()
+	if len(ids) != 1 {
+		t.Fatalf("session ids = %v, want one default session", ids)
+	}
+	assertResolvedDefaultLiveSessionID(t, ids[0])
+}
+
 func writeFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 	t.Helper()
 	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
@@ -43,11 +62,11 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 	if svc.sessions == nil {
 		svc.sessions = factorysessions.NewRegistry()
 	}
-	handle := &liveRuntimeHandle{runtime: bundle, runDone: make(chan struct{})}
-	svc.registerLiveSession(defaultFactorySessionID, handle, FactorySessionTarget{
+	handle := &liveRuntimeHandle{Bundle: bundle, RunDone: make(chan struct{})}
+	registeredSessionID := svc.registerLiveSession(defaultFactorySessionID, handle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}, true)
-	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
+	svc.setRunState(context.Background(), registeredSessionID, handle)
 }
 
 type recordingDiagnosticsProvider struct{}
@@ -324,7 +343,7 @@ Review.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
@@ -348,7 +367,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available gemini runner", err)
 	}
 }
@@ -371,7 +390,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available kiro runner", err)
 	}
 }
@@ -394,7 +413,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available cursor runner", err)
 	}
 }
@@ -417,7 +436,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableOpenCodeFactoryRunner(t *testing.
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available opencode runner", err)
 	}
 }
@@ -446,7 +465,7 @@ You are a helpful assistant.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
@@ -1161,14 +1180,14 @@ func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch interfaces.
 
 func pauseSessionFactory(t *testing.T, session *liveFactorySession) {
 	t.Helper()
-	if err := liveSessionHandle(session).runtime.factory.Pause(context.Background()); err != nil {
+	if err := liveSessionHandle(session).Bundle.Factory.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause(%s): %v", session.ID, err)
 	}
 }
 
 func resumeSessionFactory(t *testing.T, session *liveFactorySession) {
 	t.Helper()
-	if err := liveSessionHandle(session).runtime.factory.Resume(context.Background()); err != nil {
+	if err := liveSessionHandle(session).Bundle.Factory.Resume(context.Background()); err != nil {
 		t.Fatalf("Resume(%s): %v", session.ID, err)
 	}
 }
@@ -1184,10 +1203,10 @@ func requireLiveSession(t *testing.T, svc *FactoryService, sessionID string) *li
 
 func sessionEngineSnapshot(t *testing.T, session *liveFactorySession) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
-	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("live session runtime is required")
 	}
-	snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+	snap, err := liveSessionHandle(session).Bundle.Factory.GetEngineStateSnapshot(context.Background())
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot(%s): %v", session.ID, err)
 	}

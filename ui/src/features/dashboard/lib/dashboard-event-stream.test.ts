@@ -319,6 +319,66 @@ describe("syncCurrentFactoryDefinition bundled docs", () => {
     ],
   };
 
+  it("preserves nested bundled docs when FACTORY_CHANGE omits supportingFiles", () => {
+    const queryClient = new QueryClient();
+    const nestedDocPath = "factory/docs/standards/review.md";
+    const existingDocument = {
+      name: "factory",
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "# Review standards" },
+            targetPath: nestedDocPath,
+            type: "DOC",
+          },
+        ],
+      },
+      version: {
+        logical: "8",
+        physical: "2026-05-31T11:00:00Z",
+      },
+    };
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(sessionID),
+      existingDocument,
+    );
+
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+        id: "event-1",
+        payload: {
+          factory: {
+            ...validFactory,
+            version: {
+              logical: "9",
+              physical: "2026-05-31T12:00:00Z",
+            },
+          },
+        },
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      },
+      sessionID,
+    );
+
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
+    ).toMatchObject({
+      supportingFiles: existingDocument.supportingFiles,
+      version: {
+        logical: "9",
+        physical: "2026-05-31T12:00:00Z",
+      },
+      workers: [expect.objectContaining({ model: "gpt-5.6" })],
+    });
+  });
+
   it("preserves bundled docs when FACTORY_CHANGE omits supportingFiles", () => {
     const queryClient = new QueryClient();
     const existingDocument = {

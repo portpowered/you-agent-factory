@@ -5,6 +5,8 @@ properties:
     $ref: './RenderedPromptDiagnostic.yaml'
   provider:
     $ref: './ProviderDiagnostic.yaml'
+  invocation:
+    $ref: './InvocationDiagnostic.yaml'
   command:
     $ref: '../../../openapi-main.yaml#/components/schemas/CommandDiagnostic'
   panic:

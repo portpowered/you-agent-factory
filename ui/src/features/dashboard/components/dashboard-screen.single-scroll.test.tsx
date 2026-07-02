@@ -11,6 +11,10 @@ const dashboardSnapshotState = vi.hoisted(() => ({
   value: {
     error: null as Error | null,
     isInitialLoading: false,
+    preflightRecovery: null as
+      | { reasonCode: string; requestedSessionId: string }
+      | null,
+    preflightStatus: "success" as const,
     snapshot: null as DashboardSnapshot | null,
     streamState: {
       message: "Factory event stream connected.",

@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "./api/events";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   failureAnalysisTimelineEvents,
   graphStateSmokeTimelineEvents,
@@ -120,14 +120,16 @@ function expectSeparatedStateMarkerZones(label: string, count: number): void {
   ).toHaveLength(count);
 }
 
-function requireEventStream(): MockEventSource {
-  const stream = MockEventSource.instances[0];
+async function requireEventStream(): Promise<MockEventSource> {
+  return await waitFor(() => {
+    const stream = MockEventSource.instances[0];
 
-  if (!stream) {
-    throw new Error("expected factory event stream to be opened");
-  }
+    if (!stream) {
+      throw new Error("expected factory event stream to be opened");
+    }
 
-  return stream;
+    return stream;
+  });
 }
 
 const streamGraphBaseFactory = {
@@ -243,12 +245,12 @@ const streamedGraphChangeEvents = [
 describe("App streamed replay rendering flows", () => {
   registerAppDashboardTestLifecycle();
 
-  it("smoke tests /events replay rendering without the removed dashboard snapshot route", async () => {
+  it("smoke tests session-scoped event replay rendering without the removed dashboard snapshot route", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
     expect(stream.url).toBe(
-      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+      `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
 
     act(() => {
@@ -289,7 +291,7 @@ describe("App streamed replay rendering flows", () => {
   it("smoke tests failure analysis from streamed events through fixed-tick rendering", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
 
     act(() => {
       for (const event of failureAnalysisTimelineEvents) {
@@ -392,7 +394,7 @@ describe("App streamed replay rendering flows", () => {
   it("smoke tests resource counts from streamed events against backend world-view counts", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
 
     act(() => {
       for (const event of resourceCountTimelineEvents) {
@@ -434,7 +436,7 @@ describe("App streamed replay rendering flows", () => {
       snapshot: baselineSnapshot,
     });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
 
     act(() => {
       stream.emit("message", streamedGraphChangeEvents[0]);
@@ -454,9 +456,7 @@ describe("App streamed replay rendering flows", () => {
       stream.emit("message", streamedGraphChangeEvents[1]);
     });
 
-    const qaNode = await waitFor(() =>
-      getWorkstationNodeByLabel("QA"),
-    );
+    const qaNode = await waitFor(() => getWorkstationNodeByLabel("QA"));
     expectReactFlowNodePosition(qaNode, { x: 640, y: 260 });
     await waitFor(() => {
       expectReactFlowViewportTransform({ x: -180, y: 55, zoom: 0.85 });

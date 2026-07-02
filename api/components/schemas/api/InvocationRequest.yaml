@@ -1,21 +1,30 @@
 type: object
 additionalProperties: false
-required:
-  - sourceKind
-  - content
 properties:
   sourceKind:
     $ref: './InvocationInputSourceKind.yaml'
     description: >-
-      Input source category selected by the API caller. Current runtimes accept
-      `text` only; future multimodal categories are documented in the enum but
-      not implemented by this contract slice.
+      Compatibility input source category selected by the API caller when
+      `content` is supplied. Current runtimes accept `text` only; future
+      multimodal categories are documented in the enum but not implemented by
+      this contract slice.
   content:
     $ref: '../data-models/WorkContent.yaml'
     description: >-
-      Canonical text-first invocation content. Current runtimes resolve exactly
-      one logical text input from this carrier; non-text source categories are
-      reserved for future contract extensions.
+      Canonical text-first compatibility invocation content. Current runtimes
+      resolve exactly one logical text input from this carrier; non-text source
+      categories are reserved for future contract extensions. When `args` is
+      omitted, `content` and `sourceKind: text` preserve the legacy invocation
+      contract.
+  args:
+    type: object
+    additionalProperties: true
+    description: >-
+      Optional structured invocation arguments keyed by parameter name,
+      externalName, or alias. Values must decode as a string or an array of
+      strings. Signature-backed runtimes normalize these values through the
+      shared backend argument resolver. Compatibility `content` requests should
+      omit `args`.
   requestId:
     type: string
     description: Optional caller-supplied idempotency key for the invocation request.

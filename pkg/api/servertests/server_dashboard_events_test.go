@@ -155,7 +155,9 @@ func TestGetDashboardUI_FallbacksToIndexForClientRoutes(t *testing.T) {
 	}
 }
 
-func TestGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
+// TestCompatibilityGetEvents_* exercises compatibility-only process-global GET /events behavior.
+// Dashboard, Factory Session, and replay smokes should use session-scoped routes instead.
+func TestCompatibilityGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	historical := testHistoricalFactoryEvents(t, eventTime)
 	liveEvents := make(chan factoryapi.FactoryEvent, 1)
@@ -165,10 +167,150 @@ func TestGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
 	defer server.Close()
 
-	reader, closeStream := openEventStreamReader(t, server.URL)
+	reader, closeStream := openCompatibilityEventStreamReader(t, server.URL)
 	defer closeStream()
 	assertHistoricalEventsReplay(t, reader, historical)
 	assertLiveEventReplay(t, reader, liveEvents, eventTime)
+}
+
+func TestSessionScopedLiveGetEvents_JSONRecoveryProbeReturnsCursorStaleForLiveSession(t *testing.T) {
+	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	sessionID := "session-alpha"
+	historical := testHistoricalFactoryEvents(t, eventTime)
+	mf := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			sessionID: {
+				FactoryEvents: historical,
+			},
+		},
+	}
+
+	server := httptest.NewServer(newAPITestServer(mf).Handler())
+	defer server.Close()
+
+	eventPath := "/factory-sessions/" + sessionID + "/events?after_event_id=missing-event-id"
+	req, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+eventPath,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET recovery probe: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+
+	var recovery factoryapi.FactorySessionEventStreamRecovery
+	if err := json.NewDecoder(resp.Body).Decode(&recovery); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if recovery.FactorySessionId != sessionID {
+		t.Fatalf("factorySessionId = %q, want %q", recovery.FactorySessionId, sessionID)
+	}
+	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcome("CURSOR_STALE") {
+		t.Fatalf("outcome = %q, want CURSOR_STALE", recovery.Outcome)
+	}
+	if !recovery.Retry.OmitAfterEventId || !recovery.Retry.OmitAfterSequence {
+		t.Fatalf("retry = %#v, want both omit flags true", recovery.Retry)
+	}
+	assertSessionScopedFactoryEventsPath(t, eventPath, sessionID)
+}
+
+func assertSessionScopedFactoryEventsPath(t *testing.T, path, sessionID string) {
+	t.Helper()
+	wantPrefix := "/factory-sessions/" + sessionID + "/events"
+	if !strings.HasPrefix(path, wantPrefix) {
+		t.Fatalf("event stream path = %q, want session-scoped prefix %q", path, wantPrefix)
+	}
+	if path == "/events" || strings.HasPrefix(path, "/events?") {
+		t.Fatalf("event stream path = %q, must not use compatibility-only GET /events", path)
+	}
+}
+
+func TestSessionScopedLiveGetEvents_JSONRecoveryProbeReturnsUnknownSessionForMissingLiveSession(t *testing.T) {
+	server := httptest.NewServer(newAPITestServer(&testutil.MockFactory{}).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+"/factory-sessions/session-missing/events?after_event_id=missing-event-id",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET recovery probe: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+
+	var recovery factoryapi.FactorySessionEventStreamRecovery
+	if err := json.NewDecoder(resp.Body).Decode(&recovery); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if recovery.FactorySessionId != "session-missing" {
+		t.Fatalf("factorySessionId = %q, want session-missing", recovery.FactorySessionId)
+	}
+	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcome("UNKNOWN_SESSION") {
+		t.Fatalf("outcome = %q, want UNKNOWN_SESSION", recovery.Outcome)
+	}
+	if recovery.Retry.OmitAfterEventId || recovery.Retry.OmitAfterSequence {
+		t.Fatalf("retry = %#v, want omit flags false", recovery.Retry)
+	}
+}
+
+func TestSessionScopedLiveGetEvents_ValidReconnectCursorStillStreamsSSEForLiveSession(t *testing.T) {
+	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	sessionID := "session-alpha"
+	historical := testHistoricalFactoryEvents(t, eventTime)
+	mf := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			sessionID: {
+				FactoryEvents: historical,
+			},
+		},
+	}
+
+	server := httptest.NewServer(newAPITestServer(mf).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+"/factory-sessions/"+sessionID+"/events?after_event_id="+historical[1].Id,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET events: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", got)
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	event := readAPISSEFactoryEvent(t, reader)
+	if event.Id != historical[2].Id {
+		t.Fatalf("event id = %q, want %q", event.Id, historical[2].Id)
+	}
 }
 
 func testHistoricalFactoryEvents(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
@@ -184,7 +326,8 @@ func testHistoricalFactoryEvents(t *testing.T, eventTime time.Time) []factoryapi
 	}
 }
 
-func openEventStreamReader(t *testing.T, serverURL string) (*bufio.Reader, func()) {
+// openCompatibilityEventStreamReader opens process-global GET /events for retained compatibility coverage.
+func openCompatibilityEventStreamReader(t *testing.T, serverURL string) (*bufio.Reader, func()) {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -199,7 +342,7 @@ func openEventStreamReader(t *testing.T, serverURL string) (*bufio.Reader, func(
 	t.Cleanup(func() { _ = resp.Body.Close() })
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("status = %d, body = %s", resp.StatusCode, string(body))
+		t.Fatalf("compatibility GET /events status = %d, body = %s", resp.StatusCode, string(body))
 	}
 	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
 		t.Fatalf("Content-Type = %q, want text/event-stream", got)
@@ -251,7 +394,7 @@ func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan f
 	}
 }
 
-func TestGetEvents_ReconnectAfterEventIDSkipsAcknowledgedHistory(t *testing.T) {
+func TestCompatibilityGetEvents_ReconnectAfterEventIDSkipsAcknowledgedHistory(t *testing.T) {
 	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	historical := testHistoricalFactoryEvents(t, eventTime)
 	liveEvents := make(chan factoryapi.FactoryEvent, 1)
@@ -282,7 +425,7 @@ func TestGetEvents_ReconnectAfterEventIDSkipsAcknowledgedHistory(t *testing.T) {
 	}
 }
 
-func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
+func TestCompatibilityGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 	liveEvents := make(chan factoryapi.FactoryEvent)
 	mf := &testutil.MockFactory{
 		FactoryEventStream: &interfaces.FactoryEventStream{
@@ -320,6 +463,78 @@ func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected subscription context cancellation after client disconnect")
 	}
+}
+
+func TestCompatibilityGetEvents_ReconnectAfterSequenceSkipsAcknowledgedHistory(t *testing.T) {
+	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	historical := testHistoricalFactoryEventsWithSequence(t, eventTime)
+	liveEvents := make(chan factoryapi.FactoryEvent, 1)
+	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical, Events: liveEvents}}
+
+	logger, _ := zap.NewDevelopment()
+	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/events?after_sequence=0", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("compatibility GET /events: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("compatibility GET /events status = %d, body = %s", resp.StatusCode, string(body))
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	replayed := readAPISSEFactoryEvent(t, reader)
+	if replayed.Id != historical[1].Id {
+		t.Fatalf("compatibility reconnect replay = %q, want only events after sequence 0 (%q)", replayed.Id, historical[1].Id)
+	}
+}
+
+func TestCompatibilityGetEvents_InvalidReconnectCursorReturnsBadRequest(t *testing.T) {
+	historical := testHistoricalFactoryEvents(t, time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC))
+	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical}}
+
+	logger, _ := zap.NewDevelopment()
+	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/events?after_event_id=missing-event-id", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("compatibility GET /events: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("compatibility GET /events status = %d, want 400: %s", resp.StatusCode, readBody(t, resp))
+	}
+
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode compatibility error response: %v", err)
+	}
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("compatibility error code = %q, want BAD_REQUEST", errResp.Code)
+	}
+}
+
+func testHistoricalFactoryEventsWithSequence(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	historical := testHistoricalFactoryEvents(t, eventTime)
+	for index := range historical {
+		sequence := index
+		historical[index].Context.Sequence = sequence
+	}
+	return historical
 }
 
 func TestDashboardSnapshotRoutes_RemovedFromRouter(t *testing.T) {

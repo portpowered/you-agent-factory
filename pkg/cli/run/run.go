@@ -26,9 +26,11 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -57,7 +59,10 @@ type RunConfig struct {
 	// InvocationStdinText carries stdin text resolved before Run when root
 	// already consumed the stdin stream for one-shot factory invocation.
 	InvocationStdinText *string
-	RunnerID string
+	// InvocationNormalizedArguments carries CLI-normalized signature-backed
+	// invocation inputs for factories that declare invocationSignature.
+	InvocationNormalizedArguments *invocations.NormalizedArguments
+	RunnerID                      string
 	// OperatorDefaults carries resolved operator-level default worker model
 	// settings loaded at the CLI boundary.
 	OperatorDefaults operatorconfig.ResolvedDefaults
@@ -123,9 +128,13 @@ type RunConfig struct {
 	// StdinIsTTY reports whether stdin is an interactive TTY. Nil inspects
 	// os.Stdin directly.
 	StdinIsTTY func() bool
-	// JSONOutput emits the API-shaped InvocationResponse on successful factory
-	// invocation instead of only the primary text result.
+	// JSONOutput emits the API-shaped InvocationResponse for factory invocation
+	// results, including non-success outcomes that return recovery context.
 	JSONOutput bool
+	// InvocationOutputMode selects stdout behavior for one-shot factory
+	// invocations. Empty uses the primary-result-only contract; response-stream
+	// attaches to internal SessionResponseStream progress when available.
+	InvocationOutputMode string
 	// InvocationMetricsRecorder receives invocation counter emissions from the
 	// CLI boundary, including pre-runtime source conflicts.
 	InvocationMetricsRecorder service.InvocationMetricsRecorder
@@ -201,7 +210,6 @@ func SetBuildFactoryService(builder FactoryServiceBuilder) {
 const (
 	completedPlaceIDSuffix        = "completed"
 	failedPlaceIDSuffix           = "failed"
-	defaultRecordingsDir          = ".you-agent-factory/recordings"
 	defaultFactorySessionID       = "~default"
 	defaultRecordPathSessionToken = "__factory_session_id__"
 )
@@ -431,6 +439,9 @@ func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, 
 	if err != nil {
 		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
 	}
+	if err := validateInvocationOutputMode(cfg, invocationMode); err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
 	return cfg, invocationRequest, invocationMode, recordPath, nil
 }
 
@@ -474,13 +485,8 @@ func generateDefaultLiveRunRecordPath() (string, error) {
 		now.Format("150405"),
 		defaultLiveRunRecordUUID(),
 	)
-	return filepath.Join(
-		homeDir,
-		defaultRecordingsDir,
-		now.Format("2006-01"),
-		now.Format("2006-01-02"),
-		recordingID,
-	), nil
+	recordingsDir := defaultpaths.RecordingsDatedDir(defaultpaths.RecordingsRoot(homeDir), now)
+	return filepath.Join(recordingsDir, recordingID), nil
 }
 
 func resolveDefaultSessionRecordPath(path string) string {

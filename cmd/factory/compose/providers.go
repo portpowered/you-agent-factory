@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
 
@@ -51,12 +52,22 @@ func provideRuntimeBuildService(
 	return service.NewRuntimeBuildService(cfg, clock, baseLogger, &domain)
 }
 
+func provideWorkersSchedulerService(
+	cfg *service.FactoryServiceConfig,
+	clock factory.Clock,
+	logger *zap.Logger,
+	hostedWorkers hostedworkers.Config,
+) *workersservice.Service {
+	return service.NewWorkersSchedulerService(cfg, clock, logger, hostedWorkers)
+}
+
 func provideFactoryServiceCollaborators(
 	sessions *factorysessions.Registry,
 	localModels service.LocalModelDomain,
 	runtimeBuild *runtimebuild.Service,
+	workersScheduler *workersservice.Service,
 ) service.FactoryServiceCollaborators {
-	return service.NewFactoryServiceCollaboratorsFromParts(sessions, localModels, runtimeBuild)
+	return service.NewFactoryServiceCollaboratorsFromParts(sessions, localModels, runtimeBuild, workersScheduler)
 }
 
 func provideHostedWorkersConfig(
@@ -72,7 +83,11 @@ func provideFactoryService(
 	cfg *service.FactoryServiceConfig,
 ) *service.FactoryService {
 	serviceShell := service.FactoryServiceShell{Service: service.NewFactoryServiceFromCore(core)}
-	return service.AttachFactorySaveCollaborator(serviceShell, service.ProvideFactorySaveCollaborator(serviceShell, cfg))
+	svc := service.AttachModelServiceCollaborator(serviceShell, service.ProvideModelServiceCollaborator(serviceShell, cfg))
+	return service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell{Service: svc},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: svc}, cfg),
+	)
 }
 
 func provideFactoryCore(

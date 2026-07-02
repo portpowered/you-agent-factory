@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testpath"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -125,6 +126,67 @@ Reviewer feedback: {{ (index .Inputs 0).RejectionFeedback }}
 	}
 	if !strings.Contains(result, "Missing error handling section") {
 		t.Errorf("expected rejection feedback, got: %s", result)
+	}
+}
+
+func TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs(t *testing.T) {
+	renderer := &DefaultPromptRenderer{}
+	factoryDir := testpath.MustRepoPathFromCaller(t, 0, "factory")
+	factoryCtx := &factory_context.FactoryContext{FactoryDirectory: factoryDir}
+
+	overview, err := renderer.Render(
+		`{{ index .Docs "factory/docs/overview.md" }}`,
+		nil,
+		factoryCtx,
+	)
+	if err != nil {
+		t.Fatalf("render overview doc: %v", err)
+	}
+	for _, want := range []string{
+		"# Factory Overview",
+		"you-agent-factory",
+		"ideafy",
+		"docs/temp/progress.md",
+		"docs/temp/checklist.md",
+		"docs/temp/meta.md",
+		"factory/docs/batch-input-example.json",
+		"you work list --session",
+		"you session list",
+	} {
+		if !strings.Contains(overview, want) {
+			t.Fatalf("overview doc missing %q", want)
+		}
+	}
+	for _, absent := range []string{
+		"Awesome-list",
+		"awesome-list",
+		"docs/internal/",
+	} {
+		if strings.Contains(overview, absent) {
+			t.Fatalf("overview doc still contains stale marker %q", absent)
+		}
+	}
+
+	batchInputs, err := renderer.Render(
+		`{{ index .Docs "factory/docs/batch-inputs.md" }}`,
+		nil,
+		factoryCtx,
+	)
+	if err != nil {
+		t.Fatalf("render batch-inputs doc: %v", err)
+	}
+	for _, want := range []string{
+		"# Batch Inputs",
+		"factory/docs/batch-input-example.json",
+		"docs/temp/progress.md",
+		"docs/temp/checklist.md",
+		"docs/temp/meta.md",
+		"you submit batch --dry-run factory/docs/batch-input-example.json --session",
+		"## Verification",
+	} {
+		if !strings.Contains(batchInputs, want) {
+			t.Fatalf("batch-inputs doc missing %q", want)
+		}
 	}
 }
 

@@ -127,6 +127,30 @@ func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testi
 	}
 }
 
+func TestValidateModelWorkerRuntimeProviders_AllowsInvocationInterpolationProvider(t *testing.T) {
+	factoryDir := t.TempDir()
+	loaded, err := config.NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name: "firstProvider",
+			}},
+		},
+		Workers: []interfaces.WorkerConfig{{
+			Name:          "executor",
+			Type:          interfaces.WorkerTypeModel,
+			ModelProvider: "${firstProvider}",
+			Body:          "You are the executor.",
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	if err := operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded); err != nil {
+		t.Fatalf("ValidateModelWorkerRuntimeProviders: %v", err)
+	}
+}
+
 func newOperatorDefaultsRuntimeFixture(t *testing.T, factory map[string]any) *config.LoadedFactoryConfig {
 	t.Helper()
 

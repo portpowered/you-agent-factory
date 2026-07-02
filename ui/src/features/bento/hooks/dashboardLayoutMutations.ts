@@ -38,6 +38,7 @@ export function addDashboardWidgetToLayout(
   );
   const nextWidgetLayout = {
     ...widgetDefaultLayout,
+    hidden: undefined,
     id: getNextDashboardWidgetInstanceID(layout, widgetType),
     widgetType,
   };

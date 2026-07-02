@@ -3,7 +3,10 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./styles.css";
+import { dashboardComponentsPackageName } from "./lib/components-package-resolution";
 import { App } from "./App";
+
+void dashboardComponentsPackageName;
 
 const container = document.getElementById("root");
 const queryClient = new QueryClient();

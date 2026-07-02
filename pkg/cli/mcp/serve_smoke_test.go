@@ -4,16 +4,18 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -160,13 +162,16 @@ func assertInstallSmokeRunningPoll(t *testing.T, client *stdioMCPClient, session
 
 func closeRunServeSmokeServer(t *testing.T, stdinWrite *os.File, serveErr <-chan error) {
 	t.Helper()
-	_ = stdinWrite.Close()
+	if stdinWrite != nil {
+		_ = stdinWrite.Close()
+	}
 	select {
 	case err := <-serveErr:
-		if err != nil && err != io.EOF && !strings.Contains(err.Error(), "file already closed") {
+		if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
 			t.Fatalf("RunServe: %v", err)
 		}
-	default:
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunServe did not shut down after stdin closed")
 	}
 }
 

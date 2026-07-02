@@ -27,6 +27,20 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 			},
 			TraceId:                stringPtr("trace-legacy"),
 			CurrentChainingTraceId: stringPtr("trace-chain-1"),
+			StopSummary: &factoryapi.FactoryStopSummary{
+				SessionId:                "session-beta",
+				StopKind:                 factoryapi.FactoryStopKind("BLOCKED"),
+				WorkState:                stringPtr("story:blocked"),
+				LatestResultSummary:      stringPtr("provider timeout"),
+				SuggestedRecoverySurface: stringPtr("existing work repair, work move, or follow-up submission controls"),
+				SuggestedRecoveryAction:  stringPtr("Inspect the blocked work \"Review PRD\" [work-review-1], then use the existing work repair, work move, or follow-up submission controls to unblock it."),
+				LatestDispatch: &factoryapi.FactoryStopDispatchSummary{
+					DispatchId:      "dispatch-review-1",
+					Status:          factoryapi.FactoryDispatchStatusFAILED,
+					DispatchKind:    factoryapi.FactoryDispatchKindPETRITRANSITION,
+					WorkstationName: stringPtr("Review"),
+				},
+			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -50,7 +64,130 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
 		"Trace:\ttrace-chain-1\n" +
-		"Relations:\tnone\n"
+		"Relations:\tnone\n" +
+		"Stop summary:\tkind=BLOCKED session=session-beta state=story:blocked\n" +
+		"Stop dispatch:\tdispatch-review-1 status=FAILED kind=PETRI_TRANSITION workstation=Review\n" +
+		"Stop result:\tprovider timeout\n" +
+		"Recovery surface:\texisting work repair, work move, or follow-up submission controls\n" +
+		"Recovery action:\tInspect the blocked work \"Review PRD\" [work-review-1], then use the existing work repair, work move, or follow-up submission controls to unblock it.\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestShow_HumanOutputIncludesInterruptedStopSummary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/session-beta/work/work-review-1" {
+			t.Fatalf("path = %q, want /factory-sessions/session-beta/work/work-review-1", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:         "Review child",
+			WorkId:       stringPtr("work-review-1"),
+			WorkTypeName: stringPtr("goal"),
+			State: &factoryapi.WorkState{
+				Name: "review",
+				Type: factoryapi.WorkStateTypePROCESSING,
+			},
+			TraceId: stringPtr("trace-review-1"),
+			StopSummary: &factoryapi.FactoryStopSummary{
+				SessionId:                "session-beta",
+				StopKind:                 factoryapi.FactoryStopKind("INTERRUPTED"),
+				WorkId:                   stringPtr("work-review-1"),
+				WorkState:                stringPtr("goal:review"),
+				LatestResultSummary:      stringPtr("Dispatch interrupted while waiting for review output"),
+				SuggestedRecoverySurface: stringPtr("existing dispatch retry, work repair, or session workflow controls"),
+				SuggestedRecoveryAction:  stringPtr("Inspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery."),
+				LatestDispatch: &factoryapi.FactoryStopDispatchSummary{
+					DispatchId:      "dispatch-1",
+					Status:          factoryapi.FactoryDispatchStatusINTERRUPTED,
+					DispatchKind:    factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+					WorkstationName: stringPtr("review child"),
+				},
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Show(ShowConfig{
+		Server:    serverBase(t, srv),
+		SessionID: "session-beta",
+		WorkID:    "work-review-1",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+
+	want := "" +
+		"Work ID:\twork-review-1\n" +
+		"Name:\tReview child\n" +
+		"Work type:\tgoal\n" +
+		"State name:\treview\n" +
+		"State type:\tPROCESSING\n" +
+		"Trace:\ttrace-review-1\n" +
+		"Relations:\tnone\n" +
+		"Stop summary:\tkind=INTERRUPTED session=session-beta state=goal:review\n" +
+		"Stop dispatch:\tdispatch-1 status=INTERRUPTED kind=JAVASCRIPT_AGENT workstation=review child\n" +
+		"Stop result:\tDispatch interrupted while waiting for review output\n" +
+		"Recovery surface:\texisting dispatch retry, work repair, or session workflow controls\n" +
+		"Recovery action:\tInspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery.\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
+func TestShow_HumanOutputIncludesPausedLifecycleStopSummary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/session-paused/work/work-review-1" {
+			t.Fatalf("path = %q, want /factory-sessions/session-paused/work/work-review-1", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		lifecycle := factoryapi.FactorySessionDurableLifecycleStatusPaused
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:         "Review child",
+			WorkId:       stringPtr("work-review-1"),
+			WorkTypeName: stringPtr("goal"),
+			State: &factoryapi.WorkState{
+				Name: "review",
+				Type: factoryapi.WorkStateTypePROCESSING,
+			},
+			TraceId: stringPtr("trace-review-1"),
+			StopSummary: &factoryapi.FactoryStopSummary{
+				SessionId:              "session-paused",
+				StopKind:               factoryapi.FactoryStopKind("PAUSED"),
+				WorkState:              stringPtr("goal:review"),
+				SessionLifecycleStatus: &lifecycle,
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Show(ShowConfig{
+		Server:    serverBase(t, srv),
+		SessionID: "session-paused",
+		WorkID:    "work-review-1",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+
+	want := "" +
+		"Work ID:\twork-review-1\n" +
+		"Name:\tReview child\n" +
+		"Work type:\tgoal\n" +
+		"State name:\treview\n" +
+		"State type:\tPROCESSING\n" +
+		"Trace:\ttrace-review-1\n" +
+		"Relations:\tnone\n" +
+		"Stop summary:\tkind=PAUSED session=session-paused state=goal:review lifecycle=PAUSED\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
@@ -105,7 +242,7 @@ func TestShow_NotFoundExitsWithClearError(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
-			Code:    factoryapi.NOTFOUND,
+			Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 			Message: "work not found",
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)

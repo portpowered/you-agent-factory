@@ -7,9 +7,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // SessionProjectionEventKinds lists canonical event types that project durable
@@ -19,6 +16,7 @@ var SessionProjectionEventKinds = []string{
 	"SESSION_PAUSED",
 	"SESSION_RESUMED",
 	"SESSION_RESULT_UPDATED",
+	"SESSION_LIFECYCLE_CONTROL",
 	"SESSION_COMPLETED",
 	"ORCHESTRATOR_PHASE_CHANGED",
 	"ORCHESTRATOR_CHECKPOINT_WRITTEN",
@@ -149,7 +147,7 @@ type ResultAvailabilityDetail struct {
 // CLI, MCP, and UI transports.
 type ResultReadResult struct {
 	SessionID        string
-	ResultStatus       ResultStatus
+	ResultStatus     ResultStatus
 	SessionStatus    LifecycleStatus
 	Mode             ResultMode
 	IncludeArtifacts bool
@@ -164,13 +162,14 @@ type ResultReadResult struct {
 type DispatchStatus string
 
 const (
-	DispatchStatusQueued    DispatchStatus = "QUEUED"
-	DispatchStatusRunning   DispatchStatus = "RUNNING"
-	DispatchStatusCompleted DispatchStatus = "COMPLETED"
-	DispatchStatusFailed    DispatchStatus = "FAILED"
-	DispatchStatusCanceled  DispatchStatus = "CANCELED"
-	DispatchStatusTimedOut  DispatchStatus = "TIMED_OUT"
-	DispatchStatusSkipped   DispatchStatus = "SKIPPED"
+	DispatchStatusQueued      DispatchStatus = "QUEUED"
+	DispatchStatusRunning     DispatchStatus = "RUNNING"
+	DispatchStatusCompleted   DispatchStatus = "COMPLETED"
+	DispatchStatusFailed      DispatchStatus = "FAILED"
+	DispatchStatusCanceled    DispatchStatus = "CANCELED"
+	DispatchStatusTimedOut    DispatchStatus = "TIMED_OUT"
+	DispatchStatusSkipped     DispatchStatus = "SKIPPED"
+	DispatchStatusInterrupted DispatchStatus = "INTERRUPTED"
 )
 
 // DispatchUsage summarizes one dispatch execution.
@@ -233,17 +232,18 @@ type DispatchSummary struct {
 	Usage               *DispatchUsage
 	Warnings            []DispatchWarning
 	FailureDetail       *DispatchFailureDetail
+	JavaScript          *DispatchJavaScriptProjection
 }
 
 // DispatchDetail is the shared durable dispatch read projection.
 type DispatchDetail struct {
 	DispatchSummary
-	SessionID          string
-	OrchestratorKind   string
-	ArtifactIDs        []string
-	StatusTransitions  []DispatchStatus
-	Petri              *DispatchPetriProjection
-	JavaScript         *DispatchJavaScriptProjection
+	SessionID         string
+	OrchestratorKind  string
+	ArtifactIDs       []string
+	StatusTransitions []DispatchStatus
+	Petri             *DispatchPetriProjection
+	JavaScript        *DispatchJavaScriptProjection
 }
 
 // ListDispatchesResult is the shared durable dispatch list outcome.
@@ -307,6 +307,7 @@ type EventReadResult struct {
 	SessionID string
 	Events    []json.RawMessage
 }
+
 // NormalizeResultRequest validates and normalizes one durable result read request.
 func NormalizeResultRequest(req ResultRequest) (ResultRequest, error) {
 	mode := req.Mode
@@ -373,6 +374,8 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 		return r.applySessionResumed(envelope)
 	case "SESSION_RESULT_UPDATED":
 		return r.applySessionResultUpdated(envelope)
+	case "SESSION_LIFECYCLE_CONTROL":
+		return r.applySessionLifecycleControl(envelope)
 	case "SESSION_COMPLETED":
 		return r.applySessionCompleted(envelope)
 	default:
@@ -462,8 +465,14 @@ func (r *sessionProjectionReducer) applySessionResumed(envelope canonicalFactory
 	if err != nil {
 		return fmt.Errorf("parse resumedAt: %w", err)
 	}
-	r.session.Status = LifecycleStatusRunning
-	r.result.SessionStatus = LifecycleStatusRunning
+	switch strings.TrimSpace(payload.Status) {
+	case string(LifecycleStatusResuming):
+		r.session.Status = LifecycleStatusResuming
+		r.result.SessionStatus = LifecycleStatusResuming
+	default:
+		r.session.Status = LifecycleStatusRunning
+		r.result.SessionStatus = LifecycleStatusRunning
+	}
 	if r.session.Lifecycle == nil {
 		r.session.Lifecycle = &LifecycleTimestamps{}
 	}
@@ -494,6 +503,43 @@ func (r *sessionProjectionReducer) applySessionResultUpdated(envelope canonicalF
 			Message:   strings.TrimSpace(payload.Availability.Message),
 			Retryable: payload.Availability.Retryable,
 		}
+	}
+	return nil
+}
+
+func (r *sessionProjectionReducer) applySessionLifecycleControl(envelope canonicalFactoryEvent) error {
+	var payload struct {
+		Operation      string `json:"operation"`
+		Outcome        string `json:"outcome"`
+		PreviousStatus string `json:"previousStatus"`
+		NewStatus      string `json:"newStatus"`
+		OccurredAt     string `json:"occurredAt"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal SESSION_LIFECYCLE_CONTROL payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Outcome) != string(LifecycleControlOutcomeAccepted) {
+		return nil
+	}
+	r.mergeSessionIdentity(envelope.Context)
+
+	newStatus := strings.TrimSpace(payload.NewStatus)
+	if newStatus != "" {
+		r.session.Status = LifecycleStatus(newStatus)
+	}
+	occurredAt, err := time.Parse(time.RFC3339, strings.TrimSpace(payload.OccurredAt))
+	if err != nil {
+		return fmt.Errorf("parse occurredAt: %w", err)
+	}
+	if r.session.Lifecycle == nil {
+		r.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	operation := strings.TrimSpace(payload.Operation)
+	switch operation {
+	case string(LifecycleControlPause):
+		r.session.Lifecycle.PausedAt = timePtr(occurredAt.UTC())
+	case string(LifecycleControlResume):
+		r.session.Lifecycle.ResumedAt = timePtr(occurredAt.UTC())
 	}
 	return nil
 }
@@ -665,144 +711,4 @@ func stringValuePtr(value *string) string {
 func timePtr(value time.Time) *time.Time {
 	cloned := value
 	return &cloned
-}
-
-func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessionState) {
-	target.session = source.session
-	target.result = source.result
-	target.dispatches = cloneDispatchSummaries(source.dispatches)
-	target.dispatchJavaScript = cloneDispatchJavaScriptProjections(source.dispatchJavaScript)
-	target.dispatchStatusTransitions = cloneDispatchStatusTransitions(source.dispatchStatusTransitions)
-	target.artifacts = cloneArtifactSummaries(source.artifacts)
-	target.events = source.events
-}
-
-func applyRuntimeExecutionRecordProjection(
-	state *runtimeSessionState,
-	sessionID string,
-	records []workflowruntime.RuntimeRecord,
-	finishedAt time.Time,
-) {
-	recordProjection := ProjectRuntimeExecutionRecords(sessionID, records, finishedAt)
-	if recordProjection.Phase != "" {
-		state.session.Phase = recordProjection.Phase
-	}
-	state.dispatches = cloneDispatchSummaries(recordProjection.Dispatches)
-	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(recordProjection.DispatchJavaScript)
-	state.dispatchStatusTransitions = cloneDispatchStatusTransitions(recordProjection.DispatchStatusTransitions)
-	state.artifacts = cloneArtifactSummaries(recordProjection.Artifacts)
-	state.session.Progress = &recordProjection.Progress
-	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
-	state.session.ArtifactCount = len(state.session.ArtifactRefs)
-}
-
-func applyRuntimeSuccessProjection(
-	state *runtimeSessionState,
-	sessionID string,
-	outcome workflowruntime.Outcome,
-	finishedAt time.Time,
-) {
-	applyRuntimeExecutionRecordProjection(state, sessionID, outcome.Records, finishedAt)
-
-	projected, resultSummary, err := projectRuntimeSuccessResult(sessionID, outcome.Value, state.artifacts)
-	if err != nil {
-		state.session.Status = LifecycleStatusFailed
-		state.session.Failure = &FailureSummary{
-			Reason:  "WORKFLOW_RUNTIME_INVALID_RESULT",
-			Message: err.Error(),
-		}
-		state.session.ResultSummary = &ResultSummary{
-			ResultStatus: string(ResultStatusUnavailable),
-		}
-		state.result = ResultReadResult{
-			SessionID:     sessionID,
-			ResultStatus:  ResultStatusUnavailable,
-			SessionStatus: LifecycleStatusFailed,
-			Failure:       cloneFailureSummary(state.session.Failure),
-			Availability:  defaultUnavailableAvailability(),
-		}
-		return
-	}
-	state.session.Status = LifecycleStatusSucceeded
-	state.session.ResultSummary = resultSummary
-	state.result = projected
-}
-
-func projectRuntimeSuccessResult(
-	sessionID string,
-	value workflowresult.TypedValue,
-	artifacts []ArtifactSummary,
-) (ResultReadResult, *ResultSummary, error) {
-	parts, validation := workflowresult.ProjectPrimaryResult(sessionID, value, artifactStatesFromSummaries(artifacts))
-	if validation.HasIssues() {
-		return ResultReadResult{}, nil, fmt.Errorf("project primary result: %v", validation.Issues)
-	}
-
-	primaryJSON := workContentJSONFromParts(parts)
-	result := ResultReadResult{
-		SessionID:     sessionID,
-		ResultStatus:  ResultStatusFinal,
-		SessionStatus: LifecycleStatusSucceeded,
-		PrimaryResult: primaryJSON,
-		ArtifactIDs:   artifactIDsFromSummaries(artifacts),
-	}
-	summary := &ResultSummary{
-		ResultStatus: string(ResultStatusFinal),
-		Summary:      resultSummaryTextFromParts(parts),
-	}
-	return result, summary, nil
-}
-
-func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
-	content := workcontent.GeneratedPtrFromParts(parts)
-	if content == nil {
-		return nil
-	}
-	encoded, err := json.Marshal(content)
-	if err != nil {
-		return nil
-	}
-	return encoded
-}
-
-func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
-	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
-			if text := strings.TrimSpace(part.Text); text != "" {
-				return text
-			}
-		}
-	}
-	return ""
-}
-
-func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.FactorySessionArtifactState {
-	if len(artifacts) == 0 {
-		return nil
-	}
-	states := make([]interfaces.FactorySessionArtifactState, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		states = append(states, interfaces.FactorySessionArtifactState{
-			ID:          artifact.ID,
-			Kind:        artifact.Kind,
-			Visibility:  artifact.Visibility,
-			Label:       artifact.Label,
-			ContentHash: artifact.ContentHash,
-			SizeBytes:   artifact.SizeBytes,
-			AuditMode:   artifact.AuditMode,
-		})
-	}
-	return states
-}
-
-// PersistedRuntimeSessionState is a JSON-serializable durable runtime session snapshot
-// used to reload terminal JavaScript runtime sessions across CLI invocations.
-type PersistedRuntimeSessionState struct {
-	Session                   SessionReadResult
-	Result                    ResultReadResult
-	Dispatches                []DispatchSummary
-	DispatchJavaScript        map[string]DispatchJavaScriptProjection
-	DispatchStatusTransitions map[string][]DispatchStatus
-	Artifacts                 []ArtifactSummary
-	Events                    []json.RawMessage
 }

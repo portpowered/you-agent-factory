@@ -95,6 +95,97 @@ func TestGeneratedArtifactsAndCanonicalFixturesOmitRetiredEventNames(t *testing.
 	}
 }
 
+func TestGeneratedFactoryInferenceResponseEvent_UsesCanonicalPublicFieldsOnly(t *testing.T) {
+	eventTime := time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC)
+	dispatchID := "dispatch-cursor-1"
+	requestMetadata := factoryapi.StringMap{
+		"request_id": "req-123",
+	}
+	responseMetadata := factoryapi.StringMap{
+		"duration_ms": "25",
+	}
+	event := factoryapi.FactoryEvent{
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Id:            "event-inference-response-cursor",
+		Type:          factoryapi.FactoryEventTypeInferenceResponse,
+		Context: factoryapi.FactoryEventContext{
+			Sequence:   10,
+			Tick:       4,
+			EventTime:  eventTime,
+			DispatchId: &dispatchID,
+		},
+		Payload: factoryEventPayload(t, factoryapi.InferenceResponseEventPayload{
+			InferenceRequestId: "inference-request-cursor",
+			Attempt:            1,
+			Outcome:            factoryapi.InferenceOutcomeSucceeded,
+			Response:           stringPtr("Plan done"),
+			DurationMillis:     25,
+			ProviderSession: &factoryapi.ProviderSessionMetadata{
+				Provider: stringPtr("cursor"),
+				Kind:     stringPtr("session_id"),
+				Id:       stringPtr("cursor-session-123"),
+			},
+			Diagnostics: &factoryapi.SafeWorkDiagnostics{
+				Provider: &factoryapi.ProviderDiagnostic{
+					Provider:         stringPtr("cursor"),
+					Model:            stringPtr("gpt-5"),
+					RequestMetadata:  &requestMetadata,
+					ResponseMetadata: &responseMetadata,
+				},
+			},
+		}),
+	}
+
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal generated FactoryEvent: %v", err)
+	}
+
+	var roundTripped map[string]any
+	decodeRoundTripJSON(t, encoded, &roundTripped, "generated cursor inference response event")
+	payload, ok := roundTripped["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload = %#v, want object", roundTripped["payload"])
+	}
+
+	assertJSONKeysAbsent(t, payload, "generated inference response payload", "kind", "payload", "providerSessionRef", "timestamp_ms", "model_call_id")
+	providerSession, ok := payload["providerSession"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload.providerSession = %#v, want object", payload["providerSession"])
+	}
+	assertJSONKeysAbsent(t, providerSession, "generated provider session payload", "providerSessionRef", "session_id", "timestamp_ms", "model_call_id")
+
+	diagnostics, ok := payload["diagnostics"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload.diagnostics = %#v, want object", payload["diagnostics"])
+	}
+	assertJSONKeysAbsent(t, diagnostics, "generated safe diagnostics payload", "kind", "payload", "rawEvent", "streamJson")
+
+	providerDiagnostics, ok := diagnostics["provider"].(map[string]any)
+	if !ok {
+		t.Fatalf("payload.diagnostics.provider = %#v, want object", diagnostics["provider"])
+	}
+	assertJSONKeysAbsent(t, providerDiagnostics, "generated provider diagnostics payload", "providerSessionRef", "timestamp_ms", "model_call_id")
+}
+
+func TestGeneratedPublicEventArtifactsOmitInternalResponseStreamTerms(t *testing.T) {
+	paths := []string{
+		filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"),
+		filepath.FromSlash("../../replay/testdata/inference-events.replay.json"),
+	}
+
+	for _, path := range paths {
+		path := path
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			assertTextOmitsInternalResponseStreamTerms(t, string(data))
+		})
+	}
+}
+
 func TestGeneratedInferenceEventJSONRoundTripPreservesAttemptCorrelation(t *testing.T) {
 	event := decodeFactoryEventJSON(t, `{
 		"schemaVersion": "agent-factory.event.v1",
@@ -368,9 +459,9 @@ func generatedFactoryOrchestratorLifecycleEvents(t *testing.T, eventTime time.Ti
 			Type:          factoryapi.FactoryEventTypeJavaScriptPhaseChange,
 			Context:       factoryapi.FactoryEventContext{Sequence: 11, Tick: 6, EventTime: eventTime},
 			Payload: factoryEventPayload(t, factoryapi.JavaScriptPhaseChangeEventPayload{
-				Phase:      "execute",
-				Phases:     []string{"plan", "execute"},
-				ArgsDigest: stringPtr("sha256:args"),
+				Phase:        "execute",
+				Phases:       []string{"plan", "execute"},
+				ArgsDigest:   stringPtr("sha256:args"),
 				ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusRUNNING,
 				ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
 					Queued:    1,
@@ -461,12 +552,13 @@ func generatedFactoryWorkEvents(t *testing.T) []factoryapi.FactoryEvent {
 
 func generatedFactoryExecutionEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
-	events := make([]factoryapi.FactoryEvent, 0, 9)
+	events := make([]factoryapi.FactoryEvent, 0, 10)
 	events = append(events, generatedFactoryDispatchEvents(t)...)
 	events = append(events, generatedFactoryWorkStateChangeEvents(t)...)
 	events = append(events, generatedFactoryModelEvents(t)...)
 	events = append(events, generatedFactoryInferenceEvents(t)...)
 	events = append(events, generatedFactoryScriptEvents(t)...)
+	events = append(events, generatedFactoryAgentRunEvents(t)...)
 	return events
 }
 
@@ -828,6 +920,7 @@ func assertEventPayloadJSONOmitsKeys(t *testing.T, event factoryapi.FactoryEvent
 			t.Fatalf("generated event payload must not reintroduce payload.%s: %#v", key, payloadJSON)
 		}
 	}
+	assertTextOmitsInternalResponseStreamTerms(t, string(encoded))
 }
 
 func assertGeneratedWorkRequestEventContext(t *testing.T, event factoryapi.FactoryEvent) {

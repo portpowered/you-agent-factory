@@ -59,6 +59,13 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	if got := collectorSink.statusTransitions("dispatch-1"); len(got) != 3 {
 		t.Fatalf("recorded status transitions = %#v, want queued/running/completed", got)
 	}
+	completed := collectorSink.completedDispatchRecord("dispatch-1")
+	if completed == nil {
+		t.Fatal("expected completed child dispatch record")
+	}
+	if completed.Output["text"] != "bridged-child-output" {
+		t.Fatalf("completed output text = %#v, want bridged-child-output", completed.Output["text"])
+	}
 }
 
 type unitMockProvider struct {
@@ -156,6 +163,20 @@ func (s *testChildRecordSink) statusTransitions(dispatchID string) []string {
 		transitions = append(transitions, status)
 	}
 	return transitions
+}
+
+func (s *testChildRecordSink) completedDispatchRecord(dispatchID string) *workflowruntime.ChildDispatchRecord {
+	for i := len(s.records) - 1; i >= 0; i-- {
+		record := s.records[i]
+		if record.ChildDispatch == nil || record.ChildDispatch.DispatchID != dispatchID {
+			continue
+		}
+		if record.ChildDispatch.Status == workflowruntime.ChildDispatchStatusCompleted {
+			child := *record.ChildDispatch
+			return &child
+		}
+	}
+	return nil
 }
 
 func (s *testChildRecordSink) failedDispatchRecords(dispatchID string) []workflowruntime.ChildDispatchRecord {

@@ -64,13 +64,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/current-factory-definition/hooks/useCurrentFactoryDefinition.ts",
-    importSpecifiers: ["../../dashboard/session/dashboard-session-provider"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
       "src/features/current-factory-definition/hooks/useFactoryDocumentSave.test-helpers.tsx",
     importSpecifiers: ["../../dashboard/session/dashboard-session-provider"],
     reason:
@@ -954,15 +947,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/dashboard/hooks/useDashboardSessionLifecycle.ts",
     importSpecifiers: ["../../timeline/state/factoryTimelineStore"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath: "src/features/dashboard/hooks/useDashboardSnapshot.ts",
-    importSpecifiers: [
-      "../../timeline/state/factoryTimelineDebug",
-      "../../timeline/state/factoryTimelineStore",
-    ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },

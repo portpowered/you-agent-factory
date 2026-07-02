@@ -98,10 +98,11 @@ type ChildDispatchRecord struct {
 	ExecutionMode      string `json:"executionMode,omitempty"`
 	Provider           string `json:"provider,omitempty"`
 	ProviderSessionRef string `json:"providerSessionRef,omitempty"`
-	ArtifactRef        string `json:"artifactRef,omitempty"`
-	FailureReason      string `json:"failureReason,omitempty"`
-	FailureMessage     string `json:"failureMessage,omitempty"`
-	FailureErrorClass  string `json:"failureErrorClass,omitempty"`
+	ArtifactRef        string         `json:"artifactRef,omitempty"`
+	Output             map[string]any `json:"output,omitempty"`
+	FailureReason      string         `json:"failureReason,omitempty"`
+	FailureMessage     string         `json:"failureMessage,omitempty"`
+	FailureErrorClass  string         `json:"failureErrorClass,omitempty"`
 }
 
 // BudgetRecord captures effective policy budget values observed by the runtime.

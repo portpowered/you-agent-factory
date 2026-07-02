@@ -15,6 +15,7 @@ type Request struct {
 	Args      json.RawMessage
 	Metadata  map[string]string
 	Policy    workflowpolicy.EffectivePolicy
+	Resume    *ResumeContext
 }
 
 // ChildRecordSink reserves child dispatch identity and appends typed runtime records.
