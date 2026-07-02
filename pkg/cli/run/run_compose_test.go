@@ -16,17 +16,17 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestInjectCLITransport_MatchesServiceBuildFactoryServiceInvalidConfig(t *testing.T) {
+func TestInjectRuntimeRunner_MatchesServiceBuildFactoryServiceInvalidConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &service.FactoryServiceConfig{
 		Dir: t.TempDir(),
 	}
 
-	_, errWire := compose.InjectCLITransport(ctx, cfg)
+	_, errWire := compose.InjectRuntimeRunner(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
 	if errWire == nil {
-		t.Fatal("expected InjectCLITransport to fail without factory.json")
+		t.Fatal("expected InjectRuntimeRunner to fail without factory.json")
 	}
 	if errService == nil {
 		t.Fatal("expected service.BuildFactoryService to fail without factory.json")
@@ -36,7 +36,31 @@ func TestInjectCLITransport_MatchesServiceBuildFactoryServiceInvalidConfig(t *te
 	}
 }
 
-func TestInjectCLITransport_RunCompletesBatchWithMockWorkers(t *testing.T) {
+func TestRun_InitializerStartupFailureReturnsActionableError(t *testing.T) {
+	restoreBuilder := setInitializerRuntimeBuilder(t)
+	defer restoreBuilder()
+
+	dir := t.TempDir()
+	err := Run(context.Background(), RunConfig{
+		Dir:                        dir,
+		Port:                       0,
+		SuppressDashboardRendering: true,
+		Logger:                     zap.NewNop(),
+	})
+	if err == nil {
+		t.Fatal("expected Run to fail without factory.json")
+	}
+
+	_, errService := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{Dir: dir})
+	if errService == nil {
+		t.Fatal("expected service.BuildFactoryService to fail without factory.json")
+	}
+	if err.Error() != errService.Error() {
+		t.Fatalf("Run startup error = %q, want %q", err, errService)
+	}
+}
+
+func TestInjectRuntimeRunner_RunCompletesBatchWithMockWorkers(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	writeCLITransportTestWorkerAgentsMD(t, dir, "worker-a")
@@ -64,22 +88,8 @@ func TestInjectCLITransport_RunCompletesBatchWithMockWorkers(t *testing.T) {
 		t.Fatalf("write work file: %v", err)
 	}
 
-	originalBuilder := buildFactoryService
-	defer func() {
-		buildFactoryService = originalBuilder
-	}()
-
-	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		transport, err := compose.InjectCLITransport(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		runner := transport.Runner()
-		if runner == nil {
-			return nil, errors.New("initializer CLI transport missing runtime runner")
-		}
-		return runner, nil
-	}
+	restoreBuilder := setInitializerRuntimeBuilder(t)
+	defer restoreBuilder()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -106,27 +116,26 @@ func TestInjectCLITransport_RunCompletesBatchWithMockWorkers(t *testing.T) {
 	}
 }
 
-func writeCLITransportTestWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {
-	t.Helper()
-	workerDir := filepath.Join(factoryDir, "workers", workerName)
-	if err := os.MkdirAll(workerDir, 0o755); err != nil {
-		t.Fatalf("create worker dir: %v", err)
-	}
-	content := "---\ntype: MODEL_WORKER\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n"
-	if err := os.WriteFile(filepath.Join(workerDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
-		t.Fatalf("write worker AGENTS.md: %v", err)
-	}
-}
+func TestInjectRuntimeRunner_CleanInvocationReturnsPrimaryResult(t *testing.T) {
+	dir, workFile := writeDashboardRunFixture(t)
 
-func writeCLITransportTestWorkstationAgentsMD(t *testing.T, factoryDir, workstationName string) {
-	t.Helper()
-	workstationDir := filepath.Join(factoryDir, "workstations", workstationName)
-	if err := os.MkdirAll(workstationDir, 0o755); err != nil {
-		t.Fatalf("create workstation dir: %v", err)
+	restoreBuilder := setInitializerRuntimeBuilder(t)
+	defer restoreBuilder()
+
+	output, err := runWithCapturedStdout(t, RunConfig{
+		Dir:                     dir,
+		Port:                    0,
+		WorkFile:                workFile,
+		MockWorkersEnabled:      true,
+		CleanInvocation:         true,
+		DisableDefaultRecording: true,
+		Logger:                  zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
 	}
-	content := "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"
-	if err := os.WriteFile(filepath.Join(workstationDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
-		t.Fatalf("write workstation AGENTS.md: %v", err)
+	if output != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want primary clean invocation output", output)
 	}
 }
 
@@ -155,5 +164,29 @@ func TestBuildFactoryService_OverrideableWithoutWire(t *testing.T) {
 	})
 	if err == nil || err.Error() != "stub run" {
 		t.Fatalf("Run with stub builder = %v, want stub run", err)
+	}
+}
+
+func writeCLITransportTestWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {
+	t.Helper()
+	workerDir := filepath.Join(factoryDir, "workers", workerName)
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("create worker dir: %v", err)
+	}
+	content := "---\ntype: MODEL_WORKER\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n"
+	if err := os.WriteFile(filepath.Join(workerDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write worker AGENTS.md: %v", err)
+	}
+}
+
+func writeCLITransportTestWorkstationAgentsMD(t *testing.T, factoryDir, workstationName string) {
+	t.Helper()
+	workstationDir := filepath.Join(factoryDir, "workstations", workstationName)
+	if err := os.MkdirAll(workstationDir, 0o755); err != nil {
+		t.Fatalf("create workstation dir: %v", err)
+	}
+	content := "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"
+	if err := os.WriteFile(filepath.Join(workstationDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
 	}
 }

@@ -580,7 +580,7 @@ func TestRun_WireBuiltFactoryServiceServesStatus(t *testing.T) {
 		t.Fatalf("Close listener: %v", err)
 	}
 
-	restoreBuilder := setInitializerAPIRuntimeBuilder(t)
+	restoreBuilder := setInitializerRuntimeBuilder(t)
 	defer restoreBuilder()
 
 	originalStartAPIServer := startAPIServer
@@ -670,7 +670,7 @@ func TestRun_WireBuiltFactoryServiceListsModels(t *testing.T) {
 		t.Fatalf("Close listener: %v", err)
 	}
 
-	restoreBuilder := setInitializerAPIRuntimeBuilder(t)
+	restoreBuilder := setInitializerRuntimeBuilder(t)
 	defer restoreBuilder()
 
 	originalStartAPIServer := startAPIServer

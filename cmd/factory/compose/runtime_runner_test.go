@@ -40,6 +40,24 @@ func TestInjectRuntimeRunner_RejectsMissingFactoryConfig(t *testing.T) {
 	}
 }
 
+func TestInjectRuntimeRunner_SelectsCLITransportWhenPortZero(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{"name":"cli-runner","workTypes":[]}`), 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	ctx := context.Background()
+	runner, err := compose.InjectRuntimeRunner(ctx, &service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("InjectRuntimeRunner without port: %v", err)
+	}
+	if runner == nil {
+		t.Fatal("expected CLI transport runtime runner")
+	}
+}
+
 func TestInjectRuntimeRunner_SelectsAPITransportWhenPortConfigured(t *testing.T) {
 	t.Parallel()
 

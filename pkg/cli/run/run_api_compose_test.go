@@ -3,7 +3,6 @@ package run
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -123,25 +122,6 @@ func TestInjectAPITransport_RunServesSessionModelAndFactoryEndpoints(t *testing.
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for Run to exit after cancel")
-	}
-}
-
-func setInitializerAPIRuntimeBuilder(t *testing.T) func() {
-	t.Helper()
-
-	originalBuilder := buildFactoryService
-	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		runner, err := compose.InjectRuntimeRunner(ctx, cfg)
-		if err != nil {
-			return nil, err
-		}
-		if runner == nil {
-			return nil, errors.New("initializer runtime runner missing")
-		}
-		return runner, nil
-	}
-	return func() {
-		buildFactoryService = originalBuilder
 	}
 }
 
