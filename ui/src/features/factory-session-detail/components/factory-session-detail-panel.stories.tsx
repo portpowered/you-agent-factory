@@ -1,4 +1,7 @@
 import {
+  LiveProviderSuccessInspection as liveProviderSuccessInspectionStory,
+} from "../lib/factory-session-detail-panel.live-provider-story-definitions.stories.shared";
+import {
   DispatchDrilldownStates as dispatchDrilldownStatesStory,
 } from "../lib/factory-session-detail-panel.story-definitions.stories.shared";
 import {
@@ -17,6 +20,9 @@ export default {
 };
 
 export const DispatchDrilldownStates = { ...dispatchDrilldownStatesStory };
+export const LiveProviderSuccessInspection = {
+  ...liveProviderSuccessInspectionStory,
+};
 export const DurableReplayDisclosure = { ...durableReplayDisclosureStory };
 export const DurableReplayDisclosureAwaitingApproval = {
   ...durableReplayDisclosureAwaitingApprovalStory,

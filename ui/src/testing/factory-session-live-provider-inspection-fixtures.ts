@@ -37,6 +37,34 @@ export function buildSuccessfulLiveProviderDispatchSummary() {
   };
 }
 
+export function buildSuccessfulLiveProviderDispatchList() {
+  return {
+    dispatches: [buildSuccessfulLiveProviderDispatchSummary()],
+    sessionId: successfulLiveProviderSessionID,
+  };
+}
+
+export function buildSuccessfulLiveProviderDispatchDetail() {
+  return {
+    artifactIds: ["art-js-success-001"],
+    attempt: 1,
+    dispatchKind: "JAVASCRIPT_VERIFY",
+    id: successfulLiveProviderDispatchID,
+    javascript: {
+      executionMode: "live",
+      taskKind: "VERIFY",
+      taskLabel: "verify-docs",
+    },
+    label: "verify-docs",
+    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+    providerSessionRefs: [successfulLiveProviderSessionRef],
+    relatedWorkIds: ["work-docs-refresh-001"],
+    sessionId: successfulLiveProviderSessionID,
+    status: "COMPLETED",
+    statusTransitions: ["QUEUED", "RUNNING", "COMPLETED"],
+  };
+}
+
 export function buildFailedBridgedChildDispatchSummary() {
   return {
     attempt: 1,
