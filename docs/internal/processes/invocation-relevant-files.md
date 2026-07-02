@@ -243,7 +243,8 @@ primary-result behavior.
 - Behavioral proof for named goal batch invocation lives in
   `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
-  legacy-materialized upgrade smoke case.
+  fresh-home materialization smoke case, a customer-edit preservation rerun
+  smoke case, and a legacy-materialized upgrade smoke case.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
