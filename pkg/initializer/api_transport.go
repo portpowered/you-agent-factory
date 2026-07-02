@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 // APITransport bundles initializer-produced domain services with the session
@@ -42,18 +41,4 @@ func (t *APITransport) Run(ctx context.Context) error {
 		return nil
 	}
 	return t.Host.Run(ctx)
-}
-
-func servicesFromCore(core *Core) *Services {
-	if core == nil {
-		return nil
-	}
-	return &Services{
-		core:              core,
-		Sessions:          core.Sessions(),
-		FactoryDefinition: service.NewFactoryDefinitionServiceFromCore(core),
-		Models:            service.NewModelServiceFromCore(core),
-		Workers:           core.HostedWorkers(),
-		RuntimeHost:       core.RuntimeBuild(),
-	}
 }

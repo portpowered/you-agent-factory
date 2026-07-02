@@ -94,7 +94,10 @@ You are a helpful assistant.
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	}
 	errInit := func() error {
-		_, err := initializer.Initialize(ctx, cfg)
+		services, err := initializer.Initialize(ctx, cfg)
+		if services != nil {
+			t.Fatal("expected Initialize to return nil services for openCodeAgent runtime host construction failure")
+		}
 		return err
 	}()
 	errService := func() error {

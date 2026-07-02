@@ -22,9 +22,12 @@ func TestInitialize_RejectsMissingFactoryConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &initializer.Config{Dir: t.TempDir()}
 
-	_, errInit := initializer.Initialize(ctx, cfg)
+	services, errInit := initializer.Initialize(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
+	if services != nil {
+		t.Fatal("expected Initialize to return nil services without factory.json")
+	}
 	if errInit == nil {
 		t.Fatal("expected Initialize to fail without factory.json")
 	}
@@ -66,9 +69,12 @@ func TestInitialize_RejectsInvalidFactoryConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &initializer.Config{Dir: dir}
 
-	_, errInit := initializer.Initialize(ctx, cfg)
+	services, errInit := initializer.Initialize(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
+	if services != nil {
+		t.Fatal("expected Initialize to return nil services for invalid workstation worker reference")
+	}
 	if errInit == nil {
 		t.Fatal("expected Initialize to fail for invalid workstation worker reference")
 	}

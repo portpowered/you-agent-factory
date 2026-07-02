@@ -37,3 +37,17 @@ func (s *Services) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, b
 	}
 	return service.StartupWorkerConfigFromCore(s.core, name)
 }
+
+func servicesFromCore(core *Core) *Services {
+	if core == nil {
+		return nil
+	}
+	return &Services{
+		core:              core,
+		Sessions:          core.Sessions(),
+		FactoryDefinition: service.NewFactoryDefinitionServiceFromCore(core),
+		Models:            service.NewModelServiceFromCore(core),
+		Workers:           core.HostedWorkers(),
+		RuntimeHost:       core.RuntimeBuild(),
+	}
+}
