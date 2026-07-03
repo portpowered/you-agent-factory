@@ -30,7 +30,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@you-agent-factory/components/data-display";
 import {
   DashboardEmptyState,
   DashboardEmptyStateText,
