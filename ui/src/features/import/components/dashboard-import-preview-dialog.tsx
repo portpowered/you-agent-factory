@@ -4,18 +4,20 @@ import {
 } from "@you-agent-factory/components/recipes";
 import { useId, useMemo, useState } from "react";
 import {
-  AlertPanel,
-  Button,
-  DescriptionList,
-  Heading,
-  Label,
-  Text,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+} from "@you-agent-factory/components";
+import {
+  AlertPanel,
+  Button,
+  DescriptionList,
+  Heading,
+  Label,
+  Text,
   SurfacePanel,
 } from "../../../components/ui";
 import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";

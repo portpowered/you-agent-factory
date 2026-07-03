@@ -10,3 +10,23 @@
 @import "./styles/typography-role-utilities.css";
 @import "./styles/typography-roles.css";
 @import "./styles/layout-role-tokens.css";
+
+@keyframes overlay-collapsible-down {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes overlay-collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+
+  to {
+    height: 0;
+  }
+}

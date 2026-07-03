@@ -7,7 +7,7 @@ import "react-resizable/css/styles.css";
 
 import { Heading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
-import { ScrollArea } from "../../../components/ui/scroll-area";
+import { ScrollArea } from "@you-agent-factory/components";
 import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 

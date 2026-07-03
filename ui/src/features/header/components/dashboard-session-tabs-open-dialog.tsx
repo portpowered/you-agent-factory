@@ -5,13 +5,15 @@ import type {
   FactorySessionTarget,
 } from "../../../api/factory-sessions";
 import {
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@you-agent-factory/components";
+import {
   AlertPanel,
   AlertPanelText,
   Button,
   Text,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
   Input,
   StandardListSelection,
   StandardListSelectionItem,

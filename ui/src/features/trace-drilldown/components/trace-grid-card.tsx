@@ -15,11 +15,8 @@ import {
   Label,
   ExpandablePanelTrigger,
 } from "../../../components/ui";
+import { Collapsible, CollapsibleContent } from "@you-agent-factory/components";
 import { Button } from "../../../components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-} from "../../../components/ui/collapsible";
 import {
   formatDurationMillis,
   formatTraceOutcome,
