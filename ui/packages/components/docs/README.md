@@ -24,3 +24,9 @@ read it directly from the package; no docs-site implementation is required.
 See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
+
+## Component docs
+
+- [Widget frame and layout recipes](./widget-frame-recipes.md) — import paths,
+  state ownership, accessibility, Storybook references, and source-copy guidance
+  for domain-free framed panels.

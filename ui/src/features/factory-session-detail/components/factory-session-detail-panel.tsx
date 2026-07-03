@@ -15,7 +15,9 @@ import {
   DashboardText,
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
-import { DetailCopy } from "../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
 import {
   FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
@@ -187,7 +189,7 @@ function JavaScriptSessionProjection({
   });
 
   if (!javascript) {
-    return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
+    return <WidgetDetailCopy>{messages.javascriptProjectionMissingState}</WidgetDetailCopy>;
   }
 
   const warnings = (dispatches ?? []).flatMap(
@@ -299,7 +301,7 @@ function DispatchSummaryList({
   return (
     <section className="grid gap-3">
       <DashboardLabel>{messages.dispatchesHeading}</DashboardLabel>
-      <DetailCopy>{messages.dispatchSelectionHint}</DetailCopy>
+      <WidgetDetailCopy>{messages.dispatchSelectionHint}</WidgetDetailCopy>
       <div className="grid gap-3">
         {dispatches.map((dispatch) => (
           <DispatchSummaryRow
@@ -431,17 +433,17 @@ function DispatchDetailState({
 
   if (state.status === "loading") {
     return (
-      <DetailCopy id={detailRegionID} role="status">
+      <WidgetDetailCopy id={detailRegionID} role="status">
         {messages.dispatchDetailLoadingState}
-      </DetailCopy>
+      </WidgetDetailCopy>
     );
   }
 
   if (state.status === "not-found") {
     return (
-      <DetailCopy id={detailRegionID} role="status">
+      <WidgetDetailCopy id={detailRegionID} role="status">
         {messages.dispatchDetailMissingState(dispatchID)}
-      </DetailCopy>
+      </WidgetDetailCopy>
     );
   }
 
@@ -482,7 +484,7 @@ function PetriSessionProjection({
   const messages = getFactorySessionDetailMessages(locale);
 
   if (!petri) {
-    return <DetailCopy>{messages.markingEmptyState}</DetailCopy>;
+    return <WidgetDetailCopy>{messages.markingEmptyState}</WidgetDetailCopy>;
   }
 
   return (

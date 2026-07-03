@@ -6,7 +6,9 @@ import {
   DashboardText,
 } from "../../../../../components/ui";
 import { getProviderSessionLogTarget } from "../../../../../components/ui/formatters";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
@@ -203,7 +205,7 @@ function ProviderSessionAttemptList({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   if (attempts.length === 0) {
-    return <DetailCopy>{emptyMessage}</DetailCopy>;
+    return <WidgetDetailCopy>{emptyMessage}</WidgetDetailCopy>;
   }
 
   return (

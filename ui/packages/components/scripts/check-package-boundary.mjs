@@ -23,6 +23,7 @@ const forbiddenRuntimeModulePrefixes = [
   "@tanstack/react-query",
   "monaco-editor",
   "@monaco-editor/react",
+  "react-grid-layout",
   "sonner",
 ];
 
