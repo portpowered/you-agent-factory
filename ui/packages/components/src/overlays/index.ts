@@ -2,3 +2,30 @@
 export const COMPONENTS_CATEGORY = "overlays" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
+
+export {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./collapsible";
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "./dialog";
+export type { DialogContentProps } from "./dialog";
+export {
+  OVERLAY_DIALOG_BODY_CLASS,
+  OVERLAY_DIALOG_CONTENT_SHELL_CLASS,
+  OVERLAY_FORM_GROUP_CLASS,
+} from "./overlay-layout";
+export { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "./popover";
+export { ScrollArea, ScrollBar } from "./scroll-area";
+export type { ScrollAreaProps, ScrollBarProps } from "./scroll-area";

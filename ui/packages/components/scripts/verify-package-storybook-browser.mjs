@@ -14,12 +14,24 @@ const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
 const port = Number(
   process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817",
 );
-const storyId = "primitives-packagetext--body";
-const storyText = "Hello from the component package";
+const storyIds = [
+  "primitives-packagetext--body",
+  "overlays-dialog--default",
+  "overlays-popover--default",
+  "overlays-collapsible--default",
+  "overlays-scrollarea--default",
+];
+const storyTexts = {
+  "primitives-packagetext--body": "Hello from the component package",
+  "overlays-dialog--default": "Package dialog",
+  "overlays-popover--default": "Popover content from the component package",
+  "overlays-collapsible--default":
+    "Collapsible content rendered from the package overlays category",
+  "overlays-scrollarea--default": "Scrollable row 1",
+};
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
 const indexUrl = `${baseUrl}/index.json`;
-const iframeUrl = `${baseUrl}/iframe.html?id=${storyId}&viewMode=story`;
 
 function assertPortAvailable(hostName, portNumber) {
   return new Promise((resolve, reject) => {
@@ -136,38 +148,43 @@ async function main() {
   try {
     const indexResponse = await waitForHttpOk(indexUrl);
     const indexPayload = await indexResponse.json();
-    const storyEntry = indexPayload.entries?.[storyId];
 
-    if (!storyEntry) {
-      throw new Error(
-        `Expected package story ${storyId} in ${indexUrl}, found ${Object.keys(indexPayload.entries ?? {}).join(", ")}`,
+    for (const storyId of storyIds) {
+      const storyEntry = indexPayload.entries?.[storyId];
+
+      if (!storyEntry) {
+        throw new Error(
+          `Expected package story ${storyId} in ${indexUrl}, found ${Object.keys(indexPayload.entries ?? {}).join(", ")}`,
+        );
+      }
+
+      const iframeUrl = `${baseUrl}/iframe.html?id=${storyId}&viewMode=story`;
+      const iframeResponse = await waitForHttpOk(iframeUrl);
+      if (!iframeResponse.ok) {
+        throw new Error(`Expected ${iframeUrl} to return HTTP 200.`);
+      }
+
+      const storyText = storyTexts[storyId];
+      const assetBundleText = readStaticAssetBundleText();
+      if (!assetBundleText.includes(storyText)) {
+        throw new Error(
+          `Built package Storybook assets did not include story text for ${storyId}.`,
+        );
+      }
+
+      if (
+        assetBundleText.includes("DashboardSessionProvider") ||
+        assetBundleText.includes("@tanstack/react-query")
+      ) {
+        throw new Error(
+          "Built package Storybook assets appear to include dashboard runtime providers.",
+        );
+      }
+
+      console.log(
+        `Verified package Storybook story ${storyId} at ${iframeUrl} without dashboard providers.`,
       );
     }
-
-    const iframeResponse = await waitForHttpOk(iframeUrl);
-    if (!iframeResponse.ok) {
-      throw new Error(`Expected ${iframeUrl} to return HTTP 200.`);
-    }
-
-    const assetBundleText = readStaticAssetBundleText();
-    if (!assetBundleText.includes(storyText)) {
-      throw new Error(
-        `Built package Storybook assets did not include story text for ${storyId}.`,
-      );
-    }
-
-    if (
-      assetBundleText.includes("DashboardSessionProvider") ||
-      assetBundleText.includes("@tanstack/react-query")
-    ) {
-      throw new Error(
-        "Built package Storybook assets appear to include dashboard runtime providers.",
-      );
-    }
-
-    console.log(
-      `Verified package Storybook story ${storyId} at ${iframeUrl} without dashboard providers.`,
-    );
   } finally {
     cleanup();
     await delay(500);
