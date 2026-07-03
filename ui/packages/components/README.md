@@ -140,6 +140,9 @@ See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site
 route, generated registry, or additional build-time documentation tooling.
 
+- [Charts](./docs/charts.md) — config, presentation, tooltip and legend,
+  state panels, and caller-owned series state
+
 ## Development
 
 From `ui/packages/components`:

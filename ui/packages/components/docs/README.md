@@ -24,3 +24,8 @@ read it directly from the package; no docs-site implementation is required.
 See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
+
+## Component guides
+
+- [Charts](./charts.md) — `ChartContainer`, tooltip and legend content, state
+  panels, config types, and host-owned data boundaries
