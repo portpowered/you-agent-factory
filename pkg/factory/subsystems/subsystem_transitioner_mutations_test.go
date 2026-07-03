@@ -843,12 +843,7 @@ func newAcceptedMixedWorkResourceMutationFixture() acceptedMixedWorkResourceMuta
 	}
 }
 
-func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfaces.MarkingMutation, resource interfaces.Token) {
-	t.Helper()
-	if len(mutations) != 2 {
-		t.Fatalf("mutation count = %d, want 2 (work output + resource release)", len(mutations))
-	}
-
+func findWorkAndResourceMutations(mutations []interfaces.MarkingMutation) (*interfaces.MarkingMutation, *interfaces.MarkingMutation) {
 	var workMutation *interfaces.MarkingMutation
 	var resourceMutation *interfaces.MarkingMutation
 	for i := range mutations {
@@ -862,6 +857,11 @@ func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfac
 			resourceMutation = &mutations[i]
 		}
 	}
+	return workMutation, resourceMutation
+}
+
+func assertAcceptedMixedWorkOutputMutation(t *testing.T, workMutation *interfaces.MarkingMutation) {
+	t.Helper()
 	if workMutation == nil {
 		t.Fatal("expected work output mutation")
 	}
@@ -871,6 +871,10 @@ func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfac
 	if workMutation.NewToken.Color.TraceID != "trace-batch-idea-001" {
 		t.Fatalf("work TraceID = %q, want trace-batch-idea-001", workMutation.NewToken.Color.TraceID)
 	}
+}
+
+func assertReleasedResourceMutationBasics(t *testing.T, resourceMutation *interfaces.MarkingMutation, resource interfaces.Token) {
+	t.Helper()
 	if resourceMutation == nil {
 		t.Fatal("expected resource release mutation")
 	}
@@ -886,6 +890,16 @@ func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfac
 	if resourceMutation.NewToken.Color.TraceID != "" {
 		t.Fatalf("released resource TraceID = %q, want empty", resourceMutation.NewToken.Color.TraceID)
 	}
+}
+
+func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfaces.MarkingMutation, resource interfaces.Token) {
+	t.Helper()
+	if len(mutations) != 2 {
+		t.Fatalf("mutation count = %d, want 2 (work output + resource release)", len(mutations))
+	}
+	workMutation, resourceMutation := findWorkAndResourceMutations(mutations)
+	assertAcceptedMixedWorkOutputMutation(t, workMutation)
+	assertReleasedResourceMutationBasics(t, resourceMutation, resource)
 }
 
 func TestCalculateMutations_AcceptedMixedWorkResource_ReleasesConsumedResourceRegardlessOfInputOrder(t *testing.T) {

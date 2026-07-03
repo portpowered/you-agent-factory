@@ -743,55 +743,31 @@ func newAcceptedReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, 
 	return tp, snapshot, resourceConsumed
 }
 
+func assertReleasedResourcePipelineHistory(t *testing.T, released *interfaces.Token, resourceConsumed interfaces.Token) {
+	t.Helper()
+	if released.ID != resourceConsumed.ID || released.Color.WorkID != resourceConsumed.Color.WorkID {
+		t.Fatalf("released resource token = %#v, want preserved identity from %#v", released, resourceConsumed)
+	}
+	if !released.CreatedAt.Equal(resourceConsumed.CreatedAt) {
+		t.Fatalf("CreatedAt = %v, want %v", released.CreatedAt, resourceConsumed.CreatedAt)
+	}
+	if released.Color.Tags["pool"] != "shared" {
+		t.Fatalf("tag pool = %q, want %q", released.Color.Tags["pool"], "shared")
+	}
+	if released.History.PlaceVisits["agent-slot:available"] != 4 {
+		t.Fatalf("PlaceVisits = %#v, want preserved history", released.History.PlaceVisits)
+	}
+}
+
 func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickResult, resourceConsumed interfaces.Token) {
 	t.Helper()
 	if result == nil || len(result.Mutations) != 2 {
 		t.Fatalf("expected 2 mutations, got %+v", result)
 	}
-
-	var workMutation *interfaces.MarkingMutation
-	var released *interfaces.MarkingMutation
-	for i := range result.Mutations {
-		if result.Mutations[i].NewToken == nil {
-			continue
-		}
-		switch result.Mutations[i].NewToken.Color.DataType {
-		case interfaces.DataTypeWork:
-			workMutation = &result.Mutations[i]
-		case interfaces.DataTypeResource:
-			released = &result.Mutations[i]
-		}
-	}
-	if workMutation == nil {
-		t.Fatal("expected work output mutation")
-	}
-	if workMutation.ToPlace != "story:complete" {
-		t.Fatalf("work ToPlace = %q, want story:complete", workMutation.ToPlace)
-	}
-	if workMutation.NewToken.Color.TraceID != "trace-batch-idea-001" {
-		t.Fatalf("work TraceID = %q, want trace-batch-idea-001", workMutation.NewToken.Color.TraceID)
-	}
-	if released == nil {
-		t.Fatal("expected released resource mutation")
-	}
-	if released.ToPlace != "agent-slot:available" {
-		t.Fatalf("ToPlace = %q, want %q", released.ToPlace, "agent-slot:available")
-	}
-	if released.NewToken.ID != resourceConsumed.ID || released.NewToken.Color.WorkID != resourceConsumed.Color.WorkID {
-		t.Fatalf("released resource token = %#v, want preserved identity from %#v", released.NewToken, resourceConsumed)
-	}
-	if !released.NewToken.CreatedAt.Equal(resourceConsumed.CreatedAt) {
-		t.Fatalf("CreatedAt = %v, want %v", released.NewToken.CreatedAt, resourceConsumed.CreatedAt)
-	}
-	if released.NewToken.Color.Tags["pool"] != "shared" {
-		t.Fatalf("tag pool = %q, want %q", released.NewToken.Color.Tags["pool"], "shared")
-	}
-	if released.NewToken.Color.TraceID != "" {
-		t.Fatalf("released resource TraceID = %q, want empty", released.NewToken.Color.TraceID)
-	}
-	if released.NewToken.History.PlaceVisits["agent-slot:available"] != 4 {
-		t.Fatalf("PlaceVisits = %#v, want preserved history", released.NewToken.History.PlaceVisits)
-	}
+	workMutation, released := findWorkAndResourceMutations(result.Mutations)
+	assertAcceptedMixedWorkOutputMutation(t, workMutation)
+	assertReleasedResourceMutationBasics(t, released, resourceConsumed)
+	assertReleasedResourcePipelineHistory(t, released.NewToken, resourceConsumed)
 }
 
 func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransitions(t *testing.T) {
