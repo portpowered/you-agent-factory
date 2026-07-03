@@ -1,6 +1,5 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: topology and localization scenarios share one current deployment harness seam.
 import "@testing-library/jest-dom/vitest";
-import "./react-flow-current-activity-card-component.mocks.test";
+import "./react-flow-current-activity-card-component.mocks";
 
 import {
   cleanup,
@@ -12,23 +11,23 @@ import {
 import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
+} from "../../../../api/dashboard/types";
 import {
   type ImportFactoryValue,
   SessionFactoryAPIError,
-} from "../../../api/session-factory";
+} from "../../../../api/session-factory";
 import {
   semanticWorkflowDashboardSnapshot,
   singleNodeDashboardSnapshot,
   twentyNodeDashboardSnapshot,
-} from "../../../components/dashboard/test-fixtures";
-import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
-import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
-import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
-import { currentActivityTopologyKey } from "../lib/react-flow-current-activity-card-keys";
-import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
-import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
+} from "../../../../components/dashboard/test-fixtures";
+import type { ReadFactoryImportFile } from "../../../import/hooks/use-factory-png-drop";
+import type { FactoryImportConfirmInput } from "../../../import/lib/factory-import-save-choice";
+import type { FactoryPngImportValue } from "../../../import/lib/factory-png-import";
+import { getImportPreviewDialogMessages } from "../../../import/messages/import-preview-dialog";
+import { currentActivityTopologyKey } from "../../lib/react-flow-current-activity-card-keys";
+import { getDashboardFlowAxisLegendMessages } from "../../messages/dashboard-flow-axis-legend";
+import { getWorkflowActivityGraphImportMessages } from "../../messages/graph-import";
 import {
   createFactoryImportValue,
   createFileDropTransfer,
@@ -36,7 +35,7 @@ import {
   refreshFactoryFromTopology,
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
-} from "./react-flow-current-activity-card-component.harness.test";
+} from "./react-flow-current-activity-card-component.harness";
 
 const workflowGraphLocaleFallbackTimeoutMs = 180_000;
 

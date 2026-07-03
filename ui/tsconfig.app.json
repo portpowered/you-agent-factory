@@ -28,6 +28,8 @@
     "src/**/*.test.tsx",
     "src/**/*.stories.tsx",
     "src/features/bento/components/dashboard-bento-story-shared.tsx",
+    "src/features/workflow-activity/components/current-activity-card/*.harness.tsx",
+    "src/features/workflow-activity/components/current-activity-card/*.mocks.ts",
     "packages/components/src/**/*.test.ts",
     "packages/components/src/**/*.test.tsx",
     "packages/components/src/**/*.harness.test.ts",

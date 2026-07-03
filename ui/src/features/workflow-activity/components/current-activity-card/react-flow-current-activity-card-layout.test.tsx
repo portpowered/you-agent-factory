@@ -1,6 +1,5 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout scenarios share one current deployment harness seam.
 import "@testing-library/jest-dom/vitest";
-import "./react-flow-current-activity-card-component.mocks.test";
+import "./react-flow-current-activity-card-component.mocks";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -9,25 +8,25 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
+import type { DashboardSnapshot } from "../../../../api/dashboard/types";
 import {
   semanticWorkflowDashboardSnapshot,
   workstationKindParityDashboardSnapshot,
   workstationKindParityExpectations,
-} from "../../../components/dashboard/test-fixtures";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+} from "../../../../components/dashboard/test-fixtures";
+import { DashboardSessionTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
-} from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
+} from "../../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
-} from "../lib/current-activity-factory-graph-layout";
-import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
-import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
+} from "../../lib/current-activity-factory-graph-layout";
+import { currentActivityGraphKey } from "../../lib/react-flow-current-activity-card-keys";
+import { ReactFlowCurrentActivityCard } from "../react-flow-current-activity-card";
 import {
   dashboardSnapshotWithActiveWorkItemCount,
   dashboardSnapshotWithStateCounts,
@@ -37,7 +36,7 @@ import {
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
   renderWithQueryClient,
-} from "./react-flow-current-activity-card-component.harness.test";
+} from "./react-flow-current-activity-card-component.harness";
 
 async function getWorkstationNode(label = "Review"): Promise<HTMLElement> {
   const button = await screen.findByRole("button", {

@@ -156,6 +156,8 @@ export default defineConfig({
         "src/testing/app-shell-workflow-activity-stub.tsx",
         "src/testing/guarded-suite-console.setup.ts",
         "src/testing/replay-harness.ts",
+        "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-component.harness.tsx",
+        "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-component.mocks.ts",
         "src/styles.css",
         "**/index.ts",
         // Browser integration harness code is validated in the browser lane, not jsdom coverage.

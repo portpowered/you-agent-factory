@@ -1,10 +1,9 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: editor chrome scenarios share one current deployment harness seam.
 import "@testing-library/jest-dom/vitest";
-import "./react-flow-current-activity-card-component.mocks.test";
+import "./react-flow-current-activity-card-component.mocks";
 
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import {
   baseFactoryDefinition,
   baseFactoryDefinitionDocument,
@@ -14,13 +13,13 @@ import {
   divergentDocumentPlaneFactoryDocument,
   wireMockEditableFactoryGraph,
   workerDenseFactoryDefinitionDocument,
-} from "../../../testing/graph-editor-harness";
-import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
-import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
-import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
-import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/operations/factory-graph-operations";
+} from "../../../../testing/graph-editor-harness";
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
+import { useFactoryGraphDraftState } from "../../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { useEditableFactoryGraph } from "../../../factory-graph-editor/hooks/use-editable-factory-graph";
+import { removeFactoryGraphNode } from "../../../factory-graph-editor/lib/operations/factory-graph-operations";
 import {
   currentFactoryDocumentFromSnapshot,
   dashboardSnapshotWithActiveWorkItemCount,
@@ -30,8 +29,9 @@ import {
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
   workerDenseSnapshot,
-} from "./react-flow-current-activity-card-component.harness.test";
+} from "./react-flow-current-activity-card-component.harness";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: editor chrome scenarios share one current deployment harness seam.
 describe("ReactFlowCurrentActivityCard editor chrome", () => {
   registerCurrentActivityCardTestLifecycle();
 

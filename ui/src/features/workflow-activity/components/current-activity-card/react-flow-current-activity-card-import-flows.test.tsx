@@ -1,18 +1,17 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: import flow scenarios share one mocked deployment harness seam.
 import "@testing-library/jest-dom/vitest";
-import "./react-flow-current-activity-card-component.mocks.test";
+import "./react-flow-current-activity-card-component.mocks";
 
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
   type ImportFactoryValue,
   SessionFactoryAPIError,
-} from "../../../api/session-factory";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
-import { createFactoryImportConfirmInput } from "../../import/lib/factory-import-confirm-input.test-helpers";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
-import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
-import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
+} from "../../../../api/session-factory";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import type { ReadFactoryImportFile } from "../../../import/hooks/use-factory-png-drop";
+import { createFactoryImportConfirmInput } from "../../../import/lib/factory-import-confirm-input.test-helpers";
+import type { FactoryImportConfirmInput } from "../../../import/lib/factory-import-save-choice";
+import type { FactoryPngImportValue } from "../../../import/lib/factory-png-import";
+import { getDashboardFlowAxisLegendMessages } from "../../messages/dashboard-flow-axis-legend";
 import {
   createFactoryImportValue,
   createFileDropTransfer,
@@ -20,7 +19,7 @@ import {
   PADDING_CLASS_PATTERN,
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
-} from "./react-flow-current-activity-card-component.harness.test";
+} from "./react-flow-current-activity-card-component.harness";
 
 describe("ReactFlowCurrentActivityCard import flows", () => {
   registerCurrentActivityCardTestLifecycle();

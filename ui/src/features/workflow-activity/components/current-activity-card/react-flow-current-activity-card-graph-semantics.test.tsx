@@ -1,6 +1,5 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: graph semantics scenarios share one current deployment harness seam.
 import "@testing-library/jest-dom/vitest";
-import "./react-flow-current-activity-card-component.mocks.test";
+import "./react-flow-current-activity-card-component.mocks";
 
 import {
   cleanup,
@@ -9,31 +8,31 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import type { DashboardSnapshot } from "../../../../api/dashboard/types";
 import {
   resourceOccupancySnapshotForTick,
   semanticWorkflowDashboardSnapshot,
-} from "../../../components/dashboard/test-fixtures";
+} from "../../../../components/dashboard/test-fixtures";
 import {
   baseFactoryDefinitionDocument,
   workerDenseFactoryDefinitionDocument,
-} from "../../../testing/graph-editor-harness";
-import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
-import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/fixtures/maintainer-runtime-shaped-factory.fixture";
+} from "../../../../testing/graph-editor-harness";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryGraphDraftState } from "../../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { maintainerRuntimeShapedFactory } from "../../../factory-graph-editor/lib/fixtures/maintainer-runtime-shaped-factory.fixture";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
-} from "../../flowchart/lib/workstation-icon-metadata";
-import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
-import { buildGraphEdges } from "../lib/react-flow-current-activity-card-edges";
+} from "../../../flowchart/lib/workstation-icon-metadata";
+import { buildCurrentActivityGraphLayoutFromFactory } from "../../lib/current-activity-factory-graph-layout";
+import { buildGraphEdges } from "../../lib/react-flow-current-activity-card-edges";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-} from "../lib/react-flow-current-activity-card-graph";
+} from "../../lib/react-flow-current-activity-card-graph";
 import {
   dashboardSnapshotWithActiveWorkItemCount,
   dashboardSnapshotWithStateCounts,
@@ -45,7 +44,7 @@ import {
   reinstallDashboardBrowserTestShims,
   renderCurrentActivity,
   workerDenseSnapshot,
-} from "./react-flow-current-activity-card-component.harness.test";
+} from "./react-flow-current-activity-card-component.harness";
 
 const LEGEND_ICON_EXPECTATIONS = [
   ["Queue", "queue"],

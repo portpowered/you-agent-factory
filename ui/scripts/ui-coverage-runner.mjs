@@ -29,11 +29,11 @@ export { defaultSlowFileSummaryLimit, defaultCapturedStdoutMaxBuffer };
 export const defaultUiCoverageShardTotal = 10;
 export const defaultTimingReportsDir = ".vitest-report-timings";
 export const isolatedReactFlowCoverageFiles = [
-  "src/features/workflow-activity/components/react-flow-current-activity-card-editor-chrome.test.tsx",
-  "src/features/workflow-activity/components/react-flow-current-activity-card-import-flows.test.tsx",
-  "src/features/workflow-activity/components/react-flow-current-activity-card-graph-semantics.test.tsx",
-  "src/features/workflow-activity/components/react-flow-current-activity-card-layout.test.tsx",
-  "src/features/workflow-activity/components/react-flow-current-activity-card-topology-localization.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-import-flows.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-graph-semantics.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-layout.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-topology-localization.test.tsx",
 ];
 
 export function getMainCoveredMaxWorkers(env = process.env, options = {}) {

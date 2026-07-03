@@ -37,7 +37,7 @@ test("categorizes covered and browser integration paths", () => {
   );
   expect(
     categorizeUiTestFile(
-      "src/features/workflow-activity/components/react-flow-current-activity-card-editor-chrome.test.tsx",
+      "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx",
     ),
   ).toBe("react-flow-graph");
   expect(

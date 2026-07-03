@@ -3,33 +3,33 @@ import "@testing-library/jest-dom/vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
-} from "../../../api/dashboard/types";
-import type { ImportFactoryValue } from "../../../api/session-factory";
-import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+} from "../../../../api/dashboard/types";
+import type { ImportFactoryValue } from "../../../../api/session-factory";
+import { factoryFromDashboardTopology } from "../../../../components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import { DashboardSessionTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import {
   baseFactoryDefinitionDocument,
   createMockGraphEditorDraftState,
   wireMockEditableFactoryGraph,
-} from "../../../testing/graph-editor-harness";
-import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
-import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
-import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
-import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
-import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
-import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { resetCurrentActivityGraphLayoutCacheForTests } from "../hooks/react-flow-current-activity-card-graph-layout";
-import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
-import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
-import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
+} from "../../../../testing/graph-editor-harness";
+import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
+import { useFactoryGraphDraftState } from "../../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { useEditableFactoryGraph } from "../../../factory-graph-editor/hooks/use-editable-factory-graph";
+import type { ReadFactoryImportFile } from "../../../import/hooks/use-factory-png-drop";
+import type { FactoryImportConfirmInput } from "../../../import/lib/factory-import-save-choice";
+import type { FactoryPngImportValue } from "../../../import/lib/factory-png-import";
+import type { CurrentActivityImportController } from "../../hooks/current-activity-import-controller";
+import { resetCurrentActivityGraphLayoutCacheForTests } from "../../hooks/react-flow-current-activity-card-graph-layout";
+import type { CurrentActivitySelection } from "../../lib/react-flow-current-activity-card-types";
+import { getDashboardFlowAxisLegendMessages } from "../../messages/dashboard-flow-axis-legend";
+import { ReactFlowCurrentActivityCard } from "../react-flow-current-activity-card";
 
 export const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
