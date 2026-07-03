@@ -19,6 +19,12 @@ those surfaces are documented.
 This docs shell is plain markdown kept under version control. Host applications
 read it directly from the package; no docs-site implementation is required.
 
+## Documented component groups
+
+- [Overlay and disclosure primitives](./overlays.md) — Dialog, Popover,
+  Collapsible, and ScrollArea accessibility, labeling, focus, and overflow
+  guidance.
+
 ## Getting started
 
 See the package [README](../README.md) for install, CSS import setup, theming,
