@@ -3,8 +3,8 @@ import { type ReactNode, useId } from "react";
 import {
   AlertPanel,
   AlertPanelText,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormWarning,
   Input,
   OptionalEnumSelect,
@@ -487,12 +487,12 @@ function ResourceEditableConfigurationDraftStatus({
       <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
       </CurrentSelectionDetailFeedback>
-      <DashboardText
+      <Text
         className="m-0 text-on-surface-subtle"
         variant="supporting"
       >
         {messages.editableConfigurationSaveDisabledValidationDetail}
-      </DashboardText>
+      </Text>
     </CurrentSelectionFormField>
   );
 }
@@ -512,9 +512,9 @@ function ResourceEditableConfigurationField({
 }) {
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       {input}
       {supportingContent}
       {errorMessage ? (

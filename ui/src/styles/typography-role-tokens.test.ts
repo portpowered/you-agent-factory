@@ -30,7 +30,7 @@ const textColorTokensPath = path.join(
   packageStylesDir,
   "text-color-role-tokens.css",
 );
-const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
+const typographyRolesPath = path.join(packageStylesDir, "typography-roles.css");
 const roleTokensSourcePath = path.join(packageStylesDir, "color-role-tokens.css");
 
 const MATERIAL_SCALE_FAMILIES = [
@@ -47,7 +47,7 @@ describe("typography-role-tokens (US-006)", () => {
   const typographySource = readFileSync(typographyTokensPath, "utf8");
   const utilitiesSource = readFileSync(typographyUtilitiesPath, "utf8");
   const textColorSource = readFileSync(textColorTokensPath, "utf8");
-  const stylesSource = readFileSync(stylesSourcePath, "utf8");
+  const typographyRolesSource = readFileSync(typographyRolesPath, "utf8");
   const roleTokensSource = readFileSync(roleTokensSourcePath, "utf8");
 
   it("defines Material 3 scale families with large/medium/small variants", () => {
@@ -78,15 +78,15 @@ describe("typography-role-tokens (US-006)", () => {
     expect(textColorSource).toContain("--color-code:");
   });
 
-  it("maps dashboard semantic classes through scale utilities and text color roles", () => {
-    expect(stylesSource).toContain(
-      ".af-dashboard-page-heading {\n    @apply font-display text-display-medium text-on-surface;",
+  it("maps domain-free semantic classes through scale utilities and text color roles", () => {
+    expect(typographyRolesSource).toContain(
+      ".af-page-heading {\n    @apply font-display text-display-medium text-on-surface;",
     );
-    expect(stylesSource).toContain(
-      ".af-dashboard-body-text {\n    @apply text-body-medium text-on-surface-variant;",
+    expect(typographyRolesSource).toContain(
+      ".af-body-text {\n    @apply text-body-medium text-on-surface-variant;",
     );
-    expect(stylesSource).toContain(
-      ".af-dashboard-body-code {\n    @apply font-mono text-code-medium text-code;",
+    expect(typographyRolesSource).toContain(
+      ".af-body-code {\n    @apply font-mono text-code-medium text-code;",
     );
   });
 

@@ -8,7 +8,7 @@ import {
   AlertPanel,
   AlertPanelText,
   Button,
-  DashboardText,
+  Text,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -79,12 +79,12 @@ export function OpenSessionDialog({
     >
       <DialogHeader>
         <DialogTitle>{messages.openSessionDialogTitle}</DialogTitle>
-        <DashboardText
+        <Text
           className="text-sm leading-6 text-on-surface-variant"
           id={dialogDescriptionID}
         >
           {messages.openSessionDialogDescription}
-        </DashboardText>
+        </Text>
       </DialogHeader>
       <form className="grid gap-4" onSubmit={onInspectFolder}>
         <div className="grid gap-2">
@@ -108,12 +108,12 @@ export function OpenSessionDialog({
               value={folderPath}
             />
           </div>
-          <DashboardText
+          <Text
             className="text-sm text-on-surface-variant"
             id={folderHelperTextID}
           >
             {messages.sessionFolderHelperText}
-          </DashboardText>
+          </Text>
         </div>
         {validationStatusMessage ? (
           <AlertPanel
@@ -217,15 +217,15 @@ function InitNewFactoryConfirmation({
       surface="low"
     >
       <section className="grid gap-3">
-        <DashboardText
+        <Text
           className="text-sm leading-6 text-on-surface"
           id="init-new-factory-confirmation-title"
         >
           {description}
-        </DashboardText>
-        <DashboardText className="break-all font-mono text-xs text-on-surface-subtle">
+        </Text>
+        <Text className="break-all font-mono text-xs text-on-surface-subtle">
           {nestedFactoryPath}
-        </DashboardText>
+        </Text>
         <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
           <Button
             disabled={isPending}

@@ -2,9 +2,9 @@ import { useId, useState } from "react";
 
 import {
   AlertPanel,
-  DashboardLabel,
+  Label,
   DashboardStatusPill,
-  DashboardText,
+  Text,
 } from "../../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../../components/ui/widget-frame";
@@ -32,7 +32,7 @@ export function FactorySessionEventReplayDisclosure({
     <section className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid gap-2">
-          <DashboardLabel>{messages.eventReplayHeading}</DashboardLabel>
+          <Label>{messages.eventReplayHeading}</Label>
           <DetailCopy>{messages.eventReplayHint}</DetailCopy>
         </div>
         <ExpandablePanelTrigger
@@ -117,14 +117,14 @@ function EventReplayState({
       className="grid gap-3 border-t border-outline pt-3"
       id={detailRegionID}
     >
-      <DashboardText as="div" variant="supporting">
+      <Text as="div" variant="supporting">
         {truncatedCount > 0
           ? messages.eventReplaySummary(
               visibleEvents.length,
               state.events.length,
             )
           : messages.eventReplayVisibleSummary(visibleEvents.length)}
-      </DashboardText>
+      </Text>
       <ol className="grid gap-2">
         {timelineItems.map((item) => (
           <li
@@ -139,11 +139,11 @@ function EventReplayState({
                 {item.typeLabel}
               </DashboardStatusPill>
             </div>
-            {item.detail ? <DashboardText>{item.detail}</DashboardText> : null}
-            <DashboardText variant="supporting">{item.referenceSummary}</DashboardText>
+            {item.detail ? <Text>{item.detail}</Text> : null}
+            <Text variant="supporting">{item.referenceSummary}</Text>
             <div className="flex flex-wrap items-center gap-2">
-              <DashboardText variant="supporting">{item.orderLabel}</DashboardText>
-              <DashboardText variant="supporting">{item.timeLabel}</DashboardText>
+              <Text variant="supporting">{item.orderLabel}</Text>
+              <Text variant="supporting">{item.timeLabel}</Text>
             </div>
           </li>
         ))}

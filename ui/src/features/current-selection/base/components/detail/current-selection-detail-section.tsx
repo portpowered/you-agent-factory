@@ -1,6 +1,6 @@
 import { type HTMLAttributes, type ReactNode, useId } from "react";
 
-import { DashboardHeading } from "../../../../../components/ui";
+import { Heading } from "../../../../../components/ui";
 import { cn } from "../../../../../lib/cn";
 
 export interface CurrentSelectionDetailSectionProps
@@ -32,9 +32,9 @@ export function CurrentSelectionDetailSection({
       {...props}
     >
       {title ? (
-        <DashboardHeading as="h4" className="m-0" id={resolvedHeadingId}>
+        <Heading as="h4" className="m-0" id={resolvedHeadingId}>
           {title}
-        </DashboardHeading>
+        </Heading>
       ) : null}
       {children}
     </section>

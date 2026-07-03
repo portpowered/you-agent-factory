@@ -88,7 +88,7 @@ describe("prompt-editor neutral surface roles", () => {
     expect(source).toContain('className="m-0 text-on-surface-variant"');
     expect(source).toContain('variant="supporting"');
     expect(source).toMatch(
-      /<DashboardCode\s+as="pre"\s+className="m-0 whitespace-pre-wrap break-words text-on-surface-variant/,
+      /<Code\s+as="pre"\s+className="m-0 whitespace-pre-wrap break-words text-on-surface-variant/,
     );
     expectNoForbiddenTransitionalNeutralText(source);
   });

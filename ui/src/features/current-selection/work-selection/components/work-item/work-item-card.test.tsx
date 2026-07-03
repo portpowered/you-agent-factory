@@ -1634,7 +1634,7 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(
       within(relationshipSection).getByText(/selected timeline snapshot/i)
         .className,
-    ).toContain("af-dashboard-supporting-text");
+    ).toContain("af-supporting-text");
     expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
   });
 });

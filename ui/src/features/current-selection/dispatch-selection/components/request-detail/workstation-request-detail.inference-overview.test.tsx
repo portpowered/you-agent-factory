@@ -144,7 +144,7 @@ it("keeps inference-backed request and response detail inside inference attempts
   expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
   expect(
     currentSelection.getByText("Dispatch ID").closest("dl")?.className,
-  ).toContain("af-dashboard-body-text");
+  ).toContain("af-body-text");
   expect(currentSelection.getByText("1m 3s")).toBeTruthy();
   expect(
     requestDetails.queryByText(/Inference attempts when available/),

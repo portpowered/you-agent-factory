@@ -2,7 +2,7 @@ import { expect, within } from "storybook/test";
 
 import { Button } from "./button";
 import { DashboardActionButton } from "./dashboard-action-button";
-import { DashboardActionRow } from "./dashboard-action-row";
+import { ActionRow } from "@you-agent-factory/components";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
 const policyCards = [
@@ -15,7 +15,7 @@ const policyCards = [
   },
   {
     approved:
-      "Use DashboardActionButton or DashboardActionRow for compact dashboard headers, detail-card chrome, and factory graph editor toolbars.",
+      "Use DashboardActionButton or ActionRow for compact dashboard headers, detail-card chrome, and factory graph editor toolbars.",
     id: "dashboard-action-lane",
     title: "Compact dashboard actions use DashboardActionButton",
     when: "Dashboard headers, inline action rows, widget chrome, graph-editor controls, and similar dense control surfaces.",
@@ -202,7 +202,7 @@ function ButtonPolicyShowcase() {
             Syncing graph
           </DashboardActionButton>
         </div>
-        <DashboardActionRow
+        <ActionRow
           actions={
             <>
               <DashboardActionButton type="button">

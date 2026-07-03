@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import {
   DashboardActionButton,
-  DashboardActionRow,
+  ActionRow,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -256,7 +256,7 @@ export function FactoryGraphEditorToolbar({
             tone="outline"
           />
           {showDraftActionRow ? (
-            <DashboardActionRow
+            <ActionRow
               actions={
                 <>
                   <FactoryGraphEditorTooltipActionButton

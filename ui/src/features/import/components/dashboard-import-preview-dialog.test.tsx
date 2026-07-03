@@ -384,8 +384,8 @@ describe("DashboardImportPreviewDialog", () => {
 
     expect(alert.textContent).toContain(messages.activationErrorTitle);
     expect(alert.textContent).toContain(expectedCopy);
-    expect(title.className).toContain("af-dashboard-section-heading");
-    expect(copy.className).toContain("af-dashboard-body-text");
+    expect(title.className).toContain("af-section-heading");
+    expect(copy.className).toContain("af-body-text");
   });
 
   it("dismisses the dashboard-owned preview after a successful activation", async () => {

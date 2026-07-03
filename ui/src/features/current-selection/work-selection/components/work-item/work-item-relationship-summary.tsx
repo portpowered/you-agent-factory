@@ -1,6 +1,6 @@
 import {
-  DashboardCode,
-  DashboardLabel,
+  Code,
+  Label,
   surfacePanelVariants,
 } from "../../../../../components/ui";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
@@ -33,12 +33,12 @@ export function FocusedRelationshipSummary({
       })}
     >
       <div className="grid gap-1">
-        <DashboardLabel>
+        <Label>
           {messages.relationshipFocusSummaryHeading}
-        </DashboardLabel>
-        <DashboardCode className="min-w-0 break-words text-sm leading-5 text-on-surface">
+        </Label>
+        <Code className="min-w-0 break-words text-sm leading-5 text-on-surface">
           {node.label}
-        </DashboardCode>
+        </Code>
       </div>
       <CurrentSelectionDescriptionList>
         <CurrentSelectionDetailItem

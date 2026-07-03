@@ -1,6 +1,6 @@
 import type { DashboardSessionBracket } from "../../../api/dashboard/types";
 import type { DashboardStreamState } from "../../../api/dashboard/types";
-import { AlertPanel, DashboardLabel, DashboardText } from "../../../components/ui";
+import { AlertPanel, Label, Text } from "../../../components/ui";
 import { getDashboardSessionLifecycleMessages } from "../messages/dashboard-session-lifecycle";
 
 export interface DashboardSessionLifecycleBannerProps {
@@ -71,8 +71,8 @@ export function DashboardSessionLifecycleBanner({
 function LifecycleMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel>{label}</DashboardLabel>
-      <DashboardText>{value}</DashboardText>
+      <Label>{label}</Label>
+      <Text>{value}</Text>
     </div>
   );
 }

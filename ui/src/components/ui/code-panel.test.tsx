@@ -10,7 +10,7 @@ describe("CodePanel", () => {
     expect(codePanel.tagName).toBe("PRE");
     expect(codePanel.className).toContain("bg-surface-container-high");
     expect(codePanel.className).toContain("p-2");
-    expect(codePanel.className).toContain("af-dashboard-body-code");
+    expect(codePanel.className).toContain("af-body-code");
   });
 
   it("supports low-surface default-padding code panels", () => {

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import {
   DashboardActionButton,
-  DashboardActionRow,
+  ActionRow,
 } from "../../../../../components/ui";
 
 export interface EditableConfigurationSaveRowProps {
@@ -26,7 +26,7 @@ export function EditableConfigurationSaveRow({
   const label = isSaving ? busyLabel : saveLabel;
 
   return (
-    <DashboardActionRow
+    <ActionRow
       actions={
         <>
           {resetSlot}

@@ -5,7 +5,7 @@ import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { DashboardText, Textarea } from "../ui";
+import { Text, Textarea } from "../ui";
 import {
   applyWorkstationPromptTheme,
   registerWorkstationPromptMonaco,
@@ -261,12 +261,12 @@ function TextEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <DashboardText
+      <Text
         className="m-0 text-on-surface-variant"
         variant="supporting"
       >
         {message}
-      </DashboardText>
+      </Text>
       <Textarea
         aria-label={ariaLabel}
         defaultValue={value}

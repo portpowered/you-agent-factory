@@ -1,4 +1,4 @@
-import { DashboardActionRow, DashboardHeading } from "../../../components/ui";
+import { ActionRow, Heading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
 import type { DashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
@@ -38,7 +38,7 @@ export function DashboardGeneralHeader({
             "max-md:flex-col",
           )}
         >
-          <DashboardHeading
+          <Heading
             className="m-0 min-w-0 shrink-0 self-end pb-2"
             level="page"
           >
@@ -46,13 +46,13 @@ export function DashboardGeneralHeader({
               locale={locale}
               wordmarkClassName="truncate"
             />
-          </DashboardHeading>
+          </Heading>
           <div className="flex min-w-0 w-full flex-1">
             <div className="flex h-full min-w-0 w-full items-stretch overflow-x-auto px-4 pt-1">
               <DashboardSessionTabs locale={locale} state={sessionTabsState} />
             </div>
           </div>
-          <DashboardActionRow
+          <ActionRow
             actions={
               <DashboardHeaderColorPaletteControls
                 locale={locale}

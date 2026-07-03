@@ -23,7 +23,7 @@ export function expectSingleWorkOutcomeCardHeader(
     level: 3,
     name: cardTitle,
   });
-  expect(titleHeading.className).toContain("af-dashboard-section-heading");
+  expect(titleHeading.className).toContain("af-section-heading");
 
   const chartRegion = within(card).getByLabelText(cardRegionLabel);
   expect(

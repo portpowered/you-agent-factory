@@ -41,8 +41,8 @@ describe("DashboardEmptyState", () => {
     });
     const body = screen.getByText("Run the factory to populate this trend.");
 
-    expect(title.className).toContain("af-dashboard-section-heading");
-    expect(body.className).toContain("af-dashboard-body-text");
+    expect(title.className).toContain("af-section-heading");
+    expect(body.className).toContain("af-body-text");
     expect(body.className).toContain("m-0");
   });
 });

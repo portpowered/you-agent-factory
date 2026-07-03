@@ -52,7 +52,7 @@ describe("DashboardWidgetFrame chrome", () => {
     expect(card.className).toContain("border-outline");
     expect(card.className).toContain("bg-surface-container-high");
     expect(subtitle.className).toContain("af-dashboard-widget-subtitle");
-    expect(bodyCopy.className).toContain("af-dashboard-body-text");
+    expect(bodyCopy.className).toContain("af-body-text");
     expect(emptyHeading.parentElement?.className).toContain("border-dashed");
     expect(emptyHeading.parentElement?.className).toContain(
       "border-outline-variant",

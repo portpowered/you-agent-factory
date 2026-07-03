@@ -27,7 +27,7 @@ describe("FactoryGraphEditorNotice", () => {
       "!text-current",
     );
     expect(screen.getByText("Save could not complete.").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
 
     const dismissButton = screen.getByRole("button", { name: "Dismiss" });

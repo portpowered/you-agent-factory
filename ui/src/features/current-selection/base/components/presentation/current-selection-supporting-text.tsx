@@ -1,6 +1,6 @@
 import { forwardRef, type HTMLAttributes } from "react";
 
-import { DashboardCode, DashboardText } from "../../../../../components/ui";
+import { Code, Text } from "../../../../../components/ui";
 import { cn } from "../../../../../lib/cn";
 
 type CurrentSelectionSupportingTextTone = "notice" | "status";
@@ -26,7 +26,7 @@ export const CurrentSelectionSupportingText = forwardRef<
   ref,
 ) {
   return (
-    <DashboardText
+    <Text
       className={cn("m-0", SUPPORTING_TEXT_TONE_CLASS[tone], className)}
       ref={ref}
       variant="supporting"
@@ -43,7 +43,7 @@ export const CurrentSelectionSubtleCode = forwardRef<
   CurrentSelectionSubtleCodeProps
 >(function CurrentSelectionSubtleCode({ className, ...props }, ref) {
   return (
-    <DashboardCode
+    <Code
       className={cn("text-xs text-on-surface-variant", className)}
       ref={ref}
       {...props}

@@ -145,7 +145,7 @@ describe("DashboardHeader", () => {
     });
     const actionRow = globalActions.parentElement?.parentElement;
     const actionRowSections = toolbar.querySelectorAll(
-      "[data-dashboard-action-row-section]",
+      "[data-action-row-section]",
     );
 
     const exportButton = screen.getByRole<HTMLButtonElement>("button", {
@@ -176,7 +176,7 @@ describe("DashboardHeader", () => {
     expect(actionRow?.className).toContain("max-md:w-full");
     expect(actionRowSections).toHaveLength(1);
     expect(
-      actionRowSections[0]?.getAttribute("data-dashboard-action-row-section"),
+      actionRowSections[0]?.getAttribute("data-action-row-section"),
     ).toBe("actions");
     expect(actionRowSections[0]?.contains(languageButton)).toBe(true);
     expect(actionRowSections[0]?.contains(paletteButton)).toBe(true);

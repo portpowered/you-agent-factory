@@ -1,6 +1,6 @@
 import {
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   SurfacePanel,
 } from "../../../components/ui";
 import { EnumSelect } from "../../../components/ui/enum-select";
@@ -90,9 +90,9 @@ export function FailureTrendCard({
       <div className="mb-4 flex flex-col items-start justify-between gap-3 md:flex-row">
         <WidgetSubtitle>{messages.failureSummary}</WidgetSubtitle>
         <div className="grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36">
-          <DashboardLabel as="label" htmlFor={rangeSelectId}>
+          <Label as="label" htmlFor={rangeSelectId}>
             {messages.rangeLabel}
-          </DashboardLabel>
+          </Label>
           <EnumSelect
             aria-label={messages.rangeLabel}
             className="rounded-lg border-primary py-2"
@@ -175,12 +175,12 @@ export function FailureTrendCard({
               surface="low"
             >
               <li>
-                <DashboardText
+                <Text
                   as="span"
                   className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
                 >
                   {group.label}
-                </DashboardText>
+                </Text>
                 <strong className="shrink-0 text-on-error-container">
                   {group.count}
                 </strong>

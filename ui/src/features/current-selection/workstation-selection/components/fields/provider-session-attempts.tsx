@@ -2,8 +2,8 @@ import type { DashboardProviderSession } from "../../../../../api/dashboard/type
 
 import {
   ButtonLink,
-  DashboardCode,
-  DashboardText,
+  Code,
+  Text,
 } from "../../../../../components/ui";
 import { getProviderSessionLogTarget } from "../../../../../components/ui/formatters";
 import { DetailCopy } from "../../../../../components/ui/widget-frame";
@@ -246,9 +246,9 @@ function ProviderSessionAttemptList({
             />
             {outcome.rawOutcomeLabel ? (
               <div className="mt-2 grid gap-1">
-                <DashboardCode as="p" className="m-0" size="supporting">
+                <Code as="p" className="m-0" size="supporting">
                   {outcome.rawOutcomeLabel}
-                </DashboardCode>
+                </Code>
               </div>
             ) : null}
             {loadableProviderSession && onSelectProviderSession ? (
@@ -262,16 +262,16 @@ function ProviderSessionAttemptList({
                 selected={providerSessionSelected}
                 variant="card"
               >
-                <DashboardText as="span" variant="supporting">
+                <Text as="span" variant="supporting">
                   {providerSessionSelected
                     ? messages.providerSessionSelectedAction
                     : messages.providerSessionSelectAction}
-                </DashboardText>
-                <DashboardCode>{providerSessionLabel}</DashboardCode>
+                </Text>
+                <Code>{providerSessionLabel}</Code>
               </CurrentSelectionSelectableButton>
             ) : (
               <div className="mt-2 grid gap-1">
-                <DashboardCode>{providerSessionLabel}</DashboardCode>
+                <Code>{providerSessionLabel}</Code>
                 <CurrentSelectionSupportingText tone="status">
                   {messages.providerSessionSelectionUnavailable}
                 </CurrentSelectionSupportingText>
@@ -360,9 +360,9 @@ function ProviderSessionLogAccess({
           {messages.providerSessionLogAction}
         </ButtonLink>
       ) : (
-        <DashboardText as="span" className="font-bold text-on-surface-variant">
+        <Text as="span" className="font-bold text-on-surface-variant">
           {messages.providerSessionLogUnavailable}
-        </DashboardText>
+        </Text>
       )}
     </div>
   );

@@ -8,8 +8,8 @@ import {
   AlertPanelText,
   Button,
   DashboardIconButtonShell,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormError,
   Input,
 } from "../../../../components/ui";
@@ -194,18 +194,18 @@ function InvocationField({
     .filter((entry): entry is string => entry !== null)
     .join(" ");
   const labelContent = (
-    <DashboardLabel>
+    <Label>
       {field.label}{" "}
       {field.required ? (
-        <DashboardText
+        <Text
           as="span"
           className="text-on-error-container"
           variant="supporting"
         >
           ({messages.invocation.requiredAffordance})
-        </DashboardText>
+        </Text>
       ) : null}
-    </DashboardLabel>
+    </Label>
   );
 
   return (
@@ -287,13 +287,13 @@ function InvocationField({
       {helperLines.length > 0 ? (
         <div className="grid gap-1" id={descriptionID}>
           {helperLines.map((line) => (
-            <DashboardText
+            <Text
               className="text-on-surface-variant"
               key={line}
               variant="supporting"
             >
               {line}
-            </DashboardText>
+            </Text>
           ))}
         </div>
       ) : null}
@@ -394,13 +394,13 @@ function InvocationOutputHint({
       <AlertPanelText>{messages.invocation.outputHintTitle}</AlertPanelText>
       <div className="grid gap-1 pt-1">
         {detailLines.map((line) => (
-          <DashboardText
+          <Text
             className="text-on-surface-variant"
             key={line}
             variant="supporting"
           >
             {line}
-          </DashboardText>
+          </Text>
         ))}
       </div>
     </AlertPanel>
@@ -422,29 +422,29 @@ function InvocationExamples({
       <div className="grid gap-2 pt-1">
         {examples.map((example) => (
           <div className="grid gap-1" key={example.name}>
-            <DashboardText className="font-medium" variant="supporting">
+            <Text className="font-medium" variant="supporting">
               {example.name}
-            </DashboardText>
+            </Text>
             {example.description ? (
-              <DashboardText
+              <Text
                 className="text-on-surface-variant"
                 variant="supporting"
               >
                 {example.description}
-              </DashboardText>
+              </Text>
             ) : null}
             {example.argv && example.argv.length > 0 ? (
-              <DashboardText className="font-mono text-xs" variant="supporting">
+              <Text className="font-mono text-xs" variant="supporting">
                 {example.argv.join(" ")}
-              </DashboardText>
+              </Text>
             ) : null}
             {example.stdin ? (
-              <DashboardText
+              <Text
                 className="text-on-surface-variant"
                 variant="supporting"
               >
                 {messages.invocation.exampleStdin(example.stdin)}
-              </DashboardText>
+              </Text>
             ) : null}
           </div>
         ))}

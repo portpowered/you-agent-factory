@@ -4,8 +4,8 @@ import { type ReactNode, useState } from "react";
 import {
   Button,
   DashboardIconButtonShell,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormError,
   Input,
   Popover,
@@ -159,16 +159,16 @@ export function SubmitWorkCard({
         >
           <div className="grid gap-2">
             <label htmlFor={requestNameID}>
-              <DashboardLabel>
+              <Label>
                 {messages.requestNameLabel}{" "}
-                <DashboardText
+                <Text
                   as="span"
                   className="text-on-error-container"
                   variant="supporting"
                 >
                   ({messages.requestNameRequiredAffordance})
-                </DashboardText>
-              </DashboardLabel>
+                </Text>
+              </Label>
             </label>
             <Input
               aria-describedby={
@@ -206,12 +206,12 @@ export function SubmitWorkCard({
               widgetId={widgetId}
             />
             {validationErrors?.submissionItems ? (
-              <DashboardText
+              <Text
                 className="text-on-error-container"
                 variant="supporting"
               >
                 {validationErrors.submissionItems}
-              </DashboardText>
+              </Text>
             ) : null}
           </div>
         </div>
@@ -346,13 +346,13 @@ function AddSubmissionItemMenu({
         aria-label={messages.addItemMenuLabel}
         className="grid gap-3"
       >
-        <DashboardText
+        <Text
           className="text-on-surface-variant"
           id={menuDescriptionID}
           variant="supporting"
         >
           {messages.addItemMenuDescription}
-        </DashboardText>
+        </Text>
         <div className="grid gap-2">
           {ADDABLE_ITEM_TYPES.map((itemType) => {
             const typeLabel = itemTypeLabel(messages, itemType);

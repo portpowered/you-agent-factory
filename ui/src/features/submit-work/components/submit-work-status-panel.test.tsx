@@ -29,7 +29,7 @@ describe("SubmitWorkStatusPanel", () => {
       "bg-info-container",
     );
     expect(guidanceCopy.className).toContain("!text-current");
-    expect(submittingCopy.className).toContain("af-dashboard-body-text");
+    expect(submittingCopy.className).toContain("af-body-text");
   });
 
   it("renders success and failure states with semantic alert tones", () => {
@@ -65,7 +65,7 @@ describe("SubmitWorkStatusPanel", () => {
     );
     expect(screen.getByText("Submitted.").className).toContain("!text-current");
     expect(screen.getByText("Submit failed.").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
   });
 });

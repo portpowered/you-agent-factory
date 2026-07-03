@@ -2,8 +2,8 @@ import {
   AlertPanel,
   AlertPanelText,
   CodePanel,
-  DashboardCode,
-  DashboardLabel,
+  Code,
+  Label,
   SurfacePanel,
 } from "../../components/ui";
 import { cn } from "../../lib/cn";
@@ -80,9 +80,9 @@ export function PromptEditorDiagnosticsPanel({
     <AlertPanel className="min-h-24" id={id} role="alert" tone="danger">
       <AlertPanelText>{labels.diagnosticsSummary}</AlertPanelText>
       <div className="grid gap-2">
-        <DashboardLabel as="h5" className="m-0">
+        <Label as="h5" className="m-0">
           {labels.diagnosticsHeading}
-        </DashboardLabel>
+        </Label>
         <ul className="m-0 grid list-none gap-2 p-0">
           {diagnostics.map((diagnostic) => (
             <SurfacePanel
@@ -97,9 +97,9 @@ export function PromptEditorDiagnosticsPanel({
                   {formatDiagnosticListMessage(diagnostic, labels)}
                 </AlertPanelText>
                 {diagnostic.path ? (
-                  <DashboardCode className="text-xs text-on-surface-variant [overflow-wrap:anywhere]">
+                  <Code className="text-xs text-on-surface-variant [overflow-wrap:anywhere]">
                     {diagnostic.path}
-                  </DashboardCode>
+                  </Code>
                 ) : null}
                 {diagnostic.sourceText ? (
                   <CodePanel

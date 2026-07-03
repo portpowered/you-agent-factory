@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
 import {
-  DashboardHeading,
-  DashboardText,
+  Heading,
+  Text,
   surfacePanelVariants,
 } from "../../../../../components/ui";
 
@@ -26,16 +26,16 @@ export function CurrentSelectionSectionHeader({
       })}
     >
       <div className="grid min-w-0 gap-1">
-        <DashboardHeading as="h4" id={headingId}>
+        <Heading as="h4" id={headingId}>
           {title}
-        </DashboardHeading>
+        </Heading>
         {supportingText ? (
-          <DashboardText
+          <Text
             className="m-0 text-on-surface-subtle"
             variant="supporting"
           >
             {supportingText}
-          </DashboardText>
+          </Text>
         ) : null}
       </div>
       {action}

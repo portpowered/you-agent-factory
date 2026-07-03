@@ -21,25 +21,25 @@ vi.mock("../../../components/ui", () => ({
   Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
-  DashboardDescriptionList: ({
+  DescriptionList: ({
     children,
     ...props
   }: HTMLAttributes<HTMLDListElement>) => <dl {...props}>{children}</dl>,
-  DashboardHeading: ({
+  Heading: ({
     as: Component = "h3",
     children,
     ...props
   }: HTMLAttributes<HTMLElement> & { as?: ElementType }) => (
     <Component {...props}>{children}</Component>
   ),
-  DashboardLabel: ({
+  Label: ({
     as: Component = "span",
     children,
     ...props
   }: HTMLAttributes<HTMLElement> & { as?: ElementType }) => (
     <Component {...props}>{children}</Component>
   ),
-  DashboardText: ({
+  Text: ({
     as: Component = "p",
     children,
     ...props

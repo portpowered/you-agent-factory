@@ -6,9 +6,9 @@ import type {
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
 import {
-  DashboardCode,
-  DashboardDescriptionList,
-  DashboardLabel,
+  Code,
+  DescriptionList,
+  Label,
   ExpandablePanelTrigger,
 } from "../../../components/ui";
 import { Button } from "../../../components/ui/button";
@@ -167,15 +167,15 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
 
   return (
     <div className="grid min-w-0 w-full gap-3">
-      <DashboardDescriptionList className="gap-3 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-outline [&_div]:pt-3 [&_dt]:mb-1">
+      <DescriptionList className="gap-3 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-outline [&_div]:pt-3 [&_dt]:mb-1">
         <div>
-          <DashboardLabel as="dt">{messages.traceIdLabel}</DashboardLabel>
+          <Label as="dt">{messages.traceIdLabel}</Label>
           <dd className="[overflow-wrap:anywhere]">
             {trace.trace_id || messages.unavailableValue}
           </dd>
         </div>
         <div>
-          <DashboardLabel as="dt">{messages.dispatchFlowLabel}</DashboardLabel>
+          <Label as="dt">{messages.dispatchFlowLabel}</Label>
           <dd>
             <TraceWorkstationPath
               dispatches={trace.dispatches}
@@ -184,7 +184,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </dd>
         </div>
         <div>
-          <DashboardLabel as="dt">{messages.dispatchCountLabel}</DashboardLabel>
+          <Label as="dt">{messages.dispatchCountLabel}</Label>
           <dd>{trace.dispatches.length}</dd>
         </div>
         <div>
@@ -200,13 +200,13 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                   className="grid gap-2.5"
                 >
                   <div className="flex items-center justify-between gap-3  py-sm rounded-lg ">
-                    <DashboardLabel
+                    <Label
                       as="h3"
                       className="m-0"
                       id={`${workItemsID}-heading`}
                     >
                       {messages.workItemsSummary(workItems.length)}
-                    </DashboardLabel>
+                    </Label>
                     <ExpandablePanelTrigger
                       controlsID={workItemsID}
                       expanded={workItemsExpanded}
@@ -233,15 +233,15 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </dd>
         </div>
         <div>
-          <DashboardLabel as="dt">{messages.requestIdsLabel}</DashboardLabel>
+          <Label as="dt">{messages.requestIdsLabel}</Label>
           <dd className="[overflow-wrap:anywhere]">
             {trace.request_ids?.join(", ") || messages.unavailableValue}
           </dd>
         </div>
         <div>
-          <DashboardLabel as="dt">
+          <Label as="dt">
             {messages.batchRelationsLabel}
-          </DashboardLabel>
+          </Label>
           <dd>
             {trace.relations && trace.relations.length > 0 ? (
               <TraceRelationFlow
@@ -254,7 +254,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
             )}
           </dd>
         </div>
-      </DashboardDescriptionList>
+      </DescriptionList>
 
       {trace.dispatches.length > 0 ? (
         <Table
@@ -357,9 +357,9 @@ function SelectableWorkList({
               {formatTypedWorkItemLabel(workItem)}
             </Button>
           ) : (
-            <DashboardCode size="supporting">
+            <Code size="supporting">
               {formatTypedWorkItemLabel(workItem)}
-            </DashboardCode>
+            </Code>
           )}
         </li>
       ))}

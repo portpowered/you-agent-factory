@@ -5,7 +5,7 @@ import {
   useId,
   useState,
 } from "react";
-import { DashboardHeading, DashboardText } from "../../../components/ui";
+import { Heading, Text } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { cn } from "../../../lib/cn";
 
@@ -81,17 +81,17 @@ export function StandardExpandableSection({
             )}
           >
             {leadingVisual}
-            <DashboardHeading as={HeadingTag} id={headingID}>
+            <Heading as={HeadingTag} id={headingID}>
               {heading}
-            </DashboardHeading>
+            </Heading>
           </div>
           {supportingText ? (
-            <DashboardText
+            <Text
               className="m-0 text-on-surface-subtle"
               variant="supporting"
             >
               {supportingText}
-            </DashboardText>
+            </Text>
           ) : null}
         </div>
         <ExpandablePanelTrigger

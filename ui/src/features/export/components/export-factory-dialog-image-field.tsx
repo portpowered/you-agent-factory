@@ -1,5 +1,5 @@
 import {
-  DashboardText,
+  Text,
   FileInput,
   FormDescription,
   FormError,
@@ -35,9 +35,9 @@ export function ExportFactoryDialogImageField({
       afterControl={
         <>
           {selectedImage ? (
-            <DashboardText className="m-0" variant="supporting">
+            <Text className="m-0" variant="supporting">
               {selectedImageLabel(selectedImage.name)}
-            </DashboardText>
+            </Text>
           ) : null}
           {imageValidationMessage ? (
             <FormError id={imageValidationId}>

@@ -4,7 +4,7 @@ import { useId } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
-import { DashboardHeading } from "../../../components/ui";
+import { Heading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
@@ -41,9 +41,9 @@ function CurrentActivityCardHeading({
 
   return (
     <div>
-      <DashboardHeading as="h2" className="m-0" id={headingID}>
+      <Heading as="h2" className="m-0" id={headingID}>
         {messages.title}
-      </DashboardHeading>
+      </Heading>
     </div>
   );
 }

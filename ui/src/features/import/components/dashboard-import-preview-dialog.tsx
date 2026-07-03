@@ -2,10 +2,10 @@ import { useId, useMemo, useState } from "react";
 import {
   AlertPanel,
   Button,
-  DashboardDescriptionList,
-  DashboardHeading,
-  DashboardLabel,
-  DashboardText,
+  DescriptionList,
+  Heading,
+  Label,
+  Text,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -176,9 +176,9 @@ function FactoryImportSaveChoiceFieldset({
   return (
     <SurfacePanel asChild className="grid gap-3" radius="2xl" surface="low">
       <fieldset disabled={isSubmitting}>
-        <DashboardLabel as="legend" className="text-primary">
+        <Label as="legend" className="text-primary">
           {messages.saveChoiceLegend}
-        </DashboardLabel>
+        </Label>
         <div
           className="grid gap-2"
           role="radiogroup"
@@ -204,9 +204,9 @@ function FactoryImportSaveChoiceFieldset({
                 <span className="text-base font-semibold text-on-surface">
                   {messages.replaceCurrentOption}
                 </span>
-                <DashboardText as="span" className="m-0" variant="supporting">
+                <Text as="span" className="m-0" variant="supporting">
                   {messages.replaceCurrentOptionDescription}
-                </DashboardText>
+                </Text>
                 <span className="text-sm font-semibold text-on-surface">
                   {currentSessionFactoryName}
                 </span>
@@ -233,13 +233,13 @@ function FactoryImportSaveChoiceFieldset({
                 <span className="text-base font-semibold text-on-surface">
                   {messages.createNewNamedOption}
                 </span>
-                <DashboardText as="span" className="m-0" variant="supporting">
+                <Text as="span" className="m-0" variant="supporting">
                   {messages.createNewNamedOptionDescription}
-                </DashboardText>
+                </Text>
                 <span className="grid gap-1">
-                  <DashboardLabel as="span" className="text-primary">
+                  <Label as="span" className="text-primary">
                     {messages.createResolvedNameLabel}
-                  </DashboardLabel>
+                  </Label>
                   <span className="text-sm font-semibold text-on-surface">
                     {createFactoryName}
                   </span>
@@ -334,19 +334,19 @@ export function FactoryImportPreviewDialog({
         </SurfacePanel>
         <div className="grid content-start gap-5">
           <DialogHeader className="grid gap-3">
-            <DashboardLabel as="p" className="m-0 text-primary">
+            <Label as="p" className="m-0 text-primary">
               {messages.flowLabel}
-            </DashboardLabel>
+            </Label>
             <div className="grid gap-2">
-              <DashboardHeading as={DialogTitle} className="m-0">
+              <Heading as={DialogTitle} className="m-0">
                 {messages.title}
-              </DashboardHeading>
-              <DashboardText as={DialogDescription} className="m-0">
+              </Heading>
+              <Text as={DialogDescription} className="m-0">
                 {renderImportPreviewCurrentFactoryDescription(
                   messages.descriptionTemplate,
                   currentSessionFactoryName,
                 )}
-              </DashboardText>
+              </Text>
             </div>
           </DialogHeader>
 
@@ -355,24 +355,24 @@ export function FactoryImportPreviewDialog({
           </p>
 
           <SurfacePanel asChild padding="default" radius="2xl" surface="low">
-            <DashboardDescriptionList className="gap-3">
+            <DescriptionList className="gap-3">
               <div className="grid gap-1">
-                <DashboardLabel as="dt" className="text-primary">
+                <Label as="dt" className="text-primary">
                   {messages.droppedFileLabel}
-                </DashboardLabel>
+                </Label>
                 <dd className="m-0 font-semibold text-on-surface">
                   {previewState.file.name}
                 </dd>
               </div>
               <div className="grid gap-1">
-                <DashboardLabel as="dt" className="text-primary">
+                <Label as="dt" className="text-primary">
                   {messages.embeddedFactoryLabel}
-                </DashboardLabel>
+                </Label>
                 <dd className="m-0 font-semibold text-on-surface">
                   {previewState.value.factory.name}
                 </dd>
               </div>
-            </DashboardDescriptionList>
+            </DescriptionList>
           </SurfacePanel>
 
           <FactoryImportSaveChoiceFieldset
@@ -384,9 +384,9 @@ export function FactoryImportPreviewDialog({
             onChoiceChange={setChoice}
           />
 
-          <DashboardText className="m-0" variant="supporting">
+          <Text className="m-0" variant="supporting">
             {messages.hint}
-          </DashboardText>
+          </Text>
 
           {activationState.status === "error" ? (
             <FactoryImportActivationErrorPanel

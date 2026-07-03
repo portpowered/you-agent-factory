@@ -1,8 +1,8 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import {
-  DashboardDescriptionList,
-  DashboardLabel,
+  DescriptionList,
+  Label,
   SurfacePanel,
 } from "../../../components/ui";
 import { WidgetSubtitle } from "../../../components/ui/widget-frame";
@@ -14,12 +14,12 @@ export function TrendSummaryGrid({
   ...props
 }: ComponentPropsWithoutRef<"dl">) {
   return (
-    <DashboardDescriptionList
+    <DescriptionList
       className={cn("mb-4 grid-cols-1 gap-3 md:grid-cols-3", className)}
       {...props}
     >
       {children}
-    </DashboardDescriptionList>
+    </DescriptionList>
   );
 }
 
@@ -33,9 +33,9 @@ export function TrendSummaryMetric({
   return (
     <SurfacePanel asChild radius="lg" surface="low">
       <div>
-        <DashboardLabel as="dt" className="mb-1">
+        <Label as="dt" className="mb-1">
           {label}
-        </DashboardLabel>
+        </Label>
         <WidgetSubtitle as="dd" className="m-0">
           {value}
         </WidgetSubtitle>

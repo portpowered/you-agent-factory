@@ -184,7 +184,7 @@ describe("DashboardMessagePanel", () => {
     );
     expect(screen.getByRole("alert").className).toContain("bg-error-container");
     expect(screen.getByText("Import preview ready.").className).toContain(
-      "af-dashboard-supporting-text",
+      "af-supporting-text",
     );
     expect(screen.getByText("Import failed.").className).toContain(
       "!text-current",

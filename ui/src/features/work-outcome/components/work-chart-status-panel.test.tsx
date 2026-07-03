@@ -43,10 +43,10 @@ describe("WorkChartStatusPanel", () => {
     expect(alert.className).toContain("min-h-[14rem]");
     expect(alert.className).not.toContain("border-dashed");
     expect(screen.getByText("Unable to render chart").className).toContain(
-      "af-dashboard-section-heading",
+      "af-section-heading",
     );
     expect(screen.getByText("Chart data is unavailable.").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
   });
 });

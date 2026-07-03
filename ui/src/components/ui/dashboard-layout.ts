@@ -32,7 +32,7 @@ export const LAYOUT_CARD_CONTENT_STACK_CLASS = "grid gap-layout-element";
 export const LAYOUT_PAGE_HEADER_CLASS =
   "flex flex-wrap items-start justify-between gap-layout-group";
 
-/** Dense toolbar / action row aligned with DashboardActionRow rhythm. */
+/** Dense toolbar / action row aligned with ActionRow rhythm. */
 export const LAYOUT_TOOLBAR_ROW_CLASS =
   "flex flex-wrap items-center gap-layout-tight max-md:justify-start";
 

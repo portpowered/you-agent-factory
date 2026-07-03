@@ -1,8 +1,8 @@
 import { type ReactNode, useId } from "react";
 
 import {
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   Input,
   SurfacePanel,
 } from "../../../../components/ui";
@@ -154,12 +154,12 @@ function WorkStateEditableConfigurationDraftStatus({
       <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
       </CurrentSelectionDetailFeedback>
-      <DashboardText
+      <Text
         className="m-0 text-on-surface-subtle"
         variant="supporting"
       >
         {messages.editableConfigurationSaveDisabledValidationDetail}
-      </DashboardText>
+      </Text>
     </CurrentSelectionFormField>
   );
 }
@@ -177,9 +177,9 @@ function WorkStateEditableConfigurationField({
 }) {
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       {input}
       {errorMessage ? (
         <CurrentSelectionDetailFeedback

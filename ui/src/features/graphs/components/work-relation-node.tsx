@@ -1,6 +1,6 @@
 import type { Node, NodeProps } from "@xyflow/react";
 
-import { DashboardText } from "../../../components/ui";
+import { Text } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
@@ -60,13 +60,13 @@ export function WorkRelationNodeView({ data }: NodeProps<WorkRelationNode>) {
       nodeType={relationShellNodeType(data.kind)}
     >
       <div className="grid h-full min-h-0 min-w-0 content-center">
-        <DashboardText
+        <Text
           className={relationNodeLabelClassName(data.displayLabel)}
           data-factory-entity-title
           title={data.workID ?? data.displayLabel}
         >
           {data.displayLabel}
-        </DashboardText>
+        </Text>
       </div>
     </ActivityGraphNodeShell>
   );

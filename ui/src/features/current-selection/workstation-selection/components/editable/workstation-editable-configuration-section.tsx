@@ -4,8 +4,8 @@ import { type ReactNode, useId } from "react";
 import {
   AlertPanel,
   AlertPanelText,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   EnumSelect,
   FormDescription,
   FormError,
@@ -506,12 +506,12 @@ function EditableConfigurationSharedWorkerHint({
   }
 
   return (
-    <DashboardText className="m-0 text-on-surface-subtle" variant="supporting">
+    <Text className="m-0 text-on-surface-subtle" variant="supporting">
       {messages.editableConfigurationSharedWorkerScopeHint(
         valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
         formatList(sharedWorkstationNames),
       )}
-    </DashboardText>
+    </Text>
   );
 }
 
@@ -630,9 +630,9 @@ function EditableConfigurationField({
 }) {
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       {input}
       {supportingContent}
       {errorMessage ? (
@@ -659,7 +659,7 @@ function WorkstationSummaryItem({
       })}
       data-workstation-summary-item={label}
     >
-      <DashboardLabel>{label}</DashboardLabel>
+      <Label>{label}</Label>
       <strong className="flex min-w-0 items-center gap-2 text-sm text-on-surface [overflow-wrap:anywhere]">
         {iconKind && iconLabel ? (
           <GraphSemanticIcon

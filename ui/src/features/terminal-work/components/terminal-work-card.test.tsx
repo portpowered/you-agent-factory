@@ -47,9 +47,9 @@ describe("CompletedFailedWorkstationCard", () => {
       name: messages.rowTitle("failed"),
     });
     expect(completedHeading.className).toContain(
-      "af-dashboard-section-heading",
+      "af-section-heading",
     );
-    expect(failedHeading.className).toContain("af-dashboard-section-heading");
+    expect(failedHeading.className).toContain("af-section-heading");
     const completedTitle = completedHeading.closest(
       "[data-terminal-work-title]",
     );
@@ -96,7 +96,7 @@ describe("CompletedFailedWorkstationCard", () => {
     });
     expect(doneStoryAction.textContent).toBe(messages.openWorkItemAction);
     const doneStoryCard = screen.getByText("Done Story").closest("li");
-    expect(doneStoryCard?.className).toContain("af-dashboard-body-text");
+    expect(doneStoryCard?.className).toContain("af-body-text");
     expect(
       within(doneStoryCard as HTMLElement).getByText(
         messages.rowTitle("completed"),
@@ -112,12 +112,12 @@ describe("CompletedFailedWorkstationCard", () => {
       ).getByText(messages.rowTitle("failed")).className,
     ).toContain("text-on-error-container");
     const failedMeta = screen.getByText("Failed at setup-workspace");
-    expect(failedMeta.className).toContain("af-dashboard-supporting-text");
+    expect(failedMeta.className).toContain("af-supporting-text");
     expect(failedMeta).toBeTruthy();
     expect(
       within(completedRow as HTMLElement).getByText(messages.itemCountLabel(1))
         .className,
-    ).toContain("af-dashboard-supporting-text");
+    ).toContain("af-supporting-text");
 
     fireEvent.click(doneStoryAction);
     expect(onSelectItem).toHaveBeenCalledWith(

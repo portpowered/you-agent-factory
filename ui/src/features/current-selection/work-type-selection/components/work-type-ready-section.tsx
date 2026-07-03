@@ -2,7 +2,7 @@ import { type ReactNode, useId } from "react";
 
 import {
   Checkbox,
-  DashboardLabel,
+  Label,
   DashboardStatusPill,
   Input,
 } from "../../../../components/ui";
@@ -139,7 +139,7 @@ export function WorkTypeReadySection({
               {messages.handlingBehaviorDefaultStatusLabel}
             </DashboardStatusPill>
           ) : null}
-          <DashboardLabel
+          <Label
             as="label"
             className="flex items-center gap-2"
             htmlFor="editable-work-type-handling-behavior-default"
@@ -158,7 +158,7 @@ export function WorkTypeReadySection({
               }
             />
             {messages.handlingBehaviorDefaultLabel}
-          </DashboardLabel>
+          </Label>
           {!hasDefaultHandlingBehavior ? (
             <CurrentSelectionSupportingText id={handlingBehaviorHelperId}>
               {messages.handlingBehaviorDefaultHelper}
@@ -198,9 +198,9 @@ function WorkTypeEditableField({
 }) {
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       {input}
       {errorMessage ? (
         <CurrentSelectionDetailFeedback

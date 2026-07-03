@@ -194,19 +194,19 @@ describe("dashboard trend cards", () => {
     );
 
     expect(screen.getByText("No failure samples").className).toContain(
-      "af-dashboard-section-heading",
+      "af-section-heading",
     );
     expect(
       screen.getByText(
         "Failure trend data appears after the event stream receives work history.",
       ).className,
-    ).toContain("af-dashboard-body-text");
+    ).toContain("af-body-text");
     expect(screen.getAllByText("No selected trace")).toHaveLength(2);
     expect(
       screen.getByText(
         "Select active work with retained trace history to compare dispatch timing.",
       ).className,
-    ).toContain("af-dashboard-body-text");
+    ).toContain("af-body-text");
   });
 
   it("applies shared typography helpers to trend labels, summaries, and supporting copy", () => {
@@ -275,7 +275,7 @@ describe("dashboard trend cards", () => {
         ?.querySelector("dd")?.className,
     ).toContain("af-dashboard-widget-subtitle");
     expect(failureScope.getByText("Work type: story").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
     expect(failureScope.getByText("Work type: story").className).toContain(
       "text-on-surface-variant",

@@ -9,10 +9,10 @@ import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
   AlertPanel,
   Button,
-  DashboardHeading,
-  DashboardLabel,
+  Heading,
+  Label,
   DashboardStatusPill,
-  DashboardText,
+  Text,
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
@@ -59,10 +59,10 @@ export function FactorySessionDetailPanel({
       aria-label={messages.selectedSessionHeading}
       className="grid gap-4"
     >
-      <DashboardHeading>{messages.selectedSessionHeading}</DashboardHeading>
+      <Heading>{messages.selectedSessionHeading}</Heading>
       <div className="grid gap-2">
-        <DashboardLabel>{messages.sessionIdLabel}</DashboardLabel>
-        <DashboardText>{sessionID}</DashboardText>
+        <Label>{messages.sessionIdLabel}</Label>
+        <Text>{sessionID}</Text>
       </div>
 
       {detailState.status === "loading" ? (
@@ -103,7 +103,7 @@ function FactorySessionRuntimeSections({
 
   return (
     <div className="grid gap-4">
-      <DashboardHeading>{messages.runtimeHeading}</DashboardHeading>
+      <Heading>{messages.runtimeHeading}</Heading>
       <div className="grid gap-2 sm:grid-cols-2">
         <Metric
           label={messages.orchestratorKindLabel}
@@ -298,7 +298,7 @@ function DispatchSummaryList({
 
   return (
     <section className="grid gap-3">
-      <DashboardLabel>{messages.dispatchesHeading}</DashboardLabel>
+      <Label>{messages.dispatchesHeading}</Label>
       <DetailCopy>{messages.dispatchSelectionHint}</DetailCopy>
       <div className="grid gap-3">
         {dispatches.map((dispatch) => (
@@ -355,7 +355,7 @@ function DispatchSummaryRow({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid min-w-0 gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <DashboardLabel>{dispatchLabel}</DashboardLabel>
+            <Label>{dispatchLabel}</Label>
             <DashboardStatusPill
               size="compact"
               tone={resolveFactoryDispatchStatusTone({
@@ -366,16 +366,16 @@ function DispatchSummaryRow({
               {dispatch.status}
             </DashboardStatusPill>
           </div>
-          <DashboardText
+          <Text
             as="div"
             className="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-subtle"
             variant="supporting"
           >
             <span>{dispatch.dispatchKind}</span>
             <span>{dispatch.id}</span>
-          </DashboardText>
+          </Text>
           {summaryDetails.length > 0 ? (
-            <DashboardText
+            <Text
               as="div"
               className="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-subtle"
               variant="supporting"
@@ -383,7 +383,7 @@ function DispatchSummaryRow({
               {summaryDetails.map((detail) => (
                 <span key={detail}>{detail}</span>
               ))}
-            </DashboardText>
+            </Text>
           ) : null}
         </div>
         <ExpandablePanelTrigger
@@ -493,13 +493,13 @@ function PetriSessionProjection({
       />
       {petri.enabledTransitions.length > 0 ? (
         <div className="grid gap-2">
-          <DashboardLabel>{messages.enabledTransitionsHeading}</DashboardLabel>
+          <Label>{messages.enabledTransitionsHeading}</Label>
           <ul className="grid gap-1">
             {petri.enabledTransitions.map((transition) => (
               <li key={transition.transitionId}>
-                <DashboardText>
+                <Text>
                   {transition.transitionId} ({transition.workerType})
-                </DashboardText>
+                </Text>
               </li>
             ))}
           </ul>
@@ -518,16 +518,16 @@ function CheckpointRefList({
 }) {
   return (
     <div className="grid gap-2">
-      <DashboardLabel>{heading}</DashboardLabel>
+      <Label>{heading}</Label>
       <ul className="grid gap-1">
         {checkpoints.map((checkpoint) => (
           <li key={checkpoint.id}>
-            <DashboardText>
+            <Text>
               {checkpoint.label
                 ? `${checkpoint.id} (${checkpoint.label})`
                 : checkpoint.id}
               {checkpoint.summary ? ` — ${checkpoint.summary}` : ""}
-            </DashboardText>
+            </Text>
           </li>
         ))}
       </ul>
@@ -544,11 +544,11 @@ function WarningList({
 }) {
   return (
     <div className="grid gap-2">
-      <DashboardLabel>{heading}</DashboardLabel>
+      <Label>{heading}</Label>
       <ul className="grid gap-1">
         {warnings.map((warning) => (
           <li key={`${warning.code}:${warning.message}`}>
-            <DashboardText>{warning.message}</DashboardText>
+            <Text>{warning.message}</Text>
           </li>
         ))}
       </ul>
@@ -559,8 +559,8 @@ function WarningList({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel>{label}</DashboardLabel>
-      <DashboardText>{value}</DashboardText>
+      <Label>{label}</Label>
+      <Text>{value}</Text>
     </div>
   );
 }

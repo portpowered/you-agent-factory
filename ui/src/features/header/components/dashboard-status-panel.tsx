@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardHeading } from "../../../components/ui";
+import { Heading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { useAppLocale } from "../../../i18n";
@@ -34,9 +34,9 @@ export function DashboardStatusPanel({
           wordmarkClassName="truncate"
         />
       </p>
-      <DashboardHeading className="m-0" level="page">
+      <Heading className="m-0" level="page">
         {title}
-      </DashboardHeading>
+      </Heading>
       {detail ? (
         <DetailCopy className={detailClassName}>{detail}</DetailCopy>
       ) : null}

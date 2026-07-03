@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import {
   DashboardActionButton,
-  DashboardActionRow,
+  ActionRow,
 } from "../../../../../components/ui";
 
 const CURRENT_SELECTION_HEADER_ACTIONS_GROUP_CLASS = "w-full justify-end";
@@ -26,7 +26,7 @@ export function CurrentSelectionHeaderActions({
   undoLabel: string;
 }) {
   return (
-    <DashboardActionRow
+    <ActionRow
       actions={
         <>
           <DashboardActionButton

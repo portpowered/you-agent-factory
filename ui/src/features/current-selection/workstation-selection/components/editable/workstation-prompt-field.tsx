@@ -7,8 +7,8 @@ import {
 } from "../../../../../components/prompt-editor";
 import { VerticalResizableWidth } from "../../../../../components/prompt-editor/vertical-resizable-width";
 import {
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   ExpandablePanelTrigger,
   FormError,
   SurfacePanel,
@@ -337,9 +337,9 @@ function PromptContractList({
 }) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel as="h5" className="m-0">
+      <Label as="h5" className="m-0">
         {heading}
-      </DashboardLabel>
+      </Label>
       <ul className="m-0 grid list-none gap-1 p-0">
         {items.map((item) => (
           <SurfacePanel
@@ -353,12 +353,12 @@ function PromptContractList({
               <CurrentSelectionSubtleCode className="[overflow-wrap:anywhere]">
                 {item.label}
               </CurrentSelectionSubtleCode>
-              <DashboardText
+              <Text
                 className="m-0 text-on-surface-subtle [overflow-wrap:anywhere]"
                 variant="supporting"
               >
                 {item.detail}
-              </DashboardText>
+              </Text>
               <CurrentSelectionSubtleCode className="[overflow-wrap:anywhere]">
                 {item.example}
               </CurrentSelectionSubtleCode>

@@ -420,7 +420,7 @@ describe("TraceGridBentoCard state handling", () => {
     );
 
     expect(screen.getByText("Trace history unavailable").className).toContain(
-      "af-dashboard-section-heading",
+      "af-section-heading",
     );
 
     rerender(
@@ -429,12 +429,12 @@ describe("TraceGridBentoCard state handling", () => {
       />,
     );
     expect(screen.getByText("Loading trace").className).toContain(
-      "af-dashboard-section-heading",
+      "af-section-heading",
     );
     expect(
       screen.getByText("Reconstructing dispatch history for work-active.")
         .className,
-    ).toContain("af-dashboard-body-text");
+    ).toContain("af-body-text");
     expect(container.querySelectorAll(".animate-pulse")).toHaveLength(3);
 
     rerender(
@@ -443,10 +443,10 @@ describe("TraceGridBentoCard state handling", () => {
       />,
     );
     expect(screen.getByText("Trace lookup failed").className).toContain(
-      "af-dashboard-section-heading",
+      "af-section-heading",
     );
     expect(screen.getByText("network failed").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
   });
 });

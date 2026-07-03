@@ -1,3 +1,17 @@
+export {
+  ActionRow,
+  Code,
+  DescriptionList,
+  Heading,
+  Label,
+  Text,
+  type ActionRowProps,
+  type CodeProps,
+  type DescriptionListProps,
+  type HeadingProps,
+  type TextProps,
+} from "@you-agent-factory/components";
+
 export * from "./alert-panel";
 export * from "./button";
 export * from "./button-link";

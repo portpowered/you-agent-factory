@@ -48,9 +48,9 @@ describe("FactoryGraphEditor add dialog fields", () => {
     expect(screen.getByText("Node name").className).toContain(
       "text-on-surface",
     );
-    expect(help.className).toContain("af-dashboard-supporting-text");
+    expect(help.className).toContain("af-supporting-text");
     expect(error.textContent).toBe("Use a unique name.");
-    expect(error.className).toContain("af-dashboard-supporting-text");
+    expect(error.className).toContain("af-supporting-text");
     expect(error.className).toContain("font-medium");
     expect(error.className).toContain("text-on-error-container");
 
