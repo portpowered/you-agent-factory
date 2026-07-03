@@ -287,6 +287,9 @@ func TestOutputToken_CrossType_UsesWorkIDGenerator(t *testing.T) {
 	if token.Color.WorkTypeID != "target-type" {
 		t.Errorf("WorkTypeID = %q, want %q", token.Color.WorkTypeID, "target-type")
 	}
+	if token.Color.DataType != interfaces.DataTypeWork {
+		t.Errorf("DataType = %q, want %q", token.Color.DataType, interfaces.DataTypeWork)
+	}
 	if token.Color.ParentID != "work-source-type-1" {
 		t.Errorf("ParentID = %q, want %q", token.Color.ParentID, "work-source-type-1")
 	}
@@ -599,6 +602,213 @@ func TestOutputToken_Resource_DoesNotInventWorkChainingLineage(t *testing.T) {
 	}
 }
 
+type mixedWorkResourceOutputFixture struct {
+	transformer *Transformer
+	resource    interfaces.Token
+	work        interfaces.Token
+	arcs        []petri.Arc
+	baseHistory interfaces.TokenHistory
+	now         time.Time
+}
+
+func newMixedWorkResourceTraceLineageFixture() mixedWorkResourceOutputFixture {
+	now := time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-time.Hour)
+	return mixedWorkResourceOutputFixture{
+		transformer: New(
+			map[string]*petri.Place{
+				"story:complete":       {ID: "story:complete", TypeID: "story", State: "complete"},
+				"agent-slot:available": {ID: "agent-slot:available", TypeID: "agent-slot", State: "available"},
+			},
+			map[string]*state.WorkType{
+				"story": {ID: "story"},
+			},
+			WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+		),
+		resource: interfaces.Token{
+			ID:        "agent-slot:resource:0",
+			PlaceID:   "agent-slot:available",
+			CreatedAt: createdAt,
+			EnteredAt: createdAt,
+			Color: interfaces.TokenColor{
+				WorkID:     "agent-slot:0",
+				WorkTypeID: "agent-slot",
+				DataType:   interfaces.DataTypeResource,
+			},
+		},
+		work: interfaces.Token{
+			ID:        "work-story-1",
+			PlaceID:   "story:in-review",
+			CreatedAt: createdAt,
+			EnteredAt: createdAt,
+			Color: interfaces.TokenColor{
+				WorkID:                   "work-story-1",
+				WorkTypeID:               "story",
+				TraceID:                  "trace-batch-idea-001",
+				CurrentChainingTraceID:   "trace-batch-idea-001",
+				PreviousChainingTraceIDs: []string{"trace-batch-idea-001"},
+				ChainingTraceDepth:       3,
+			},
+		},
+		arcs: []petri.Arc{
+			{ID: "work-out", PlaceID: "story:complete", Direction: petri.ArcOutput},
+			{ID: "slot-out", PlaceID: "agent-slot:available", Direction: petri.ArcOutput},
+		},
+		baseHistory: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+		now: now,
+	}
+}
+
+func assertMixedWorkOutputPreservesTraceLineage(t *testing.T, workToken *interfaces.Token) {
+	t.Helper()
+	if workToken.Color.DataType != interfaces.DataTypeWork {
+		t.Fatalf("work DataType = %q, want %q", workToken.Color.DataType, interfaces.DataTypeWork)
+	}
+	if workToken.Color.TraceID != "trace-batch-idea-001" {
+		t.Fatalf("work TraceID = %q, want trace-batch-idea-001", workToken.Color.TraceID)
+	}
+	if workToken.Color.CurrentChainingTraceID != "trace-batch-idea-001" {
+		t.Fatalf("work CurrentChainingTraceID = %q, want trace-batch-idea-001", workToken.Color.CurrentChainingTraceID)
+	}
+	if workToken.Color.WorkID != "work-story-1" {
+		t.Fatalf("work WorkID = %q, want work-story-1", workToken.Color.WorkID)
+	}
+}
+
+func assertMixedResourceOutputPreservesIdentity(t *testing.T, resourceToken *interfaces.Token, consumed interfaces.Token) {
+	t.Helper()
+	if resourceToken.ID != consumed.ID {
+		t.Fatalf("resource ID = %q, want %q", resourceToken.ID, consumed.ID)
+	}
+	if resourceToken.Color.DataType != interfaces.DataTypeResource {
+		t.Fatalf("resource DataType = %q, want %q", resourceToken.Color.DataType, interfaces.DataTypeResource)
+	}
+	if resourceToken.Color.WorkID != "agent-slot:0" {
+		t.Fatalf("resource WorkID = %q, want agent-slot:0", resourceToken.Color.WorkID)
+	}
+	if resourceToken.Color.TraceID != "" || resourceToken.Color.CurrentChainingTraceID != "" {
+		t.Fatalf("resource trace fields = (%q,%q), want empty", resourceToken.Color.TraceID, resourceToken.Color.CurrentChainingTraceID)
+	}
+}
+
+func TestOutputToken_MixedWorkResource_PreservesWorkTraceLineageRegardlessOfInputOrder(t *testing.T) {
+	fixture := newMixedWorkResourceTraceLineageFixture()
+	orderings := []struct {
+		name          string
+		consumed      []interfaces.Token
+		inputColors   []interfaces.TokenColor
+		resourceIndex int
+	}{
+		{
+			name:          "resource-first",
+			consumed:      []interfaces.Token{fixture.resource, fixture.work},
+			inputColors:   []interfaces.TokenColor{fixture.resource.Color, fixture.work.Color},
+			resourceIndex: 0,
+		},
+		{
+			name:          "work-first",
+			consumed:      []interfaces.Token{fixture.work, fixture.resource},
+			inputColors:   []interfaces.TokenColor{fixture.work.Color, fixture.resource.Color},
+			resourceIndex: 0,
+		},
+	}
+
+	for _, ordering := range orderings {
+		t.Run(ordering.name, func(t *testing.T) {
+			workToken, err := fixture.transformer.OutputToken(OutputTokenInput{
+				ArcIndex:       0,
+				Arcs:           fixture.arcs,
+				ConsumedTokens: ordering.consumed,
+				InputColors:    ordering.inputColors,
+				Outcome:        interfaces.OutcomeAccepted,
+				Now:            fixture.now,
+				History:        fixture.baseHistory,
+			})
+			if err != nil {
+				t.Fatalf("work OutputToken() error = %v", err)
+			}
+			assertMixedWorkOutputPreservesTraceLineage(t, workToken)
+
+			resourceToken, err := fixture.transformer.OutputToken(OutputTokenInput{
+				ArcIndex:           1,
+				Arcs:               fixture.arcs,
+				ConsumedTokens:     ordering.consumed,
+				InputColors:        ordering.inputColors,
+				ResourceTokenIndex: ordering.resourceIndex,
+				Outcome:            interfaces.OutcomeAccepted,
+				Now:                fixture.now,
+				History:            fixture.baseHistory,
+			})
+			if err != nil {
+				t.Fatalf("resource OutputToken() error = %v", err)
+			}
+			assertMixedResourceOutputPreservesIdentity(t, resourceToken, fixture.resource)
+		})
+	}
+}
+
+func TestOutputToken_CrossTypeWithResource_PreservesWorkTraceRegardlessOfInputOrder(t *testing.T) {
+	now := time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)
+	transformer := New(
+		map[string]*petri.Place{
+			"prd:init": {ID: "prd:init", TypeID: "prd", State: "init"},
+		},
+		map[string]*state.WorkType{
+			"idea": {ID: "idea"},
+			"prd":  {ID: "prd"},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+	resource := interfaces.TokenColor{
+		WorkID:     "agent-slot:0",
+		WorkTypeID: "agent-slot",
+		DataType:   interfaces.DataTypeResource,
+	}
+	work := interfaces.TokenColor{
+		WorkID:     "work-idea-1",
+		WorkTypeID: "idea",
+		TraceID:    "trace-batch-idea-002",
+	}
+	orderings := [][]interfaces.TokenColor{
+		{resource, work},
+		{work, resource},
+	}
+
+	for i, inputColors := range orderings {
+		token, err := transformer.OutputToken(OutputTokenInput{
+			ArcIndex:    0,
+			Arcs:        []petri.Arc{{PlaceID: "prd:init", Direction: petri.ArcOutput}},
+			InputColors: inputColors,
+			Outcome:     interfaces.OutcomeAccepted,
+			Now:         now,
+			History: interfaces.TokenHistory{
+				TotalVisits:         map[string]int{},
+				ConsecutiveFailures: map[string]int{},
+				PlaceVisits:         map[string]int{},
+			},
+		})
+		if err != nil {
+			t.Fatalf("ordering %d OutputToken() error = %v", i, err)
+		}
+		if token.Color.DataType != interfaces.DataTypeWork {
+			t.Fatalf("ordering %d DataType = %q, want work", i, token.Color.DataType)
+		}
+		if token.Color.TraceID != "trace-batch-idea-002" {
+			t.Fatalf("ordering %d TraceID = %q, want trace-batch-idea-002", i, token.Color.TraceID)
+		}
+		if token.Color.WorkTypeID != "prd" {
+			t.Fatalf("ordering %d WorkTypeID = %q, want prd", i, token.Color.WorkTypeID)
+		}
+		if token.Color.ParentID != "work-idea-1" {
+			t.Fatalf("ordering %d ParentID = %q, want work-idea-1", i, token.Color.ParentID)
+		}
+	}
+}
+
 func TestReleasedResourceToken_PreservesConsumedTokenIdentity(t *testing.T) {
 	now := time.Date(2026, time.April, 7, 13, 0, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)
@@ -639,4 +849,117 @@ func TestReleasedResourceToken_PreservesConsumedTokenIdentity(t *testing.T) {
 	if released.History.PlaceVisits["executor-slot:available"] != 2 {
 		t.Fatalf("PlaceVisits after source mutation = %#v, want detached original", released.History.PlaceVisits)
 	}
+}
+
+func newMixedWorkResourceReleaseFixture() mixedWorkResourceOutputFixture {
+	now := time.Date(2026, time.April, 7, 14, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-time.Hour)
+	return mixedWorkResourceOutputFixture{
+		transformer: New(
+			map[string]*petri.Place{
+				"story:complete":       {ID: "story:complete", TypeID: "story", State: "complete"},
+				"agent-slot:available": {ID: "agent-slot:available", TypeID: "agent-slot", State: "available"},
+			},
+			map[string]*state.WorkType{
+				"story": {ID: "story"},
+			},
+			WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+		),
+		resource: interfaces.Token{
+			ID:        "agent-slot:resource:0",
+			PlaceID:   "agent-slot:available",
+			CreatedAt: createdAt,
+			EnteredAt: createdAt,
+			Color: interfaces.TokenColor{
+				WorkID:     "agent-slot:0",
+				WorkTypeID: "agent-slot",
+				DataType:   interfaces.DataTypeResource,
+			},
+			History: interfaces.TokenHistory{
+				PlaceVisits: map[string]int{"agent-slot:available": 3},
+			},
+		},
+		work: interfaces.Token{
+			ID:        "work-story-1",
+			PlaceID:   "story:in-review",
+			CreatedAt: createdAt,
+			EnteredAt: createdAt,
+			Color: interfaces.TokenColor{
+				WorkID:     "work-story-1",
+				WorkTypeID: "story",
+				DataType:   interfaces.DataTypeWork,
+				TraceID:    "trace-batch-idea-001",
+			},
+			History: interfaces.TokenHistory{
+				TotalVisits:         map[string]int{},
+				ConsecutiveFailures: map[string]int{},
+				PlaceVisits:         map[string]int{},
+			},
+		},
+		arcs: []petri.Arc{
+			{ID: "work-out", PlaceID: "story:complete", Direction: petri.ArcOutput},
+			{ID: "slot-out", PlaceID: "agent-slot:available", Direction: petri.ArcOutput},
+		},
+		baseHistory: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+		now: now,
+	}
+}
+
+func assertMixedResourceOutputPreservesConsumedHistory(t *testing.T, resourceToken *interfaces.Token, consumed interfaces.Token, now time.Time) {
+	t.Helper()
+	assertMixedResourceOutputPreservesIdentity(t, resourceToken, consumed)
+	if resourceToken.PlaceID != "agent-slot:available" {
+		t.Fatalf("resource PlaceID = %q, want agent-slot:available", resourceToken.PlaceID)
+	}
+	if !resourceToken.CreatedAt.Equal(consumed.CreatedAt) {
+		t.Fatalf("resource CreatedAt = %v, want %v", resourceToken.CreatedAt, consumed.CreatedAt)
+	}
+	if !resourceToken.EnteredAt.Equal(now) {
+		t.Fatalf("resource EnteredAt = %v, want %v", resourceToken.EnteredAt, now)
+	}
+	if resourceToken.History.PlaceVisits["agent-slot:available"] != 3 {
+		t.Fatalf("resource PlaceVisits = %#v, want preserved history", resourceToken.History.PlaceVisits)
+	}
+}
+
+func TestOutputToken_MixedWorkResource_ReleasesConsumedResourceIdentityRegardlessOfInputOrder(t *testing.T) {
+	fixture := newMixedWorkResourceReleaseFixture()
+	orderings := []struct {
+		name     string
+		consumed []interfaces.Token
+	}{
+		{name: "resource-first", consumed: []interfaces.Token{fixture.resource, fixture.work}},
+		{name: "work-first", consumed: []interfaces.Token{fixture.work, fixture.resource}},
+	}
+
+	for _, ordering := range orderings {
+		t.Run(ordering.name, func(t *testing.T) {
+			resourceToken, err := fixture.transformer.OutputToken(OutputTokenInput{
+				ArcIndex:           1,
+				Arcs:               fixture.arcs,
+				ConsumedTokens:     ordering.consumed,
+				InputColors:        tokenColorsFromTokens(ordering.consumed),
+				ResourceTokenIndex: 0,
+				Outcome:            interfaces.OutcomeAccepted,
+				Now:                fixture.now,
+				History:            fixture.baseHistory,
+			})
+			if err != nil {
+				t.Fatalf("resource OutputToken() error = %v", err)
+			}
+			assertMixedResourceOutputPreservesConsumedHistory(t, resourceToken, fixture.resource, fixture.now)
+		})
+	}
+}
+
+func tokenColorsFromTokens(tokens []interfaces.Token) []interfaces.TokenColor {
+	colors := make([]interfaces.TokenColor, len(tokens))
+	for i, token := range tokens {
+		colors[i] = token.Color
+	}
+	return colors
 }

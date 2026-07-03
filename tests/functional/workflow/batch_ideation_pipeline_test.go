@@ -28,22 +28,15 @@ func seedBatchIdeas(t *testing.T, dir string, count int) []string {
 	return traceIDs
 }
 
-// TestBatchIdeationPipeline_ConcurrencyLimit2 verifies that 3 ideas seeded
-// via seed files independently progress through the full ideation pipeline
-// (idea → prd → story → complete) with resource-based concurrency limits
-// (agent-slot capacity=2) throttling execution without deadlock.
+// TestBatchIdeationPipeline_ConcurrencyLimit2 verifies that three idea Work
+// requests seeded via submit files independently progress through the full
+// ideation pipeline (idea → prd → story → complete) with resource-limited
+// concurrency (agent-slot capacity=2) throttling execution without deadlock.
 //
 // Each idea pipeline requires: planner(1) + executor(1) + reviewer(1) = 3
 // provider calls. Converter is LOGICAL_MOVE — no provider call.
-// Total: 3 ideas × 3 calls = 9 provider calls minimum.
-//
-// NOTE: TraceID lineage across work types with resource_usage has a known
-// framework issue where output arc color assignment is non-deterministic
-// (see tasks/ideas-to-review/resource-token-color-corruption.md).
-// This test verifies completion and resource management; US-004 covers
-// TraceID lineage in detail without resource interference.
+// Total: 3 ideas × 3 calls = 9 provider calls.
 func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
-	t.Skip("Flaky test skipped pending framework fix for resource token color assignment issue (see tasks/ideas-to-review/resource-token-color-corruption.md)")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "batch_ideation_pipeline"))
 
 	// Every response contains ALL stop tokens (COMPLETE + ACCEPTED) since
@@ -82,27 +75,34 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 		HasNoTokenInPlace("story:init").
 		HasNoTokenInPlace("story:in-review")
 
-	// Each idea lineage (TraceID) is independent and traceable through work
-	// tokens. Due to a known framework issue with resource output arc color
-	// assignment, some tokens may have empty colors — we verify the work tokens
-	// that do carry TraceIDs.
+	// Each completed story Work item preserves one of the seeded trace IDs.
 	foundTraces := make(map[string]bool)
 	for _, tok := range storyCompleteTokens {
-		if tok.Color.DataType == interfaces.DataTypeWork && tok.Color.TraceID != "" {
-			foundTraces[tok.Color.TraceID] = true
+		if tok.Color.DataType != interfaces.DataTypeWork {
+			t.Errorf("story:complete token %s: expected work DataType, got %q", tok.ID, tok.Color.DataType)
+			continue
 		}
+		if tok.Color.TraceID == "" {
+			t.Errorf("story:complete token %s: expected TraceID lineage", tok.ID)
+			continue
+		}
+		if !slices.Contains(traceIDs, tok.Color.TraceID) {
+			t.Errorf("unexpected TraceID %q in story:complete", tok.Color.TraceID)
+			continue
+		}
+		foundTraces[tok.Color.TraceID] = true
 	}
-	// Verify all found traces are from our expected set.
-	for traceID := range foundTraces {
-		if !slices.Contains(traceIDs, traceID) {
-			t.Errorf("unexpected TraceID %q in story:complete", traceID)
+	for _, traceID := range traceIDs {
+		if !foundTraces[traceID] {
+			t.Errorf("expected TraceID %q in story:complete, not found", traceID)
 		}
 	}
 
-	// Provider called at least 9 times: 3 planner + 3 executor + 3 reviewer.
-	if provider.CallCount() < 9 {
-		t.Errorf("expected provider called at least 9 times, got %d", provider.CallCount())
+	// Total provider calls: 3 planner + 3 executor + 3 reviewer = 9.
+	if provider.CallCount() != 9 {
+		t.Errorf("expected exactly 9 provider calls, got %d", provider.CallCount())
 	}
+	assertSerialPipelineProviderCallsUseAgentsMD(t, provider.Calls())
 
 	// Resource tokens returned: 2 tokens in agent-slot:available (capacity=2).
 	resourceTokens := snap.TokensInPlace("agent-slot:available")
@@ -112,8 +112,8 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 }
 
 // TestSerialIdeationPipeline_ConcurrencyLimit1 verifies that with agent-slot
-// capacity of 1, submitting 3 ideas results in fully serialized processing
-// where only one agent runs at a time and all work completes without deadlock.
+// capacity of 1, three idea Work requests are processed serially so only one
+// agent runs at a time and all Work completes without deadlock.
 //
 // Same topology as TestBatchIdeationPipeline_ConcurrencyLimit2 but capacity=1.
 // Total: 3 ideas × 3 provider calls = 9.
