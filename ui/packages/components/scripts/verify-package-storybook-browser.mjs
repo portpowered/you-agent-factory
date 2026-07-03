@@ -7,6 +7,12 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 import {
+  PACKAGE_FORM_FOCUS_STORY_IDS,
+  PACKAGE_FORM_MOBILE_STORY_IDS,
+  verifyPackageFormFocusStories,
+  verifyPackageFormMobileStories,
+} from "./verify-package-form-storybook-browser.mjs";
+import {
   hostResponsibilityCopy,
   overlayStoryIds,
   overlayStoryTexts,
@@ -19,6 +25,10 @@ import {
   verifyPackageSelectKeyboardStories,
 } from "./verify-package-storybook-selects.mjs";
 
+export {
+  PACKAGE_FORM_FOCUS_STORY_IDS,
+  PACKAGE_FORM_MOBILE_STORY_IDS,
+} from "./verify-package-form-storybook-browser.mjs";
 export {
   PACKAGE_SELECT_EDGE_STATE_STORY_IDS,
   PACKAGE_SELECT_KEYBOARD_STORY_ID,
@@ -114,6 +124,8 @@ async function verifyPackageStorybookBrowser() {
   const page = await browser.newPage();
 
   try {
+    await verifyPackageFormMobileStories({ page, storyUrl });
+    await verifyPackageFormFocusStories({ page, storyUrl });
     await verifyPackageSelectKeyboardStories({ page, storyUrl });
     await verifyPackageSelectEdgeStateStories({ page, storyUrl });
     await verifyPackageOverlayStories({ page, baseUrl });
@@ -184,6 +196,8 @@ async function main() {
 
     for (const storyId of [
       PACKAGE_TEXT_STORY_ID,
+      ...PACKAGE_FORM_MOBILE_STORY_IDS,
+      ...PACKAGE_FORM_FOCUS_STORY_IDS,
       ...PACKAGE_SELECT_KEYBOARD_STORY_IDS,
       ...PACKAGE_SELECT_EDGE_STATE_STORY_IDS,
       ...overlayStoryIds,

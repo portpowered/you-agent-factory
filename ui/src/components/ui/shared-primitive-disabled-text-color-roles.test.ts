@@ -3,10 +3,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { inputVariants } from "./input";
+
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
 
 const IN_SCOPE_FILES = [
-  "input.tsx",
   "expandable-panel-trigger.tsx",
   "chart.tsx",
   "dashboard-action-button.tsx",
@@ -29,12 +30,12 @@ describe("shared primitive disabled text color roles", () => {
     expectNoTransitionalDisabledText(readComponentSource(fileName));
   });
 
-  it("maps input placeholder and disabled copy to on-surface-disabled role utilities", () => {
-    const source = readComponentSource("input.tsx");
+  it("maps package-backed input placeholder and disabled copy to on-surface-disabled role utilities", () => {
+    const className = inputVariants();
 
-    expect(source).toContain("placeholder:text-on-surface-disabled");
-    expect(source).toContain("disabled:text-on-surface-disabled");
-    expectNoTransitionalDisabledText(source);
+    expect(className).toContain("placeholder:text-on-surface-disabled");
+    expect(className).toContain("disabled:text-on-surface-disabled");
+    expectNoTransitionalDisabledText(className);
   });
 
   it("maps expandable panel trigger disabled copy to on-surface-disabled", () => {

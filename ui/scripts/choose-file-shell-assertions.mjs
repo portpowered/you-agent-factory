@@ -7,8 +7,8 @@ const ACCENT_CHROME_TOKENS = [
 
 const NEUTRAL_SHELL_TOKENS = [
   "border-dashed",
-  "border-af-border-strong",
-  "bg-af-surface-subtle",
+  "border-outline-variant",
+  "bg-surface-container-low",
 ];
 
 export function assertChooseFileShellNeutral(className, label) {
@@ -26,9 +26,9 @@ export function assertChooseFileShellNeutral(className, label) {
 }
 
 export function assertChooseFileDragActiveNeutral(className, label) {
-  if (!className.includes("border-af-border-strong")) {
+  if (!className.includes("border-outline-variant")) {
     throw new Error(
-      `${label} drag-active missing border-af-border-strong: ${className}`,
+      `${label} drag-active missing border-outline-variant: ${className}`,
     );
   }
 
