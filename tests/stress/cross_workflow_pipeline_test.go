@@ -226,10 +226,13 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 		}(g)
 	}
 
-	// 3 goroutines query marking concurrently.
+	// 3 goroutines query marking and runtime status concurrently while submissions
+	// and Work processing are still active.
+	codeChangeTerminalPlaces := []string{"code-change:complete", "code-change:failed"}
 	var queryWg sync.WaitGroup
 	queryDone := make(chan struct{})
-	var queryCount atomic.Int64
+	var markingQueryCount atomic.Int64
+	var statusQueryCount atomic.Int64
 	for range 3 {
 		queryWg.Add(1)
 		go func() {
@@ -244,14 +247,26 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 						_ = tok.PlaceID
 						_ = tok.Color.WorkTypeID
 					}
-					queryCount.Add(1)
+					markingQueryCount.Add(1)
+
+					if stateSnap, err := hA.GetEngineStateSnapshot(); err == nil {
+						_ = stateSnap.RuntimeStatus
+						statusQueryCount.Add(1)
+					}
 				}
 			}
 		}()
 	}
 
 	submitWg.Wait()
-	pollUntilAllTerminalH(t, hA, []string{"code-change:complete", "code-change:failed"}, totalItems, 20*time.Second)
+	pollUntilAllTerminalH(t, hA, codeChangeTerminalPlaces, totalItems, 20*time.Second)
+
+	if markingQueryCount.Load() == 0 {
+		t.Fatal("expected concurrent marking queries before stopping query workers, got 0")
+	}
+	if statusQueryCount.Load() == 0 {
+		t.Fatal("expected concurrent status queries before stopping query workers, got 0")
+	}
 
 	close(queryDone)
 	queryWg.Wait()
@@ -259,12 +274,12 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	<-errChA
 
 	snapA := hA.Marking()
-	complete := len(snapA.TokensInPlace("code-change:complete"))
-	if complete != totalItems {
-		t.Errorf("expected %d complete, got %d", totalItems, complete)
-	}
+	assertMarkingConsistency(t, snapA, codeChangeTerminalPlaces, totalItems)
 
-	t.Logf("no-race test: %d items completed, %d queries", complete, queryCount.Load())
+	t.Logf("no-race test: %d terminal tokens, %d marking queries, %d status queries",
+		countTerminalTokens(snapA, codeChangeTerminalPlaces),
+		markingQueryCount.Load(),
+		statusQueryCount.Load())
 }
 
 // --- Helper configs for cross-workflow tests ---
