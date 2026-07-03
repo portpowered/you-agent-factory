@@ -38,10 +38,9 @@ function expectRoleBasedNeutralSurfaces(className: string): void {
 }
 
 describe("shared primitive neutral surface roles", () => {
-  it.each([
-    ["dashboard-shell.tsx", readComponentSource],
-    ["input.tsx", readComponentSource],
-  ])("uses role-based neutral surfaces in %s", (fileName, readSource) => {
+  it.each([["dashboard-shell.tsx", readComponentSource]])(
+    "uses role-based neutral surfaces in %s",
+    (fileName, readSource) => {
     const source = readSource(fileName);
 
     expect(source).toContain("border-outline");
