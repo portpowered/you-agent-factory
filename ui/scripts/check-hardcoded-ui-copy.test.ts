@@ -251,6 +251,25 @@ test("runHardcodedUiCopyCheck allows catalogs, tests, stories, and documented di
         }
       `,
     );
+    await mkdir(
+      path.join(srcDir, "features", "orders", "components", "test-support"),
+      { recursive: true },
+    );
+    await writeFile(
+      path.join(
+        srcDir,
+        "features",
+        "orders",
+        "components",
+        "test-support",
+        "orders.fixtures.ts",
+      ),
+      `
+        export const orderFixture = {
+          title: "Retry request",
+        };
+      `,
+    );
     await writeFile(
       path.join(srcDir, "features", "orders", "orders.tsx"),
       `
