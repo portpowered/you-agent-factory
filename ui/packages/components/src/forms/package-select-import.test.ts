@@ -8,7 +8,9 @@ import {
   OptionalEnumSelect,
   ResetEnumSelect,
   Select,
+  SELECT_EMPTY_STATE_VALUE,
   SelectContent,
+  SelectEmpty,
   SelectField,
   SelectGroup,
   SelectItem,
@@ -23,7 +25,9 @@ import {
   OptionalEnumSelect as FormsOptionalEnumSelect,
   ResetEnumSelect as FormsResetEnumSelect,
   Select as FormsSelect,
+  SELECT_EMPTY_STATE_VALUE as FormsSelectEmptyStateValue,
   SelectContent as FormsSelectContent,
+  SelectEmpty as FormsSelectEmpty,
   SelectField as FormsSelectField,
   SelectGroup as FormsSelectGroup,
   SelectItem as FormsSelectItem,
@@ -40,6 +44,7 @@ describe("@you-agent-factory/components select imports", () => {
     expect(SelectValue).toBeTruthy();
     expect(typeof SelectTrigger).toBe("object");
     expect(SelectContent).toBeTypeOf("function");
+    expect(SelectEmpty).toBeTypeOf("function");
     expect(SelectLabel).toBeTypeOf("function");
     expect(typeof SelectItem).toBe("object");
     expect(SelectSeparator).toBeTypeOf("function");
@@ -56,6 +61,8 @@ describe("@you-agent-factory/components select imports", () => {
     expect(FormsSelectValue).toBe(SelectValue);
     expect(FormsSelectTrigger).toBe(SelectTrigger);
     expect(FormsSelectContent).toBe(SelectContent);
+    expect(FormsSelectEmpty).toBe(SelectEmpty);
+    expect(FormsSelectEmptyStateValue).toBe(SELECT_EMPTY_STATE_VALUE);
     expect(FormsSelectLabel).toBe(SelectLabel);
     expect(FormsSelectItem).toBe(SelectItem);
     expect(FormsSelectSeparator).toBe(SelectSeparator);

@@ -2,7 +2,9 @@ import { type ComponentProps, useState } from "react";
 
 import {
   Select,
+  SELECT_EMPTY_STATE_VALUE,
   SelectContent,
+  SelectEmpty,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -24,7 +26,10 @@ type EnumSelectAriaProps = Pick<
 export interface EnumSelectProps extends EnumSelectAriaProps {
   className?: string;
   disabled?: boolean;
+  emptyOptionsLabel?: string;
   id: string;
+  loading?: boolean;
+  loadingLabel?: string;
   onValueChange: (value: string) => void;
   options: readonly EnumSelectOption[];
   placeholder?: string;
@@ -34,28 +39,49 @@ export interface EnumSelectProps extends EnumSelectAriaProps {
 export function EnumSelect({
   className,
   disabled,
+  emptyOptionsLabel = "No options available",
   id,
+  loading = false,
+  loadingLabel = "Loading options...",
   onValueChange,
   options,
   placeholder,
   value,
   ...aria
 }: EnumSelectProps) {
+  const isEmpty = !loading && options.length === 0;
+  const resolvedPlaceholder = loading ? loadingLabel : placeholder;
+
   return (
-    <Select disabled={disabled} onValueChange={onValueChange} value={value}>
-      <SelectTrigger className={className} id={id} {...aria}>
-        <SelectValue placeholder={placeholder} />
+    <Select
+      disabled={disabled || loading}
+      onValueChange={onValueChange}
+      value={loading ? SELECT_EMPTY_STATE_VALUE : value}
+    >
+      <SelectTrigger
+        aria-busy={loading || undefined}
+        className={className}
+        id={id}
+        {...aria}
+      >
+        <SelectValue placeholder={resolvedPlaceholder} />
       </SelectTrigger>
       <SelectContent>
-        {options.map((option) => (
-          <SelectItem
-            disabled={option.disabled}
-            key={option.value}
-            value={option.value}
-          >
-            {option.label}
-          </SelectItem>
-        ))}
+        {loading ? (
+          <SelectEmpty>{loadingLabel}</SelectEmpty>
+        ) : isEmpty ? (
+          <SelectEmpty>{emptyOptionsLabel}</SelectEmpty>
+        ) : (
+          options.map((option) => (
+            <SelectItem
+              disabled={option.disabled}
+              key={option.value}
+              value={option.value}
+            >
+              {option.label}
+            </SelectItem>
+          ))
+        )}
       </SelectContent>
     </Select>
   );

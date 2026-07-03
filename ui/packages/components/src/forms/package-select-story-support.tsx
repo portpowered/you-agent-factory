@@ -4,13 +4,20 @@ import { useId, useState, type ReactNode } from "react";
 import {
   Select,
   SelectContent,
+  SelectEmpty,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "./package-select";
+import { EnumSelect } from "./package-enum-select";
 
 export const MOBILE_STORY_WIDTH = "320px";
 export const PACKAGE_SELECT_STORY_LABEL = "Work type";
+export const PACKAGE_SELECT_LONG_LABEL =
+  "A very long workstation label that should stay readable inside narrow form layouts without overlapping neighboring controls";
+export const PACKAGE_SELECT_EMPTY_OPTIONS_LABEL = "No work types available";
+export const PACKAGE_SELECT_LOADING_LABEL = "Loading work types...";
+export const PACKAGE_SELECT_ERROR_TEXT = "Work type is required.";
 
 export const PACKAGE_SELECT_STORY_OPTIONS = [
   { label: "Story", value: "story" },
@@ -154,6 +161,99 @@ export function KeyboardSelectStoryExample() {
           </SelectTrigger>
           <SelectContent>
             <PackageSelectStoryOptions />
+          </SelectContent>
+        </Select>
+      )}
+    </PackageSelectStoryField>
+  );
+}
+
+export function EmptyOptionsSelectStoryExample() {
+  return (
+    <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
+      {(controlProps) => (
+        <Select>
+          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+            <SelectValue placeholder="Select a work type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectEmpty>{PACKAGE_SELECT_EMPTY_OPTIONS_LABEL}</SelectEmpty>
+          </SelectContent>
+        </Select>
+      )}
+    </PackageSelectStoryField>
+  );
+}
+
+export function LoadingOptionsSelectStoryExample() {
+  return (
+    <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
+      {(controlProps) => (
+        <EnumSelect
+          aria-label={PACKAGE_SELECT_STORY_LABEL}
+          id={controlProps.id}
+          loading
+          loadingLabel={PACKAGE_SELECT_LOADING_LABEL}
+          onValueChange={() => undefined}
+          options={PACKAGE_SELECT_STORY_OPTIONS}
+          value="story"
+          {...(controlProps["aria-describedby"]
+            ? { "aria-describedby": controlProps["aria-describedby"] }
+            : {})}
+          {...(controlProps["aria-invalid"]
+            ? { "aria-invalid": controlProps["aria-invalid"] }
+            : {})}
+        />
+      )}
+    </PackageSelectStoryField>
+  );
+}
+
+export function ErrorStateSelectStoryExample() {
+  return (
+    <PackageSelectStoryField
+      errorText={PACKAGE_SELECT_ERROR_TEXT}
+      label={PACKAGE_SELECT_STORY_LABEL}
+    >
+      {(controlProps) => (
+        <Select>
+          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+            <SelectValue placeholder="Select a work type" />
+          </SelectTrigger>
+          <SelectContent>
+            <PackageSelectStoryOptions />
+          </SelectContent>
+        </Select>
+      )}
+    </PackageSelectStoryField>
+  );
+}
+
+export function LongLabelSelectStoryExample() {
+  const longOptions = [
+    {
+      label: PACKAGE_SELECT_LONG_LABEL,
+      value: "long-story",
+    },
+    {
+      label: "Bug",
+      value: "bug",
+    },
+  ] as const;
+
+  return (
+    <PackageSelectStoryField label={PACKAGE_SELECT_STORY_LABEL}>
+      {(controlProps) => (
+        <Select defaultValue="long-story">
+          <SelectTrigger aria-label={PACKAGE_SELECT_STORY_LABEL} {...controlProps}>
+            <SelectValue placeholder="Select a work type" />
+          </SelectTrigger>
+          <SelectContent>
+            {longOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       )}

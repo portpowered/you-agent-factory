@@ -96,6 +96,8 @@ export function SelectLabel({ className, ...props }: SelectLabelProps) {
   );
 }
 
+export const SELECT_EMPTY_STATE_VALUE = "__select-empty-state__";
+
 export type SelectItemProps = ComponentProps<typeof SelectPrimitive.Item>;
 
 export const SelectItem = forwardRef<
@@ -105,7 +107,7 @@ export const SelectItem = forwardRef<
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex w-full cursor-default select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm outline-none focus:bg-surface-container-highest data-[disabled]:pointer-events-none data-[disabled]:text-on-surface-disabled data-[highlighted]:bg-surface-container-highest",
+        "relative flex w-full min-w-0 cursor-default select-none items-center rounded-lg py-2 pl-8 pr-2 text-sm outline-none focus:bg-surface-container-highest data-[disabled]:pointer-events-none data-[disabled]:text-on-surface-disabled data-[highlighted]:bg-surface-container-highest",
         className,
       )}
       ref={ref}
@@ -116,10 +118,34 @@ export const SelectItem = forwardRef<
           <SelectCheckIcon className="h-4 w-4" />
         </SelectPrimitive.ItemIndicator>
       </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemText className="line-clamp-2 break-words">
+        {children}
+      </SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   );
 });
+
+export type SelectEmptyProps = {
+  children: ReactNode;
+  className?: string;
+};
+
+export function SelectEmpty({ children, className }: SelectEmptyProps) {
+  return (
+    <SelectPrimitive.Item
+      className={cn(
+        "relative flex w-full min-w-0 cursor-default select-none items-center rounded-lg px-2 py-2 text-sm text-on-surface-disabled data-[disabled]:pointer-events-none data-[disabled]:text-on-surface-disabled",
+        className,
+      )}
+      disabled
+      value={SELECT_EMPTY_STATE_VALUE}
+    >
+      <SelectPrimitive.ItemText className="line-clamp-2 break-words">
+        {children}
+      </SelectPrimitive.ItemText>
+    </SelectPrimitive.Item>
+  );
+}
 
 export type SelectSeparatorProps = ComponentProps<
   typeof SelectPrimitive.Separator

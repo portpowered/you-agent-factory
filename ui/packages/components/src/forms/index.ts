@@ -19,7 +19,9 @@ export { NativeSelect } from "./package-native-select";
 export type { NativeSelectProps } from "./package-native-select";
 export {
   Select,
+  SELECT_EMPTY_STATE_VALUE,
   SelectContent,
+  SelectEmpty,
   SelectField,
   SelectGroup,
   SelectItem,
@@ -30,6 +32,7 @@ export {
 } from "./package-select";
 export type {
   SelectContentProps,
+  SelectEmptyProps,
   SelectFieldProps,
   SelectItemProps,
   SelectLabelProps,

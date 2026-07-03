@@ -4,7 +4,11 @@ import { expect, userEvent, within } from "storybook/test";
 import {
   ControlledOpenSelectStoryExample,
   ControlledSelectStoryExample,
+  EmptyOptionsSelectStoryExample,
+  ErrorStateSelectStoryExample,
   KeyboardSelectStoryExample,
+  LoadingOptionsSelectStoryExample,
+  LongLabelSelectStoryExample,
   PACKAGE_SELECT_STORY_LABEL,
   PackageSelectStoryField,
   withMobileWidth,
@@ -130,4 +134,25 @@ export const Focus: Story = {
 export const MobileWidth: Story = {
   decorators: [withMobileWidth],
   render: () => <ControlledSelectStoryExample />,
+};
+
+export const EmptyOptions: Story = {
+  render: () => <EmptyOptionsSelectStoryExample />,
+};
+
+export const LoadingOptions: Story = {
+  render: () => <LoadingOptionsSelectStoryExample />,
+};
+
+export const ErrorState: Story = {
+  render: () => <ErrorStateSelectStoryExample />,
+};
+
+export const LongLabel: Story = {
+  render: () => <LongLabelSelectStoryExample />,
+};
+
+export const LongLabelMobileWidth: Story = {
+  decorators: [withMobileWidth],
+  render: () => <LongLabelSelectStoryExample />,
 };
