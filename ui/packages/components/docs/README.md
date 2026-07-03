@@ -19,6 +19,11 @@ those surfaces are documented.
 This docs shell is plain markdown kept under version control. Host applications
 read it directly from the package; no docs-site implementation is required.
 
+## Documented components
+
+- [Form select primitives](./forms-select-primitives.md) — `Select`,
+  `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+
 ## Getting started
 
 See the package [README](../README.md) for install, CSS import setup, theming,
