@@ -1,7 +1,5 @@
-import { CodePanel } from "../../../../../components/ui/code-panel";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
+import { CodePanel } from "@you-agent-factory/components";
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import {
   CurrentSelectionDetailCode,
   CurrentSelectionLabel,

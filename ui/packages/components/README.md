@@ -135,6 +135,9 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
+- [Skeleton loading placeholders](./docs/feedback-skeleton.md)
+- [CodePanel long-content containment](./docs/data-display-code-panel.md)
 - [Form select primitives](./docs/forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
 - [Widget frame and layout recipes](./docs/widget-frame-recipes.md)

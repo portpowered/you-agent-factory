@@ -25,7 +25,7 @@ import {
   formatTraceOutcome,
   formatTypedWorkItemLabel,
 } from "../../../components/ui/formatters";
-import { Skeleton } from "../../../components/ui/skeleton";
+import { Skeleton } from "@you-agent-factory/components";
 import {
   Table,
   TableBody,
