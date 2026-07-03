@@ -3,10 +3,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { expectStyledCheckbox } from "../../../../testing/checkbox-test-helpers";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { expectStyledCheckbox } from "../../../../../testing/checkbox-test-helpers";
 
-import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
+import type { EditableWorkerConfigurationState } from "../../lib/detail-card-types";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
 import {
   buildReadyWorkerEditableConfigurationState,

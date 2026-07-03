@@ -18,7 +18,7 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/worker-selection/components/worker-editable-configuration-section.tsx",
+      "src/features/current-selection/worker-selection/components/editable/worker-editable-configuration-section.tsx",
   },
   {
     owner: "expandable-panel-trigger",

@@ -7,7 +7,7 @@ import {
 import { useWorkerDetailState } from "../hooks/use-worker-detail-state";
 import type { WorkerDetailCardProps } from "../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
-import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
+import { WorkerEditableConfigurationSection } from "./editable/worker-editable-configuration-section";
 
 export function WorkerDetailCard({
   editableConfigurationState,

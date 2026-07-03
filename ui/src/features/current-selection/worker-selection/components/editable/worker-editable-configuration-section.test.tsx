@@ -2,9 +2,9 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
 
-import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
+import type { EditableWorkerConfigurationState } from "../../lib/detail-card-types";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
 import {
   buildReadyWorkerEditableConfigurationState,

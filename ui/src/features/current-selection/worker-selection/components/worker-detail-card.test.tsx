@@ -13,7 +13,7 @@ import type {
   EditableWorkerSaveState,
 } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
-import { EditableWorkerConfigurationHeaderActions } from "./worker-save-controls";
+import { EditableWorkerConfigurationHeaderActions } from "./editable/worker-save-controls";
 
 const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
 
