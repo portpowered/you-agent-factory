@@ -44,20 +44,13 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OnTick before due tick: %v", err)
 	}
-	if len(before.GeneratedBatches) != 0 {
-		t.Fatalf("generated batches before due tick = %d, want 0", len(before.GeneratedBatches))
-	}
-	if !before.KeepAlive {
-		t.Fatal("before due tick KeepAlive = false, want true while future submissions remain")
-	}
+	assertSubmissionHookBeforeDueTick(t, before)
 
 	due, err := hook.OnTick(context.Background(), replaySubmissionHookContext(2))
 	if err != nil {
 		t.Fatalf("OnTick at due tick: %v", err)
 	}
-	if len(due.GeneratedBatches) != 1 {
-		t.Fatalf("generated batches at due tick = %d, want 1", len(due.GeneratedBatches))
-	}
+	assertSubmissionHookDueTickBatchCount(t, due, 1)
 	batch := due.GeneratedBatches[0]
 	if batch.Request.RequestID != "request-1" {
 		t.Fatalf("replayed request ID = %q, want request-1", batch.Request.RequestID)
@@ -74,8 +67,30 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	if len(batch.Request.Relations) != 1 || batch.Request.Relations[0].SourceWorkName != "work-2" || batch.Request.Relations[0].TargetWorkName != "work-1" {
 		t.Fatalf("replayed relations = %#v, want work-2 depends on work-1", batch.Request.Relations)
 	}
-	if due.KeepAlive {
-		t.Fatal("due tick KeepAlive = true, want false after last submission is emitted")
+	assertSubmissionHookFinalKeepAliveShutdown(t, due)
+}
+
+func assertSubmissionHookBeforeDueTick(t *testing.T, got interfaces.SubmissionHookResult) {
+	t.Helper()
+	if len(got.GeneratedBatches) != 0 {
+		t.Fatalf("before-due batch count = %d, want 0", len(got.GeneratedBatches))
+	}
+	if !got.KeepAlive {
+		t.Fatal("before-due keep-alive = false, want true while future submissions remain")
+	}
+}
+
+func assertSubmissionHookDueTickBatchCount(t *testing.T, got interfaces.SubmissionHookResult, want int) {
+	t.Helper()
+	if len(got.GeneratedBatches) != want {
+		t.Fatalf("due-tick batch count = %d, want %d", len(got.GeneratedBatches), want)
+	}
+}
+
+func assertSubmissionHookFinalKeepAliveShutdown(t *testing.T, got interfaces.SubmissionHookResult) {
+	t.Helper()
+	if got.KeepAlive {
+		t.Fatal("final keep-alive shutdown = true, want false after last submission is emitted")
 	}
 }
 
