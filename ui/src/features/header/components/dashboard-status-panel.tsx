@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 
 import { Heading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
-import { DetailCopy } from "../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { useAppLocale } from "../../../i18n";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
@@ -38,7 +40,7 @@ export function DashboardStatusPanel({
         {title}
       </Heading>
       {detail ? (
-        <DetailCopy className={detailClassName}>{detail}</DetailCopy>
+        <WidgetDetailCopy className={detailClassName}>{detail}</WidgetDetailCopy>
       ) : null}
       {actions ? <div className="mt-4">{actions}</div> : null}
     </DashboardPanelShell>

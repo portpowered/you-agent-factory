@@ -139,6 +139,12 @@ directory:
   `Code`, dense text, truncation, and wrapping
 - [Layout and display primitives](./docs/layout-display-primitives.md) —
   `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
+- [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
+- [Skeleton loading placeholders](./docs/feedback-skeleton.md)
+- [CodePanel long-content containment](./docs/data-display-code-panel.md)
+- [Form select primitives](./docs/forms-select-primitives.md) — `Select`,
+  `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+- [Widget frame and layout recipes](./docs/widget-frame-recipes.md)
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site

@@ -43,6 +43,7 @@ const EXCLUDED_RELATIVE_PATH_PATTERNS = [
   /^src\/components\/ui\/(color-role-accent-contrast|color-role-neutral-surfaces|layout-role-showcase|typography-role-hierarchy|theme-role-migration-overview)\.tsx$/,
   /^src\/testing\//,
   /\/messages\//,
+  /\/test-support\//,
   /\.stories\./,
   /\.test\./,
   /dashboard-bento-story-shared\.tsx$/,

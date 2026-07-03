@@ -1,3 +1,4 @@
+import { EnumSelect, ResetEnumSelect } from "@you-agent-factory/components";
 import { useId } from "react";
 
 import { MonacoGuardSelectorEditor } from "../../../../../components/prompt-editor";
@@ -5,11 +6,9 @@ import {
   DashboardActionButton,
   Label,
   Text,
-  EnumSelect,
   FormDescription,
   FormError,
   Input,
-  ResetEnumSelect,
   SurfacePanel,
 } from "../../../../../components/ui";
 import {

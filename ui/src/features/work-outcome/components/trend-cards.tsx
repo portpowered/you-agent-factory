@@ -1,20 +1,20 @@
+import { EnumSelect } from "@you-agent-factory/components";
+import {
+  WidgetDetailCopy,
+  WidgetEmptyState,
+  WidgetEmptyStateText,
+  WidgetEmptyStateTitle,
+  WidgetSubtitle,
+} from "@you-agent-factory/components/recipes";
 import {
   Label,
   Text,
   SurfacePanel,
 } from "../../../components/ui";
-import { EnumSelect } from "../../../components/ui/enum-select";
 import {
   formatDurationMillis,
   formatTraceOutcome,
 } from "../../../components/ui/formatters";
-import {
-  DashboardEmptyState,
-  DashboardEmptyStateText,
-  DashboardEmptyStateTitle,
-  DetailCopy,
-  WidgetSubtitle,
-} from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import { DashboardWidgetFrame } from "../../bento/public";
 import {
@@ -150,14 +150,14 @@ export function FailureTrendCard({
           ))}
         </svg>
       ) : (
-        <DashboardEmptyState compact>
-          <DashboardEmptyStateTitle>
+        <WidgetEmptyState compact>
+          <WidgetEmptyStateTitle>
             {messages.failureEmptyTitle}
-          </DashboardEmptyStateTitle>
-          <DashboardEmptyStateText>
+          </WidgetEmptyStateTitle>
+          <WidgetEmptyStateText>
             {messages.failureEmptyMessage}
-          </DashboardEmptyStateText>
-        </DashboardEmptyState>
+          </WidgetEmptyStateText>
+        </WidgetEmptyState>
       )}
 
       {model.groups.length > 0 ? (
@@ -189,7 +189,7 @@ export function FailureTrendCard({
           ))}
         </ul>
       ) : (
-        <DetailCopy>{messages.causeGroupsEmpty}</DetailCopy>
+        <WidgetDetailCopy>{messages.causeGroupsEmpty}</WidgetDetailCopy>
       )}
     </DashboardWidgetFrame>
   );
@@ -260,14 +260,14 @@ export function ReworkTrendCard({
           ))}
         </svg>
       ) : (
-        <DashboardEmptyState compact>
-          <DashboardEmptyStateTitle>
+        <WidgetEmptyState compact>
+          <WidgetEmptyStateTitle>
             {messages.reworkEmptyTitle}
-          </DashboardEmptyStateTitle>
-          <DashboardEmptyStateText>
+          </WidgetEmptyStateTitle>
+          <WidgetEmptyStateText>
             {messages.reworkEmptyMessage}
-          </DashboardEmptyStateText>
-        </DashboardEmptyState>
+          </WidgetEmptyStateText>
+        </WidgetEmptyState>
       )}
     </DashboardWidgetFrame>
   );
@@ -351,14 +351,14 @@ export function TimingTrendCard({
           </TrendSummaryGrid>
         </>
       ) : (
-        <DashboardEmptyState compact>
-          <DashboardEmptyStateTitle>
+        <WidgetEmptyState compact>
+          <WidgetEmptyStateTitle>
             {messages.reworkEmptyTitle}
-          </DashboardEmptyStateTitle>
-          <DashboardEmptyStateText>
+          </WidgetEmptyStateTitle>
+          <WidgetEmptyStateText>
             {messages.timingEmptyMessage}
-          </DashboardEmptyStateText>
-        </DashboardEmptyState>
+          </WidgetEmptyStateText>
+        </WidgetEmptyState>
       )}
     </DashboardWidgetFrame>
   );

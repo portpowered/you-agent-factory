@@ -9,10 +9,30 @@ import { configDefaults, coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
-const componentsPackageRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "packages/components/src",
-);
+const uiRoot = path.dirname(fileURLToPath(import.meta.url));
+const componentsPackageRoot = path.resolve(uiRoot, "packages/components/src");
+const sharedReactAliases = [
+  {
+    find: "react",
+    replacement: path.join(uiRoot, "node_modules/react"),
+  },
+  {
+    find: "react-dom",
+    replacement: path.join(uiRoot, "node_modules/react-dom"),
+  },
+  {
+    find: "react/jsx-runtime",
+    replacement: path.join(uiRoot, "node_modules/react/jsx-runtime"),
+  },
+  {
+    find: "react/jsx-dev-runtime",
+    replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
+  },
+  {
+    find: "@radix-ui/react-select",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
+  },
+] as const;
 const isCoverageRun = process.argv.includes("--coverage");
 const profileSourceMaps =
   process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "true" ||
@@ -25,6 +45,7 @@ const monacoEditorPlugin =
     : monacoEditorPluginModule.default;
 const optimizedDeps = isVitestRun
   ? ([
+      "@radix-ui/react-select",
       "@radix-ui/react-slot",
       "react",
       "react-dom",
@@ -116,8 +137,17 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: createComponentsPackageAliases(componentsPackageRoot),
-    dedupe: ["react", "react-dom", "@radix-ui/react-slot"],
+    alias: [
+      ...sharedReactAliases,
+      ...createComponentsPackageAliases(componentsPackageRoot),
+    ],
+    dedupe: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+      "@radix-ui/react-slot",
+    ],
   },
   server: {
     host: true,

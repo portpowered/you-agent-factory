@@ -1,3 +1,7 @@
+import {
+  WidgetEmptyStateText,
+  WidgetEmptyStateTitle,
+} from "@you-agent-factory/components/recipes";
 import { useId, useMemo, useState } from "react";
 import {
   AlertPanel,
@@ -14,10 +18,6 @@ import {
   DialogTitle,
   SurfacePanel,
 } from "../../../components/ui";
-import {
-  DashboardEmptyStateText,
-  DashboardEmptyStateTitle,
-} from "../../../components/ui/widget-frame";
 import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
 import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 import { allocateImportCreateFactoryName } from "../lib/allocate-import-create-factory-name";
@@ -122,12 +122,12 @@ function FactoryImportActivationErrorPanel({
       variant="empty"
     >
       <div className="grid gap-1">
-        <DashboardEmptyStateTitle>
+        <WidgetEmptyStateTitle>
           {messages.activationErrorTitle}
-        </DashboardEmptyStateTitle>
-        <DashboardEmptyStateText>
+        </WidgetEmptyStateTitle>
+        <WidgetEmptyStateText>
           {factoryImportActivationErrorCopy(error, locale)}
-        </DashboardEmptyStateText>
+        </WidgetEmptyStateText>
       </div>
     </AlertPanel>
   );

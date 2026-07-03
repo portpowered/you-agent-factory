@@ -5,7 +5,9 @@ import {
   Label,
   SurfacePanel,
 } from "../../../components/ui";
-import { WidgetSubtitle } from "../../../components/ui/widget-frame";
+import {
+  WidgetSubtitle,
+} from "@you-agent-factory/components/recipes";
 import { cn } from "../../../lib/cn";
 
 export function TrendSummaryGrid({

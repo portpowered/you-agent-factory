@@ -6,7 +6,9 @@ import {
   Label,
   Text,
 } from "../../../components/ui";
-import { DetailCopy } from "../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { cn } from "../../../lib/cn";
 import { CurrentSelectionHistoryCard } from "../../current-selection/history/public";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
@@ -346,7 +348,7 @@ function TokenUsageSection({
             ]}
           />
         ) : (
-          <DetailCopy>{messages.tokenUsageUnavailable}</DetailCopy>
+          <WidgetDetailCopy>{messages.tokenUsageUnavailable}</WidgetDetailCopy>
         )
       }
     >
@@ -374,7 +376,7 @@ function TokenUsageSection({
           />
         </div>
       ) : (
-        <DetailCopy>{messages.tokenUsageUnavailable}</DetailCopy>
+        <WidgetDetailCopy>{messages.tokenUsageUnavailable}</WidgetDetailCopy>
       )}
     </ProviderSessionExpandableSection>
   );
@@ -411,7 +413,7 @@ function TurnsSection({
             ]}
           />
         ) : (
-          <DetailCopy>{messages.turnsUnavailable}</DetailCopy>
+          <WidgetDetailCopy>{messages.turnsUnavailable}</WidgetDetailCopy>
         )
       }
     >
@@ -457,7 +459,7 @@ function TurnsSection({
           ))}
         </div>
       ) : (
-        <DetailCopy>{messages.turnsUnavailable}</DetailCopy>
+        <WidgetDetailCopy>{messages.turnsUnavailable}</WidgetDetailCopy>
       )}
     </ProviderSessionExpandableSection>
   );

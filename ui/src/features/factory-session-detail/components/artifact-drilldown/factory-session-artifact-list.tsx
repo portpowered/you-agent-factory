@@ -9,7 +9,9 @@ import {
   Text,
 } from "../../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
-import { DetailCopy } from "../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { WorkContentReadOnlyList } from "../../../work-content/public";
 import { useFactorySessionArtifactDrilldown } from "../../hooks/use-factory-session-artifact-drilldown";
 import { hasUsableArtifactDownload } from "../../lib/factory-session-artifact-drilldown";
@@ -121,7 +123,7 @@ function ArtifactDrilldownBody({
   const state = useFactorySessionArtifactDrilldown(sessionID, artifactID, true);
 
   if (state.status === "loading") {
-    return <DetailCopy>{messages.artifactDetailLoadingState}</DetailCopy>;
+    return <WidgetDetailCopy>{messages.artifactDetailLoadingState}</WidgetDetailCopy>;
   }
 
   if (state.status === "error") {

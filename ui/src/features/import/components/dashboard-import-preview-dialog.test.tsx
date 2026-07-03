@@ -9,6 +9,10 @@ import { axe } from "jest-axe";
 import { useState } from "react";
 
 import { SessionFactoryAPIError } from "../../../api/session-factory";
+import {
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+} from "@you-agent-factory/components/recipes";
 import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 import {
   DashboardImportPreviewDialog,

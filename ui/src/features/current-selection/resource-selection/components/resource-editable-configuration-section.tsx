@@ -1,3 +1,4 @@
+import { OptionalEnumSelect } from "@you-agent-factory/components";
 import { type ReactNode, useId } from "react";
 
 import {
@@ -7,7 +8,6 @@ import {
   Text,
   FormWarning,
   Input,
-  OptionalEnumSelect,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";

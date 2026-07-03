@@ -1,5 +1,10 @@
 import { render, screen } from "@testing-library/react";
 
+import {
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+} from "@you-agent-factory/components/recipes";
+
 import { WorkChartStatusPanel } from "./work-chart-status-panel";
 
 describe("WorkChartStatusPanel", () => {
