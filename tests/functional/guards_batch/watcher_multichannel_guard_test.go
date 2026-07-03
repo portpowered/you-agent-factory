@@ -106,18 +106,36 @@ func TestMultiChannelGuard_GuardBlocksUntilAllPagesComplete(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_input_guard_dir"))
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Guard blocking test"}`))
 
-	h := testutil.NewServiceTestHarness(t, dir)
+	releaseCh := make(chan struct{})
+	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
 
 	parserExec := &fanoutParserExecutor{childCount: 3}
 	h.SetCustomExecutor("parser", parserExec)
-	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-	)
+	h.SetCustomExecutor("processor", &gatedProcessor{release: releaseCh})
 	h.MockWorker("completer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
 
-	h.RunUntilComplete(t, 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, errCh, 15*time.Second)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if parserExec.callCount() >= 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if parserExec.callCount() < 1 {
+		t.Fatal("parser never fanned out page Work")
+	}
+	support.WaitForHarnessPlaceTokenCount(t, h, "chapter:complete", 0, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "page:complete", 0, time.Second)
+
+	close(releaseCh)
+
+	support.WaitForHarnessPlaceTokenCount(t, h, "page:complete", 3, 10*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "chapter:complete", 1, 10*time.Second)
 
 	h.Assert().
 		PlaceTokenCount("chapter:complete", 1).
@@ -125,6 +143,11 @@ func TestMultiChannelGuard_GuardBlocksUntilAllPagesComplete(t *testing.T) {
 		HasNoTokenInPlace("chapter:processing").
 		HasNoTokenInPlace("chapter:init").
 		HasNoTokenInPlace("page:init")
+
+	cancel()
+	if err := <-errCh; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("factory run error: %v", err)
+	}
 }
 
 func TestMultiChannelGuard_DynamicExecDirWithGuard(t *testing.T) {

@@ -115,6 +115,31 @@ func (p *execDirObservingProcessor) sawExecutionChannelValue() bool {
 	return p.sawExecutionChannel
 }
 
+type gatedProcessor struct {
+	release <-chan struct{}
+
+	mu            sync.Mutex
+	dispatchCount int
+}
+
+func (p *gatedProcessor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	select {
+	case <-p.release:
+	case <-ctx.Done():
+		return interfaces.WorkResult{}, ctx.Err()
+	}
+
+	p.mu.Lock()
+	p.dispatchCount++
+	p.mu.Unlock()
+
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+	}, nil
+}
+
 type multiChapterParserExecutor struct {
 	mu          sync.Mutex
 	calls       int
