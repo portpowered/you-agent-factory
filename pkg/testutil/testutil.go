@@ -160,6 +160,26 @@ func normalizeFactoryJSONInDir(t *testing.T, dir string) {
 	}
 }
 
+// WriteDynamicExecutionFile creates inputs/<workType>/<executionID>/ while the file
+// watcher is already running and drops payload into that channel. Start the runtime
+// first via RunInBackground and WaitForRuntimeAvailability.
+func WriteDynamicExecutionFile(t *testing.T, dir, workType, executionID string, payload []byte) {
+	t.Helper()
+	if strings.TrimSpace(executionID) == "" {
+		t.Fatal("WriteDynamicExecutionFile: executionID is required")
+	}
+	inputDir := filepath.Join(dir, interfaces.InputsDir, workType, executionID)
+	if err := os.MkdirAll(inputDir, 0o755); err != nil {
+		t.Fatalf("WriteDynamicExecutionFile: create input dir: %v", err)
+	}
+	// Allow fsnotify to attach the new execution channel directory.
+	time.Sleep(300 * time.Millisecond)
+	filename := fmt.Sprintf("dynamic-%d.json", seedFileCounter.Add(1))
+	if err := os.WriteFile(filepath.Join(inputDir, filename), payload, 0o644); err != nil {
+		t.Fatalf("WriteDynamicExecutionFile: write file: %v", err)
+	}
+}
+
 // WriteSeedExecutionFile writes a seed file under inputs/<workType>/<executionID>/
 // so functional tests exercise watcher execution-channel submission without
 // reaching into FileWatcher adapter internals. Call before NewServiceTestHarness.

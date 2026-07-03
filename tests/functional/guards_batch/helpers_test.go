@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -59,6 +61,58 @@ func (e *fanoutParserExecutor) callCount() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.calls
+}
+
+func executionIDFromDispatch(dispatch interfaces.WorkDispatch) string {
+	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
+		if token.Color.Tags[executionIDTagKey] != "" {
+			return token.Color.Tags[executionIDTagKey]
+		}
+	}
+	return ""
+}
+
+type execDirObservingProcessor struct {
+	factoryDir      string
+	wantExecutionID string
+
+	mu                  sync.Mutex
+	dispatchCount       int
+	sawExecutionChannel bool
+}
+
+func (p *execDirObservingProcessor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	p.mu.Lock()
+	p.dispatchCount++
+	p.mu.Unlock()
+
+	channelDir := filepath.Join(p.factoryDir, interfaces.InputsDir, "chapter", p.wantExecutionID)
+	if st, err := os.Stat(channelDir); err == nil && st.IsDir() {
+		p.mu.Lock()
+		p.sawExecutionChannel = true
+		p.mu.Unlock()
+	}
+	if got := executionIDFromDispatch(dispatch); got != p.wantExecutionID {
+		return interfaces.WorkResult{}, fmt.Errorf("page dispatch execution ID = %q, want %q", got, p.wantExecutionID)
+	}
+
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+	}, nil
+}
+
+func (p *execDirObservingProcessor) dispatchCountValue() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.dispatchCount
+}
+
+func (p *execDirObservingProcessor) sawExecutionChannelValue() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.sawExecutionChannel
 }
 
 type multiChapterParserExecutor struct {

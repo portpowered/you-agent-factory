@@ -24,3 +24,20 @@ func TestWriteSeedExecutionFile_WritesUnderExecutionChannel(t *testing.T) {
 		t.Fatalf("expected file, got directory %q", entries[0].Name())
 	}
 }
+
+func TestWriteDynamicExecutionFile_WritesUnderExecutionChannel(t *testing.T) {
+	dir := t.TempDir()
+	WriteDynamicExecutionFile(t, dir, "chapter", "exec-dynamic", []byte(`{"title":"dynamic"}`))
+
+	gotPath := filepath.Join(dir, interfaces.InputsDir, "chapter", "exec-dynamic")
+	entries, err := os.ReadDir(gotPath)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("file count = %d, want 1", len(entries))
+	}
+	if entries[0].IsDir() {
+		t.Fatalf("expected file, got directory %q", entries[0].Name())
+	}
+}
