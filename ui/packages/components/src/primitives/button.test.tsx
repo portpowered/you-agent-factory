@@ -23,16 +23,20 @@ describe("Button semantic variants", () => {
       name: "Save changes",
     });
 
+    expect(primaryButton.className).toContain("border-primary");
+    expect(primaryButton.className).toContain("bg-primary");
     expect(primaryButton.className).toContain("hover:bg-on-primary-container");
     expect(primaryButton.className).toContain(
       "hover:border-on-primary-container",
     );
+    expect(primaryButton.className).not.toContain("af-success");
     expect(primaryButton.className.includes("brightness-")).toBe(false);
     expect(destructiveButton.className).toContain("hover:bg-af-danger-hover");
     expect(destructiveButton.className).toContain(
       "hover:border-af-danger-hover",
     );
     expect(warningButton.className).toContain("bg-warning-container");
+    expect(warningButton.className).toContain("border-af-warning-border");
     expect(warningButton.className).toContain("hover:bg-warning-container");
     expect(destructiveButton.className.includes("brightness-")).toBe(false);
   });
@@ -58,8 +62,10 @@ describe("Button semantic variants", () => {
     expect(secondaryButton.className).toContain("text-primary");
     expect(outlineButton.className).toContain("border-outline");
     expect(outlineButton.className).toContain("bg-surface-container-high");
+    expect(outlineButton.className).toContain("text-on-surface");
     expect(ghostButton.className).toContain("border-transparent");
     expect(ghostButton.className).toContain("bg-transparent");
+    expect(ghostButton.className).toContain("text-on-surface-variant");
   });
 
   it("keeps destructive and warning variants visually distinguishable", () => {
@@ -124,7 +130,9 @@ describe("Button loading behavior", () => {
 
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toBeDisabled();
-    expect(button.querySelector("svg.animate-spin")).toBeTruthy();
+    const spinner = button.querySelector("svg.animate-spin");
+    expect(spinner).toBeTruthy();
+    expect(spinner?.querySelector("circle.text-on-surface-disabled")).toBeTruthy();
     expect(
       button.querySelector("span.pointer-events-none.absolute.inset-0"),
     ).toBeTruthy();

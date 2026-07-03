@@ -4,17 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
-const PACKAGE_BUTTON_SOURCE_PATH = join(
-  UI_COMPONENTS_DIR,
-  "../../../packages/components/src/primitives/button.tsx",
-);
 
 function readComponentSource(fileName: string): string {
   return readFileSync(join(UI_COMPONENTS_DIR, fileName), "utf8");
-}
-
-function readPackageButtonSource(): string {
-  return readFileSync(PACKAGE_BUTTON_SOURCE_PATH, "utf8");
 }
 
 describe("shared primitive semantic color roles", () => {
@@ -34,13 +26,5 @@ describe("shared primitive semantic color roles", () => {
     expect(source).toMatch(/warning:\s*\n?\s*"border-af-warning-border/);
     expect(source).toMatch(/info:\s*\n?\s*"border-af-info-border/);
     expect(source).toMatch(/active:\s*\n?\s*"border-primary/);
-  });
-
-  it("keeps the default button tone on primary accent tokens, not warning or success", () => {
-    const source = readPackageButtonSource();
-
-    expect(source).toMatch(/default:\s*\n?\s*"border-primary bg-primary/);
-    expect(source).toMatch(/warning:\s*\n?\s*"border-af-warning-border/);
-    expect(source).not.toContain("af-success");
   });
 });

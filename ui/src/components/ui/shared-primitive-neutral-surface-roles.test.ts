@@ -4,17 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
-const PACKAGE_BUTTON_SOURCE_PATH = join(
-  UI_COMPONENTS_DIR,
-  "../../../packages/components/src/primitives/button.tsx",
-);
 
 function readComponentSource(fileName: string): string {
   return readFileSync(join(UI_COMPONENTS_DIR, fileName), "utf8");
-}
-
-function readPackageButtonSource(): string {
-  return readFileSync(PACKAGE_BUTTON_SOURCE_PATH, "utf8");
 }
 
 function expectNoTransitionalNeutralSurfaces(source: string): void {
@@ -55,14 +47,5 @@ describe("shared primitive neutral surface roles", () => {
     expect(source).toContain(
       "border-outline-variant bg-surface-container-low text-on-surface",
     );
-  });
-
-  it("maps button outline and ghost neutral chrome to role tokens", () => {
-    const source = readPackageButtonSource();
-
-    expect(source).toContain(
-      "border-outline bg-surface-container-high text-on-surface",
-    );
-    expect(source).toContain("text-on-surface-variant");
   });
 });
