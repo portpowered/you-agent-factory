@@ -109,6 +109,45 @@ describe("Button semantic variants", () => {
     expect(button.className).toContain("focus-visible:ring-af-focus-ring");
   });
 
+  it("exposes busy state, disables interaction, and preserves the accessible name while loading", () => {
+    renderPackageComponent(
+      <Button loading type="button">
+        Save changes
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Save changes" });
+
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toBeDisabled();
+    expect(button.querySelector("svg.animate-spin")).toBeTruthy();
+    expect(
+      button.querySelector("span.pointer-events-none.absolute.inset-0"),
+    ).toBeTruthy();
+  });
+
+  it("supports icon-only loading buttons with an accessible label", () => {
+    renderPackageComponent(
+      <Button
+        aria-label="Sync graph"
+        loading
+        size="icon"
+        tone="outline"
+        type="button"
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" />
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Sync graph" });
+
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toBeDisabled();
+    expect(button.className).toContain("h-11");
+    expect(button.className).toContain("w-11");
+    expect(button.querySelector("svg.animate-spin")).toBeTruthy();
+  });
+
   it("can project shared button styling onto child elements when structure requires it", () => {
     renderPackageComponent(
       <Button asChild size="sm" tone="outline">

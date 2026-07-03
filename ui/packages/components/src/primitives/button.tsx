@@ -1,10 +1,16 @@
 import { Slot } from "@radix-ui/react-slot";
-import { type ButtonHTMLAttributes, forwardRef } from "react";
+import { type ButtonHTMLAttributes, forwardRef, type ReactNode } from "react";
 
 import { cn } from "../utilities/cn";
 
+const BUTTON_LOADING_CONTENT_CLASS = "inline-flex items-center justify-center gap-2";
+const BUTTON_LOADING_HIDDEN_CONTENT_CLASS = "opacity-0";
+const BUTTON_LOADING_OVERLAY_CLASS =
+  "pointer-events-none absolute inset-0 inline-flex items-center justify-center";
+
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean;
+  loading?: boolean;
   tone?:
     | "default"
     | "destructive"
@@ -52,11 +58,66 @@ export const buttonVariants = ({
     className,
   );
 
+function ButtonLoadingSpinner() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-4 animate-spin"
+      fill="none"
+      focusable="false"
+      viewBox="0 0 16 16"
+    >
+      <circle
+        className="text-on-surface-disabled"
+        cx="8"
+        cy="8"
+        r="6"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M8 2a6 6 0 0 1 6 6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
+function renderButtonContent(
+  children: ReactNode,
+  loading: boolean,
+): ReactNode {
+  if (!loading) {
+    return children;
+  }
+
+  return (
+    <>
+      <span
+        className={cn(
+          BUTTON_LOADING_CONTENT_CLASS,
+          BUTTON_LOADING_HIDDEN_CONTENT_CLASS,
+        )}
+      >
+        {children}
+      </span>
+      <span aria-hidden="true" className={BUTTON_LOADING_OVERLAY_CLASS}>
+        <ButtonLoadingSpinner />
+      </span>
+    </>
+  );
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
     {
       asChild = false,
+      children,
       className,
+      disabled,
+      loading = false,
       size = "default",
       tone = "default",
       type = "button",
@@ -65,13 +126,24 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) {
     const Component = asChild ? Slot : "button";
+    const isDisabled = disabled || loading;
+    const showLoadingOverlay = loading && !asChild;
+
     return (
       <Component
-        className={buttonVariants({ className, size, tone })}
+        aria-busy={loading || undefined}
+        className={buttonVariants({
+          className: cn(showLoadingOverlay && "relative", className),
+          size,
+          tone,
+        })}
+        disabled={isDisabled}
         ref={ref}
         {...(!asChild ? { type } : undefined)}
         {...props}
-      />
+      >
+        {renderButtonContent(children, showLoadingOverlay)}
+      </Component>
     );
   },
 );
