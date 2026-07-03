@@ -16,10 +16,17 @@ export const GRAPH_EDGE_TYPES = {
   graphEdge: GraphEdge,
 };
 
+export type GraphEdgeProps = EdgeProps & {
+  edgeClassName?: string;
+  labelClassName?: string;
+};
+
 export function GraphEdge({
   data,
+  edgeClassName = "graph-edge",
   id,
   interactionWidth,
+  labelClassName = "graph-edge-label pointer-events-none fill-on-surface-subtle text-[11px] font-semibold",
   markerEnd,
   selected,
   sourcePosition,
@@ -29,7 +36,7 @@ export function GraphEdge({
   targetPosition,
   targetX,
   targetY,
-}: EdgeProps) {
+}: GraphEdgeProps) {
   const edgeRef = useRef<SVGGElement | null>(null);
   const [inspected, setInspected] = useState(false);
   const edgeData = (data ?? {}) as GraphEdgeData;
@@ -91,7 +98,7 @@ export function GraphEdge({
 
   return (
     <g
-      className="graph-edge"
+      className={edgeClassName}
       data-edge-id={id}
       data-label-visible={revealLabel ? "true" : "false"}
       ref={edgeRef}
@@ -104,7 +111,7 @@ export function GraphEdge({
       />
       {edgeData.label ? (
         <text
-          className="graph-edge-label pointer-events-none fill-on-surface-subtle text-[11px] font-semibold"
+          className={labelClassName}
           style={{
             paintOrder: "stroke",
             stroke: "var(--color-surface)",

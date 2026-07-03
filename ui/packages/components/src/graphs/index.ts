@@ -12,10 +12,7 @@ export {
   GraphViewportSurface,
   type GraphViewportSurfaceProps,
 } from "./graph-viewport-surface";
-export {
-  type GraphNodeHandle,
-  type GraphNodeHandleTone,
-} from "./graph-node-handle";
+export type { GraphNodeHandle, GraphNodeHandleTone } from "./graph-node-handle";
 export {
   GraphNodeHandleBadge,
   type GraphNodeHandleBadgeProps,
@@ -40,8 +37,5 @@ export {
   buildGraphEdgePathThroughWaypoints,
   type GraphEdgeWaypoint,
 } from "./graph-edge-path";
-export {
-  GRAPH_EDGE_TYPES,
-  GraphEdge,
-  type GraphEdgeData,
-} from "./graph-edge";
+export type { GraphEdgeData, GraphEdgeProps } from "./graph-edge";
+export { GRAPH_EDGE_TYPES, GraphEdge } from "./graph-edge";
