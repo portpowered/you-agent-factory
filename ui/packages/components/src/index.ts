@@ -8,10 +8,19 @@ export {
   type ComponentCategoryExportPath,
 } from "./category-paths";
 
-export { AlertPanel, AlertPanelText, Skeleton } from "./feedback";
+export {
+  AlertPanel,
+  AlertPanelStatusLabel,
+  AlertPanelText,
+  AlertPanelTitle,
+  Skeleton,
+} from "./feedback";
 export type {
   AlertPanelProps,
+  AlertPanelSemanticVariant,
+  AlertPanelStatusLabelProps,
   AlertPanelTextProps,
+  AlertPanelTitleProps,
   AlertPanelTone,
   AlertPanelVariant,
 } from "./feedback";
