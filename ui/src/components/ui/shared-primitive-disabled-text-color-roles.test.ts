@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
+const PACKAGE_BUTTON_SOURCE_PATH = join(
+  UI_COMPONENTS_DIR,
+  "../../../packages/components/src/primitives/button.tsx",
+);
 
 const IN_SCOPE_FILES = [
   "input.tsx",
@@ -16,6 +20,10 @@ const FORBIDDEN_TRANSITIONAL_DISABLED_TEXT = /\btext-af-text-disabled\b/;
 
 function readComponentSource(fileName: string): string {
   return readFileSync(join(UI_COMPONENTS_DIR, fileName), "utf8");
+}
+
+function readPackageButtonSource(): string {
+  return readFileSync(PACKAGE_BUTTON_SOURCE_PATH, "utf8");
 }
 
 function expectNoTransitionalDisabledText(source: string): void {
@@ -52,7 +60,7 @@ describe("shared primitive disabled text color roles", () => {
   });
 
   it("maps dashboard action button spinner circle to text-on-surface-disabled", () => {
-    const source = readComponentSource("dashboard-action-button.tsx");
+    const source = readPackageButtonSource();
 
     expect(source).toContain('className="text-on-surface-disabled"');
     expectNoTransitionalDisabledText(source);

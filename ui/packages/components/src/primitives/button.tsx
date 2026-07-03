@@ -1,5 +1,15 @@
 import { Slot } from "@radix-ui/react-slot";
-import { type ButtonHTMLAttributes, forwardRef, type ReactNode } from "react";
+import {
+  type ButtonHTMLAttributes,
+  Children,
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 
 import { cn } from "../utilities/cn";
 
@@ -110,6 +120,88 @@ function renderButtonContent(
   );
 }
 
+function suppressSlottedActivation(event: KeyboardEvent | MouseEvent): void {
+  event.preventDefault();
+  const nativeEvent = event.nativeEvent;
+  if (typeof nativeEvent.stopImmediatePropagation === "function") {
+    nativeEvent.stopImmediatePropagation();
+    return;
+  }
+  event.stopPropagation();
+}
+
+function shouldSuppressSlottedKeyboardActivation(
+  event: KeyboardEvent,
+): boolean {
+  return event.key === "Enter" || event.key === " ";
+}
+
+type SlottedChildProps = {
+  "aria-busy"?: boolean | "true" | "false";
+  "aria-disabled"?: boolean | "true" | "false";
+  className?: string;
+  href?: string;
+  onClick?: (event: MouseEvent<HTMLElement>) => void;
+  onKeyDown?: (event: KeyboardEvent<HTMLElement>) => void;
+  ref?: Ref<HTMLElement>;
+};
+
+function mergeRefs<T>(...refs: Array<Ref<T> | undefined>): Ref<T> {
+  return (value) => {
+    for (const ref of refs) {
+      if (typeof ref === "function") {
+        ref(value);
+      } else if (ref && typeof ref === "object") {
+        ref.current = value;
+      }
+    }
+  };
+}
+
+function renderBlockedAsChildButton(
+  {
+    children,
+    className,
+    loading,
+    props,
+    ref,
+    size,
+    tone,
+  }: {
+    children: ReactNode;
+    className?: string;
+    loading: boolean;
+    props: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">;
+    ref: Ref<HTMLButtonElement>;
+    size: NonNullable<ButtonProps["size"]>;
+    tone: NonNullable<ButtonProps["tone"]>;
+  },
+) {
+  const child = Children.only(children);
+  if (!isValidElement<SlottedChildProps>(child)) {
+    throw new Error("Button with asChild requires a single React element child.");
+  }
+
+  return cloneElement(child, {
+    ...props,
+    "aria-busy": loading || undefined,
+    "aria-disabled": true,
+    className: buttonVariants({
+      className: cn("pointer-events-none", className, child.props.className),
+      size,
+      tone,
+    }),
+    href: undefined,
+    onClick: suppressSlottedActivation,
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      if (shouldSuppressSlottedKeyboardActivation(event)) {
+        suppressSlottedActivation(event);
+      }
+    },
+    ref: mergeRefs(ref, child.props.ref),
+  });
+}
+
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
     {
@@ -118,6 +210,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       className,
       disabled,
       loading = false,
+      onClick,
+      onKeyDown,
       size = "default",
       tone = "default",
       type = "button",
@@ -125,9 +219,22 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref,
   ) {
-    const Component = asChild ? Slot : "button";
-    const isDisabled = disabled || loading;
+    const isInteractionBlocked = disabled || loading;
     const showLoadingOverlay = loading && !asChild;
+
+    if (asChild && isInteractionBlocked) {
+      return renderBlockedAsChildButton({
+        children,
+        className,
+        loading,
+        props,
+        ref,
+        size,
+        tone,
+      });
+    }
+
+    const Component = asChild ? Slot : "button";
 
     return (
       <Component
@@ -137,7 +244,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           size,
           tone,
         })}
-        disabled={isDisabled}
+        disabled={asChild ? undefined : isInteractionBlocked}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
         ref={ref}
         {...(!asChild ? { type } : undefined)}
         {...props}

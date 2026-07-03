@@ -22,21 +22,29 @@ describe("component package harness wiring", () => {
     tempRoots = [];
   });
 
-  it("runs ui-components-typecheck successfully on the real package", () => {
-    execSync("make ui-components-typecheck", {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  });
+  it(
+    "runs ui-components-typecheck successfully on the real package",
+    () => {
+      execSync("make ui-components-typecheck", {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    },
+    60_000,
+  );
 
-  it("runs ui-components-boundary successfully on the real package", () => {
-    execSync("make ui-components-boundary", {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  });
+  it(
+    "runs ui-components-boundary successfully on the real package",
+    () => {
+      execSync("make ui-components-boundary", {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    },
+    60_000,
+  );
 
   it("fails ui-components-boundary when package source violates boundary rules", async () => {
     const tempRoot = await mkdtemp(

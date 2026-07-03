@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { renderPackageComponent, screen } from "../testing/render";
+import { renderPackageComponent, screen, userEvent } from "../testing/render";
 import { Button } from "./button";
 
 describe("Button semantic variants", () => {
@@ -84,7 +84,9 @@ describe("Button semantic variants", () => {
     expect(destructiveButton.className).not.toContain("bg-warning-container");
     expect(warningButton.className).not.toContain("bg-error");
   });
+});
 
+describe("Button disabled and focus behavior", () => {
   it("applies disabled styling and prevents interaction semantics", () => {
     renderPackageComponent(
       <Button disabled tone="default">
@@ -108,7 +110,9 @@ describe("Button semantic variants", () => {
     expect(button.className).toContain("focus-visible:ring-2");
     expect(button.className).toContain("focus-visible:ring-af-focus-ring");
   });
+});
 
+describe("Button loading behavior", () => {
   it("exposes busy state, disables interaction, and preserves the accessible name while loading", () => {
     renderPackageComponent(
       <Button loading type="button">
@@ -148,6 +152,31 @@ describe("Button semantic variants", () => {
     expect(button.querySelector("svg.animate-spin")).toBeTruthy();
   });
 
+  it("prevents duplicate activation when loading with asChild projection", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+
+    renderPackageComponent(
+      <Button asChild loading>
+        <button onClick={onClick} type="button">
+          Save changes
+        </button>
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Save changes" });
+
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button.className).toContain("pointer-events-none");
+
+    await user.click(button);
+
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe("Button asChild projection", () => {
   it("can project shared button styling onto child elements when structure requires it", () => {
     renderPackageComponent(
       <Button asChild size="sm" tone="outline">
