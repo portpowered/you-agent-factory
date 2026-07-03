@@ -7,3 +7,13 @@ export {
   COMPONENT_CATEGORY_EXPORT_PATHS,
   type ComponentCategoryExportPath,
 } from "./category-paths";
+
+export { AlertPanel, AlertPanelText, Skeleton } from "./feedback";
+export type {
+  AlertPanelProps,
+  AlertPanelTextProps,
+  AlertPanelTone,
+  AlertPanelVariant,
+} from "./feedback";
+export { CodePanel, codePanelVariants } from "./data-display";
+export type { CodePanelProps } from "./data-display";
