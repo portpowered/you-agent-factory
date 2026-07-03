@@ -21,4 +21,7 @@
   --spacing-layout-inset-card: 1rem;
   --spacing-layout-inset-card-relaxed: 1.25rem;
   --spacing-layout-inset-dialog: 1.5rem;
+
+  /* Card elevation for framed widget shells */
+  --shadow-af-card: 0 12px 28px rgb(from var(--color-af-shadow) r g b / 0.2);
 }

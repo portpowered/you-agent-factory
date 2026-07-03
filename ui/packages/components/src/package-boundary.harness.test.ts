@@ -165,6 +165,8 @@ describe("package boundary harness", () => {
           'import Editor from "@monaco-editor/react";\nexport function MonacoWidget() { return <Editor />; }\n',
         "runtime/sonner.tsx":
           'import { toast } from "sonner";\nexport function SonnerWidget() { toast("hi"); return null; }\n',
+        "runtime/grid.tsx":
+          'import { GridLayout } from "react-grid-layout";\nexport function GridWidget() { return <GridLayout layout={[]} width={320} />; }\n',
       },
       tempRoot,
     );
@@ -195,6 +197,11 @@ describe("package boundary harness", () => {
           kind: "app-runtime-module",
           importPath: "sonner",
           relativeFilePath: "src/runtime/sonner.tsx",
+        }),
+        expect.objectContaining({
+          kind: "app-runtime-module",
+          importPath: "react-grid-layout",
+          relativeFilePath: "src/runtime/grid.tsx",
         }),
       ]),
     );

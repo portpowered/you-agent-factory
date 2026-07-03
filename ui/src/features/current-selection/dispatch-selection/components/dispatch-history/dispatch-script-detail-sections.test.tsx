@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { WIDGET_FRAME_BODY_TEXT_CLASS } from "@you-agent-factory/components/recipes";
+
 import {
   ScriptArgsSection,
   ScriptOutputSection,
@@ -50,7 +52,7 @@ describe("dispatch script detail sections", () => {
     );
 
     expect(screen.getByText("No output recorded.").className).toContain(
-      "af-dashboard-body-text",
+      WIDGET_FRAME_BODY_TEXT_CLASS,
     );
   });
 });

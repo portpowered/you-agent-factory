@@ -1,4 +1,6 @@
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import type { NoSelectionDetailCardProps } from "../detail-card/detail-card-types";
 import { SelectionDetailLayout } from "../layout/current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "../presentation/current-selection-locale";
@@ -10,7 +12,7 @@ export function NoSelectionDetailCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <DetailCopy>{messages.emptyStateGuidance}</DetailCopy>
+      <WidgetDetailCopy>{messages.emptyStateGuidance}</WidgetDetailCopy>
     </SelectionDetailLayout>
   );
 }

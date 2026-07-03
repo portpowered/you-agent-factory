@@ -1,7 +1,7 @@
 import {
-  DetailCopy,
+  WidgetDetailCopy,
   WidgetSubtitle,
-} from "../../../../../components/ui/widget-frame";
+} from "@you-agent-factory/components/recipes";
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import { SelectionDetailLayout } from "../../../base/components/layout/current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "../../../base/components/presentation/current-selection-locale";
@@ -57,7 +57,7 @@ export function TerminalWorkSummaryCard({
       {status === "failed" &&
       normalizedFailureReason === undefined &&
       normalizedFailureMessage === undefined ? (
-        <DetailCopy>{messages.failureDetailsUnavailable}</DetailCopy>
+        <WidgetDetailCopy>{messages.failureDetailsUnavailable}</WidgetDetailCopy>
       ) : null}
       {executionDetails ? (
         <ExecutionDetailsSection details={executionDetails} now={now} />

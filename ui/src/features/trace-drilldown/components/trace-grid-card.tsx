@@ -1,5 +1,9 @@
+import {
+  WidgetEmptyState,
+  WidgetEmptyStateText,
+  WidgetEmptyStateTitle,
+} from "@you-agent-factory/components/recipes";
 import type { HTMLAttributes, ReactNode } from "react";
-
 import { useEffect, useMemo, useState } from "react";
 import type {
   DashboardTrace,
@@ -31,11 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from "../../../components/ui/table";
-import {
-  DashboardEmptyState,
-  DashboardEmptyStateText,
-  DashboardEmptyStateTitle,
-} from "../../../components/ui/widget-frame";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
@@ -97,20 +96,18 @@ function renderTraceState(
     case "idle":
       return (
         <div>
-          <DashboardEmptyStateTitle as="h2">
+          <WidgetEmptyStateTitle as="h2">
             {messages.idleTitle}
-          </DashboardEmptyStateTitle>
+          </WidgetEmptyStateTitle>
         </div>
       );
     case "loading":
       return (
         <div>
-          <DashboardEmptyStateTitle>
-            {messages.loadingTitle}
-          </DashboardEmptyStateTitle>
-          <DashboardEmptyStateText>
+          <WidgetEmptyStateTitle>{messages.loadingTitle}</WidgetEmptyStateTitle>
+          <WidgetEmptyStateText>
             {messages.loadingMessage(state.workID)}
-          </DashboardEmptyStateText>
+          </WidgetEmptyStateText>
           <div aria-hidden="true" className="grid gap-2 pt-2">
             <Skeleton className="h-4 w-full max-w-48" />
             <Skeleton className="h-24 w-full" />
@@ -121,21 +118,15 @@ function renderTraceState(
     case "empty":
       return (
         <div>
-          <DashboardEmptyStateTitle>
-            {messages.emptyTitle}
-          </DashboardEmptyStateTitle>
-          <DashboardEmptyStateText>
-            {messages.emptyMessage}
-          </DashboardEmptyStateText>
+          <WidgetEmptyStateTitle>{messages.emptyTitle}</WidgetEmptyStateTitle>
+          <WidgetEmptyStateText>{messages.emptyMessage}</WidgetEmptyStateText>
         </div>
       );
     case "error":
       return (
         <div>
-          <DashboardEmptyStateTitle>
-            {messages.errorTitle}
-          </DashboardEmptyStateTitle>
-          <DashboardEmptyStateText>{state.message}</DashboardEmptyStateText>
+          <WidgetEmptyStateTitle>{messages.errorTitle}</WidgetEmptyStateTitle>
+          <WidgetEmptyStateText>{state.message}</WidgetEmptyStateText>
         </div>
       );
     case "ready":
@@ -322,14 +313,14 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </TableBody>
         </Table>
       ) : (
-        <DashboardEmptyState compact>
-          <DashboardEmptyStateTitle>
+        <WidgetEmptyState compact>
+          <WidgetEmptyStateTitle>
             {messages.noTraceHistoryTitle}
-          </DashboardEmptyStateTitle>
-          <DashboardEmptyStateText>
+          </WidgetEmptyStateTitle>
+          <WidgetEmptyStateText>
             {messages.noTraceHistoryMessage}
-          </DashboardEmptyStateText>
-        </DashboardEmptyState>
+          </WidgetEmptyStateText>
+        </WidgetEmptyState>
       )}
     </div>
   );

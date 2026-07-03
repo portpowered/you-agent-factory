@@ -5,7 +5,9 @@ import type {
   DashboardScriptResponse,
 } from "../../../../../api/dashboard/types";
 import { formatDurationMillis } from "../../../../../components/ui/formatters";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import type { LoadableProviderSessionRef } from "../../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import {
@@ -65,7 +67,7 @@ export function DispatchInferenceAttemptsSection({
             />
           ))
         ) : emptyCopy ? (
-          <DetailCopy>{emptyCopy}</DetailCopy>
+          <WidgetDetailCopy>{emptyCopy}</WidgetDetailCopy>
         ) : null}
       </div>
     </CollapsibleDispatchAttemptSection>
@@ -105,7 +107,7 @@ export function DispatchScriptAttemptsSection({
             scriptResponse={scriptResponse}
           />
         ) : (
-          <DetailCopy>{messages.noScriptAttemptRecordedYet}</DetailCopy>
+          <WidgetDetailCopy>{messages.noScriptAttemptRecordedYet}</WidgetDetailCopy>
         )}
       </div>
     </CollapsibleDispatchAttemptSection>

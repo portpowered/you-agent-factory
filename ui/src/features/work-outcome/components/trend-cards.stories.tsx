@@ -1,5 +1,5 @@
+import { WIDGET_FRAME_SUBTITLE_CLASS } from "@you-agent-factory/components/recipes";
 import { expect, within } from "storybook/test";
-
 import "../../../styles.css";
 import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
 import type {
@@ -153,7 +153,7 @@ export const TypographyScale = {
         .getByText("Failed in range")
         .closest("div")
         ?.querySelector("dd")?.className,
-    ).toContain("af-dashboard-widget-subtitle");
+    ).toContain(WIDGET_FRAME_SUBTITLE_CLASS);
     expect(timingScope.getByLabelText("Timing range").tagName).toBe("DL");
   },
 };

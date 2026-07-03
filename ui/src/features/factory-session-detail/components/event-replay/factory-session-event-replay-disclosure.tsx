@@ -7,7 +7,9 @@ import {
   DashboardText,
 } from "../../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
-import { DetailCopy } from "../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { useFactorySessionEventReplay } from "../../hooks/use-factory-session-event-replay";
 import { buildFactorySessionEventReplayTimeline } from "../../lib/factory-session-event-replay-timeline";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
@@ -33,7 +35,7 @@ export function FactorySessionEventReplayDisclosure({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="grid gap-2">
           <DashboardLabel>{messages.eventReplayHeading}</DashboardLabel>
-          <DetailCopy>{messages.eventReplayHint}</DetailCopy>
+          <WidgetDetailCopy>{messages.eventReplayHint}</WidgetDetailCopy>
         </div>
         <ExpandablePanelTrigger
           aria-label={
@@ -74,7 +76,7 @@ function EventReplayState({
 
   if (state.status === "loading") {
     return (
-      <DetailCopy id={detailRegionID}>{messages.eventReplayLoadingState}</DetailCopy>
+      <WidgetDetailCopy id={detailRegionID}>{messages.eventReplayLoadingState}</WidgetDetailCopy>
     );
   }
 
@@ -100,7 +102,7 @@ function EventReplayState({
 
   if (state.events.length === 0) {
     return (
-      <DetailCopy id={detailRegionID}>{messages.eventReplayEmptyState}</DetailCopy>
+      <WidgetDetailCopy id={detailRegionID}>{messages.eventReplayEmptyState}</WidgetDetailCopy>
     );
   }
 

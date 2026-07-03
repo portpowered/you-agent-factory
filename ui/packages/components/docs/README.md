@@ -33,3 +33,9 @@ from sibling files in this directory as the library grows.
   empty vs loading feedback
 - [CodePanel](./data-display-code-panel.md) — long-line and long-block
   containment, scrolling, and responsive layout expectations
+
+## Widget layout recipes
+
+- [Widget frame and layout recipes](./widget-frame-recipes.md) — import paths,
+  state ownership, accessibility, Storybook references, and source-copy guidance
+  for domain-free framed panels.
