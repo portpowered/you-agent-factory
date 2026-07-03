@@ -5,12 +5,12 @@ import {
   DashboardText,
   FormWarning,
   OptionalEnumSelect,
-} from "../../../../../../components/ui";
+} from "../../../../../../../components/ui";
 import {
   CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
-} from "../../../../base/public";
-import type { EditableWorkerOverwriteField } from "../../../lib/detail-card-types";
+} from "../../../../../base/public";
+import type { EditableWorkerOverwriteField } from "../../../../lib/detail-card-types";
 import type {
   ReadyWorkerEditableConfigurationState,
   WorkerEditableConfigurationMessages,

@@ -3,11 +3,11 @@ import type {
   ReadyWorkerEditableConfigurationState,
   ReadyWorkerEditableValidationErrors,
   WorkerEditableConfigurationMessages,
-} from "./worker-editable-configuration-field-types";
+} from "./primitives/worker-editable-configuration-field-types";
 import {
   WorkerEditableConfigurationField,
   WorkerEditableConfigurationServerChangedHint,
-} from "./worker-editable-configuration-field-primitives";
+} from "./primitives/worker-editable-configuration-field-primitives";
 
 export function WorkerEditableConfigurationScriptFields({
   messages,

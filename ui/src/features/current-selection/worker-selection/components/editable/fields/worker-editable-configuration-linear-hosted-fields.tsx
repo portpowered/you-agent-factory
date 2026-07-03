@@ -3,12 +3,12 @@ import type {
   ReadyWorkerEditableConfigurationState,
   ReadyWorkerEditableValidationErrors,
   WorkerEditableConfigurationMessages,
-} from "./worker-editable-configuration-field-types";
+} from "./primitives/worker-editable-configuration-field-types";
 import {
   WorkerEditableConfigurationField,
   WorkerEditableConfigurationFieldHelp,
   WorkerEditableConfigurationServerChangedHint,
-} from "./worker-editable-configuration-field-primitives";
+} from "./primitives/worker-editable-configuration-field-primitives";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: hosted Linear poller fields stay grouped for parity with other worker sections.
 export function LinearHostedWorkerEditableFields({

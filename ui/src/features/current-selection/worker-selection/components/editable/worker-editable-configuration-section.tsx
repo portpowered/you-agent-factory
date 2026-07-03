@@ -30,7 +30,7 @@ import type {
   ReadyWorkerEditableConfigurationState,
   ReadyWorkerEditableValidationErrors,
   WorkerEditableConfigurationMessages,
-} from "./fields/worker-editable-configuration-field-types";
+} from "./fields/primitives/worker-editable-configuration-field-types";
 import { WorkerEditableConfigurationHostedFields } from "./fields/worker-editable-configuration-hosted-fields";
 import { WorkerEditableConfigurationModelFields } from "./fields/worker-editable-configuration-model-fields";
 import { WorkerEditableConfigurationScriptFields } from "./fields/worker-editable-configuration-script-fields";

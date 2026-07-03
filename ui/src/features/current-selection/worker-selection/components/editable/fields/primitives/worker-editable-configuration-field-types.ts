@@ -1,5 +1,5 @@
-import type { EditableWorkerConfigurationState } from "../../../lib/detail-card-types";
-import type { getWorkerDetailMessages } from "../../../messages/worker-detail";
+import type { EditableWorkerConfigurationState } from "../../../../lib/detail-card-types";
+import type { getWorkerDetailMessages } from "../../../../messages/worker-detail";
 
 export type ReadyWorkerEditableConfigurationState = Extract<
   EditableWorkerConfigurationState,

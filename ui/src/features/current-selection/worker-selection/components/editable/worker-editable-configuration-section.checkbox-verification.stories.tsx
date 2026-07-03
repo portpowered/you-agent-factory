@@ -1,7 +1,7 @@
 import { expect, userEvent, within } from "storybook/test";
 import { useState } from "react";
 
-import "../../../../styles.css";
+import "../../../../../styles.css";
 import type { EditableWorkerSaveValidationErrors } from "../../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../../messages/worker-detail";
 import { expectStyledCheckboxInStory } from "../../../../../testing/checkbox-story-helpers";

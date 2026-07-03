@@ -3,12 +3,12 @@ import type {
   ReadyWorkerEditableConfigurationState,
   ReadyWorkerEditableValidationErrors,
   WorkerEditableConfigurationMessages,
-} from "./worker-editable-configuration-field-types";
+} from "./primitives/worker-editable-configuration-field-types";
 import {
   WorkerEditableConfigurationField,
   WorkerEditableConfigurationServerChangedHint,
   WorkerOptionalEnumSelect,
-} from "./worker-editable-configuration-field-primitives";
+} from "./primitives/worker-editable-configuration-field-primitives";
 import { LinearHostedWorkerEditableFields } from "./worker-editable-configuration-linear-hosted-fields";
 
 export function WorkerEditableConfigurationHostedFields({
