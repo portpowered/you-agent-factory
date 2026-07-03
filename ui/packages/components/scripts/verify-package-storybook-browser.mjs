@@ -5,6 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
+import { chromium } from "playwright";
 
 const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -14,12 +15,27 @@ const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
 const port = Number(
   process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817",
 );
-const storyId = "primitives-packagetext--body";
-const storyText = "Hello from the component package";
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
 const indexUrl = `${baseUrl}/index.json`;
-const iframeUrl = `${baseUrl}/iframe.html?id=${storyId}&viewMode=story`;
+const STORY_RENDER_TIMEOUT_MS = 30_000;
+
+const PACKAGE_TEXT_STORY_ID = "primitives-packagetext--body";
+const PACKAGE_TEXT = "Hello from the component package";
+
+export const PACKAGE_SELECT_KEYBOARD_STORY_ID =
+  "forms-packageselect--controlled-value";
+export const PACKAGE_SELECT_FOCUS_STORY_ID = "forms-packageselect--focus";
+export const PACKAGE_SELECT_STORY_LABEL = "Work type";
+
+export const PACKAGE_SELECT_KEYBOARD_STORY_IDS = [
+  PACKAGE_SELECT_KEYBOARD_STORY_ID,
+  PACKAGE_SELECT_FOCUS_STORY_ID,
+];
+
+function storyUrl(storyId) {
+  return `${baseUrl}/iframe.html?id=${storyId}&viewMode=story`;
+}
 
 function assertPortAvailable(hostName, portNumber) {
   return new Promise((resolve, reject) => {
@@ -84,6 +100,139 @@ function readStaticAssetBundleText() {
     .join("\n");
 }
 
+async function waitForStoryRender(page) {
+  await page.waitForSelector("#storybook-root", {
+    state: "attached",
+    timeout: STORY_RENDER_TIMEOUT_MS,
+  });
+  await page.waitForFunction(
+    () => {
+      const root = document.querySelector("#storybook-root");
+      if (!(root instanceof HTMLElement)) {
+        return false;
+      }
+      if (root.childElementCount > 0) {
+        return true;
+      }
+      return Array.from(document.body.children).some((child) => {
+        if (!(child instanceof HTMLElement)) {
+          return false;
+        }
+        if (
+          child.id === "storybook-root" ||
+          child.id === "storybook-docs" ||
+          child.tagName === "SCRIPT" ||
+          child.tagName === "STYLE"
+        ) {
+          return false;
+        }
+
+        return true;
+      });
+    },
+    { timeout: STORY_RENDER_TIMEOUT_MS },
+  );
+}
+
+async function expectComboboxFocusRingVisible(page, labelText, label) {
+  const trigger = page.getByRole("combobox", { name: labelText });
+  await trigger.waitFor({
+    state: "visible",
+    timeout: STORY_RENDER_TIMEOUT_MS,
+  });
+  await trigger.focus();
+
+  const hasFocusRing = await trigger.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) {
+      return false;
+    }
+
+    const styles = window.getComputedStyle(element);
+    const outlineWidth = Number.parseFloat(styles.outlineWidth || "0");
+    const boxShadow = styles.boxShadow;
+    return (
+      outlineWidth > 0 ||
+      (boxShadow !== "none" && boxShadow.length > 0) ||
+      element.matches(":focus-visible")
+    );
+  });
+
+  if (!hasFocusRing) {
+    throw new Error(`Expected a visible focus treatment on ${label}.`);
+  }
+}
+
+export async function verifyPackageSelectKeyboardStories({
+  page,
+  storyIds = PACKAGE_SELECT_KEYBOARD_STORY_IDS,
+} = {}) {
+  await page.setViewportSize({ height: 900, width: 1440 });
+
+  for (const storyId of storyIds) {
+    await page.goto(storyUrl(storyId), {
+      timeout: 90_000,
+      waitUntil: "networkidle",
+    });
+    await waitForStoryRender(page);
+
+    if (storyId === PACKAGE_SELECT_KEYBOARD_STORY_ID) {
+      const trigger = page.getByRole("combobox", {
+        name: PACKAGE_SELECT_STORY_LABEL,
+      });
+      await trigger.waitFor({
+        state: "visible",
+        timeout: STORY_RENDER_TIMEOUT_MS,
+      });
+      await trigger.focus();
+      await page.keyboard.press("ArrowDown");
+
+      const listbox = page.getByRole("listbox");
+      await listbox.waitFor({ state: "visible" });
+      await page.getByRole("option", { name: "Story" }).waitFor({
+        state: "visible",
+      });
+
+      await page.keyboard.press("Enter");
+      await listbox.waitFor({ state: "hidden" });
+      await trigger.waitFor({ state: "visible" });
+
+      const selectedText = await trigger.textContent();
+      if (!selectedText?.includes("Story")) {
+        throw new Error(
+          `Expected keyboard selection to update ${storyId}, got "${selectedText ?? ""}".`,
+        );
+      }
+
+      const isFocused = await trigger.evaluate((element) => {
+        return element === document.activeElement;
+      });
+      if (!isFocused) {
+        throw new Error(
+          `Expected focus to return to the select trigger after keyboard selection in ${storyId}.`,
+        );
+      }
+      continue;
+    }
+
+    await expectComboboxFocusRingVisible(
+      page,
+      PACKAGE_SELECT_STORY_LABEL,
+      storyId,
+    );
+  }
+}
+
+async function verifyPackageStorybookBrowser() {
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+
+  try {
+    await verifyPackageSelectKeyboardStories({ page });
+  } finally {
+    await browser.close();
+  }
+}
+
 async function main() {
   await assertPortAvailable(host, port);
 
@@ -136,23 +285,28 @@ async function main() {
   try {
     const indexResponse = await waitForHttpOk(indexUrl);
     const indexPayload = await indexResponse.json();
-    const storyEntry = indexPayload.entries?.[storyId];
+    const storyEntry = indexPayload.entries?.[PACKAGE_TEXT_STORY_ID];
 
     if (!storyEntry) {
       throw new Error(
-        `Expected package story ${storyId} in ${indexUrl}, found ${Object.keys(indexPayload.entries ?? {}).join(", ")}`,
+        `Expected package story ${PACKAGE_TEXT_STORY_ID} in ${indexUrl}, found ${Object.keys(indexPayload.entries ?? {}).join(", ")}`,
       );
     }
 
-    const iframeResponse = await waitForHttpOk(iframeUrl);
-    if (!iframeResponse.ok) {
-      throw new Error(`Expected ${iframeUrl} to return HTTP 200.`);
+    for (const storyId of [
+      PACKAGE_TEXT_STORY_ID,
+      ...PACKAGE_SELECT_KEYBOARD_STORY_IDS,
+    ]) {
+      const iframeResponse = await waitForHttpOk(storyUrl(storyId));
+      if (!iframeResponse.ok) {
+        throw new Error(`Expected ${storyUrl(storyId)} to return HTTP 200.`);
+      }
     }
 
     const assetBundleText = readStaticAssetBundleText();
-    if (!assetBundleText.includes(storyText)) {
+    if (!assetBundleText.includes(PACKAGE_TEXT)) {
       throw new Error(
-        `Built package Storybook assets did not include story text for ${storyId}.`,
+        `Built package Storybook assets did not include story text for ${PACKAGE_TEXT_STORY_ID}.`,
       );
     }
 
@@ -165,8 +319,10 @@ async function main() {
       );
     }
 
+    await verifyPackageStorybookBrowser();
+
     console.log(
-      `Verified package Storybook story ${storyId} at ${iframeUrl} without dashboard providers.`,
+      `Verified package Storybook stories at ${baseUrl} without dashboard providers.`,
     );
   } finally {
     cleanup();
