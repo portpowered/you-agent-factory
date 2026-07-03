@@ -18,21 +18,13 @@ func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 	t.Run("factory metadata", func(t *testing.T) {
 		assertSnapshotFactoryMetadata(t, snap)
 	})
-
-	runtime := snap.RuntimeStateSnapshot()
-	if runtime.RuntimeStatus != snap.RuntimeStatus {
-		t.Fatalf("runtime status = %q, want %q", runtime.RuntimeStatus, snap.RuntimeStatus)
-	}
-	if runtime.TickCount != snap.TickCount {
-		t.Fatalf("runtime tick count = %d, want %d", runtime.TickCount, snap.TickCount)
-	}
-	if len(runtime.ActiveThrottlePauses) != 1 {
-		t.Fatalf("runtime active throttle pause count = %d, want 1", len(runtime.ActiveThrottlePauses))
-	}
-	aggregate := NewEngineStateSnapshot(runtime, "RUNNING", time.Minute, snap.Topology)
-	if len(aggregate.ActiveThrottlePauses) != 1 {
-		t.Fatalf("aggregate active throttle pause count = %d, want 1", len(aggregate.ActiveThrottlePauses))
-	}
+	t.Run("runtime projection", func(t *testing.T) {
+		assertRuntimeStateSnapshot(t, snap)
+	})
+	t.Run("aggregate construction", func(t *testing.T) {
+		runtime := snap.RuntimeStateSnapshot()
+		assertNewEngineStateSnapshot(t, runtime, "RUNNING", time.Minute, snap.Topology)
+	})
 }
 
 func assertSnapshotRuntimeFields(t *testing.T, snap interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]) {
@@ -70,6 +62,45 @@ func assertSnapshotRuntimeFields(t *testing.T, snap interfaces.EngineStateSnapsh
 	}
 	if snap.ActiveThrottlePauses[0].LaneID != "claude/claude-sonnet" {
 		t.Fatalf("active throttle pause lane = %q, want claude/claude-sonnet", snap.ActiveThrottlePauses[0].LaneID)
+	}
+}
+
+func assertRuntimeStateSnapshot(t *testing.T, snap interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]) {
+	t.Helper()
+
+	runtime := snap.RuntimeStateSnapshot()
+	if runtime.RuntimeStatus != snap.RuntimeStatus {
+		t.Errorf("runtime status = %q, want %q", runtime.RuntimeStatus, snap.RuntimeStatus)
+	}
+	if runtime.TickCount != snap.TickCount {
+		t.Errorf("runtime tick count = %d, want %d", runtime.TickCount, snap.TickCount)
+	}
+	if len(runtime.ActiveThrottlePauses) != len(snap.ActiveThrottlePauses) {
+		t.Fatalf("runtime active throttle pause count = %d, want %d", len(runtime.ActiveThrottlePauses), len(snap.ActiveThrottlePauses))
+	}
+}
+
+func assertNewEngineStateSnapshot(
+	t *testing.T,
+	runtime interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net],
+	factoryState string,
+	uptime time.Duration,
+	topology *Net,
+) {
+	t.Helper()
+
+	aggregate := NewEngineStateSnapshot(runtime, factoryState, uptime, topology)
+	if len(aggregate.ActiveThrottlePauses) != len(runtime.ActiveThrottlePauses) {
+		t.Errorf("aggregate active throttle pause count = %d, want %d", len(aggregate.ActiveThrottlePauses), len(runtime.ActiveThrottlePauses))
+	}
+	if aggregate.FactoryState != factoryState {
+		t.Errorf("aggregate factory state = %q, want %q", aggregate.FactoryState, factoryState)
+	}
+	if aggregate.Uptime != uptime {
+		t.Errorf("aggregate uptime = %v, want %v", aggregate.Uptime, uptime)
+	}
+	if aggregate.Topology != topology {
+		t.Fatalf("aggregate topology = %#v, want %#v", aggregate.Topology, topology)
 	}
 }
 
