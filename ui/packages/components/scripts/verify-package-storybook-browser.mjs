@@ -14,13 +14,19 @@ const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
 const port = Number(
   process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817",
 );
-const storyId = "primitives-packagetext--body";
-const storyText = "Hello from the component package";
+const storiesToVerify = [
+  {
+    id: "primitives-packagetext--body",
+    text: "Hello from the component package",
+  },
+  {
+    id: "data-display-datatable--success",
+    text: "Signal Router",
+  },
+];
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
 const indexUrl = `${baseUrl}/index.json`;
-const iframeUrl = `${baseUrl}/iframe.html?id=${storyId}&viewMode=story`;
-
 function assertPortAvailable(hostName, portNumber) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -136,25 +142,7 @@ async function main() {
   try {
     const indexResponse = await waitForHttpOk(indexUrl);
     const indexPayload = await indexResponse.json();
-    const storyEntry = indexPayload.entries?.[storyId];
-
-    if (!storyEntry) {
-      throw new Error(
-        `Expected package story ${storyId} in ${indexUrl}, found ${Object.keys(indexPayload.entries ?? {}).join(", ")}`,
-      );
-    }
-
-    const iframeResponse = await waitForHttpOk(iframeUrl);
-    if (!iframeResponse.ok) {
-      throw new Error(`Expected ${iframeUrl} to return HTTP 200.`);
-    }
-
     const assetBundleText = readStaticAssetBundleText();
-    if (!assetBundleText.includes(storyText)) {
-      throw new Error(
-        `Built package Storybook assets did not include story text for ${storyId}.`,
-      );
-    }
 
     if (
       assetBundleText.includes("DashboardSessionProvider") ||
@@ -165,9 +153,31 @@ async function main() {
       );
     }
 
-    console.log(
-      `Verified package Storybook story ${storyId} at ${iframeUrl} without dashboard providers.`,
-    );
+    for (const story of storiesToVerify) {
+      const storyEntry = indexPayload.entries?.[story.id];
+
+      if (!storyEntry) {
+        throw new Error(
+          `Expected package story ${story.id} in ${indexUrl}, found ${Object.keys(indexPayload.entries ?? {}).join(", ")}`,
+        );
+      }
+
+      const storyIframeUrl = `${baseUrl}/iframe.html?id=${story.id}&viewMode=story`;
+      const iframeResponse = await waitForHttpOk(storyIframeUrl);
+      if (!iframeResponse.ok) {
+        throw new Error(`Expected ${storyIframeUrl} to return HTTP 200.`);
+      }
+
+      if (!assetBundleText.includes(story.text)) {
+        throw new Error(
+          `Built package Storybook assets did not include story text for ${story.id}.`,
+        );
+      }
+
+      console.log(
+        `Verified package Storybook story ${story.id} at ${storyIframeUrl} without dashboard providers.`,
+      );
+    }
   } finally {
     cleanup();
     await delay(500);
