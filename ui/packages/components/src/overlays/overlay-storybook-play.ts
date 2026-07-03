@@ -22,6 +22,27 @@ export async function verifyDialogKeyboardFocus({
   await expect(trigger).toHaveFocus();
 }
 
+export async function verifyDialogEscapeClose({
+  canvasElement,
+}: {
+  canvasElement: HTMLElement;
+}) {
+  const canvas = within(canvasElement);
+  const page = within(canvasElement.ownerDocument.body);
+
+  const trigger = canvas.getByRole("button", { name: "Open dialog for Escape" });
+  await userEvent.click(trigger);
+
+  const dialog = await page.findByRole("dialog", { name: "Escape close dialog" });
+  expect(dialog).toBeVisible();
+
+  await userEvent.keyboard("{Escape}");
+  await expect(
+    page.queryByRole("dialog", { name: "Escape close dialog" }),
+  ).toBeNull();
+  await expect(trigger).toHaveFocus();
+}
+
 export async function verifyPopoverKeyboardFocus({
   canvasElement,
 }: {
@@ -42,6 +63,25 @@ export async function verifyPopoverKeyboardFocus({
     page.queryByText("Popover content from the component package."),
   ).toBeNull();
   await expect(trigger).toHaveFocus();
+}
+
+export async function verifyPopoverKeyboardOpen({
+  canvasElement,
+}: {
+  canvasElement: HTMLElement;
+}) {
+  const canvas = within(canvasElement);
+  const page = within(canvasElement.ownerDocument.body);
+
+  const trigger = canvas.getByRole("button", {
+    name: "Open popover with keyboard",
+  });
+  trigger.focus();
+  await userEvent.keyboard("{Enter}");
+
+  await expect(
+    page.getByText("Popover opened from the keyboard trigger."),
+  ).toBeVisible();
 }
 
 export async function verifyCollapsibleKeyboardFocus({

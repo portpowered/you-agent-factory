@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { ScrollArea } from "./scroll-area";
+import { ScrollArea, ScrollBar } from "./scroll-area";
+import { SCROLL_AREA_HORIZONTAL_ANCHOR, SCROLL_AREA_MOBILE_ANCHOR } from "./overlay-story-copy";
+import { overlayStoryDocs } from "./overlay-story-docs";
 import { verifyScrollAreaKeyboardFocus } from "./overlay-storybook-play";
 
 const meta = {
@@ -8,6 +10,7 @@ const meta = {
   component: ScrollArea,
   parameters: {
     layout: "centered",
+    docs: overlayStoryDocs,
   },
 } satisfies Meta<typeof ScrollArea>;
 
@@ -36,6 +39,30 @@ export const Default: Story = {
   ),
 };
 
+export const HorizontalOverflow: Story = {
+  render: () => (
+    <ScrollArea className="w-72 rounded-2xl border border-outline p-3">
+      <div className="flex w-max gap-4 pb-2 text-body-medium text-on-surface">
+        {Array.from({ length: 20 }, (_, index) => {
+          const label = `Wide horizontal scroll item ${index + 1}`;
+          return (
+            <div
+              className="min-w-40 rounded-lg border border-outline px-3 py-2"
+              key={label}
+            >
+              {label}
+            </div>
+          );
+        })}
+        <div className="min-w-40 rounded-lg border border-outline px-3 py-2">
+          {SCROLL_AREA_HORIZONTAL_ANCHOR}
+        </div>
+      </div>
+      <ScrollBar orientation="horizontal" />
+    </ScrollArea>
+  ),
+};
+
 export const KeyboardFocus: Story = {
   render: () => (
     <ScrollArea className="h-32 w-72 rounded-2xl border border-outline p-3">
@@ -56,4 +83,29 @@ export const KeyboardFocus: Story = {
     </ScrollArea>
   ),
   play: verifyScrollAreaKeyboardFocus,
+};
+
+export const MobileWidth: Story = {
+  parameters: {
+    viewport: {
+      defaultViewport: "mobile1",
+    },
+  },
+  render: () => (
+    <ScrollArea className="h-40 w-full max-w-xs rounded-2xl border border-outline p-3">
+      <div className="space-y-3 text-body-medium text-on-surface">
+        <p>{SCROLL_AREA_MOBILE_ANCHOR}</p>
+        {[
+          "Mobile scroll row 1",
+          "Mobile scroll row 2",
+          "Mobile scroll row 3",
+          "Mobile scroll row 4",
+          "Mobile scroll row 5",
+          "Mobile scroll row 6",
+        ].map((row) => (
+          <p key={row}>{row}</p>
+        ))}
+      </div>
+    </ScrollArea>
+  ),
 };
