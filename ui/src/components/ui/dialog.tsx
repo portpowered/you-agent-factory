@@ -9,5 +9,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
-} from "@you-agent-factory/components";
-export type { DialogContentProps } from "@you-agent-factory/components";
+} from "@you-agent-factory/components/overlays";
+export type { DialogContentProps } from "@you-agent-factory/components/overlays";

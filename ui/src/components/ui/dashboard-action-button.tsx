@@ -4,7 +4,7 @@ import {
   Button,
   IconButtonShell,
   type ButtonProps,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/primitives";
 import { cn } from "../../lib/cn";
 
 const DASHBOARD_ACTION_BUTTON_BASE_CLASS =

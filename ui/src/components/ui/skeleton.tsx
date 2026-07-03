@@ -1,1 +1,1 @@
-export { Skeleton } from "@you-agent-factory/components";
+export { Skeleton } from "@you-agent-factory/components/feedback";
