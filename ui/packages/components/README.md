@@ -135,10 +135,14 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [`docs/graphs.md`](./docs/graphs.md) — graph node shell, node button, edge,
+  viewport surface, handle badge, edge path helpers, React Flow boundary, and
+  Storybook example map
 - [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
 - [Skeleton loading placeholders](./docs/feedback-skeleton.md)
 - [CodePanel long-content containment](./docs/data-display-code-panel.md)
 - [Table primitives and DataTable](./docs/table-data-table.md)
+- [Form input primitives](./docs/forms-input-primitives.md)
 - [Form select primitives](./docs/forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
 - [Overlay and disclosure primitives](./docs/overlays.md)

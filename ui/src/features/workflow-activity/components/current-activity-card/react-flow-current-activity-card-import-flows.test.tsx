@@ -209,7 +209,9 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(legend?.className).toContain("right-4");
     expect(legend?.className).toContain("top-4");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
-    expect(viewport.className).toContain("max-h-full");
+    expect(viewport.className).toContain("h-full");
+    expect(viewport.className).toContain("min-h-96");
+    expect(viewport.className).not.toContain("max-h-full");
     expect(viewport.className).toContain("overflow-hidden");
     expect(viewport.style.height).toBe("100%");
     expect(viewport.style.maxHeight).toBe("100%");

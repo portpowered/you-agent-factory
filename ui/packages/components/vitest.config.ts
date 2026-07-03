@@ -50,6 +50,7 @@ export default defineConfig({
   },
   test: {
     environment: "happy-dom",
+    exclude: ["src/**/*.harness.test.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["./src/testing/vitest.setup.ts"],
     server: {
