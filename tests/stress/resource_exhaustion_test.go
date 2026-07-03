@@ -373,11 +373,66 @@ func TestResourceExhaustionNoTokenLoss(t *testing.T) {
 	}
 }
 
-// TestResourceExhaustionWithFailure validates that resource tokens are
-// properly returned when work fails (via failure arcs) and that remaining
-// items can still proceed after a failure.
+// TestResourceExhaustionWithFailure validates that consumed reusable resources
+// are returned when work fails after acquisition and that remaining items can
+// still complete once the resource is released by the runtime failure path.
 func TestResourceExhaustionWithFailure(t *testing.T) {
-	t.Skip("pending migration: multiple failure arcs (task:failed + resource:available) not expressible in single on_failure config")
+	if testing.Short() {
+		t.Skip("skipping stress test in short mode")
+	}
+
+	const (
+		numItems       = 5
+		expectedFailed = 1
+	)
+
+	// Config: task init → complete while consuming a capacity-limited gpu resource.
+	// OnFailure routes failed work to task:failed; consumed gpu tokens are returned
+	// automatically by the transitioner failure path.
+	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
+			{Name: "init", Type: interfaces.StateTypeInitial},
+			{Name: "complete", Type: interfaces.StateTypeTerminal},
+			{Name: "failed", Type: interfaces.StateTypeFailed},
+		}}},
+		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+		Workers:   []interfaces.WorkerConfig{{Name: "processor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "process", WorkerTypeName: "processor",
+			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
+			Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		}},
+	})
+	h := testutil.NewServiceTestHarness(t, dir)
+
+	processResults := make([]interfaces.WorkResult, numItems)
+	processResults[0] = interfaces.WorkResult{Outcome: interfaces.OutcomeFailed, Error: "simulated processing failure"}
+	for i := 1; i < numItems; i++ {
+		processResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+	}
+	h.MockWorker("processor", processResults...)
+
+	queueManyItems(t, h, "task", numItems)
+
+	h.RunUntilComplete(t, 30*time.Second)
+
+	snap := h.Marking()
+
+	failedCount := len(snap.TokensInPlace("task:failed"))
+	if failedCount != expectedFailed {
+		t.Errorf("expected %d failed, got %d", expectedFailed, failedCount)
+	}
+
+	expectedComplete := numItems - expectedFailed
+	completeCount := len(snap.TokensInPlace("task:complete"))
+	if completeCount != expectedComplete {
+		t.Errorf("expected %d complete, got %d", expectedComplete, completeCount)
+	}
+
+	h.Assert().
+		HasNoTokenInPlace("task:init")
 }
 
 // TestResourceExhaustionTimeout validates no infinite loops or deadlocks
