@@ -117,6 +117,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: createComponentsPackageAliases(componentsPackageRoot),
+    dedupe: ["react", "react-dom", "@radix-ui/react-slot"],
   },
   server: {
     host: true,

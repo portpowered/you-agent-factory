@@ -4,11 +4,14 @@ export {
   DescriptionList,
   Heading,
   Label,
+  SurfacePanel,
   Text,
+  surfacePanelVariants,
   type ActionRowProps,
   type CodeProps,
   type DescriptionListProps,
   type HeadingProps,
+  type SurfacePanelProps,
   type TextProps,
 } from "@you-agent-factory/components";
 
@@ -49,7 +52,6 @@ export * from "./select";
 export * from "./selectable-card-button";
 export * from "./skeleton";
 export * from "./standard-list-selection";
-export * from "./surface-panel";
 export * from "./table";
 export * from "./textarea";
 export * from "./widget-frame";

@@ -10,7 +10,10 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "./dashboard-typography";
-import { SurfacePanel, type SurfacePanelProps } from "./surface-panel";
+import {
+  SurfacePanel,
+  type SurfacePanelProps,
+} from "@you-agent-factory/components";
 
 type AlertPanelTone = "danger" | "info" | "neutral" | "success" | "warning";
 type AlertPanelVariant = "default" | "empty";

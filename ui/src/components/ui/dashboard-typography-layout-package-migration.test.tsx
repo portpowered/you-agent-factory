@@ -7,7 +7,9 @@ import {
   DescriptionList as PackageDescriptionList,
   Heading as PackageHeading,
   Label as PackageLabel,
+  SurfacePanel as PackageSurfacePanel,
   Text as PackageText,
+  surfacePanelVariants as packageSurfacePanelVariants,
 } from "@you-agent-factory/components";
 
 import { TrendSummaryGrid, TrendSummaryMetric } from "../../features/work-outcome/components/trend-summary";
@@ -17,7 +19,9 @@ import {
   DescriptionList,
   Heading,
   Label,
+  SurfacePanel,
   Text,
+  surfacePanelVariants,
 } from "./index";
 import { AlertPanel } from "./alert-panel";
 import { DashboardActionRow } from "./dashboard-action-row";
@@ -31,8 +35,6 @@ import {
 import { DashboardActionButton } from "./dashboard-action-button";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 import { FormDescription, FormError, FormWarning } from "./form-field";
-import { SurfacePanel } from "./surface-panel";
-
 describe("dashboard typography layout package migration", () => {
   it("re-exports package typography and layout primitives from dashboard UI entrypoints", () => {
     expect(Text).toBe(PackageText);
@@ -41,6 +43,8 @@ describe("dashboard typography layout package migration", () => {
     expect(Code).toBe(PackageCode);
     expect(ActionRow).toBe(PackageActionRow);
     expect(DescriptionList).toBe(PackageDescriptionList);
+    expect(SurfacePanel).toBe(PackageSurfacePanel);
+    expect(surfacePanelVariants).toBe(packageSurfacePanelVariants);
     expect(DashboardText).toBe(PackageText);
     expect(DashboardHeading).toBe(PackageHeading);
     expect(DashboardLabel).toBe(PackageLabel);
