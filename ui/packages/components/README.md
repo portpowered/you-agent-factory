@@ -135,6 +135,10 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [Typography roles](./docs/typography-roles.md) — `Text`, `Heading`, `Label`,
+  `Code`, dense text, truncation, and wrapping
+- [Layout and display primitives](./docs/layout-display-primitives.md) —
+  `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site
