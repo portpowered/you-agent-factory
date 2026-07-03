@@ -11,6 +11,8 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../..",
 );
+// Make subprocess harness checks can exceed Vitest's default 5s under parallel load.
+const makeHarnessTestTimeoutMs = 30_000;
 
 describe("component package harness wiring", () => {
   let tempRoots: string[] = [];
@@ -22,21 +24,29 @@ describe("component package harness wiring", () => {
     tempRoots = [];
   });
 
-  it("runs ui-components-typecheck successfully on the real package", () => {
-    execSync("make ui-components-typecheck", {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  });
+  it(
+    "runs ui-components-typecheck successfully on the real package",
+    () => {
+      execSync("make ui-components-typecheck", {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    },
+    makeHarnessTestTimeoutMs,
+  );
 
-  it("runs ui-components-boundary successfully on the real package", () => {
-    execSync("make ui-components-boundary", {
-      cwd: repoRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  });
+  it(
+    "runs ui-components-boundary successfully on the real package",
+    () => {
+      execSync("make ui-components-boundary", {
+        cwd: repoRoot,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    },
+    makeHarnessTestTimeoutMs,
+  );
 
   it("fails ui-components-boundary when package source violates boundary rules", async () => {
     const tempRoot = await mkdtemp(
@@ -66,5 +76,5 @@ describe("component package harness wiring", () => {
         "@you-agent-factory/components package boundary check failed:",
       ),
     });
-  });
+  }, makeHarnessTestTimeoutMs);
 });
