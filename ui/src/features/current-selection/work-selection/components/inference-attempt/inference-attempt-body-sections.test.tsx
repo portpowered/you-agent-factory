@@ -75,7 +75,7 @@ describe("inference attempt body sections", () => {
       screen.getByText(
         "Provider response text is not available for this inference attempt.",
       ).className,
-    ).toContain("af-body-text");
+    ).toContain("text-body-medium");
   });
 
   it("renders awaiting response copy for pending attempts", () => {
