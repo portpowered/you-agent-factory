@@ -11,9 +11,18 @@ import (
 	"time"
 )
 
-// portos:func-length-exception owner=agent-factory reason=legacy-resource-fixture review=2026-07-18 removal=split-resource-config-fixture-before-next-resource-change
 func TestConfigMapping_ResourceUsage(t *testing.T) {
-	input := &interfaces.FactoryConfig{
+	mapper := testConfigMapper{}
+	outputNet, err := mapper.Map(context.Background(), resourceUsageFactoryConfig())
+	if err != nil {
+		t.Fatalf("failed to map config: %v", err)
+	}
+	assertMappedResourcePlace(t, outputNet)
+	assertMappedResourceTransition(t, outputNet, "processor")
+}
+
+func resourceUsageFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{
 				Name: "task",
@@ -45,14 +54,6 @@ func TestConfigMapping_ResourceUsage(t *testing.T) {
 			},
 		},
 	}
-
-	mapper := testConfigMapper{}
-	outputNet, err := mapper.Map(context.Background(), input)
-	if err != nil {
-		t.Fatalf("failed to map config: %v", err)
-	}
-	assertMappedResourcePlace(t, outputNet)
-	assertMappedResourceTransition(t, outputNet, "processor")
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-resource-fixture review=2026-07-18 removal=split-shared-resource-fixture-before-next-resource-change
