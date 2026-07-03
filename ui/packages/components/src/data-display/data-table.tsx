@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { cn } from "../utilities/cn";
 import {
   Table,
   TableBody,
@@ -9,6 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "./table";
+
+export type DataTableState = "empty" | "error" | "loading" | "success";
 
 export interface DataTableColumn<Row> {
   cell: (row: Row) => ReactNode;
@@ -25,8 +28,50 @@ export interface DataTableProps<Row> {
   ariaLabel?: string;
   caption?: ReactNode;
   emptyMessage?: ReactNode;
+  errorMessage?: ReactNode;
+  loadingMessage?: ReactNode;
   rowClassName?: (row: Row) => string | undefined;
+  state?: DataTableState;
   tableClassName?: string;
+}
+
+function DataTablePlaceholderBar({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn("animate-pulse rounded-xl bg-af-overlay", className)}
+    />
+  );
+}
+
+function DataTableStatusRow({
+  children,
+  colSpan,
+  role,
+  ariaBusy,
+  ariaLive,
+  cellClassName,
+}: {
+  children: ReactNode;
+  colSpan: number;
+  role: "alert" | "status";
+  ariaBusy?: boolean;
+  ariaLive?: "assertive" | "polite";
+  cellClassName?: string;
+}) {
+  return (
+    <TableRow>
+      <TableCell className={cellClassName} colSpan={colSpan}>
+        <div
+          aria-busy={ariaBusy || undefined}
+          aria-live={ariaLive}
+          role={role}
+        >
+          {children}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
 }
 
 export function DataTable<Row>({
@@ -36,9 +81,70 @@ export function DataTable<Row>({
   ariaLabel,
   caption,
   emptyMessage,
+  errorMessage,
+  loadingMessage,
   rowClassName,
+  state = "success",
   tableClassName,
 }: DataTableProps<Row>) {
+  const renderBody = () => {
+    if (state === "loading") {
+      return (
+        <DataTableStatusRow
+          ariaBusy
+          ariaLive="polite"
+          colSpan={columns.length}
+          role="status"
+        >
+          <div className="grid gap-3 py-1">
+            {loadingMessage}
+            <div aria-hidden="true" className="grid gap-2">
+              <DataTablePlaceholderBar className="h-4 w-full max-w-48" />
+              <DataTablePlaceholderBar className="h-8 w-full" />
+              <DataTablePlaceholderBar className="h-4 w-full max-w-48" />
+            </div>
+          </div>
+        </DataTableStatusRow>
+      );
+    }
+
+    if (state === "error") {
+      return (
+        <DataTableStatusRow
+          ariaLive="assertive"
+          cellClassName="text-af-text-subtle"
+          colSpan={columns.length}
+          role="alert"
+        >
+          {errorMessage}
+        </DataTableStatusRow>
+      );
+    }
+
+    if (state === "empty" || (state === "success" && data.length === 0)) {
+      return (
+        <DataTableStatusRow
+          ariaLive="polite"
+          cellClassName="text-af-text-subtle"
+          colSpan={columns.length}
+          role="status"
+        >
+          {emptyMessage}
+        </DataTableStatusRow>
+      );
+    }
+
+    return data.map((row) => (
+      <TableRow className={rowClassName?.(row)} key={getRowKey(row)}>
+        {columns.map((column) => (
+          <TableCell className={column.cellClassName} key={column.id}>
+            {column.cell(row)}
+          </TableCell>
+        ))}
+      </TableRow>
+    ));
+  };
+
   return (
     <Table aria-label={ariaLabel} className={tableClassName}>
       {caption ? <TableCaption>{caption}</TableCaption> : null}
@@ -55,25 +161,7 @@ export function DataTable<Row>({
           ))}
         </TableRow>
       </TableHeader>
-      <TableBody>
-        {data.length > 0 ? (
-          data.map((row) => (
-            <TableRow className={rowClassName?.(row)} key={getRowKey(row)}>
-              {columns.map((column) => (
-                <TableCell className={column.cellClassName} key={column.id}>
-                  {column.cell(row)}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))
-        ) : (
-          <TableRow>
-            <TableCell className="text-af-text-subtle" colSpan={columns.length}>
-              {emptyMessage}
-            </TableCell>
-          </TableRow>
-        )}
-      </TableBody>
+      <TableBody>{renderBody()}</TableBody>
     </Table>
   );
 }

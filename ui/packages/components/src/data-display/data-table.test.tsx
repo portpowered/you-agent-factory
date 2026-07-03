@@ -111,5 +111,75 @@ describe("DataTable", () => {
     );
 
     expect(screen.getByText("No rows available")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("No rows available");
+  });
+
+  it("renders an explicit loading state with accessible status semantics", () => {
+    renderPackageComponent(
+      <DataTable
+        ariaLabel="Loading data table"
+        columns={sampleColumns}
+        data={sampleRows}
+        getRowKey={(row) => row.id}
+        loadingMessage="Loading table rows"
+        state="loading"
+      />,
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-busy", "true");
+    expect(status).toHaveTextContent("Loading table rows");
+    expect(screen.queryByRole("cell", { name: "Alpha" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Name" })).toBeInTheDocument();
+  });
+
+  it("renders an explicit empty state without relying on row data", () => {
+    renderPackageComponent(
+      <DataTable
+        ariaLabel="Empty data table"
+        columns={sampleColumns}
+        data={sampleRows}
+        emptyMessage="No matching rows"
+        getRowKey={(row) => row.id}
+        state="empty"
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("No matching rows");
+    expect(screen.queryByRole("cell", { name: "Alpha" })).not.toBeInTheDocument();
+  });
+
+  it("renders an explicit error state with alert semantics", () => {
+    renderPackageComponent(
+      <DataTable
+        ariaLabel="Error data table"
+        columns={sampleColumns}
+        data={sampleRows}
+        errorMessage="Unable to load table data"
+        getRowKey={(row) => row.id}
+        state="error"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Unable to load table data",
+    );
+    expect(screen.queryByRole("cell", { name: "Alpha" })).not.toBeInTheDocument();
+  });
+
+  it("renders semantic success state rows when data is present", () => {
+    renderPackageComponent(
+      <DataTable
+        ariaLabel="Success data table"
+        columns={sampleColumns}
+        data={sampleRows}
+        getRowKey={(row) => row.id}
+        state="success"
+      />,
+    );
+
+    expect(screen.getByRole("cell", { name: "Alpha" })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

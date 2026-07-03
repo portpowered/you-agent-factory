@@ -73,6 +73,7 @@ export const Success: Story = {
     columns: productColumns as DataTableColumn<unknown>[],
     data: productRows as unknown[],
     getRowKey: (row) => (row as ProductRow).id,
+    state: "success",
   },
   render: (args) => (
     <DataTable<ProductRow>
@@ -81,6 +82,70 @@ export const Success: Story = {
       columns={productColumns}
       data={productRows}
       getRowKey={(row) => row.id}
+      state="success"
+    />
+  ),
+};
+
+export const Loading: Story = {
+  args: {
+    ariaLabel: "Product catalog loading",
+    columns: productColumns as DataTableColumn<unknown>[],
+    data: productRows as unknown[],
+    getRowKey: (row) => (row as ProductRow).id,
+    loadingMessage: "Loading product catalog",
+    state: "loading",
+  },
+  render: (args) => (
+    <DataTable<ProductRow>
+      ariaLabel={args.ariaLabel}
+      columns={productColumns}
+      data={productRows}
+      getRowKey={(row) => row.id}
+      loadingMessage="Loading product catalog"
+      state="loading"
+    />
+  ),
+};
+
+export const Empty: Story = {
+  args: {
+    ariaLabel: "Product catalog empty",
+    columns: productColumns as DataTableColumn<unknown>[],
+    data: [] as unknown[],
+    emptyMessage: "No products match the current filters",
+    getRowKey: (row) => (row as ProductRow).id,
+    state: "empty",
+  },
+  render: (args) => (
+    <DataTable<ProductRow>
+      ariaLabel={args.ariaLabel}
+      columns={productColumns}
+      data={[]}
+      emptyMessage="No products match the current filters"
+      getRowKey={(row) => row.id}
+      state="empty"
+    />
+  ),
+};
+
+export const Error: Story = {
+  args: {
+    ariaLabel: "Product catalog error",
+    columns: productColumns as DataTableColumn<unknown>[],
+    data: productRows as unknown[],
+    errorMessage: "Unable to load product catalog data",
+    getRowKey: (row) => (row as ProductRow).id,
+    state: "error",
+  },
+  render: (args) => (
+    <DataTable<ProductRow>
+      ariaLabel={args.ariaLabel}
+      columns={productColumns}
+      data={productRows}
+      errorMessage="Unable to load product catalog data"
+      getRowKey={(row) => row.id}
+      state="error"
     />
   ),
 };

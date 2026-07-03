@@ -23,6 +23,18 @@ const storiesToVerify = [
     id: "data-display-datatable--success",
     text: "Signal Router",
   },
+  {
+    id: "data-display-datatable--loading",
+    text: "Loading product catalog",
+  },
+  {
+    id: "data-display-datatable--empty",
+    text: "No products match the current filters",
+  },
+  {
+    id: "data-display-datatable--error",
+    text: "Unable to load product catalog data",
+  },
 ];
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
