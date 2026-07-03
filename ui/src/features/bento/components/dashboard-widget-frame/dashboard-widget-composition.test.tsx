@@ -4,15 +4,15 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FactorySessionEventReplayDisclosure } from "../../factory-session-detail/components/event-replay/factory-session-event-replay-disclosure";
-import { ProviderSessionWidget } from "../../provider-session-detail/public";
-import { DEFAULT_DASHBOARD_LAYOUT } from "../hooks/dashboardLayoutSchema";
+import { FactorySessionEventReplayDisclosure } from "../../../factory-session-detail/components/event-replay/factory-session-event-replay-disclosure";
+import { ProviderSessionWidget } from "../../../provider-session-detail/public";
+import { DEFAULT_DASHBOARD_LAYOUT } from "../../hooks/dashboardLayoutSchema";
 import {
   canAddDashboardWidgetType,
   getDashboardWidgetPickerAvailability,
-} from "../lib/dashboard-widget-picker";
-import { AgentBentoCard, toCompactGridLayout } from "./agent-bento";
-import { DashboardWidgetFrame } from "./dashboard-widget-frame/dashboard-widget-frame";
+} from "../../lib/dashboard-widget-picker";
+import { AgentBentoCard, toCompactGridLayout } from "../agent-bento";
+import { DashboardWidgetFrame } from "./dashboard-widget-frame";
 
 const SELECTED_SESSION = {
   dispatchID: "dispatch-review-active",
