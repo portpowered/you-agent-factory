@@ -5,3 +5,16 @@ export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
 export { PackageText } from "./package-text";
 export type { PackageTextProps, PackageTextVariant } from "./package-text";
+
+export { Code, Heading, Label, Text } from "./typography";
+export type { CodeProps, HeadingProps, TextProps } from "./typography";
+
+export {
+  BODY_CODE_CLASS,
+  BODY_TEXT_CLASS,
+  PAGE_HEADING_CLASS,
+  SECTION_HEADING_CLASS,
+  SUPPORTING_CODE_CLASS,
+  SUPPORTING_LABEL_CLASS,
+  SUPPORTING_TEXT_CLASS,
+} from "./typography-roles";

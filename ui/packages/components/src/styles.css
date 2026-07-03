@@ -7,4 +7,6 @@
 @import "./styles/color-role-tokens.css";
 @import "./styles/text-color-role-tokens.css";
 @import "./styles/typography-role-tokens.css";
+@import "./styles/typography-role-utilities.css";
+@import "./styles/typography-roles.css";
 @import "./styles/layout-role-tokens.css";

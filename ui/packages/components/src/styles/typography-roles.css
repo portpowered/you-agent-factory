@@ -1,0 +1,33 @@
+/*
+ * Domain-free typography role classes for package consumers.
+ */
+
+@layer components {
+  .af-page-heading {
+    @apply font-display text-display-medium text-on-surface;
+  }
+
+  .af-section-heading {
+    @apply text-title-large uppercase text-on-surface;
+  }
+
+  .af-body-text {
+    @apply text-body-medium text-on-surface-variant;
+  }
+
+  .af-supporting-text {
+    @apply text-body-small text-on-surface-variant;
+  }
+
+  .af-supporting-label {
+    @apply text-label-medium uppercase text-on-surface-subtle;
+  }
+
+  .af-body-code {
+    @apply font-mono text-code-medium text-code;
+  }
+
+  .af-supporting-code {
+    @apply font-mono text-code-small text-code;
+  }
+}

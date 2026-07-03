@@ -8,6 +8,10 @@
  */
 
 @theme {
+  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "Consolas", monospace;
+
   /* --- Display (hero / high-emphasis numeric) --- */
   --text-display-large: clamp(2.25rem, 5vw, 3.75rem);
   --text-display-large--line-height: 1;

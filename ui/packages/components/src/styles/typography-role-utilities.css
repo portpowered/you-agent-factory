@@ -1,0 +1,73 @@
+/*
+ * Composed typography utilities pairing Material scale roles with text color roles.
+ */
+
+@layer components {
+  .type-display-large {
+    @apply font-display text-display-large tracking-[-0.04em];
+  }
+
+  .type-display-medium {
+    @apply font-display text-display-medium tracking-[-0.035em];
+  }
+
+  .type-display-small {
+    @apply font-display text-display-small tracking-[-0.03em];
+  }
+
+  .type-headline-large {
+    @apply font-sans text-headline-large font-semibold tracking-[-0.02em];
+  }
+
+  .type-headline-medium {
+    @apply font-sans text-headline-medium font-semibold;
+  }
+
+  .type-headline-small {
+    @apply font-sans text-headline-small font-semibold;
+  }
+
+  .type-title-large {
+    @apply font-sans text-title-large;
+  }
+
+  .type-title-medium {
+    @apply font-sans text-title-medium;
+  }
+
+  .type-title-small {
+    @apply font-sans text-title-small;
+  }
+
+  .type-body-large {
+    @apply font-sans text-body-large;
+  }
+
+  .type-body-medium {
+    @apply font-sans text-body-medium;
+  }
+
+  .type-body-small {
+    @apply font-sans text-body-small;
+  }
+
+  .type-label-large {
+    @apply font-sans text-label-large uppercase;
+  }
+
+  .type-label-medium {
+    @apply font-sans text-label-medium uppercase;
+  }
+
+  .type-label-small {
+    @apply font-sans text-label-small uppercase;
+  }
+
+  .type-code-medium {
+    @apply font-mono text-code-medium;
+  }
+
+  .type-code-small {
+    @apply font-mono text-code-small;
+  }
+}
