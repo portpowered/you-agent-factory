@@ -287,6 +287,9 @@ func TestOutputToken_CrossType_UsesWorkIDGenerator(t *testing.T) {
 	if token.Color.WorkTypeID != "target-type" {
 		t.Errorf("WorkTypeID = %q, want %q", token.Color.WorkTypeID, "target-type")
 	}
+	if token.Color.DataType != interfaces.DataTypeWork {
+		t.Errorf("DataType = %q, want %q", token.Color.DataType, interfaces.DataTypeWork)
+	}
 	if token.Color.ParentID != "work-source-type-1" {
 		t.Errorf("ParentID = %q, want %q", token.Color.ParentID, "work-source-type-1")
 	}
@@ -596,6 +599,191 @@ func TestOutputToken_Resource_DoesNotInventWorkChainingLineage(t *testing.T) {
 	}
 	if token.Color.TraceID != "" {
 		t.Fatalf("TraceID = %q, want empty for resource output", token.Color.TraceID)
+	}
+}
+
+func TestOutputToken_MixedWorkResource_PreservesWorkTraceLineageRegardlessOfInputOrder(t *testing.T) {
+	now := time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-time.Hour)
+	transformer := New(
+		map[string]*petri.Place{
+			"story:complete":       {ID: "story:complete", TypeID: "story", State: "complete"},
+			"agent-slot:available": {ID: "agent-slot:available", TypeID: "agent-slot", State: "available"},
+		},
+		map[string]*state.WorkType{
+			"story": {ID: "story"},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+	resource := interfaces.Token{
+		ID:        "agent-slot:resource:0",
+		PlaceID:   "agent-slot:available",
+		CreatedAt: createdAt,
+		EnteredAt: createdAt,
+		Color: interfaces.TokenColor{
+			WorkID:     "agent-slot:0",
+			WorkTypeID: "agent-slot",
+			DataType:   interfaces.DataTypeResource,
+		},
+	}
+	work := interfaces.Token{
+		ID:        "work-story-1",
+		PlaceID:   "story:in-review",
+		CreatedAt: createdAt,
+		EnteredAt: createdAt,
+		Color: interfaces.TokenColor{
+			WorkID:                   "work-story-1",
+			WorkTypeID:               "story",
+			TraceID:                  "trace-batch-idea-001",
+			CurrentChainingTraceID:   "trace-batch-idea-001",
+			PreviousChainingTraceIDs: []string{"trace-batch-idea-001"},
+			ChainingTraceDepth:       3,
+		},
+	}
+	arcs := []petri.Arc{
+		{ID: "work-out", PlaceID: "story:complete", Direction: petri.ArcOutput},
+		{ID: "slot-out", PlaceID: "agent-slot:available", Direction: petri.ArcOutput},
+	}
+	baseHistory := interfaces.TokenHistory{
+		TotalVisits:         map[string]int{},
+		ConsecutiveFailures: map[string]int{},
+		PlaceVisits:         map[string]int{},
+	}
+
+	orderings := []struct {
+		name           string
+		consumed       []interfaces.Token
+		inputColors    []interfaces.TokenColor
+		resourceIndex  int
+	}{
+		{
+			name:          "resource-first",
+			consumed:      []interfaces.Token{resource, work},
+			inputColors:   []interfaces.TokenColor{resource.Color, work.Color},
+			resourceIndex: 0,
+		},
+		{
+			name:          "work-first",
+			consumed:      []interfaces.Token{work, resource},
+			inputColors:   []interfaces.TokenColor{work.Color, resource.Color},
+			resourceIndex: 0,
+		},
+	}
+
+	for _, ordering := range orderings {
+		t.Run(ordering.name, func(t *testing.T) {
+			workToken, err := transformer.OutputToken(OutputTokenInput{
+				ArcIndex:       0,
+				Arcs:           arcs,
+				ConsumedTokens: ordering.consumed,
+				InputColors:    ordering.inputColors,
+				Outcome:        interfaces.OutcomeAccepted,
+				Now:            now,
+				History:        baseHistory,
+			})
+			if err != nil {
+				t.Fatalf("work OutputToken() error = %v", err)
+			}
+			if workToken.Color.DataType != interfaces.DataTypeWork {
+				t.Fatalf("work DataType = %q, want %q", workToken.Color.DataType, interfaces.DataTypeWork)
+			}
+			if workToken.Color.TraceID != "trace-batch-idea-001" {
+				t.Fatalf("work TraceID = %q, want trace-batch-idea-001", workToken.Color.TraceID)
+			}
+			if workToken.Color.CurrentChainingTraceID != "trace-batch-idea-001" {
+				t.Fatalf("work CurrentChainingTraceID = %q, want trace-batch-idea-001", workToken.Color.CurrentChainingTraceID)
+			}
+			if workToken.Color.WorkID != "work-story-1" {
+				t.Fatalf("work WorkID = %q, want work-story-1", workToken.Color.WorkID)
+			}
+
+			resourceToken, err := transformer.OutputToken(OutputTokenInput{
+				ArcIndex:           1,
+				Arcs:               arcs,
+				ConsumedTokens:     ordering.consumed,
+				InputColors:        ordering.inputColors,
+				ResourceTokenIndex: ordering.resourceIndex,
+				Outcome:            interfaces.OutcomeAccepted,
+				Now:                now,
+				History:            baseHistory,
+			})
+			if err != nil {
+				t.Fatalf("resource OutputToken() error = %v", err)
+			}
+			if resourceToken.ID != resource.ID {
+				t.Fatalf("resource ID = %q, want %q", resourceToken.ID, resource.ID)
+			}
+			if resourceToken.Color.DataType != interfaces.DataTypeResource {
+				t.Fatalf("resource DataType = %q, want %q", resourceToken.Color.DataType, interfaces.DataTypeResource)
+			}
+			if resourceToken.Color.WorkID != "agent-slot:0" {
+				t.Fatalf("resource WorkID = %q, want agent-slot:0", resourceToken.Color.WorkID)
+			}
+			if resourceToken.Color.TraceID != "" {
+				t.Fatalf("resource TraceID = %q, want empty", resourceToken.Color.TraceID)
+			}
+			if resourceToken.Color.CurrentChainingTraceID != "" {
+				t.Fatalf("resource CurrentChainingTraceID = %q, want empty", resourceToken.Color.CurrentChainingTraceID)
+			}
+		})
+	}
+}
+
+func TestOutputToken_CrossTypeWithResource_PreservesWorkTraceRegardlessOfInputOrder(t *testing.T) {
+	now := time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)
+	transformer := New(
+		map[string]*petri.Place{
+			"prd:init": {ID: "prd:init", TypeID: "prd", State: "init"},
+		},
+		map[string]*state.WorkType{
+			"idea": {ID: "idea"},
+			"prd":  {ID: "prd"},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+	resource := interfaces.TokenColor{
+		WorkID:     "agent-slot:0",
+		WorkTypeID: "agent-slot",
+		DataType:   interfaces.DataTypeResource,
+	}
+	work := interfaces.TokenColor{
+		WorkID:     "work-idea-1",
+		WorkTypeID: "idea",
+		TraceID:    "trace-batch-idea-002",
+	}
+	orderings := [][]interfaces.TokenColor{
+		{resource, work},
+		{work, resource},
+	}
+
+	for i, inputColors := range orderings {
+		token, err := transformer.OutputToken(OutputTokenInput{
+			ArcIndex:    0,
+			Arcs:        []petri.Arc{{PlaceID: "prd:init", Direction: petri.ArcOutput}},
+			InputColors: inputColors,
+			Outcome:     interfaces.OutcomeAccepted,
+			Now:         now,
+			History: interfaces.TokenHistory{
+				TotalVisits:         map[string]int{},
+				ConsecutiveFailures: map[string]int{},
+				PlaceVisits:         map[string]int{},
+			},
+		})
+		if err != nil {
+			t.Fatalf("ordering %d OutputToken() error = %v", i, err)
+		}
+		if token.Color.DataType != interfaces.DataTypeWork {
+			t.Fatalf("ordering %d DataType = %q, want work", i, token.Color.DataType)
+		}
+		if token.Color.TraceID != "trace-batch-idea-002" {
+			t.Fatalf("ordering %d TraceID = %q, want trace-batch-idea-002", i, token.Color.TraceID)
+		}
+		if token.Color.WorkTypeID != "prd" {
+			t.Fatalf("ordering %d WorkTypeID = %q, want prd", i, token.Color.WorkTypeID)
+		}
+		if token.Color.ParentID != "work-idea-1" {
+			t.Fatalf("ordering %d ParentID = %q, want work-idea-1", i, token.Color.ParentID)
+		}
 	}
 }
 

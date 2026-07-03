@@ -399,7 +399,9 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 	}
 
 	if matched := findMatchingInput(inputColors, targetTypeID); matched != nil {
-		return interfaces.CloneTokenColor(*matched), nil
+		color := interfaces.CloneTokenColor(*matched)
+		ensureWorkOutputDataType(&color, targetTypeID, t.workTypes)
+		return color, nil
 	}
 
 	first := firstNonResourceInput(inputColors)
@@ -415,7 +417,7 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 		parentID = first.WorkID
 	}
 
-	return interfaces.TokenColor{
+	color := interfaces.TokenColor{
 		WorkTypeID:               targetTypeID,
 		WorkID:                   t.nextWorkID(targetTypeID),
 		Name:                     name,
@@ -425,7 +427,18 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 		PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokenColors(inputColors),
 		TraceID:                  traceID,
 		ParentID:                 parentID,
-	}, nil
+	}
+	ensureWorkOutputDataType(&color, targetTypeID, t.workTypes)
+	return color, nil
+}
+
+func ensureWorkOutputDataType(color *interfaces.TokenColor, targetTypeID string, workTypes map[string]*state.WorkType) {
+	if color == nil || targetTypeID == "" || color.DataType == interfaces.DataTypeResource {
+		return
+	}
+	if _, isWorkType := workTypes[targetTypeID]; isWorkType {
+		color.DataType = interfaces.DataTypeWork
+	}
 }
 
 func (t *Transformer) nextWorkID(workTypeID string) string {
