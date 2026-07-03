@@ -2,24 +2,31 @@ import { BaseEdge, type EdgeProps, getBezierPath } from "@xyflow/react";
 import { useEffect, useRef, useState } from "react";
 
 import {
-  buildFactoryGraphEdgePathThroughWaypoints,
-  type FactoryGraphEdgeWaypoint,
-} from "../lib/factory-graph-edge-path";
+  buildGraphEdgePathThroughWaypoints,
+  type GraphEdgeWaypoint,
+} from "./graph-edge-path";
 
-type FactoryGraphEdgeData = {
+export type GraphEdgeData = {
   alwaysShowLabel?: boolean;
   label?: string;
-  waypoints?: FactoryGraphEdgeWaypoint[];
+  waypoints?: GraphEdgeWaypoint[];
 };
 
-export const FACTORY_GRAPH_EDGE_TYPES = {
-  factoryEditorEdge: FactoryGraphEdge,
+export const GRAPH_EDGE_TYPES = {
+  graphEdge: GraphEdge,
 };
 
-function FactoryGraphEdge({
+export type GraphEdgeProps = EdgeProps & {
+  edgeClassName?: string;
+  labelClassName?: string;
+};
+
+export function GraphEdge({
   data,
+  edgeClassName = "graph-edge",
   id,
   interactionWidth,
+  labelClassName = "graph-edge-label pointer-events-none fill-on-surface-subtle text-[11px] font-semibold",
   markerEnd,
   selected,
   sourcePosition,
@@ -29,11 +36,11 @@ function FactoryGraphEdge({
   targetPosition,
   targetX,
   targetY,
-}: EdgeProps) {
+}: GraphEdgeProps) {
   const edgeRef = useRef<SVGGElement | null>(null);
   const [inspected, setInspected] = useState(false);
-  const edgeData = (data ?? {}) as FactoryGraphEdgeData;
-  const routedPath = buildFactoryGraphEdgePathThroughWaypoints({
+  const edgeData = (data ?? {}) as GraphEdgeData;
+  const routedPath = buildGraphEdgePathThroughWaypoints({
     sourcePosition,
     sourceX,
     sourceY,
@@ -91,7 +98,7 @@ function FactoryGraphEdge({
 
   return (
     <g
-      className="agent-factory-editor-edge"
+      className={edgeClassName}
       data-edge-id={id}
       data-label-visible={revealLabel ? "true" : "false"}
       ref={edgeRef}
@@ -104,7 +111,7 @@ function FactoryGraphEdge({
       />
       {edgeData.label ? (
         <text
-          className="agent-factory-editor-edge-label pointer-events-none fill-on-surface-subtle text-[11px] font-semibold"
+          className={labelClassName}
           style={{
             paintOrder: "stroke",
             stroke: "var(--color-surface)",

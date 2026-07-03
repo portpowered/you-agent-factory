@@ -18,10 +18,9 @@ const packageStylesDir = path.resolve(
 const layoutTokensPath = path.join(packageStylesDir, "layout-role-tokens.css");
 const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
 const dialogSourcePath = path.join(
-  stylesDir,
+  packageStylesDir,
   "..",
-  "components",
-  "ui",
+  "overlays",
   "dialog.tsx",
 );
 const layoutPrimitivesPath = path.join(
@@ -79,8 +78,8 @@ describe("layout-role-tokens (US-007)", () => {
   });
 
   it("wires shared Dialog chrome to layout spacing roles", () => {
-    expect(dialogSource).toContain("LAYOUT_DIALOG_CONTENT_SHELL_CLASS");
-    expect(dialogSource).toContain("LAYOUT_FORM_GROUP_CLASS");
+    expect(dialogSource).toContain("OVERLAY_DIALOG_CONTENT_SHELL_CLASS");
+    expect(dialogSource).toContain("OVERLAY_FORM_GROUP_CLASS");
     expect(dialogSource).toContain("gap-layout-element");
   });
 });

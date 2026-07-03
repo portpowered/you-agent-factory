@@ -36,6 +36,7 @@
     "storybook:factory-graph-visual-group-save-check": "bun run build-storybook && node scripts/run-factory-graph-visual-group-save-browser-check.mjs",
     "storybook:responsive-check": "node scripts/run-storybook-responsive-check.mjs",
     "storybook:serve-static": "http-server storybook-static -p 6008 -a 127.0.0.1 -s",
+    "verify:dashboard-widget-bento-layout": "node scripts/verify-dashboard-widget-bento-layout.mjs",
     "storybook:wait-for-index": "wait-on --timeout 30000 http://127.0.0.1:6008/index.json",
     "storybook:test-runner:ci": "vitest run --config vitest.storybook.config.ts --project=storybook",
     "test:coverage": "node scripts/run-ui-coverage-with-timings.mjs",

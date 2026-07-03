@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
-import { DetailCopy } from "../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { readFactorySessionIDSearchParam } from "../lib/search-param/factory-session-search-param";
 import { getFactorySessionWidgetMessages } from "../messages/factory-session-widget";
@@ -37,7 +39,7 @@ export function FactorySessionWidget({
           sessionID={selectedSessionID}
         />
       ) : (
-        <DetailCopy>{messages.emptyState}</DetailCopy>
+        <WidgetDetailCopy>{messages.emptyState}</WidgetDetailCopy>
       )}
     </DashboardWidgetFrame>
   );

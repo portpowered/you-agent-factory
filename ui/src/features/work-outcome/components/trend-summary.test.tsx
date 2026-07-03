@@ -1,5 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
+import { WIDGET_FRAME_SUBTITLE_CLASS } from "@you-agent-factory/components/recipes";
+
 import { TrendSummaryGrid, TrendSummaryMetric } from "./trend-summary";
 
 describe("TrendSummary", () => {
@@ -20,6 +22,6 @@ describe("TrendSummary", () => {
     expect(metric?.className).toContain("bg-surface-container-low");
     expect(label.tagName).toBe("DT");
     expect(value.tagName).toBe("DD");
-    expect(value.className).toContain("af-dashboard-widget-subtitle");
+    expect(value.className).toContain(WIDGET_FRAME_SUBTITLE_CLASS);
   });
 });

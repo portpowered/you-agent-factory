@@ -137,6 +137,17 @@ directory:
 - [`docs/`](./docs/)
 - [Button primitives](./docs/button.md) — semantic variants, `ButtonLink`
   guidance, loading behavior, and icon-only accessibility labels.
+- [`docs/graphs.md`](./docs/graphs.md) — graph node shell, node button, edge,
+  viewport surface, handle badge, edge path helpers, React Flow boundary, and
+  Storybook example map
+- [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
+- [Skeleton loading placeholders](./docs/feedback-skeleton.md)
+- [CodePanel long-content containment](./docs/data-display-code-panel.md)
+- [Form input primitives](./docs/forms-input-primitives.md)
+- [Form select primitives](./docs/forms-select-primitives.md) — `Select`,
+  `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+- [Overlay and disclosure primitives](./docs/overlays.md)
+- [Widget frame and layout recipes](./docs/widget-frame-recipes.md)
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site

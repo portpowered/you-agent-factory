@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+
+import { WIDGET_FRAME_BODY_TEXT_CLASS } from "@you-agent-factory/components/recipes";
 import { inferenceAttempt } from "../../../base/components/detail-card/detail-card-test-helpers";
 import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import {
@@ -73,7 +75,7 @@ describe("inference attempt body sections", () => {
       screen.getByText(
         "Provider response text is not available for this inference attempt.",
       ).className,
-    ).toContain("af-dashboard-body-text");
+    ).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
   });
 
   it("renders awaiting response copy for pending attempts", () => {

@@ -323,7 +323,7 @@ describe("story assertions", () => {
       evaluate: vi
         .fn()
         .mockResolvedValue(
-          "rounded-xl border border-dashed border-af-border-strong bg-af-surface-subtle",
+          "rounded-xl border border-dashed border-outline-variant bg-surface-container-low",
         ),
       isVisible: vi.fn().mockResolvedValue(true),
     };

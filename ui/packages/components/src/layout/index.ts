@@ -2,3 +2,6 @@
 export const COMPONENTS_CATEGORY = "layout" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
+
+export { SurfacePanel, surfacePanelVariants } from "./surface-panel";
+export type { SurfacePanelProps } from "./surface-panel";

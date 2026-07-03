@@ -2,25 +2,8 @@ export const approvedButtonUsageAllowlist = [
   {
     buttonVariantsCount: 2,
     buttonVariantsReason:
-      "Shared dialog owner may compose buttonVariants for its structural close and action controls.",
-    rawButtonFingerprints: ["aria-label={resolvedCloseLabel}"],
-    rawButtonReason:
-      "Shared dialog owner keeps one raw semantic close trigger around the action rows.",
-    relativeFilePath: "src/components/ui/dialog.tsx",
-  },
-  {
-    buttonVariantsCount: 2,
-    buttonVariantsReason:
       "Shared calendar owner may compose buttonVariants for calendar navigation controls.",
     relativeFilePath: "src/components/ui/calendar.tsx",
-  },
-  {
-    rawButtonFingerprints: [
-      "className={cn(GRAPH_NODE_BUTTON_BASE_CLASS, className)}",
-    ],
-    rawButtonReason:
-      "Graph nodes stay behind the dedicated GraphNodeButton semantic wrapper owner.",
-    relativeFilePath: "src/features/graphs/components/graph-node-button.tsx",
   },
   {
     rawButtonFingerprints: [

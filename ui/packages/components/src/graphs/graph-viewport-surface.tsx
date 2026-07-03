@@ -1,8 +1,8 @@
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 
-import { cn } from "../../../lib/cn";
+import { cn } from "../utilities/cn";
 
-interface GraphViewportSurfaceProps extends HTMLAttributes<HTMLElement> {
+export interface GraphViewportSurfaceProps extends HTMLAttributes<HTMLElement> {
   children: ReactNode;
 }
 
@@ -13,10 +13,10 @@ export const GraphViewportSurface = forwardRef<
   return (
     <section
       className={cn(
-        "relative h-full max-h-full overflow-hidden rounded-3xl border shadow-none transition-colors",
+        "relative min-h-0 overflow-hidden rounded-3xl border shadow-none transition-colors",
         className,
       )}
-      data-dashboard-graph-frame="true"
+      data-graph-viewport-surface="true"
       ref={ref}
       role={role ?? "region"}
       {...props}

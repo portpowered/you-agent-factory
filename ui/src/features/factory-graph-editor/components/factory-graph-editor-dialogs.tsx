@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -11,7 +10,8 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "../../../components/ui";
+} from "@you-agent-factory/components";
+import { Button } from "../../../components/ui";
 import { FactoryGraphEditorMenuHeader } from "./menu/factory-graph-editor-menu-header";
 
 export function FactoryGraphEditorActionPopover({

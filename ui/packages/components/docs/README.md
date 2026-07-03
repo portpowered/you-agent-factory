@@ -19,13 +19,43 @@ those surfaces are documented.
 This docs shell is plain markdown kept under version control. Host applications
 read it directly from the package; no docs-site implementation is required.
 
+## Documented components
+
+- [Button primitives](./button.md) — `Button`, `ButtonLink`, `IconButtonShell`,
+  semantic variants, loading behavior, and icon-only accessibility labels.
+- [Form select primitives](./forms-select-primitives.md) — `Select`,
+  `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+- [Overlay and disclosure primitives](./overlays.md) — Dialog, Popover,
+  Collapsible, and ScrollArea accessibility, labeling, focus, and overflow
+  guidance.
+
 ## Getting started
 
 See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
 
-## Documented components
+## Form input primitives
 
-- [Button primitives](./button.md) — `Button`, `ButtonLink`, `IconButtonShell`,
-  semantic variants, loading behavior, and icon-only accessibility labels.
+- [Form input primitives](./forms-input-primitives.md) — import paths, controlled
+  versus uncontrolled usage, host accessibility responsibilities, and
+  presentation-only boundaries for text input, textarea, checkbox, and file input.
+
+## Feedback and code display
+
+- [AlertPanel](./feedback-alert-panel.md) — semantic feedback variants, token
+  mapping, accessibility, and Storybook references
+- [Skeleton](./feedback-skeleton.md) — loading placeholders, busy regions, and
+  empty vs loading feedback
+- [CodePanel](./data-display-code-panel.md) — long-line and long-block
+  containment, scrolling, and responsive layout expectations
+
+## Widget layout recipes
+
+- [Graph primitives](./graphs.md) — `@you-agent-factory/components/graphs`
+  contracts, React Flow boundary, host responsibilities, and Storybook example
+  map
+- [Widget frame and layout recipes](./widget-frame-recipes.md) — import paths,
+  state ownership, accessibility, Storybook references, and source-copy guidance
+  for domain-free framed panels.
+

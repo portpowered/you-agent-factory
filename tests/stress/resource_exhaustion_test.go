@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -373,11 +374,93 @@ func TestResourceExhaustionNoTokenLoss(t *testing.T) {
 	}
 }
 
-// TestResourceExhaustionWithFailure validates that resource tokens are
-// properly returned when work fails (via failure arcs) and that remaining
-// items can still proceed after a failure.
+// TestResourceExhaustionWithFailure validates that consumed reusable resources
+// are returned when work fails after acquisition and that remaining items can
+// still complete once the resource is released by the runtime failure path.
 func TestResourceExhaustionWithFailure(t *testing.T) {
-	t.Skip("pending migration: multiple failure arcs (task:failed + resource:available) not expressible in single on_failure config")
+	if testing.Short() {
+		t.Skip("skipping stress test in short mode")
+	}
+
+	const (
+		numItems       = 5
+		expectedFailed = 1
+		gpuCapacity    = 1
+	)
+
+	// Config: task init → complete while consuming a capacity-limited gpu resource.
+	// OnFailure routes failed work to task:failed; consumed gpu tokens are returned
+	// automatically by the transitioner failure path.
+	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
+			{Name: "init", Type: interfaces.StateTypeInitial},
+			{Name: "complete", Type: interfaces.StateTypeTerminal},
+			{Name: "failed", Type: interfaces.StateTypeFailed},
+		}}},
+		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+		Workers:   []interfaces.WorkerConfig{{Name: "processor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "process", WorkerTypeName: "processor",
+			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
+			Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+		}},
+	})
+	h := testutil.NewServiceTestHarness(t, dir)
+
+	processResults := make([]interfaces.WorkResult, numItems)
+	processResults[0] = interfaces.WorkResult{Outcome: interfaces.OutcomeFailed, Error: "simulated processing failure"}
+	for i := 1; i < numItems; i++ {
+		processResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+	}
+	h.MockWorker("processor", processResults...)
+
+	queueManyItems(t, h, "task", numItems)
+
+	h.RunUntilComplete(t, 30*time.Second)
+
+	snap := h.Marking()
+
+	failedCount := len(snap.TokensInPlace("task:failed"))
+	if failedCount != expectedFailed {
+		t.Errorf("expected %d failed, got %d", expectedFailed, failedCount)
+	}
+
+	expectedComplete := numItems - expectedFailed
+	completeCount := len(snap.TokensInPlace("task:complete"))
+	if completeCount != expectedComplete {
+		t.Errorf("expected %d complete, got %d", expectedComplete, completeCount)
+	}
+
+	h.Assert().
+		HasNoTokenInPlace("task:init")
+
+	gpuTokens := snap.TokensInPlace("gpu:available")
+	if len(gpuTokens) != gpuCapacity {
+		t.Errorf("expected %d GPU token(s) in gpu:available, got %d", gpuCapacity, len(gpuTokens))
+	}
+
+	expectedTotal := numItems + gpuCapacity
+	if len(snap.Tokens) != expectedTotal {
+		t.Errorf("expected %d total tokens, got %d", expectedTotal, len(snap.Tokens))
+	}
+
+	tokenIDs := make(map[string]bool, len(snap.Tokens))
+	for _, tok := range snap.Tokens {
+		if tokenIDs[tok.ID] {
+			t.Errorf("duplicate token ID: %s", tok.ID)
+		}
+		tokenIDs[tok.ID] = true
+	}
+
+	failedWorkIDs := workTokenIDsInPlace(snap, "task:failed")
+	completeWorkIDs := workTokenIDsInPlace(snap, "task:complete")
+	for workID := range failedWorkIDs {
+		if completeWorkIDs[workID] {
+			t.Errorf("work %q appears in both task:failed and task:complete", workID)
+		}
+	}
 }
 
 // TestResourceExhaustionTimeout validates no infinite loops or deadlocks
@@ -426,6 +509,18 @@ func TestResourceExhaustionTimeout(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("resource exhaustion test did not complete within 10s — possible deadlock")
 	}
+}
+
+// workTokenIDsInPlace returns work IDs for non-resource tokens in the given place.
+func workTokenIDsInPlace(snap *petri.MarkingSnapshot, placeID string) map[string]bool {
+	ids := make(map[string]bool)
+	for _, tok := range snap.TokensInPlace(placeID) {
+		if tok.Color.DataType == interfaces.DataTypeResource || tok.Color.WorkID == "" {
+			continue
+		}
+		ids[tok.Color.WorkID] = true
+	}
+	return ids
 }
 
 // --- Helper executors ---

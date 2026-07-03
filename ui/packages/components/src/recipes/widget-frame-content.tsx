@@ -1,13 +1,15 @@
 import type { ElementType, HTMLAttributes, ReactNode } from "react";
 
-import { cn } from "../../lib/cn";
+import { cn } from "../utilities/cn";
+
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_WIDGET_SUBTITLE_CLASS,
-} from "./dashboard-typography";
-const WIDGET_SUBTITLE_CLASS = cn("mt-0", DASHBOARD_WIDGET_SUBTITLE_CLASS);
-const DETAIL_COPY_CLASS = cn("m-0", DASHBOARD_BODY_TEXT_CLASS);
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+  WIDGET_FRAME_SUBTITLE_CLASS,
+} from "./widget-frame-typography";
+
+const WIDGET_SUBTITLE_CLASS = cn("mt-0", WIDGET_FRAME_SUBTITLE_CLASS);
+const DETAIL_COPY_CLASS = cn("m-0", WIDGET_FRAME_BODY_TEXT_CLASS);
 const EMPTY_STATE_CLASS =
   "grid min-h-60 items-start gap-1.5 rounded-2xl border border-dashed border-outline-variant bg-surface-container-low p-5 [&_h3]:m-0";
 const EMPTY_STATE_COMPACT_CLASS = "min-h-0";
@@ -30,11 +32,16 @@ export function WidgetSubtitle({
   );
 }
 
-export interface DetailCopyProps extends HTMLAttributes<HTMLParagraphElement> {
+export interface WidgetDetailCopyProps
+  extends HTMLAttributes<HTMLParagraphElement> {
   children: ReactNode;
 }
 
-export function DetailCopy({ children, className, ...props }: DetailCopyProps) {
+export function WidgetDetailCopy({
+  children,
+  className,
+  ...props
+}: WidgetDetailCopyProps) {
   return (
     <p className={cn(DETAIL_COPY_CLASS, className)} {...props}>
       {children}
@@ -42,18 +49,17 @@ export function DetailCopy({ children, className, ...props }: DetailCopyProps) {
   );
 }
 
-export interface DashboardEmptyStateProps
-  extends HTMLAttributes<HTMLDivElement> {
+export interface WidgetEmptyStateProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   compact?: boolean;
 }
 
-export function DashboardEmptyState({
+export function WidgetEmptyState({
   children,
   className,
   compact = false,
   ...props
-}: DashboardEmptyStateProps) {
+}: WidgetEmptyStateProps) {
   return (
     <div
       className={cn(
@@ -68,21 +74,21 @@ export function DashboardEmptyState({
   );
 }
 
-export interface DashboardEmptyStateTitleProps
+export interface WidgetEmptyStateTitleProps
   extends HTMLAttributes<HTMLElement> {
   as?: ElementType;
   children: ReactNode;
 }
 
-export function DashboardEmptyStateTitle({
+export function WidgetEmptyStateTitle({
   as: Component = "h3",
   children,
   className,
   ...props
-}: DashboardEmptyStateTitleProps) {
+}: WidgetEmptyStateTitleProps) {
   return (
     <Component
-      className={cn(DASHBOARD_SECTION_HEADING_CLASS, className)}
+      className={cn(WIDGET_FRAME_SECTION_HEADING_CLASS, className)}
       {...props}
     >
       {children}
@@ -90,18 +96,18 @@ export function DashboardEmptyStateTitle({
   );
 }
 
-export interface DashboardEmptyStateTextProps
+export interface WidgetEmptyStateTextProps
   extends HTMLAttributes<HTMLParagraphElement> {
   children: ReactNode;
 }
 
-export function DashboardEmptyStateText({
+export function WidgetEmptyStateText({
   children,
   className,
   ...props
-}: DashboardEmptyStateTextProps) {
+}: WidgetEmptyStateTextProps) {
   return (
-    <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS, className)} {...props}>
+    <p className={cn("m-0", WIDGET_FRAME_BODY_TEXT_CLASS, className)} {...props}>
       {children}
     </p>
   );

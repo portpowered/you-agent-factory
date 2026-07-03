@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -204,10 +205,11 @@ func executeDispatchSynchronously(
 			result interfaces.WorkResult
 			err    error
 		)
+		start := time.Now()
 		func() {
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					result = workers.PanicAsFailedResult(dispatch, recovered, 0)
+					result = workers.PanicAsFailedResult(dispatch, recovered, time.Since(start))
 					err = nil
 				}
 			}()
