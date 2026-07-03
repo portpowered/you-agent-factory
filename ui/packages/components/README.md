@@ -135,6 +135,9 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [`docs/graphs.md`](./docs/graphs.md) — graph node shell, node button, edge,
+  viewport surface, handle badge, edge path helpers, React Flow boundary, and
+  Storybook example map
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site
