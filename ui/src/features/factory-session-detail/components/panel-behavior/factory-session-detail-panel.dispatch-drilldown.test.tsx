@@ -2,12 +2,12 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
+import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   BASELINE_DISPATCH_ID,
   BASELINE_SESSION_ID,
   mockJavaScriptSessionBetaFetchWithDeferredDispatch,
-} from "./test-support/factory-session-detail-panel.baseline-fixtures";
+} from "../test-support/factory-session-detail-panel.baseline-fixtures";
 import {
   createBaselineDispatchDetailPayload,
   DISPATCH_API_ERROR_ID,
@@ -17,11 +17,11 @@ import {
   mockDispatchApiErrorFetch,
   mockDispatchNotFoundFetch,
   mockDispatchReplacementFetch,
-} from "./test-support/factory-session-detail-panel.dispatch-drilldown-fixtures";
+} from "../test-support/factory-session-detail-panel.dispatch-drilldown-fixtures";
 import {
   jsonResponse,
   renderWithQueryClient,
-} from "./test-support/factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel dispatch drilldown loading and unavailable states", () => {
   beforeEach(() => {

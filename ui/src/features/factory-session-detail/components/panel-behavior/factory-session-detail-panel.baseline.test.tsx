@@ -1,14 +1,14 @@
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
+import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   BASELINE_DISPATCH_ID,
   BASELINE_SESSION_ID,
   mockJavaScriptSessionBetaFetch,
   mockPendingSessionFetch,
-} from "./test-support/factory-session-detail-panel.baseline-fixtures";
-import { renderWithQueryClient } from "./test-support/factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.baseline-fixtures";
+import { renderWithQueryClient } from "../test-support/factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel baseline loading and success", () => {
   beforeEach(() => {

@@ -1,8 +1,8 @@
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
-import { BASELINE_SESSION_ID } from "./test-support/factory-session-detail-panel.baseline-fixtures";
+import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
+import { BASELINE_SESSION_ID } from "../test-support/factory-session-detail-panel.baseline-fixtures";
 import {
   mockPausedLifecycleFetch,
   mockPetriRuntimeDetailFetch,
@@ -11,8 +11,8 @@ import {
   mockSessionNotFoundFetch,
   NOT_FOUND_SESSION_ID,
   PETRI_SESSION_ID,
-} from "./test-support/factory-session-detail-panel.non-success-lifecycle-fixtures";
-import { renderWithQueryClient } from "./test-support/factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.non-success-lifecycle-fixtures";
+import { renderWithQueryClient } from "../test-support/factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel non-success session and lifecycle states", () => {
   beforeEach(() => {

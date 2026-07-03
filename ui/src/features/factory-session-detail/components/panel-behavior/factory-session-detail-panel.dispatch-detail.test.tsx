@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
+import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   DISPATCH_DETAIL_SESSION_ID,
   DISPATCH_ERROR_ID,
@@ -15,8 +15,8 @@ import {
   mockSuccessfulDispatchDetailFetch,
   mockWarningDispatchDetailFetch,
   PRIMARY_PROVIDER_SESSION,
-} from "./test-support/factory-session-detail-panel.dispatch-detail-fixtures";
-import { renderWithQueryClient } from "./test-support/factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.dispatch-detail-fixtures";
+import { renderWithQueryClient } from "../test-support/factory-session-detail-panel.test-helpers";
 
 function expectSummaryState() {
   expect(screen.getAllByText("Execution mode: live").length).toBeGreaterThan(0);
