@@ -135,6 +135,8 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [Table primitives and DataTable](./docs/table-data-table.md)
+- [Widget frame and layout recipes](./docs/widget-frame-recipes.md)
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site

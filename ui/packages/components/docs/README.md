@@ -24,3 +24,9 @@ read it directly from the package; no docs-site implementation is required.
 See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
+
+## Component docs
+
+- [Table primitives and DataTable](./table-data-table.md) — generic row contract,
+  explicit data states, density and responsive layout helpers, accessibility,
+  and Storybook references for domain-free tabular data display.
