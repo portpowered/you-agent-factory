@@ -42,8 +42,13 @@ export type {
 } from "./widget-frame-states";
 export {
   WIDGET_FRAME_MIN_WIDTH_CLASS,
+  WIDGET_FRAME_OVERFLOW_TOLERANCE_PX,
+  WIDGET_FRAME_RESPONSIVE_SHELL_CLASS,
+  WIDGET_FRAME_STORY_SHELL_DATA_ATTR,
   WIDGET_FRAME_WIDE_BODY_CLASS,
   widgetFrameDetailCardClass,
+  widgetFrameHasNoHorizontalOverflow,
+  widgetFrameStoryShellStyle,
 } from "./widget-frame-layout";
 export { WidgetFrame } from "./widget-frame";
 export type { WidgetFrameProps } from "./widget-frame";

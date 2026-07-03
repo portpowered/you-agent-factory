@@ -16,6 +16,8 @@ import {
   WidgetSubtitle,
   WidgetSuccessState,
   widgetFrameDetailCardClass,
+  widgetFrameHasNoHorizontalOverflow,
+  widgetFrameStoryShellStyle,
 } from "@you-agent-factory/components";
 import * as recipes from "@you-agent-factory/components/recipes";
 
@@ -34,6 +36,8 @@ describe("@you-agent-factory/components widget frame exports", () => {
     expect(WidgetSuccessState).toBeTypeOf("function");
     expect(WidgetFrameDisclosureTrigger).toBeTypeOf("object");
     expect(widgetFrameDetailCardClass).toContain("[&_dl]:grid");
+    expect(widgetFrameStoryShellStyle("360px").style.maxWidth).toBe("360px");
+    expect(widgetFrameHasNoHorizontalOverflow).toBeTypeOf("function");
   });
 
   it("imports the same contracts from the recipes category entrypoint", () => {
