@@ -48,6 +48,10 @@ const sharedReactAliases = [
     find: "@radix-ui/react-select",
     replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
   },
+  {
+    find: "@xyflow/react",
+    replacement: path.join(uiRoot, "node_modules/@xyflow/react"),
+  },
 ] as const;
 const isCoverageRun = process.argv.includes("--coverage");
 const profileSourceMaps =
@@ -67,6 +71,7 @@ const optimizedDeps = isVitestRun
       "@radix-ui/react-scroll-area",
       "@radix-ui/react-select",
       "@radix-ui/react-slot",
+      "@xyflow/react",
       "react",
       "react-dom",
       "react/jsx-runtime",
@@ -167,6 +172,7 @@ export default defineConfig({
       "react/jsx-runtime",
       "react/jsx-dev-runtime",
       "@radix-ui/react-slot",
+      "@xyflow/react",
     ],
   },
   server: {
