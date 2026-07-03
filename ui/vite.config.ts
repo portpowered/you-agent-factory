@@ -156,6 +156,7 @@ export default defineConfig({
         "src/testing/app-shell-workflow-activity-stub.tsx",
         "src/testing/guarded-suite-console.setup.ts",
         "src/testing/replay-harness.ts",
+        "src/features/**/test-support/**",
         "src/styles.css",
         "**/index.ts",
         // Browser integration harness code is validated in the browser lane, not jsdom coverage.

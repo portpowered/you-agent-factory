@@ -28,6 +28,13 @@ export const defaultShardMainCoveredMaxWorkers = "1";
 export { defaultSlowFileSummaryLimit, defaultCapturedStdoutMaxBuffer };
 export const defaultUiCoverageShardTotal = 10;
 export const defaultTimingReportsDir = ".vitest-report-timings";
+export const isolatedReactFlowCoverageFiles = [
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-editor-chrome.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-import-flows.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-graph-semantics.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-layout.test.tsx",
+  "src/features/workflow-activity/components/current-activity-card/react-flow-current-activity-card-topology-localization.test.tsx",
+];
 
 export function getMainCoveredMaxWorkers(env = process.env, options = {}) {
   if (env.UI_COVERAGE_MAIN_MAX_WORKERS) {
@@ -201,8 +208,7 @@ export function buildMainCoveredVitestArgs(options = {}) {
     "scripts/ui-coverage-runner.test.mjs",
     "--exclude",
     "scripts/ui-coverage-runner.shard-merge.test.mjs",
-    "--exclude",
-    "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
+    ...isolatedReactFlowCoverageFiles.flatMap((file) => ["--exclude", file]),
   ];
 
   if (options.shard) {
@@ -257,7 +263,7 @@ export function buildUiCoveragePhases(options = {}) {
         "--reporter=default",
         "--reporter=blob",
         "--outputFile.blob=.vitest-reports/react-flow-current-activity-card.json",
-        "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
+        ...isolatedReactFlowCoverageFiles,
       ],
     },
     {

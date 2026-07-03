@@ -13,6 +13,7 @@ import { expect, test, vi } from "vitest";
 import {
   buildMainCoveredShardPhase,
   buildUiCoveragePhases,
+  isolatedReactFlowCoverageFiles,
   cleanCoverageArtifacts,
   defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
@@ -103,17 +104,17 @@ test("keeps browser-backed and standalone script-style tests outside the main co
   ]);
 });
 
-test("keeps the React Flow coverage file isolated from the main covered pass", () => {
+test("keeps the React Flow coverage files isolated from the main covered pass", () => {
   const [mainCoveredPass, isolatedReactFlowPass] = buildUiCoveragePhases({
     mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
   });
-  const reactFlowCoverageFile =
-    "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx";
 
-  expect(mainCoveredPass.args).toEqual(
-    expect.arrayContaining(["--exclude", reactFlowCoverageFile]),
-  );
-  expect(isolatedReactFlowPass.args).toContain(reactFlowCoverageFile);
+  for (const reactFlowCoverageFile of isolatedReactFlowCoverageFiles) {
+    expect(mainCoveredPass.args).toEqual(
+      expect.arrayContaining(["--exclude", reactFlowCoverageFile]),
+    );
+    expect(isolatedReactFlowPass.args).toContain(reactFlowCoverageFile);
+  }
   expect(isolatedReactFlowPass.args).toContain("--maxWorkers=1");
 });
 
@@ -212,8 +213,7 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
       "scripts/ui-coverage-runner.test.mjs",
       "--exclude",
       "scripts/ui-coverage-runner.shard-merge.test.mjs",
-      "--exclude",
-      "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
+      ...isolatedReactFlowCoverageFiles.flatMap((file) => ["--exclude", file]),
     ]),
   );
 });

@@ -58,6 +58,28 @@ test("scanCrossFeatureBoundary passes when features import through public bounda
   }
 });
 
+test("scanCrossFeatureBoundary skips feature-local test-support helpers", async () => {
+  const { featuresDir, tempRoot } = await createFeatureTree({
+    alpha: {
+      "hooks/use-alpha.ts": "export function useAlpha() { return null; }\n",
+    },
+    beta: {
+      "components/test-support/widget.test-helpers.tsx":
+        'import { useAlpha } from "../../../alpha/hooks/use-alpha";\nexport function renderWidget() { return null; }\n',
+    },
+  });
+
+  try {
+    await expect(scanCrossFeatureBoundary(featuresDir, [])).resolves.toEqual({
+      allowlistedDebt: [],
+      staleAllowlistEntries: [],
+      violations: [],
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
 test("scanCrossFeatureBoundary flags cross-feature internal imports as hard-fail violations", async () => {
   const { featuresDir, tempRoot } = await createFeatureTree({
     alpha: {

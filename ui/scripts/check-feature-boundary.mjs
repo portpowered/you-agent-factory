@@ -46,6 +46,10 @@ function shouldSkipFile(filePath) {
     return true;
   }
 
+  if (toPosixPath(filePath).includes("/test-support/")) {
+    return true;
+  }
+
   return skippedFileSuffixes.some((suffix) => filePath.endsWith(suffix));
 }
 

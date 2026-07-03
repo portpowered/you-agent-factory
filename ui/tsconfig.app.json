@@ -27,6 +27,7 @@
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "src/**/*.stories.tsx",
+    "src/features/**/test-support/**",
     "src/features/bento/components/dashboard-bento-story-shared.tsx",
     "packages/components/src/**/*.test.ts",
     "packages/components/src/**/*.test.tsx",
