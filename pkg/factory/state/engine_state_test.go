@@ -8,11 +8,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this snapshot contract test keeps all exported state fields visible in one reviewer-readable assertion flow.
 func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 	snap := engineStateSnapshotFixture()
 
-	// Runtime state assertions.
+	t.Run("runtime fields", func(t *testing.T) {
+		assertSnapshotRuntimeFields(t, snap)
+	})
+	t.Run("factory metadata", func(t *testing.T) {
+		assertSnapshotFactoryMetadata(t, snap)
+	})
+	t.Run("runtime projection", func(t *testing.T) {
+		assertRuntimeStateSnapshot(t, snap)
+	})
+	t.Run("aggregate construction", func(t *testing.T) {
+		runtime := snap.RuntimeStateSnapshot()
+		assertNewEngineStateSnapshot(t, runtime, "RUNNING", time.Minute, snap.Topology)
+	})
+}
+
+func assertSnapshotRuntimeFields(t *testing.T, snap interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]) {
+	t.Helper()
+
 	if len(snap.Marking.Tokens) != 1 {
 		t.Errorf("expected 1 token, got %d", len(snap.Marking.Tokens))
 	}
@@ -46,33 +62,58 @@ func TestEngineStateSnapshot_AllFieldsAccessible(t *testing.T) {
 	if snap.ActiveThrottlePauses[0].LaneID != "claude/claude-sonnet" {
 		t.Fatalf("active throttle pause lane = %q, want claude/claude-sonnet", snap.ActiveThrottlePauses[0].LaneID)
 	}
+}
 
-	// Factory state.
+func assertRuntimeStateSnapshot(t *testing.T, snap interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]) {
+	t.Helper()
+
+	runtime := snap.RuntimeStateSnapshot()
+	if runtime.RuntimeStatus != snap.RuntimeStatus {
+		t.Errorf("runtime status = %q, want %q", runtime.RuntimeStatus, snap.RuntimeStatus)
+	}
+	if runtime.TickCount != snap.TickCount {
+		t.Errorf("runtime tick count = %d, want %d", runtime.TickCount, snap.TickCount)
+	}
+	if len(runtime.ActiveThrottlePauses) != len(snap.ActiveThrottlePauses) {
+		t.Fatalf("runtime active throttle pause count = %d, want %d", len(runtime.ActiveThrottlePauses), len(snap.ActiveThrottlePauses))
+	}
+}
+
+func assertNewEngineStateSnapshot(
+	t *testing.T,
+	runtime interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net],
+	factoryState string,
+	uptime time.Duration,
+	topology *Net,
+) {
+	t.Helper()
+
+	aggregate := NewEngineStateSnapshot(runtime, factoryState, uptime, topology)
+	if len(aggregate.ActiveThrottlePauses) != len(runtime.ActiveThrottlePauses) {
+		t.Errorf("aggregate active throttle pause count = %d, want %d", len(aggregate.ActiveThrottlePauses), len(runtime.ActiveThrottlePauses))
+	}
+	if aggregate.FactoryState != factoryState {
+		t.Errorf("aggregate factory state = %q, want %q", aggregate.FactoryState, factoryState)
+	}
+	if aggregate.Uptime != uptime {
+		t.Errorf("aggregate uptime = %v, want %v", aggregate.Uptime, uptime)
+	}
+	if aggregate.Topology != topology {
+		t.Fatalf("aggregate topology = %#v, want %#v", aggregate.Topology, topology)
+	}
+}
+
+func assertSnapshotFactoryMetadata(t *testing.T, snap interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]) {
+	t.Helper()
+
 	if snap.FactoryState != "RUNNING" {
 		t.Errorf("expected FactoryState=RUNNING, got %s", snap.FactoryState)
 	}
-
-	// Uptime.
 	if snap.Uptime != 10*time.Minute {
 		t.Errorf("expected Uptime=10m, got %v", snap.Uptime)
 	}
 	if snap.Topology == nil || snap.Topology.ID != "snapshot-topology" {
 		t.Fatalf("expected topology snapshot-topology, got %#v", snap.Topology)
-	}
-
-	runtime := snap.RuntimeStateSnapshot()
-	if runtime.RuntimeStatus != snap.RuntimeStatus {
-		t.Fatalf("runtime status = %q, want %q", runtime.RuntimeStatus, snap.RuntimeStatus)
-	}
-	if runtime.TickCount != snap.TickCount {
-		t.Fatalf("runtime tick count = %d, want %d", runtime.TickCount, snap.TickCount)
-	}
-	if len(runtime.ActiveThrottlePauses) != 1 {
-		t.Fatalf("runtime active throttle pause count = %d, want 1", len(runtime.ActiveThrottlePauses))
-	}
-	aggregate := NewEngineStateSnapshot(runtime, "RUNNING", time.Minute, snap.Topology)
-	if len(aggregate.ActiveThrottlePauses) != 1 {
-		t.Fatalf("aggregate active throttle pause count = %d, want 1", len(aggregate.ActiveThrottlePauses))
 	}
 }
 

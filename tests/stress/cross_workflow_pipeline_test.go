@@ -189,24 +189,28 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 		scanCount.Load(), totalSubmittedToA.Load(), completeA, 5)
 }
 
-// TestCrossWorkflowPipelineNoRace verifies no data races during cross-workflow
-// submission with concurrent status queries.
+// TestCrossWorkflowPipelineNoRace verifies the Factory runtime has no race-sensitive
+// failures when goroutines submit code-change Work Requests concurrently while other
+// goroutines read marking and runtime status. Harness setup uses WithServiceMode so
+// the background runtime stays alive during concurrent submission; no runtime semantic
+// changes were required.
 func TestCrossWorkflowPipelineNoRace(t *testing.T) {
-	t.Skip("bad arguments right now")
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
 
-	// Simple 1-stage code pipeline.
 	dirA := testutil.ScaffoldFactoryDir(t, oneStageCodePipelineCfg("coder"))
 	hA := testutil.NewServiceTestHarness(t, dirA, testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithExtraOptions(factory.WithWorkerExecutor("coder", &delayExecutor{maxDelay: time.Millisecond})))
+		testutil.WithExtraOptions(
+			factory.WithServiceMode(),
+			factory.WithWorkerExecutor("coder", &delayExecutor{maxDelay: time.Millisecond}),
+		))
 
 	ctxA, cancelA := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelA()
 	errChA := hA.RunInBackground(ctxA)
 
-	// 5 goroutines submit work items concurrently.
+	// Five goroutines submit code-change Work Requests concurrently.
 	const totalItems = 15
 	var submitWg sync.WaitGroup
 	for g := range 5 {
@@ -224,10 +228,13 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 		}(g)
 	}
 
-	// 3 goroutines query marking concurrently.
+	// 3 goroutines query marking and runtime status concurrently while submissions
+	// and Work processing are still active.
+	codeChangeTerminalPlaces := []string{"code-change:complete", "code-change:failed"}
 	var queryWg sync.WaitGroup
 	queryDone := make(chan struct{})
-	var queryCount atomic.Int64
+	var markingQueryCount atomic.Int64
+	var statusQueryCount atomic.Int64
 	for range 3 {
 		queryWg.Add(1)
 		go func() {
@@ -242,14 +249,26 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 						_ = tok.PlaceID
 						_ = tok.Color.WorkTypeID
 					}
-					queryCount.Add(1)
+					markingQueryCount.Add(1)
+
+					if stateSnap, err := hA.GetEngineStateSnapshot(); err == nil {
+						_ = stateSnap.RuntimeStatus
+						statusQueryCount.Add(1)
+					}
 				}
 			}
 		}()
 	}
 
 	submitWg.Wait()
-	pollUntilAllTerminalH(t, hA, []string{"code-change:complete", "code-change:failed"}, totalItems, 20*time.Second)
+	pollUntilAllTerminalH(t, hA, codeChangeTerminalPlaces, totalItems, 20*time.Second)
+
+	if markingQueryCount.Load() == 0 {
+		t.Fatal("expected concurrent marking reads before stopping query workers, got 0")
+	}
+	if statusQueryCount.Load() == 0 {
+		t.Fatal("expected concurrent runtime status reads before stopping query workers, got 0")
+	}
 
 	close(queryDone)
 	queryWg.Wait()
@@ -257,12 +276,12 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	<-errChA
 
 	snapA := hA.Marking()
-	complete := len(snapA.TokensInPlace("code-change:complete"))
-	if complete != totalItems {
-		t.Errorf("expected %d complete, got %d", totalItems, complete)
-	}
+	assertMarkingConsistency(t, snapA, codeChangeTerminalPlaces, totalItems)
 
-	t.Logf("no-race test: %d items completed, %d queries", complete, queryCount.Load())
+	t.Logf("no-race test: %d terminal Work tokens, %d marking reads, %d status reads",
+		countTerminalTokens(snapA, codeChangeTerminalPlaces),
+		markingQueryCount.Load(),
+		statusQueryCount.Load())
 }
 
 // --- Helper configs for cross-workflow tests ---

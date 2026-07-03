@@ -79,13 +79,16 @@
     "test:unit": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -b --noEmit --pretty false",
     "verify": "bun run typecheck && bun run test:unit && bun run build-storybook && bun run check:package-boundary && bun run check:package-dependency-direction",
-    "verify:storybook-browser": "node scripts/verify-package-storybook-browser.mjs"
+    "verify:storybook-browser": "node scripts/verify-package-storybook-browser.mjs",
+    "verify:widget-frame-docs": "node scripts/verify-widget-frame-storybook-docs.mjs",
+    "verify:widget-frame-responsive": "node scripts/verify-widget-frame-storybook-responsive.mjs"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.3.0",
     "@xyflow/react": "^12.10.2",
     "recharts": "^3.8.1"
   },

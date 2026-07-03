@@ -61,10 +61,13 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			itemRequestID = req.RequestID
 		}
 
-		tags := make(map[string]string, len(work.Tags)+2)
+		tags := make(map[string]string, len(work.Tags)+3)
 		maps.Copy(tags, work.Tags)
 		tags["_work_name"] = work.Name
 		tags["_work_type"] = workTypeID
+		if work.ExecutionID != "" {
+			tags["_execution_id"] = work.ExecutionID
+		}
 
 		normalized = append(normalized, interfaces.SubmitRequest{
 			RequestID:                itemRequestID,

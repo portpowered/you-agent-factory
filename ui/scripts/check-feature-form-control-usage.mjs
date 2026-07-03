@@ -133,6 +133,26 @@ function getJsxTagName(tagName) {
   return null;
 }
 
+const componentsPackageModule = "@you-agent-factory/components";
+const componentsPackageFormsModule = "@you-agent-factory/components/forms";
+
+const approvedSelectHelperImports = new Set([
+  "EnumSelect",
+  "OptionalEnumSelect",
+  "ResetEnumSelect",
+  "SelectField",
+]);
+
+function isApprovedSelectHelperModulePath(modulePath) {
+  return (
+    modulePath === componentsPackageModule ||
+    modulePath === componentsPackageFormsModule ||
+    modulePath.endsWith("/enum-select") ||
+    modulePath.endsWith("/components/ui") ||
+    modulePath.endsWith("/components/ui/index")
+  );
+}
+
 function isSelectModulePath(modulePath) {
   return (
     modulePath.includes("/native-select") ||
@@ -183,21 +203,24 @@ function collectFormControlUsage(sourceText, filePath) {
           "blocked-select-import",
           node.getStart(sourceFile),
           "Feature component code must not import Radix or native select primitives directly.",
-          "Use EnumSelect, OptionalEnumSelect, ResetEnumSelect, or SelectField from components/ui instead.",
+          "Use EnumSelect, OptionalEnumSelect, ResetEnumSelect, or SelectField from @you-agent-factory/components instead.",
         );
       }
 
-      if (isSelectModulePath(modulePath)) {
+      if (isSelectModulePath(modulePath) || isApprovedSelectHelperModulePath(modulePath)) {
         const namedBindings = importClause?.namedBindings;
         if (namedBindings && ts.isNamedImports(namedBindings)) {
           for (const element of namedBindings.elements) {
             const importedName = element.name.text;
-            if (blockedSelectPrimitiveImports.has(importedName)) {
+            if (
+              blockedSelectPrimitiveImports.has(importedName) &&
+              !approvedSelectHelperImports.has(importedName)
+            ) {
               pushViolation(
                 "blocked-select-import",
                 element.getStart(sourceFile),
                 "Feature component code must not import raw select primitives owned by components/ui.",
-                "Use EnumSelect, OptionalEnumSelect, ResetEnumSelect, or SelectField from components/ui instead.",
+                "Use EnumSelect, OptionalEnumSelect, ResetEnumSelect, or SelectField from @you-agent-factory/components instead.",
               );
             }
           }
@@ -223,7 +246,7 @@ function collectFormControlUsage(sourceText, filePath) {
             : tagName === "NativeSelect"
               ? "Feature component code must not render NativeSelect."
               : "Feature component code must not compose Radix select primitives directly.",
-          "Use EnumSelect, OptionalEnumSelect, ResetEnumSelect, or SelectField from components/ui instead.",
+          "Use EnumSelect, OptionalEnumSelect, ResetEnumSelect, or SelectField from @you-agent-factory/components instead.",
         );
       }
     }
@@ -338,7 +361,7 @@ async function main() {
   console.error(
     [
       "Feature form-control usage guard failed.",
-      "Feature component code must reuse shared components/ui select helpers (EnumSelect, OptionalEnumSelect, ResetEnumSelect, SelectField) instead of raw/native/Radix select primitives.",
+      "Feature component code must reuse shared select helpers (EnumSelect, OptionalEnumSelect, ResetEnumSelect, SelectField) from @you-agent-factory/components instead of raw/native/Radix select primitives.",
       violations ? ["Violations:", violations].join("\n\n") : "",
       staleAllowlistEntries
         ? ["Stale allowlist entries:", staleAllowlistEntries].join("\n\n")

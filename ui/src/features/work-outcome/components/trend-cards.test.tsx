@@ -1,8 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+  WIDGET_FRAME_SUBTITLE_CLASS,
+} from "@you-agent-factory/components/recipes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
@@ -194,19 +198,19 @@ describe("dashboard trend cards", () => {
     );
 
     expect(screen.getByText("No failure samples").className).toContain(
-      "af-dashboard-section-heading",
+      WIDGET_FRAME_SECTION_HEADING_CLASS,
     );
     expect(
       screen.getByText(
         "Failure trend data appears after the event stream receives work history.",
       ).className,
-    ).toContain("af-dashboard-body-text");
+    ).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
     expect(screen.getAllByText("No selected trace")).toHaveLength(2);
     expect(
       screen.getByText(
         "Select active work with retained trace history to compare dispatch timing.",
       ).className,
-    ).toContain("af-dashboard-body-text");
+    ).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
   });
 
   it("applies shared typography helpers to trend labels, summaries, and supporting copy", () => {
@@ -273,7 +277,7 @@ describe("dashboard trend cards", () => {
         .getByText("Failed in range")
         .closest("div")
         ?.querySelector("dd")?.className,
-    ).toContain("af-dashboard-widget-subtitle");
+    ).toContain(WIDGET_FRAME_SUBTITLE_CLASS);
     expect(failureScope.getByText("Work type: story").className).toContain(
       "af-dashboard-body-text",
     );
@@ -288,11 +292,11 @@ describe("dashboard trend cards", () => {
     );
 
     expect(reworkScope.getByText("work-active-story").className).toContain(
-      "af-dashboard-widget-subtitle",
+      WIDGET_FRAME_SUBTITLE_CLASS,
     );
     expect(timingScope.getByLabelText("Timing range").tagName).toBe("DL");
     expect(timingScope.getByText("450ms").className).toContain(
-      "af-dashboard-widget-subtitle",
+      WIDGET_FRAME_SUBTITLE_CLASS,
     );
   });
 });

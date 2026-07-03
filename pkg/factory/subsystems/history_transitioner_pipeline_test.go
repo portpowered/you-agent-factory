@@ -495,15 +495,36 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 
 // portos:func-length-exception owner=agent-factory reason=legacy-resource-release-fixture review=2026-07-18 removal=split-resource-setup-and-failure-release-assertions-before-next-history-transitioner-change
 func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceTokenIdentity(t *testing.T) {
-	tp, snapshot, resourceConsumed := newFailureReleasesConsumedResourceFixture()
+	tp, snapshot, resourceConsumed := newFailureReleasesConsumedResourceFixture(false)
 	result, err := tp.Execute(context.Background(), snapshot)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertReleasedResourceMutation(t, result, resourceConsumed)
+	assertFailedMixedWorkResourceRelease(t, result, resourceConsumed)
 }
 
-func newFailureReleasesConsumedResourceFixture() (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], interfaces.Token) {
+func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceRegardlessOfInputOrder(t *testing.T) {
+	orderings := []struct {
+		name      string
+		workFirst bool
+	}{
+		{name: "resource-first", workFirst: false},
+		{name: "work-first", workFirst: true},
+	}
+
+	for _, ordering := range orderings {
+		t.Run(ordering.name, func(t *testing.T) {
+			tp, snapshot, resourceConsumed := newFailureReleasesConsumedResourceFixture(ordering.workFirst)
+			result, err := tp.Execute(context.Background(), snapshot)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertFailedMixedWorkResourceRelease(t, result, resourceConsumed)
+		})
+	}
+}
+
+func newFailureReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], interfaces.Token) {
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"wt-code:init":       {ID: "wt-code:init", TypeID: "wt-code", State: "init"},
@@ -569,6 +590,11 @@ func newFailureReleasesConsumedResourceFixture() (*testPipeline, *interfaces.Eng
 		},
 	}
 
+	consumedTokens := []interfaces.Token{resourceConsumed, workConsumed}
+	if workFirst {
+		consumedTokens = []interfaces.Token{workConsumed, resourceConsumed}
+	}
+
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{
 			Tokens: map[string]*interfaces.Token{
@@ -582,31 +608,51 @@ func newFailureReleasesConsumedResourceFixture() (*testPipeline, *interfaces.Eng
 		},
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"d-1": {
-				DispatchID:   "d-1",
-				TransitionID: "t1",
-				ConsumedTokens: []interfaces.Token{
-					workConsumed,
-					resourceConsumed,
-				},
+				DispatchID:     "d-1",
+				TransitionID:   "t1",
+				ConsumedTokens: consumedTokens,
 			},
 		},
 	}
 	return tp, snapshot, resourceConsumed
 }
 
-func assertReleasedResourceMutation(t *testing.T, result *interfaces.TickResult, resourceConsumed interfaces.Token) {
+func assertFailedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickResult, resourceConsumed interfaces.Token) {
 	t.Helper()
 	if result == nil || len(result.Mutations) != 2 {
 		t.Fatalf("expected 2 mutations, got %+v", result)
 	}
 
-	var released *interfaces.MarkingMutation
+	var failedWork *interfaces.MarkingMutation
+	var releasedResource *interfaces.MarkingMutation
 	for i := range result.Mutations {
-		if result.Mutations[i].NewToken != nil && result.Mutations[i].NewToken.Color.DataType == interfaces.DataTypeResource {
-			released = &result.Mutations[i]
-			break
+		if result.Mutations[i].NewToken == nil {
+			continue
+		}
+		switch result.Mutations[i].NewToken.Color.DataType {
+		case interfaces.DataTypeWork:
+			failedWork = &result.Mutations[i]
+		case interfaces.DataTypeResource:
+			releasedResource = &result.Mutations[i]
 		}
 	}
+	if failedWork == nil {
+		t.Fatal("expected failed work mutation")
+	}
+	if failedWork.ToPlace != "wt-code:failed" {
+		t.Fatalf("failed work ToPlace = %q, want wt-code:failed", failedWork.ToPlace)
+	}
+	if failedWork.NewToken.Color.WorkID != "w-resource-failure" {
+		t.Fatalf("failed work WorkID = %q, want w-resource-failure", failedWork.NewToken.Color.WorkID)
+	}
+	if failedWork.NewToken.History.LastError != "agent crashed" {
+		t.Fatalf("failed work LastError = %q, want agent crashed", failedWork.NewToken.History.LastError)
+	}
+	assertReleasedResourceMutation(t, releasedResource, resourceConsumed)
+}
+
+func assertReleasedResourceMutation(t *testing.T, released *interfaces.MarkingMutation, resourceConsumed interfaces.Token) {
+	t.Helper()
 	if released == nil {
 		t.Fatal("expected released resource mutation")
 	}

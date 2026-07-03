@@ -627,6 +627,27 @@ func TestNormalizeWorkRequest_AcceptsRawJSONPayload(t *testing.T) {
 	}
 }
 
+func TestNormalizeWorkRequest_ExecutionIDTagPropagatesToSubmitRequest(t *testing.T) {
+	normalized, err := NormalizeWorkRequest(interfaces.WorkRequest{
+		RequestID: "request-exec-id",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{{
+			Name:        "chapter",
+			WorkTypeID:  "chapter",
+			ExecutionID: "exec-guard-propagation",
+		}},
+	}, interfaces.WorkRequestNormalizeOptions{ValidWorkTypes: map[string]bool{"chapter": true}})
+	if err != nil {
+		t.Fatalf("NormalizeWorkRequest: %v", err)
+	}
+	if normalized[0].ExecutionID != "exec-guard-propagation" {
+		t.Fatalf("execution ID = %q, want exec-guard-propagation", normalized[0].ExecutionID)
+	}
+	if normalized[0].Tags["_execution_id"] != "exec-guard-propagation" {
+		t.Fatalf("execution tag = %q, want exec-guard-propagation", normalized[0].Tags["_execution_id"])
+	}
+}
+
 func TestNormalizeWorkRequest_AcceptsStringPayloadAsRawText(t *testing.T) {
 	normalized, err := NormalizeWorkRequest(interfaces.WorkRequest{
 		RequestID: "request-string-payload",

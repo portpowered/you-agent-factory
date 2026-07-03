@@ -1,4 +1,5 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
+import { EnumSelect } from "@you-agent-factory/components";
 import { type ReactNode, useId } from "react";
 
 import {
@@ -6,7 +7,6 @@ import {
   AlertPanelText,
   DashboardLabel,
   DashboardText,
-  EnumSelect,
   FormDescription,
   FormError,
   Input,

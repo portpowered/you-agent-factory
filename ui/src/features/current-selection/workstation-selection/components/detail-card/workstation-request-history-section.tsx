@@ -5,7 +5,9 @@ import {
   formatDurationMillis,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../../base/public";
@@ -52,7 +54,7 @@ export function WorkstationRequestHistorySection({
           ))}
         </ul>
       ) : (
-        <DetailCopy>{messages.noWorkstationRequests}</DetailCopy>
+        <WidgetDetailCopy>{messages.noWorkstationRequests}</WidgetDetailCopy>
       )}
     </CurrentSelectionExpandableSection>
   );

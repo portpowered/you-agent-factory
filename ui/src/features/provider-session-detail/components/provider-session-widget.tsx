@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DetailCopy } from "../../../components/ui";
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { DashboardWidgetFrame } from "../../bento/public";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionWidgetMessages } from "../messages/provider-session-widget";
@@ -33,7 +33,7 @@ export function ProviderSessionWidget({
           selectedProviderSession={selectedProviderSession}
         />
       ) : (
-        <DetailCopy>{messages.emptyState}</DetailCopy>
+        <WidgetDetailCopy>{messages.emptyState}</WidgetDetailCopy>
       )}
     </DashboardWidgetFrame>
   );

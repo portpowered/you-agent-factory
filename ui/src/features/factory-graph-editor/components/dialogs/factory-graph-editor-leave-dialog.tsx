@@ -38,6 +38,7 @@ export function FactoryGraphEditorLeaveDialog({
     <Dialog onOpenChange={handleOpenChange} open={isOpen}>
       <DialogContent
         closeDisabled={isSaving}
+        closeLabel="Close dialog"
         onEscapeKeyDown={(event) => {
           if (isSaving) {
             event.preventDefault();
