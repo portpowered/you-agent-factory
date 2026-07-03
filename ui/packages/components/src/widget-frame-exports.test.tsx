@@ -7,8 +7,14 @@ import {
   WidgetEmptyState,
   WidgetEmptyStateText,
   WidgetEmptyStateTitle,
+  WidgetErrorState,
   WidgetFrame,
+  WidgetFrameDisclosure,
+  WidgetFrameDisclosurePanel,
+  WidgetFrameDisclosureTrigger,
+  WidgetLoadingState,
   WidgetSubtitle,
+  WidgetSuccessState,
   widgetFrameDetailCardClass,
 } from "@you-agent-factory/components";
 import * as recipes from "@you-agent-factory/components/recipes";
@@ -23,6 +29,10 @@ describe("@you-agent-factory/components widget frame exports", () => {
     expect(WidgetEmptyState).toBeTypeOf("function");
     expect(WidgetEmptyStateTitle).toBeTypeOf("function");
     expect(WidgetEmptyStateText).toBeTypeOf("function");
+    expect(WidgetLoadingState).toBeTypeOf("function");
+    expect(WidgetErrorState).toBeTypeOf("function");
+    expect(WidgetSuccessState).toBeTypeOf("function");
+    expect(WidgetFrameDisclosureTrigger).toBeTypeOf("object");
     expect(widgetFrameDetailCardClass).toContain("[&_dl]:grid");
   });
 
@@ -31,6 +41,10 @@ describe("@you-agent-factory/components widget frame exports", () => {
     expect(recipes.WidgetSubtitle).toBe(WidgetSubtitle);
     expect(recipes.WidgetDetailCopy).toBe(WidgetDetailCopy);
     expect(recipes.WidgetEmptyState).toBe(WidgetEmptyState);
+    expect(recipes.WidgetLoadingState).toBe(WidgetLoadingState);
+    expect(recipes.WidgetFrameDisclosureTrigger).toBe(
+      WidgetFrameDisclosureTrigger,
+    );
     expect(recipes.widgetFrameDetailCardClass).toBe(widgetFrameDetailCardClass);
   });
 

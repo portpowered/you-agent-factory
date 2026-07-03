@@ -4,6 +4,18 @@ export const COMPONENTS_CATEGORY = "recipes" as const;
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
 export {
+  WidgetFrameDisclosure,
+  WidgetFrameDisclosureIcon,
+  WidgetFrameDisclosurePanel,
+  WidgetFrameDisclosureTrigger,
+} from "./widget-frame-disclosure";
+export type {
+  WidgetFrameDisclosureIconProps,
+  WidgetFrameDisclosurePanelProps,
+  WidgetFrameDisclosureProps,
+  WidgetFrameDisclosureTriggerProps,
+} from "./widget-frame-disclosure";
+export {
   WidgetDetailCopy,
   WidgetEmptyState,
   WidgetEmptyStateText,
@@ -17,6 +29,17 @@ export type {
   WidgetEmptyStateTitleProps,
   WidgetSubtitleProps,
 } from "./widget-frame-content";
+export { WidgetFrameSkeleton } from "./widget-frame-skeleton";
+export {
+  WidgetErrorState,
+  WidgetLoadingState,
+  WidgetSuccessState,
+} from "./widget-frame-states";
+export type {
+  WidgetErrorStateProps,
+  WidgetLoadingStateProps,
+  WidgetSuccessStateProps,
+} from "./widget-frame-states";
 export {
   WIDGET_FRAME_MIN_WIDTH_CLASS,
   WIDGET_FRAME_WIDE_BODY_CLASS,
