@@ -2,14 +2,10 @@ import type { ReactNode } from "react";
 
 import {
   DataTable as PackageDataTable,
-  type DataTableColumn,
   type DataTableProps as PackageDataTableProps,
-  type DataTableState,
 } from "@you-agent-factory/components/data-display";
 import { useAppLocale } from "../../i18n";
 import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
-
-export type { DataTableColumn, DataTableState };
 
 export interface DataTableProps<Row>
   extends Omit<PackageDataTableProps<Row>, "emptyMessage"> {
