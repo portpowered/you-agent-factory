@@ -100,7 +100,7 @@ export const Loaded: Story = {
   },
 };
 
-export const Error: Story = {
+export const ErrorState: Story = {
   args: {
     buttonLabel: "Error node",
     graphState: "error",

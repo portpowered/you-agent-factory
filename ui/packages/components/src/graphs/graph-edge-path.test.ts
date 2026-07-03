@@ -70,4 +70,64 @@ describe("buildGraphEdgePathThroughWaypoints", () => {
     expect(routed.labelX).toBeGreaterThan(0);
     expect(routed.labelY).toBeGreaterThanOrEqual(0);
   });
+
+  it("returns a stable straight path for collinear source, waypoint, and target points", () => {
+    const routed = buildGraphEdgePathThroughWaypoints({
+      sourcePosition: Position.Right,
+      sourceX: 0,
+      sourceY: 50,
+      targetPosition: Position.Left,
+      targetX: 200,
+      targetY: 50,
+      waypoints: [{ x: 100, y: 50 }],
+    });
+
+    expect(routed.path).toContain("M 0 50");
+    expect(routed.path).toContain("100, 50");
+    expect(routed.path).toContain("200, 50");
+    expect(routed.labelX).toBe(100);
+    expect(routed.labelY).toBe(50);
+  });
+
+  it("returns a stable stepped path for orthogonal waypoint routing", () => {
+    const routed = buildGraphEdgePathThroughWaypoints({
+      sourcePosition: Position.Right,
+      sourceX: 0,
+      sourceY: 0,
+      targetPosition: Position.Left,
+      targetX: 200,
+      targetY: 100,
+      waypoints: [
+        { x: 100, y: 0 },
+        { x: 100, y: 100 },
+      ],
+    });
+
+    expect(routed.path).toContain("M 0 0");
+    expect(routed.path).toContain("100, 0");
+    expect(routed.path).toContain("100, 100");
+    expect(routed.path).toContain("200, 100");
+    expect(routed.path).not.toContain("NaN");
+  });
+
+  it("returns a stable curved path for multi-waypoint routes", () => {
+    const routed = buildGraphEdgePathThroughWaypoints({
+      sourcePosition: Position.Bottom,
+      sourceX: 20,
+      sourceY: 0,
+      targetPosition: Position.Top,
+      targetX: 180,
+      targetY: 160,
+      waypoints: [
+        { x: 20, y: 80 },
+        { x: 180, y: 80 },
+      ],
+    });
+
+    expect(routed.path).toMatch(/^M /);
+    expect(routed.path).toContain("C ");
+    expect(routed.path).toContain("180, 160");
+    expect(routed.labelX).toBe(20);
+    expect(routed.labelY).toBe(80);
+  });
 });
