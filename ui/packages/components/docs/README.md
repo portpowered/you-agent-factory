@@ -24,3 +24,9 @@ read it directly from the package; no docs-site implementation is required.
 See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
+
+## Component docs
+
+- [Form input primitives](./forms-input-primitives.md) — import paths, controlled
+  versus uncontrolled usage, host accessibility responsibilities, and
+  presentation-only boundaries for text input, textarea, checkbox, and file input.

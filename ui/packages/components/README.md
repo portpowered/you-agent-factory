@@ -135,6 +135,7 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [Form input primitives](./docs/forms-input-primitives.md)
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site
