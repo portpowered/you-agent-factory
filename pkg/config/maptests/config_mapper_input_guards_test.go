@@ -32,79 +32,13 @@ func TestConfigMapping_PerInputGuard_DynamicFanout(t *testing.T) {
 }
 
 func TestConfigMapping_PerInputGuard_AnyChildFailed(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
-			{
-				Name: "request",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "waiting", Type: interfaces.StateTypeProcessing},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
-				},
-			},
-			{
-				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "failed", Type: interfaces.StateTypeFailed},
-				},
-			},
-		},
-		Workers: []interfaces.WorkerConfig{
-			{Name: "check-worker"},
-		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{
-				Name:           "failure-checker",
-				WorkerTypeName: "check-worker",
-				Inputs: []interfaces.IOConfig{
-					{StateName: "waiting", WorkTypeName: "request"},
-					{
-						StateName:    "failed",
-						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type:        interfaces.GuardTypeAnyChildFailed,
-							ParentInput: "request",
-						},
-					},
-				},
-				Outputs: []interfaces.IOConfig{
-					{StateName: "failed", WorkTypeName: "request"},
-				},
-			},
-		},
-	}
-
 	mapper := testConfigMapper{}
-	outputNet, err := mapper.Map(context.Background(), input)
+	outputNet, err := mapper.Map(context.Background(), anyChildFailedFactoryConfig())
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
 	}
 
-	tr := outputNet.Transitions["failure-checker"]
-	if tr == nil {
-		t.Fatal("expected transition 'failure-checker' to exist")
-	}
-
-	if len(tr.InputArcs) != 2 {
-		t.Fatalf("expected 2 input arcs, got %d", len(tr.InputArcs))
-	}
-
-	childArc := tr.InputArcs[1]
-	if childArc.Mode != interfaces.ArcModeObserve {
-		t.Errorf("child arc mode: expected OBSERVE, got %d", childArc.Mode)
-	}
-	if childArc.Cardinality.Mode != petri.CardinalityOne {
-		t.Errorf("child arc cardinality: expected ONE, got %d", childArc.Cardinality.Mode)
-	}
-
-	guard, ok := childArc.Guard.(*petri.AnyWithParentGuard)
-	if !ok {
-		t.Fatalf("expected AnyWithParentGuard, got %T", childArc.Guard)
-	}
-	if guard.MatchBinding != "parent" {
-		t.Errorf("guard match binding: expected 'parent', got %q", guard.MatchBinding)
-	}
+	assertAnyChildFailedFailureChecker(t, outputNet)
 }
 
 func TestConfigMapping_PerInputGuard_ValidationRejectsMissingParentInput(t *testing.T) {
