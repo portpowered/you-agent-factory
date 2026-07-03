@@ -28,10 +28,10 @@ func seedBatchIdeas(t *testing.T, dir string, count int) []string {
 	return traceIDs
 }
 
-// TestBatchIdeationPipeline_ConcurrencyLimit2 verifies that 3 ideas seeded
-// via seed files independently progress through the full ideation pipeline
-// (idea → prd → story → complete) with resource-based concurrency limits
-// (agent-slot capacity=2) throttling execution without deadlock.
+// TestBatchIdeationPipeline_ConcurrencyLimit2 verifies that three idea Work
+// requests seeded via submit files independently progress through the full
+// ideation pipeline (idea → prd → story → complete) with resource-limited
+// concurrency (agent-slot capacity=2) throttling execution without deadlock.
 //
 // Each idea pipeline requires: planner(1) + executor(1) + reviewer(1) = 3
 // provider calls. Converter is LOGICAL_MOVE — no provider call.
@@ -112,8 +112,8 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 }
 
 // TestSerialIdeationPipeline_ConcurrencyLimit1 verifies that with agent-slot
-// capacity of 1, submitting 3 ideas results in fully serialized processing
-// where only one agent runs at a time and all work completes without deadlock.
+// capacity of 1, three idea Work requests are processed serially so only one
+// agent runs at a time and all Work completes without deadlock.
 //
 // Same topology as TestBatchIdeationPipeline_ConcurrencyLimit2 but capacity=1.
 // Total: 3 ideas × 3 provider calls = 9.

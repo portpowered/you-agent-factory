@@ -432,6 +432,9 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 	return color, nil
 }
 
+// ensureWorkOutputDataType marks routed outputs into registered work-type places as
+// Work tokens. Cross-type transitions that clone a consumed Work token can inherit
+// an empty DataType; mixed Work/resource dispatches must still emit Work lineage.
 func ensureWorkOutputDataType(color *interfaces.TokenColor, targetTypeID string, workTypes map[string]*state.WorkType) {
 	if color == nil || targetTypeID == "" || color.DataType == interfaces.DataTypeResource {
 		return
