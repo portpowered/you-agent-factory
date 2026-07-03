@@ -40,7 +40,7 @@ describe("dispatch script detail sections", () => {
 
     expect(screen.getByText("hello").tagName).toBe("PRE");
     expect(screen.getByText("hello").className).toContain(
-      "af-body-code",
+      "text-code-medium",
     );
 
     rerender(
@@ -52,7 +52,7 @@ describe("dispatch script detail sections", () => {
     );
 
     expect(screen.getByText("No output recorded.").className).toContain(
-      "af-body-text",
+      WIDGET_FRAME_BODY_TEXT_CLASS,
     );
   });
 });
