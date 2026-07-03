@@ -1,8 +1,8 @@
 import { Save } from "lucide-react";
-import { DashboardActionButton } from "../../../../components/ui";
-import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
-import type { EditableWorkerSaveState } from "../lib/detail-card-types";
-import { getWorkerDetailMessages } from "../messages/worker-detail";
+import { DashboardActionButton } from "../../../../../components/ui";
+import { EditableConfigurationDiscardHeaderAction } from "../../../base/public";
+import type { EditableWorkerSaveState } from "../../lib/detail-card-types";
+import { getWorkerDetailMessages } from "../../messages/worker-detail";
 
 export function EditableWorkerConfigurationHeaderActions({
   canDiscard,

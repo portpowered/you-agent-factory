@@ -1,8 +1,8 @@
 import { vi } from "vitest";
 
-import type { CanonicalFactoryDefinition } from "../../../../api/factory-definition/api";
-import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
-import { getWorkerDetailMessages } from "../messages/worker-detail";
+import type { CanonicalFactoryDefinition } from "../../../../../api/factory-definition/api";
+import type { EditableWorkerConfigurationState } from "../../lib/detail-card-types";
+import { getWorkerDetailMessages } from "../../messages/worker-detail";
 
 const EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS = {
   authSecretRef: "",

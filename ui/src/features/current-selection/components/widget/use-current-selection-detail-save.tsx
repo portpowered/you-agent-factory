@@ -18,7 +18,7 @@ import {
   type UseSaveEditableWorkTypeConfigurationResult,
   useSaveEditableWorkTypeConfiguration,
 } from "../../work-type-selection/hooks/use-save-editable-work-type-configuration";
-import { EditableWorkerConfigurationHeaderActions } from "../../worker-selection/components/worker-save-controls";
+import { EditableWorkerConfigurationHeaderActions } from "../../worker-selection/components/editable/worker-save-controls";
 import type { useEditableWorkerConfigurationState } from "../../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../../worker-selection/hooks/use-save-editable-worker-configuration";
 import { EditableWorkstationConfigurationHeaderActions } from "../../workstation-selection/components/editable/workstation-save-controls";

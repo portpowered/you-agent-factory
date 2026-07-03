@@ -630,10 +630,27 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/current-selection/worker-selection/components/worker-editable-configuration-section.tsx",
+      "src/features/current-selection/worker-selection/components/editable/fields/worker-editable-configuration-shared-fields.tsx",
     importSpecifiers: [
-      "../../../current-factory-definition/lib/worker-editable-values",
-      "../../../current-factory-definition/lib/worker-timeout-duration",
+      "../../../../../current-factory-definition/lib/worker-timeout-duration",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/worker-selection/components/editable/fields/worker-editable-configuration-model-fields.tsx",
+    importSpecifiers: [
+      "../../../../../current-factory-definition/lib/worker-editable-values",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/worker-selection/components/editable/fields/worker-editable-configuration-hosted-fields.tsx",
+    importSpecifiers: [
+      "../../../../../current-factory-definition/lib/worker-editable-values",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
