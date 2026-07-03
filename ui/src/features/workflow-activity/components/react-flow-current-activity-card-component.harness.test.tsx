@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
 import type {
@@ -28,6 +28,7 @@ import type { FactoryPngImportValue } from "../../import/lib/factory-png-import"
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { resetCurrentActivityGraphLayoutCacheForTests } from "../hooks/react-flow-current-activity-card-graph-layout";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
+import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
 export const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
@@ -49,7 +50,7 @@ export interface RenderCurrentActivityOptions {
 }
 export const defaultDraftState = createMockGraphEditorDraftState();
 
-function _dashboardSnapshotWithStateCounts(
+export function dashboardSnapshotWithStateCounts(
   overrides: Record<string, number>,
 ): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
@@ -59,6 +60,26 @@ function _dashboardSnapshotWithStateCounts(
   };
 
   return snapshot;
+}
+
+export async function getStateNodeArticle(label: string): Promise<HTMLElement> {
+  const button = await screen.findByRole("button", {
+    name: `Select ${label} state`,
+  });
+  return button.closest(".react-flow__node") as HTMLElement;
+}
+
+export async function expandGraphLegend(locale = "en"): Promise<HTMLElement> {
+  const messages = getDashboardFlowAxisLegendMessages(locale);
+  const actionTargetLabel =
+    messages.title.charAt(0).toLowerCase() + messages.title.slice(1);
+  const expandButton = await screen.findByRole("button", {
+    name: messages.expandToggleLabel(actionTargetLabel),
+  });
+
+  fireEvent.click(expandButton);
+
+  return await screen.findByLabelText(messages.title);
 }
 
 export function refreshFactoryFromTopology(
