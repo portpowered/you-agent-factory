@@ -1,3 +1,4 @@
+import { EnumSelect } from "@you-agent-factory/components";
 import {
   WidgetDetailCopy,
   WidgetEmptyState,
@@ -10,7 +11,6 @@ import {
   DashboardText,
   SurfacePanel,
 } from "../../../components/ui";
-import { EnumSelect } from "../../../components/ui/enum-select";
 import {
   formatDurationMillis,
   formatTraceOutcome,

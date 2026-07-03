@@ -1,13 +1,12 @@
+import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components";
 import { useId } from "react";
 
 import {
   DashboardLabel,
   DashboardText,
-  EnumSelect,
   FormDescription,
   FormError,
   Input,
-  OptionalEnumSelect,
   SurfacePanel,
 } from "../../../../../components/ui";
 import type { EditableWorkstationInputDraft } from "../../../../current-factory-definition/lib/workstation-editable-values";
