@@ -78,6 +78,57 @@ func TestNew_InlineDispatchWithNoopExecutorCompletesWorkflow(t *testing.T) {
 	}
 }
 
+func TestNew_InlineDispatchExecutorPanicRoutesFailedWork(t *testing.T) {
+	f, err := New(
+		factory.WithNet(buildSimpleNetWithFailureArc()),
+		factory.WithInlineDispatch(),
+		factory.WithWorkerExecutor("mock", &panicExecutor{message: "simulated catastrophic panic"}),
+		factory.WithLogger(logging.NoopLogger{}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+		WorkID:     "work-panic",
+		WorkTypeID: "task",
+		TraceID:    "trace-panic",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := f.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	snapshot, err := f.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	if snapshot.FactoryState != string(interfaces.FactoryStateCompleted) {
+		t.Fatalf("factory state = %q, want %q", snapshot.FactoryState, interfaces.FactoryStateCompleted)
+	}
+	if !markingContainsWorkAtPlace(&snapshot.Marking, "work-panic", "task:failed") {
+		t.Fatalf("expected work-panic to reach task:failed, marking=%#v", snapshot.Marking.PlaceTokens)
+	}
+	if markingContainsWorkAtPlace(&snapshot.Marking, "work-panic", "task:done") {
+		t.Fatal("expected work-panic to avoid task:done after executor panic")
+	}
+	if len(snapshot.DispatchHistory) != 1 {
+		t.Fatalf("dispatch history count = %d, want 1", len(snapshot.DispatchHistory))
+	}
+	completed := snapshot.DispatchHistory[0]
+	if completed.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, interfaces.OutcomeFailed)
+	}
+	if !strings.Contains(completed.Reason, "executor panic:") || !strings.Contains(completed.Reason, "simulated catastrophic panic") {
+		t.Fatalf("dispatch reason = %q, want panic-derived failure message", completed.Reason)
+	}
+}
+
 func TestNew_InlineDispatchWithoutRegisteredExecutorRecordsMissingExecutorFailure(t *testing.T) {
 	f, err := New(
 		factory.WithNet(buildSimpleNetWithFailureArc()),

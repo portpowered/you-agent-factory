@@ -42,10 +42,6 @@ export const LAYOUT_FORM_GROUP_CLASS = "grid gap-layout-tight";
 /** Dialog and modal body regions between header and footer. */
 export const LAYOUT_DIALOG_BODY_CLASS = "grid gap-layout-group";
 
-/** Radix dialog content shell (matches shared DialogContent). */
-export const LAYOUT_DIALOG_CONTENT_SHELL_CLASS =
-  "grid gap-layout-group p-layout-inset-dialog";
-
 export const DASHBOARD_LAYOUT_CONTRACT: readonly DashboardLayoutContractEntry[] =
   [
     {

@@ -8,15 +8,6 @@ export const approvedButtonUsageAllowlist = [
   {
     buttonVariantsCount: 2,
     buttonVariantsReason:
-      "Shared dialog owner may compose buttonVariants for its structural close and action controls.",
-    rawButtonFingerprints: ["aria-label={resolvedCloseLabel}"],
-    rawButtonReason:
-      "Shared dialog owner keeps one raw semantic close trigger around the action rows.",
-    relativeFilePath: "src/components/ui/dialog.tsx",
-  },
-  {
-    buttonVariantsCount: 2,
-    buttonVariantsReason:
       "Shared calendar owner may compose buttonVariants for calendar navigation controls.",
     relativeFilePath: "src/components/ui/calendar.tsx",
   },

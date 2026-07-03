@@ -11,9 +11,18 @@ import (
 	"time"
 )
 
-// portos:func-length-exception owner=agent-factory reason=legacy-resource-fixture review=2026-07-18 removal=split-resource-config-fixture-before-next-resource-change
 func TestConfigMapping_ResourceUsage(t *testing.T) {
-	input := &interfaces.FactoryConfig{
+	mapper := testConfigMapper{}
+	outputNet, err := mapper.Map(context.Background(), resourceUsageFactoryConfig())
+	if err != nil {
+		t.Fatalf("failed to map config: %v", err)
+	}
+	assertMappedResourcePlace(t, outputNet)
+	assertMappedResourceTransition(t, outputNet, "processor")
+}
+
+func resourceUsageFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{
 				Name: "task",
@@ -45,19 +54,22 @@ func TestConfigMapping_ResourceUsage(t *testing.T) {
 			},
 		},
 	}
+}
 
+func TestConfigMapping_TwoWorkstationsSharingResource(t *testing.T) {
 	mapper := testConfigMapper{}
-	outputNet, err := mapper.Map(context.Background(), input)
+	outputNet, err := mapper.Map(context.Background(), twoWorkstationsSharingResourceFactoryConfig())
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
 	}
 	assertMappedResourcePlace(t, outputNet)
-	assertMappedResourceTransition(t, outputNet, "processor")
+	for _, name := range []string{"step1", "step2"} {
+		assertMappedResourceTransition(t, outputNet, name)
+	}
 }
 
-// portos:func-length-exception owner=agent-factory reason=legacy-resource-fixture review=2026-07-18 removal=split-shared-resource-fixture-before-next-resource-change
-func TestConfigMapping_TwoWorkstationsSharingResource(t *testing.T) {
-	input := &interfaces.FactoryConfig{
+func twoWorkstationsSharingResourceFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{
 				Name: "task",
@@ -103,40 +115,6 @@ func TestConfigMapping_TwoWorkstationsSharingResource(t *testing.T) {
 				},
 			},
 		},
-	}
-
-	mapper := testConfigMapper{}
-	outputNet, err := mapper.Map(context.Background(), input)
-	if err != nil {
-		t.Fatalf("failed to map config: %v", err)
-	}
-
-	// Both transitions should have resource consume and release arcs.
-	for _, name := range []string{"step1", "step2"} {
-		tr := outputNet.Transitions[name]
-		if tr == nil {
-			t.Fatalf("expected transition %q to exist", name)
-		}
-		// 1 normal input + 1 consume = 2 input arcs.
-		if len(tr.InputArcs) != 2 {
-			t.Errorf("transition %q: expected 2 input arcs, got %d", name, len(tr.InputArcs))
-		}
-		// 1 normal output + 1 release = 2 output arcs.
-		if len(tr.OutputArcs) != 2 {
-			t.Errorf("transition %q: expected 2 output arcs, got %d", name, len(tr.OutputArcs))
-		}
-
-		// Verify consume arc references the shared resource.
-		consumeArc := tr.InputArcs[1]
-		if consumeArc.PlaceID != "gpu:available" {
-			t.Errorf("transition %q: consume arc place expected 'gpu:available', got %q", name, consumeArc.PlaceID)
-		}
-
-		// Verify release arc references the shared resource.
-		releaseArc := tr.OutputArcs[1]
-		if releaseArc.PlaceID != "gpu:available" {
-			t.Errorf("transition %q: release arc place expected 'gpu:available', got %q", name, releaseArc.PlaceID)
-		}
 	}
 }
 

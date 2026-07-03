@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
 import type { SelectedWorkOperationHistoryItem } from "../../../hooks/helpers/selected-work-operation-history";
@@ -182,7 +184,7 @@ export function SelectedWorkDispatchHistorySection({
             )}
           </div>
         ) : (
-          <DetailCopy>{messages.workOperationsEmpty}</DetailCopy>
+          <WidgetDetailCopy>{messages.workOperationsEmpty}</WidgetDetailCopy>
         )}
       </SelectedWorkHistoryExpandableSection>
     );
@@ -236,7 +238,7 @@ export function SelectedWorkDispatchHistorySection({
           ))}
         </div>
       ) : (
-        <DetailCopy>{messages.dispatchHistoryEmpty}</DetailCopy>
+        <WidgetDetailCopy>{messages.dispatchHistoryEmpty}</WidgetDetailCopy>
       )}
     </SelectedWorkHistoryExpandableSection>
   );

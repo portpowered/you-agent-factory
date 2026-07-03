@@ -7,7 +7,9 @@ import {
   DashboardStatusPill,
   DashboardText,
 } from "../../../../components/ui";
-import { DetailCopy } from "../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import {
   type LifecycleControlFeedbackState,
   getFactorySessionLifecycleActionLabel,
@@ -72,10 +74,10 @@ export function LifecycleActionSection({
         </DashboardText>
       ) : null}
       {availability.showDispatchSelectionHint ? (
-        <DetailCopy>{messages.lifecycleControlsRetrySelectionHint}</DetailCopy>
+        <WidgetDetailCopy>{messages.lifecycleControlsRetrySelectionHint}</WidgetDetailCopy>
       ) : null}
       {availability.showEmptyState ? (
-        <DetailCopy>{messages.lifecycleControlsEmptyState}</DetailCopy>
+        <WidgetDetailCopy>{messages.lifecycleControlsEmptyState}</WidgetDetailCopy>
       ) : null}
     </section>
   );

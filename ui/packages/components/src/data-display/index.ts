@@ -3,6 +3,9 @@ export const COMPONENTS_CATEGORY = "data-display" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
+export { CodePanel, codePanelVariants } from "./code-panel";
+export type { CodePanelProps } from "./code-panel";
+
 export { DataTable } from "./data-table";
 export type {
   DataTableColumn,

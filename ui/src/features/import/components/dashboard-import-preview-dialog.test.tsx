@@ -9,6 +9,10 @@ import { axe } from "jest-axe";
 import { useState } from "react";
 
 import { SessionFactoryAPIError } from "../../../api/session-factory";
+import {
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+} from "@you-agent-factory/components/recipes";
 import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 import {
   DashboardImportPreviewDialog,
@@ -384,8 +388,8 @@ describe("DashboardImportPreviewDialog", () => {
 
     expect(alert.textContent).toContain(messages.activationErrorTitle);
     expect(alert.textContent).toContain(expectedCopy);
-    expect(title.className).toContain("af-dashboard-section-heading");
-    expect(copy.className).toContain("af-dashboard-body-text");
+    expect(title.className).toContain(WIDGET_FRAME_SECTION_HEADING_CLASS);
+    expect(copy.className).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
   });
 
   it("dismisses the dashboard-owned preview after a successful activation", async () => {

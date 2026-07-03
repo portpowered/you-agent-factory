@@ -14,6 +14,78 @@ const dialogEventState = {
   outsidePrevented: false,
 };
 
+vi.mock("@you-agent-factory/components", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@you-agent-factory/components")
+  >();
+
+  return {
+    ...actual,
+    Dialog: ({
+      children,
+      onOpenChange,
+    }: {
+      children: ReactNode;
+      onOpenChange?: (open: boolean) => void;
+      open?: boolean;
+    }) => (
+      <div>
+        {children}
+        <button onClick={() => onOpenChange?.(false)} type="button">
+          Request close
+        </button>
+      </div>
+    ),
+    DialogContent: ({
+      children,
+      onEscapeKeyDown,
+      onInteractOutside,
+    }: {
+      children: ReactNode;
+      onEscapeKeyDown?: (event: { preventDefault: () => void }) => void;
+      onInteractOutside?: (event: { preventDefault: () => void }) => void;
+    }) => (
+      <div aria-label="Review factory import" role="dialog">
+        {children}
+        <button
+          onClick={() =>
+            onEscapeKeyDown?.({
+              preventDefault: () => {
+                dialogEventState.escapePrevented = true;
+              },
+            })
+          }
+          type="button"
+        >
+          Trigger escape
+        </button>
+        <button
+          onClick={() =>
+            onInteractOutside?.({
+              preventDefault: () => {
+                dialogEventState.outsidePrevented = true;
+              },
+            })
+          }
+          type="button"
+        >
+          Trigger outside
+        </button>
+      </div>
+    ),
+    DialogDescription: ({ children }: { children: ReactNode }) => (
+      <p>{children}</p>
+    ),
+    DialogFooter: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    DialogHeader: ({ children }: { children: ReactNode }) => (
+      <div>{children}</div>
+    ),
+    DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+  };
+});
+
 vi.mock("../../../components/ui", () => ({
   AlertPanel: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => (
     <div {...props}>{children}</div>
@@ -46,68 +118,6 @@ vi.mock("../../../components/ui", () => ({
   }: HTMLAttributes<HTMLElement> & { as?: ElementType }) => (
     <Component {...props}>{children}</Component>
   ),
-  Dialog: ({
-    children,
-    onOpenChange,
-  }: {
-    children: ReactNode;
-    onOpenChange?: (open: boolean) => void;
-    open?: boolean;
-  }) => (
-    <div>
-      {children}
-      <button onClick={() => onOpenChange?.(false)} type="button">
-        Request close
-      </button>
-    </div>
-  ),
-  DialogContent: ({
-    children,
-    onEscapeKeyDown,
-    onInteractOutside,
-  }: {
-    children: ReactNode;
-    onEscapeKeyDown?: (event: { preventDefault: () => void }) => void;
-    onInteractOutside?: (event: { preventDefault: () => void }) => void;
-  }) => (
-    <div aria-label="Review factory import" role="dialog">
-      {children}
-      <button
-        onClick={() =>
-          onEscapeKeyDown?.({
-            preventDefault: () => {
-              dialogEventState.escapePrevented = true;
-            },
-          })
-        }
-        type="button"
-      >
-        Trigger escape
-      </button>
-      <button
-        onClick={() =>
-          onInteractOutside?.({
-            preventDefault: () => {
-              dialogEventState.outsidePrevented = true;
-            },
-          })
-        }
-        type="button"
-      >
-        Trigger outside
-      </button>
-    </div>
-  ),
-  DialogDescription: ({ children }: { children: ReactNode }) => (
-    <p>{children}</p>
-  ),
-  DialogFooter: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogHeader: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
   SurfacePanel: ({
     asChild,
     children,

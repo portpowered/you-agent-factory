@@ -31,18 +31,10 @@ describe("WorkTotalsCard", () => {
     );
 
     const workTotals = screen.getByLabelText("work totals");
-    const inProgressCard = within(workTotals)
-      .getByText("In progress")
-      .closest("article");
-    const completedCard = within(workTotals)
-      .getByText("Completed")
-      .closest("article");
-    const failedCard = within(workTotals)
-      .getByText("Failed")
-      .closest("article");
-    const dispatchedCard = within(workTotals)
-      .getByText("Dispatched")
-      .closest("article");
+    const inProgressCard = screen.getByLabelText("In progress: 2");
+    const completedCard = screen.getByLabelText("Completed: 3");
+    const failedCard = screen.getByLabelText("Failed: 1");
+    const dispatchedCard = screen.getByLabelText("Dispatched: 5");
     const cardShell = screen.getByRole("article", { name: "Work totals" });
     const cardHeader = cardShell.querySelector("header");
 
@@ -71,17 +63,16 @@ describe("WorkTotalsCard", () => {
     expect(screen.getByLabelText("Completed: 3")).toBeTruthy();
     expect(screen.getByLabelText("Failed: 1")).toBeTruthy();
     expect(screen.getByLabelText("Dispatched: 5")).toBeTruthy();
-    expect(inProgressCard?.className).toContain("border-af-info-border");
-    expect(inProgressCard?.className).toContain("bg-info-container");
-    expect(completedCard?.className).toContain("border-af-success-border");
-    expect(completedCard?.className).toContain("bg-success-container");
-    expect(failedCard?.className).toContain("border-af-danger-border");
-    expect(failedCard?.className).toContain("bg-error-container");
-    expect(dispatchedCard?.className).toContain("border-outline");
-    expect(dispatchedCard?.className).toContain("border-af-info-border");
-    expect(dispatchedCard?.className).toContain("bg-info-container");
-    expect(dispatchedCard?.className).not.toContain("border-af-success-border");
-    expect(dispatchedCard?.className).not.toContain("border-af-danger-border");
+    expect(inProgressCard.className).toContain("border-af-info-border");
+    expect(inProgressCard.className).toContain("bg-info-container");
+    expect(completedCard.className).toContain("border-af-success-border");
+    expect(completedCard.className).toContain("bg-success-container");
+    expect(failedCard.className).toContain("border-af-danger-border");
+    expect(failedCard.className).toContain("bg-error-container");
+    expect(dispatchedCard.className).toContain("border-af-info-border");
+    expect(dispatchedCard.className).toContain("bg-info-container");
+    expect(dispatchedCard.className).not.toContain("border-af-success-border");
+    expect(dispatchedCard.className).not.toContain("border-af-danger-border");
   });
 
   it("fits default bento height without vertical scroll for representative counts", () => {
@@ -108,9 +99,9 @@ describe("WorkTotalsCard", () => {
     expect(body.className).not.toMatch(/overflow-y-(auto|scroll)/);
     expectNoVerticalScrollContainer(body);
 
-    const statCard = within(card).getByText("In progress").closest("article");
-    expect(statCard?.className).toContain("p-2");
-    expect(within(requireValue(statCard)).getByText("2").className).toContain(
+    const statCard = screen.getByLabelText("In progress: 2");
+    expect(statCard.className).toContain("p-2");
+    expect(within(statCard).getByText("2").className).toContain(
       "text-[1.2rem]",
     );
   });
