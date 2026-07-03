@@ -7,3 +7,28 @@ export {
   COMPONENT_CATEGORY_EXPORT_PATHS,
   type ComponentCategoryExportPath,
 } from "./category-paths";
+
+export {
+  WidgetDetailCopy,
+  WidgetEmptyState,
+  WidgetEmptyStateText,
+  WidgetEmptyStateTitle,
+  WidgetFrame,
+  WidgetSubtitle,
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_MIN_WIDTH_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+  WIDGET_FRAME_SUBTITLE_CLASS,
+  WIDGET_FRAME_SUPPORTING_LABEL_CLASS,
+  WIDGET_FRAME_SUPPORTING_LABELS_CLASS,
+  WIDGET_FRAME_WIDE_BODY_CLASS,
+  widgetFrameDetailCardClass,
+} from "./recipes";
+export type {
+  WidgetDetailCopyProps,
+  WidgetEmptyStateProps,
+  WidgetEmptyStateTextProps,
+  WidgetEmptyStateTitleProps,
+  WidgetFrameProps,
+  WidgetSubtitleProps,
+} from "./recipes";
