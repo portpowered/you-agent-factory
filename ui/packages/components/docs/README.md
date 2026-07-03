@@ -23,6 +23,9 @@ read it directly from the package; no docs-site implementation is required.
 
 - [Form select primitives](./forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+- [Overlay and disclosure primitives](./overlays.md) — Dialog, Popover,
+  Collapsible, and ScrollArea accessibility, labeling, focus, and overflow
+  guidance.
 
 ## Getting started
 

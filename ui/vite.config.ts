@@ -29,6 +29,22 @@ const sharedReactAliases = [
     replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
   },
   {
+    find: "@radix-ui/react-dialog",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-dialog"),
+  },
+  {
+    find: "@radix-ui/react-popover",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-popover"),
+  },
+  {
+    find: "@radix-ui/react-collapsible",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-collapsible"),
+  },
+  {
+    find: "@radix-ui/react-scroll-area",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-scroll-area"),
+  },
+  {
     find: "@radix-ui/react-select",
     replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
   },
@@ -45,6 +61,10 @@ const monacoEditorPlugin =
     : monacoEditorPluginModule.default;
 const optimizedDeps = isVitestRun
   ? ([
+      "@radix-ui/react-collapsible",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-scroll-area",
       "@radix-ui/react-select",
       "@radix-ui/react-slot",
       "react",

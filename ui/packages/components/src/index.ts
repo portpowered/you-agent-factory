@@ -102,3 +102,32 @@ export type {
   SelectSeparatorProps,
   SelectTriggerProps,
 } from "./forms";
+export {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+  OVERLAY_DIALOG_BODY_CLASS,
+  OVERLAY_DIALOG_CONTENT_SHELL_CLASS,
+  OVERLAY_FORM_GROUP_CLASS,
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+  ScrollArea,
+  ScrollBar,
+} from "./overlays";
+export type {
+  DialogContentProps,
+  ScrollAreaProps,
+  ScrollBarProps,
+} from "./overlays";

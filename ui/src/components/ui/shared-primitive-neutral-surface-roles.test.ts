@@ -4,9 +4,23 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
+const PACKAGE_OVERLAYS_DIR = join(
+  UI_COMPONENTS_DIR,
+  "..",
+  "..",
+  "..",
+  "packages",
+  "components",
+  "src",
+  "overlays",
+);
 
 function readComponentSource(fileName: string): string {
   return readFileSync(join(UI_COMPONENTS_DIR, fileName), "utf8");
+}
+
+function readPackageOverlaySource(fileName: string): string {
+  return readFileSync(join(PACKAGE_OVERLAYS_DIR, fileName), "utf8");
 }
 
 function expectNoTransitionalNeutralSurfaces(source: string): void {
@@ -17,12 +31,22 @@ function expectNoTransitionalNeutralSurfaces(source: string): void {
 
 describe("shared primitive neutral surface roles", () => {
   it.each([
-    "dashboard-shell.tsx",
-    "input.tsx",
-    "dialog.tsx",
-    "popover.tsx",
-  ])("uses role-based neutral surfaces in %s", (fileName) => {
-    const source = readComponentSource(fileName);
+    ["dashboard-shell.tsx", readComponentSource],
+    ["input.tsx", readComponentSource],
+  ])("uses role-based neutral surfaces in %s", (fileName, readSource) => {
+    const source = readSource(fileName);
+
+    expect(source).toContain("border-outline");
+    expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
+    expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
+    expectNoTransitionalNeutralSurfaces(source);
+  });
+
+  it.each([
+    ["dialog.tsx", readPackageOverlaySource],
+    ["popover.tsx", readPackageOverlaySource],
+  ])("uses role-based neutral surfaces in package overlay %s", (fileName, readSource) => {
+    const source = readSource(fileName);
 
     expect(source).toContain("border-outline");
     expect(source).toMatch(/\btext-on-surface(-variant)?\b/);

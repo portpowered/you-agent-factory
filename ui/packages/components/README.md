@@ -140,6 +140,7 @@ directory:
 - [CodePanel long-content containment](./docs/data-display-code-panel.md)
 - [Form select primitives](./docs/forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+- [Overlay and disclosure primitives](./docs/overlays.md)
 - [Widget frame and layout recipes](./docs/widget-frame-recipes.md)
 
 See that directory for component-level documentation as it is added. The docs
