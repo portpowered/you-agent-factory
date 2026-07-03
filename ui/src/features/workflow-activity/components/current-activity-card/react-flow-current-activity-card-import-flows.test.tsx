@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import "../../../../testing/react-flow-current-activity-card-component.mocks";
+import "./test-support/react-flow-current-activity-card-component.mocks";
 
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import {
@@ -19,7 +19,7 @@ import {
   PADDING_CLASS_PATTERN,
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
-} from "../../../../testing/react-flow-current-activity-card-component.harness";
+} from "./test-support/react-flow-current-activity-card-component.harness";
 
 describe("ReactFlowCurrentActivityCard import flows", () => {
   registerCurrentActivityCardTestLifecycle();

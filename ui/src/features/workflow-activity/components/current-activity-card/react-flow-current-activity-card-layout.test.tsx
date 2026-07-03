@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import "../../../../testing/react-flow-current-activity-card-component.mocks";
+import "./test-support/react-flow-current-activity-card-component.mocks";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -36,7 +36,7 @@ import {
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
   renderWithQueryClient,
-} from "../../../../testing/react-flow-current-activity-card-component.harness";
+} from "./test-support/react-flow-current-activity-card-component.harness";
 
 async function getWorkstationNode(label = "Review"): Promise<HTMLElement> {
   const button = await screen.findByRole("button", {

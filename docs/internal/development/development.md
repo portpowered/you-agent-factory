@@ -482,7 +482,8 @@ Use **card-level `render(...)`** (or a feature-local test helper) when the behav
 
 | Concern | Harness module | Typical consumers |
 | --- | --- | --- |
-| Editable factory graph mocks and fixtures | `ui/src/testing/graph-editor-harness.ts` | split `react-flow-current-activity-card-*.test.tsx` suites, `use-editable-factory-graph.test.tsx` |
+| Editable factory graph mocks and fixtures | `ui/src/testing/graph-editor-harness.ts` | `use-editable-factory-graph.test.tsx` and other graph-editor suites |
+| Current activity card render/lifecycle helpers | `ui/src/features/workflow-activity/components/current-activity-card/test-support/react-flow-current-activity-card-component.harness.tsx` | split `react-flow-current-activity-card-*.test.tsx` suites under `current-activity-card/` |
 | Session factory GET/PUT fetch doubles | `ui/src/testing/session-factory-mocks.ts` | `App.import.test.tsx`, `ui/src/api/session-factory/*.test.ts` |
 | Dashboard session store pinning | `ui/src/testing/dashboard-session-test-provider.tsx` | `renderApp({ sessionID })`, `ui/.storybook/dashboard-story-runtime.tsx` |
 | Bento catalog Storybook fixtures | `ui/src/features/bento/components/dashboard-bento-story-shared.tsx` | `dashboard-bento-*-catalog.stories.tsx` |

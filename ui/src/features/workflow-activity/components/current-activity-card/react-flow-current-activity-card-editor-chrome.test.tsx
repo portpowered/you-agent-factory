@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import "../../../../testing/react-flow-current-activity-card-component.mocks";
+import "./test-support/react-flow-current-activity-card-component.mocks";
 
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,7 +29,7 @@ import {
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
   workerDenseSnapshot,
-} from "../../../../testing/react-flow-current-activity-card-component.harness";
+} from "./test-support/react-flow-current-activity-card-component.harness";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: editor chrome scenarios share one current deployment harness seam.
 describe("ReactFlowCurrentActivityCard editor chrome", () => {
