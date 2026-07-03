@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this replay hook test keeps the tick-ordered work request event contract readable in one end-to-end flow.
 func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	hook, err := NewSubmissionHook(testReplayArtifact(t, replayWorkRequestEvent(t, "request-1", 2, "api", []factoryapi.Work{{
 		Name:         "work-1",
@@ -44,38 +43,93 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OnTick before due tick: %v", err)
 	}
-	if len(before.GeneratedBatches) != 0 {
-		t.Fatalf("generated batches before due tick = %d, want 0", len(before.GeneratedBatches))
-	}
-	if !before.KeepAlive {
-		t.Fatal("before due tick KeepAlive = false, want true while future submissions remain")
-	}
+	assertSubmissionHookBeforeDueTick(t, before)
 
 	due, err := hook.OnTick(context.Background(), replaySubmissionHookContext(2))
 	if err != nil {
 		t.Fatalf("OnTick at due tick: %v", err)
 	}
-	if len(due.GeneratedBatches) != 1 {
-		t.Fatalf("generated batches at due tick = %d, want 1", len(due.GeneratedBatches))
-	}
+	assertSubmissionHookDueTickBatchCount(t, due, 1)
 	batch := due.GeneratedBatches[0]
-	if batch.Request.RequestID != "request-1" {
-		t.Fatalf("replayed request ID = %q, want request-1", batch.Request.RequestID)
+	assertSubmissionHookReplayedRequestID(t, batch, "request-1")
+	assertSubmissionHookReplayedSourceMetadata(t, batch, "api")
+	assertSubmissionHookReplayedGeneratedWorkCount(t, batch, 2, "work-1")
+	assertSubmissionHookReplayedOrderedContent(t, batch.Request.Works[0], "alpha", "file://fixtures/alpha.png")
+	assertSubmissionHookReplayedDependencyRelation(t, batch, "work-2", "work-1")
+	assertSubmissionHookFinalKeepAliveShutdown(t, due)
+}
+
+func assertSubmissionHookBeforeDueTick(t *testing.T, got interfaces.SubmissionHookResult) {
+	t.Helper()
+	if len(got.GeneratedBatches) != 0 {
+		t.Fatalf("before-due batch count = %d, want 0", len(got.GeneratedBatches))
 	}
-	if len(batch.Request.Works) != 2 {
-		t.Fatalf("replayed batch works = %d, want 2", len(batch.Request.Works))
+	if !got.KeepAlive {
+		t.Fatal("before-due keep-alive = false, want true while future submissions remain")
 	}
-	if batch.Request.Works[0].WorkID != "work-1" || batch.Metadata.Source != "api" {
-		t.Fatalf("replayed generated batch = %#v, want work-1 from api", batch)
+}
+
+func assertSubmissionHookDueTickBatchCount(t *testing.T, got interfaces.SubmissionHookResult, want int) {
+	t.Helper()
+	if len(got.GeneratedBatches) != want {
+		t.Fatalf("due-tick batch count = %d, want %d", len(got.GeneratedBatches), want)
 	}
-	if got := batch.Request.Works[0].Content; len(got) != 2 || got[0].Text != "alpha" || got[1].URL != "file://fixtures/alpha.png" {
-		t.Fatalf("replayed content = %#v, want ordered text and image parts", got)
+}
+
+func assertSubmissionHookFinalKeepAliveShutdown(t *testing.T, got interfaces.SubmissionHookResult) {
+	t.Helper()
+	if got.KeepAlive {
+		t.Fatal("final keep-alive shutdown = true, want false after last submission is emitted")
 	}
-	if len(batch.Request.Relations) != 1 || batch.Request.Relations[0].SourceWorkName != "work-2" || batch.Request.Relations[0].TargetWorkName != "work-1" {
-		t.Fatalf("replayed relations = %#v, want work-2 depends on work-1", batch.Request.Relations)
+}
+
+func assertSubmissionHookReplayedRequestID(t *testing.T, batch interfaces.GeneratedSubmissionBatch, want string) {
+	t.Helper()
+	if batch.Request.RequestID != want {
+		t.Fatalf("replayed request ID = %q, want %q", batch.Request.RequestID, want)
 	}
-	if due.KeepAlive {
-		t.Fatal("due tick KeepAlive = true, want false after last submission is emitted")
+}
+
+func assertSubmissionHookReplayedSourceMetadata(t *testing.T, batch interfaces.GeneratedSubmissionBatch, want string) {
+	t.Helper()
+	if batch.Metadata.Source != want {
+		t.Fatalf("replayed source metadata = %q, want %q", batch.Metadata.Source, want)
+	}
+}
+
+func assertSubmissionHookReplayedGeneratedWorkCount(t *testing.T, batch interfaces.GeneratedSubmissionBatch, wantCount int, firstWorkID string) {
+	t.Helper()
+	if len(batch.Request.Works) != wantCount {
+		t.Fatalf("replayed generated work count = %d, want %d", len(batch.Request.Works), wantCount)
+	}
+	if batch.Request.Works[0].WorkID != firstWorkID {
+		t.Fatalf("replayed first work ID = %q, want %q", batch.Request.Works[0].WorkID, firstWorkID)
+	}
+}
+
+func assertSubmissionHookReplayedOrderedContent(t *testing.T, work interfaces.Work, wantText, wantImageURL string) {
+	t.Helper()
+	got := work.Content
+	if len(got) != 2 {
+		t.Fatalf("replayed content part count = %d, want 2", len(got))
+	}
+	if got[0].Text != wantText {
+		t.Fatalf("replayed first content text = %q, want %q", got[0].Text, wantText)
+	}
+	if got[1].URL != wantImageURL {
+		t.Fatalf("replayed second content image URL = %q, want %q", got[1].URL, wantImageURL)
+	}
+}
+
+func assertSubmissionHookReplayedDependencyRelation(t *testing.T, batch interfaces.GeneratedSubmissionBatch, sourceWork, targetWork string) {
+	t.Helper()
+	if len(batch.Request.Relations) != 1 {
+		t.Fatalf("replayed relation count = %d, want 1", len(batch.Request.Relations))
+	}
+	relation := batch.Request.Relations[0]
+	if relation.SourceWorkName != sourceWork || relation.TargetWorkName != targetWork {
+		t.Fatalf("replayed dependency relation = %q -> %q, want %q -> %q (source depends on target)",
+			relation.SourceWorkName, relation.TargetWorkName, sourceWork, targetWork)
 	}
 }
 
