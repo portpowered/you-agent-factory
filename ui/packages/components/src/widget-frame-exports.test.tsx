@@ -9,8 +9,6 @@ import {
   WidgetEmptyStateTitle,
   WidgetErrorState,
   WidgetFrame,
-  WidgetFrameDisclosure,
-  WidgetFrameDisclosurePanel,
   WidgetFrameDisclosureTrigger,
   WidgetLoadingState,
   WidgetSubtitle,
