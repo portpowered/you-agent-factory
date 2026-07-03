@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-
+import userEvent from "@testing-library/user-event";
 import {
   WIDGET_FRAME_BODY_TEXT_CLASS,
   WIDGET_FRAME_SECTION_HEADING_CLASS,
@@ -8,9 +8,18 @@ import {
   WidgetEmptyState,
   WidgetEmptyStateText,
   WidgetEmptyStateTitle,
+  WidgetErrorState,
   WidgetFrame,
+  WidgetFrameDisclosure,
+  WidgetFrameDisclosurePanel,
+  WidgetFrameDisclosureTrigger,
+  WidgetLoadingState,
   WidgetSubtitle,
+  WidgetSuccessState,
+  widgetFrameHasNoHorizontalOverflow,
+  widgetFrameStoryShellStyle,
 } from "@you-agent-factory/components/recipes";
+import { vi } from "vitest";
 
 describe("WidgetEmptyState", () => {
   it("renders compact dashboard empty states through the component contract", () => {
@@ -194,5 +203,121 @@ describe("WidgetFrame", () => {
         screen.getByRole("button", { name: "Remove card" }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("Widget frame state panels", () => {
+  it("renders host-provided loading copy with busy status semantics", () => {
+    render(
+      <WidgetLoadingState>
+        <WidgetEmptyStateTitle>Loading content</WidgetEmptyStateTitle>
+        <WidgetEmptyStateText>
+          Host-provided loading message.
+        </WidgetEmptyStateText>
+      </WidgetLoadingState>,
+    );
+
+    const status = screen.getByRole("status");
+
+    expect(status.getAttribute("aria-busy")).toBe("true");
+    expect(
+      screen.getByRole("heading", { name: "Loading content" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Host-provided loading message.")).toBeTruthy();
+    expect(status.querySelectorAll('[aria-hidden="true"]')).toHaveLength(4);
+  });
+
+  it("renders host-provided error copy with alert semantics", () => {
+    render(
+      <WidgetErrorState>
+        <WidgetEmptyStateTitle>Request failed</WidgetEmptyStateTitle>
+        <WidgetEmptyStateText>
+          Host-provided error message.
+        </WidgetEmptyStateText>
+      </WidgetErrorState>,
+    );
+
+    const alert = screen.getByRole("alert");
+
+    expect(alert.className).toContain("bg-error-container");
+    expect(
+      screen.getByRole("heading", { name: "Request failed" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Host-provided error message.")).toBeTruthy();
+  });
+
+  it("renders host-provided success copy with status semantics", () => {
+    render(
+      <WidgetSuccessState>
+        <WidgetEmptyStateTitle>Action completed</WidgetEmptyStateTitle>
+        <WidgetEmptyStateText>
+          Host-provided success message.
+        </WidgetEmptyStateText>
+      </WidgetSuccessState>,
+    );
+
+    const status = screen.getByRole("status");
+
+    expect(status.className).toContain("bg-success-container");
+    expect(
+      screen.getByRole("heading", { name: "Action completed" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Host-provided success message.")).toBeTruthy();
+  });
+});
+
+describe("WidgetFrameDisclosure", () => {
+  it("exposes disclosure semantics and toggles expanded state from callbacks", async () => {
+    const user = userEvent.setup();
+    const onExpandedChange = vi.fn();
+
+    render(
+      <WidgetFrameDisclosure>
+        <WidgetFrameDisclosureTrigger
+          controlsID="details-panel"
+          expanded={false}
+          onExpandedChange={onExpandedChange}
+        >
+          Show details
+        </WidgetFrameDisclosureTrigger>
+        <WidgetFrameDisclosurePanel expanded={false} id="details-panel">
+          <p>Hidden details</p>
+        </WidgetFrameDisclosurePanel>
+      </WidgetFrameDisclosure>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Show details" });
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger.getAttribute("aria-controls")).toBe("details-panel");
+    expect(trigger.querySelector("svg")).toBeTruthy();
+    expect(
+      document.getElementById("details-panel")?.hasAttribute("hidden"),
+    ).toBe(true);
+
+    await user.click(trigger);
+
+    expect(onExpandedChange).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("Widget frame layout helpers", () => {
+  it("builds responsive story shell styles for bounded viewports", () => {
+    expect(widgetFrameStoryShellStyle("360px")).toEqual({
+      style: {
+        maxWidth: "360px",
+        padding: "1rem",
+        width: "100%",
+      },
+    });
+  });
+
+  it("detects horizontal overflow within the configured tolerance", () => {
+    const element = document.createElement("div");
+    Object.defineProperty(element, "scrollWidth", { value: 120 });
+    Object.defineProperty(element, "clientWidth", { value: 100 });
+
+    expect(widgetFrameHasNoHorizontalOverflow(element)).toBe(false);
+    expect(widgetFrameHasNoHorizontalOverflow(element, 20)).toBe(true);
   });
 });
