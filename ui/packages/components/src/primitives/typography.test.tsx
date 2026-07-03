@@ -3,7 +3,17 @@
 import { describe, expect, it } from "vitest";
 
 import { renderPackageComponent, screen } from "../testing/render";
+import {
+  CAPTION_TEXT_CLASS,
+  DENSE_BODY_TEXT_CLASS,
+  MUTED_TEXT_CLASS,
+  TEXT_TRUNCATE_CLASS,
+  TEXT_WRAP_CLASS,
+} from "./typography-roles";
 import { Code, Heading, Label, Text } from "./typography";
+
+const LONG_LABEL =
+  "Extremely long host-supplied label that should not force horizontal overflow";
 
 describe("typography primitives", () => {
   it("renders page and section heading roles", () => {
@@ -42,6 +52,26 @@ describe("typography primitives", () => {
     );
   });
 
+  it("renders muted, caption, and dense text roles with semantic tokens", () => {
+    renderPackageComponent(
+      <>
+        <Text variant="muted">Muted metadata</Text>
+        <Text variant="caption">Caption copy</Text>
+        <Text variant="dense">Dense metadata row</Text>
+      </>,
+    );
+
+    expect(screen.getByText("Muted metadata").className).toContain(
+      MUTED_TEXT_CLASS,
+    );
+    expect(screen.getByText("Caption copy").className).toContain(
+      CAPTION_TEXT_CLASS,
+    );
+    expect(screen.getByText("Dense metadata row").className).toContain(
+      DENSE_BODY_TEXT_CLASS,
+    );
+  });
+
   it("renders label and code typography roles", () => {
     renderPackageComponent(
       <>
@@ -56,6 +86,42 @@ describe("typography primitives", () => {
     );
     expect(screen.getByText("value-1").className).toContain(
       "af-supporting-code",
+    );
+  });
+
+  it("applies truncation classes for long labels and values", () => {
+    renderPackageComponent(
+      <div style={{ width: "120px" }}>
+        <Label truncate>{LONG_LABEL}</Label>
+        <Text truncate>{LONG_LABEL}</Text>
+      </div>,
+    );
+
+    expect(screen.getAllByText(LONG_LABEL)).toHaveLength(2);
+    for (const element of screen.getAllByText(LONG_LABEL)) {
+      expect(element.className).toContain(TEXT_TRUNCATE_CLASS);
+    }
+  });
+
+  it("applies wrapping classes for long body copy", () => {
+    renderPackageComponent(
+      <Text wrap>{LONG_LABEL}</Text>,
+    );
+
+    expect(screen.getByText(LONG_LABEL).className).toContain(TEXT_WRAP_CLASS);
+  });
+
+  it("truncates long section headings inside constrained containers", () => {
+    renderPackageComponent(
+      <div style={{ width: "120px" }}>
+        <Heading level="section" truncate>
+          {LONG_LABEL}
+        </Heading>
+      </div>,
+    );
+
+    expect(screen.getByRole("heading", { name: LONG_LABEL }).className).toContain(
+      TEXT_TRUNCATE_CLASS,
     );
   });
 });

@@ -30,4 +30,24 @@
   .af-supporting-code {
     @apply font-mono text-code-small text-code;
   }
+
+  .af-muted-text {
+    @apply text-body-medium text-on-surface-subtle;
+  }
+
+  .af-caption-text {
+    @apply text-label-small text-on-surface-subtle;
+  }
+
+  .af-dense-body-text {
+    @apply text-body-small leading-tight text-on-surface-variant;
+  }
+
+  .af-text-truncate {
+    @apply block min-w-0 truncate whitespace-nowrap;
+  }
+
+  .af-text-wrap {
+    @apply min-w-0 break-words [overflow-wrap:anywhere];
+  }
 }
