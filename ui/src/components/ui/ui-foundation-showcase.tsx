@@ -3,6 +3,17 @@ import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 
 import { useAppLocale } from "../../i18n";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@you-agent-factory/components";
+import {
   Button,
   Calendar,
   ChartContainer,
@@ -10,16 +21,7 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
   DataTable,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   Input,
   ResizableHandle,
   ResizablePanel,
@@ -292,7 +294,7 @@ export function UIFoundationShowcase({
                 {messages.dialogOpenAction}
               </Button>
               <Dialog onOpenChange={setDialogOpen} open={dialogOpen}>
-                <DialogContent locale={locale}>
+                <DialogContent closeLabel={messages.dialogCloseLabel}>
                   <DialogHeader>
                     <DialogTitle>{messages.dialogTitle}</DialogTitle>
                     <DialogDescription>

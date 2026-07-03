@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 
 import {
-  DashboardActionButton,
-  DashboardActionRow,
   Popover,
   PopoverContent,
   PopoverTrigger,
+} from "@you-agent-factory/components";
+import {
+  DashboardActionButton,
+  DashboardActionRow,
 } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";

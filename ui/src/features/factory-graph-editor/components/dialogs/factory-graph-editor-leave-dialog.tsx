@@ -1,12 +1,12 @@
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../../../components/ui";
+} from "@you-agent-factory/components";
+import { Button } from "../../../../components/ui";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
 export function FactoryGraphEditorLeaveDialog({

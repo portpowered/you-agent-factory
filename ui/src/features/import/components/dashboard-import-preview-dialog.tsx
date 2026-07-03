@@ -1,17 +1,19 @@
 import { useId, useMemo, useState } from "react";
 import {
-  AlertPanel,
-  Button,
-  DashboardDescriptionList,
-  DashboardHeading,
-  DashboardLabel,
-  DashboardText,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+} from "@you-agent-factory/components";
+import {
+  AlertPanel,
+  Button,
+  DashboardDescriptionList,
+  DashboardHeading,
+  DashboardLabel,
+  DashboardText,
   SurfacePanel,
 } from "../../../components/ui";
 import {
