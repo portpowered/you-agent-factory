@@ -1,5 +1,7 @@
 import { CodePanel } from "../../../../../components/ui/code-panel";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import {
   CurrentSelectionDetailCode,
   CurrentSelectionLabel,
@@ -45,7 +47,7 @@ export function ScriptOutputSection({
       {value ? (
         <CodePanel>{value}</CodePanel>
       ) : (
-        <DetailCopy>{emptyMessage}</DetailCopy>
+        <WidgetDetailCopy>{emptyMessage}</WidgetDetailCopy>
       )}
     </div>
   );

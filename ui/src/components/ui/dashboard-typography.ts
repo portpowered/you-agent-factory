@@ -13,8 +13,6 @@ export const DASHBOARD_SUPPORTING_LABEL_CLASS = "af-dashboard-supporting-label";
 export const DASHBOARD_BODY_CODE_CLASS = "af-dashboard-body-code";
 export const DASHBOARD_SUPPORTING_CODE_CLASS = "af-dashboard-supporting-code";
 export const DASHBOARD_WIDGET_SUBTITLE_CLASS = "af-dashboard-widget-subtitle";
-export const DASHBOARD_SUPPORTING_LABELS_CLASS =
-  "af-dashboard-supporting-labels";
 
 /** Material 3 typography families (see typography-role-tokens.css). */
 export type MaterialTypographyFamily =

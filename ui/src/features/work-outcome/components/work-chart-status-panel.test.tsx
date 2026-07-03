@@ -1,5 +1,10 @@
 import { render, screen } from "@testing-library/react";
 
+import {
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+} from "@you-agent-factory/components/recipes";
+
 import { WorkChartStatusPanel } from "./work-chart-status-panel";
 
 describe("WorkChartStatusPanel", () => {
@@ -43,10 +48,10 @@ describe("WorkChartStatusPanel", () => {
     expect(alert.className).toContain("min-h-[14rem]");
     expect(alert.className).not.toContain("border-dashed");
     expect(screen.getByText("Unable to render chart").className).toContain(
-      "af-dashboard-section-heading",
+      WIDGET_FRAME_SECTION_HEADING_CLASS,
     );
     expect(screen.getByText("Chart data is unavailable.").className).toContain(
-      "af-dashboard-body-text",
+      WIDGET_FRAME_BODY_TEXT_CLASS,
     );
   });
 });
