@@ -189,14 +189,16 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 		scanCount.Load(), totalSubmittedToA.Load(), completeA, 5)
 }
 
-// TestCrossWorkflowPipelineNoRace verifies no data races during cross-workflow
-// submission with concurrent status queries.
+// TestCrossWorkflowPipelineNoRace verifies the Factory runtime has no race-sensitive
+// failures when goroutines submit code-change Work Requests concurrently while other
+// goroutines read marking and runtime status. Harness setup uses WithServiceMode so
+// the background runtime stays alive during concurrent submission; no runtime semantic
+// changes were required.
 func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
 
-	// Simple 1-stage code pipeline.
 	dirA := testutil.ScaffoldFactoryDir(t, oneStageCodePipelineCfg("coder"))
 	hA := testutil.NewServiceTestHarness(t, dirA, testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithExtraOptions(
@@ -208,7 +210,7 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	defer cancelA()
 	errChA := hA.RunInBackground(ctxA)
 
-	// 5 goroutines submit work items concurrently.
+	// Five goroutines submit code-change Work Requests concurrently.
 	const totalItems = 15
 	var submitWg sync.WaitGroup
 	for g := range 5 {
@@ -262,10 +264,10 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	pollUntilAllTerminalH(t, hA, codeChangeTerminalPlaces, totalItems, 20*time.Second)
 
 	if markingQueryCount.Load() == 0 {
-		t.Fatal("expected concurrent marking queries before stopping query workers, got 0")
+		t.Fatal("expected concurrent marking reads before stopping query workers, got 0")
 	}
 	if statusQueryCount.Load() == 0 {
-		t.Fatal("expected concurrent status queries before stopping query workers, got 0")
+		t.Fatal("expected concurrent runtime status reads before stopping query workers, got 0")
 	}
 
 	close(queryDone)
@@ -276,7 +278,7 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	snapA := hA.Marking()
 	assertMarkingConsistency(t, snapA, codeChangeTerminalPlaces, totalItems)
 
-	t.Logf("no-race test: %d terminal tokens, %d marking queries, %d status queries",
+	t.Logf("no-race test: %d terminal Work tokens, %d marking reads, %d status reads",
 		countTerminalTokens(snapA, codeChangeTerminalPlaces),
 		markingQueryCount.Load(),
 		statusQueryCount.Load())
