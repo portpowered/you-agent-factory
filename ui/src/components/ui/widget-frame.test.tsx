@@ -1,17 +1,21 @@
 import { render, screen } from "@testing-library/react";
 
 import {
-  DashboardEmptyState,
-  DashboardEmptyStateText,
-  DashboardEmptyStateTitle,
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+  WIDGET_FRAME_SUBTITLE_CLASS,
+  WidgetEmptyState,
+  WidgetEmptyStateText,
+  WidgetEmptyStateTitle,
   WidgetSubtitle,
-} from "./widget-frame";
-describe("DashboardEmptyState", () => {
+} from "@you-agent-factory/components/recipes";
+
+describe("WidgetEmptyState", () => {
   it("renders compact dashboard empty states through the component contract", () => {
     render(
-      <DashboardEmptyState compact>
+      <WidgetEmptyState compact>
         <h3>No trace selected</h3>
-      </DashboardEmptyState>,
+      </WidgetEmptyState>,
     );
 
     const emptyHeading = screen.getByRole("heading", {
@@ -25,14 +29,14 @@ describe("DashboardEmptyState", () => {
 
   it("renders empty-state title and body copy through shared typography roles", () => {
     render(
-      <DashboardEmptyState>
-        <DashboardEmptyStateTitle as="h2">
+      <WidgetEmptyState>
+        <WidgetEmptyStateTitle as="h2">
           No chart data
-        </DashboardEmptyStateTitle>
-        <DashboardEmptyStateText>
+        </WidgetEmptyStateTitle>
+        <WidgetEmptyStateText>
           Run the factory to populate this trend.
-        </DashboardEmptyStateText>
-      </DashboardEmptyState>,
+        </WidgetEmptyStateText>
+      </WidgetEmptyState>,
     );
 
     const title = screen.getByRole("heading", {
@@ -41,8 +45,8 @@ describe("DashboardEmptyState", () => {
     });
     const body = screen.getByText("Run the factory to populate this trend.");
 
-    expect(title.className).toContain("af-dashboard-section-heading");
-    expect(body.className).toContain("af-dashboard-body-text");
+    expect(title.className).toContain(WIDGET_FRAME_SECTION_HEADING_CLASS);
+    expect(body.className).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
     expect(body.className).toContain("m-0");
   });
 });
@@ -58,6 +62,6 @@ describe("WidgetSubtitle", () => {
     const value = screen.getByText("42 completed");
 
     expect(value.tagName).toBe("DD");
-    expect(value.className).toContain("af-dashboard-widget-subtitle");
+    expect(value.className).toContain(WIDGET_FRAME_SUBTITLE_CLASS);
   });
 });

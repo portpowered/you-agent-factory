@@ -3,7 +3,9 @@ import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
 import {
@@ -132,7 +134,7 @@ export function WorkstationActiveWorkList({
           })}
         </ul>
       ) : (
-        <DetailCopy>{messages.activeWorkEmpty}</DetailCopy>
+        <WidgetDetailCopy>{messages.activeWorkEmpty}</WidgetDetailCopy>
       )}
     </CurrentSelectionExpandableSection>
   );

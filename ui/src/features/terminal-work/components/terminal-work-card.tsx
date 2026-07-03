@@ -4,7 +4,9 @@ import {
   DashboardActionButton,
   surfacePanelVariants,
 } from "../../../components/ui";
-import { DetailCopy } from "../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import { cn } from "../../../lib/cn";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { CurrentSelectionExecutionPill } from "../../current-selection/base/components/presentation/current-selection-pill";
@@ -186,7 +188,7 @@ function TerminalWorkRow({
           ))}
         </ul>
       ) : (
-        <DetailCopy>{emptyMessage}</DetailCopy>
+        <WidgetDetailCopy>{emptyMessage}</WidgetDetailCopy>
       )}
     </StandardExpandableSection>
   );
