@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
+const PACKAGE_CHART_SOURCE = join(
+  UI_COMPONENTS_DIR,
+  "../../../packages/components/src/charts/chart.tsx",
+);
 
 const IN_SCOPE_FILES = [
   "input.tsx",
@@ -45,10 +49,12 @@ describe("shared primitive disabled text color roles", () => {
   });
 
   it("maps chart hidden legend toggle copy to text-on-surface-disabled", () => {
-    const source = readComponentSource("chart.tsx");
+    const shimSource = readComponentSource("chart.tsx");
+    const chartSource = readFileSync(PACKAGE_CHART_SOURCE, "utf8");
 
-    expect(source).toMatch(/hidden\s*\?\s*"text-on-surface-disabled"/);
-    expectNoTransitionalDisabledText(source);
+    expect(shimSource).toContain("@you-agent-factory/components/charts");
+    expect(chartSource).toMatch(/hidden\s*\?\s*"text-on-surface-disabled"/);
+    expectNoTransitionalDisabledText(chartSource);
   });
 
   it("maps dashboard action button spinner circle to text-on-surface-disabled", () => {
