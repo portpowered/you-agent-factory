@@ -559,7 +559,7 @@ export function CurrentActivityGraphViewport({
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
-          "min-h-96",
+          "h-full min-h-96",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-primary bg-primary-container",

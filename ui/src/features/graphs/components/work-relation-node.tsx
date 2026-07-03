@@ -6,7 +6,7 @@ import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/
 import {
   activityGraphNodeSurfaceClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
-import { GraphNodeButton } from "./graph-node-button";
+import { GraphNodeButton } from "@you-agent-factory/components/graphs";
 import {
   type ActivityGraphNodeHandle,
   ActivityGraphNodeShell,

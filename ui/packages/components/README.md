@@ -139,6 +139,9 @@ directory:
   `Code`, dense text, truncation, and wrapping
 - [Layout and display primitives](./docs/layout-display-primitives.md) —
   `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
+- [`docs/graphs.md`](./docs/graphs.md) — graph node shell, node button, edge,
+  viewport surface, handle badge, edge path helpers, React Flow boundary, and
+  Storybook example map
 - [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
 - [Skeleton loading placeholders](./docs/feedback-skeleton.md)
 - [CodePanel long-content containment](./docs/data-display-code-panel.md)

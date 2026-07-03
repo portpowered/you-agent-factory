@@ -1,11 +1,11 @@
 import { Handle, Position } from "@xyflow/react";
 import type { CSSProperties } from "react";
 
-import { cn } from "../../../lib/cn";
-import type { ActivityGraphNodeHandle } from "./graph-node-shell";
+import { cn } from "../utilities/cn";
+import type { GraphNodeHandle, GraphNodeHandleTone } from "./graph-node-handle";
 
-interface GraphNodeHandleBadgeProps {
-  handle: ActivityGraphNodeHandle;
+export interface GraphNodeHandleBadgeProps {
+  handle: GraphNodeHandle;
 }
 
 export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
@@ -25,7 +25,7 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
     );
   }
 
-  const tone = handleTone(handle.id);
+  const tone = handle.tone ?? "default";
 
   return (
     <div
@@ -36,7 +36,7 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
     >
       <Handle
         aria-invalid={handle.validationError ? true : undefined}
-        aria-label={handle.buttonAriaLabel}
+        aria-label={handle.buttonAriaLabel ?? handle.label}
         className={cn(
           "pointer-events-auto absolute !top-1/2 !h-5 !w-5 !border-0 !bg-transparent",
           "before:pointer-events-none before:absolute before:top-1/2 before:h-2.5 before:w-2.5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-surface before:bg-[var(--node-handle-background)] before:shadow-sm before:transition before:content-['']",
@@ -68,57 +68,7 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
   );
 }
 
-function handleTone(
-  handleId: string,
-):
-  | "assignment"
-  | "continue"
-  | "default"
-  | "failure"
-  | "input"
-  | "output"
-  | "worker"
-  | "rejection"
-  | "resource" {
-  if (handleId.includes("resource")) {
-    return "resource";
-  }
-
-  if (
-    handleId.includes("worker-assignment") ||
-    handleId.includes("worker-input")
-  ) {
-    return "worker";
-  }
-
-  if (handleId.includes("on-continue")) {
-    return "continue";
-  }
-
-  if (handleId.includes("on-failure")) {
-    return "failure";
-  }
-
-  if (handleId.includes("on-rejection")) {
-    return "rejection";
-  }
-
-  if (handleId.includes("output")) {
-    return "output";
-  }
-
-  if (handleId.includes("input")) {
-    return "input";
-  }
-
-  if (handleId.includes("assignment")) {
-    return "assignment";
-  }
-
-  return "default";
-}
-
-function handleDotColor(tone: ReturnType<typeof handleTone>): string {
+function handleDotColor(tone: GraphNodeHandleTone): string {
   switch (tone) {
     case "assignment":
       return "var(--color-success)";
@@ -142,7 +92,7 @@ function handleDotColor(tone: ReturnType<typeof handleTone>): string {
 }
 
 function anchoredHandleStyle(
-  side: ActivityGraphNodeHandle["side"],
+  side: GraphNodeHandle["side"],
 ): CSSProperties {
   return side === "left"
     ? {
