@@ -3,12 +3,21 @@ import type { ReactNode } from "react";
 import { cn } from "../utilities/cn";
 import { GraphNodeHandleBadge } from "./graph-node-handle-badge";
 import type { GraphNodeHandle } from "./graph-node-handle";
+import { GraphNodeStateIndicator } from "./graph-node-state-indicator";
+import {
+  GRAPH_NODE_CONTENT_MIN_HEIGHT_CLASS,
+  type GraphNodeState,
+  graphNodeShellStateAttributes,
+  graphNodeShellStateClassName,
+} from "./graph-node-state";
 
 export interface GraphNodeShellProps {
   children: ReactNode;
   className?: string;
   handles: GraphNodeHandle[];
   nodeKind?: string;
+  state?: GraphNodeState;
+  stateLabel?: string;
 }
 
 export function GraphNodeShell({
@@ -16,6 +25,8 @@ export function GraphNodeShell({
   className = "",
   handles,
   nodeKind,
+  state = "default",
+  stateLabel,
 }: GraphNodeShellProps) {
   const leftHandles = handles.filter((handle) => handle.side === "left");
   const rightHandles = handles.filter((handle) => handle.side === "right");
@@ -24,15 +35,18 @@ export function GraphNodeShell({
     <article
       className={cn(
         "relative flex h-full min-w-0 w-full overflow-visible rounded-lg border border-outline bg-surface text-on-surface",
+        graphNodeShellStateClassName(state),
         className,
       )}
       data-graph-node-kind={nodeKind}
+      {...graphNodeShellStateAttributes(state, stateLabel)}
     >
       <NodeHandleRail handles={leftHandles} side="left" />
       <NodeHandleRail handles={rightHandles} side="right" />
       <div
         className={cn(
           "flex h-full min-w-0 w-full flex-col gap-1 py-3",
+          GRAPH_NODE_CONTENT_MIN_HEIGHT_CLASS,
           leftHandles.length > 0 ? "pl-6 pr-3" : "px-3",
           rightHandles.length > 0 && leftHandles.length > 0
             ? "pr-6"
@@ -41,6 +55,7 @@ export function GraphNodeShell({
               : null,
         )}
       >
+        <GraphNodeStateIndicator state={state} stateLabel={stateLabel} />
         {children}
       </div>
     </article>

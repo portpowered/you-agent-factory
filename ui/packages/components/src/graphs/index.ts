@@ -22,6 +22,21 @@ export {
 } from "./graph-node-handle-badge";
 export { GraphNodeShell, type GraphNodeShellProps } from "./graph-node-shell";
 export {
+  defaultGraphNodeStateLabel,
+  GRAPH_NODE_CONTENT_MIN_HEIGHT_CLASS,
+  GRAPH_NODE_STATE_INDICATOR_HEIGHT_CLASS,
+  graphNodeButtonIsDisabled,
+  graphNodeButtonStateAttributes,
+  graphNodeButtonStateClassName,
+  graphNodeShellStateAttributes,
+  graphNodeShellStateClassName,
+  type GraphNodeState,
+} from "./graph-node-state";
+export {
+  GraphNodeStateIndicator,
+  type GraphNodeStateIndicatorProps,
+} from "./graph-node-state-indicator";
+export {
   buildGraphEdgePathThroughWaypoints,
   type GraphEdgeWaypoint,
 } from "./graph-edge-path";
