@@ -11,57 +11,14 @@ import (
 // pkgmaintcheck:ignore-cyclomatic-complexity this binding-alignment test keeps legacy and inference workstation assertions together on one contract surface.
 func TestResolveInferenceOperationBindings_InferenceAndLegacyWorkstationTypesAlign(t *testing.T) {
 	worker := inferenceBindingWorkerFixture()
-	inputTokens := []interfaces.Token{{
-		ID: "token-tts",
-		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{{
-				Type:  interfaces.WorkContentPartTypeText,
-				Label: "utterance",
-				Text:  "hello world",
-			}},
-		},
-	}}
+	inputTokens := inferenceBindingInputTokensFixture()
 
-	inferenceBindings, err := ResolveInferenceOperationBindings(
-		inferenceBindingWorkstationFixture(interfaces.WorkstationTypeInference),
-		worker,
-		inputTokens,
-	)
-	if err != nil {
-		t.Fatalf("ResolveInferenceOperationBindings inference run: %v", err)
-	}
-	legacyBindings, err := ResolveInferenceOperationBindings(
-		inferenceBindingWorkstationFixture(interfaces.WorkstationTypeInvoke),
-		worker,
-		inputTokens,
-	)
-	if err != nil {
-		t.Fatalf("ResolveInferenceOperationBindings legacy model invoke: %v", err)
-	}
+	inferenceBindings := mustResolveInferenceBindings(t, interfaces.WorkstationTypeInference, worker, inputTokens)
+	legacyBindings := mustResolveInferenceBindings(t, interfaces.WorkstationTypeInvoke, worker, inputTokens)
 
-	for _, got := range [][]interfaces.ResolvedModelOperationBinding{inferenceBindings, legacyBindings} {
-		if len(got) != 2 {
-			t.Fatalf("bindings = %#v, want 2 resolved slots", got)
-		}
-		if got[0].Slot != "text" || got[0].Source != interfaces.ModelOperationBindingSourceInput || got[0].Content[0].Text != "hello world" {
-			t.Fatalf("text binding = %#v, want input text binding", got[0])
-		}
-		if got[1].Slot != "voice" || got[1].Source != interfaces.ModelOperationBindingSourceConfig || string(got[1].Content[0].JSON) != `{"name":"alloy"}` {
-			t.Fatalf("voice binding = %#v, want config voice binding", got[1])
-		}
-	}
-
-	if len(legacyBindings) != len(inferenceBindings) {
-		t.Fatalf("legacy vs inference binding count = %d vs %d", len(legacyBindings), len(inferenceBindings))
-	}
-	for i := range legacyBindings {
-		if legacyBindings[i].Slot != inferenceBindings[i].Slot || legacyBindings[i].Source != inferenceBindings[i].Source {
-			t.Fatalf("binding[%d] = %#v vs %#v, want aligned slot/source", i, legacyBindings[i], inferenceBindings[i])
-		}
-		if len(legacyBindings[i].Content) != len(inferenceBindings[i].Content) || legacyBindings[i].Content[0].Text != inferenceBindings[i].Content[0].Text {
-			t.Fatalf("binding[%d] content = %#v vs %#v, want aligned content", i, legacyBindings[i].Content, inferenceBindings[i].Content)
-		}
-	}
+	assertInferenceBindingFixtureBindings(t, inferenceBindings)
+	assertInferenceBindingFixtureBindings(t, legacyBindings)
+	assertInferenceBindingsAligned(t, inferenceBindings, legacyBindings)
 }
 
 func TestWorkContentFromInferenceOutput_OrdersAudioBeforeExtraParts(t *testing.T) {
@@ -159,6 +116,75 @@ func TestOperationBindingsFromGenerated_MapsSelectorFields(t *testing.T) {
 	}})
 	if len(bindings) != 1 || bindings[0].Slot != "text" || bindings[0].Selector.Label != "utterance" {
 		t.Fatalf("bindings = %#v, want mapped selector", bindings)
+	}
+}
+
+func inferenceBindingInputTokensFixture() []interfaces.Token {
+	return []interfaces.Token{{
+		ID: "token-tts",
+		Color: interfaces.TokenColor{
+			Content: []interfaces.WorkContentPart{{
+				Type:  interfaces.WorkContentPartTypeText,
+				Label: "utterance",
+				Text:  "hello world",
+			}},
+		},
+	}}
+}
+
+func mustResolveInferenceBindings(
+	t *testing.T,
+	workstationType string,
+	worker *interfaces.WorkerConfig,
+	inputTokens []interfaces.Token,
+) []interfaces.ResolvedModelOperationBinding {
+	t.Helper()
+	bindings, err := ResolveInferenceOperationBindings(
+		inferenceBindingWorkstationFixture(workstationType),
+		worker,
+		inputTokens,
+	)
+	if err != nil {
+		t.Fatalf("ResolveInferenceOperationBindings %s: %v", workstationType, err)
+	}
+	return bindings
+}
+
+func assertInferenceBindingFixtureBindings(t *testing.T, bindings []interfaces.ResolvedModelOperationBinding) {
+	t.Helper()
+	if len(bindings) != 2 {
+		t.Fatalf("bindings = %#v, want 2 resolved slots", bindings)
+	}
+	assertInferenceBindingTextSlot(t, bindings[0])
+	assertInferenceBindingVoiceSlot(t, bindings[1])
+}
+
+func assertInferenceBindingTextSlot(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+	t.Helper()
+	if binding.Slot != "text" || binding.Source != interfaces.ModelOperationBindingSourceInput || binding.Content[0].Text != "hello world" {
+		t.Fatalf("text binding = %#v, want input text binding", binding)
+	}
+}
+
+func assertInferenceBindingVoiceSlot(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+	t.Helper()
+	if binding.Slot != "voice" || binding.Source != interfaces.ModelOperationBindingSourceConfig || string(binding.Content[0].JSON) != `{"name":"alloy"}` {
+		t.Fatalf("voice binding = %#v, want config voice binding", binding)
+	}
+}
+
+func assertInferenceBindingsAligned(t *testing.T, inference, legacy []interfaces.ResolvedModelOperationBinding) {
+	t.Helper()
+	if len(legacy) != len(inference) {
+		t.Fatalf("legacy vs inference binding count = %d vs %d", len(legacy), len(inference))
+	}
+	for i := range legacy {
+		if legacy[i].Slot != inference[i].Slot || legacy[i].Source != inference[i].Source {
+			t.Fatalf("binding[%d] = %#v vs %#v, want aligned slot/source", i, legacy[i], inference[i])
+		}
+		if len(legacy[i].Content) != len(inference[i].Content) || legacy[i].Content[0].Text != inference[i].Content[0].Text {
+			t.Fatalf("binding[%d] content = %#v vs %#v, want aligned content", i, legacy[i].Content, inference[i].Content)
+		}
 	}
 }
 
