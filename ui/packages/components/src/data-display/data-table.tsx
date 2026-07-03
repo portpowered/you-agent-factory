@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "../utilities/cn";
 import {
   Table,
+  type TableSize,
   TableBody,
   TableCaption,
   TableCell,
@@ -27,10 +28,13 @@ export interface DataTableProps<Row> {
   getRowKey: (row: Row) => string;
   ariaLabel?: string;
   caption?: ReactNode;
+  containerClassName?: string;
+  containerProps?: HTMLAttributes<HTMLDivElement>;
   emptyMessage?: ReactNode;
   errorMessage?: ReactNode;
   loadingMessage?: ReactNode;
   rowClassName?: (row: Row) => string | undefined;
+  size?: TableSize;
   state?: DataTableState;
   tableClassName?: string;
 }
@@ -80,10 +84,13 @@ export function DataTable<Row>({
   getRowKey,
   ariaLabel,
   caption,
+  containerClassName,
+  containerProps,
   emptyMessage,
   errorMessage,
   loadingMessage,
   rowClassName,
+  size,
   state = "success",
   tableClassName,
 }: DataTableProps<Row>) {
@@ -146,7 +153,13 @@ export function DataTable<Row>({
   };
 
   return (
-    <Table aria-label={ariaLabel} className={tableClassName}>
+    <Table
+      aria-label={ariaLabel}
+      className={tableClassName}
+      containerClassName={containerClassName}
+      containerProps={containerProps}
+      size={size}
+    >
       {caption ? <TableCaption>{caption}</TableCaption> : null}
       <TableHeader>
         <TableRow>

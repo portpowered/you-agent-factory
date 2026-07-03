@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { renderPackageComponent, screen } from "../testing/render";
 import { DataTable } from "./data-table";
+import {
+  tableCellTruncateClassName,
+  tableCellWrapClassName,
+} from "./table-layout";
 
 interface SampleRow {
   id: string;
@@ -31,7 +35,7 @@ const sampleColumns = [
   },
 ];
 
-describe("DataTable", () => {
+describe("DataTable row rendering", () => {
   it("renders generic rows through host-provided column definitions", () => {
     renderPackageComponent(
       <DataTable
@@ -98,7 +102,9 @@ describe("DataTable", () => {
     expect(screen.getByTestId("role-row-2")).toHaveTextContent("Editor");
     expect(screen.getByTestId("role-row-1")).toHaveTextContent("Owner");
   });
+});
 
+describe("DataTable explicit states", () => {
   it("renders host-provided empty copy when no rows are present", () => {
     renderPackageComponent(
       <DataTable
@@ -181,5 +187,63 @@ describe("DataTable", () => {
     expect(screen.getByRole("cell", { name: "Alpha" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("DataTable layout", () => {
+  it("applies dense spacing through the table size prop", () => {
+    renderPackageComponent(
+      <DataTable
+        ariaLabel="Dense data table"
+        columns={sampleColumns}
+        data={sampleRows}
+        getRowKey={(row) => row.id}
+        size="dense"
+      />,
+    );
+
+    const scroller = screen.getByRole("table", { name: "Dense data table" })
+      .parentElement;
+    expect(scroller).toHaveAttribute("data-size", "dense");
+    expect(screen.getByRole("columnheader", { name: "Name" }).className).toContain(
+      "group-data-[size=dense]/table:px-3",
+    );
+  });
+
+  it("renders long cell content with host-provided containment classes", () => {
+    const longColumns = [
+      {
+        id: "notes",
+        header: "Notes",
+        cellClassName: tableCellWrapClassName,
+        cell: () =>
+          "A very long diagnostic note that should wrap inside the table cell instead of expanding the page width.",
+      },
+      {
+        id: "trace",
+        header: "Trace",
+        cellClassName: tableCellTruncateClassName,
+        cell: () => "trace-factory-session-7f3c2a91b4d8e6c0-overflowing-value",
+      },
+    ];
+
+    renderPackageComponent(
+      <DataTable
+        ariaLabel="Long cell table"
+        columns={longColumns}
+        data={[{ id: "row-1" }]}
+        getRowKey={(row) => row.id}
+      />,
+    );
+
+    const wrapCell = screen.getByRole("cell", {
+      name: /very long diagnostic note/i,
+    });
+    const truncateCell = screen.getByRole("cell", {
+      name: /trace-factory-session/i,
+    });
+
+    expect(wrapCell.className).toContain("[overflow-wrap:anywhere]");
+    expect(truncateCell.className).toContain("truncate");
   });
 });

@@ -19,4 +19,11 @@ export {
   TableHeader,
   TableRow,
 } from "./table";
-export type { TableProps } from "./table";
+export type { TableProps, TableSize } from "./table";
+
+export {
+  tableCellTruncateClassName,
+  tableCellWrapClassName,
+  tableMinWidthWideClassName,
+  tableNarrowContainerClassName,
+} from "./table-layout";

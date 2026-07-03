@@ -8,21 +8,25 @@ import {
 
 import { cn } from "../utilities/cn";
 
+export type TableSize = "default" | "dense";
+
 export interface TableProps extends TableHTMLAttributes<HTMLTableElement> {
   containerClassName?: string;
   containerProps?: HTMLAttributes<HTMLDivElement>;
+  size?: TableSize;
 }
 
 export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
-  { className, containerClassName, containerProps, ...props },
+  { className, containerClassName, containerProps, size = "default", ...props },
   ref,
 ) {
   return (
     <div
       className={cn(
-        "w-full overflow-x-auto overflow-y-clip rounded-2xl border border-outline ",
+        "group/table w-full overflow-x-auto overflow-y-clip rounded-2xl border border-outline",
         containerClassName,
       )}
+      data-size={size}
       {...containerProps}
     >
       <table
@@ -87,6 +91,7 @@ export const TableHead = forwardRef<
     <th
       className={cn(
         "h-11 px-4 text-left align-middle text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle",
+        "group-data-[size=dense]/table:h-8 group-data-[size=dense]/table:px-3 group-data-[size=dense]/table:py-2",
         className,
       )}
       ref={ref}
@@ -101,7 +106,11 @@ export const TableCell = forwardRef<
 >(function TableCell({ className, ...props }, ref) {
   return (
     <td
-      className={cn("px-4 py-3 align-middle text-on-surface", className)}
+      className={cn(
+        "min-w-0 px-4 py-3 align-middle text-on-surface",
+        "group-data-[size=dense]/table:px-3 group-data-[size=dense]/table:py-2",
+        className,
+      )}
       ref={ref}
       {...props}
     />

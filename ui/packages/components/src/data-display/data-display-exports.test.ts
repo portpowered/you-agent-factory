@@ -12,6 +12,8 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  tableCellWrapClassName,
+  tableNarrowContainerClassName,
 } from "@you-agent-factory/components/data-display";
 
 describe("data-display exports", () => {
@@ -25,5 +27,7 @@ describe("data-display exports", () => {
     expect(TableCell).toBeTruthy();
     expect(TableCaption).toBeTruthy();
     expect(typeof DataTable).toBe("function");
+    expect(tableCellWrapClassName).toContain("overflow-wrap");
+    expect(tableNarrowContainerClassName).toContain("overscroll-x-contain");
   });
 });

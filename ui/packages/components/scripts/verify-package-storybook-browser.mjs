@@ -32,8 +32,20 @@ const storiesToVerify = [
     text: "No products match the current filters",
   },
   {
-    id: "data-display-datatable--error",
+    id: "data-display-datatable--error-state",
     text: "Unable to load product catalog data",
+  },
+  {
+    id: "data-display-datatable--dense",
+    text: "Queue depth",
+  },
+  {
+    id: "data-display-datatable--long-cell",
+    text: "Provider session emitted a long diagnostic payload",
+  },
+  {
+    id: "data-display-datatable--narrow-viewport",
+    text: "Signal Router",
   },
 ];
 const staticDir = path.join(packageRoot, "storybook-static");
