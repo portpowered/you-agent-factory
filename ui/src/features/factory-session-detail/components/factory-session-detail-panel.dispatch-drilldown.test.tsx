@@ -23,7 +23,7 @@ import {
   renderWithQueryClient,
 } from "./test-support/factory-session-detail-panel.test-helpers";
 
-describe("FactorySessionDetailPanel dispatch drilldown", () => {
+describe("FactorySessionDetailPanel dispatch drilldown loading and unavailable states", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
   });
@@ -106,6 +106,16 @@ describe("FactorySessionDetailPanel dispatch drilldown", () => {
     });
     expect(screen.getByText("Dispatches")).toBeTruthy();
     expect(screen.getByText("Runtime")).toBeTruthy();
+  });
+});
+
+describe("FactorySessionDetailPanel dispatch drilldown replacement and error states", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("replaces dispatch detail when selecting a different dispatch summary row", async () => {
