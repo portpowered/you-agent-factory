@@ -1,12 +1,12 @@
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../../../../components/ui";
+} from "@you-agent-factory/components";
+import { Button } from "../../../../components/ui";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
 export function FactoryGraphEditorLeaveDialog({
@@ -38,6 +38,7 @@ export function FactoryGraphEditorLeaveDialog({
     <Dialog onOpenChange={handleOpenChange} open={isOpen}>
       <DialogContent
         closeDisabled={isSaving}
+        closeLabel="Close dialog"
         onEscapeKeyDown={(event) => {
           if (isSaving) {
             event.preventDefault();
