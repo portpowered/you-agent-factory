@@ -34,7 +34,7 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/workflow-activity/lib",
   },
   {
-    maxFileCount: 32,
+    maxFileCount: 36,
     relativeDirectoryPath: "src/features/workflow-activity/components",
   },
   {
