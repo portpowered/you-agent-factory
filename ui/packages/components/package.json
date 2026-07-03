@@ -84,6 +84,7 @@
     "verify:widget-frame-responsive": "node scripts/verify-widget-frame-storybook-responsive.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-select": "^2.3.0",
     "@xyflow/react": "^12.10.2",
     "recharts": "^3.8.1"
   },
