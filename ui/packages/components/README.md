@@ -135,6 +135,8 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [Button primitives](./docs/button.md) — semantic variants, `ButtonLink`
+  guidance, loading behavior, and icon-only accessibility labels.
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site

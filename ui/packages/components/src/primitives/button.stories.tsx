@@ -99,6 +99,12 @@ const meta = {
   component: Button,
   parameters: {
     layout: "centered",
+    docs: {
+      description: {
+        component:
+          "Package-owned button primitives for semantic actions, link-like navigation, loading states, and icon-only toolbar controls. See docs/button.md for variant guidance and host-app responsibilities.",
+      },
+    },
   },
   tags: ["test"],
 } satisfies Meta<typeof Button>;
