@@ -3,11 +3,15 @@ package guards_batch
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const executionIDTagKey = "_execution_id"
 
 type fanoutParserExecutor struct {
 	mu         sync.Mutex
@@ -21,8 +25,16 @@ func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch interfaces.Wo
 	e.mu.Unlock()
 
 	parentWorkID := ""
-	if len(dispatch.InputTokens) > 0 {
-		parentWorkID = support.FirstInputToken(dispatch.InputTokens).Color.WorkID
+	parentTags := map[string]string{}
+	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
+		if token.Color.DataType != interfaces.DataTypeWork {
+			continue
+		}
+		parentWorkID = token.Color.WorkID
+		if len(token.Color.Tags) > 0 {
+			parentTags = maps.Clone(token.Color.Tags)
+		}
+		break
 	}
 
 	spawned := make([]interfaces.TokenColor, e.childCount)
@@ -31,6 +43,7 @@ func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch interfaces.Wo
 			WorkTypeID: "page",
 			WorkID:     fmt.Sprintf("page-%d", i+1),
 			ParentID:   parentWorkID,
+			Tags:       maps.Clone(parentTags),
 		}
 	}
 
