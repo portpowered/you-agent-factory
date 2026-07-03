@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { inputVariants } from "./input";
+
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
 
 function readComponentSource(fileName: string): string {
@@ -15,10 +17,15 @@ function expectNoTransitionalNeutralSurfaces(source: string): void {
   expect(source).not.toMatch(/\btext-af-text(?!-)/);
 }
 
+function expectRoleBasedNeutralSurfaces(className: string): void {
+  expect(className).toContain("border-outline");
+  expect(className).toMatch(/\btext-on-surface(-variant)?\b/);
+  expect(className).toMatch(/\bbg-surface-container-(low|high)\b/);
+}
+
 describe("shared primitive neutral surface roles", () => {
   it.each([
     "dashboard-shell.tsx",
-    "input.tsx",
     "dialog.tsx",
     "popover.tsx",
   ])("uses role-based neutral surfaces in %s", (fileName) => {
@@ -28,6 +35,11 @@ describe("shared primitive neutral surface roles", () => {
     expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
     expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
     expectNoTransitionalNeutralSurfaces(source);
+  });
+
+  it("keeps package-backed input primitives on role-based neutral surfaces", () => {
+    expectRoleBasedNeutralSurfaces(inputVariants());
+    expectNoTransitionalNeutralSurfaces(inputVariants());
   });
 
   it("uses role-based neutral borders and text in table.tsx", () => {
