@@ -2,7 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 
+import { Heading, Text } from "../primitives/typography";
 import { renderPackageComponent, screen } from "../testing/render";
+import { ActionRow } from "./action-row";
 import { SurfacePanel, surfacePanelVariants } from "./surface-panel";
 
 describe("SurfacePanel", () => {
@@ -38,6 +40,25 @@ describe("SurfacePanel", () => {
     expect(row.className).toContain("custom-row");
     expect(row.className).not.toContain("p-2");
     expect(row.className).not.toContain("p-3");
+  });
+
+  it("preserves heading, content, and footer structure through host composition", () => {
+    renderPackageComponent(
+      <SurfacePanel className="grid gap-3" padding="compact" radius="lg">
+        <Heading level="section">Panel heading</Heading>
+        <Text>Panel body content</Text>
+        <ActionRow actions={<button type="button">Save</button>} />
+      </SurfacePanel>,
+    );
+
+    const panel = screen.getByText("Panel body content").parentElement;
+    expect(panel?.className).toContain("border-outline");
+    expect(panel?.className).toContain("rounded-lg");
+    expect(panel?.className).toContain("p-2");
+    expect(
+      screen.getByRole("heading", { name: "Panel heading" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
   it("exposes variant class generation for non-component consumers", () => {
