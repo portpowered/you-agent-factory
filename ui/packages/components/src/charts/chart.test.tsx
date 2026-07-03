@@ -125,11 +125,14 @@ describe("chart package exports", () => {
       "data-chart-legend-series-hidden",
       "true",
     );
+    expect(hiddenBetaButton).toHaveClass("text-on-surface-disabled");
+    expect(hiddenBetaButton.className).not.toContain("text-af-text-disabled");
 
     const visibleAlphaButton = screen.getByRole("button", {
       name: "Hide Alpha series",
     });
     expect(visibleAlphaButton).toHaveAttribute("aria-pressed", "true");
+    expect(visibleAlphaButton).not.toHaveClass("text-on-surface-disabled");
 
     await user.click(hiddenBetaButton);
     expect(onToggleSeries).toHaveBeenCalledWith("beta");

@@ -467,6 +467,37 @@ export async function findAvailablePort() {
   return address.port;
 }
 
+async function listenHttpServer(
+  server,
+  port,
+  host,
+  { maxAttempts = 15, retryDelayMs = 100 } = {},
+) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await new Promise((resolve, reject) => {
+        const onError = (error) => {
+          server.removeListener("listening", onListening);
+          reject(error);
+        };
+        const onListening = () => {
+          server.removeListener("error", onError);
+          resolve();
+        };
+        server.once("error", onError);
+        server.once("listening", onListening);
+        server.listen(port, host);
+      });
+      return;
+    } catch (error) {
+      if (error?.code !== "EADDRINUSE" || attempt === maxAttempts) {
+        throw error;
+      }
+      await delay(retryDelayMs * attempt);
+    }
+  }
+}
+
 function configuredPort(name) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -1667,10 +1698,7 @@ export async function startFactoryApiServer({
     response.end("not found");
   });
 
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(apiPort, previewHost, resolve);
-  });
+  await listenHttpServer(server, apiPort, previewHost);
 
   return {
     releaseReplayStream,
