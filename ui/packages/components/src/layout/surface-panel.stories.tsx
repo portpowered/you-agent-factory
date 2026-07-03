@@ -114,10 +114,11 @@ export const MobileSurfacePanelLayout: Story = {
     },
   },
   render: () => (
-    <SurfacePanel className="grid w-full max-w-xs gap-3" padding="compact" radius="lg">
+    <SurfacePanel className="grid w-full min-w-0 max-w-xs gap-3" padding="compact" radius="lg">
       <Heading level="section">Mobile panel</Heading>
       <Text variant="dense">Dense panel content remains readable on narrow screens.</Text>
       <ActionRow
+        className="min-w-0 w-full"
         actions={
           <>
             <DemoButton>Cancel</DemoButton>

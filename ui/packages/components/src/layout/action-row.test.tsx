@@ -52,6 +52,7 @@ describe("ActionRow", () => {
 
     const row = container.firstElementChild;
     expect(row?.className).toContain("flex-wrap");
+    expect(row?.className).toContain("min-w-0");
     expect(row?.className).toContain("max-md:justify-start");
 
     const sections = container.querySelectorAll("[data-action-row-section]");

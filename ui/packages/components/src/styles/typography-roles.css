@@ -44,7 +44,7 @@
   }
 
   .af-text-truncate {
-    @apply block min-w-0 truncate whitespace-nowrap;
+    @apply block min-w-0 max-w-full truncate whitespace-nowrap;
   }
 
   .af-text-wrap {

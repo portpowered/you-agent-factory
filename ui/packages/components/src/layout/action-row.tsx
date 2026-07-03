@@ -3,7 +3,7 @@ import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../utilities/cn";
 
 const ACTION_ROW_CLASS =
-  "flex flex-wrap items-center gap-2 max-md:justify-start";
+  "flex min-w-0 flex-wrap items-center gap-2 max-md:justify-start";
 const ACTION_ROW_SECTION_CLASS =
   "flex min-w-0 flex-wrap items-center gap-2";
 

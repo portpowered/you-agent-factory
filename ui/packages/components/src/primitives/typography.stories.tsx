@@ -107,10 +107,10 @@ export const MobileTypographyRoles: Story = {
     },
   },
   render: () => (
-    <div className="grid w-full max-w-xs gap-3">
+    <div className="grid w-full min-w-0 max-w-xs gap-3">
       <Heading level="section">Section heading</Heading>
       <Text variant="dense">Dense metadata remains readable on narrow screens</Text>
-      <div className="w-full">
+      <div className="min-w-0 w-full">
         <Text truncate>{LONG_LABEL}</Text>
       </div>
     </div>
@@ -125,10 +125,10 @@ export const DesktopTypographyRoles: Story = {
     },
   },
   render: () => (
-    <div className="grid w-full max-w-2xl gap-3">
+    <div className="grid w-full min-w-0 max-w-2xl gap-3">
       <Heading level="page">Page heading</Heading>
       <Text>Body text remains readable at wider dashboard widths</Text>
-      <div className="w-96">
+      <div className="min-w-0 w-full max-w-96">
         <Text truncate>{LONG_LABEL}</Text>
       </div>
     </div>
