@@ -9,6 +9,24 @@ export {
 } from "./category-paths";
 
 export {
+  AlertPanel,
+  AlertPanelStatusLabel,
+  AlertPanelText,
+  AlertPanelTitle,
+  Skeleton,
+} from "./feedback";
+export type {
+  AlertPanelProps,
+  AlertPanelSemanticVariant,
+  AlertPanelStatusLabelProps,
+  AlertPanelTextProps,
+  AlertPanelTitleProps,
+  AlertPanelTone,
+  AlertPanelVariant,
+} from "./feedback";
+export { CodePanel, codePanelVariants } from "./data-display";
+export type { CodePanelProps } from "./data-display";
+export {
   WidgetDetailCopy,
   WidgetEmptyState,
   WidgetEmptyStateText,
@@ -52,3 +70,35 @@ export type {
   WidgetSubtitleProps,
   WidgetSuccessStateProps,
 } from "./recipes";
+export {
+  EnumSelect,
+  ENUM_SELECT_EMPTY_VALUE,
+  NativeSelect,
+  OptionalEnumSelect,
+  ResetEnumSelect,
+  Select,
+  SELECT_EMPTY_STATE_VALUE,
+  SelectContent,
+  SelectEmpty,
+  SelectField,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "./forms";
+export type {
+  EnumSelectOption,
+  EnumSelectProps,
+  NativeSelectProps,
+  OptionalEnumSelectProps,
+  ResetEnumSelectProps,
+  SelectContentProps,
+  SelectEmptyProps,
+  SelectFieldProps,
+  SelectItemProps,
+  SelectLabelProps,
+  SelectSeparatorProps,
+  SelectTriggerProps,
+} from "./forms";

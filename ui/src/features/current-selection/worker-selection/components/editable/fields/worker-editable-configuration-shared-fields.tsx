@@ -1,4 +1,5 @@
-import { EnumSelect, Input } from "../../../../../../components/ui";
+import { EnumSelect } from "@you-agent-factory/components";
+import { Input } from "../../../../../../components/ui";
 import { WORKER_TIMEOUT_UNITS } from "../../../../../current-factory-definition/lib/worker-timeout-duration";
 import { resolveEditableWorkerTypeOptions } from "../../../../../current-factory-definition/public";
 import type {

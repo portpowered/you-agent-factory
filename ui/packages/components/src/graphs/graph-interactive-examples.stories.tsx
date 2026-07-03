@@ -61,7 +61,7 @@ export const Interactive: Story = {
     className: "h-[28rem]",
     fixtureNodes: desktopInteractiveGraphNodes,
     initialSelectedNodeId: null,
-    viewportWidthClass: "w-full max-w-5xl",
+    viewportWidthClass: "w-[48rem] max-w-full",
   },
 };
 
@@ -69,7 +69,7 @@ export const Selected: Story = {
   args: {
     fixtureNodes: desktopInteractiveGraphNodes,
     initialSelectedNodeId: "ready-node",
-    viewportWidthClass: "w-full max-w-5xl",
+    viewportWidthClass: "w-[48rem] max-w-full",
   },
 };
 

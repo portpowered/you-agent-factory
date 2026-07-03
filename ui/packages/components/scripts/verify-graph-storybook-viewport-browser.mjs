@@ -25,16 +25,19 @@ const GRAPH_VIEWPORT_STORIES = [
     id: "graphs-graphinteractiveexamples--interactive",
     label: "interactive",
     minHeight: 200,
+    minWidth: 200,
   },
   {
     id: "graphs-graphinteractiveexamples--desktop-viewport",
     label: "desktop viewport",
     minHeight: 200,
+    minWidth: 200,
   },
   {
     id: "graphs-graphinteractiveexamples--narrow-viewport",
     label: "narrow viewport",
     minHeight: 200,
+    minWidth: 200,
   },
 ];
 
@@ -105,6 +108,11 @@ async function verifyGraphViewportStory(page, story) {
   if (!box || box.height < story.minHeight) {
     throw new Error(
       `Expected ${story.label} graph viewport height >= ${story.minHeight}px, got ${box?.height ?? 0}px (${iframeUrl}).`,
+    );
+  }
+  if (!box || box.width < story.minWidth) {
+    throw new Error(
+      `Expected ${story.label} graph viewport width >= ${story.minWidth}px, got ${box?.width ?? 0}px (${iframeUrl}).`,
     );
   }
 

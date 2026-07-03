@@ -139,4 +139,16 @@ describe("graph interactive examples", () => {
     expect(viewport).not.toHaveClass("h-full");
     expect(viewport).not.toHaveClass("max-h-full");
   });
+
+  it("renders the interactive graph example with an explicit viewport width wrapper", async () => {
+    renderPackageComponent(
+      <GraphInteractiveExample fixtureNodes={desktopInteractiveGraphNodes} />,
+    );
+
+    await screen.findByRole("region", { name: "Interactive graph example" });
+
+    const widthWrapper = document.querySelector(".w-\\[48rem\\]");
+    expect(widthWrapper).not.toBeNull();
+    expect(widthWrapper).toHaveClass("max-w-full");
+  });
 });

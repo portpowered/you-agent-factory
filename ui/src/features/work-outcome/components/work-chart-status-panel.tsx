@@ -4,7 +4,7 @@ import {
   WidgetEmptyStateTitle,
 } from "@you-agent-factory/components/recipes";
 import type { ChartPresentation } from "../../../components/ui/chart";
-import { Skeleton } from "../../../components/ui/skeleton";
+import { Skeleton } from "@you-agent-factory/components";
 import { cn } from "../../../lib/cn";
 
 // tailwind-exception: intrinsic-sizing

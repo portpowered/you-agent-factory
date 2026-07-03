@@ -19,13 +19,27 @@ those surfaces are documented.
 This docs shell is plain markdown kept under version control. Host applications
 read it directly from the package; no docs-site implementation is required.
 
+## Documented components
+
+- [Form select primitives](./forms-select-primitives.md) — `Select`,
+  `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+
 ## Getting started
 
 See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
 
-## Component docs
+## Feedback and code display
+
+- [AlertPanel](./feedback-alert-panel.md) — semantic feedback variants, token
+  mapping, accessibility, and Storybook references
+- [Skeleton](./feedback-skeleton.md) — loading placeholders, busy regions, and
+  empty vs loading feedback
+- [CodePanel](./data-display-code-panel.md) — long-line and long-block
+  containment, scrolling, and responsive layout expectations
+
+## Widget layout recipes
 
 - [Graph primitives](./graphs.md) — `@you-agent-factory/components/graphs`
   contracts, React Flow boundary, host responsibilities, and Storybook example

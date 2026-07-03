@@ -30,6 +30,34 @@ async function createSourceTree(files) {
   return { srcDir, tempRoot };
 }
 
+test("scanFeatureFormControlUsage allows approved EnumSelect helpers from the components package", async () => {
+  const { srcDir, tempRoot } = await createSourceTree({
+    "features/submit-work/components/submit-work-card.tsx": `
+      import { EnumSelect } from "@you-agent-factory/components";
+
+      export function SubmitWorkCard() {
+        return (
+          <EnumSelect
+            id="work-type"
+            onValueChange={() => {}}
+            options={[{ label: "Story", value: "story" }]}
+            value="story"
+          />
+        );
+      }
+    `,
+  });
+
+  try {
+    await expect(scanFeatureFormControlUsage(srcDir, [])).resolves.toEqual({
+      staleAllowlistEntries: [],
+      violations: [],
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
 test("scanFeatureFormControlUsage allows approved EnumSelect helpers in feature components", async () => {
   const { srcDir, tempRoot } = await createSourceTree({
     "features/submit-work/components/submit-work-card.tsx": `

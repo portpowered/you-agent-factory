@@ -11,6 +11,8 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../..",
 );
+// Make subprocess harness checks can exceed Vitest's default 5s under parallel load.
+const makeHarnessTestTimeoutMs = 30_000;
 
 describe("component package harness wiring", () => {
   let tempRoots: string[] = [];
@@ -31,7 +33,7 @@ describe("component package harness wiring", () => {
         stdio: ["ignore", "pipe", "pipe"],
       });
     },
-    30_000,
+    makeHarnessTestTimeoutMs,
   );
 
   it(
@@ -43,7 +45,7 @@ describe("component package harness wiring", () => {
         stdio: ["ignore", "pipe", "pipe"],
       });
     },
-    30_000,
+    makeHarnessTestTimeoutMs,
   );
 
   it("fails ui-components-boundary when package source violates boundary rules", async () => {
@@ -74,5 +76,5 @@ describe("component package harness wiring", () => {
         "@you-agent-factory/components package boundary check failed:",
       ),
     });
-  });
+  }, makeHarnessTestTimeoutMs);
 });
