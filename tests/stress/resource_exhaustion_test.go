@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -384,6 +385,7 @@ func TestResourceExhaustionWithFailure(t *testing.T) {
 	const (
 		numItems       = 5
 		expectedFailed = 1
+		gpuCapacity    = 1
 	)
 
 	// Config: task init → complete while consuming a capacity-limited gpu resource.
@@ -433,6 +435,32 @@ func TestResourceExhaustionWithFailure(t *testing.T) {
 
 	h.Assert().
 		HasNoTokenInPlace("task:init")
+
+	gpuTokens := snap.TokensInPlace("gpu:available")
+	if len(gpuTokens) != gpuCapacity {
+		t.Errorf("expected %d GPU token(s) in gpu:available, got %d", gpuCapacity, len(gpuTokens))
+	}
+
+	expectedTotal := numItems + gpuCapacity
+	if len(snap.Tokens) != expectedTotal {
+		t.Errorf("expected %d total tokens, got %d", expectedTotal, len(snap.Tokens))
+	}
+
+	tokenIDs := make(map[string]bool, len(snap.Tokens))
+	for _, tok := range snap.Tokens {
+		if tokenIDs[tok.ID] {
+			t.Errorf("duplicate token ID: %s", tok.ID)
+		}
+		tokenIDs[tok.ID] = true
+	}
+
+	failedWorkIDs := workTokenIDsInPlace(snap, "task:failed")
+	completeWorkIDs := workTokenIDsInPlace(snap, "task:complete")
+	for workID := range failedWorkIDs {
+		if completeWorkIDs[workID] {
+			t.Errorf("work %q appears in both task:failed and task:complete", workID)
+		}
+	}
 }
 
 // TestResourceExhaustionTimeout validates no infinite loops or deadlocks
@@ -481,6 +509,18 @@ func TestResourceExhaustionTimeout(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("resource exhaustion test did not complete within 10s — possible deadlock")
 	}
+}
+
+// workTokenIDsInPlace returns work IDs for non-resource tokens in the given place.
+func workTokenIDsInPlace(snap *petri.MarkingSnapshot, placeID string) map[string]bool {
+	ids := make(map[string]bool)
+	for _, tok := range snap.TokensInPlace(placeID) {
+		if tok.Color.DataType == interfaces.DataTypeResource || tok.Color.WorkID == "" {
+			continue
+		}
+		ids[tok.Color.WorkID] = true
+	}
+	return ids
 }
 
 // --- Helper executors ---
