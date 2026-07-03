@@ -192,7 +192,6 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 // TestCrossWorkflowPipelineNoRace verifies no data races during cross-workflow
 // submission with concurrent status queries.
 func TestCrossWorkflowPipelineNoRace(t *testing.T) {
-	t.Skip("bad arguments right now")
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
@@ -200,7 +199,10 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	// Simple 1-stage code pipeline.
 	dirA := testutil.ScaffoldFactoryDir(t, oneStageCodePipelineCfg("coder"))
 	hA := testutil.NewServiceTestHarness(t, dirA, testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithExtraOptions(factory.WithWorkerExecutor("coder", &delayExecutor{maxDelay: time.Millisecond})))
+		testutil.WithExtraOptions(
+			factory.WithServiceMode(),
+			factory.WithWorkerExecutor("coder", &delayExecutor{maxDelay: time.Millisecond}),
+		))
 
 	ctxA, cancelA := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelA()
