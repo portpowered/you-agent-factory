@@ -1,10 +1,14 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
 
-import { renderPackageComponent, screen } from "../testing/render";
+import {
+  renderPackageComponent,
+  screen,
+  userEvent,
+} from "../testing/render";
 
 import {
   ChartContainer,
@@ -75,5 +79,59 @@ describe("chart package exports", () => {
     });
     expect(screen.getByText("Alpha series")).toBeInTheDocument();
     expect(screen.getByText("Beta series")).toBeInTheDocument();
+  });
+
+  it("accepts caller-owned hidden series state, toggle callbacks, and presentation props", async () => {
+    const hiddenSeries = new Set(["beta"]);
+    const onToggleSeries = vi.fn();
+    const user = userEvent.setup();
+
+    renderPackageComponent(
+      <ChartContainer
+        config={sampleChartConfig}
+        footer={
+          <ChartLegendContent
+            getToggleLabel={(label, hidden) =>
+              hidden ? `Show ${label}` : `Hide ${label}`
+            }
+            hiddenSeries={hiddenSeries}
+            onToggleSeries={onToggleSeries}
+            payload={sampleLegendPayload}
+          />
+        }
+        presentation="embedded"
+        title="Caller-owned legend chart"
+      >
+        <LineChart data={sampleChartData}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="tick" />
+          <YAxis />
+          <Line dataKey="alpha" stroke="var(--color-alpha)" type="monotone" />
+          <Line dataKey="beta" stroke="var(--color-beta)" type="monotone" />
+        </LineChart>
+      </ChartContainer>,
+    );
+
+    const chartRegion = screen.getByRole("img", {
+      name: "Caller-owned legend chart",
+    });
+    expect(chartRegion).toHaveAttribute("data-chart-presentation", "embedded");
+
+    const hiddenBetaButton = screen.getByRole("button", {
+      name: "Show Beta series",
+    });
+    expect(hiddenBetaButton).toHaveAttribute("aria-pressed", "false");
+    expect(hiddenBetaButton).toHaveAttribute(
+      "data-chart-legend-series-hidden",
+      "true",
+    );
+
+    const visibleAlphaButton = screen.getByRole("button", {
+      name: "Hide Alpha series",
+    });
+    expect(visibleAlphaButton).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(hiddenBetaButton);
+    expect(onToggleSeries).toHaveBeenCalledWith("beta");
   });
 });

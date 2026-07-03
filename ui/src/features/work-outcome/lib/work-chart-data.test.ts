@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getDashboardWorkChartSeriesDefinitions } from "./chart-contract";
 import type { WorkChartModel } from "./trends";
 import {
   buildWorkChartData,
@@ -54,5 +55,73 @@ describe("buildWorkChartData", () => {
       { label: "Tick 343", queued: 3, tick: 343 },
     ]);
     expect(result.data.series.map((series) => series.key)).toEqual(["queued"]);
+  });
+
+  it("maps dashboard semantic series definitions into deterministic chart config", () => {
+    const model: WorkChartModel = {
+      delta: { queued: 1, inFlight: 0, completed: 1, failed: 0 },
+      failureGroups: [],
+      points: [
+        { label: "Tick 1", observedAt: 1000, order: 0, tick: 1 },
+        { label: "Tick 2", observedAt: 2000, order: 1, tick: 2 },
+      ],
+      rangeID: "session",
+      rangeLabel: "Session",
+      samples: [],
+      series: [
+        {
+          key: "queued",
+          label: "Queued",
+          unit: "count",
+          points: [
+            { label: "Queued: 1", observedAt: 1000, order: 0, value: 1 },
+            { label: "Queued: 2", observedAt: 2000, order: 1, value: 2 },
+          ],
+        },
+        {
+          key: "completed",
+          label: "Completed",
+          unit: "count",
+          points: [
+            { label: "Completed: 0", observedAt: 1000, order: 0, value: 0 },
+            { label: "Completed: 1", observedAt: 2000, order: 1, value: 1 },
+          ],
+        },
+      ],
+    };
+    const series = getDashboardWorkChartSeriesDefinitions([
+      { key: "queued", label: "Queued" },
+      { key: "completed", label: "Completed" },
+    ]);
+
+    const result = buildWorkChartData(model, series);
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") {
+      return;
+    }
+
+    expect(result.data.config).toEqual({
+      queued: {
+        color: "var(--color-af-chart-queued)",
+        label: "Queued",
+      },
+      completed: {
+        color: "var(--color-af-chart-completed)",
+        label: "Completed",
+      },
+    });
+    expect(result.data.series).toEqual([
+      expect.objectContaining({
+        key: "queued",
+        label: "Queued",
+        lineColor: "var(--color-af-chart-queued)",
+      }),
+      expect.objectContaining({
+        key: "completed",
+        label: "Completed",
+        lineColor: "var(--color-af-chart-completed)",
+      }),
+    ]);
   });
 });
