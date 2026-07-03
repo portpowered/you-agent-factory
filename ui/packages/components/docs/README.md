@@ -44,6 +44,9 @@ from sibling files in this directory as the library grows.
 
 ## Widget layout recipes
 
+- [Graph primitives](./graphs.md) — `@you-agent-factory/components/graphs`
+  contracts, React Flow boundary, host responsibilities, and Storybook example
+  map
 - [Widget frame and layout recipes](./widget-frame-recipes.md) — import paths,
   state ownership, accessibility, Storybook references, and source-copy guidance
   for domain-free framed panels.
