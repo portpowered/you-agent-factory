@@ -20,9 +20,15 @@ export const genericGraphHandles: GraphNodeHandle[] = [
   },
 ];
 
-export const genericGraphInputHandle: GraphNodeHandle[] = [genericGraphHandles[0]!];
+const [genericGraphInput, genericGraphOutput] = genericGraphHandles;
 
-export const genericGraphOutputHandle: GraphNodeHandle[] = [genericGraphHandles[1]!];
+if (!genericGraphInput || !genericGraphOutput) {
+  throw new Error("genericGraphHandles fixture is incomplete");
+}
+
+export const genericGraphInputHandle: GraphNodeHandle[] = [genericGraphInput];
+
+export const genericGraphOutputHandle: GraphNodeHandle[] = [genericGraphOutput];
 
 export type GraphInteractiveFixtureNode = {
   fixedState?: GraphNodeState;

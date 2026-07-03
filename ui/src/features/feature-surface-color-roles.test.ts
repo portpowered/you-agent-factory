@@ -62,8 +62,19 @@ describe("feature surface color roles (US-009)", () => {
   });
 
   it("representative graph and header surfaces use role utilities", () => {
-    const nodeShell = readFileSync(
+    const activityNodeShell = readFileSync(
       join(FEATURES_ROOT, "graphs/components/graph-node-shell.tsx"),
+      "utf8",
+    );
+    const packageNodeShell = readFileSync(
+      join(
+        FEATURES_ROOT,
+        "../../packages/components/src/graphs/graph-node-shell.tsx",
+      ),
+      "utf8",
+    );
+    const workstationNodeView = readFileSync(
+      join(FEATURES_ROOT, "graphs/components/workstation-node-view.tsx"),
       "utf8",
     );
     const sessionTab = readFileSync(
@@ -75,8 +86,11 @@ describe("feature surface color roles (US-009)", () => {
       "utf8",
     );
 
-    expect(nodeShell).toContain("border-outline bg-surface");
-    expect(nodeShell).toContain("text-on-surface");
+    expect(activityNodeShell).toContain("GraphNodeShell");
+    expect(packageNodeShell).toContain("border-outline bg-surface");
+    expect(packageNodeShell).toContain("text-on-surface");
+    expect(workstationNodeView).toMatch(/\btext-on-surface(-subtle)?\b/);
+    expect(workstationNodeView).toContain("border-outline bg-surface");
     expect(sessionTabs).toMatch(/\btext-on-surface(-variant)?\b/);
     expect(sessionTab).toMatch(/\bbg-surface-container-(low|high)\b/);
   });

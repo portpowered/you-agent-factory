@@ -10,7 +10,6 @@ import {
   fireEvent,
   renderPackageComponent,
   screen,
-  userEvent,
   waitFor,
 } from "../testing/render";
 import { installReactFlowTestShims } from "../testing/react-flow-test-shims";
