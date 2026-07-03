@@ -1,10 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
 
 import {
-  DashboardEmptyState,
-  DetailCopy,
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SUBTITLE_CLASS,
+  WIDGET_FRAME_SUPPORTING_LABELS_CLASS,
+  WidgetEmptyState,
+  WidgetDetailCopy,
   WidgetSubtitle,
-} from "../../../../components/ui/widget-frame";
+} from "@you-agent-factory/components/recipes";
 import { DashboardWidgetFrame } from "./dashboard-widget-frame";
 
 describe("DashboardWidgetFrame chrome", () => {
@@ -12,12 +15,12 @@ describe("DashboardWidgetFrame chrome", () => {
     render(
       <DashboardWidgetFrame title="Submit work" widgetId="submit-work">
         <WidgetSubtitle>Queue a new request</WidgetSubtitle>
-        <DetailCopy>
+        <WidgetDetailCopy>
           Submissions stay inside the shared layout frame.
-        </DetailCopy>
-        <DashboardEmptyState>
+        </WidgetDetailCopy>
+        <WidgetEmptyState>
           <h3>No active submission</h3>
-        </DashboardEmptyState>
+        </WidgetEmptyState>
       </DashboardWidgetFrame>,
     );
 
@@ -48,11 +51,11 @@ describe("DashboardWidgetFrame chrome", () => {
     expect(card.dataset.dashboardPanelShell).toBe("grid-card");
     expect(card.className).toContain("shadow-af-card");
     expect(card.className).toContain("[&_dl]:grid");
-    expect(card.className).toContain("af-dashboard-supporting-labels");
+    expect(card.className).toContain(WIDGET_FRAME_SUPPORTING_LABELS_CLASS);
     expect(card.className).toContain("border-outline");
     expect(card.className).toContain("bg-surface-container-high");
-    expect(subtitle.className).toContain("af-dashboard-widget-subtitle");
-    expect(bodyCopy.className).toContain("af-dashboard-body-text");
+    expect(subtitle.className).toContain(WIDGET_FRAME_SUBTITLE_CLASS);
+    expect(bodyCopy.className).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
     expect(emptyHeading.parentElement?.className).toContain("border-dashed");
     expect(emptyHeading.parentElement?.className).toContain(
       "border-outline-variant",

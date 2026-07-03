@@ -38,4 +38,3 @@ export * from "./standard-list-selection";
 export * from "./surface-panel";
 export * from "./table";
 export * from "./textarea";
-export * from "./widget-frame";

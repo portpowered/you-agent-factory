@@ -51,7 +51,7 @@ describe("DetailCardFactorySaveFeedback", () => {
     const copy = screen.getByText(messages.successMessage);
 
     expect(status.className).toContain("bg-success-container");
-    expect(copy.className).toContain("af-dashboard-body-text");
+    expect(copy.className).toContain("text-body-medium");
     expect(copy.className).toContain("!text-current");
   });
 
@@ -73,7 +73,7 @@ describe("DetailCardFactorySaveFeedback", () => {
     expect(
       screen.getByText("Running factory changed on disk.").className,
     ).toContain("!text-current");
-    expect(detail.className).toContain("af-dashboard-supporting-text");
+    expect(detail.className).toContain("text-body-small");
     expect(detail.className).toContain("text-on-surface-subtle");
   });
 

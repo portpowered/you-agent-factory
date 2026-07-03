@@ -24,11 +24,10 @@ export const FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS: Record<
   FactoryGraphLayoutPerformanceBudget
 > = {
   hundred: {
-    // Initial projection includes one-time module/import cost on cold starts.
-    initialProjectionMs: 6_000,
+    initialProjectionMs: 4_000,
     dragSingleNodeMs: 5,
     dragMultiNodeMs: 25,
-    saveLayoutRecomputationMs: 50,
+    saveLayoutRecomputationMs: 25,
     waypointEditMs: 5,
     waypointHistoryMs: 5,
   },
@@ -36,19 +35,15 @@ export const FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS: Record<
     initialProjectionMs: 35_000,
     dragSingleNodeMs: 5,
     dragMultiNodeMs: 50,
-    // Save-layout recomputation varies with host CPU load; 300 ms keeps the
-    // 500-node gate stable on developer hardware and full `make ui-test` runs.
-    saveLayoutRecomputationMs: 300,
+    saveLayoutRecomputationMs: 50,
     waypointEditMs: 5,
     waypointHistoryMs: 10,
   },
   stressThousand: {
-    // Stress projection includes ELK work that can exceed 90 s on slower hosts.
-    initialProjectionMs: 120_000,
+    initialProjectionMs: 90_000,
     dragSingleNodeMs: 10,
     dragMultiNodeMs: 100,
-    // Waypoint saves on the stress fixture can exceed the 500-node gate under load.
-    saveLayoutRecomputationMs: 600,
+    saveLayoutRecomputationMs: 125,
     waypointEditMs: 10,
     waypointHistoryMs: 15,
   },

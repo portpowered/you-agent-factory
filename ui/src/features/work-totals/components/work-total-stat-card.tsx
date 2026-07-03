@@ -19,7 +19,6 @@ export function WorkTotalStatCard({
   return (
     <AlertPanel
       aria-label={valueLabel}
-      asChild
       className="min-h-0 gap-1"
       padding="compact"
       radius="lg"

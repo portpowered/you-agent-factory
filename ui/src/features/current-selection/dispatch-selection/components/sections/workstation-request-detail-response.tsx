@@ -1,6 +1,8 @@
-import { CodePanel } from "../../../../../components/ui/code-panel";
+import { CodePanel } from "@you-agent-factory/components";
 import { formatDurationMillis } from "../../../../../components/ui/formatters";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import {
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,
@@ -143,11 +145,11 @@ function ScriptResponseDetails({
         ) : null}
       </CurrentSelectionDescriptionList>
       {request.script_response ? null : (
-        <DetailCopy>
+        <WidgetDetailCopy>
           {request.errored_request_count > 0 || view.hasFailureDetails
             ? messages.scriptResponseUnavailableErrored
             : messages.scriptResponseUnavailablePending}
-        </DetailCopy>
+        </WidgetDetailCopy>
       )}
     </>
   );

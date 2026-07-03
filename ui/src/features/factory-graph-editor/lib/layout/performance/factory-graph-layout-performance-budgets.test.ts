@@ -8,10 +8,10 @@ import {
 describe("factory graph layout performance budgets", () => {
   it("documents budgets for every large-editor fixture key", () => {
     expect(FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.hundred).toEqual({
-      initialProjectionMs: 6_000,
+      initialProjectionMs: 4_000,
       dragSingleNodeMs: 5,
       dragMultiNodeMs: 25,
-      saveLayoutRecomputationMs: 50,
+      saveLayoutRecomputationMs: 25,
       waypointEditMs: 5,
       waypointHistoryMs: 5,
     });
@@ -19,16 +19,12 @@ describe("factory graph layout performance budgets", () => {
       35_000,
     );
     expect(
-      FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.fiveHundred
-        .saveLayoutRecomputationMs,
-    ).toBe(300);
-    expect(
       FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.stressThousand.initialProjectionMs,
-    ).toBe(120_000);
+    ).toBe(90_000);
     expect(
       FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.stressThousand
         .saveLayoutRecomputationMs,
-    ).toBe(600);
+    ).toBe(125);
   });
 
   it("measures median async operation duration with warmup and iterations", async () => {

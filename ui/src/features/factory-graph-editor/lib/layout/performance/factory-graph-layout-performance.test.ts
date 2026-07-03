@@ -172,7 +172,7 @@ async function expectFixtureWithinBudget(
   );
 }
 
-describe.sequential("factory graph layout performance budgets", () => {
+describe("factory graph layout performance budgets", () => {
   it("keeps the 100 node fixture within the documented canonical budgets", async () => {
     await expectFixtureWithinBudget(factoryGraphLargeEditorFixtures.hundred, {
       projectionIterations: 1,

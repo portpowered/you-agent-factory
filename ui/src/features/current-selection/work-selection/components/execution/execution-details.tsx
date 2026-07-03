@@ -3,7 +3,9 @@ import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../../components/ui/formatters";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
@@ -94,7 +96,7 @@ export function ExecutionDetailsSection({
           </CurrentSelectionTraceButton>
         </div>
       ) : (
-        <DetailCopy>{messages.traceUnavailable}</DetailCopy>
+        <WidgetDetailCopy>{messages.traceUnavailable}</WidgetDetailCopy>
       )}
       <WorkstationRequestProjectionSection details={details} />
       {showInferenceAttempts ? (
@@ -120,7 +122,7 @@ export function InferenceAttemptsSection({
         ))}
       </div>
     ) : (
-      <DetailCopy>{messages.inferenceAttemptsEmptyState}</DetailCopy>
+      <WidgetDetailCopy>{messages.inferenceAttemptsEmptyState}</WidgetDetailCopy>
     );
 
   if (!showHeading) {

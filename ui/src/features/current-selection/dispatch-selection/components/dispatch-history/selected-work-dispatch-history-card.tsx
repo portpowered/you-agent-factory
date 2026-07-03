@@ -4,7 +4,9 @@ import {
   formatLocalDateTime,
   formatWorkItemLabel,
 } from "../../../../../components/ui/formatters";
-import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import type { LoadableProviderSessionRef } from "../../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
@@ -329,7 +331,7 @@ function DispatchRequestContent({
     <div className="grid gap-2">
       <CurrentSelectionLabel>{messages.requestDetailsTitle}</CurrentSelectionLabel>
       {view.isScriptBackedRequest ? (
-        <DetailCopy>{messages.promptDetailsNotApplicable}</DetailCopy>
+        <WidgetDetailCopy>{messages.promptDetailsNotApplicable}</WidgetDetailCopy>
       ) : null}
       <WorkItemPayloadList
         messages={{
