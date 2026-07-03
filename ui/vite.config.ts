@@ -9,10 +9,46 @@ import { configDefaults, coverageConfigDefaults } from "vitest/config";
 
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
-const componentsPackageRoot = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "packages/components/src",
-);
+const uiRoot = path.dirname(fileURLToPath(import.meta.url));
+const componentsPackageRoot = path.resolve(uiRoot, "packages/components/src");
+const sharedReactAliases = [
+  {
+    find: "react",
+    replacement: path.join(uiRoot, "node_modules/react"),
+  },
+  {
+    find: "react-dom",
+    replacement: path.join(uiRoot, "node_modules/react-dom"),
+  },
+  {
+    find: "react/jsx-runtime",
+    replacement: path.join(uiRoot, "node_modules/react/jsx-runtime"),
+  },
+  {
+    find: "react/jsx-dev-runtime",
+    replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
+  },
+  {
+    find: "@radix-ui/react-dialog",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-dialog"),
+  },
+  {
+    find: "@radix-ui/react-popover",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-popover"),
+  },
+  {
+    find: "@radix-ui/react-collapsible",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-collapsible"),
+  },
+  {
+    find: "@radix-ui/react-scroll-area",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-scroll-area"),
+  },
+  {
+    find: "@radix-ui/react-select",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
+  },
+] as const;
 const isCoverageRun = process.argv.includes("--coverage");
 const profileSourceMaps =
   process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "true" ||
@@ -25,6 +61,11 @@ const monacoEditorPlugin =
     : monacoEditorPluginModule.default;
 const optimizedDeps = isVitestRun
   ? ([
+      "@radix-ui/react-collapsible",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-scroll-area",
+      "@radix-ui/react-select",
       "@radix-ui/react-slot",
       "react",
       "react-dom",
@@ -116,7 +157,13 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: createComponentsPackageAliases(componentsPackageRoot),
+    alias: [...sharedReactAliases, ...createComponentsPackageAliases(componentsPackageRoot)],
+    dedupe: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+    ],
   },
   server: {
     host: true,

@@ -14,6 +14,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
+type panicExecutor struct {
+	message string
+}
+
+func (e *panicExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	panic(e.message)
+}
+
 type recordingExecutor struct {
 	calls []interfaces.WorkDispatch
 }
@@ -83,6 +91,28 @@ func (p plannedCompletionPlanner) PlannedResultForDispatch(dispatch interfaces.W
 	result.DispatchID = dispatch.DispatchID
 	result.TransitionID = dispatch.TransitionID
 	return result, true, nil
+}
+
+func TestExecuteDispatchSynchronously_ExecutorPanicReturnsFailedResult(t *testing.T) {
+	dispatch := interfaces.WorkDispatch{
+		DispatchID:   "dispatch-panic",
+		TransitionID: "t-process",
+	}
+	executors := map[string]workers.WorkerExecutor{
+		"mock": &panicExecutor{message: "simulated executor panic"},
+	}
+
+	result := executeDispatchSynchronously(context.Background(), dispatch, "mock", executors)
+
+	if result.DispatchID != dispatch.DispatchID || result.TransitionID != dispatch.TransitionID {
+		t.Fatalf("panic result lost dispatch identity: %+v", result)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("panic result outcome = %q, want %q", result.Outcome, interfaces.OutcomeFailed)
+	}
+	if !strings.Contains(result.Error, "executor panic:") || !strings.Contains(result.Error, "simulated executor panic") {
+		t.Fatalf("panic result error = %q, want panic-derived failure message", result.Error)
+	}
 }
 
 func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerExecutesSynchronously(t *testing.T) {

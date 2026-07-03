@@ -11,6 +11,8 @@ const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../..",
 );
+// Make subprocess harness checks can exceed Vitest's default 5s under parallel load.
+const makeHarnessTestTimeoutMs = 60_000;
 
 describe("component package harness wiring", () => {
   let tempRoots: string[] = [];
@@ -31,7 +33,7 @@ describe("component package harness wiring", () => {
         stdio: ["ignore", "pipe", "pipe"],
       });
     },
-    60_000,
+    makeHarnessTestTimeoutMs,
   );
 
   it(
@@ -43,40 +45,36 @@ describe("component package harness wiring", () => {
         stdio: ["ignore", "pipe", "pipe"],
       });
     },
-    60_000,
+    makeHarnessTestTimeoutMs,
   );
 
-  it(
-    "fails ui-components-boundary when package source violates boundary rules",
-    async () => {
-      const tempRoot = await mkdtemp(
-        path.join(os.tmpdir(), "package-harness-boundary-failure-"),
-      );
-      tempRoots.push(tempRoot);
+  it("fails ui-components-boundary when package source violates boundary rules", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "package-harness-boundary-failure-"),
+    );
+    tempRoots.push(tempRoot);
 
-      const packageSrcDir = path.join(tempRoot, "src");
-      await mkdir(path.join(packageSrcDir, "widgets"), { recursive: true });
-      await writeFile(
-        path.join(packageSrcDir, "widgets/bad.tsx"),
-        'import { toast } from "sonner";\nexport function BadWidget() { toast("nope"); return null; }\n',
-      );
+    const packageSrcDir = path.join(tempRoot, "src");
+    await mkdir(path.join(packageSrcDir, "widgets"), { recursive: true });
+    await writeFile(
+      path.join(packageSrcDir, "widgets/bad.tsx"),
+      'import { toast } from "sonner";\nexport function BadWidget() { toast("nope"); return null; }\n',
+    );
 
-      await expect(
-        execFileAsync("make", ["ui-components-boundary"], {
-          cwd: repoRoot,
-          env: {
-            ...process.env,
-            AGENT_FACTORY_COMPONENTS_SRC_DIR: packageSrcDir,
-            AGENT_FACTORY_DASHBOARD_SRC_DIR: path.join(tempRoot, "dashboard-src"),
-          },
-        }),
-      ).rejects.toMatchObject({
-        code: 2,
-        stderr: expect.stringContaining(
-          "@you-agent-factory/components package boundary check failed:",
-        ),
-      });
-    },
-    60_000,
-  );
+    await expect(
+      execFileAsync("make", ["ui-components-boundary"], {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          AGENT_FACTORY_COMPONENTS_SRC_DIR: packageSrcDir,
+          AGENT_FACTORY_DASHBOARD_SRC_DIR: path.join(tempRoot, "dashboard-src"),
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 2,
+      stderr: expect.stringContaining(
+        "@you-agent-factory/components package boundary check failed:",
+      ),
+    });
+  }, makeHarnessTestTimeoutMs);
 });

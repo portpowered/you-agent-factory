@@ -6,9 +6,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelOperationContentType } from "../../../../api/generated/openapi";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 
-vi.mock("../../../../components/ui/dialog", () =>
-  import("../../../../testing/mock-dashboard-dialog"),
-);
+vi.mock("@you-agent-factory/components", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@you-agent-factory/components")
+  >();
+  const mockDialog = await import("../../../../testing/mock-dashboard-dialog");
+
+  return {
+    ...actual,
+    Dialog: mockDialog.Dialog,
+    DialogContent: mockDialog.DialogContent,
+    DialogDescription: mockDialog.DialogDescription,
+    DialogFooter: mockDialog.DialogFooter,
+    DialogHeader: mockDialog.DialogHeader,
+    DialogOverlay: mockDialog.DialogOverlay,
+    DialogPortal: mockDialog.DialogPortal,
+    DialogTitle: mockDialog.DialogTitle,
+  };
+});
 
 import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import { createEmptyEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";

@@ -438,12 +438,43 @@ func TestPoisonTokenNoPanic(t *testing.T) {
 }
 
 // TestPoisonTokenExecutorPanic verifies that if an executor panics, the
-// syncDispatcher does not propagate the panic to crash the test runner.
-// Note: the current syncDispatcher does NOT recover from executor panics,
-// so this test documents the behavior and uses recover() in the test itself.
+// Factory runtime recovers the panic and routes the Work through failed-Work
+// semantics without crashing the test process.
 func TestPoisonTokenExecutorPanic(t *testing.T) {
-	// pending migration: panic recovery in inline dispatch not supported during Run()
-	t.Skip("pending migration: panic recovery in inline dispatch not supported during Run()")
+	if testing.Short() {
+		t.Skip("skipping stress test in short mode")
+	}
+
+	dir := testutil.ScaffoldFactoryDir(t, poisonExecCfg("panic-worker"))
+	h := testutil.NewServiceTestHarness(t, dir)
+
+	h.SetCustomExecutor("panic-worker", &panicWorkerExecutor{
+		message: "simulated executor catastrophic panic",
+	})
+
+	h.SubmitWork("task", []byte(`{"test": "executor-panic"}`))
+
+	// Executor panics are converted to OutcomeFailed WorkResults and routed via
+	// FailureArcs — RunUntilComplete should succeed (no panic escaping Run()).
+	h.RunUntilComplete(t, 10*time.Second)
+
+	h.Assert().
+		PlaceTokenCount("task:failed", 1).
+		HasNoTokenInPlace("task:init").
+		HasNoTokenInPlace("task:complete")
+
+	snap := h.Marking()
+	for _, tok := range snap.Tokens {
+		if tok.PlaceID == "task:failed" {
+			if !strings.Contains(tok.History.LastError, "executor panic:") {
+				t.Errorf("expected panic failure message in token history, got: %q", tok.History.LastError)
+			}
+			if !strings.Contains(tok.History.LastError, "simulated executor catastrophic panic") {
+				t.Errorf("expected panic value in token history, got: %q", tok.History.LastError)
+			}
+			break
+		}
+	}
 }
 
 // TestPoisonTokenExecutorError verifies that executors returning Go errors are
@@ -576,6 +607,15 @@ func (e *errorExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (i
 	return interfaces.WorkResult{}, e.err
 }
 
+// panicWorkerExecutor panics from Execute to exercise executor panic recovery.
+type panicWorkerExecutor struct {
+	message string
+}
+
+func (e *panicWorkerExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	panic(e.message)
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -640,4 +680,5 @@ var (
 	_ workers.WorkerExecutor = (*emptyResultExecutor)(nil)
 	_ workers.WorkerExecutor = (*massiveSpawnExecutor)(nil)
 	_ workers.WorkerExecutor = (*errorExecutor)(nil)
+	_ workers.WorkerExecutor = (*panicWorkerExecutor)(nil)
 )

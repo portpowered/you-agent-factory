@@ -10,6 +10,11 @@ import {
 import type { ReactNode } from "react";
 import { vi } from "vitest";
 
+import {
+  WIDGET_FRAME_BODY_TEXT_CLASS,
+  WIDGET_FRAME_SECTION_HEADING_CLASS,
+} from "@you-agent-factory/components/recipes";
+
 vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../lib/trace-factory-graph-layout")>();
@@ -420,7 +425,7 @@ describe("TraceGridBentoCard state handling", () => {
     );
 
     expect(screen.getByText("Trace history unavailable").className).toContain(
-      "af-dashboard-section-heading",
+      WIDGET_FRAME_SECTION_HEADING_CLASS,
     );
 
     rerender(
@@ -429,12 +434,12 @@ describe("TraceGridBentoCard state handling", () => {
       />,
     );
     expect(screen.getByText("Loading trace").className).toContain(
-      "af-dashboard-section-heading",
+      WIDGET_FRAME_SECTION_HEADING_CLASS,
     );
     expect(
       screen.getByText("Reconstructing dispatch history for work-active.")
         .className,
-    ).toContain("af-dashboard-body-text");
+    ).toContain(WIDGET_FRAME_BODY_TEXT_CLASS);
     expect(container.querySelectorAll(".animate-pulse")).toHaveLength(3);
 
     rerender(
@@ -443,10 +448,10 @@ describe("TraceGridBentoCard state handling", () => {
       />,
     );
     expect(screen.getByText("Trace lookup failed").className).toContain(
-      "af-dashboard-section-heading",
+      WIDGET_FRAME_SECTION_HEADING_CLASS,
     );
     expect(screen.getByText("network failed").className).toContain(
-      "af-dashboard-body-text",
+      WIDGET_FRAME_BODY_TEXT_CLASS,
     );
   });
 });

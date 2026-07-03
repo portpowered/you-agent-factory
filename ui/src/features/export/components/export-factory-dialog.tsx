@@ -2,16 +2,18 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
-  AlertPanel,
-  AlertPanelText,
-  Button,
-  DashboardText,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+} from "@you-agent-factory/components";
+import {
+  AlertPanel,
+  AlertPanelText,
+  Button,
+  DashboardText,
   FormDescription,
   FormError,
   FormField,

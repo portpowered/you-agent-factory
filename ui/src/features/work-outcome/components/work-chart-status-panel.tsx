@@ -1,10 +1,10 @@
-import type { ChartPresentation } from "@you-agent-factory/components/charts";
-import { Skeleton } from "../../../components/ui/skeleton";
 import {
-  DashboardEmptyState,
-  DashboardEmptyStateText,
-  DashboardEmptyStateTitle,
-} from "../../../components/ui/widget-frame";
+  WidgetEmptyState,
+  WidgetEmptyStateText,
+  WidgetEmptyStateTitle,
+} from "@you-agent-factory/components/recipes";
+import type { ChartPresentation } from "@you-agent-factory/components/charts";
+import { Skeleton } from "@you-agent-factory/components";
 import { cn } from "../../../lib/cn";
 
 // tailwind-exception: intrinsic-sizing
@@ -40,14 +40,14 @@ export function WorkChartStatusPanel({
           <Skeleton className="h-28 w-full" />
         </div>
       ) : null}
-      <DashboardEmptyStateTitle>{title}</DashboardEmptyStateTitle>
-      <DashboardEmptyStateText>{message}</DashboardEmptyStateText>
+      <WidgetEmptyStateTitle>{title}</WidgetEmptyStateTitle>
+      <WidgetEmptyStateText>{message}</WidgetEmptyStateText>
     </>
   );
 
   if (!embedded) {
     return (
-      <DashboardEmptyState
+      <WidgetEmptyState
         aria-busy={ariaBusy || undefined}
         aria-live={role === "alert" ? "assertive" : "polite"}
         className={WORK_CHART_STATUS_PANEL_CLASS}
@@ -56,7 +56,7 @@ export function WorkChartStatusPanel({
         role={role}
       >
         {content}
-      </DashboardEmptyState>
+      </WidgetEmptyState>
     );
   }
 

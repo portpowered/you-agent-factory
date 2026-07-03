@@ -2,17 +2,19 @@ import { Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@you-agent-factory/components";
+import {
   Button,
   DashboardIconButtonShell,
   DashboardLabel,
   DashboardText,
   FormError,
   Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
 } from "../../../components/ui";
-import { OptionalEnumSelect } from "../../../components/ui/enum-select";
+import { OptionalEnumSelect } from "@you-agent-factory/components";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";

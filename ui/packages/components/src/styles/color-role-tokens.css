@@ -141,4 +141,23 @@
   --color-af-worker: var(--color-tertiary);
   --color-af-worker-surface: var(--color-tertiary-container);
   --color-af-worker-text: var(--color-on-tertiary-container);
+
+  /* Semantic border and overlay tokens for feedback and loading surfaces */
+  --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
+  --color-af-success-border: rgb(
+    from var(--color-af-foundation-success) r g b /
+    0.28
+  );
+  --color-af-warning-border: rgb(
+    from var(--color-af-foundation-warning) r g b /
+    0.3
+  );
+  --color-af-danger-border: rgb(
+    from var(--color-af-foundation-danger) r g b /
+    0.3
+  );
+  --color-af-info-border: rgb(
+    from var(--color-af-foundation-info) r g b /
+    0.28
+  );
 }

@@ -9,7 +9,9 @@ import {
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
-import { DetailCopy } from "../../../../components/ui/widget-frame";
+import {
+  WidgetDetailCopy,
+} from "@you-agent-factory/components/recipes";
 import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,
@@ -120,13 +122,13 @@ export function StateNodeDetailCard({
               workItems={visibleWorkItems}
             />
           ) : (
-            <DetailCopy>
+            <WidgetDetailCopy>
               {emptyStatePlaceMessage(
                 messages,
                 usesRetainedWorkItems,
                 tokenCount,
               )}
-            </DetailCopy>
+            </WidgetDetailCopy>
           )}
         </CurrentSelectionExpandableSection>
       </CurrentSelectionBodyLayout>

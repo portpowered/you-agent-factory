@@ -23,7 +23,6 @@ export function FactoryGraphEditorNotice({
 }) {
   return (
     <AlertPanel
-      asChild
       padding="default"
       radius="2xl"
       role={tone === "danger" ? "alert" : "status"}
