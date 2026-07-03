@@ -1,5 +1,5 @@
 import type { ChartPresentation } from "../../../components/ui/chart";
-import { Skeleton } from "../../../components/ui/skeleton";
+import { Skeleton } from "@you-agent-factory/components";
 import {
   DashboardEmptyState,
   DashboardEmptyStateText,

@@ -38,7 +38,7 @@ describe("dispatch script detail sections", () => {
 
     expect(screen.getByText("hello").tagName).toBe("PRE");
     expect(screen.getByText("hello").className).toContain(
-      "af-dashboard-body-code",
+      "text-code-medium",
     );
 
     rerender(

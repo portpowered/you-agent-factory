@@ -597,7 +597,7 @@ describe("ProviderSessionDetailPanel", () => {
       '{"path":"pkg/api/provider_session_details.go"}',
     );
     expect(rawArguments.tagName).toBe("PRE");
-    expect(rawArguments.className).toContain("af-dashboard-body-code");
+    expect(rawArguments.className).toContain("text-code-medium");
   });
 
   it("formats source, transcript, and turn timestamps in the local timezone while preserving raw source and turn ISO access", async () => {

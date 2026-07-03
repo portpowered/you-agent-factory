@@ -1,4 +1,4 @@
-import { CodePanel } from "../../../../../components/ui/code-panel";
+import { CodePanel } from "@you-agent-factory/components";
 import { DetailCopy } from "../../../../../components/ui/widget-frame";
 import {
   CurrentSelectionDetailCode,

@@ -47,10 +47,10 @@ describe("AlertPanel", () => {
     const body = screen.getByText("Primary alert copy");
     const supporting = screen.getByText("Supporting alert copy");
 
-    expect(body.className).toContain("af-dashboard-body-text");
+    expect(body.className).toContain("text-body-medium");
     expect(body.className).toContain("!text-current");
     expect(supporting.tagName).toBe("SPAN");
-    expect(supporting.className).toContain("af-dashboard-supporting-text");
+    expect(supporting.className).toContain("text-body-small");
     expect(supporting.className).toContain("!text-current");
   });
 });
