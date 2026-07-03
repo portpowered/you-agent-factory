@@ -467,37 +467,69 @@ export async function findAvailablePort() {
   return address.port;
 }
 
-async function listenHttpServer(
-  server,
-  port,
-  host,
-  { maxAttempts = 15, retryDelayMs = 100 } = {},
-) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      await new Promise((resolve, reject) => {
-        const onError = (error) => {
-          server.removeListener("listening", onListening);
-          reject(error);
-        };
-        const onListening = () => {
-          server.removeListener("error", onError);
-          resolve();
-        };
-        server.once("error", onError);
-        server.once("listening", onListening);
-        server.listen(port, host);
+async function assertPortAvailable(host, port) {
+  const probe = http.createServer();
+  let listening = false;
+  try {
+    await new Promise((resolve, reject) => {
+      probe.once("error", reject);
+      probe.listen(port, host, () => {
+        listening = true;
+        resolve();
       });
-      return;
-    } catch (error) {
-      if (error?.code !== "EADDRINUSE" || attempt === maxAttempts) {
-        throw error;
-      }
-      await delay(retryDelayMs * attempt);
+    });
+  } finally {
+    if (listening) {
+      await new Promise((resolve, reject) => {
+        probe.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
     }
   }
 }
 
+/**
+ * Poll until a TCP port is free so sequential browser integration suites can
+ * reuse the shared preview API port after a real-backend harness stops.
+ */
+export async function waitForPortAvailable(
+  host = previewHost,
+  port,
+  timeoutMs = 15_000,
+  intervalMs = 250,
+) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = null;
+
+  while (Date.now() < deadline) {
+    try {
+      await assertPortAvailable(host, port);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code !== "EADDRINUSE"
+      ) {
+        throw error;
+      }
+      await delay(intervalMs);
+    }
+  }
+
+  const suffix =
+    lastError instanceof Error ? `: ${lastError.message}` : lastError ? `: ${lastError}` : ".";
+  throw new Error(
+    `Timed out waiting for ${host}:${port} to become available${suffix}`,
+  );
+}
 function configuredPort(name) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -1698,7 +1730,12 @@ export async function startFactoryApiServer({
     response.end("not found");
   });
 
-  await listenHttpServer(server, apiPort, previewHost);
+  await waitForPortAvailable(previewHost, apiPort);
+
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(apiPort, previewHost, resolve);
+  });
 
   return {
     releaseReplayStream,

@@ -73,6 +73,16 @@ describe("@you-agent-factory/components package import resolution", () => {
     },
   );
 
+  it("imports graph primitives from the graphs category surface", () => {
+    expect(graphs.COMPONENTS_CATEGORY).toBe("graphs");
+    expect(graphs.GraphNodeShell).toBeTypeOf("function");
+    expect(graphs.GraphNodeButton).toBeTypeOf("object");
+    expect(graphs.GraphEdge).toBeTypeOf("function");
+    expect(graphs.GraphViewportSurface).toBeTypeOf("object");
+    expect(graphs.GraphNodeHandleBadge).toBeTypeOf("function");
+    expect(graphs.buildGraphEdgePathThroughWaypoints).toBeTypeOf("function");
+  });
+
   it("imports cn from the utilities category surface", () => {
     expect(utilitiesCategory).toBe("utilities");
     expect(cn("alpha", false, "beta")).toBe("alpha beta");

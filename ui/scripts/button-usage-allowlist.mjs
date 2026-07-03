@@ -13,14 +13,6 @@ export const approvedButtonUsageAllowlist = [
   },
   {
     rawButtonFingerprints: [
-      "className={cn(GRAPH_NODE_BUTTON_BASE_CLASS, className)}",
-    ],
-    rawButtonReason:
-      "Graph nodes stay behind the dedicated GraphNodeButton semantic wrapper owner.",
-    relativeFilePath: "src/features/graphs/components/graph-node-button.tsx",
-  },
-  {
-    rawButtonFingerprints: [
       'aria-haspopup="dialog"',
       "aria-controls={controlsID}",
       "aria-label={sessionCloseLabel(session, messages)}",
