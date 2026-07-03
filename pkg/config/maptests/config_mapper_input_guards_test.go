@@ -12,95 +12,14 @@ import (
 
 // --- per-input guard tests ---
 
-// portos:func-length-exception owner=agent-factory reason=legacy-input-guard-fixture review=2026-07-18 removal=split-static-guard-fixture-before-next-input-guard-change
 func TestConfigMapping_PerInputGuard_StaticAllChildrenComplete(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
-			{
-				Name: "request",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "waiting", Type: interfaces.StateTypeProcessing},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-				},
-			},
-			{
-				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-				},
-			},
-		},
-		Workers: []interfaces.WorkerConfig{
-			{Name: "collect-worker"},
-		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{
-				Name:           "collector",
-				WorkerTypeName: "collect-worker",
-				Inputs: []interfaces.IOConfig{
-					{StateName: "waiting", WorkTypeName: "request"},
-					{
-						StateName:    "complete",
-						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type:        interfaces.GuardTypeAllChildrenComplete,
-							ParentInput: "request",
-						},
-					},
-				},
-				Outputs: []interfaces.IOConfig{
-					{StateName: "complete", WorkTypeName: "request"},
-				},
-			},
-		},
-	}
-
 	mapper := testConfigMapper{}
-	outputNet, err := mapper.Map(context.Background(), input)
+	outputNet, err := mapper.Map(context.Background(), staticAllChildrenCompleteFactoryConfig())
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
 	}
 
-	collector := outputNet.Transitions["collector"]
-	if collector == nil {
-		t.Fatal("expected transition 'collector' to exist")
-	}
-
-	// Should have 2 input arcs: parent consume + child observe.
-	if len(collector.InputArcs) != 2 {
-		t.Fatalf("expected 2 input arcs on collector, got %d", len(collector.InputArcs))
-	}
-
-	// First arc: parent consume with named binding "parent".
-	parentArc := collector.InputArcs[0]
-	if parentArc.Name != "parent" {
-		t.Errorf("first input arc name: expected 'parent', got %q", parentArc.Name)
-	}
-	if parentArc.PlaceID != "request:waiting" {
-		t.Errorf("parent arc place: expected 'request:waiting', got %q", parentArc.PlaceID)
-	}
-
-	// Second arc: child observation with AllWithParentGuard.
-	childArc := collector.InputArcs[1]
-	if childArc.PlaceID != "page:complete" {
-		t.Errorf("child arc place: expected 'page:complete', got %q", childArc.PlaceID)
-	}
-	if childArc.Mode != interfaces.ArcModeObserve {
-		t.Errorf("child arc mode: expected OBSERVE, got %d", childArc.Mode)
-	}
-	if childArc.Cardinality.Mode != petri.CardinalityAll {
-		t.Errorf("child arc cardinality: expected ALL, got %d", childArc.Cardinality.Mode)
-	}
-
-	guard, ok := childArc.Guard.(*petri.AllWithParentGuard)
-	if !ok {
-		t.Fatalf("expected AllWithParentGuard on child arc, got %T", childArc.Guard)
-	}
-	if guard.MatchBinding != "parent" {
-		t.Errorf("guard match binding: expected 'parent', got %q", guard.MatchBinding)
-	}
+	assertStaticAllChildrenCompleteCollector(t, outputNet)
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-input-guard-fixture review=2026-07-18 removal=split-dynamic-guard-fixture-before-next-input-guard-change
