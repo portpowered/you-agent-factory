@@ -135,6 +135,9 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
+- [Skeleton loading placeholders](./docs/feedback-skeleton.md)
+- [CodePanel long-content containment](./docs/data-display-code-panel.md)
 
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site
