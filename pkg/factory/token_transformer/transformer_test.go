@@ -828,3 +828,117 @@ func TestReleasedResourceToken_PreservesConsumedTokenIdentity(t *testing.T) {
 		t.Fatalf("PlaceVisits after source mutation = %#v, want detached original", released.History.PlaceVisits)
 	}
 }
+
+func TestOutputToken_MixedWorkResource_ReleasesConsumedResourceIdentityRegardlessOfInputOrder(t *testing.T) {
+	now := time.Date(2026, time.April, 7, 14, 0, 0, 0, time.UTC)
+	createdAt := now.Add(-time.Hour)
+	transformer := New(
+		map[string]*petri.Place{
+			"story:complete":       {ID: "story:complete", TypeID: "story", State: "complete"},
+			"agent-slot:available": {ID: "agent-slot:available", TypeID: "agent-slot", State: "available"},
+		},
+		map[string]*state.WorkType{
+			"story": {ID: "story"},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+	resource := interfaces.Token{
+		ID:        "agent-slot:resource:0",
+		PlaceID:   "agent-slot:available",
+		CreatedAt: createdAt,
+		EnteredAt: createdAt,
+		Color: interfaces.TokenColor{
+			WorkID:     "agent-slot:0",
+			WorkTypeID: "agent-slot",
+			DataType:   interfaces.DataTypeResource,
+		},
+		History: interfaces.TokenHistory{
+			PlaceVisits: map[string]int{"agent-slot:available": 3},
+		},
+	}
+	work := interfaces.Token{
+		ID:        "work-story-1",
+		PlaceID:   "story:in-review",
+		CreatedAt: createdAt,
+		EnteredAt: createdAt,
+		Color: interfaces.TokenColor{
+			WorkID:     "work-story-1",
+			WorkTypeID: "story",
+			DataType:   interfaces.DataTypeWork,
+			TraceID:    "trace-batch-idea-001",
+		},
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	}
+	arcs := []petri.Arc{
+		{ID: "work-out", PlaceID: "story:complete", Direction: petri.ArcOutput},
+		{ID: "slot-out", PlaceID: "agent-slot:available", Direction: petri.ArcOutput},
+	}
+	baseHistory := interfaces.TokenHistory{
+		TotalVisits:         map[string]int{},
+		ConsecutiveFailures: map[string]int{},
+		PlaceVisits:         map[string]int{},
+	}
+
+	orderings := []struct {
+		name    string
+		consumed []interfaces.Token
+	}{
+		{name: "resource-first", consumed: []interfaces.Token{resource, work}},
+		{name: "work-first", consumed: []interfaces.Token{work, resource}},
+	}
+
+	for _, ordering := range orderings {
+		t.Run(ordering.name, func(t *testing.T) {
+			inputColors := tokenColorsFromTokens(ordering.consumed)
+			resourceToken, err := transformer.OutputToken(OutputTokenInput{
+				ArcIndex:           1,
+				Arcs:               arcs,
+				ConsumedTokens:     ordering.consumed,
+				InputColors:        inputColors,
+				ResourceTokenIndex: 0,
+				Outcome:            interfaces.OutcomeAccepted,
+				Now:                now,
+				History:            baseHistory,
+			})
+			if err != nil {
+				t.Fatalf("resource OutputToken() error = %v", err)
+			}
+			if resourceToken.ID != resource.ID {
+				t.Fatalf("resource ID = %q, want %q", resourceToken.ID, resource.ID)
+			}
+			if resourceToken.PlaceID != "agent-slot:available" {
+				t.Fatalf("resource PlaceID = %q, want agent-slot:available", resourceToken.PlaceID)
+			}
+			if resourceToken.Color.DataType != interfaces.DataTypeResource {
+				t.Fatalf("resource DataType = %q, want %q", resourceToken.Color.DataType, interfaces.DataTypeResource)
+			}
+			if resourceToken.Color.WorkID != "agent-slot:0" {
+				t.Fatalf("resource WorkID = %q, want agent-slot:0", resourceToken.Color.WorkID)
+			}
+			if resourceToken.Color.TraceID != "" || resourceToken.Color.CurrentChainingTraceID != "" {
+				t.Fatalf("resource trace fields = (%q,%q), want empty", resourceToken.Color.TraceID, resourceToken.Color.CurrentChainingTraceID)
+			}
+			if !resourceToken.CreatedAt.Equal(createdAt) {
+				t.Fatalf("resource CreatedAt = %v, want %v", resourceToken.CreatedAt, createdAt)
+			}
+			if !resourceToken.EnteredAt.Equal(now) {
+				t.Fatalf("resource EnteredAt = %v, want %v", resourceToken.EnteredAt, now)
+			}
+			if resourceToken.History.PlaceVisits["agent-slot:available"] != 3 {
+				t.Fatalf("resource PlaceVisits = %#v, want preserved history", resourceToken.History.PlaceVisits)
+			}
+		})
+	}
+}
+
+func tokenColorsFromTokens(tokens []interfaces.Token) []interfaces.TokenColor {
+	colors := make([]interfaces.TokenColor, len(tokens))
+	for i, token := range tokens {
+		colors[i] = token.Color
+	}
+	return colors
+}

@@ -627,6 +627,173 @@ func assertReleasedResourceMutation(t *testing.T, result *interfaces.TickResult,
 	}
 }
 
+func TestHistoryTransitionerPipeline_AcceptedReleasesConsumedResourceTokenIdentityRegardlessOfInputOrder(t *testing.T) {
+	orderings := []struct {
+		name           string
+		consumedTokens []interfaces.Token
+	}{
+		{name: "resource-first"},
+		{name: "work-first"},
+	}
+
+	for _, ordering := range orderings {
+		t.Run(ordering.name, func(t *testing.T) {
+			tp, snapshot, resourceConsumed := newAcceptedReleasesConsumedResourceFixture(ordering.name == "work-first")
+			result, err := tp.Execute(context.Background(), snapshot)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertAcceptedMixedWorkResourceRelease(t, result, resourceConsumed)
+		})
+	}
+}
+
+func newAcceptedReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], interfaces.Token) {
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"story:in-review":      {ID: "story:in-review", TypeID: "story", State: "in-review"},
+			"story:complete":       {ID: "story:complete", TypeID: "story", State: "complete"},
+			"agent-slot:available": {ID: "agent-slot:available", TypeID: "agent-slot", State: "available"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"t1": {
+				ID:         "t1",
+				Name:       "review-story",
+				WorkerType: "reviewer",
+				InputArcs: []petri.Arc{
+					{ID: "a1", Name: "work", PlaceID: "story:in-review", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+					{ID: "a2", Name: "resource", PlaceID: "agent-slot:available", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "a3", Name: "complete", PlaceID: "story:complete", Direction: petri.ArcOutput},
+					{ID: "a4", Name: "resource", PlaceID: "agent-slot:available", Direction: petri.ArcOutput},
+				},
+			},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"story": {
+				ID: "story",
+				States: []state.StateDefinition{
+					{Value: "in-review", Category: state.StateCategoryProcessing},
+					{Value: "complete", Category: state.StateCategoryTerminal},
+				},
+			},
+		},
+	}
+	tp := newTestPipeline(n)
+	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeAccepted, Output: "Done. COMPLETE ACCEPTED"})
+
+	now := time.Date(2026, time.April, 7, 14, 0, 0, 0, time.UTC)
+	resourceConsumed := interfaces.Token{
+		ID:        "agent-slot:resource:0",
+		PlaceID:   "agent-slot:available",
+		CreatedAt: now.Add(-3 * time.Hour),
+		EnteredAt: now.Add(-3 * time.Hour),
+		Color: interfaces.TokenColor{
+			WorkID:     "agent-slot:0",
+			WorkTypeID: "agent-slot",
+			DataType:   interfaces.DataTypeResource,
+			Tags:       map[string]string{"pool": "shared"},
+		},
+		History: interfaces.TokenHistory{
+			PlaceVisits: map[string]int{"agent-slot:available": 4},
+		},
+	}
+	workConsumed := interfaces.Token{
+		ID:        "tok-1",
+		PlaceID:   "story:in-review",
+		CreatedAt: now.Add(-time.Hour),
+		EnteredAt: now.Add(-time.Hour),
+		Color: interfaces.TokenColor{
+			WorkID:     "work-story-1",
+			WorkTypeID: "story",
+			DataType:   interfaces.DataTypeWork,
+			TraceID:    "trace-batch-idea-001",
+		},
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	}
+	consumedTokens := []interfaces.Token{resourceConsumed, workConsumed}
+	if workFirst {
+		consumedTokens = []interfaces.Token{workConsumed, resourceConsumed}
+	}
+
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: petri.MarkingSnapshot{
+			Tokens: map[string]*interfaces.Token{
+				workConsumed.ID:     &workConsumed,
+				resourceConsumed.ID: &resourceConsumed,
+			},
+			PlaceTokens: map[string][]string{
+				"story:in-review":      {workConsumed.ID},
+				"agent-slot:available": {resourceConsumed.ID},
+			},
+		},
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"d-1": {
+				DispatchID:     "d-1",
+				TransitionID:   "t1",
+				ConsumedTokens: consumedTokens,
+			},
+		},
+	}
+	return tp, snapshot, resourceConsumed
+}
+
+func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickResult, resourceConsumed interfaces.Token) {
+	t.Helper()
+	if result == nil || len(result.Mutations) != 2 {
+		t.Fatalf("expected 2 mutations, got %+v", result)
+	}
+
+	var workMutation *interfaces.MarkingMutation
+	var released *interfaces.MarkingMutation
+	for i := range result.Mutations {
+		if result.Mutations[i].NewToken == nil {
+			continue
+		}
+		switch result.Mutations[i].NewToken.Color.DataType {
+		case interfaces.DataTypeWork:
+			workMutation = &result.Mutations[i]
+		case interfaces.DataTypeResource:
+			released = &result.Mutations[i]
+		}
+	}
+	if workMutation == nil {
+		t.Fatal("expected work output mutation")
+	}
+	if workMutation.ToPlace != "story:complete" {
+		t.Fatalf("work ToPlace = %q, want story:complete", workMutation.ToPlace)
+	}
+	if workMutation.NewToken.Color.TraceID != "trace-batch-idea-001" {
+		t.Fatalf("work TraceID = %q, want trace-batch-idea-001", workMutation.NewToken.Color.TraceID)
+	}
+	if released == nil {
+		t.Fatal("expected released resource mutation")
+	}
+	if released.ToPlace != "agent-slot:available" {
+		t.Fatalf("ToPlace = %q, want %q", released.ToPlace, "agent-slot:available")
+	}
+	if released.NewToken.ID != resourceConsumed.ID || released.NewToken.Color.WorkID != resourceConsumed.Color.WorkID {
+		t.Fatalf("released resource token = %#v, want preserved identity from %#v", released.NewToken, resourceConsumed)
+	}
+	if !released.NewToken.CreatedAt.Equal(resourceConsumed.CreatedAt) {
+		t.Fatalf("CreatedAt = %v, want %v", released.NewToken.CreatedAt, resourceConsumed.CreatedAt)
+	}
+	if released.NewToken.Color.Tags["pool"] != "shared" {
+		t.Fatalf("tag pool = %q, want %q", released.NewToken.Color.Tags["pool"], "shared")
+	}
+	if released.NewToken.Color.TraceID != "" {
+		t.Fatalf("released resource TraceID = %q, want empty", released.NewToken.Color.TraceID)
+	}
+	if released.NewToken.History.PlaceVisits["agent-slot:available"] != 4 {
+		t.Fatalf("PlaceVisits = %#v, want preserved history", released.NewToken.History.PlaceVisits)
+	}
+}
+
 func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransitions(t *testing.T) {
 	n := buildPipelineNet()
 	transitioner := NewTransitioner(n, nil)
