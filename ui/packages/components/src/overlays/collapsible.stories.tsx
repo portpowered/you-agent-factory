@@ -5,6 +5,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./collapsible";
+import { verifyCollapsibleKeyboardFocus } from "./overlay-storybook-play";
 
 const meta = {
   title: "Overlays/Collapsible",
@@ -29,4 +30,9 @@ export const Default: Story = {
       </CollapsibleContent>
     </Collapsible>
   ),
+};
+
+export const KeyboardFocus: Story = {
+  ...Default,
+  play: verifyCollapsibleKeyboardFocus,
 };

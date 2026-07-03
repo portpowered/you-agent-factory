@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "./dialog";
+import { verifyDialogKeyboardFocus } from "./overlay-storybook-play";
 
 const meta = {
   title: "Overlays/Dialog",
@@ -40,4 +41,9 @@ export const Default: Story = {
       </DialogContent>
     </Dialog>
   ),
+};
+
+export const KeyboardFocus: Story = {
+  ...Default,
+  play: verifyDialogKeyboardFocus,
 };

@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { spawn } from "node:child_process";
 import { readFileSync, readdirSync, rmSync } from "node:fs";
 import net from "node:net";
@@ -10,6 +11,8 @@ const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
+const uiRoot = path.resolve(packageRoot, "../..");
+const requireFromUi = createRequire(path.join(uiRoot, "package.json"));
 const host = process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_HOST ?? "127.0.0.1";
 const port = Number(
   process.env.AGENT_FACTORY_PACKAGE_STORYBOOK_PORT ?? "3817",
@@ -20,6 +23,10 @@ const storyIds = [
   "overlays-popover--default",
   "overlays-collapsible--default",
   "overlays-scrollarea--default",
+  "overlays-dialog--keyboard-focus",
+  "overlays-popover--keyboard-focus",
+  "overlays-collapsible--keyboard-focus",
+  "overlays-scrollarea--keyboard-focus",
 ];
 const storyTexts = {
   "primitives-packagetext--body": "Hello from the component package",
@@ -28,7 +35,18 @@ const storyTexts = {
   "overlays-collapsible--default":
     "Collapsible content rendered from the package overlays category",
   "overlays-scrollarea--default": "Scrollable row 1",
+  "overlays-dialog--keyboard-focus": "Package dialog",
+  "overlays-popover--keyboard-focus": "Popover content from the component package",
+  "overlays-collapsible--keyboard-focus":
+    "Collapsible content rendered from the package overlays category",
+  "overlays-scrollarea--keyboard-focus": "Scrollable field",
 };
+const keyboardStoryIds = [
+  "overlays-dialog--keyboard-focus",
+  "overlays-popover--keyboard-focus",
+  "overlays-collapsible--keyboard-focus",
+  "overlays-scrollarea--keyboard-focus",
+];
 const staticDir = path.join(packageRoot, "storybook-static");
 const baseUrl = `http://${host}:${port}`;
 const indexUrl = `${baseUrl}/index.json`;
@@ -94,6 +112,86 @@ function readStaticAssetBundleText() {
       readFileSync(path.join(assetsDir, fileName), "utf8"),
     )
     .join("\n");
+}
+
+async function verifyKeyboardStory(page, storyId) {
+  const iframeUrl = `${baseUrl}/iframe.html?id=${storyId}&viewMode=story`;
+  await page.goto(iframeUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await page.waitForSelector("#storybook-root", { timeout: 10_000 });
+  const storyRoot = page.locator("#storybook-root");
+
+  switch (storyId) {
+    case "overlays-dialog--keyboard-focus": {
+      const trigger = storyRoot.getByRole("button", { name: "Open dialog" });
+      await trigger.click();
+      const dialog = page.getByRole("dialog", { name: "Package dialog" });
+      await dialog.waitFor({ state: "visible", timeout: 10_000 });
+      await page.getByRole("button", { name: "Close" }).waitFor({
+        state: "visible",
+        timeout: 10_000,
+      });
+      await page.keyboard.press("Escape");
+      await dialog.waitFor({ state: "hidden", timeout: 10_000 });
+      await trigger.focus();
+      break;
+    }
+    case "overlays-popover--keyboard-focus": {
+      const trigger = storyRoot.getByRole("button", { name: "Open popover" });
+      await trigger.click();
+      await page
+        .getByText("Popover content from the component package.")
+        .waitFor({ state: "visible", timeout: 10_000 });
+      await page.keyboard.press("Escape");
+      await page
+        .getByText("Popover content from the component package.")
+        .waitFor({ state: "hidden", timeout: 10_000 });
+      break;
+    }
+    case "overlays-collapsible--keyboard-focus": {
+      const trigger = storyRoot.getByRole("button", { name: "Toggle details" });
+      await trigger.focus();
+      await page.keyboard.press("Enter");
+      await storyRoot
+        .getByText(
+          "Collapsible content rendered from the package overlays category.",
+        )
+        .waitFor({ state: "visible", timeout: 10_000 });
+      break;
+    }
+    case "overlays-scrollarea--keyboard-focus": {
+      const field = storyRoot.getByRole("textbox", { name: "Scrollable field" });
+      await field.waitFor({ state: "visible", timeout: 10_000 });
+      await field.focus();
+      const focused = await field.evaluate(
+        (element) => element === document.activeElement,
+      );
+      if (!focused) {
+        throw new Error(
+          `Expected ScrollArea keyboard story field to receive focus for ${storyId}.`,
+        );
+      }
+      break;
+    }
+    default:
+      throw new Error(`No keyboard verification handler for ${storyId}.`);
+  }
+}
+
+async function verifyKeyboardStories() {
+  const { chromium } = requireFromUi("playwright");
+  const browser = await chromium.launch({ headless: true });
+
+  try {
+    const page = await browser.newPage();
+    for (const storyId of keyboardStoryIds) {
+      await verifyKeyboardStory(page, storyId);
+      console.log(
+        `Verified package Storybook keyboard behavior for ${storyId}.`,
+      );
+    }
+  } finally {
+    await browser.close();
+  }
 }
 
 async function main() {
@@ -185,6 +283,8 @@ async function main() {
         `Verified package Storybook story ${storyId} at ${iframeUrl} without dashboard providers.`,
       );
     }
+
+    await verifyKeyboardStories();
   } finally {
     cleanup();
     await delay(500);

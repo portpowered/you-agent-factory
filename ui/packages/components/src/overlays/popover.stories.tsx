@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { verifyPopoverKeyboardFocus } from "./overlay-storybook-play";
 
 const meta = {
   title: "Overlays/Popover",
@@ -27,4 +28,9 @@ export const Default: Story = {
       </PopoverContent>
     </Popover>
   ),
+};
+
+export const KeyboardFocus: Story = {
+  ...Default,
+  play: verifyPopoverKeyboardFocus,
 };
