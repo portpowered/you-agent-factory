@@ -3,6 +3,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+import { inputVariants } from "./input";
+
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
 const PACKAGE_OVERLAYS_DIR = join(
   UI_COMPONENTS_DIR,
@@ -29,11 +31,16 @@ function expectNoTransitionalNeutralSurfaces(source: string): void {
   expect(source).not.toMatch(/\btext-af-text(?!-)/);
 }
 
+function expectRoleBasedNeutralSurfaces(className: string): void {
+  expect(className).toContain("border-outline");
+  expect(className).toMatch(/\btext-on-surface(-variant)?\b/);
+  expect(className).toMatch(/\bbg-surface-container-(low|high)\b/);
+}
+
 describe("shared primitive neutral surface roles", () => {
-  it.each([
-    ["dashboard-shell.tsx", readComponentSource],
-    ["input.tsx", readComponentSource],
-  ])("uses role-based neutral surfaces in %s", (fileName, readSource) => {
+  it.each([["dashboard-shell.tsx", readComponentSource]])(
+    "uses role-based neutral surfaces in %s",
+    (fileName, readSource) => {
     const source = readSource(fileName);
 
     expect(source).toContain("border-outline");
@@ -52,6 +59,11 @@ describe("shared primitive neutral surface roles", () => {
     expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
     expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
     expectNoTransitionalNeutralSurfaces(source);
+  });
+
+  it("keeps package-backed input primitives on role-based neutral surfaces", () => {
+    expectRoleBasedNeutralSurfaces(inputVariants());
+    expectNoTransitionalNeutralSurfaces(inputVariants());
   });
 
   it("uses role-based neutral borders and text in table.tsx", () => {
