@@ -117,6 +117,14 @@ export default defineConfig({
   ],
   resolve: {
     alias: createComponentsPackageAliases(componentsPackageRoot),
+    dedupe: [
+      "@radix-ui/react-compose-refs",
+      "@radix-ui/react-slot",
+      "react",
+      "react-dom",
+      "react/jsx-dev-runtime",
+      "react/jsx-runtime",
+    ],
   },
   server: {
     host: true,

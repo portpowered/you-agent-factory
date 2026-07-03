@@ -11,7 +11,7 @@ import {
   DashboardLabel,
   ExpandablePanelTrigger,
 } from "../../../components/ui";
-import { Button } from "../../../components/ui/button";
+import { Button } from "@you-agent-factory/components";
 import {
   Collapsible,
   CollapsibleContent,

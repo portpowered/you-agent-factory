@@ -1,20 +1,20 @@
 import { forwardRef, type ReactNode } from "react";
 
+import {
+  Button,
+  IconButtonShell,
+  type ButtonProps,
+} from "@you-agent-factory/components";
 import { cn } from "../../lib/cn";
-import { Button, type ButtonProps } from "./button";
-import { DashboardIconButtonShell } from "./dashboard-icon-button-shell";
 
 const DASHBOARD_ACTION_BUTTON_BASE_CLASS =
   "relative shrink-0 rounded-lg border text-sm font-semibold";
 const DASHBOARD_ACTION_BUTTON_SIZE_CLASS = {
   text: "min-h-10 px-3.5 py-2",
 };
-const DASHBOARD_ACTION_BUTTON_CONTENT_CLASS =
-  "inline-flex items-center justify-center gap-2";
-const DASHBOARD_ACTION_BUTTON_EXECUTING_CONTENT_CLASS = "opacity-0";
 
 export interface DashboardActionButtonProps
-  extends Omit<ButtonProps, "children" | "size"> {
+  extends Omit<ButtonProps, "children" | "size" | "loading"> {
   children: ReactNode;
   executing?: boolean;
   iconOnly?: boolean;
@@ -35,84 +35,36 @@ export const DashboardActionButton = forwardRef<
   },
   ref,
 ) {
-  const content = (
-    <>
-      <span
-        className={cn(
-          DASHBOARD_ACTION_BUTTON_CONTENT_CLASS,
-          executing && DASHBOARD_ACTION_BUTTON_EXECUTING_CONTENT_CLASS,
-        )}
-      >
-        {children}
-      </span>
-      {executing ? (
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 inline-flex items-center justify-center"
-        >
-          <DashboardActionButtonSpinner />
-        </span>
-      ) : null}
-    </>
-  );
-
   if (iconOnly) {
     return (
-      <DashboardIconButtonShell
-        aria-busy={executing || undefined}
+      <IconButtonShell
         className={cn(DASHBOARD_ACTION_BUTTON_BASE_CLASS, className)}
-        disabled={disabled || executing}
+        disabled={disabled}
+        loading={executing}
         ref={ref}
         tone={tone}
         {...props}
       >
-        {content}
-      </DashboardIconButtonShell>
+        {children}
+      </IconButtonShell>
     );
   }
 
   return (
     <Button
-      aria-busy={executing || undefined}
       className={cn(
         DASHBOARD_ACTION_BUTTON_BASE_CLASS,
         DASHBOARD_ACTION_BUTTON_SIZE_CLASS.text,
         className,
       )}
-      disabled={disabled || executing}
+      disabled={disabled}
+      loading={executing}
       ref={ref}
       size="sm"
       tone={tone}
       {...props}
     >
-      {content}
+      {children}
     </Button>
   );
 });
-
-function DashboardActionButtonSpinner() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="size-4 animate-spin"
-      fill="none"
-      focusable="false"
-      viewBox="0 0 16 16"
-    >
-      <circle
-        className="text-on-surface-disabled"
-        cx="8"
-        cy="8"
-        r="6"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M8 2a6 6 0 0 1 6 6"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.5"
-      />
-    </svg>
-  );
-}
