@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -22,65 +21,9 @@ func TestConfigMapping_PerInputGuard_StaticAllChildrenComplete(t *testing.T) {
 	assertStaticAllChildrenCompleteCollector(t, outputNet)
 }
 
-// portos:func-length-exception owner=agent-factory reason=legacy-input-guard-fixture review=2026-07-18 removal=split-dynamic-guard-fixture-before-next-input-guard-change
 func TestConfigMapping_PerInputGuard_DynamicFanout(t *testing.T) {
-	input := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
-			{
-				Name: "chapter",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "processing", Type: interfaces.StateTypeProcessing},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-				},
-			},
-			{
-				Name: "page",
-				States: []interfaces.StateConfig{
-					{Name: "init", Type: interfaces.StateTypeInitial},
-					{Name: "complete", Type: interfaces.StateTypeTerminal},
-				},
-			},
-		},
-		Workers: []interfaces.WorkerConfig{
-			{Name: "parse-worker"},
-			{Name: "complete-worker"},
-		},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{
-				Name:           "parser",
-				WorkerTypeName: "parse-worker",
-				Inputs: []interfaces.IOConfig{
-					{StateName: "init", WorkTypeName: "chapter"},
-				},
-				Outputs: []interfaces.IOConfig{
-					{StateName: "processing", WorkTypeName: "chapter"},
-				},
-			},
-			{
-				Name:           "chapter-complete",
-				WorkerTypeName: "complete-worker",
-				Inputs: []interfaces.IOConfig{
-					{StateName: "processing", WorkTypeName: "chapter"},
-					{
-						StateName:    "complete",
-						WorkTypeName: "page",
-						Guard: &interfaces.InputGuardConfig{
-							Type:        interfaces.GuardTypeAllChildrenComplete,
-							ParentInput: "chapter",
-							SpawnedBy:   "parser",
-						},
-					},
-				},
-				Outputs: []interfaces.IOConfig{
-					{StateName: "complete", WorkTypeName: "chapter"},
-				},
-			},
-		},
-	}
-
 	mapper := testConfigMapper{}
-	outputNet, err := mapper.Map(context.Background(), input)
+	outputNet, err := mapper.Map(context.Background(), dynamicFanoutFactoryConfig())
 	if err != nil {
 		t.Fatalf("failed to map config: %v", err)
 	}
@@ -840,76 +783,3 @@ func TestConfigMapping_PerInputGuard_SameTraceIDBuildsConsumeGuardAgainstPeerInp
 	}
 }
 
-func assertDynamicFanoutTransition(t *testing.T, outputNet *state.Net) {
-	t.Helper()
-
-	tr := outputNet.Transitions["chapter-complete"]
-	if tr == nil {
-		t.Fatal("expected transition 'chapter-complete' to exist")
-	}
-	if len(tr.InputArcs) != 3 {
-		t.Fatalf("expected 3 input arcs, got %d", len(tr.InputArcs))
-	}
-	assertDynamicFanoutParentArc(t, tr.InputArcs[0])
-	assertDynamicFanoutCountArc(t, tr.InputArcs[1])
-	assertDynamicFanoutChildArc(t, tr.InputArcs[2])
-
-	if outputNet.FanoutGroups == nil {
-		t.Fatal("expected FanoutGroups to be set")
-	}
-	if outputNet.FanoutGroups["parser"] != "parser:fanout-count" {
-		t.Errorf("FanoutGroups[parser]: expected 'parser:fanout-count', got %q", outputNet.FanoutGroups["parser"])
-	}
-}
-
-func assertDynamicFanoutParentArc(t *testing.T, parentArc petri.Arc) {
-	t.Helper()
-
-	if parentArc.Name != "parent" {
-		t.Errorf("arc[0] name: expected 'parent', got %q", parentArc.Name)
-	}
-	if parentArc.PlaceID != "chapter:processing" {
-		t.Errorf("arc[0] place: expected 'chapter:processing', got %q", parentArc.PlaceID)
-	}
-}
-
-func assertDynamicFanoutCountArc(t *testing.T, countArc petri.Arc) {
-	t.Helper()
-
-	if countArc.Name != "fanout-count" {
-		t.Errorf("arc[1] name: expected 'fanout-count', got %q", countArc.Name)
-	}
-	if countArc.PlaceID != "parser:fanout-count" {
-		t.Errorf("arc[1] place: expected 'parser:fanout-count', got %q", countArc.PlaceID)
-	}
-	if countArc.Mode != interfaces.ArcModeConsume {
-		t.Errorf("arc[1] mode: expected CONSUME, got %d", countArc.Mode)
-	}
-	if _, ok := countArc.Guard.(*petri.MatchColorGuard); !ok {
-		t.Fatalf("arc[1] guard: expected MatchColorGuard, got %T", countArc.Guard)
-	}
-}
-
-func assertDynamicFanoutChildArc(t *testing.T, childArc petri.Arc) {
-	t.Helper()
-
-	if childArc.PlaceID != "page:complete" {
-		t.Errorf("arc[2] place: expected 'page:complete', got %q", childArc.PlaceID)
-	}
-	if childArc.Mode != interfaces.ArcModeObserve {
-		t.Errorf("arc[2] mode: expected OBSERVE, got %d", childArc.Mode)
-	}
-	if childArc.Cardinality.Mode != petri.CardinalityZeroOrMore {
-		t.Errorf("arc[2] cardinality: expected ZERO_OR_MORE, got %d", childArc.Cardinality.Mode)
-	}
-	fcGuard, ok := childArc.Guard.(*petri.FanoutCountGuard)
-	if !ok {
-		t.Fatalf("arc[2] guard: expected FanoutCountGuard, got %T", childArc.Guard)
-	}
-	if fcGuard.MatchBinding != "parent" {
-		t.Errorf("fanout guard match binding: expected 'parent', got %q", fcGuard.MatchBinding)
-	}
-	if fcGuard.CountBinding != "fanout-count" {
-		t.Errorf("fanout guard count binding: expected 'fanout-count', got %q", fcGuard.CountBinding)
-	}
-}
