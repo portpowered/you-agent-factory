@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import "./react-flow-current-activity-card-component.mocks";
+import "../../../../testing/react-flow-current-activity-card-component.mocks";
 
 import {
   cleanup,
@@ -35,7 +35,7 @@ import {
   refreshFactoryFromTopology,
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
-} from "./react-flow-current-activity-card-component.harness";
+} from "../../../../testing/react-flow-current-activity-card-component.harness";
 
 const workflowGraphLocaleFallbackTimeoutMs = 180_000;
 

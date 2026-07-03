@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import "./react-flow-current-activity-card-component.mocks";
+import "../../../../testing/react-flow-current-activity-card-component.mocks";
 
 import {
   cleanup,
@@ -44,7 +44,7 @@ import {
   reinstallDashboardBrowserTestShims,
   renderCurrentActivity,
   workerDenseSnapshot,
-} from "./react-flow-current-activity-card-component.harness";
+} from "../../../../testing/react-flow-current-activity-card-component.harness";
 
 const LEGEND_ICON_EXPECTATIONS = [
   ["Queue", "queue"],

@@ -7,29 +7,29 @@ import { afterEach, beforeEach, vi } from "vitest";
 import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
-} from "../../../../api/dashboard/types";
-import type { ImportFactoryValue } from "../../../../api/session-factory";
-import { factoryFromDashboardTopology } from "../../../../components/dashboard/fixtures";
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
-import { DashboardSessionTestProvider } from "../../../../testing/dashboard-session-test-provider";
+} from "../api/dashboard/types";
+import type { ImportFactoryValue } from "../api/session-factory";
+import { factoryFromDashboardTopology } from "../components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "../components/dashboard/test-browser-shims";
+import { semanticWorkflowDashboardSnapshot } from "../components/dashboard/test-fixtures";
+import { useCurrentFactoryDocument } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
+import { useFactoryGraphDraftState } from "../features/factory-graph-editor/hooks/factory-graph-draft-hook";
+import { useEditableFactoryGraph } from "../features/factory-graph-editor/hooks/use-editable-factory-graph";
+import type { ReadFactoryImportFile } from "../features/import/hooks/use-factory-png-drop";
+import type { FactoryImportConfirmInput } from "../features/import/lib/factory-import-save-choice";
+import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
+import type { CurrentActivityImportController } from "../features/workflow-activity/hooks/current-activity-import-controller";
+import { resetCurrentActivityGraphLayoutCacheForTests } from "../features/workflow-activity/hooks/react-flow-current-activity-card-graph-layout";
+import type { CurrentActivitySelection } from "../features/workflow-activity/lib/react-flow-current-activity-card-types";
+import { getDashboardFlowAxisLegendMessages } from "../features/workflow-activity/messages/dashboard-flow-axis-legend";
+import { ReactFlowCurrentActivityCard } from "../features/workflow-activity/components/react-flow-current-activity-card";
+import { DashboardSessionTestProvider } from "./dashboard-session-test-provider";
 import {
   baseFactoryDefinitionDocument,
   createMockGraphEditorDraftState,
   wireMockEditableFactoryGraph,
-} from "../../../../testing/graph-editor-harness";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useFactoryDocumentSave } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
-import { useFactoryGraphDraftState } from "../../../factory-graph-editor/hooks/factory-graph-draft-hook";
-import { useEditableFactoryGraph } from "../../../factory-graph-editor/hooks/use-editable-factory-graph";
-import type { ReadFactoryImportFile } from "../../../import/hooks/use-factory-png-drop";
-import type { FactoryImportConfirmInput } from "../../../import/lib/factory-import-save-choice";
-import type { FactoryPngImportValue } from "../../../import/lib/factory-png-import";
-import type { CurrentActivityImportController } from "../../hooks/current-activity-import-controller";
-import { resetCurrentActivityGraphLayoutCacheForTests } from "../../hooks/react-flow-current-activity-card-graph-layout";
-import type { CurrentActivitySelection } from "../../lib/react-flow-current-activity-card-types";
-import { getDashboardFlowAxisLegendMessages } from "../../messages/dashboard-flow-axis-legend";
-import { ReactFlowCurrentActivityCard } from "../react-flow-current-activity-card";
+} from "./graph-editor-harness";
 
 export const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
 
