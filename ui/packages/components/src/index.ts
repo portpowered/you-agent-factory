@@ -7,3 +7,9 @@ export {
   COMPONENT_CATEGORY_EXPORT_PATHS,
   type ComponentCategoryExportPath,
 } from "./category-paths";
+export { Button, ButtonLink, buttonVariants, IconButtonShell } from "./primitives";
+export type {
+  ButtonLinkProps,
+  ButtonProps,
+  IconButtonShellProps,
+} from "./primitives";
