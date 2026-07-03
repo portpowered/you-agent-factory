@@ -13,7 +13,7 @@ export const GraphViewportSurface = forwardRef<
   return (
     <section
       className={cn(
-        "relative h-full max-h-full overflow-hidden rounded-3xl border shadow-none transition-colors",
+        "relative min-h-0 overflow-hidden rounded-3xl border shadow-none transition-colors",
         className,
       )}
       data-graph-viewport-surface="true"

@@ -130,6 +130,11 @@ const edgeTypes = { graphEdge: GraphEdge };
 Semantic viewport chrome (`section` with `role="region"` by default) for graph
 frames. Accepts children (typically `ReactFlow`) and standard section attributes.
 
+Pass an explicit height (`h-*`, `min-h-*`) for Storybook or standalone examples.
+Hosts that fill flex parents should add `h-full` (and usually `min-h-0`) via
+`className`; the primitive does not force `h-full` so explicit heights are not
+capped by a collapsed parent.
+
 ```tsx
 <GraphViewportSurface className="h-[480px] border-outline">
   <ReactFlow /* ... */ />

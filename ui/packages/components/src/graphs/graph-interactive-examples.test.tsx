@@ -122,4 +122,21 @@ describe("graph interactive examples", () => {
       document.querySelector('[data-node-handle-badge="output-source"]'),
     ).toBeInTheDocument();
   });
+
+  it("renders the interactive graph viewport with explicit story height classes", async () => {
+    renderPackageComponent(
+      <GraphInteractiveExample
+        className="h-[28rem]"
+        fixtureNodes={desktopInteractiveGraphNodes}
+      />,
+    );
+
+    const viewport = await screen.findByRole("region", {
+      name: "Interactive graph example",
+    });
+
+    expect(viewport).toHaveClass("h-[28rem]");
+    expect(viewport).not.toHaveClass("h-full");
+    expect(viewport).not.toHaveClass("max-h-full");
+  });
 });
