@@ -4,19 +4,19 @@
 
 @layer components {
   .type-display-large {
-    @apply font-display text-display-large tracking-[-0.04em];
+    @apply font-display text-display-large;
   }
 
   .type-display-medium {
-    @apply font-display text-display-medium tracking-[-0.035em];
+    @apply font-display text-display-medium;
   }
 
   .type-display-small {
-    @apply font-display text-display-small tracking-[-0.03em];
+    @apply font-display text-display-small;
   }
 
   .type-headline-large {
-    @apply font-sans text-headline-large font-semibold tracking-[-0.02em];
+    @apply font-sans text-headline-large font-semibold;
   }
 
   .type-headline-medium {
