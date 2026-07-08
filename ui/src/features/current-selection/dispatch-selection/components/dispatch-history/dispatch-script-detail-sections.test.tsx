@@ -13,11 +13,11 @@ describe("dispatch script detail sections", () => {
     render(<ScriptArgsSection args={["--work", "work-1"]} label="Args" />);
 
     expect(screen.getByText("Args").className).toContain(
-      "af-dashboard-supporting-label",
+      "af-supporting-label",
     );
     expect(screen.getByText("--work").tagName).toBe("CODE");
     expect(screen.getByText("work-1").className).toContain(
-      "af-dashboard-body-code",
+      "af-body-code",
     );
   });
 

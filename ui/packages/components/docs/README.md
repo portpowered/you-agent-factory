@@ -21,6 +21,10 @@ read it directly from the package; no docs-site implementation is required.
 
 ## Documented components
 
+- [Typography roles](./typography-roles.md) — `Text`, `Heading`, `Label`,
+  `Code`, dense text, truncation, and wrapping
+- [Layout and display primitives](./layout-display-primitives.md) —
+  `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
 - [Form select primitives](./forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
 - [Form field structure and messaging](./forms-form-field.md) — `FormField`,
@@ -35,6 +39,11 @@ read it directly from the package; no docs-site implementation is required.
 See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
+
+## Component guides
+
+- [Charts](./charts.md) — `ChartContainer`, tooltip and legend content, state
+  panels, config types, and host-owned data boundaries
 
 ## Form input primitives
 
@@ -54,6 +63,12 @@ from sibling files in this directory as the library grows.
   empty vs loading feedback
 - [CodePanel](./data-display-code-panel.md) — long-line and long-block
   containment, scrolling, and responsive layout expectations
+
+## Table data display
+
+- [Table primitives and DataTable](./table-data-table.md) — generic row contract,
+  explicit data states, density and responsive layout helpers, accessibility,
+  and Storybook references for domain-free tabular data display.
 
 ## Widget layout recipes
 

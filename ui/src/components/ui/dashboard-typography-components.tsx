@@ -1,122 +1,14 @@
-import {
-  type ElementType,
-  forwardRef,
-  type HTMLAttributes,
-  type ReactNode,
-} from "react";
+/** @deprecated Use `Text` from `@you-agent-factory/components`. */
+export { Text as DashboardText, type TextProps as DashboardTextProps } from "@you-agent-factory/components";
 
-import { cn } from "../../lib/cn";
-import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_PAGE_HEADING_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "./dashboard-typography";
+/** @deprecated Use `Heading` from `@you-agent-factory/components`. */
+export {
+  Heading as DashboardHeading,
+  type HeadingProps as DashboardHeadingProps,
+} from "@you-agent-factory/components";
 
-type TypographyElementProps = HTMLAttributes<HTMLElement> & {
-  as?: ElementType;
-  children?: ReactNode;
-  dateTime?: string;
-  htmlFor?: string;
-  type?: "button" | "reset" | "submit";
-};
+/** @deprecated Use `Label` from `@you-agent-factory/components`. */
+export { Label as DashboardLabel } from "@you-agent-factory/components";
 
-export interface DashboardTextProps extends TypographyElementProps {
-  variant?: "body" | "supporting";
-}
-
-export const DashboardText = forwardRef<HTMLElement, DashboardTextProps>(
-  function DashboardText(
-    { as: Component = "p", children, className, variant = "body", ...props },
-    ref,
-  ) {
-    return (
-      <Component
-        className={cn(
-          variant === "body"
-            ? DASHBOARD_BODY_TEXT_CLASS
-            : DASHBOARD_SUPPORTING_TEXT_CLASS,
-          className,
-        )}
-        ref={ref}
-        {...props}
-      >
-        {children}
-      </Component>
-    );
-  },
-);
-
-export interface DashboardHeadingProps extends TypographyElementProps {
-  level?: "page" | "section";
-}
-
-export const DashboardHeading = forwardRef<HTMLElement, DashboardHeadingProps>(
-  function DashboardHeading(
-    { as, children, className, level = "section", ...props },
-    ref,
-  ) {
-    const Component = as ?? (level === "page" ? "h1" : "h3");
-
-    return (
-      <Component
-        className={cn(
-          level === "page"
-            ? DASHBOARD_PAGE_HEADING_CLASS
-            : DASHBOARD_SECTION_HEADING_CLASS,
-          className,
-        )}
-        ref={ref}
-        {...props}
-      >
-        {children}
-      </Component>
-    );
-  },
-);
-
-export const DashboardLabel = forwardRef<HTMLElement, TypographyElementProps>(
-  function DashboardLabel(
-    { as: Component = "span", children, className, ...props },
-    ref,
-  ) {
-    return (
-      <Component
-        className={cn(DASHBOARD_SUPPORTING_LABEL_CLASS, className)}
-        ref={ref}
-        {...props}
-      >
-        {children}
-      </Component>
-    );
-  },
-);
-
-export interface DashboardCodeProps extends TypographyElementProps {
-  size?: "body" | "supporting";
-}
-
-export const DashboardCode = forwardRef<HTMLElement, DashboardCodeProps>(
-  function DashboardCode(
-    { as: Component = "code", children, className, size = "body", ...props },
-    ref,
-  ) {
-    return (
-      <Component
-        className={cn(
-          size === "body"
-            ? DASHBOARD_BODY_CODE_CLASS
-            : DASHBOARD_SUPPORTING_CODE_CLASS,
-          className,
-        )}
-        ref={ref}
-        {...props}
-      >
-        {children}
-      </Component>
-    );
-  },
-);
+/** @deprecated Use `Code` from `@you-agent-factory/components`. */
+export { Code as DashboardCode, type CodeProps as DashboardCodeProps } from "@you-agent-factory/components";

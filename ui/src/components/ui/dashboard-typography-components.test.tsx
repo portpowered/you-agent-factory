@@ -1,65 +1,60 @@
 import { render, screen } from "@testing-library/react";
 
-import {
-  DashboardCode,
-  DashboardHeading,
-  DashboardLabel,
-  DashboardText,
-} from "./dashboard-typography-components";
+import { Code, Heading, Label, Text } from "@you-agent-factory/components";
 
 describe("dashboard typography components", () => {
   it("renders page and section heading roles", () => {
     render(
       <>
-        <DashboardHeading level="page">Factory dashboard</DashboardHeading>
-        <DashboardHeading as="h4">Runtime details</DashboardHeading>
+        <Heading level="page">Factory dashboard</Heading>
+        <Heading as="h4">Runtime details</Heading>
       </>,
     );
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Factory dashboard" })
         .className,
-    ).toContain("af-dashboard-page-heading");
+    ).toContain("af-page-heading");
     expect(
       screen.getByRole("heading", { level: 4, name: "Runtime details" })
         .className,
-    ).toContain("af-dashboard-section-heading");
+    ).toContain("af-section-heading");
   });
 
   it("renders body and supporting text roles on configurable elements", () => {
     render(
       <>
-        <DashboardText>Body copy</DashboardText>
-        <DashboardText as="span" variant="supporting">
+        <Text>Body copy</Text>
+        <Text as="span" variant="supporting">
           Supporting copy
-        </DashboardText>
+        </Text>
       </>,
     );
 
     expect(screen.getByText("Body copy").tagName).toBe("P");
     expect(screen.getByText("Body copy").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
     expect(screen.getByText("Supporting copy").tagName).toBe("SPAN");
     expect(screen.getByText("Supporting copy").className).toContain(
-      "af-dashboard-supporting-text",
+      "af-supporting-text",
     );
   });
 
   it("renders label and code typography roles", () => {
     render(
       <>
-        <DashboardLabel as="dt">Dispatch ID</DashboardLabel>
-        <DashboardCode size="supporting">dispatch-1</DashboardCode>
+        <Label as="dt">Dispatch ID</Label>
+        <Code size="supporting">dispatch-1</Code>
       </>,
     );
 
     expect(screen.getByText("Dispatch ID").tagName).toBe("DT");
     expect(screen.getByText("Dispatch ID").className).toContain(
-      "af-dashboard-supporting-label",
+      "af-supporting-label",
     );
     expect(screen.getByText("dispatch-1").className).toContain(
-      "af-dashboard-supporting-code",
+      "af-supporting-code",
     );
   });
 });

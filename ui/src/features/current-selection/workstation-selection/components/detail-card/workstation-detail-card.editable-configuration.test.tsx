@@ -50,7 +50,7 @@ function currentSelectionHeaderActionSection() {
     name: "Undo selection",
   });
   const actionSection = undoButton.closest(
-    "[data-dashboard-action-row-section='actions']",
+    "[data-action-row-section='actions']",
   );
   if (!actionSection) {
     throw new Error("expected header action section");

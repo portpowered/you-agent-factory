@@ -45,13 +45,6 @@ describe("shared primitive disabled text color roles", () => {
     expectNoTransitionalDisabledText(source);
   });
 
-  it("maps chart hidden legend toggle copy to text-on-surface-disabled", () => {
-    const source = readComponentSource("chart.tsx");
-
-    expect(source).toMatch(/hidden\s*\?\s*"text-on-surface-disabled"/);
-    expectNoTransitionalDisabledText(source);
-  });
-
   it("maps dashboard action button spinner circle to text-on-surface-disabled", () => {
     const source = readComponentSource("dashboard-action-button.tsx");
 

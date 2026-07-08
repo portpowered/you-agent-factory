@@ -1,4 +1,4 @@
-import { DashboardText, SurfacePanel } from "../../../components/ui";
+import { Text, SurfacePanel } from "../../../components/ui";
 import {
   AUTHORED_BODY_TEXT_CLASS,
   AuthoredBodyText,
@@ -45,9 +45,9 @@ function renderWorkContentPart(part: WorkContentPart, index: number) {
 
   return (
     <SurfacePanel asChild key={`work-content-part-${index}`} radius="lg">
-      <DashboardText className="text-on-surface-variant" variant="supporting">
+      <Text className="text-on-surface-variant" variant="supporting">
         {describeWorkContentPart(part)}
-      </DashboardText>
+      </Text>
     </SurfacePanel>
   );
 }

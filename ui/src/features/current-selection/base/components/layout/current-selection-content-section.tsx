@@ -1,6 +1,6 @@
 import { type HTMLAttributes, type ReactNode, useId } from "react";
 
-import { DashboardHeading } from "../../../../../components/ui";
+import { Heading } from "../../../../../components/ui";
 import { cn } from "../../../../../lib/cn";
 
 export interface CurrentSelectionContentSectionProps
@@ -29,9 +29,9 @@ export function CurrentSelectionContentSection({
       className={cn("mt-4 grid gap-2.5 [&_h4]:m-0", className)}
       {...props}
     >
-      <DashboardHeading as="h4" className="m-0" id={resolvedHeadingId}>
+      <Heading as="h4" className="m-0" id={resolvedHeadingId}>
         {title}
-      </DashboardHeading>
+      </Heading>
       {children}
     </section>
   );

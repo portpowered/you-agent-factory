@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { DashboardLabel, DashboardText } from "../../../components/ui";
+import { Label, Text } from "../../../components/ui";
 import { StandardExpandableSection } from "../../standard-card-components/public";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
@@ -42,10 +42,10 @@ export function SectionMetricPreview({
     <dl className="grid gap-2">
       {items.map((item) => (
         <div className="grid gap-1" key={item.label}>
-          <DashboardLabel as="dt">{item.label}</DashboardLabel>
-          <DashboardText as="dd" className="m-0 [overflow-wrap:anywhere]">
+          <Label as="dt">{item.label}</Label>
+          <Text as="dd" className="m-0 [overflow-wrap:anywhere]">
             {item.value}
-          </DashboardText>
+          </Text>
         </div>
       ))}
     </dl>
@@ -69,15 +69,15 @@ export function TranscriptSectionPreview({
     <div className="grid gap-2">
       {previewEntries.map((entry) => (
         <div className="grid gap-1" key={entry.order}>
-          <DashboardLabel>
+          <Label>
             {getTranscriptPreviewEntryTitle(entry, messages)}
-          </DashboardLabel>
-          <DashboardText className="m-0">
+          </Label>
+          <Text className="m-0">
             {messages.orderLabel({
               order: entry.order,
               turnIndex: entry.turnIndex,
             })}
-          </DashboardText>
+          </Text>
         </div>
       ))}
     </div>

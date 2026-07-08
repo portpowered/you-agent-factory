@@ -24,7 +24,7 @@ describe("CurrentSelectionDetailItem", () => {
     );
 
     expect(screen.getByText("request-1").className).toContain(
-      "af-dashboard-body-code",
+      "af-body-code",
     );
   });
 

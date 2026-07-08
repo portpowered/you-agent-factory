@@ -8,6 +8,9 @@ export {
   type ComponentCategoryExportPath,
 } from "./category-paths";
 
+export { DescriptionList } from "./data-display/description-list";
+export type { DescriptionListProps } from "./data-display/description-list";
+
 export {
   AlertPanel,
   AlertPanelStatusLabel,
@@ -24,8 +27,30 @@ export type {
   AlertPanelTone,
   AlertPanelVariant,
 } from "./feedback";
-export { CodePanel, codePanelVariants } from "./data-display";
-export type { CodePanelProps } from "./data-display";
+export {
+  CodePanel,
+  DataTable,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  codePanelVariants,
+  tableCellTruncateClassName,
+  tableCellWrapClassName,
+  tableMinWidthWideClassName,
+  tableNarrowContainerClassName,
+} from "./data-display";
+export type {
+  CodePanelProps,
+  DataTableColumn,
+  DataTableProps,
+  DataTableState,
+  TableProps,
+  TableSize,
+} from "./data-display";
 export {
   WidgetDetailCopy,
   WidgetEmptyState,
@@ -132,6 +157,20 @@ export type {
   SelectSeparatorProps,
   SelectTriggerProps,
 } from "./forms";
+
+export { ActionRow } from "./layout/action-row";
+export type { ActionRowProps } from "./layout/action-row";
+export { SurfacePanel, surfacePanelVariants } from "./layout/surface-panel";
+export type { SurfacePanelProps } from "./layout/surface-panel";
+
+export { Code, Heading, Label, Text } from "./primitives/typography";
+export type {
+  CodeProps,
+  HeadingProps,
+  LabelProps,
+  TextProps,
+  TextVariant,
+} from "./primitives/typography";
 export {
   Collapsible,
   CollapsibleContent,

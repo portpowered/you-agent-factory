@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DashboardLabel, SurfacePanel } from "../../../components/ui";
+import { Label, SurfacePanel } from "../../../components/ui";
 
 export function WorkContentItemShell({
   children,
@@ -15,7 +15,7 @@ export function WorkContentItemShell({
       <li>
         <div className="flex items-start justify-between gap-3">
           <div className="grid gap-1">
-            <DashboardLabel>{itemTypeLabel}</DashboardLabel>
+            <Label>{itemTypeLabel}</Label>
           </div>
           {headerActions}
         </div>

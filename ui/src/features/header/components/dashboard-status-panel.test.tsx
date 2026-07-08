@@ -19,7 +19,7 @@ describe("DashboardStatusPanel", () => {
     expect(screen.getByText("U").className).not.toContain("sr-only");
     expect(headerEyebrow?.textContent).toContain("U");
     expect(headerEyebrow?.className).toContain("text-primary");
-    expect(heading.className).toContain("af-dashboard-page-heading");
+    expect(heading.className).toContain("af-page-heading");
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
     expect(section?.getAttribute("data-dashboard-panel-shell")).toBe("panel");
     expect(section?.className).toContain("border-outline");

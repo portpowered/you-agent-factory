@@ -530,7 +530,6 @@ export async function waitForPortAvailable(
     `Timed out waiting for ${host}:${port} to become available${suffix}`,
   );
 }
-
 function configuredPort(name) {
   const value = process.env[name]?.trim();
   if (!value) {

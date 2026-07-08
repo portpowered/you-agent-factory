@@ -1,3 +1,4 @@
+import { Slot } from "@radix-ui/react-slot";
 import { forwardRef, type HTMLAttributes } from "react";
 
 import { cn } from "../utilities/cn";
@@ -8,6 +9,7 @@ type SurfacePanelSurface = "high" | "low";
 type SurfacePanelTone = "default" | "accent" | "selected";
 
 export interface SurfacePanelProps extends HTMLAttributes<HTMLDivElement> {
+  asChild?: boolean;
   padding?: SurfacePanelPadding;
   radius?: SurfacePanelRadius;
   surface?: SurfacePanelSurface;
@@ -60,6 +62,7 @@ export function surfacePanelVariants({
 export const SurfacePanel = forwardRef<HTMLDivElement, SurfacePanelProps>(
   function SurfacePanel(
     {
+      asChild = false,
       className,
       padding = "default",
       radius = "xl",
@@ -69,8 +72,10 @@ export const SurfacePanel = forwardRef<HTMLDivElement, SurfacePanelProps>(
     },
     ref,
   ) {
+    const Component = asChild ? Slot : "div";
+
     return (
-      <div
+      <Component
         className={surfacePanelVariants({
           className,
           padding,

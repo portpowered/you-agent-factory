@@ -5,7 +5,7 @@ import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { DashboardCode, DashboardText } from "../ui";
+import { Code, Text } from "../ui";
 import {
   applyWorkstationPromptTheme,
   buildWorkstationPromptMarkers,
@@ -351,18 +351,18 @@ function PromptEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <DashboardText
+      <Text
         className="m-0 text-on-surface-variant"
         variant="supporting"
       >
         {message}
-      </DashboardText>
-      <DashboardCode
+      </Text>
+      <Code
         as="pre"
         className="m-0 whitespace-pre-wrap break-words text-on-surface-variant [overflow-wrap:anywhere]"
       >
         {value}
-      </DashboardCode>
+      </Code>
     </div>
   );
 }

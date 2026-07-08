@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardText } from "../../../../components/ui";
+import { Text } from "../../../../components/ui";
 
 export function FactoryGraphEditorMenuItemCopy({
   description,
@@ -11,17 +11,17 @@ export function FactoryGraphEditorMenuItemCopy({
 }) {
   return (
     <span className="grid justify-items-start gap-0.5">
-      <DashboardText
+      <Text
         as="span"
         className="font-semibold text-on-surface"
         variant="body"
       >
         {label}
-      </DashboardText>
+      </Text>
       {description ? (
-        <DashboardText as="span" variant="supporting">
+        <Text as="span" variant="supporting">
           {description}
-        </DashboardText>
+        </Text>
       ) : null}
     </span>
   );

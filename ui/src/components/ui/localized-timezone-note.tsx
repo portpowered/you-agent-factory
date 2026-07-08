@@ -1,7 +1,7 @@
 import { cn } from "../../lib/cn";
 import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "./dashboard-typography";
 import { formatLocalTimezoneContext } from "./formatters";
-import { SurfacePanel } from "./surface-panel";
+import { SurfacePanel } from "@you-agent-factory/components";
 
 export function LocalizedTimezoneNote({
   children,

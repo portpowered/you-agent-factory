@@ -2,8 +2,8 @@ import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components";
 import { useId } from "react";
 
 import {
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormDescription,
   FormError,
   Input,
@@ -39,9 +39,9 @@ export function EditableConfigurationWorkstationInputGuardsField({
   if (inputs.length === 0) {
     return (
       <CurrentSelectionFormField>
-        <DashboardLabel as="h5" className="m-0">
+        <Label as="h5" className="m-0">
           {messages.workstationInputGuardsHeading}
-        </DashboardLabel>
+        </Label>
         <FormDescription variant="body">
           {messages.workstationInputGuardsEmpty}
         </FormDescription>
@@ -51,9 +51,9 @@ export function EditableConfigurationWorkstationInputGuardsField({
 
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="h5" className="m-0">
+      <Label as="h5" className="m-0">
         {messages.workstationInputGuardsHeading}
-      </DashboardLabel>
+      </Label>
       <ul className="m-0 grid list-none gap-2 p-0">
         {inputs.map((input, slotIndex) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: input slots have no stable server id until save
@@ -114,19 +114,19 @@ function WorkstationInputSlotGuardRow({
             {messages.workstationInputSlotHeading(input.workType, input.state)}
           </h6>
           {guard ? (
-            <DashboardText
+            <Text
               className="m-0 text-on-surface-subtle"
               variant="supporting"
             >
               {messages.localizeInputGuardType(guard.type)} ·{" "}
               {formatInputGuardSummary(guard)}
-            </DashboardText>
+            </Text>
           ) : null}
         </div>
         <div className="grid gap-2">
-          <DashboardLabel as="label" htmlFor={guardTypeFieldId}>
+          <Label as="label" htmlFor={guardTypeFieldId}>
             {messages.workstationInputGuardTypeFieldLabel}
-          </DashboardLabel>
+          </Label>
           <OptionalEnumSelect
             aria-label={messages.workstationInputGuardTypeFieldLabel}
             emptyOptionLabel={messages.workstationInputGuardNoneOption}
@@ -215,9 +215,9 @@ function PeerInputGuardFields({
 
   return (
     <div className="grid gap-1">
-      <DashboardLabel as="label" htmlFor={matchInputFieldId}>
+      <Label as="label" htmlFor={matchInputFieldId}>
         {matchInputFieldLabel}
-      </DashboardLabel>
+      </Label>
       {peerWorkTypes.length === 0 ? (
         <FormDescription variant="body">
           {messages.workstationInputGuardPeersEmpty}
@@ -276,9 +276,9 @@ function ParentInputGuardFields({
   return (
     <div className="grid gap-2 md:grid-cols-2">
       <div className="grid gap-1">
-        <DashboardLabel as="label" htmlFor={parentInputFieldId}>
+        <Label as="label" htmlFor={parentInputFieldId}>
           {messages.inputGuardParentInputFieldLabel}
-        </DashboardLabel>
+        </Label>
         {peerWorkTypes.length === 0 ? (
           <FormDescription variant="body">
             {messages.workstationInputGuardPeersEmpty}
@@ -309,9 +309,9 @@ function ParentInputGuardFields({
         ) : null}
       </div>
       <div className="grid gap-1">
-        <DashboardLabel as="label" htmlFor={spawnedByFieldId}>
+        <Label as="label" htmlFor={spawnedByFieldId}>
           {messages.inputGuardSpawnedByFieldLabel}
-        </DashboardLabel>
+        </Label>
         <Input
           id={spawnedByFieldId}
           onChange={(event) => {

@@ -93,7 +93,7 @@ describe("StandardListSelectionItem", () => {
     expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS);
     expect(row.getAttribute("aria-pressed")).toBe("false");
     expect(row.getAttribute("data-selected")).toBe("false");
-    expect(row.className).toContain("af-dashboard-body-text");
+    expect(row.className).toContain("af-body-text");
     expectNoSolidAccentSelectedTreatment(row.className);
   });
 
@@ -106,7 +106,7 @@ describe("StandardListSelectionItem", () => {
 
     expect(
       screen.getByRole("button", { name: "Custom row" }).className,
-    ).not.toContain("af-dashboard-body-text");
+    ).not.toContain("af-body-text");
   });
 
   it("uses neutral selected surfaces without accent fill when selected", () => {

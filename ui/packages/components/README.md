@@ -135,12 +135,17 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [Typography roles](./docs/typography-roles.md) — `Text`, `Heading`, `Label`,
+  `Code`, dense text, truncation, and wrapping
+- [Layout and display primitives](./docs/layout-display-primitives.md) —
+  `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
 - [`docs/graphs.md`](./docs/graphs.md) — graph node shell, node button, edge,
   viewport surface, handle badge, edge path helpers, React Flow boundary, and
   Storybook example map
 - [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
 - [Skeleton loading placeholders](./docs/feedback-skeleton.md)
 - [CodePanel long-content containment](./docs/data-display-code-panel.md)
+- [Table primitives and DataTable](./docs/table-data-table.md)
 - [Form input primitives](./docs/forms-input-primitives.md)
 - [Form field structure and messaging](./docs/forms-form-field.md) — `FormField`,
   labels, descriptions, helper text, warnings, errors, success messages,
@@ -153,6 +158,9 @@ directory:
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site
 route, generated registry, or additional build-time documentation tooling.
+
+- [Charts](./docs/charts.md) — config, presentation, tooltip and legend,
+  state panels, and caller-owned series state
 
 ## Development
 

@@ -1,4 +1,4 @@
-import type { ChartPresentation } from "../../../components/ui/chart";
+import type { ChartPresentation } from "@you-agent-factory/components/charts";
 
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_READY_CLASS =

@@ -175,7 +175,10 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: [...sharedReactAliases, ...createComponentsPackageAliases(componentsPackageRoot)],
+    alias: [
+      ...sharedReactAliases,
+      ...createComponentsPackageAliases(componentsPackageRoot),
+    ],
     dedupe: [
       "@radix-ui/react-compose-refs",
       "@radix-ui/react-slot",

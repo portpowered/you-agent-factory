@@ -1,3 +1,20 @@
+export {
+  ActionRow,
+  Code,
+  DescriptionList,
+  Heading,
+  Label,
+  SurfacePanel,
+  Text,
+  surfacePanelVariants,
+  type ActionRowProps,
+  type CodeProps,
+  type DescriptionListProps,
+  type HeadingProps,
+  type SurfacePanelProps,
+  type TextProps,
+} from "@you-agent-factory/components";
+
 export * from "./alert-panel";
 export * from "./button";
 export * from "./button-link";
@@ -35,6 +52,5 @@ export * from "./select";
 export * from "./selectable-card-button";
 export * from "./skeleton";
 export * from "./standard-list-selection";
-export * from "./surface-panel";
 export * from "./table";
 export * from "./textarea";

@@ -279,7 +279,7 @@ describe("dashboard trend cards", () => {
         ?.querySelector("dd")?.className,
     ).toContain(WIDGET_FRAME_SUBTITLE_CLASS);
     expect(failureScope.getByText("Work type: story").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
     expect(failureScope.getByText("Work type: story").className).toContain(
       "text-on-surface-variant",

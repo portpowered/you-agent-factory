@@ -1,5 +1,5 @@
 import type { DashboardInferenceAttempt } from "../../../../../api/dashboard/types";
-import { DashboardCode, DashboardText } from "../../../../../components/ui";
+import { Code, Text } from "../../../../../components/ui";
 import { getProviderSessionLogTarget } from "../../../../../components/ui/formatters";
 import {
   getLoadableProviderSessionRef,
@@ -65,12 +65,12 @@ export function InferenceAttemptProviderSessionDetails({
           selected={state.providerSessionSelected}
           variant="card"
         >
-          <DashboardText as="span" variant="supporting">
+          <Text as="span" variant="supporting">
             {state.providerSessionSelected
               ? workstationMessages.providerSessionSelectedAction
               : workstationMessages.providerSessionSelectAction}
-          </DashboardText>
-          <DashboardCode>{state.providerSessionLabel}</DashboardCode>
+          </Text>
+          <Code>{state.providerSessionLabel}</Code>
         </CurrentSelectionSelectableButton>
       </div>
     );
@@ -81,7 +81,7 @@ export function InferenceAttemptProviderSessionDetails({
       <CurrentSelectionLabel>
         {detailMessages.providerSessionLabel}
       </CurrentSelectionLabel>
-      <DashboardCode>{state.providerSessionLabel}</DashboardCode>
+      <Code>{state.providerSessionLabel}</Code>
       <CurrentSelectionSupportingText tone="status">
         {workstationMessages.providerSessionSelectionUnavailable}
       </CurrentSelectionSupportingText>

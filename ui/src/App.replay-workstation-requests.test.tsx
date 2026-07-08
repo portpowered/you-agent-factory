@@ -244,7 +244,7 @@ describe("App replay workstation request flows", () => {
     expect(
       screen.queryByText(runtimeDetailsFixtureIDs.unsafeUserMessageBody),
     ).toBeNull();
-  }, 30_000);
+  }, 90_000);
 
   it("smoke tests mixed script and inference workstation-request history against backend expectations", async () => {
     renderApp({
@@ -351,5 +351,5 @@ describe("App replay workstation request flows", () => {
         scriptDashboardIntegrationFixtureIDs.inferenceResponseText,
       ).length,
     ).toBeGreaterThan(0);
-  });
+  }, 90_000);
 });

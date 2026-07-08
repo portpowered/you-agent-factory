@@ -12,7 +12,7 @@ import { Dialog } from "@you-agent-factory/components";
 import {
   AlertPanel,
   Button,
-  DashboardText,
+  Text,
 } from "../../../components/ui";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
@@ -190,9 +190,9 @@ function SessionTabsContent({
 
   if (isPending) {
     return (
-      <DashboardText className="text-sm text-on-surface-variant">
+      <Text className="text-sm text-on-surface-variant">
         {messages.loadingSessionsLabel}
-      </DashboardText>
+      </Text>
     );
   }
   if (error) {
@@ -212,9 +212,9 @@ function SessionTabsContent({
   if (sessions.length === 0) {
     return (
       <>
-        <DashboardText className="text-sm text-on-surface">
+        <Text className="text-sm text-on-surface">
           {messages.sessionsEmptyTitle}
-        </DashboardText>
+        </Text>
         <OpenSessionButton
           label={messages.openSessionButtonLabel}
           onClick={onOpenSession}
@@ -374,7 +374,7 @@ function SessionErrorState({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <DashboardText className="text-sm text-on-surface">{label}</DashboardText>
+      <Text className="text-sm text-on-surface">{label}</Text>
       <Button onClick={onRetry} size="sm" tone="outline">
         {messages.retrySessionsLabel}
       </Button>
