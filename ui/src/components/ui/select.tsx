@@ -10,7 +10,7 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/forms";
 export type {
   SelectContentProps,
   SelectEmptyProps,
@@ -19,4 +19,4 @@ export type {
   SelectLabelProps,
   SelectSeparatorProps,
   SelectTriggerProps,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/forms";

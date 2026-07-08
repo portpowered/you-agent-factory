@@ -1,4 +1,4 @@
-import { CodePanel } from "@you-agent-factory/components";
+import { CodePanel } from "@you-agent-factory/components/data-display";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import {
   CurrentSelectionDetailCode,

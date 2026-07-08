@@ -192,7 +192,12 @@ export default defineConfig({
       ...createComponentsPackageAliases(componentsPackageRoot),
     ],
     dedupe: [
+      "@radix-ui/react-collapsible",
       "@radix-ui/react-compose-refs",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-scroll-area",
+      "@radix-ui/react-select",
       "@radix-ui/react-slot",
       "@xyflow/react",
       "@xyflow/system",
@@ -218,6 +223,27 @@ export default defineConfig({
   test: {
     deps: {
       interopDefault: true,
+    },
+    server: {
+      deps: {
+        moduleDirectories: [path.join(uiRoot, "node_modules")],
+        inline: [
+          "recharts",
+          "@radix-ui/react-collapsible",
+          "@radix-ui/react-compose-refs",
+          "@radix-ui/react-dialog",
+          "@radix-ui/react-popover",
+          "@radix-ui/react-scroll-area",
+          "@radix-ui/react-select",
+          "@radix-ui/react-slot",
+          "@xyflow/react",
+          "@xyflow/system",
+          "react",
+          "react-dom",
+          "react/jsx-runtime",
+          "react/jsx-dev-runtime",
+        ],
+      },
     },
     environment: "jsdom",
     exclude: [

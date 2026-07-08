@@ -10,7 +10,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/overlays";
 import { Button } from "../../../components/ui";
 import { FactoryGraphEditorMenuHeader } from "./menu/factory-graph-editor-menu-header";
 

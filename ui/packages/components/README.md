@@ -135,6 +135,8 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [Button primitives](./docs/button.md) — semantic variants, `ButtonLink`
+  guidance, loading behavior, and icon-only accessibility labels.
 - [Typography roles](./docs/typography-roles.md) — `Text`, `Heading`, `Label`,
   `Code`, dense text, truncation, and wrapping
 - [Layout and display primitives](./docs/layout-display-primitives.md) —

@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModelOperationContentType } from "../../../../api/generated/openapi";
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 
-vi.mock("@you-agent-factory/components", async (importOriginal) => {
+vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import("@you-agent-factory/components")
+    typeof import("@you-agent-factory/components/overlays")
   >();
   const mockDialog = await import("../../../../testing/mock-dashboard-dialog");
 

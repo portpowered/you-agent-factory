@@ -13,7 +13,7 @@ import {
   FormError,
   Input,
 } from "../../../../components/ui";
-import { OptionalEnumSelect } from "@you-agent-factory/components";
+import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { DashboardWidgetFrame } from "../../../bento/public";
 import { useFactoryInvocationWidget } from "../../hooks/use-factory-invocation-widget";
 import type { InvocationFieldModel } from "../../lib/factory-invocation-form";

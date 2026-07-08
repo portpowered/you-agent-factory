@@ -3,4 +3,4 @@ export {
   PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/overlays";

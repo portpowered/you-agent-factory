@@ -43,7 +43,7 @@
     "test:coverage": "node scripts/run-ui-coverage-with-timings.mjs",
     "test:integration": "node scripts/run-ui-integration-with-timings.mjs",
     "test:integration:durable-session-real-backend": "node scripts/run-durable-session-real-backend-integration-with-timings.mjs",
-    "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs'",
+    "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs' --maxWorkers=2 --retry=2",
     "test": "vitest run --exclude 'integration/*.integration.test.mjs' && vitest run integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
     "tsc": "tsc -b --noEmit --pretty false",

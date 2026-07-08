@@ -8,6 +8,12 @@ export {
   type ComponentCategoryExportPath,
 } from "./category-paths";
 
+export { Button, ButtonLink, buttonVariants, IconButtonShell } from "./primitives";
+export type {
+  ButtonLinkProps,
+  ButtonProps,
+  IconButtonShellProps,
+} from "./primitives";
 export { DescriptionList } from "./data-display/description-list";
 export type { DescriptionListProps } from "./data-display/description-list";
 
@@ -200,3 +206,4 @@ export type {
   ScrollAreaProps,
   ScrollBarProps,
 } from "./overlays";
+

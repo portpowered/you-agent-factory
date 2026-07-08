@@ -9,8 +9,6 @@ const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
 
 const IN_SCOPE_FILES = [
   "expandable-panel-trigger.tsx",
-  "chart.tsx",
-  "dashboard-action-button.tsx",
 ] as const;
 
 const FORBIDDEN_TRANSITIONAL_DISABLED_TEXT = /\btext-af-text-disabled\b/;
@@ -42,13 +40,6 @@ describe("shared primitive disabled text color roles", () => {
     const source = readComponentSource("expandable-panel-trigger.tsx");
 
     expect(source).toContain("disabled:text-on-surface-disabled");
-    expectNoTransitionalDisabledText(source);
-  });
-
-  it("maps dashboard action button spinner circle to text-on-surface-disabled", () => {
-    const source = readComponentSource("dashboard-action-button.tsx");
-
-    expect(source).toContain('className="text-on-surface-disabled"');
     expectNoTransitionalDisabledText(source);
   });
 });

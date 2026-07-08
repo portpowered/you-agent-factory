@@ -102,15 +102,18 @@ async function expectFixtureWithinBudget(
     x: 144,
     y: 288,
   });
-  const saveMedianMs = await measureMedianOperationMs(() => {
-    hasFactoryLayoutChanges(fixture.layout, pendingLayout);
-    applyPendingFactoryLayout(fixture.factoryDefinition, pendingLayout);
-    applyFactoryGraphPendingEdits({
-      baseFactoryDefinition: fixture.factoryDefinition,
-      draft: createEmptyFactoryGraphDraft(),
-      pendingLayout,
-    });
-  });
+  const saveMedianMs = await measureMedianOperationMs(
+    () => {
+      hasFactoryLayoutChanges(fixture.layout, pendingLayout);
+      applyPendingFactoryLayout(fixture.factoryDefinition, pendingLayout);
+      applyFactoryGraphPendingEdits({
+        baseFactoryDefinition: fixture.factoryDefinition,
+        draft: createEmptyFactoryGraphDraft(),
+        pendingLayout,
+      });
+    },
+    { warmup: 5, iterations: 9 },
+  );
   expect(saveMedianMs).toBeLessThanOrEqual(budget.saveLayoutRecomputationMs);
 
   const sampleEdgeId = fixture.topology.edges[0]?.id;
@@ -153,20 +156,26 @@ async function expectFixtureWithinBudget(
   });
   expect(waypointHistoryMedianMs).toBeLessThanOrEqual(budget.waypointHistoryMs);
 
-  const waypointSaveMedianMs = await measureMedianOperationMs(() => {
-    const pendingWaypointLayout = addFactoryLayoutEdgeWaypoint(
-      fixture.layout,
-      sampleEdgeId,
-      { x: 144, y: 288 },
-    );
-    hasFactoryLayoutChanges(fixture.layout, pendingWaypointLayout);
-    applyPendingFactoryLayout(fixture.factoryDefinition, pendingWaypointLayout);
-    applyFactoryGraphPendingEdits({
-      baseFactoryDefinition: fixture.factoryDefinition,
-      draft: createEmptyFactoryGraphDraft(),
-      pendingLayout: pendingWaypointLayout,
-    });
-  });
+  const waypointSaveMedianMs = await measureMedianOperationMs(
+    () => {
+      const pendingWaypointLayout = addFactoryLayoutEdgeWaypoint(
+        fixture.layout,
+        sampleEdgeId,
+        { x: 144, y: 288 },
+      );
+      hasFactoryLayoutChanges(fixture.layout, pendingWaypointLayout);
+      applyPendingFactoryLayout(
+        fixture.factoryDefinition,
+        pendingWaypointLayout,
+      );
+      applyFactoryGraphPendingEdits({
+        baseFactoryDefinition: fixture.factoryDefinition,
+        draft: createEmptyFactoryGraphDraft(),
+        pendingLayout: pendingWaypointLayout,
+      });
+    },
+    { warmup: 5, iterations: 9 },
+  );
   expect(waypointSaveMedianMs).toBeLessThanOrEqual(
     budget.saveLayoutRecomputationMs,
   );

@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/overlays";
 import {
   AlertPanel,
   AlertPanelText,

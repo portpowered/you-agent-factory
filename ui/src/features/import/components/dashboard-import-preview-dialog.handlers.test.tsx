@@ -14,9 +14,9 @@ const dialogEventState = {
   outsidePrevented: false,
 };
 
-vi.mock("@you-agent-factory/components", async (importOriginal) => {
+vi.mock("@you-agent-factory/components/overlays", async (importOriginal) => {
   const actual = await importOriginal<
-    typeof import("@you-agent-factory/components")
+    typeof import("@you-agent-factory/components/overlays")
   >();
 
   return {

@@ -131,4 +131,18 @@ describe("dashboard form field re-exports", () => {
     expect(legend.tagName).toBe("LEGEND");
     expect(legend.className).toContain("font-semibold");
   });
+
+  it("joins host message element ids through buildFormFieldAriaDescribedBy", () => {
+    expect(
+      buildFormFieldAriaDescribedBy({
+        descriptionId: "factory-description",
+        helperId: "factory-helper",
+        warningId: "factory-warning",
+        successId: "factory-success",
+      }),
+    ).toBe(
+      "factory-description factory-helper factory-warning factory-success",
+    );
+    expect(buildFormFieldAriaDescribedBy({})).toBeUndefined();
+  });
 });

@@ -33,7 +33,7 @@ describe("component package harness wiring", () => {
         stdio: ["ignore", "pipe", "pipe"],
       });
     },
-    makeHarnessTestTimeoutMs,
+    60_000,
   );
 
   it(
@@ -45,7 +45,7 @@ describe("component package harness wiring", () => {
         stdio: ["ignore", "pipe", "pipe"],
       });
     },
-    makeHarnessTestTimeoutMs,
+    60_000,
   );
 
   it("fails ui-components-boundary when package source violates boundary rules", async () => {

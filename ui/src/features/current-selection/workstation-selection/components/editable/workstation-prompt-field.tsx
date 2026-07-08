@@ -13,7 +13,7 @@ import {
   FormError,
   SurfacePanel,
 } from "../../../../../components/ui";
-import { Collapsible, CollapsibleContent } from "@you-agent-factory/components";
+import { Collapsible, CollapsibleContent } from "@you-agent-factory/components/overlays";
 import { cn } from "../../../../../lib/cn";
 import {
   CurrentSelectionFormField,

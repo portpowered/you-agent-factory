@@ -95,13 +95,4 @@ describe("shared primitive neutral surface roles", () => {
       "border-outline-variant bg-surface-container-low text-on-surface",
     );
   });
-
-  it("maps button outline and ghost neutral chrome to role tokens", () => {
-    const source = readComponentSource("button.tsx");
-
-    expect(source).toContain(
-      "border-outline bg-surface-container-high text-on-surface",
-    );
-    expect(source).toContain("text-on-surface-variant");
-  });
 });

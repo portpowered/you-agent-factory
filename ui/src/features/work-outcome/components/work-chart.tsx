@@ -9,7 +9,7 @@ import {
   YAxis,
 } from "recharts";
 import type { LegendPayload } from "recharts/types/component/DefaultLegendContent";
-import { Button } from "../../../components/ui/button";
+import { Button } from "@you-agent-factory/components/primitives";
 import {
   ChartContainer,
   ChartLegendContent,
