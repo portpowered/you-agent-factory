@@ -24,8 +24,30 @@ export type {
   AlertPanelTone,
   AlertPanelVariant,
 } from "./feedback";
-export { CodePanel, codePanelVariants } from "./data-display";
-export type { CodePanelProps } from "./data-display";
+export {
+  CodePanel,
+  DataTable,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  codePanelVariants,
+  tableCellTruncateClassName,
+  tableCellWrapClassName,
+  tableMinWidthWideClassName,
+  tableNarrowContainerClassName,
+} from "./data-display";
+export type {
+  CodePanelProps,
+  DataTableColumn,
+  DataTableProps,
+  DataTableState,
+  TableProps,
+  TableSize,
+} from "./data-display";
 export {
   WidgetDetailCopy,
   WidgetEmptyState,

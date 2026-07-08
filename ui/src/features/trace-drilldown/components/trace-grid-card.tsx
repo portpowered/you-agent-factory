@@ -31,7 +31,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../../../components/ui/table";
+} from "@you-agent-factory/components/data-display";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";

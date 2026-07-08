@@ -53,6 +53,12 @@ from sibling files in this directory as the library grows.
 - [CodePanel](./data-display-code-panel.md) — long-line and long-block
   containment, scrolling, and responsive layout expectations
 
+## Table data display
+
+- [Table primitives and DataTable](./table-data-table.md) — generic row contract,
+  explicit data states, density and responsive layout helpers, accessibility,
+  and Storybook references for domain-free tabular data display.
+
 ## Widget layout recipes
 
 - [Graph primitives](./graphs.md) — `@you-agent-factory/components/graphs`
