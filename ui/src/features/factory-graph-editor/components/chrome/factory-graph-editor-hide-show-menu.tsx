@@ -2,7 +2,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/overlays";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
 import { FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS } from "../../lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";

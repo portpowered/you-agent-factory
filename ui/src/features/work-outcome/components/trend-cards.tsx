@@ -1,4 +1,4 @@
-import { EnumSelect } from "@you-agent-factory/components";
+import { EnumSelect } from "@you-agent-factory/components/forms";
 import {
   WidgetDetailCopy,
   WidgetEmptyState,

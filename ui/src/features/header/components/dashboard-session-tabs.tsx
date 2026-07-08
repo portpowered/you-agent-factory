@@ -8,7 +8,7 @@ import {
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { Dialog } from "@you-agent-factory/components";
+import { Dialog } from "@you-agent-factory/components/overlays";
 import {
   AlertPanel,
   Button,

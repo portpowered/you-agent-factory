@@ -5,7 +5,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/overlays";
 import {
   Button,
   DashboardIconButtonShell,
@@ -14,7 +14,7 @@ import {
   FormError,
   Input,
 } from "../../../components/ui";
-import { OptionalEnumSelect } from "@you-agent-factory/components";
+import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";

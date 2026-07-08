@@ -1,4 +1,4 @@
-import { OptionalEnumSelect } from "@you-agent-factory/components";
+import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { DashboardText } from "../../../../../components/ui";
 import { resolveRunnerSelection } from "../../../../current-factory-definition/lib/runner-selection";
 import {

@@ -5,7 +5,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/overlays";
 import { Button } from "../../../../components/ui";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 

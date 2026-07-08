@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext } from "react";
 
-import { Button } from "@you-agent-factory/components";
+import { Button } from "@you-agent-factory/components/primitives";
 
 const MockDialogContext = createContext<{
   onOpenChange?: (open: boolean) => void;

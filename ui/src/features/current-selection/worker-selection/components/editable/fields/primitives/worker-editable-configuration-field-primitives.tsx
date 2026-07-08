@@ -1,4 +1,4 @@
-import { OptionalEnumSelect } from "@you-agent-factory/components";
+import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import type { ReactNode } from "react";
 
 import {

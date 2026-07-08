@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components";
+import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import {
   FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,

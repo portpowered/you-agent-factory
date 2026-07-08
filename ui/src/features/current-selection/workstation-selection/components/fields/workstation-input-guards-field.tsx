@@ -1,4 +1,4 @@
-import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components";
+import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import { useId } from "react";
 
 import {

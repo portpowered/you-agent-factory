@@ -1,4 +1,4 @@
-import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components";
+import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components/forms";
 import type { ReactNode } from "react";
 import type { ModelOperationContentType } from "../../../../api/generated/openapi";
 import {
