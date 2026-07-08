@@ -15,6 +15,8 @@ describe("dashboard Vite config", () => {
   it("dedupes context-bearing packages used by linked component sources", () => {
     expect(config.resolve?.dedupe).toEqual(
       expect.arrayContaining([
+        "@radix-ui/react-compose-refs",
+        "@radix-ui/react-slot",
         "react",
         "react-dom",
         "@xyflow/react",
