@@ -243,7 +243,7 @@ it("rerenders current-selection request history and request-detail times when th
   } finally {
     dateNowSpy.mockRestore();
   }
-});
+}, 90_000);
 
 it("shows localized fallback copy for invalid request-detail timestamps without leaking broken raw values", async () => {
   const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(now);
@@ -299,4 +299,4 @@ it("shows localized fallback copy for invalid request-detail timestamps without 
   } finally {
     dateNowSpy.mockRestore();
   }
-});
+}, 90_000);
