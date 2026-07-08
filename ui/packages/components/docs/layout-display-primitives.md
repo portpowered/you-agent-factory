@@ -109,15 +109,14 @@ Statuses render before actions when both are provided. The row returns `null`
 when neither slot has content.
 
 ```tsx
-import { Button } from "@you-agent-factory/components";
 import { ActionRow } from "@you-agent-factory/components/layout";
 
 <ActionRow
   statuses={<span>Status copy supplied by the host</span>}
   actions={
     <>
-      <Button tone="secondary">Secondary action</Button>
-      <Button>Primary action</Button>
+      <button type="button">Secondary action</button>
+      <button type="button">Primary action</button>
     </>
   }
 />
