@@ -12,7 +12,7 @@ describe("CurrentSelectionSupportingText", () => {
     );
 
     const notice = screen.getByText("Loading");
-    expect(notice.className).toContain("af-dashboard-supporting-text");
+    expect(notice.className).toContain("af-supporting-text");
     expect(notice.className).toContain("text-on-surface-variant");
   });
 
@@ -34,7 +34,7 @@ describe("CurrentSelectionSubtleCode", () => {
     render(<CurrentSelectionSubtleCode>input.foo</CurrentSelectionSubtleCode>);
 
     expect(screen.getByText("input.foo").className).toContain(
-      "af-dashboard-body-code",
+      "af-body-code",
     );
   });
 });

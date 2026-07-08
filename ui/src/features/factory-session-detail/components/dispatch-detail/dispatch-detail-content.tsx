@@ -1,9 +1,9 @@
 import {
   ButtonLink,
-  DashboardDescriptionList,
-  DashboardLabel,
+  DescriptionList,
+  Label,
   DashboardStatusPill,
-  DashboardText,
+  Text,
 } from "../../../../components/ui";
 import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
@@ -36,7 +36,7 @@ export function DispatchDetailContent({
             items={data.warnings}
             keyForItem={(warning) => `${warning.code}:${warning.message}`}
             renderItem={(warning) => (
-              <DashboardDescriptionList>
+              <DescriptionList>
                 <DispatchDetailItem
                   code
                   label={messages.warningCodeLabel}
@@ -46,7 +46,7 @@ export function DispatchDetailContent({
                   label={messages.failureMessageLabel}
                   value={warning.message}
                 />
-              </DashboardDescriptionList>
+              </DescriptionList>
             )}
           />
         </DispatchDetailSection>
@@ -68,7 +68,7 @@ function DispatchSummaryMetrics({
     <div className="grid gap-2 sm:grid-cols-2">
       <Metric label={messages.dispatchKindLabel} value={data.dispatchKind} />
       <div className="grid gap-1">
-        <DashboardLabel>{messages.dispatchStatusLabel}</DashboardLabel>
+        <Label>{messages.dispatchStatusLabel}</Label>
         <DashboardStatusPill
           size="compact"
           tone={resolveFactoryDispatchStatusTone({
@@ -120,7 +120,7 @@ function DispatchJavaScriptSection({
 
   return (
     <DispatchDetailSection heading={messages.javascriptTaskHeading}>
-      <DashboardDescriptionList>
+      <DescriptionList>
         <DispatchDetailItem
           label={messages.javascriptTaskKindLabel}
           value={data.javascript.taskKind}
@@ -133,7 +133,7 @@ function DispatchJavaScriptSection({
           label={messages.executionModeLabel}
           value={data.javascript.executionMode}
         />
-      </DashboardDescriptionList>
+      </DescriptionList>
     </DispatchDetailSection>
   );
 }
@@ -152,7 +152,7 @@ function DispatchPetriSection({
 
   return (
     <DispatchDetailSection heading={messages.petriDetailHeading}>
-      <DashboardDescriptionList>
+      <DescriptionList>
         <DispatchDetailItem
           label={messages.petriTransitionLabel}
           value={data.petri.transitionId}
@@ -165,7 +165,7 @@ function DispatchPetriSection({
           label={messages.petriWorkstationLabel}
           value={data.petri.workstationName}
         />
-      </DashboardDescriptionList>
+      </DescriptionList>
     </DispatchDetailSection>
   );
 }
@@ -187,7 +187,7 @@ function DispatchStatusHistorySection({
       <DispatchDetailList
         items={data.statusHistory}
         keyForItem={(status) => status}
-        renderItem={(status) => <DashboardText>{status}</DashboardText>}
+        renderItem={(status) => <Text>{status}</Text>}
       />
     </DispatchDetailSection>
   );
@@ -211,13 +211,13 @@ function DispatchProviderSessionsSection({
         items={data.providerSessionRefs}
         keyForItem={(ref) => `${ref.provider}:${ref.kind}:${ref.id}`}
         renderItem={(ref) => (
-          <DashboardDescriptionList>
+          <DescriptionList>
             <DispatchDetailItem label={messages.providerLabel} value={ref.provider} />
             <DispatchDetailItem
               label={messages.providerSessionRefLabel}
               value={`${ref.kind} · ${ref.id}`}
             />
-          </DashboardDescriptionList>
+          </DescriptionList>
         )}
       />
     </DispatchDetailSection>
@@ -274,7 +274,7 @@ function DispatchRelatedWorkSection({
       <DispatchDetailList
         items={data.relatedWorkIDs}
         keyForItem={(workID) => workID}
-        renderItem={(workID) => <DashboardText>{workID}</DashboardText>}
+        renderItem={(workID) => <Text>{workID}</Text>}
       />
     </DispatchDetailSection>
   );
@@ -294,7 +294,7 @@ function DispatchFailureSection({
 
   return (
     <DispatchDetailSection heading={messages.failureDetailHeading}>
-      <DashboardDescriptionList aria-label={messages.failureDetailHeading}>
+      <DescriptionList aria-label={messages.failureDetailHeading}>
         <DispatchDetailItem
           code
           label={messages.failureReasonLabel}
@@ -309,7 +309,7 @@ function DispatchFailureSection({
           label={messages.failureMessageLabel}
           value={data.failureDetail.message}
         />
-      </DashboardDescriptionList>
+      </DescriptionList>
     </DispatchDetailSection>
   );
 }
@@ -328,7 +328,7 @@ function DispatchUsageSection({
 
   return (
     <DispatchDetailSection heading={messages.usageHeading}>
-      <DashboardDescriptionList>
+      <DescriptionList>
         <DispatchDetailItem
           label={messages.usageInputTokensLabel}
           value={formatNumericDetail(data.usage.inputTokens)}
@@ -353,7 +353,7 @@ function DispatchUsageSection({
           label={messages.usageCostLabel}
           value={formatCostUsd(data.usage.costUsd)}
         />
-      </DashboardDescriptionList>
+      </DescriptionList>
     </DispatchDetailSection>
   );
 }
@@ -361,8 +361,8 @@ function DispatchUsageSection({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel>{label}</DashboardLabel>
-      <DashboardText>{value}</DashboardText>
+      <Label>{label}</Label>
+      <Text>{value}</Text>
     </div>
   );
 }
@@ -376,7 +376,7 @@ function DispatchDetailSection({
 }) {
   return (
     <section className="grid gap-2 border-t border-outline pt-3">
-      <DashboardLabel>{heading}</DashboardLabel>
+      <Label>{heading}</Label>
       {children}
     </section>
   );

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardText } from "../../../../components/ui";
+import { Text } from "../../../../components/ui";
 
 export function FactoryGraphEditorMenuHeader({
   description,
@@ -11,17 +11,17 @@ export function FactoryGraphEditorMenuHeader({
 }) {
   return (
     <div className="grid gap-1">
-      <DashboardText
+      <Text
         as="p"
         className="m-0 font-semibold text-on-surface"
         variant="body"
       >
         {title}
-      </DashboardText>
+      </Text>
       {description ? (
-        <DashboardText as="p" className="m-0" variant="supporting">
+        <Text as="p" className="m-0" variant="supporting">
           {description}
-        </DashboardText>
+        </Text>
       ) : null}
     </div>
   );

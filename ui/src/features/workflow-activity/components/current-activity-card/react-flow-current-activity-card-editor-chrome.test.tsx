@@ -966,7 +966,7 @@ describe("ReactFlowCurrentActivityCard editor chrome", () => {
       name: "Factory graph editor tools",
     });
     const statusSection = document.querySelector(
-      '[data-dashboard-action-row-section="statuses"]',
+      '[data-action-row-section="statuses"]',
     );
     expect(statusSection).toBeNull();
     expect(within(toolbar).queryAllByRole("status")).toHaveLength(0);

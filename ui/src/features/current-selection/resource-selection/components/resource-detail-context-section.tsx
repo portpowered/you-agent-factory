@@ -1,6 +1,6 @@
 import { useId } from "react";
 
-import { DashboardLabel, DashboardText } from "../../../../components/ui";
+import { Label, Text } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import {
   CurrentSelectionExpandableSection,
@@ -16,10 +16,10 @@ import type { getResourceDetailMessages } from "../messages/resource-detail";
 function SummaryField({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-0.5">
-      <DashboardLabel>{label}</DashboardLabel>
-      <DashboardText as="span" className="m-0 text-on-surface">
+      <Label>{label}</Label>
+      <Text as="span" className="m-0 text-on-surface">
         {value}
-      </DashboardText>
+      </Text>
     </div>
   );
 }
@@ -147,9 +147,9 @@ export function ResourceReferencingWorkersSection({
       }
     >
       {workerNames.length > 0 ? (
-        <DashboardText className="m-0 text-on-surface">
+        <Text className="m-0 text-on-surface">
           {formatList(workerNames)}
-        </DashboardText>
+        </Text>
       ) : (
         <CurrentSelectionSupportingText>
           {messages.referencingWorkersEmpty}
@@ -181,9 +181,9 @@ export function ResourceReferencingWorkstationsSection({
       }
     >
       {workstationNames.length > 0 ? (
-        <DashboardText className="m-0 text-on-surface">
+        <Text className="m-0 text-on-surface">
           {formatList(workstationNames)}
-        </DashboardText>
+        </Text>
       ) : (
         <CurrentSelectionSupportingText>
           {messages.referencingWorkstationsEmpty}

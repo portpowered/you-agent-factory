@@ -26,7 +26,7 @@ describe("CurrentSelectionContentSection", () => {
     expect(section.className).toContain("mt-4");
     expect(section.className).toContain("gap-2.5");
     expect(section.className).not.toContain("border-t");
-    expect(heading.className).toContain("af-dashboard-section-heading");
+    expect(heading.className).toContain("af-section-heading");
   });
 
   it("supports an explicit region label when heading copy should not name the section", () => {

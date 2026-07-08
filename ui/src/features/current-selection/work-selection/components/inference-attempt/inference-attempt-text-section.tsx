@@ -1,4 +1,4 @@
-import { DashboardLabel } from "../../../../../components/ui";
+import { Label } from "../../../../../components/ui";
 import { AuthoredBodyText } from "../../../../../lib/authored-body-text";
 import type { InferenceAttemptTextSectionProps } from "../../../base/components/detail-card/detail-card-types";
 
@@ -8,7 +8,7 @@ export function InferenceAttemptTextSection({
 }: InferenceAttemptTextSectionProps) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel>{label}</DashboardLabel>
+      <Label>{label}</Label>
       <AuthoredBodyText className="min-h-80 md:min-h-96" value={value} />
     </div>
   );

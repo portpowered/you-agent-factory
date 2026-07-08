@@ -2,10 +2,10 @@ import {
   AlertPanel,
   AlertPanelText,
   DashboardActionButton,
-  DashboardActionRow,
-  DashboardLabel,
+  ActionRow,
+  Label,
   DashboardStatusPill,
-  DashboardText,
+  Text,
 } from "../../../../components/ui";
 import {
   WidgetDetailCopy,
@@ -45,8 +45,8 @@ export function LifecycleActionSection({
 
   return (
     <section className="grid gap-2">
-      <DashboardLabel>{messages.lifecycleControlsHeading}</DashboardLabel>
-      <DashboardActionRow
+      <Label>{messages.lifecycleControlsHeading}</Label>
+      <ActionRow
         actions={availability.actions.map((action) => (
           <DashboardActionButton
             disabled={
@@ -67,11 +67,11 @@ export function LifecycleActionSection({
         <LifecycleControlFeedback feedback={feedback} locale={locale} />
       ) : null}
       {availability.selectedDispatch ? (
-        <DashboardText variant="supporting">
+        <Text variant="supporting">
           {messages.lifecycleControlsSelectedDispatchLabel(
             availability.selectedDispatch.id,
           )}
-        </DashboardText>
+        </Text>
       ) : null}
       {availability.showDispatchSelectionHint ? (
         <WidgetDetailCopy>{messages.lifecycleControlsRetrySelectionHint}</WidgetDetailCopy>

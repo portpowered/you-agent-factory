@@ -597,6 +597,7 @@ describe("ProviderSessionDetailPanel", () => {
       '{"path":"pkg/api/provider_session_details.go"}',
     );
     expect(rawArguments.tagName).toBe("PRE");
+    expect(rawArguments.className).toContain("font-mono");
     expect(rawArguments.className).toContain("text-code-medium");
   });
 

@@ -23,6 +23,10 @@ read it directly from the package; no docs-site implementation is required.
 
 - [Button primitives](./button.md) — `Button`, `ButtonLink`, `IconButtonShell`,
   semantic variants, loading behavior, and icon-only accessibility labels.
+- [Typography roles](./typography-roles.md) — `Text`, `Heading`, `Label`,
+  `Code`, dense text, truncation, and wrapping
+- [Layout and display primitives](./layout-display-primitives.md) —
+  `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
 - [Form select primitives](./forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
 - [Overlay and disclosure primitives](./overlays.md) — Dialog, Popover,

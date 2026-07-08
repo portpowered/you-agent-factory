@@ -4,9 +4,9 @@ import type { components } from "../../../../api/generated/openapi";
 import {
   AlertPanel,
   ButtonLink,
-  DashboardHeading,
-  DashboardLabel,
-  DashboardText,
+  Heading,
+  Label,
+  Text,
 } from "../../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
 import {
@@ -37,7 +37,7 @@ export function FactorySessionArtifactList({
 
   return (
     <div className="grid gap-2">
-      <DashboardLabel>{heading}</DashboardLabel>
+      <Label>{heading}</Label>
       <ul className="grid gap-1">
         {artifacts.map((artifact) => (
           <li key={artifact.id}>
@@ -79,11 +79,11 @@ function ArtifactDisclosure({
     <div className="grid gap-2 rounded-lg border border-outline bg-surface-container-low p-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="grid gap-1">
-          <DashboardText>
+          <Text>
             {artifact.kind}
             {artifact.label ? ` — ${artifact.label}` : ""}
-          </DashboardText>
-          <DashboardText variant="supporting">{artifact.id}</DashboardText>
+          </Text>
+          <Text variant="supporting">{artifact.id}</Text>
         </div>
         <ExpandablePanelTrigger
           aria-label={`${messages.artifactViewLabel} ${artifact.id}`}
@@ -140,7 +140,7 @@ function ArtifactDrilldownBody({
 
   return (
     <div className="grid gap-3">
-      <DashboardHeading as="h4">{messages.artifactDetailHeading}</DashboardHeading>
+      <Heading as="h4">{messages.artifactDetailHeading}</Heading>
       <div className="grid gap-2 sm:grid-cols-2">
         <Metric label={messages.artifactIdLabel} value={state.artifact.artifactId} />
         <Metric label={messages.artifactKindLabel} value={state.artifact.kind} />
@@ -210,7 +210,7 @@ function ArtifactDrilldownBody({
         ) : null}
       </div>
       <div className="grid gap-2">
-        <DashboardLabel>{messages.artifactPreviewHeading}</DashboardLabel>
+        <Label>{messages.artifactPreviewHeading}</Label>
         {state.artifact.preview.kind === "inline" ? (
           <WorkContentReadOnlyList
             ariaLabel={messages.artifactPreviewHeading}
@@ -221,9 +221,9 @@ function ArtifactDrilldownBody({
         ) : state.artifact.preview.kind === "download" &&
           hasUsableArtifactDownload(state.artifact) ? (
           <div className="grid gap-2">
-            <DashboardText variant="supporting">
+            <Text variant="supporting">
               {messages.artifactDownloadState}
-            </DashboardText>
+            </Text>
             <ButtonLink
               className="w-fit"
               href={state.artifact.preview.contentRef.href}
@@ -234,13 +234,13 @@ function ArtifactDrilldownBody({
             </ButtonLink>
           </div>
         ) : state.artifact.preview.kind === "download" ? (
-          <DashboardText variant="supporting">
+          <Text variant="supporting">
             {messages.artifactDownloadUnavailableState}
-          </DashboardText>
+          </Text>
         ) : (
-          <DashboardText variant="supporting">
+          <Text variant="supporting">
             {messages.artifactDetailUnavailableState}
-          </DashboardText>
+          </Text>
         )}
       </div>
     </div>
@@ -250,8 +250,8 @@ function ArtifactDrilldownBody({
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel>{label}</DashboardLabel>
-      <DashboardText>{value}</DashboardText>
+      <Label>{label}</Label>
+      <Text>{value}</Text>
     </div>
   );
 }

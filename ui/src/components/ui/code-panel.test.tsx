@@ -10,6 +10,7 @@ describe("CodePanel", () => {
     expect(codePanel.tagName).toBe("PRE");
     expect(codePanel.className).toContain("bg-surface-container-high");
     expect(codePanel.className).toContain("p-2");
+    expect(codePanel.className).toContain("font-mono");
     expect(codePanel.className).toContain("text-code-medium");
   });
 

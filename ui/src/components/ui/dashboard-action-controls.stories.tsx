@@ -1,7 +1,7 @@
 import { expect, within } from "storybook/test";
 
 import { DashboardActionButton } from "./dashboard-action-button";
-import { DashboardActionRow } from "./dashboard-action-row";
+import { ActionRow } from "@you-agent-factory/components";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
 function DashboardActionControlsShowcase() {
@@ -118,7 +118,7 @@ function DashboardActionControlsShowcase() {
         >
           Shared dashboard action row
         </h2>
-        <DashboardActionRow
+        <ActionRow
           actions={
             <>
               <DashboardActionButton type="button">
@@ -154,7 +154,7 @@ export const SharedDashboardActionControls = {
       "Shared dashboard action row example",
     );
     const sections = actionRow.querySelectorAll(
-      "[data-dashboard-action-row-section]",
+      "[data-action-row-section]",
     );
 
     await expect(
@@ -184,10 +184,10 @@ export const SharedDashboardActionControls = {
     await expect(canvas.getByText("Editor unavailable")).toBeVisible();
     await expect(sections).toHaveLength(2);
     await expect(
-      sections[0]?.getAttribute("data-dashboard-action-row-section"),
+      sections[0]?.getAttribute("data-action-row-section"),
     ).toBe("statuses");
     await expect(
-      sections[1]?.getAttribute("data-dashboard-action-row-section"),
+      sections[1]?.getAttribute("data-action-row-section"),
     ).toBe("actions");
   },
 };

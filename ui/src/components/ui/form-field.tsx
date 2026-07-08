@@ -6,7 +6,7 @@ import {
 } from "react";
 
 import { cn } from "../../lib/cn";
-import { DashboardText } from "./dashboard-typography-components";
+import { Text } from "@you-agent-factory/components";
 
 export type FormFieldProps = HTMLAttributes<HTMLDivElement>;
 
@@ -44,7 +44,7 @@ export const FormDescription = forwardRef<HTMLElement, FormDescriptionProps>(
     ref,
   ) {
     return (
-      <DashboardText
+      <Text
         className={cn("m-0", className)}
         ref={ref}
         variant={variant}
@@ -61,7 +61,7 @@ export interface FormErrorProps extends HTMLAttributes<HTMLElement> {
 export const FormError = forwardRef<HTMLElement, FormErrorProps>(
   function FormError({ className, role = "alert", ...props }, ref) {
     return (
-      <DashboardText
+      <Text
         className={cn("m-0 font-medium text-on-error-container", className)}
         ref={ref}
         role={role}
@@ -79,7 +79,7 @@ export interface FormWarningProps extends HTMLAttributes<HTMLElement> {
 export const FormWarning = forwardRef<HTMLElement, FormWarningProps>(
   function FormWarning({ className, ...props }, ref) {
     return (
-      <DashboardText
+      <Text
         className={cn("m-0 font-medium text-on-warning-container", className)}
         ref={ref}
         variant="supporting"

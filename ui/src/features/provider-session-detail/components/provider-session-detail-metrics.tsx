@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DashboardLabel, DashboardText } from "../../../components/ui";
+import { Label, Text } from "../../../components/ui";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
 
 export function DetailMetric({
@@ -11,15 +11,15 @@ export function DetailMetric({
 }) {
   return (
     <div className="grid gap-1 py-1.5">
-      <DashboardLabel>{label}</DashboardLabel>
+      <Label>{label}</Label>
       {typeof value === "string" || typeof value === "number" ? (
-        <DashboardText className="m-0 mt-1 [overflow-wrap:anywhere]">
+        <Text className="m-0 mt-1 [overflow-wrap:anywhere]">
           {value}
-        </DashboardText>
+        </Text>
       ) : (
-        <DashboardText as="div" className="mt-1 [overflow-wrap:anywhere]">
+        <Text as="div" className="mt-1 [overflow-wrap:anywhere]">
           {value}
-        </DashboardText>
+        </Text>
       )}
     </div>
   );

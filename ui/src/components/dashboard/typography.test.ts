@@ -51,7 +51,7 @@ describe("dashboard typography contract", () => {
   it("documents the code extension and label roles beside Material families", () => {
     expect(
       DASHBOARD_EXTENDED_TYPOGRAPHY_ROLES.find(
-        (entry) => entry.className === "af-dashboard-body-code",
+        (entry) => entry.className === "af-body-code",
       ),
     ).toMatchObject({
       materialFamily: "code",
@@ -60,7 +60,7 @@ describe("dashboard typography contract", () => {
     });
     expect(
       DASHBOARD_EXTENDED_TYPOGRAPHY_ROLES.find(
-        (entry) => entry.className === "af-dashboard-supporting-label",
+        (entry) => entry.className === "af-supporting-label",
       ),
     ).toMatchObject({
       materialFamily: "label",

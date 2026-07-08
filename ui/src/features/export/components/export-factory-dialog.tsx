@@ -13,7 +13,7 @@ import {
   AlertPanel,
   AlertPanelText,
   Button,
-  DashboardText,
+  Text,
   FormDescription,
   FormError,
   FormField,
@@ -106,9 +106,9 @@ export function ExportFactoryDialog({
           </div>
         </DialogHeader>
 
-        <DashboardText className="m-0" variant="supporting">
+        <Text className="m-0" variant="supporting">
           {messages.hint}
-        </DashboardText>
+        </Text>
 
         <ExportFactoryDialogForm formState={formState} messages={messages} />
         <ExportFactoryDialogMessages

@@ -14,6 +14,8 @@ export type {
   ButtonProps,
   IconButtonShellProps,
 } from "./primitives";
+export { DescriptionList } from "./data-display/description-list";
+export type { DescriptionListProps } from "./data-display/description-list";
 
 export {
   AlertPanel,
@@ -141,6 +143,20 @@ export type {
   SelectSeparatorProps,
   SelectTriggerProps,
 } from "./forms";
+
+export { ActionRow } from "./layout/action-row";
+export type { ActionRowProps } from "./layout/action-row";
+export { SurfacePanel, surfacePanelVariants } from "./layout/surface-panel";
+export type { SurfacePanelProps } from "./layout/surface-panel";
+
+export { Code, Heading, Label, Text } from "./primitives/typography";
+export type {
+  CodeProps,
+  HeadingProps,
+  LabelProps,
+  TextProps,
+  TextVariant,
+} from "./primitives/typography";
 export {
   Collapsible,
   CollapsibleContent,

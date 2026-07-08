@@ -1,5 +1,5 @@
 import { OptionalEnumSelect } from "@you-agent-factory/components/forms";
-import { DashboardText } from "../../../../../components/ui";
+import { Text } from "../../../../../components/ui";
 import { resolveRunnerSelection } from "../../../../current-factory-definition/lib/runner-selection";
 import {
   getRunnerDisplayName,
@@ -62,12 +62,12 @@ export function EditableConfigurationRunnerField({
         }))}
         value={state.draft.runnerName}
       />
-      <DashboardText
+      <Text
         className="m-0 text-on-surface-subtle"
         variant="supporting"
       >
         {messages.runnerFieldHelp(runnerName, sourceLabel)}
-      </DashboardText>
+      </Text>
     </div>
   );
 }

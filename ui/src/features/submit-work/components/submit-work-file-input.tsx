@@ -1,6 +1,6 @@
 import { type DragEvent, useState } from "react";
 
-import { Button, DashboardLabel, DashboardText } from "../../../components/ui";
+import { Button, Label, Text } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { ChooseFileField } from "../../choose-file/public";
 import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
@@ -57,12 +57,12 @@ export function FileSubmissionItemEditor({
       <ChooseFileField
         afterControl={
           item.stagingStatus === "failure" && item.stagingError ? (
-            <DashboardText
+            <Text
               className="text-on-error-container"
               variant="supporting"
             >
               {item.stagingError}
-            </DashboardText>
+            </Text>
           ) : null
         }
         control={
@@ -112,14 +112,14 @@ export function FileSubmissionItemEditor({
             }}
           >
             <div className="flex flex-wrap items-center gap-3">
-              <DashboardLabel>{inputLabel}</DashboardLabel>
-              <DashboardText
+              <Label>{inputLabel}</Label>
+              <Text
                 as="span"
                 className="max-w-xl leading-relaxed text-on-surface-variant"
                 variant="supporting"
               >
                 {stateDescription}
-              </DashboardText>
+              </Text>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button
@@ -137,7 +137,7 @@ export function FileSubmissionItemEditor({
                 </span>
               </Button>
               {(item.fileName ?? "").length > 0 ? (
-                <DashboardText
+                <Text
                   as="span"
                   className="max-w-xl leading-relaxed text-on-surface-variant"
                   variant="supporting"
@@ -146,7 +146,7 @@ export function FileSubmissionItemEditor({
                     item.fileName ?? "",
                     item.mediaType ?? "",
                   )}
-                </DashboardText>
+                </Text>
               ) : null}
             </div>
           </label>

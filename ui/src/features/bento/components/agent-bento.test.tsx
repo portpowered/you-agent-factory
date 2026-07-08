@@ -105,7 +105,7 @@ describe("AgentBentoLayout", () => {
     });
     const activityBody = screen
       .getByText("Active workstation graph goes here.")
-      .closest(".af-dashboard-body-text");
+      .closest(".af-body-text");
 
     expect(
       screen.getByRole("region", { name: "you-agent-factory bento board" }),
@@ -127,8 +127,8 @@ describe("AgentBentoLayout", () => {
       "overflow-visible",
     );
     expect(getGridItem("Trace grid").dataset.bentoCardId).toBe("trace");
-    expect(activityTitle.className).toContain("af-dashboard-section-heading");
-    expect(activityBody?.className).toContain("af-dashboard-body-text");
+    expect(activityTitle.className).toContain("af-section-heading");
+    expect(activityBody?.className).toContain("af-body-text");
     expect(activityHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
     expect(activityHeader?.className).toContain("cursor-grab");
     expect(
@@ -600,7 +600,7 @@ describe("AgentBentoCard", () => {
     expect(viewport).toBeTruthy();
     expect(card.className).toContain("h-full");
     expect(card.className).toContain("overflow-hidden");
-    expect(viewport?.className).toContain("af-dashboard-body-text");
+    expect(viewport?.className).toContain("af-body-text");
     expect(viewport?.className).toContain("h-full");
     expect(screen.getByTestId("submit-work-body")).toBe(viewport);
   });

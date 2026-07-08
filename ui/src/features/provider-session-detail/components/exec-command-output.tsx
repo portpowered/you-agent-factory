@@ -1,7 +1,7 @@
 import { isAPIRecord } from "../../../api/transport";
 import {
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   SurfacePanel,
 } from "../../../components/ui";
 import { formatNumber } from "../../../i18n/formatters";
@@ -28,7 +28,7 @@ export function FriendlyExecCommandOutput({
   if (friendlyOutput === null) {
     return (
       <div className="grid gap-3">
-        {text ? <DashboardText className="m-0">{text}</DashboardText> : null}
+        {text ? <Text className="m-0">{text}</Text> : null}
         <ExecCommandContentSection
           label={messages.outputLabel}
           value={output}
@@ -39,10 +39,10 @@ export function FriendlyExecCommandOutput({
 
   return (
     <div className="grid gap-3">
-      {text ? <DashboardText className="m-0">{text}</DashboardText> : null}
+      {text ? <Text className="m-0">{text}</Text> : null}
       <SurfacePanel asChild className="grid gap-2" radius="lg" surface="low">
         <section>
-          <DashboardLabel>{messages.execCommandResultHeading}</DashboardLabel>
+          <Label>{messages.execCommandResultHeading}</Label>
           <div className="grid gap-3">
             {friendlyOutput.exitCode !== null ? (
               <SummaryMetric
@@ -91,7 +91,7 @@ function ExecCommandContentSection({
 }) {
   return (
     <section className="grid gap-2">
-      <DashboardLabel>{label}</DashboardLabel>
+      <Label>{label}</Label>
       <TranscriptContentPanel kind="code" value={value} />
     </section>
   );
@@ -108,8 +108,8 @@ function SummaryMetric({
 }) {
   return (
     <div className={cn("grid gap-1", className)}>
-      <DashboardLabel>{label}</DashboardLabel>
-      <DashboardText className="m-0">{value}</DashboardText>
+      <Label>{label}</Label>
+      <Text className="m-0">{value}</Text>
     </div>
   );
 }

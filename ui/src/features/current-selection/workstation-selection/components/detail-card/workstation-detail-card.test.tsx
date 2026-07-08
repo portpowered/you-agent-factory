@@ -622,7 +622,7 @@ describe("WorkstationDetailCard", () => {
     );
     const activeWorkActions = requireValue(
       activeWorkCard.querySelector<HTMLElement>(
-        "[data-dashboard-action-row-section='actions']",
+        "[data-action-row-section='actions']",
       ),
       "expected active work actions",
     );
@@ -749,7 +749,7 @@ describe("WorkstationDetailCard", () => {
     );
     const activeWorkActions = requireValue(
       activeWorkCard.querySelector<HTMLElement>(
-        "[data-dashboard-action-row-section='actions']",
+        "[data-action-row-section='actions']",
       ),
       "expected active work actions",
     );
@@ -909,7 +909,7 @@ describe("WorkstationDetailCard", () => {
       },
     );
     expect(unavailableWorkStatus.className).toContain(
-      "af-dashboard-supporting-text",
+      "af-supporting-text",
     );
     expect(unavailableWorkStatus.className).not.toContain("text-[0.78rem]");
 
@@ -1282,10 +1282,10 @@ describe("WorkstationDetailCard", () => {
       name: "Active work",
     });
     expect(activeWorkHeading.className).toContain(
-      "af-dashboard-section-heading",
+      "af-section-heading",
     );
     const activeWorkCard = screen.getByText("Active Story").closest("li");
-    expect(activeWorkCard?.className).toContain("af-dashboard-body-text");
+    expect(activeWorkCard?.className).toContain("af-body-text");
 
     const runHistorySection = screen
       .getByRole("heading", { name: "Run history" })
@@ -1294,7 +1294,7 @@ describe("WorkstationDetailCard", () => {
     const countText = within(runHistorySection as HTMLElement).getByText(
       "2 runs",
     );
-    expect(countText.className).toContain("af-dashboard-supporting-text");
+    expect(countText.className).toContain("af-supporting-text");
 
     fireEvent.click(
       within(runHistorySection as HTMLElement).getByRole("button", {
@@ -1305,11 +1305,11 @@ describe("WorkstationDetailCard", () => {
     const dispatchPill = within(runHistorySection as HTMLElement)
       .getAllByText("dispatch-review-active")
       .find((element) => element.tagName === "SPAN");
-    expect(dispatchPill?.className).toContain("af-dashboard-supporting-code");
+    expect(dispatchPill?.className).toContain("af-supporting-code");
     const sessionMetadata = within(runHistorySection as HTMLElement).getByText(
       /codex \/ Session ID \/ sess-active-story/,
     );
     expect(sessionMetadata.tagName).toBe("CODE");
-    expect(sessionMetadata.className).toContain("af-dashboard-body-code");
+    expect(sessionMetadata.className).toContain("af-body-code");
   });
 });
