@@ -69,7 +69,7 @@ describe("dashboard typography layout package migration", () => {
     expect(
       screen.getByText("Host-owned supporting copy for a migrated field.")
         .className,
-    ).toContain("af-body-text");
+    ).toContain("text-body-medium");
   });
 
   it("renders representative surface panel layout through dashboard shell primitives", () => {
