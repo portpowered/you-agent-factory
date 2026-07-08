@@ -48,6 +48,7 @@ export type {
 export { PackageTextarea, textareaVariants } from "./package-textarea";
 export type { PackageTextareaProps } from "./package-textarea";
 export {
+  buildFormFieldAriaDescribedBy,
   FormDescription,
   FormError,
   FormField,
@@ -63,6 +64,7 @@ export type {
   FormErrorProps,
   FormFieldGroupLabelProps,
   FormFieldGroupProps,
+  FormFieldMessageIds,
   FormFieldProps,
   FormHelperTextProps,
   FormLabelProps,

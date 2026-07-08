@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildFormFieldAriaDescribedBy,
   FormDescription,
   FormError,
   FormField,
@@ -14,6 +15,7 @@ import {
   FormWarning,
 } from "@you-agent-factory/components";
 import {
+  buildFormFieldAriaDescribedBy as FormsBuildFormFieldAriaDescribedBy,
   FormDescription as FormsFormDescription,
   FormError as FormsFormError,
   FormField as FormsFormField,
@@ -36,6 +38,7 @@ describe("@you-agent-factory/components form-field imports", () => {
     expect(FormSuccess).toBeTruthy();
     expect(FormFieldGroup).toBeTruthy();
     expect(FormFieldGroupLabel).toBeTruthy();
+    expect(buildFormFieldAriaDescribedBy).toBeTypeOf("function");
   });
 
   it("imports the same form-field exports from the forms category entrypoint", () => {
@@ -48,5 +51,6 @@ describe("@you-agent-factory/components form-field imports", () => {
     expect(FormsFormSuccess).toBe(FormSuccess);
     expect(FormsFormFieldGroup).toBe(FormFieldGroup);
     expect(FormsFormFieldGroupLabel).toBe(FormFieldGroupLabel);
+    expect(FormsBuildFormFieldAriaDescribedBy).toBe(buildFormFieldAriaDescribedBy);
   });
 });

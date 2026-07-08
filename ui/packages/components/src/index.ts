@@ -71,6 +71,7 @@ export type {
   WidgetSuccessStateProps,
 } from "./recipes";
 export {
+  buildFormFieldAriaDescribedBy,
   EnumSelect,
   ENUM_SELECT_EMPTY_VALUE,
   FormDescription,
@@ -110,6 +111,7 @@ export type {
   FormErrorProps,
   FormFieldGroupLabelProps,
   FormFieldGroupProps,
+  FormFieldMessageIds,
   FormFieldProps,
   FormHelperTextProps,
   FormLabelProps,

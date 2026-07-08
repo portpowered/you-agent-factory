@@ -8,6 +8,28 @@ import {
 
 import { cn } from "../utilities/cn";
 
+export type FormFieldMessageIds = {
+  descriptionId?: string;
+  helperId?: string;
+  warningId?: string;
+  errorId?: string;
+  successId?: string;
+};
+
+export function buildFormFieldAriaDescribedBy(
+  messageIds: FormFieldMessageIds,
+): string | undefined {
+  const ids = [
+    messageIds.descriptionId,
+    messageIds.helperId,
+    messageIds.warningId,
+    messageIds.errorId,
+    messageIds.successId,
+  ].filter((id): id is string => Boolean(id));
+
+  return ids.length > 0 ? ids.join(" ") : undefined;
+}
+
 export type FormFieldProps = HTMLAttributes<HTMLDivElement>;
 
 export const FormField = forwardRef<HTMLDivElement, FormFieldProps>(
