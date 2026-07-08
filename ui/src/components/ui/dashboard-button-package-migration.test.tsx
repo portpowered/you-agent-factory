@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import {
   Button as PackageButton,
   ButtonLink as PackageButtonLink,
@@ -64,5 +65,43 @@ describe("dashboard button package migration", () => {
     const iconButton = screen.getByRole("button", { name: "Close" });
     expect(iconButton.className).toContain("h-10");
     expect(iconButton.className).toContain("w-10");
+  });
+
+  it("blocks loading asChild projection and preserves semantic button tones", () => {
+    const onBlockedClick = vi.fn();
+    const onToneClick = vi.fn();
+
+    render(
+      <>
+        <Button asChild loading tone="destructive">
+          <a href="/blocked" onClick={onBlockedClick}>
+            Blocked link
+          </a>
+        </Button>
+        <Button onClick={onToneClick} tone="warning" type="button">
+          Warning
+        </Button>
+        <ButtonLink href="/guide">Guide</ButtonLink>
+      </>,
+    );
+
+    const blockedLink = screen.getByText("Blocked link");
+    expect(blockedLink).toHaveAttribute("aria-busy", "true");
+    expect(blockedLink).toHaveAttribute("aria-disabled", "true");
+    expect(blockedLink).not.toHaveAttribute("href");
+    fireEvent.click(blockedLink);
+    fireEvent.keyDown(blockedLink, { key: "Enter" });
+    expect(onBlockedClick).not.toHaveBeenCalled();
+
+    const warningButton = screen.getByRole("button", { name: "Warning" });
+    expect(warningButton.className).toContain("border-af-warning-border");
+    fireEvent.click(warningButton);
+    expect(onToneClick).toHaveBeenCalledTimes(1);
+
+    expect(buttonVariants({ tone: "ghost" })).toContain("border-transparent");
+    expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute(
+      "href",
+      "/guide",
+    );
   });
 });
