@@ -27,10 +27,10 @@ import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pendin
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
 vi.mock(
-  "@you-agent-factory/components",
+  "@you-agent-factory/components/overlays",
   async (importOriginal) => {
     const actual = await importOriginal<
-      typeof import("@you-agent-factory/components")
+      typeof import("@you-agent-factory/components/overlays")
     >();
     const mockDialog = await import("../../../testing/mock-dashboard-dialog");
 
