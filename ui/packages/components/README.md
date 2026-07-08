@@ -142,6 +142,9 @@ directory:
 - [Skeleton loading placeholders](./docs/feedback-skeleton.md)
 - [CodePanel long-content containment](./docs/data-display-code-panel.md)
 - [Form input primitives](./docs/forms-input-primitives.md)
+- [Form field structure and messaging](./docs/forms-form-field.md) — `FormField`,
+  labels, descriptions, helper text, warnings, errors, success messages,
+  grouped-control semantics, and host validation responsibilities
 - [Form select primitives](./docs/forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
 - [Overlay and disclosure primitives](./docs/overlays.md)
