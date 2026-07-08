@@ -9,8 +9,23 @@ import {
   FormLabel,
   FormWarning,
 } from "./form-field";
+import {
+  FormDescription as PackageFormDescription,
+  FormError as PackageFormError,
+  FormField as PackageFormField,
+  FormLabel as PackageFormLabel,
+  FormWarning as PackageFormWarning,
+} from "@you-agent-factory/components";
 
-describe("form field primitives", () => {
+describe("dashboard form field re-exports", () => {
+  it("re-exports package form-field messaging from the dashboard ui surface", () => {
+    expect(FormField).toBe(PackageFormField);
+    expect(FormLabel).toBe(PackageFormLabel);
+    expect(FormDescription).toBe(PackageFormDescription);
+    expect(FormError).toBe(PackageFormError);
+    expect(FormWarning).toBe(PackageFormWarning);
+  });
+
   it("renders field layout, visible labels, and supporting descriptions", () => {
     render(
       <FormField className="custom-field">
@@ -29,7 +44,8 @@ describe("form field primitives", () => {
     expect(label.tagName).toBe("LABEL");
     expect(label.className).toContain("font-semibold");
     expect(label.className).toContain("text-on-surface");
-    expect(description.className).toContain("af-dashboard-supporting-text");
+    expect(description.className).toContain("text-body-small");
+    expect(description.className).toContain("text-on-surface-variant");
   });
 
   it("renders validation errors with alert semantics and error color roles", () => {
@@ -38,7 +54,7 @@ describe("form field primitives", () => {
     const error = screen.getByRole("alert");
 
     expect(error).toHaveAttribute("id", "factory-name-error");
-    expect(error.className).toContain("af-dashboard-supporting-text");
+    expect(error.className).toContain("text-body-small");
     expect(error.className).toContain("font-medium");
     expect(error.className).toContain("text-on-error-container");
   });
@@ -59,7 +75,7 @@ describe("form field primitives", () => {
     );
 
     expect(screen.getByText("Definition unavailable.").className).toContain(
-      "af-dashboard-body-text",
+      "text-body-medium",
     );
   });
 
@@ -68,7 +84,7 @@ describe("form field primitives", () => {
 
     const warning = screen.getByRole("status");
 
-    expect(warning.className).toContain("af-dashboard-supporting-text");
+    expect(warning.className).toContain("text-body-small");
     expect(warning.className).toContain("font-medium");
     expect(warning.className).toContain("text-on-warning-container");
   });
