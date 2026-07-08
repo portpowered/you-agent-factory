@@ -1,4 +1,4 @@
-import { CodePanel } from "@you-agent-factory/components";
+import { CodePanel } from "@you-agent-factory/components/data-display";
 import { formatDurationMillis } from "../../../../../components/ui/formatters";
 import {
   WidgetDetailCopy,

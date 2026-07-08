@@ -1,11 +1,5 @@
 export const approvedButtonUsageAllowlist = [
   {
-    buttonVariantsCount: 1,
-    buttonVariantsReason:
-      "Shared Button primitive owner may compose buttonVariants for the canonical ordinary-action lane.",
-    relativeFilePath: "src/components/ui/button.tsx",
-  },
-  {
     buttonVariantsCount: 2,
     buttonVariantsReason:
       "Shared calendar owner may compose buttonVariants for calendar navigation controls.",

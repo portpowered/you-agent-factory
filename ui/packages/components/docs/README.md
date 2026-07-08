@@ -21,6 +21,8 @@ read it directly from the package; no docs-site implementation is required.
 
 ## Documented components
 
+- [Button primitives](./button.md) — `Button`, `ButtonLink`, `IconButtonShell`,
+  semantic variants, loading behavior, and icon-only accessibility labels.
 - [Typography roles](./typography-roles.md) — `Text`, `Heading`, `Label`,
   `Code`, dense text, truncation, and wrapping
 - [Layout and display primitives](./layout-display-primitives.md) —
@@ -71,3 +73,4 @@ from sibling files in this directory as the library grows.
 - [Widget frame and layout recipes](./widget-frame-recipes.md) — import paths,
   state ownership, accessibility, Storybook references, and source-copy guidance
   for domain-free framed panels.
+

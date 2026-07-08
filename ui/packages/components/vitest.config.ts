@@ -14,27 +14,96 @@ const uiRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
+const uiNodeModules = path.join(uiRoot, "node_modules");
+
+/** React-owning deps must resolve through the dashboard ui install to avoid duplicate React in package tests. */
 const sharedReactAliases = [
   {
     find: "react",
-    replacement: path.join(uiRoot, "node_modules/react"),
+    replacement: path.join(uiNodeModules, "react"),
   },
   {
     find: "react-dom",
-    replacement: path.join(uiRoot, "node_modules/react-dom"),
+    replacement: path.join(uiNodeModules, "react-dom"),
+  },
+  {
+    find: "react-dom/client",
+    replacement: path.join(uiNodeModules, "react-dom/client"),
   },
   {
     find: "react/jsx-runtime",
-    replacement: path.join(uiRoot, "node_modules/react/jsx-runtime"),
+    replacement: path.join(uiNodeModules, "react/jsx-runtime"),
   },
   {
     find: "react/jsx-dev-runtime",
-    replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
+    replacement: path.join(uiNodeModules, "react/jsx-dev-runtime"),
+  },
+  {
+    find: "@radix-ui/react-collapsible",
+    replacement: path.join(uiNodeModules, "@radix-ui/react-collapsible"),
+  },
+  {
+    find: "@radix-ui/react-compose-refs",
+    replacement: path.join(uiNodeModules, "@radix-ui/react-compose-refs"),
+  },
+  {
+    find: "@radix-ui/react-dialog",
+    replacement: path.join(uiNodeModules, "@radix-ui/react-dialog"),
+  },
+  {
+    find: "@radix-ui/react-popover",
+    replacement: path.join(uiNodeModules, "@radix-ui/react-popover"),
+  },
+  {
+    find: "@radix-ui/react-scroll-area",
+    replacement: path.join(uiNodeModules, "@radix-ui/react-scroll-area"),
   },
   {
     find: "@radix-ui/react-select",
-    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
+    replacement: path.join(uiNodeModules, "@radix-ui/react-select"),
   },
+  {
+    find: "@radix-ui/react-slot",
+    replacement: path.join(uiNodeModules, "@radix-ui/react-slot"),
+  },
+  {
+    find: "@xyflow/react",
+    replacement: path.join(uiNodeModules, "@xyflow/react"),
+  },
+  {
+    find: "@xyflow/system",
+    replacement: path.join(uiNodeModules, "@xyflow/system"),
+  },
+  {
+    find: "recharts",
+    replacement: path.join(uiNodeModules, "recharts"),
+  },
+  {
+    find: "@testing-library/react",
+    replacement: path.join(uiNodeModules, "@testing-library/react"),
+  },
+  {
+    find: "@testing-library/user-event",
+    replacement: path.join(uiNodeModules, "@testing-library/user-event"),
+  },
+] as const;
+
+const sharedReactDedupe = [
+  "react",
+  "react-dom",
+  "react-dom/client",
+  "react/jsx-runtime",
+  "react/jsx-dev-runtime",
+  "@radix-ui/react-collapsible",
+  "@radix-ui/react-compose-refs",
+  "@radix-ui/react-dialog",
+  "@radix-ui/react-popover",
+  "@radix-ui/react-scroll-area",
+  "@radix-ui/react-select",
+  "@radix-ui/react-slot",
+  "@xyflow/react",
+  "@xyflow/system",
+  "recharts",
 ] as const;
 
 function createComponentsPackageResolvePlugin(
@@ -73,38 +142,10 @@ export default defineConfig({
   plugins: [createComponentsPackageResolvePlugin(componentsPackageRoot)],
   resolve: {
     alias: [
-      { find: /^react$/, replacement: path.join(uiRoot, "node_modules/react") },
-      {
-        find: /^react-dom$/,
-        replacement: path.join(uiRoot, "node_modules/react-dom"),
-      },
-      {
-        find: /^react\/jsx-runtime$/,
-        replacement: path.join(uiRoot, "node_modules/react/jsx-runtime"),
-      },
-      {
-        find: /^react\/jsx-dev-runtime$/,
-        replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
-      },
-      {
-        find: /^@radix-ui\/react-select$/,
-        replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
-      },
-      {
-        find: /^@radix-ui\/react-slot$/,
-        replacement: path.join(uiRoot, "node_modules/@radix-ui/react-slot"),
-      },
       ...sharedReactAliases,
       ...createComponentsPackageAliases(componentsPackageRoot),
     ],
-    dedupe: [
-      "react",
-      "react-dom",
-      "react/jsx-runtime",
-      "react/jsx-dev-runtime",
-      "@radix-ui/react-select",
-      "@radix-ui/react-slot",
-    ],
+    dedupe: [...sharedReactDedupe],
   },
   test: {
     environment: "happy-dom",
@@ -113,15 +154,12 @@ export default defineConfig({
     setupFiles: ["./src/testing/vitest.setup.ts"],
     server: {
       deps: {
-        moduleDirectories: [
-          path.join(uiRoot, "node_modules"),
-          "node_modules",
-        ],
+        moduleDirectories: [uiNodeModules],
         inline: [
           /^@you-agent-factory\/components/,
-          "@radix-ui/react-select",
-          "@radix-ui/react-slot",
+          ...sharedReactDedupe,
           "@testing-library/react",
+          "@testing-library/user-event",
         ],
       },
     },

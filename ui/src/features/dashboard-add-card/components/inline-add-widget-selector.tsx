@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-import { EnumSelect } from "@you-agent-factory/components";
+import { EnumSelect } from "@you-agent-factory/components/forms";
 import type {
   DashboardWidgetPickerAvailability,
   DashboardWidgetPickerWidgetType,

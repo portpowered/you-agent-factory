@@ -15,14 +15,17 @@ import {
   Label,
   ExpandablePanelTrigger,
 } from "../../../components/ui";
-import { Collapsible, CollapsibleContent } from "@you-agent-factory/components";
-import { Button } from "../../../components/ui/button";
+import { Button } from "@you-agent-factory/components/primitives";
+import {
+  Collapsible,
+  CollapsibleContent,
+} from "../../../components/ui/collapsible";
 import {
   formatDurationMillis,
   formatTraceOutcome,
   formatTypedWorkItemLabel,
 } from "../../../components/ui/formatters";
-import { Skeleton } from "@you-agent-factory/components";
+import { Skeleton } from "../../../components/ui/skeleton";
 import {
   Table,
   TableBody,

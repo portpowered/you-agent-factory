@@ -27,12 +27,4 @@ describe("shared primitive semantic color roles", () => {
     expect(source).toMatch(/info:\s*\n?\s*"border-af-info-border/);
     expect(source).toMatch(/active:\s*\n?\s*"border-primary/);
   });
-
-  it("keeps the default button tone on primary accent tokens, not warning or success", () => {
-    const source = readComponentSource("button.tsx");
-
-    expect(source).toMatch(/default:\s*\n?\s*"border-primary bg-primary/);
-    expect(source).toMatch(/warning:\s*\n?\s*"border-af-warning-border/);
-    expect(source).not.toContain("af-success");
-  });
 });
