@@ -12,6 +12,17 @@ describe("dashboard Vite config", () => {
     );
   });
 
+  it("dedupes context-bearing packages used by linked component sources", () => {
+    expect(config.resolve?.dedupe).toEqual(
+      expect.arrayContaining([
+        "react",
+        "react-dom",
+        "@xyflow/react",
+        "@xyflow/system",
+      ]),
+    );
+  });
+
   it("keeps preview and dev proxy coverage aligned for all OpenAPI-backed API paths", () => {
     const expectedProxyPaths = [
       "/work",

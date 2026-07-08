@@ -1,8 +1,3 @@
-import {
-  expectNoHorizontalOverflow,
-  expectVisible,
-} from "./storybook-responsive-helpers.mjs";
-
 export const DASHBOARD_FORM_FIELD_RESPONSIVE_VIEWPORTS = [
   { height: 844, label: "mobile", width: 390 },
   { height: 900, label: "desktop", width: 1440 },

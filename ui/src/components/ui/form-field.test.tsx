@@ -3,19 +3,29 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 
 import {
+  buildFormFieldAriaDescribedBy,
   FormDescription,
   FormError,
   FormField,
+  FormFieldGroup,
+  FormFieldGroupLabel,
+  FormHelperText,
   FormLabel,
+  FormSuccess,
   FormWarning,
 } from "./form-field";
 import {
+  buildFormFieldAriaDescribedBy as PackageBuildFormFieldAriaDescribedBy,
   FormDescription as PackageFormDescription,
   FormError as PackageFormError,
   FormField as PackageFormField,
+  FormFieldGroup as PackageFormFieldGroup,
+  FormFieldGroupLabel as PackageFormFieldGroupLabel,
+  FormHelperText as PackageFormHelperText,
   FormLabel as PackageFormLabel,
+  FormSuccess as PackageFormSuccess,
   FormWarning as PackageFormWarning,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/forms";
 
 describe("dashboard form field re-exports", () => {
   it("re-exports package form-field messaging from the dashboard ui surface", () => {
@@ -24,6 +34,11 @@ describe("dashboard form field re-exports", () => {
     expect(FormDescription).toBe(PackageFormDescription);
     expect(FormError).toBe(PackageFormError);
     expect(FormWarning).toBe(PackageFormWarning);
+    expect(FormHelperText).toBe(PackageFormHelperText);
+    expect(FormSuccess).toBe(PackageFormSuccess);
+    expect(FormFieldGroup).toBe(PackageFormFieldGroup);
+    expect(FormFieldGroupLabel).toBe(PackageFormFieldGroupLabel);
+    expect(buildFormFieldAriaDescribedBy).toBe(PackageBuildFormFieldAriaDescribedBy);
   });
 
   it("renders field layout, visible labels, and supporting descriptions", () => {
@@ -87,5 +102,33 @@ describe("dashboard form field re-exports", () => {
     expect(warning.className).toContain("text-body-small");
     expect(warning.className).toContain("font-medium");
     expect(warning.className).toContain("text-on-warning-container");
+  });
+
+  it("renders helper text and success messaging with the package typography contract", () => {
+    render(
+      <>
+        <FormHelperText id="factory-helper">Shown after save.</FormHelperText>
+        <FormSuccess id="factory-success">Saved successfully.</FormSuccess>
+      </>,
+    );
+
+    expect(screen.getByText("Shown after save.").className).toContain(
+      "text-body-small",
+    );
+    expect(screen.getByText("Saved successfully.").className).toContain(
+      "text-body-small",
+    );
+  });
+
+  it("renders grouped field labels through the fieldset legend contract", () => {
+    render(
+      <FormFieldGroup>
+        <FormFieldGroupLabel>Notification channels</FormFieldGroupLabel>
+      </FormFieldGroup>,
+    );
+
+    const legend = screen.getByText("Notification channels");
+    expect(legend.tagName).toBe("LEGEND");
+    expect(legend.className).toContain("font-semibold");
   });
 });

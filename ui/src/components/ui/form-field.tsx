@@ -9,7 +9,7 @@ export {
   FormLabel,
   FormSuccess,
   FormWarning,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/forms";
 export type {
   FormDescriptionProps,
   FormErrorProps,
@@ -21,4 +21,4 @@ export type {
   FormLabelProps,
   FormSuccessProps,
   FormWarningProps,
-} from "@you-agent-factory/components";
+} from "@you-agent-factory/components/forms";
