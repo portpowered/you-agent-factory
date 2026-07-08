@@ -45,7 +45,7 @@ function expectSharedBentoCardHeaderSeam(
     level: 3,
     name: title,
   });
-  expect(titleHeading.className).toContain("af-dashboard-section-heading");
+  expect(titleHeading.className).toContain("af-section-heading");
 
   expect(cardHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
   expect(cardHeader?.className).toContain("cursor-grab");

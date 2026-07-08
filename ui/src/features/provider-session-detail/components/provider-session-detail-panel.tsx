@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
   AlertPanel,
-  DashboardHeading,
-  DashboardLabel,
-  DashboardText,
+  Heading,
+  Label,
+  Text,
 } from "../../../components/ui";
 import {
   WidgetDetailCopy,
@@ -422,10 +422,10 @@ function TurnsSection({
           {detail.parse.turns.map((turn) => (
             <article className="grid gap-3 py-1.5" key={turn.index}>
               <div className="grid gap-1">
-                <DashboardLabel>
+                <Label>
                   {messages.turnLabel({ index: turn.index })}
-                </DashboardLabel>
-                <DashboardText
+                </Label>
+                <Text
                   as="div"
                   className="text-on-surface-subtle"
                   variant="supporting"
@@ -435,7 +435,7 @@ function TurnsSection({
                     timestamp={turn.startedAt}
                     unavailableLabel={messages.noTimestamp}
                   />
-                </DashboardText>
+                </Text>
               </div>
               <div className="grid gap-4">
                 <DetailMetric
@@ -501,9 +501,9 @@ function ParseDiagnosticsSection({
       }
     >
       <section className="grid gap-3">
-        <DashboardHeading as="h5">
+        <Heading as="h5">
           {messages.parseErrorsHeading}
-        </DashboardHeading>
+        </Heading>
         <div className="grid gap-3">
           {detail.parse.parseErrors.map((error) => (
             <CurrentSelectionHistoryCard
@@ -512,9 +512,9 @@ function ParseDiagnosticsSection({
               <strong>
                 {messages.lineLabel({ lineNumber: error.lineNumber })}
               </strong>
-              <DashboardText className="m-0 mt-1.5">
+              <Text className="m-0 mt-1.5">
                 {error.message}
-              </DashboardText>
+              </Text>
             </CurrentSelectionHistoryCard>
           ))}
           {detail.parse.unknownEvents.map((event) => (
@@ -526,7 +526,7 @@ function ParseDiagnosticsSection({
                   lineNumber: event.lineNumber,
                 })}
               </strong>
-              <DashboardText
+              <Text
                 className="m-0 mt-1.5 text-on-surface-subtle"
                 variant="supporting"
               >
@@ -536,7 +536,7 @@ function ParseDiagnosticsSection({
                 ]
                   .filter(Boolean)
                   .join(" / ")}
-              </DashboardText>
+              </Text>
             </CurrentSelectionHistoryCard>
           ))}
         </div>

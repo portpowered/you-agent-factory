@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import {
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   type DisclosureButtonProps,
   SurfacePanel,
 } from "../../../components/ui";
@@ -202,12 +202,12 @@ function DashboardFlowAxisLegendItems({
                 )}
                 data-legend-flow={item.tone === "active" ? "" : undefined}
               />
-              <DashboardText
+              <Text
                 as="span"
                 className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
               >
                 {item.label}
-              </DashboardText>
+              </Text>
             </li>
           ))}
         </ul>
@@ -228,12 +228,12 @@ function DashboardFlowAxisLegendItems({
                     item.swatchClassName,
                   )}
                 />
-                <DashboardText
+                <Text
                   as="span"
                   className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
                 >
                   {item.label}
-                </DashboardText>
+                </Text>
               </li>
             ))}
           </ul>
@@ -252,12 +252,12 @@ function DashboardFlowAxisLegendItems({
                 kind={item.kind}
                 label={messages.iconLabel(item.label)}
               />
-              <DashboardText
+              <Text
                 as="span"
                 className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
               >
                 {item.label}
-              </DashboardText>
+              </Text>
             </li>
           ))}
         </ul>
@@ -302,9 +302,9 @@ export function DashboardFlowAxisLegend({
           <aside>
             <div className="mb-2 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <DashboardLabel as="h3" className="m-0 text-primary">
+                <Label as="h3" className="m-0 text-primary">
                   {resolvedAriaLabel}
-                </DashboardLabel>
+                </Label>
               </div>
               <DashboardFlowAxisLegendToggle
                 aria-label={messages.collapseToggleLabel(actionTargetLabel)}

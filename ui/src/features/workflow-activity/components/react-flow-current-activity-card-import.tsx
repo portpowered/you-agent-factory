@@ -1,7 +1,7 @@
 import {
   Button,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   SurfacePanel,
 } from "../../../components/ui";
 import type { FactoryPngDropState } from "../../import/hooks/use-factory-png-drop";
@@ -85,15 +85,15 @@ export function GraphDropOverlay({ dropState, locale }: GraphDropOverlayProps) {
       radius="2xl"
     >
       <div className="grid max-w-sm gap-2">
-        <DashboardLabel
+        <Label
           as="p"
           className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary"
         >
           {copy.title}
-        </DashboardLabel>
-        <DashboardText className="m-0 text-sm text-on-surface-variant">
+        </Label>
+        <Text className="m-0 text-sm text-on-surface-variant">
           {copy.message}
-        </DashboardText>
+        </Text>
       </div>
     </SurfacePanel>
   );

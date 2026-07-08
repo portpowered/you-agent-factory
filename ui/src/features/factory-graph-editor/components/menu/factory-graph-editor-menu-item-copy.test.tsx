@@ -15,10 +15,10 @@ describe("FactoryGraphEditorMenuItemCopy", () => {
     const description = screen.getByText("Creates an execution workstation.");
 
     expect(label.tagName).toBe("SPAN");
-    expect(label.className).toContain("af-dashboard-body-text");
+    expect(label.className).toContain("af-body-text");
     expect(label.className).toContain("font-semibold");
     expect(label.className).toContain("text-on-surface");
-    expect(description.className).toContain("af-dashboard-supporting-text");
+    expect(description.className).toContain("af-supporting-text");
   });
 
   it("renders label-only menu items without extra copy", () => {

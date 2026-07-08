@@ -4,8 +4,8 @@ import { useId } from "react";
 import { MonacoGuardSelectorEditor } from "../../../../../components/prompt-editor";
 import {
   DashboardActionButton,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormDescription,
   FormError,
   Input,
@@ -42,9 +42,9 @@ export function EditableConfigurationWorkstationGuardsField({
 
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="h5" className="m-0">
+      <Label as="h5" className="m-0">
         {messages.workstationGuardsHeading}
-      </DashboardLabel>
+      </Label>
       {guards.length === 0 ? (
         <FormDescription variant="body">
           {messages.workstationGuardsEmpty}
@@ -77,9 +77,9 @@ export function EditableConfigurationWorkstationGuardsField({
         </ul>
       )}
       <div className="grid gap-2">
-        <DashboardLabel as="label" htmlFor={addGuardFieldId}>
+        <Label as="label" htmlFor={addGuardFieldId}>
           {messages.workstationGuardsAddLabel}
-        </DashboardLabel>
+        </Label>
         <ResetEnumSelect
           aria-label={messages.workstationGuardsAddLabel}
           id={addGuardFieldId}
@@ -137,12 +137,12 @@ function WorkstationGuardRow({
             <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
               {messages.localizeWorkstationGuardType(guard.type)}
             </h6>
-            <DashboardText
+            <Text
               className="m-0 text-on-surface-subtle"
               variant="supporting"
             >
               {formatWorkstationGuardSummary(guard)}
-            </DashboardText>
+            </Text>
           </div>
           <DashboardActionButton onClick={onRemove} type="button">
             {messages.workstationGuardsRemoveAction}
@@ -197,9 +197,9 @@ function VisitCountGuardFields({
   return (
     <div className="grid gap-2 md:grid-cols-2">
       <div className="grid gap-1">
-        <DashboardLabel as="label" htmlFor={workstationFieldId}>
+        <Label as="label" htmlFor={workstationFieldId}>
           {messages.visitCountGuardWorkstationFieldLabel}
-        </DashboardLabel>
+        </Label>
         {workstationOptionsState.status === "error" ? (
           <FormError>
             {messages.editableConfigurationWorkstationUnavailablePrefix}{" "}
@@ -247,9 +247,9 @@ function VisitCountGuardFields({
         ) : null}
       </div>
       <div className="grid gap-1">
-        <DashboardLabel as="label" htmlFor={maxVisitsFieldId}>
+        <Label as="label" htmlFor={maxVisitsFieldId}>
           {messages.visitCountGuardMaxVisitsFieldLabel}
-        </DashboardLabel>
+        </Label>
         <Input
           id={maxVisitsFieldId}
           inputMode="numeric"
@@ -309,9 +309,9 @@ function MatchesFieldsGuardFields({
 
   return (
     <div className="grid gap-1">
-      <DashboardLabel>
+      <Label>
         {messages.matchesFieldsGuardInputKeyFieldLabel}
-      </DashboardLabel>
+      </Label>
       <MonacoGuardSelectorEditor
         ariaDescribedBy={inputKeyError ? inputKeyErrorId : undefined}
         ariaInvalid={Boolean(inputKeyError)}

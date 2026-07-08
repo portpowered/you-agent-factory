@@ -5,6 +5,8 @@ export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
 export { CodePanel, codePanelVariants } from "./code-panel";
 export type { CodePanelProps } from "./code-panel";
+export { DescriptionList } from "./description-list";
+export type { DescriptionListProps } from "./description-list";
 
 export { DataTable } from "./data-table";
 export type {

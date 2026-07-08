@@ -29,7 +29,7 @@ describe("form field primitives", () => {
     expect(label.tagName).toBe("LABEL");
     expect(label.className).toContain("font-semibold");
     expect(label.className).toContain("text-on-surface");
-    expect(description.className).toContain("af-dashboard-supporting-text");
+    expect(description.className).toContain("af-supporting-text");
   });
 
   it("renders validation errors with alert semantics and error color roles", () => {
@@ -38,7 +38,7 @@ describe("form field primitives", () => {
     const error = screen.getByRole("alert");
 
     expect(error).toHaveAttribute("id", "factory-name-error");
-    expect(error.className).toContain("af-dashboard-supporting-text");
+    expect(error.className).toContain("af-supporting-text");
     expect(error.className).toContain("font-medium");
     expect(error.className).toContain("text-on-error-container");
   });
@@ -59,7 +59,7 @@ describe("form field primitives", () => {
     );
 
     expect(screen.getByText("Definition unavailable.").className).toContain(
-      "af-dashboard-body-text",
+      "af-body-text",
     );
   });
 
@@ -68,7 +68,7 @@ describe("form field primitives", () => {
 
     const warning = screen.getByRole("status");
 
-    expect(warning.className).toContain("af-dashboard-supporting-text");
+    expect(warning.className).toContain("af-supporting-text");
     expect(warning.className).toContain("font-medium");
     expect(warning.className).toContain("text-on-warning-container");
   });

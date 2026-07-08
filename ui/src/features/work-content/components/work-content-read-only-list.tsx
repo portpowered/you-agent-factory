@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DashboardLabel, DashboardText } from "../../../components/ui";
+import { Label, Text } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import {
   getWorkContentInspectMessages,
@@ -41,7 +41,7 @@ export function WorkContentReadOnlyList({
 
   const contentBody = (
     <>
-      {showHeading ? <DashboardLabel>{messages.heading}</DashboardLabel> : null}
+      {showHeading ? <Label>{messages.heading}</Label> : null}
       {body}
     </>
   );
@@ -102,7 +102,7 @@ function StatusMessage({
   tone: "muted" | "warning";
 }) {
   return (
-    <DashboardText
+    <Text
       className={cn(
         "m-0",
         tone === "warning"
@@ -112,6 +112,6 @@ function StatusMessage({
       variant="supporting"
     >
       {children}
-    </DashboardText>
+    </Text>
   );
 }

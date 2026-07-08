@@ -3,7 +3,7 @@ import { useId } from "react";
 import {
   AlertPanel,
   AlertPanelText,
-  DashboardText,
+  Text,
 } from "../../../../../components/ui";
 import { formatList } from "../../../../../components/ui/formatters";
 import {
@@ -209,12 +209,12 @@ function WorkerEditableConfigurationDraftStatus({
       <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
       </CurrentSelectionDetailFeedback>
-      <DashboardText
+      <Text
         className="m-0 text-on-surface-subtle"
         variant="supporting"
       >
         {messages.editableConfigurationSaveDisabledValidationDetail}
-      </DashboardText>
+      </Text>
     </CurrentSelectionFormField>
   );
 }

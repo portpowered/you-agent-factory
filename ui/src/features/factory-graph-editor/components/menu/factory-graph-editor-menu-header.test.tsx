@@ -17,10 +17,10 @@ describe("FactoryGraphEditorMenuHeader", () => {
     const description = screen.getByText("Choose what kind of node to add.");
 
     expect(title.tagName).toBe("P");
-    expect(title.className).toContain("af-dashboard-body-text");
+    expect(title.className).toContain("af-body-text");
     expect(title.className).toContain("font-semibold");
     expect(title.className).toContain("text-on-surface");
-    expect(description.className).toContain("af-dashboard-supporting-text");
+    expect(description.className).toContain("af-supporting-text");
   });
 
   it("omits optional description copy", () => {

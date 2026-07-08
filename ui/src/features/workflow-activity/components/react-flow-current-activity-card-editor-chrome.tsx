@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardActionRow } from "../../../components/ui";
+import { ActionRow } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import {
   FactoryGraphEditorModeToggle,
@@ -91,7 +91,7 @@ export function CurrentActivityGraphHeaderActions({
     : Boolean(dirtySummary) || hasChanges;
 
   return (
-    <DashboardActionRow
+    <ActionRow
       actions={
         <>
           {showModeToggle ? (

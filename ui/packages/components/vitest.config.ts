@@ -10,6 +10,32 @@ const componentsPackageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "src",
 );
+const uiRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+const sharedReactAliases = [
+  {
+    find: "react",
+    replacement: path.join(uiRoot, "node_modules/react"),
+  },
+  {
+    find: "react-dom",
+    replacement: path.join(uiRoot, "node_modules/react-dom"),
+  },
+  {
+    find: "react/jsx-runtime",
+    replacement: path.join(uiRoot, "node_modules/react/jsx-runtime"),
+  },
+  {
+    find: "react/jsx-dev-runtime",
+    replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
+  },
+  {
+    find: "@radix-ui/react-select",
+    replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
+  },
+] as const;
 
 function createComponentsPackageResolvePlugin(
   packageRoot: string,
@@ -46,7 +72,39 @@ function createComponentsPackageResolvePlugin(
 export default defineConfig({
   plugins: [createComponentsPackageResolvePlugin(componentsPackageRoot)],
   resolve: {
-    alias: createComponentsPackageAliases(componentsPackageRoot),
+    alias: [
+      { find: /^react$/, replacement: path.join(uiRoot, "node_modules/react") },
+      {
+        find: /^react-dom$/,
+        replacement: path.join(uiRoot, "node_modules/react-dom"),
+      },
+      {
+        find: /^react\/jsx-runtime$/,
+        replacement: path.join(uiRoot, "node_modules/react/jsx-runtime"),
+      },
+      {
+        find: /^react\/jsx-dev-runtime$/,
+        replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
+      },
+      {
+        find: /^@radix-ui\/react-select$/,
+        replacement: path.join(uiRoot, "node_modules/@radix-ui/react-select"),
+      },
+      {
+        find: /^@radix-ui\/react-slot$/,
+        replacement: path.join(uiRoot, "node_modules/@radix-ui/react-slot"),
+      },
+      ...sharedReactAliases,
+      ...createComponentsPackageAliases(componentsPackageRoot),
+    ],
+    dedupe: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+      "@radix-ui/react-select",
+      "@radix-ui/react-slot",
+    ],
   },
   test: {
     environment: "happy-dom",
@@ -55,7 +113,16 @@ export default defineConfig({
     setupFiles: ["./src/testing/vitest.setup.ts"],
     server: {
       deps: {
-        inline: [/^@you-agent-factory\/components/],
+        moduleDirectories: [
+          path.join(uiRoot, "node_modules"),
+          "node_modules",
+        ],
+        inline: [
+          /^@you-agent-factory\/components/,
+          "@radix-ui/react-select",
+          "@radix-ui/react-slot",
+          "@testing-library/react",
+        ],
       },
     },
   },

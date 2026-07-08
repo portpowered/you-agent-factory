@@ -8,8 +8,8 @@ import { VerticalResizableWidth } from "../../../../components/prompt-editor/ver
 import {
   AlertPanel,
   AlertPanelText,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormError,
   FormWarning,
   Input,
@@ -73,19 +73,19 @@ export function DocEditableConfigurationSection({
               messages,
             ),
           )}
-          <DashboardText
+          <Text
             className="m-0 text-on-surface-subtle"
             variant="supporting"
           >
             {messages.editableConfigurationOverwriteWarningDetail}
-          </DashboardText>
+          </Text>
         </FormWarning>
       ) : null}
 
       <CurrentSelectionFormField>
-        <DashboardLabel htmlFor={`${sectionId}-file-name`}>
+        <Label htmlFor={`${sectionId}-file-name`}>
           {messages.editableConfigurationFileNameFieldLabel}
-        </DashboardLabel>
+        </Label>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <CurrentSelectionSupportingText className="shrink-0">
             {FACTORY_DOCS_TARGET_PREFIX}
@@ -113,9 +113,9 @@ export function DocEditableConfigurationSection({
       </CurrentSelectionFormField>
 
       <CurrentSelectionFormField>
-        <DashboardLabel htmlFor={`${sectionId}-inline-content`}>
+        <Label htmlFor={`${sectionId}-inline-content`}>
           {messages.editableConfigurationInlineContentFieldLabel}
-        </DashboardLabel>
+        </Label>
         <VerticalResizableWidth resizeHandleLabel={messages.docKindLabel}>
           <MonacoTextEditor
             ariaDescribedBy={

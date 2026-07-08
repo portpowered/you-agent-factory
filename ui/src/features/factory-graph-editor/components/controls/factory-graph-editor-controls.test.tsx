@@ -388,11 +388,11 @@ describe("factory graph editor toolbar action-row composition", () => {
       name: "Factory graph editor tools",
     });
     const sections = toolbar.querySelectorAll(
-      "[data-dashboard-action-row-section]",
+      "[data-action-row-section]",
     );
 
     expect(sections).toHaveLength(1);
-    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+    expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "actions",
     );
     expect(within(toolbar).queryByRole("status")).toBeNull();
@@ -415,7 +415,7 @@ describe("factory graph editor toolbar action-row composition", () => {
       name: "Factory graph editor tools",
     });
     const sections = toolbar.querySelectorAll(
-      "[data-dashboard-action-row-section]",
+      "[data-action-row-section]",
     );
     const discardButton = within(toolbar).getByRole("button", {
       name: "Discard changes",
@@ -425,7 +425,7 @@ describe("factory graph editor toolbar action-row composition", () => {
     });
 
     expect(sections).toHaveLength(1);
-    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+    expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "actions",
     );
     expect(discardButton.getAttribute("disabled")).not.toBeNull();

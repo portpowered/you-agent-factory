@@ -1,8 +1,8 @@
 import {
   DashboardActionButton,
-  DashboardCode,
-  DashboardDescriptionList,
-  DashboardText,
+  Code,
+  DescriptionList,
+  Text,
 } from "../../../../components/ui";
 import {
   formatLocalDateTime,
@@ -75,7 +75,7 @@ export function StateNodeDetailCard({
               : workStateMessages.expandAction
           }
         >
-          <DashboardDescriptionList>
+          <DescriptionList>
             {place.type_id ? (
               <div>
                 <dt>{messages.workTypeLabel}</dt>
@@ -96,7 +96,7 @@ export function StateNodeDetailCard({
               <dt>{messages.countLabel}</dt>
               <dd>{tokenCount}</dd>
             </div>
-          </DashboardDescriptionList>
+          </DescriptionList>
         </CurrentSelectionExpandableSection>
         {editableConfigurationState ? (
           <WorkStateEditableConfigurationSection
@@ -181,23 +181,23 @@ function StatePositionWorkListItem({
   ) : null;
   const status = startedAt ? (
     <CurrentSelectionExecutionPill>
-      <DashboardText as="time" dateTime={startedAt} title={startedAt}>
+      <Text as="time" dateTime={startedAt} title={startedAt}>
         {messages.startedAtLabel}{" "}
         {formatLocalDateTime(startedAt, messages.timestampUnavailable, locale)}
-      </DashboardText>
+      </Text>
     </CurrentSelectionExecutionPill>
   ) : undefined;
   const supportingContent = (
     <>
       {workID ? (
         <CurrentSelectionSupportingText tone="status">
-          <DashboardCode className="text-on-surface-variant" size="supporting">
+          <Code className="text-on-surface-variant" size="supporting">
             {workID}
-          </DashboardCode>
+          </Code>
         </CurrentSelectionSupportingText>
       ) : null}
       {hasFailureReason || hasFailureMessage ? (
-        <DashboardDescriptionList className="[&_div]:grid-cols-[7rem_minmax(0,1fr)]">
+        <DescriptionList className="[&_div]:grid-cols-[7rem_minmax(0,1fr)]">
           {hasFailureReason ? (
             <div>
               <dt>{messages.failureReasonLabel}</dt>
@@ -214,7 +214,7 @@ function StatePositionWorkListItem({
               </dd>
             </div>
           ) : null}
-        </DashboardDescriptionList>
+        </DescriptionList>
       ) : null}
     </>
   );

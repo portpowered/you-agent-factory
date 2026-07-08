@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
 import { DashboardActionButton } from "./dashboard-action-button";
-import { DashboardActionRow } from "./dashboard-action-row";
+import { ActionRow } from "@you-agent-factory/components";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
 describe("DashboardActionButton", () => {
@@ -127,10 +127,10 @@ describe("DashboardStatusPill", () => {
   });
 });
 
-describe("DashboardActionRow", () => {
+describe("ActionRow", () => {
   it("renders status pills before action buttons for mixed rows", () => {
     const { container } = render(
-      <DashboardActionRow
+      <ActionRow
         actions={
           <>
             <DashboardActionButton type="button">Discard</DashboardActionButton>
@@ -146,13 +146,13 @@ describe("DashboardActionRow", () => {
     );
 
     const sections = container.querySelectorAll(
-      "[data-dashboard-action-row-section]",
+      "[data-action-row-section]",
     );
     expect(sections).toHaveLength(2);
-    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+    expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "statuses",
     );
-    expect(sections[1]?.getAttribute("data-dashboard-action-row-section")).toBe(
+    expect(sections[1]?.getAttribute("data-action-row-section")).toBe(
       "actions",
     );
     expect(screen.getByRole("status").textContent).toBe(
@@ -165,7 +165,7 @@ describe("DashboardActionRow", () => {
 
   it("omits placeholder sections for button-only and pill-only rows", () => {
     const { container, rerender } = render(
-      <DashboardActionRow
+      <ActionRow
         actions={
           <DashboardActionButton type="button">Save</DashboardActionButton>
         }
@@ -173,16 +173,16 @@ describe("DashboardActionRow", () => {
     );
 
     let sections = container.querySelectorAll(
-      "[data-dashboard-action-row-section]",
+      "[data-action-row-section]",
     );
     expect(sections).toHaveLength(1);
-    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+    expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "actions",
     );
     expect(container.textContent).toContain("Save");
 
     rerender(
-      <DashboardActionRow
+      <ActionRow
         statuses={
           <DashboardStatusPill tone="neutral">Observe mode</DashboardStatusPill>
         }
@@ -190,10 +190,10 @@ describe("DashboardActionRow", () => {
     );
 
     sections = container.querySelectorAll(
-      "[data-dashboard-action-row-section]",
+      "[data-action-row-section]",
     );
     expect(sections).toHaveLength(1);
-    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+    expect(sections[0]?.getAttribute("data-action-row-section")).toBe(
       "statuses",
     );
     expect(screen.getByText("Observe mode").tagName).toBe("SPAN");

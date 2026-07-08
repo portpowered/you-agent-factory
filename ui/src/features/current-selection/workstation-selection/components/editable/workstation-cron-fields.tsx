@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 import {
   Checkbox,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormDescription,
   FormError,
   Input,
@@ -142,9 +142,9 @@ function EditableConfigurationCronField({
 }) {
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       {input}
       <FormDescription
         className="text-on-surface-subtle"
@@ -180,7 +180,7 @@ function EditableConfigurationCronTriggerAtStartField({
 
   return (
     <CurrentSelectionFormField>
-      <DashboardText
+      <Text
         as="label"
         className="inline-flex items-center gap-2 text-on-surface"
         htmlFor={fieldId}
@@ -201,7 +201,7 @@ function EditableConfigurationCronTriggerAtStartField({
           }
         />
         {messages.cronTriggerAtStartFieldLabel}
-      </DashboardText>
+      </Text>
       <EditableConfigurationServerChangedHint
         fieldName="cronTriggerAtStart"
         messages={messages}

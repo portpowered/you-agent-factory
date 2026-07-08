@@ -2,10 +2,10 @@ import { useId, useState } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
   AlertPanel,
-  DashboardHeading,
-  DashboardLabel,
+  Heading,
+  Label,
   DashboardStatusPill,
-  DashboardText,
+  Text,
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
@@ -35,9 +35,9 @@ export function TranscriptSection({
   return (
     <section className={cn("grid gap-3", className)}>
       {showHeading ? (
-        <DashboardHeading as="h5">
+        <Heading as="h5">
           {messages.transcriptHeading}
-        </DashboardHeading>
+        </Heading>
       ) : null}
       <div className="grid gap-3">
         {detail.transcript.map((entry) => (
@@ -66,9 +66,9 @@ export function EncryptedReasoningNotice({
       <DashboardStatusPill size="compact" tone="info">
         {messages.encryptedReasoningStateLabel}
       </DashboardStatusPill>
-      <DashboardText className="m-0 text-on-surface-variant">
+      <Text className="m-0 text-on-surface-variant">
         {messages.encryptedReasoningDescription}
-      </DashboardText>
+      </Text>
     </AlertPanel>
   );
 }
@@ -103,7 +103,7 @@ function TranscriptEntryCard({
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <DashboardLabel>{entryTitle}</DashboardLabel>
+            <Label>{entryTitle}</Label>
             {entry.status ? (
               <DashboardStatusPill size="compact">
                 {entry.status}
@@ -111,7 +111,7 @@ function TranscriptEntryCard({
             ) : null}
           </div>
           {metadata.length > 0 || timestampState.label ? (
-            <DashboardText
+            <Text
               as="div"
               className="flex flex-wrap items-center gap-x-2 gap-y-1 text-on-surface-subtle"
               variant="supporting"
@@ -124,12 +124,12 @@ function TranscriptEntryCard({
                   {timestampState.label}
                 </span>
               ) : null}
-            </DashboardText>
+            </Text>
           ) : null}
           {hasBody && !expanded && preview ? (
-            <DashboardText className="m-0 line-clamp-2">
+            <Text className="m-0 line-clamp-2">
               {preview}
-            </DashboardText>
+            </Text>
           ) : null}
         </div>
         {hasBody ? (
@@ -207,12 +207,12 @@ function TranscriptEntryBody({
             />
           ) : null}
           {entry.encrypted && !entry.text && !encryptedContent ? (
-            <DashboardText
+            <Text
               className="m-0 text-on-surface-subtle"
               variant="supporting"
             >
               {messages.encryptedReasoningOnly}
-            </DashboardText>
+            </Text>
           ) : null}
         </div>
       );
@@ -295,7 +295,7 @@ function TranscriptContentSection({
 }) {
   return (
     <section className="grid gap-2">
-      <DashboardLabel>{label}</DashboardLabel>
+      <Label>{label}</Label>
       <TranscriptContentPanel kind={kind} value={value} />
     </section>
   );

@@ -23,7 +23,7 @@ describe("CurrentSelectionDetailSection", () => {
     expect(section.getAttribute("aria-labelledby")).toBe(
       "request-details-heading",
     );
-    expect(heading.className).toContain("af-dashboard-section-heading");
+    expect(heading.className).toContain("af-section-heading");
   });
 
   it("keeps aria-label support for untitled detail sections", () => {

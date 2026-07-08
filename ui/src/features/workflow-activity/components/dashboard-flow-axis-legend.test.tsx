@@ -53,8 +53,8 @@ describe("DashboardFlowAxisLegend", () => {
     expect(legend.className).not.toContain("text-[0.72rem]");
     expect(expandButton.className).toContain("dashboard-eyebrow");
     expect(collapseButton.className).toContain("dashboard-eyebrow");
-    expect(activeFlowLabel?.className).toContain("af-dashboard-body-text");
-    expect(queueLabel?.className).toContain("af-dashboard-body-text");
+    expect(activeFlowLabel?.className).toContain("af-body-text");
+    expect(queueLabel?.className).toContain("af-body-text");
     for (const [label, kind] of [
       [messages.iconLabels.queue, "queue"],
       [messages.iconLabels.processing, "processing"],

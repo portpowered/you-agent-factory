@@ -1,6 +1,6 @@
 import {
   DashboardIconButtonShell,
-  DashboardText,
+  Text,
   Textarea,
 } from "../../../components/ui";
 import { WorkContentItemShell } from "../../work-content/public";
@@ -132,13 +132,13 @@ function TextSubmissionItemEditor({
         value={item.text}
       />
       {requestHint ? (
-        <DashboardText
+        <Text
           className="max-w-xl leading-relaxed text-on-surface-variant"
           id={requestTextHintID}
           variant="supporting"
         >
           {requestHint}
-        </DashboardText>
+        </Text>
       ) : null}
     </>
   );

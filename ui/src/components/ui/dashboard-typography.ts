@@ -5,13 +5,13 @@ export const DASHBOARD_RETIRED_TEXT_SIZE_LITERALS = [
   "text-[0.68rem]",
 ] as const;
 
-export const DASHBOARD_PAGE_HEADING_CLASS = "af-dashboard-page-heading";
-export const DASHBOARD_SECTION_HEADING_CLASS = "af-dashboard-section-heading";
-export const DASHBOARD_BODY_TEXT_CLASS = "af-dashboard-body-text";
-export const DASHBOARD_SUPPORTING_TEXT_CLASS = "af-dashboard-supporting-text";
-export const DASHBOARD_SUPPORTING_LABEL_CLASS = "af-dashboard-supporting-label";
-export const DASHBOARD_BODY_CODE_CLASS = "af-dashboard-body-code";
-export const DASHBOARD_SUPPORTING_CODE_CLASS = "af-dashboard-supporting-code";
+export const DASHBOARD_PAGE_HEADING_CLASS = "af-page-heading";
+export const DASHBOARD_SECTION_HEADING_CLASS = "af-section-heading";
+export const DASHBOARD_BODY_TEXT_CLASS = "af-body-text";
+export const DASHBOARD_SUPPORTING_TEXT_CLASS = "af-supporting-text";
+export const DASHBOARD_SUPPORTING_LABEL_CLASS = "af-supporting-label";
+export const DASHBOARD_BODY_CODE_CLASS = "af-body-code";
+export const DASHBOARD_SUPPORTING_CODE_CLASS = "af-supporting-code";
 export const DASHBOARD_WIDGET_SUBTITLE_CLASS = "af-dashboard-widget-subtitle";
 
 /** Material 3 typography families (see typography-role-tokens.css). */

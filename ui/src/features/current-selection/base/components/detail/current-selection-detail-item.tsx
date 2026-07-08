@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardCode } from "../../../../../components/ui";
+import { Code } from "../../../../../components/ui";
 import { cn } from "../../../../../lib/cn";
 
 export interface CurrentSelectionDetailItemProps {
@@ -62,8 +62,8 @@ export function CurrentSelectionDetailCode({
   className?: string;
 }) {
   return (
-    <DashboardCode className={cn("[overflow-wrap:anywhere]", className)}>
+    <Code className={cn("[overflow-wrap:anywhere]", className)}>
       {children}
-    </DashboardCode>
+    </Code>
   );
 }

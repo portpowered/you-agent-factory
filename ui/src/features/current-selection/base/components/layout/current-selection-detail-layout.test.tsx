@@ -56,7 +56,7 @@ describe("SelectionDetailLayout shell copy", () => {
     ).toContain("min-h-11");
     const actions = screen
       .getByRole("button", { name: "Undo selection" })
-      .closest("[data-dashboard-action-row-section='actions']");
+      .closest("[data-action-row-section='actions']");
     expect(actions?.className).toContain("w-full");
   });
 
@@ -168,7 +168,7 @@ describe("SelectionDetailLayout actions", () => {
 
     const actionSection = screen
       .getByRole("button", { name: "Undo selection" })
-      .closest("[data-dashboard-action-row-section='actions']");
+      .closest("[data-action-row-section='actions']");
 
     expect(actionSection).toBeTruthy();
     const buttons = within(actionSection as HTMLElement).getAllByRole("button");

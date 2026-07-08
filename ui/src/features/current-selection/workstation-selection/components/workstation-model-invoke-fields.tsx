@@ -2,7 +2,7 @@ import { EnumSelect, OptionalEnumSelect } from "@you-agent-factory/components";
 import type { ReactNode } from "react";
 import type { ModelOperationContentType } from "../../../../api/generated/openapi";
 import {
-  DashboardLabel,
+  Label,
   FormDescription,
   FormError,
   Input,
@@ -227,14 +227,14 @@ function EditableConfigurationModelInvokeBindingSlotCard({
 
   return (
     <div className="grid gap-2 rounded-xl border border-outline-variant p-3">
-      <DashboardLabel as="p">
+      <Label as="p">
         {messages.modelInvokeBindingSlotHeading(
           inputSlot.name,
           inputSlot.required
             ? messages.modelInvokeBindingRequiredSlotLabel
             : messages.modelInvokeBindingOptionalSlotLabel,
         )}
-      </DashboardLabel>
+      </Label>
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
         <BindingSelectorField
           fieldId={`editable-workstation-binding-${inputSlot.name}-label`}
@@ -261,12 +261,12 @@ function EditableConfigurationModelInvokeBindingSlotCard({
           value={selector.role}
         />
         <div className="grid gap-1">
-          <DashboardLabel
+          <Label
             as="label"
             htmlFor={`editable-workstation-binding-${inputSlot.name}-type`}
           >
             {messages.modelInvokeBindingSelectorTypeFieldLabel}
-          </DashboardLabel>
+          </Label>
           <OptionalEnumSelect
             aria-label={messages.modelInvokeBindingSelectorTypeFieldLabel}
             emptyOptionLabel={
@@ -394,9 +394,9 @@ function BindingSelectorField({
 }) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       <Input
         id={fieldId}
         onChange={(event) => onChange(event.target.value)}
@@ -422,9 +422,9 @@ function EditableConfigurationField({
 }) {
   return (
     <div className="grid gap-1">
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       {input}
       {supportingContent}
       {errorMessage ? (

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { DashboardActionRow, DashboardText } from "../../../../components/ui";
+import { ActionRow, Text } from "../../../../components/ui";
 
 export interface CurrentSelectionWorkRowProps {
   actions?: ReactNode;
@@ -16,12 +16,12 @@ export function CurrentSelectionWorkRow({
   title,
 }: CurrentSelectionWorkRowProps) {
   return (
-    <DashboardText as="li" className="grid min-w-0 gap-2 rounded-lg px-3 py-2">
+    <Text as="li" className="grid min-w-0 gap-2 rounded-lg px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <strong className="min-w-0 flex-1 [overflow-wrap:anywhere]">
           {title}
         </strong>
-        <DashboardActionRow
+        <ActionRow
           actions={actions}
           actionsClassName="justify-end"
           className="justify-end"
@@ -30,6 +30,6 @@ export function CurrentSelectionWorkRow({
         />
       </div>
       {supportingContent}
-    </DashboardText>
+    </Text>
   );
 }

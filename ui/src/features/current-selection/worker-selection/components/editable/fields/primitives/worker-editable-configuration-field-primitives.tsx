@@ -2,8 +2,8 @@ import { OptionalEnumSelect } from "@you-agent-factory/components";
 import type { ReactNode } from "react";
 
 import {
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   FormWarning,
 } from "../../../../../../../components/ui";
 import {
@@ -31,9 +31,9 @@ export function WorkerEditableConfigurationField({
 }) {
   return (
     <CurrentSelectionFormField>
-      <DashboardLabel as="label" htmlFor={fieldId}>
+      <Label as="label" htmlFor={fieldId}>
         {label}
-      </DashboardLabel>
+      </Label>
       {input}
       {supportingContent}
       {errorMessage ? (
@@ -51,9 +51,9 @@ export function WorkerEditableConfigurationFieldHelp({
   children: ReactNode;
 }) {
   return (
-    <DashboardText className="m-0 text-on-surface-subtle" variant="supporting">
+    <Text className="m-0 text-on-surface-subtle" variant="supporting">
       {children}
-    </DashboardText>
+    </Text>
   );
 }
 

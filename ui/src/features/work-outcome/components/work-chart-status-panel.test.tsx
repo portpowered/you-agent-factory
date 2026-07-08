@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-
 import {
   WIDGET_FRAME_BODY_TEXT_CLASS,
   WIDGET_FRAME_SECTION_HEADING_CLASS,

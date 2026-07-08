@@ -1,7 +1,7 @@
 import {
   Button,
-  DashboardLabel,
-  DashboardText,
+  Label,
+  Text,
   surfacePanelVariants,
 } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
@@ -21,20 +21,20 @@ function WorkTypeStateRowContent({
   return (
     <div className="grid min-w-0 gap-1">
       <div className="grid min-w-0 gap-1">
-        <DashboardLabel>{messages.stateNameColumnLabel}</DashboardLabel>
-        <DashboardText as="span" className="min-w-0 [overflow-wrap:anywhere]">
+        <Label>{messages.stateNameColumnLabel}</Label>
+        <Text as="span" className="min-w-0 [overflow-wrap:anywhere]">
           {state.name}
-        </DashboardText>
+        </Text>
       </div>
       <div className="grid min-w-0 gap-1">
-        <DashboardLabel>{messages.stateTypeColumnLabel}</DashboardLabel>
-        <DashboardText
+        <Label>{messages.stateTypeColumnLabel}</Label>
+        <Text
           as="span"
           className="min-w-0 [overflow-wrap:anywhere]"
           variant="supporting"
         >
           {messages.localizeWorkStateType(state.type)}
-        </DashboardText>
+        </Text>
       </div>
     </div>
   );

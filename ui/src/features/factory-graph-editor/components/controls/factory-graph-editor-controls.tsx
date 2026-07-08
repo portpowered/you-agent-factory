@@ -7,7 +7,7 @@ import {
 } from "@you-agent-factory/components";
 import {
   DashboardActionButton,
-  DashboardActionRow,
+  ActionRow,
 } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
@@ -258,7 +258,7 @@ export function FactoryGraphEditorToolbar({
             tone="outline"
           />
           {showDraftActionRow ? (
-            <DashboardActionRow
+            <ActionRow
               actions={
                 <>
                   <FactoryGraphEditorTooltipActionButton

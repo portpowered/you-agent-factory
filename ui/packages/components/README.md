@@ -135,6 +135,10 @@ Per-component usage notes, props tables, and examples live in the package docs
 directory:
 
 - [`docs/`](./docs/)
+- [Typography roles](./docs/typography-roles.md) — `Text`, `Heading`, `Label`,
+  `Code`, dense text, truncation, and wrapping
+- [Layout and display primitives](./docs/layout-display-primitives.md) —
+  `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
 - [`docs/graphs.md`](./docs/graphs.md) — graph node shell, node button, edge,
   viewport surface, handle badge, edge path helpers, React Flow boundary, and
   Storybook example map

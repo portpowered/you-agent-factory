@@ -3,9 +3,9 @@ import {
   AlertPanel,
   AlertPanelText,
   Button,
-  DashboardHeading,
-  DashboardLabel,
-  DashboardText,
+  Heading,
+  Label,
+  Text,
   SurfacePanel,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
@@ -103,19 +103,19 @@ export function DashboardMutationDialog({
             <div className="grid content-start gap-4">
               <header className="flex items-start justify-between gap-4">
                 <div className="grid gap-2">
-                  <DashboardLabel
+                  <Label
                     as="p"
                     className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary"
                   >
                     {resolvedFlowLabel}
-                  </DashboardLabel>
-                  <DashboardHeading as="h2" className="m-0" id={titleId}>
+                  </Label>
+                  <Heading as="h2" className="m-0" id={titleId}>
                     {title}
-                  </DashboardHeading>
+                  </Heading>
                   {description ? (
-                    <DashboardText className="m-0" id={descriptionId}>
+                    <Text className="m-0" id={descriptionId}>
                       {description}
-                    </DashboardText>
+                    </Text>
                   ) : null}
                 </div>
 
@@ -180,7 +180,7 @@ export function DashboardMessagePanel({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="grid gap-1">
-          <DashboardHeading as="h3">{title}</DashboardHeading>
+          <Heading as="h3">{title}</Heading>
           <AlertPanelText as="div" variant="supporting">
             {children}
           </AlertPanelText>
