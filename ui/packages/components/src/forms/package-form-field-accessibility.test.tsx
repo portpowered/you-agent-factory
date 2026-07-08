@@ -82,7 +82,7 @@ function renderAccessibleTextField({
   );
 }
 
-describe("Package form-field accessible relationships", () => {
+describe("Package form-field accessible relationships for text inputs", () => {
   it("exposes the accessible name from a visible label", () => {
     renderAccessibleTextField({ label: "Factory name" });
 
@@ -162,7 +162,9 @@ describe("Package form-field accessible relationships", () => {
     expect(control).toHaveAccessibleDescription("Name is required.");
     expect(screen.getByRole("alert")).toHaveTextContent("Name is required.");
   });
+});
 
+describe("Package form-field accessible relationships for field state", () => {
   it("includes success text in the accessible description when supplied", () => {
     renderAccessibleTextField({
       ariaDescribedBy: "factory-success",
@@ -268,7 +270,9 @@ describe("Package form-field accessible relationships", () => {
     );
     expect(control).toHaveAccessibleErrorMessage("Name is required.");
   });
+});
 
+describe("Package form-field accessible relationships for checkbox controls", () => {
   it("exposes required and disabled checkbox states with a visible label relationship", () => {
     renderPackageComponent(
       <FormField>
