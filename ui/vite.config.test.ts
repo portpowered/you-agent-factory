@@ -21,6 +21,8 @@ describe("dashboard Vite config", () => {
         "react-dom",
         "@xyflow/react",
         "@xyflow/system",
+        "react-redux",
+        "recharts",
       ]),
     );
   });
