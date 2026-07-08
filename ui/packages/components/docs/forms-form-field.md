@@ -68,7 +68,7 @@ behavior.
 | `FormLabel` | Visible label associated with a control via `htmlFor` |
 | `FormDescription` | Supporting copy below the label (body or supporting typography) |
 | `FormHelperText` | Persistent guidance below the control |
-| `FormWarning` | Cautionary message (defaults to `role="alert"` when `role` is omitted) |
+| `FormWarning` | Cautionary message — no default `role`; pass `status` or `alert` when live-region announcement is desired |
 | `FormError` | Validation error message (defaults to `role="alert"`) |
 | `FormSuccess` | Positive confirmation (defaults to `role="status"`) |
 | `FormFieldGroup` | `fieldset` wrapper for grouped controls |
@@ -137,7 +137,7 @@ omit `aria-describedby` entirely.
 | --- | --- | --- |
 | `FormDescription` | (none) | Yes, when rendered |
 | `FormHelperText` | (none) | Yes, when rendered |
-| `FormWarning` | `status` or `alert` | Yes, when rendered |
+| `FormWarning` | `status` or `alert` (no default — host supplies when needed) | Yes, when rendered |
 | `FormSuccess` | `status` (default) | Yes, when rendered |
 | `FormError` | `alert` (default) | Host choice — see error section |
 
@@ -158,6 +158,14 @@ description.
 
 `FormError` defaults to `role="alert"` so assistive technology announces new
 validation failures.
+
+### Warning text role
+
+`FormWarning` does not set a default `role`. Pass `role="status"` for
+persistent cautionary copy that should be discoverable through
+`aria-describedby`, or `role="alert"` when assistive technology should announce
+new warning text immediately. Omit `role` when the warning is purely visual
+supplement to description or helper text.
 
 ### Required and disabled state
 
