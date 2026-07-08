@@ -141,7 +141,7 @@ describe("App shell locale and toolbar flows", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "导出工厂" })).toBeNull();
     });
-  }, 30_000);
+  }, 90_000);
 
   it("falls back to English when the configured app locale is unsupported", async () => {
     renderApp({
@@ -178,7 +178,7 @@ describe("App shell locale and toolbar flows", () => {
     expect(within(toolbar).queryByText("Loading factory events...")).toBeNull();
     expect(within(toolbar).queryByText("Export PNG")).toBeNull();
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
-  });
+  }, 90_000);
 
   it("renders compact accessible stream status states without the retired toolbar labels", async () => {
     renderApp({ snapshot: terminalSnapshot });

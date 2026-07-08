@@ -12,7 +12,7 @@ const repoRoot = path.resolve(
   "../../../..",
 );
 // Make subprocess harness checks can exceed Vitest's default 5s under parallel load.
-const makeHarnessTestTimeoutMs = 30_000;
+const makeHarnessTestTimeoutMs = 60_000;
 
 describe("component package harness wiring", () => {
   let tempRoots: string[] = [];

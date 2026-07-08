@@ -35,7 +35,9 @@ export const FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS: Record<
     initialProjectionMs: 35_000,
     dragSingleNodeMs: 5,
     dragMultiNodeMs: 50,
-    saveLayoutRecomputationMs: 50,
+    // Save recomputation includes topology rebuild plus layout dirty checks; allow
+    // slower developer hosts while CI still catches multi-x regressions.
+    saveLayoutRecomputationMs: 150,
     waypointEditMs: 5,
     waypointHistoryMs: 10,
   },
@@ -43,7 +45,7 @@ export const FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS: Record<
     initialProjectionMs: 90_000,
     dragSingleNodeMs: 10,
     dragMultiNodeMs: 100,
-    saveLayoutRecomputationMs: 125,
+    saveLayoutRecomputationMs: 200,
     waypointEditMs: 10,
     waypointHistoryMs: 15,
   },

@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest";
 import { inputVariants } from "./input";
 
 const UI_COMPONENTS_DIR = join(dirname(fileURLToPath(import.meta.url)));
+const COMPONENTS_PACKAGE_DATA_DISPLAY_DIR = join(
+  UI_COMPONENTS_DIR,
+  "../../../packages/components/src/data-display",
+);
 const PACKAGE_OVERLAYS_DIR = join(
   UI_COMPONENTS_DIR,
   "..",
@@ -19,6 +23,13 @@ const PACKAGE_OVERLAYS_DIR = join(
 
 function readComponentSource(fileName: string): string {
   return readFileSync(join(UI_COMPONENTS_DIR, fileName), "utf8");
+}
+
+function readPackageTableSource(): string {
+  return readFileSync(
+    join(COMPONENTS_PACKAGE_DATA_DISPLAY_DIR, "table.tsx"),
+    "utf8",
+  );
 }
 
 function readPackageOverlaySource(fileName: string): string {
@@ -66,8 +77,8 @@ describe("shared primitive neutral surface roles", () => {
     expectNoTransitionalNeutralSurfaces(inputVariants());
   });
 
-  it("uses role-based neutral borders and text in table.tsx", () => {
-    const source = readComponentSource("table.tsx");
+  it("uses role-based neutral borders and text in package table.tsx", () => {
+    const source = readPackageTableSource();
 
     expect(source).toContain("border-outline");
     expect(source).toMatch(/\btext-on-surface(-variant)?\b/);

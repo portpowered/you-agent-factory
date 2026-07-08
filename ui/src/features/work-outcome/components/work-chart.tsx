@@ -16,7 +16,7 @@ import {
   type ChartPresentation,
   ChartTooltip,
   ChartTooltipContent,
-} from "../../../components/ui/chart";
+} from "@you-agent-factory/components/charts";
 import { cn } from "../../../lib/cn";
 import { dashboardChartAxisLabelClassName } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
