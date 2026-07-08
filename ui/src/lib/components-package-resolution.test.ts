@@ -17,6 +17,10 @@ const importerPath = path.join(
   import.meta.dirname,
   "components-package-resolution.test.ts",
 );
+const packageGraphImporterPath = path.join(
+  import.meta.dirname,
+  "../../packages/components/src/graphs/graph-node-handle-badge.tsx",
+);
 
 describe("dashboard @you-agent-factory/components package resolution", () => {
   let viteServer: ViteDevServer;
@@ -59,6 +63,17 @@ describe("dashboard @you-agent-factory/components package resolution", () => {
 
     expect(resolved?.id).toContain("packages/components/src/styles.css");
     expect(resolved?.id).not.toContain("index.ts");
+  });
+
+  it("resolves React Flow imports from package graph primitives to the dashboard singleton", async () => {
+    const resolved = await viteServer.pluginContainer.resolveId(
+      "@xyflow/react",
+      packageGraphImporterPath,
+      { ssr: false },
+    );
+
+    expect(resolved?.id).toMatch(/node_modules\/(?:\.vite\/deps\/)?@xyflow/);
+    expect(resolved?.id).not.toContain("packages/components/node_modules");
   });
 
   it.each(COMPONENT_CATEGORY_EXPORT_PATHS)(

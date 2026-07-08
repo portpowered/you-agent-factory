@@ -29,6 +29,10 @@ const sharedReactAliases = [
     replacement: path.join(uiRoot, "node_modules/react/jsx-dev-runtime"),
   },
   {
+    find: "@xyflow/react",
+    replacement: path.join(uiRoot, "node_modules/@xyflow/react"),
+  },
+  {
     find: "@radix-ui/react-dialog",
     replacement: path.join(uiRoot, "node_modules/@radix-ui/react-dialog"),
   },
@@ -71,8 +75,10 @@ const optimizedDeps = isVitestRun
       "react-dom",
       "react/jsx-runtime",
       "react/jsx-dev-runtime",
+      "@xyflow/react",
     ] as const)
   : ([
+      "@xyflow/react",
       "@radix-ui/react-slot",
       "monaco-editor/esm/vs/editor/editor.api.js",
       "react",
@@ -163,6 +169,7 @@ export default defineConfig({
       "react-dom",
       "react/jsx-runtime",
       "react/jsx-dev-runtime",
+      "@xyflow/react",
     ],
   },
   server: {

@@ -1353,7 +1353,7 @@
 
     "yargs-parser": ["yargs-parser@21.1.1", "", {}, "sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw=="],
 
-    "@you-agent-factory/components": ["@you-agent-factory/components@file:packages/components", { "dependencies": { "@xyflow/react": "^12.10.2", "recharts": "^3.8.1" }, "peerDependencies": { "react": "^19.0.0", "react-dom": "^19.0.0" } }],
+    "@you-agent-factory/components": ["@you-agent-factory/components@file:packages/components", { "dependencies": { "recharts": "^3.8.1" }, "peerDependencies": { "@xyflow/react": "^12.10.2", "react": "^19.0.0", "react-dom": "^19.0.0" } }],
 
     "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 

@@ -6,7 +6,7 @@ describe("@you-agent-factory/components dependency policy", () => {
     expect(recharts.ResponsiveContainer).toBeDefined();
   });
 
-  it("resolves @xyflow/react as an installable package dependency", async () => {
+  it("resolves @xyflow/react from the host app peer dependency", async () => {
     const xyflow = await import("@xyflow/react");
     expect(xyflow.ReactFlow).toBeDefined();
   });
