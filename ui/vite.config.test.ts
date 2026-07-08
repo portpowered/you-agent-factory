@@ -12,6 +12,26 @@ describe("dashboard Vite config", () => {
     );
   });
 
+  it("dedupes context-bearing packages used by linked component sources", () => {
+    expect(config.resolve?.dedupe).toEqual(
+      expect.arrayContaining([
+        "@radix-ui/react-collapsible",
+        "@radix-ui/react-compose-refs",
+        "@radix-ui/react-dialog",
+        "@radix-ui/react-popover",
+        "@radix-ui/react-scroll-area",
+        "@radix-ui/react-select",
+        "@radix-ui/react-slot",
+        "react",
+        "react-dom",
+        "@xyflow/react",
+        "@xyflow/system",
+        "react-redux",
+        "recharts",
+      ]),
+    );
+  });
+
   it("keeps preview and dev proxy coverage aligned for all OpenAPI-backed API paths", () => {
     const expectedProxyPaths = [
       "/work",

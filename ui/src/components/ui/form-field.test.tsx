@@ -3,14 +3,44 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 
 import {
+  buildFormFieldAriaDescribedBy,
   FormDescription,
   FormError,
   FormField,
+  FormFieldGroup,
+  FormFieldGroupLabel,
+  FormHelperText,
   FormLabel,
+  FormSuccess,
   FormWarning,
 } from "./form-field";
+import {
+  buildFormFieldAriaDescribedBy as PackageBuildFormFieldAriaDescribedBy,
+  FormDescription as PackageFormDescription,
+  FormError as PackageFormError,
+  FormField as PackageFormField,
+  FormFieldGroup as PackageFormFieldGroup,
+  FormFieldGroupLabel as PackageFormFieldGroupLabel,
+  FormHelperText as PackageFormHelperText,
+  FormLabel as PackageFormLabel,
+  FormSuccess as PackageFormSuccess,
+  FormWarning as PackageFormWarning,
+} from "@you-agent-factory/components/forms";
 
-describe("form field primitives", () => {
+describe("dashboard form field re-exports", () => {
+  it("re-exports package form-field messaging from the dashboard ui surface", () => {
+    expect(FormField).toBe(PackageFormField);
+    expect(FormLabel).toBe(PackageFormLabel);
+    expect(FormDescription).toBe(PackageFormDescription);
+    expect(FormError).toBe(PackageFormError);
+    expect(FormWarning).toBe(PackageFormWarning);
+    expect(FormHelperText).toBe(PackageFormHelperText);
+    expect(FormSuccess).toBe(PackageFormSuccess);
+    expect(FormFieldGroup).toBe(PackageFormFieldGroup);
+    expect(FormFieldGroupLabel).toBe(PackageFormFieldGroupLabel);
+    expect(buildFormFieldAriaDescribedBy).toBe(PackageBuildFormFieldAriaDescribedBy);
+  });
+
   it("renders field layout, visible labels, and supporting descriptions", () => {
     render(
       <FormField className="custom-field">
@@ -29,7 +59,8 @@ describe("form field primitives", () => {
     expect(label.tagName).toBe("LABEL");
     expect(label.className).toContain("font-semibold");
     expect(label.className).toContain("text-on-surface");
-    expect(description.className).toContain("af-supporting-text");
+    expect(description.className).toContain("text-body-small");
+    expect(description.className).toContain("text-on-surface-variant");
   });
 
   it("renders validation errors with alert semantics and error color roles", () => {
@@ -38,7 +69,7 @@ describe("form field primitives", () => {
     const error = screen.getByRole("alert");
 
     expect(error).toHaveAttribute("id", "factory-name-error");
-    expect(error.className).toContain("af-supporting-text");
+    expect(error.className).toContain("text-body-small");
     expect(error.className).toContain("font-medium");
     expect(error.className).toContain("text-on-error-container");
   });
@@ -59,7 +90,7 @@ describe("form field primitives", () => {
     );
 
     expect(screen.getByText("Definition unavailable.").className).toContain(
-      "af-body-text",
+      "text-body-medium",
     );
   });
 
@@ -68,8 +99,50 @@ describe("form field primitives", () => {
 
     const warning = screen.getByRole("status");
 
-    expect(warning.className).toContain("af-supporting-text");
+    expect(warning.className).toContain("text-body-small");
     expect(warning.className).toContain("font-medium");
     expect(warning.className).toContain("text-on-warning-container");
+  });
+
+  it("renders helper text and success messaging with the package typography contract", () => {
+    render(
+      <>
+        <FormHelperText id="factory-helper">Shown after save.</FormHelperText>
+        <FormSuccess id="factory-success">Saved successfully.</FormSuccess>
+      </>,
+    );
+
+    expect(screen.getByText("Shown after save.").className).toContain(
+      "text-body-small",
+    );
+    expect(screen.getByText("Saved successfully.").className).toContain(
+      "text-body-small",
+    );
+  });
+
+  it("renders grouped field labels through the fieldset legend contract", () => {
+    render(
+      <FormFieldGroup>
+        <FormFieldGroupLabel>Notification channels</FormFieldGroupLabel>
+      </FormFieldGroup>,
+    );
+
+    const legend = screen.getByText("Notification channels");
+    expect(legend.tagName).toBe("LEGEND");
+    expect(legend.className).toContain("font-semibold");
+  });
+
+  it("joins host message element ids through buildFormFieldAriaDescribedBy", () => {
+    expect(
+      buildFormFieldAriaDescribedBy({
+        descriptionId: "factory-description",
+        helperId: "factory-helper",
+        warningId: "factory-warning",
+        successId: "factory-success",
+      }),
+    ).toBe(
+      "factory-description factory-helper factory-warning factory-success",
+    );
+    expect(buildFormFieldAriaDescribedBy({})).toBeUndefined();
   });
 });

@@ -29,6 +29,9 @@ read it directly from the package; no docs-site implementation is required.
   `SurfacePanel`, `ActionRow`, `DescriptionList`, and responsive layout guidance
 - [Form select primitives](./forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
+- [Form field structure and messaging](./forms-form-field.md) — `FormField`,
+  labels, descriptions, helper text, warnings, errors, success messages,
+  grouped-control semantics, and host validation responsibilities
 - [Overlay and disclosure primitives](./overlays.md) — Dialog, Popover,
   Collapsible, and ScrollArea accessibility, labeling, focus, and overflow
   guidance.
@@ -49,6 +52,10 @@ from sibling files in this directory as the library grows.
 - [Form input primitives](./forms-input-primitives.md) — import paths, controlled
   versus uncontrolled usage, host accessibility responsibilities, and
   presentation-only boundaries for text input, textarea, checkbox, and file input.
+- [Form field structure and messaging](./forms-form-field.md) — `FormField`,
+  labels, descriptions, helper text, warnings, errors, success messages,
+  grouped-control semantics, `buildFormFieldAriaDescribedBy`, and host validation
+  responsibilities.
 
 ## Feedback and code display
 

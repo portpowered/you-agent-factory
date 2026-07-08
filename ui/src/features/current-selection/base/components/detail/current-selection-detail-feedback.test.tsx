@@ -14,7 +14,7 @@ describe("CurrentSelectionDetailFeedback", () => {
     const feedback = screen.getByText("Loading current definition.");
 
     expect(feedback.tagName).toBe("P");
-    expect(feedback.className).toContain("af-body-text");
+    expect(feedback.className).toContain("text-body-medium");
     expect(feedback.className).toContain("text-on-surface-variant");
   });
 

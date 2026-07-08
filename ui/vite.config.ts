@@ -68,6 +68,10 @@ const sharedReactAliases = [
     find: "recharts",
     replacement: path.join(uiRoot, "node_modules/recharts"),
   },
+  {
+    find: "react-redux",
+    replacement: path.join(uiRoot, "node_modules/react-redux"),
+  },
 ] as const;
 const isCoverageRun = process.argv.includes("--coverage");
 const profileSourceMaps =
@@ -88,6 +92,7 @@ const optimizedDeps = isVitestRun
       "@radix-ui/react-select",
       "@radix-ui/react-slot",
       "@xyflow/react",
+      "react-redux",
       "recharts",
       "react",
       "react-dom",
@@ -95,7 +100,10 @@ const optimizedDeps = isVitestRun
       "react/jsx-dev-runtime",
     ] as const)
   : ([
+      "@xyflow/react",
       "@radix-ui/react-slot",
+      "react-redux",
+      "recharts",
       "monaco-editor/esm/vs/editor/editor.api.js",
       "react",
       "react-dom",
@@ -193,6 +201,7 @@ export default defineConfig({
       "@radix-ui/react-slot",
       "@xyflow/react",
       "@xyflow/system",
+      "react-redux",
       "recharts",
       "react",
       "react-dom",
