@@ -15,18 +15,18 @@
   /* --- Display (hero / high-emphasis numeric) --- */
   --text-display-large: clamp(2.25rem, 5vw, 3.75rem);
   --text-display-large--line-height: 1;
-  --text-display-large--letter-spacing: -0.04em;
+  --text-display-large--letter-spacing: 0;
   --text-display-medium: clamp(1.85rem, 4vw, 3rem);
   --text-display-medium--line-height: 1;
-  --text-display-medium--letter-spacing: -0.035em;
+  --text-display-medium--letter-spacing: 0;
   --text-display-small: 2rem;
   --text-display-small--line-height: 1.1;
-  --text-display-small--letter-spacing: -0.03em;
+  --text-display-small--letter-spacing: 0;
 
   /* --- Headline (prominent short headings) --- */
   --text-headline-large: 1.5rem;
   --text-headline-large--line-height: 1.2;
-  --text-headline-large--letter-spacing: -0.02em;
+  --text-headline-large--letter-spacing: 0;
   --text-headline-medium: 1.25rem;
   --text-headline-medium--line-height: 1.25;
   --text-headline-small: 1.125rem;
