@@ -27,8 +27,30 @@ export type {
   AlertPanelTone,
   AlertPanelVariant,
 } from "./feedback";
-export { CodePanel, codePanelVariants } from "./data-display";
-export type { CodePanelProps } from "./data-display";
+export {
+  CodePanel,
+  DataTable,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  codePanelVariants,
+  tableCellTruncateClassName,
+  tableCellWrapClassName,
+  tableMinWidthWideClassName,
+  tableNarrowContainerClassName,
+} from "./data-display";
+export type {
+  CodePanelProps,
+  DataTableColumn,
+  DataTableProps,
+  DataTableState,
+  TableProps,
+  TableSize,
+} from "./data-display";
 export {
   WidgetDetailCopy,
   WidgetEmptyState,
@@ -78,6 +100,10 @@ export {
   ENUM_SELECT_EMPTY_VALUE,
   NativeSelect,
   OptionalEnumSelect,
+  PackageCheckbox,
+  PackageFileInput,
+  PackageInput,
+  PackageTextarea,
   ResetEnumSelect,
   Select,
   SELECT_EMPTY_STATE_VALUE,
@@ -90,12 +116,18 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  inputVariants,
+  textareaVariants,
 } from "./forms";
 export type {
   EnumSelectOption,
   EnumSelectProps,
   NativeSelectProps,
   OptionalEnumSelectProps,
+  PackageCheckboxProps,
+  PackageFileInputProps,
+  PackageInputProps,
+  PackageTextareaProps,
   ResetEnumSelectProps,
   SelectContentProps,
   SelectEmptyProps,

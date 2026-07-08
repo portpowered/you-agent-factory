@@ -3,6 +3,8 @@ export const COMPONENTS_CATEGORY = "forms" as const;
 
 export type ComponentsCategory = typeof COMPONENTS_CATEGORY;
 
+export { PackageCheckbox } from "./package-checkbox";
+export type { PackageCheckboxProps } from "./package-checkbox";
 export {
   EnumSelect,
   ENUM_SELECT_EMPTY_VALUE,
@@ -15,6 +17,10 @@ export type {
   OptionalEnumSelectProps,
   ResetEnumSelectProps,
 } from "./package-enum-select";
+export { PackageFileInput } from "./package-file-input";
+export type { PackageFileInputProps } from "./package-file-input";
+export { PackageInput, inputVariants } from "./package-input";
+export type { PackageInputProps } from "./package-input";
 export { NativeSelect } from "./package-native-select";
 export type { NativeSelectProps } from "./package-native-select";
 export {
@@ -39,3 +45,5 @@ export type {
   SelectSeparatorProps,
   SelectTriggerProps,
 } from "./package-select";
+export { PackageTextarea, textareaVariants } from "./package-textarea";
+export type { PackageTextareaProps } from "./package-textarea";

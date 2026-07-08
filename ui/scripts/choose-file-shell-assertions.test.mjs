@@ -8,7 +8,7 @@ describe("choose-file shell assertions", () => {
   test("accepts neutral dashed shell classes", () => {
     expect(() =>
       assertChooseFileShellNeutral(
-        "rounded-xl border border-dashed border-af-border-strong bg-af-surface-subtle",
+        "rounded-xl border border-dashed border-outline-variant bg-surface-container-low",
         "shell",
       ),
     ).not.toThrow();
@@ -17,7 +17,7 @@ describe("choose-file shell assertions", () => {
   test("rejects accent-filled shell classes", () => {
     expect(() =>
       assertChooseFileShellNeutral(
-        "border-dashed border-af-border-strong bg-af-accent-surface",
+        "border-dashed border-outline-variant bg-af-accent-surface",
         "shell",
       ),
     ).toThrow(/bg-af-accent-surface/);
@@ -26,7 +26,7 @@ describe("choose-file shell assertions", () => {
   test("accepts neutral drag-active shell classes", () => {
     expect(() =>
       assertChooseFileDragActiveNeutral(
-        "border-dashed border-af-border-strong bg-af-overlay",
+        "border-dashed border-outline-variant bg-af-overlay",
         "shell",
       ),
     ).not.toThrow();

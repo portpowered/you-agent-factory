@@ -145,6 +145,8 @@ directory:
 - [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
 - [Skeleton loading placeholders](./docs/feedback-skeleton.md)
 - [CodePanel long-content containment](./docs/data-display-code-panel.md)
+- [Table primitives and DataTable](./docs/table-data-table.md)
+- [Form input primitives](./docs/forms-input-primitives.md)
 - [Form select primitives](./docs/forms-select-primitives.md) — `Select`,
   `NativeSelect`, `EnumSelect`, keyboard behavior, and option contracts
 - [Overlay and disclosure primitives](./docs/overlays.md)
@@ -153,6 +155,9 @@ directory:
 See that directory for component-level documentation as it is added. The docs
 shell is plain markdown in version control; it does not require a docs-site
 route, generated registry, or additional build-time documentation tooling.
+
+- [Charts](./docs/charts.md) — config, presentation, tooltip and legend,
+  state panels, and caller-owned series state
 
 ## Development
 

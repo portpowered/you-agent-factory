@@ -37,6 +37,17 @@ See the package [README](../README.md) for install, CSS import setup, theming,
 and consumer dependency boundaries. Link new component docs from that README or
 from sibling files in this directory as the library grows.
 
+## Component guides
+
+- [Charts](./charts.md) — `ChartContainer`, tooltip and legend content, state
+  panels, config types, and host-owned data boundaries
+
+## Form input primitives
+
+- [Form input primitives](./forms-input-primitives.md) — import paths, controlled
+  versus uncontrolled usage, host accessibility responsibilities, and
+  presentation-only boundaries for text input, textarea, checkbox, and file input.
+
 ## Feedback and code display
 
 - [AlertPanel](./feedback-alert-panel.md) — semantic feedback variants, token
@@ -45,6 +56,12 @@ from sibling files in this directory as the library grows.
   empty vs loading feedback
 - [CodePanel](./data-display-code-panel.md) — long-line and long-block
   containment, scrolling, and responsive layout expectations
+
+## Table data display
+
+- [Table primitives and DataTable](./table-data-table.md) — generic row contract,
+  explicit data states, density and responsive layout helpers, accessibility,
+  and Storybook references for domain-free tabular data display.
 
 ## Widget layout recipes
 

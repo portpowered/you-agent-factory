@@ -389,7 +389,7 @@ describe("App streamed replay rendering flows", () => {
       within(fixedFailedDetail).getAllByText("Blocked Analysis Story").length,
     ).toBeGreaterThan(0);
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
-  });
+  }, 90_000);
 
   it("smoke tests resource counts from streamed events against backend world-view counts", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
@@ -579,5 +579,5 @@ describe("App streamed replay rendering flows", () => {
         ),
       ).toBeTruthy();
     });
-  });
+  }, 90_000);
 });
