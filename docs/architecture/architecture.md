@@ -163,6 +163,28 @@ policy decision, then keep CLI, API, MCP, and UI code as adapters around that
 owner. Customer-facing Factory Session behavior belongs in Factory Session
 owners; Petri-net concepts stay behind the internal runtime boundary.
 
+### Migration-era surfaces and compatibility aliases
+
+The following packages and aliases exist to keep current behavior working while
+runtime cleanup moves ownership into the target package families above. Treat
+them as temporary placement surfaces. New production behavior should not land
+there unless the change is a small compatibility delegation to the target owner
+or part of an active removal lane.
+
+| Migration-era surface | Temporary role | Target owner or sunset expectation |
+| --- | --- | --- |
+| Broad `pkg/service` runtime composition files, including `factory.go`, `factory_build.go`, `runtime_sessions.go`, `model_catalog.go`, and `factory_editable_definition.go` | Compatibility shell for existing API, CLI, session, model, save, and runtime construction entrypoints. | Move durable behavior to the narrow owner: Factory Session state to `pkg/factorysessions`, durable execution to `pkg/factorysessionexecution`, model behavior to `pkg/modelhost` and `pkg/models/service`, invocation/work input to `pkg/invocations` and `pkg/workcontent`, factory definition behavior to `pkg/factorydefinition/service`, and startup graph construction to target `pkg/inject`. Leave `pkg/service` as thin routing until callers no longer need the compatibility shell. |
+| `pkg/runtimehost` | Transitional wrapper around the service-backed runtime host shape. | Replace host ownership with explicit Factory Session, runtime loop, and initializer dependencies. Sunset the package once transports and session APIs no longer need a runtime-host facade around `FactoryService` compatibility. |
+| `pkg/composebridge` | Bridge that lets `pkg/initializer` reuse service-owned runtime bundle construction during the migration. | Move dependency graph assembly to target `pkg/inject` and keep startup in `pkg/initializer`. Delete the bridge when initializer paths can build from the explicit graph without reaching through service composition internals. |
+| Host-object dependency-injection adapters such as service-local `modelServiceHost`, `factoryDefinitionHost`, `factorySaveHost`, and `sessionGatewayHost` structs, plus cmd-owned Wire providers under `cmd/factory/compose` | Adapter objects that satisfy narrower service interfaces while the old coordinator still carries many collaborators. | Prefer explicit constructor inputs and graph assembly in target `pkg/inject`, with domain packages owning their own host interfaces only at the boundary they actually consume. Delete each adapter when the target owner accepts explicit collaborators or the old coordinator no longer fronts that behavior. |
+| Root `pkg/workflow*` packages: `pkg/workflowsource`, `pkg/workflowvalidation`, `pkg/workflowpolicy`, `pkg/workflowpreview`, and `pkg/workflowresult` | Batch 001 compatibility shims that type-alias JavaScript orchestrator packages. | Import `pkg/orchestrators/javascript/source`, `validation`, `policy`, `preview`, and `result` directly for runtime, API, CLI, MCP, and dashboard work. Remove the shims after downstream imports are gone and compatibility guarantees permit deletion. |
+| Retained workflow compatibility aliases, including `you workflow ...` CLI commands, `you.workflow.*` MCP tools, and obsolete workflow-named API routes such as workflow preview aliases | Backward-compatible names for existing operators and host integrations. | Document and test them only as aliases. Primary surfaces are Factory Session APIs (`POST /factory-sessions/async`, `POST /factory-sessions/sync`, session reads, result, dispatch, artifact, event, and lifecycle routes), Factory preview validation (`POST /factories/preview`), Factory Session CLI inspection and durable session execution semantics, and `you.factory_session.*` MCP tools. Where a `you workflow ...` command remains the only shipped CLI entrypoint, docs should describe the command as Factory Session execution or inspection. Sunset aliases only through an explicit compatibility-removal plan. |
+
+Compatibility documentation should name the successor first and the old surface
+second. For example, describe JavaScript orchestration as Factory Session
+execution with workflow-named CLI or MCP aliases, not as a separate public
+runtime resource.
+
 ### Logical session identity and restart recovery
 
 Dashboard tabs and other long-lived clients can persist logical session intent
