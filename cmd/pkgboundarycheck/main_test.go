@@ -17,7 +17,6 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	makeDir(t, repoRoot, "pkg/service")
 	makeDir(t, repoRoot, "pkg/orchestrators")
 	makeDir(t, repoRoot, "pkg/generatedclient")
-	makeDir(t, repoRoot, "pkg/workflowpreview")
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -25,7 +24,7 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run() error = %v, want nil", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "package boundary passed (no blocking root package-family violations)") {
+	if got := stdout.String(); !strings.Contains(got, "package boundary passed (no blocking package-boundary violations)") {
 		t.Fatalf("run() stdout = %q, want package-boundary success message", got)
 	}
 	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)") {
@@ -177,39 +176,45 @@ func TestRunReportsMultipleUnapprovedRootPackagesDeterministically(t *testing.T)
 	}
 }
 
-func TestRunReportsMigrationShimPatternsInAdvisoryMode(t *testing.T) {
+func TestRunBlocksMigrationShimPatternEvenWhenRootFamilyApproved(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
 	makeDir(t, repoRoot, "pkg/service")
 	writeMigrationShimCompatFile(t, repoRoot, "pkg/workflowpreview", "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview")
 
+	policy := defaultBoundaryPolicy()
+	policy.approvedProductPackageFamilies = append(policy.approvedProductPackageFamilies, "pkg/workflowpreview")
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
-	if err != nil {
-		t.Fatalf("run() error = %v, want nil", err)
+	err := runWithPolicy(config{root: repoRoot, packageRoot: defaultScanRoot}, policy, stdout, stderr)
+	if err == nil {
+		t.Fatal("runWithPolicy() error = nil, want migration-shim blocking failure")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("runWithPolicy() stdout = %q, want empty", got)
 	}
 
-	got := stdout.String()
+	got := stderr.String()
 	for _, want := range []string{
-		"package boundary passed (no blocking root package-family violations)",
-		"[agent-factory:pkg-boundary] advisory migration-only compatibility shims detected",
-		"[agent-factory:pkg-boundary] advisory migration-only compatibility shim: pkg/workflowpreview",
+		"[agent-factory:pkg-boundary] blocked migration-only compatibility shim: pkg/workflowpreview",
 		"marker: Batch 001 compatibility shim",
 		"canonical target: github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview",
-		"advisory enforcement transition: migration-shim findings become blocking in the first PR after the migration-shim removal lane lands and retained shims are removed.",
+		"remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.",
 	} {
 		if !strings.Contains(got, want) {
-			t.Fatalf("run() stdout = %q, want substring %q", got, want)
+			t.Fatalf("runWithPolicy() stderr = %q, want substring %q", got, want)
 		}
 	}
-	if got := stderr.String(); got != "" {
-		t.Fatalf("run() stderr = %q, want empty", got)
+	if strings.Contains(got, "unapproved root package family: pkg/workflowpreview") {
+		t.Fatalf("runWithPolicy() stderr = %q, migration-shim fixture should fail without root-family diagnostic", got)
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 1 package-boundary violation(s)" {
+		t.Fatalf("runWithPolicy() error = %q, want migration-shim violation count", got)
 	}
 }
 
-func TestRunReportsMigrationShimAdvisoryWithoutChangingBlockingExit(t *testing.T) {
+func TestRunReportsMigrationShimBlockingAlongsideRootViolations(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
@@ -229,11 +234,11 @@ func TestRunReportsMigrationShimAdvisoryWithoutChangingBlockingExit(t *testing.T
 	got := stderr.String()
 	for _, want := range []string{
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
-		"[agent-factory:pkg-boundary] advisory migration-only compatibility shim: pkg/workflowsource",
+		"[agent-factory:pkg-boundary] blocked migration-only compatibility shim: pkg/workflowsource",
 		"marker: Batch 001 compatibility shim",
 		"canonical target: github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source",
-		"advisory enforcement transition: migration-shim findings become blocking in the first PR after the migration-shim removal lane lands and retained shims are removed.",
-		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
+		"remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.",
+		"[agent-factory:pkg-boundary] found 3 package-boundary violation(s)",
 	} {
 		if !strings.Contains(got, want) && !strings.Contains(err.Error(), want) {
 			t.Fatalf("run() diagnostics = stdout:%q stderr:%q err:%q, want substring %q", stdout.String(), got, err.Error(), want)

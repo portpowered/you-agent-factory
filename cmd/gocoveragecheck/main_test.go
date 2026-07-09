@@ -172,7 +172,7 @@ func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
 	summaries := []packageCoverageSummary{
 		{importPath: modulePath + "/pkg/config", coverage: 74.4},
 		{importPath: modulePath + "/pkg/service", coverage: 82.1},
-		{importPath: modulePath + "/pkg/workflowpreview", coverage: 0},
+		{importPath: modulePath + "/pkg/uncovered", coverage: 0},
 	}
 
 	got := findInsufficientCoveragePackages(summaries, 80, map[string]struct{}{
@@ -180,7 +180,7 @@ func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
 	})
 
 	want := []packageCoverageSummary{
-		{importPath: modulePath + "/pkg/workflowpreview", coverage: 0},
+		{importPath: modulePath + "/pkg/uncovered", coverage: 0},
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("findInsufficientCoveragePackages() = %v, want %v", got, want)

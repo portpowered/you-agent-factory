@@ -42,11 +42,6 @@ github.com/portpowered/infinite-you/pkg/runtimehost
 github.com/portpowered/infinite-you/pkg/service/factorysave
 github.com/portpowered/infinite-you/pkg/workcontent/materialize
 github.com/portpowered/infinite-you/pkg/workers/mockworker
-github.com/portpowered/infinite-you/pkg/workflowpolicy
-github.com/portpowered/infinite-you/pkg/workflowpreview
-github.com/portpowered/infinite-you/pkg/workflowresult
-github.com/portpowered/infinite-you/pkg/workflowsource
-github.com/portpowered/infinite-you/pkg/workflowvalidation
 
 
 github.com/portpowered/infinite-you/pkg/apisurface/optional 

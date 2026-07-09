@@ -108,9 +108,10 @@ the standards.
 - `pkg/workers/`, `pkg/hostedworkers/`, and `pkg/packagedfactories/` contain
   worker execution, provider integration, mock workers, worktrees, hosted
   workers, and packaged factory support.
-- `pkg/workflowpreview/`, `pkg/workflowpolicy/`, `pkg/workflowresult/`,
-  `pkg/workflowsource/`, and `pkg/workflowvalidation/` contain JavaScript
-  workflow preview, policy, result, source lookup, and validation logic.
+- `pkg/orchestrators/javascript/preview`, `pkg/orchestrators/javascript/policy`,
+  `pkg/orchestrators/javascript/result`, `pkg/orchestrators/javascript/source`,
+  and `pkg/orchestrators/javascript/validation` contain JavaScript workflow
+  preview, policy, result, source lookup, and validation logic.
 - `tests/` contains broader functional, release, smoke, and integration tests.
 - `ui/` contains the React dashboard, generated TypeScript OpenAPI types,
   feature modules, shared components, theme/styles, Storybook, and frontend

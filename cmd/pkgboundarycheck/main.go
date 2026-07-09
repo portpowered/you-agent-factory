@@ -16,7 +16,6 @@ import (
 const defaultScanRoot = "pkg"
 const batch001MigrationShimMarker = "Batch 001 compatibility shim"
 const javascriptOrchestratorImportPrefix = "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/"
-const migrationShimAdvisoryTransition = "migration-shim findings become blocking in the first PR after the migration-shim removal lane lands and retained shims are removed."
 
 const (
 	generatedCodeExceptionScopeRoot    = "root"
@@ -32,7 +31,6 @@ var (
 type boundaryPolicy struct {
 	approvedProductPackageFamilies []string
 	generatedCodeExceptions        []generatedCodeException
-	temporaryMigrationShimRoots    []string
 }
 
 type generatedCodeException struct {
@@ -81,19 +79,10 @@ var documentedGeneratedCodeExceptions = []generatedCodeException{
 	{packagePath: "pkg/api/generated", scope: generatedCodeExceptionScopeSubtree},
 }
 
-var temporaryMigrationShimRoots = []string{
-	"pkg/workflowpolicy",
-	"pkg/workflowpreview",
-	"pkg/workflowresult",
-	"pkg/workflowsource",
-	"pkg/workflowvalidation",
-}
-
 func defaultBoundaryPolicy() boundaryPolicy {
 	return boundaryPolicy{
 		approvedProductPackageFamilies: slices.Clone(approvedProductPackageFamilies),
 		generatedCodeExceptions:        slices.Clone(documentedGeneratedCodeExceptions),
-		temporaryMigrationShimRoots:    slices.Clone(temporaryMigrationShimRoots),
 	}
 }
 
@@ -134,11 +123,14 @@ func parseConfig() config {
 }
 
 func run(cfg config, stdout io.Writer, stderr io.Writer) error {
+	return runWithPolicy(cfg, defaultBoundaryPolicy(), stdout, stderr)
+}
+
+func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr io.Writer) error {
 	if strings.TrimSpace(cfg.packageRoot) == "" {
 		return fmt.Errorf("package root must not be empty")
 	}
 
-	policy := defaultBoundaryPolicy()
 	if err := validatePolicy(policy); err != nil {
 		return err
 	}
@@ -147,10 +139,10 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(findings.rootPackageFindings) == 0 {
-		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking root package-family violations)")
+	blockingViolationCount := len(findings.rootPackageFindings) + len(findings.migrationShimFindings)
+	if blockingViolationCount == 0 {
+		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
-		writeMigrationShimAdvisories(stdout, findings.migrationShimFindings)
 		return nil
 	}
 
@@ -159,9 +151,9 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
 		fmt.Fprintln(stderr, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
-	writeMigrationShimAdvisories(stderr, findings.migrationShimFindings)
+	writeMigrationShimBlockingFindings(stderr, findings.migrationShimFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
-	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", len(findings.rootPackageFindings))
+	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
 
 func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
@@ -194,7 +186,7 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		}
 
 		packagePath := filepath.ToSlash(filepath.Join(cfg.packageRoot, entry.Name()))
-		migrationShimFinding, found, err := detectMigrationShimFinding(repoRoot, packagePath, policy)
+		migrationShimFinding, found, err := detectMigrationShimFinding(repoRoot, packagePath)
 		if err != nil {
 			return scanResult{}, err
 		}
@@ -232,15 +224,10 @@ func validatePolicy(policy boundaryPolicy) error {
 
 func isAllowedRootPackageFamily(policy boundaryPolicy, packageRoot string, packagePath string) bool {
 	return slices.Contains(policy.approvedProductPackageFamilies, packagePath) ||
-		slices.Contains(directRootGeneratedCodeExceptionPaths(policy, packageRoot), packagePath) ||
-		slices.Contains(policy.temporaryMigrationShimRoots, packagePath)
+		slices.Contains(directRootGeneratedCodeExceptionPaths(policy, packageRoot), packagePath)
 }
 
-func detectMigrationShimFinding(repoRoot string, packagePath string, policy boundaryPolicy) (migrationShimFinding, bool, error) {
-	if !slices.Contains(policy.temporaryMigrationShimRoots, packagePath) {
-		return migrationShimFinding{}, false, nil
-	}
-
+func detectMigrationShimFinding(repoRoot string, packagePath string) (migrationShimFinding, bool, error) {
 	packageDir := filepath.Join(repoRoot, filepath.FromSlash(packagePath))
 	entries, err := os.ReadDir(packageDir)
 	if err != nil {
@@ -330,20 +317,19 @@ func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
 	return descriptions
 }
 
-func writeMigrationShimAdvisories(writer io.Writer, findings []migrationShimFinding) {
+func writeMigrationShimBlockingFindings(writer io.Writer, findings []migrationShimFinding) {
 	if len(findings) == 0 {
 		return
 	}
 
-	fmt.Fprintln(writer, "[agent-factory:pkg-boundary] advisory migration-only compatibility shims detected")
 	for _, finding := range findings {
 		canonicalTarget := finding.canonicalTarget
 		if canonicalTarget == "" {
 			canonicalTarget = "not detected"
 		}
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] advisory migration-only compatibility shim: %s\n", finding.packagePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] blocked migration-only compatibility shim: %s\n", finding.packagePath)
 		fmt.Fprintf(writer, "  marker: %s\n", finding.marker)
 		fmt.Fprintf(writer, "  canonical target: %s\n", canonicalTarget)
+		fmt.Fprintln(writer, "  remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.")
 	}
-	fmt.Fprintf(writer, "[agent-factory:pkg-boundary] advisory enforcement transition: %s\n", migrationShimAdvisoryTransition)
 }
