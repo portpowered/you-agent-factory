@@ -1,5 +1,55 @@
 # Backend
 
+## Runtime Startup Ownership
+
+Runtime cleanup work should move process wiring toward this preferred ownership
+path:
+
+`cmd/factory -> pkg/root -> pkg/inject -> pkg/initializer -> transports/app graph`
+
+```mermaid
+flowchart LR
+    cmd["cmd/factory"]
+    root["pkg/root"]
+    inject["pkg/inject"]
+    graph["app dependency graph"]
+    initializer["pkg/initializer"]
+    transports["API / CLI / MCP transports and sidecars"]
+    sessions["Factory Sessions"]
+
+    cmd --> root
+    root --> inject
+    inject --> graph
+    root --> initializer
+    graph --> initializer
+    initializer --> transports
+    graph --> sessions
+```
+
+`cmd/factory` is the thin process entrypoint. It should parse only the process
+boundary concerns required to hand control to the root package, then avoid
+owning runtime composition or transport-specific dependency construction.
+
+`pkg/root` selects the process mode and top-level behavior for the current
+invocation, such as API service hosting, local CLI execution, or sidecar startup.
+It owns root command flow and chooses which already-defined startup path to run.
+
+`pkg/inject` builds the application dependency graph from explicit inputs. It is
+the target owner for dependency construction, config-loaded collaborators, and
+service graph assembly. The graph it returns should be usable by multiple
+startup modes without hiding filesystem, environment, process, or transport
+dependencies in package globals.
+
+`pkg/initializer` starts transports and sidecars from already-built services. It
+attaches API, CLI, MCP, or other process adapters to the assembled graph rather
+than rebuilding session runtime state or reaching around the graph for ad hoc
+dependencies.
+
+This startup path preserves the event-first runtime model. Transports submit
+commands into Factory Session APIs, workers and agents emit outputs, and those
+outputs re-enter the runtime as Factory events. They do not mutate canonical
+Factory Session state directly.
+
 ## Core Loop
 
 The backend centers on a deterministic tick loop that updates a shared world state from submitted events. Each tick reads pending inputs, applies subsystem logic, and emits outputs that are handed off to queues and workers.
