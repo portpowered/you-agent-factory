@@ -12,11 +12,27 @@ import (
 
 const defaultScanRoot = "pkg"
 
+const (
+	generatedCodeExceptionScopeRoot    = "root"
+	generatedCodeExceptionScopeSubtree = "subtree"
+)
+
 var (
 	stdoutWriter io.Writer = os.Stdout
 	stderrWriter io.Writer = os.Stderr
 	exitFunc               = os.Exit
 )
+
+type boundaryPolicy struct {
+	approvedProductPackageFamilies []string
+	generatedCodeExceptions        []generatedCodeException
+	temporaryMigrationShimRoots    []string
+}
+
+type generatedCodeException struct {
+	packagePath string
+	scope       string
+}
 
 var approvedProductPackageFamilies = []string{
 	"pkg/api",
@@ -54,9 +70,9 @@ var approvedProductPackageFamilies = []string{
 	"pkg/workquery",
 }
 
-var documentedGeneratedCodeExceptions = []string{
-	"pkg/generatedclient",
-	"pkg/api/generated",
+var documentedGeneratedCodeExceptions = []generatedCodeException{
+	{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
+	{packagePath: "pkg/api/generated", scope: generatedCodeExceptionScopeSubtree},
 }
 
 var temporaryMigrationShimRoots = []string{
@@ -65,6 +81,14 @@ var temporaryMigrationShimRoots = []string{
 	"pkg/workflowresult",
 	"pkg/workflowsource",
 	"pkg/workflowvalidation",
+}
+
+func defaultBoundaryPolicy() boundaryPolicy {
+	return boundaryPolicy{
+		approvedProductPackageFamilies: slices.Clone(approvedProductPackageFamilies),
+		generatedCodeExceptions:        slices.Clone(documentedGeneratedCodeExceptions),
+		temporaryMigrationShimRoots:    slices.Clone(temporaryMigrationShimRoots),
+	}
 }
 
 type config struct {
@@ -97,12 +121,18 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		return fmt.Errorf("package root must not be empty")
 	}
 
-	findings, err := scanRepo(cfg)
+	policy := defaultBoundaryPolicy()
+	if err := validatePolicy(policy); err != nil {
+		return err
+	}
+
+	findings, err := scanRepo(cfg, policy)
 	if err != nil {
 		return err
 	}
 	if len(findings) == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (approved root package families and documented exceptions only)")
+		writeGeneratedCodeExceptionSummary(stdout, policy)
 		return nil
 	}
 
@@ -111,10 +141,11 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
 		fmt.Fprintln(stderr, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
+	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", len(findings))
 }
 
-func scanRepo(cfg config) ([]rootPackageFinding, error) {
+func scanRepo(cfg config, policy boundaryPolicy) ([]rootPackageFinding, error) {
 	repoRoot, err := filepath.Abs(cfg.root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve repo root: %w", err)
@@ -144,7 +175,7 @@ func scanRepo(cfg config) ([]rootPackageFinding, error) {
 		}
 
 		packagePath := filepath.ToSlash(filepath.Join(cfg.packageRoot, entry.Name()))
-		if isAllowedRootPackageFamily(packagePath) {
+		if isAllowedRootPackageFamily(policy, cfg.packageRoot, packagePath) {
 			continue
 		}
 
@@ -157,18 +188,47 @@ func scanRepo(cfg config) ([]rootPackageFinding, error) {
 	return findings, nil
 }
 
-func isAllowedRootPackageFamily(packagePath string) bool {
-	return slices.Contains(approvedProductPackageFamilies, packagePath) ||
-		slices.Contains(directRootGeneratedCodeExceptions(), packagePath) ||
-		slices.Contains(temporaryMigrationShimRoots, packagePath)
+func validatePolicy(policy boundaryPolicy) error {
+	for _, exception := range policy.generatedCodeExceptions {
+		if strings.TrimSpace(exception.packagePath) == "" {
+			return fmt.Errorf("generated-code exception path must not be empty")
+		}
+		if slices.Contains(policy.approvedProductPackageFamilies, exception.packagePath) {
+			return fmt.Errorf("generated-code exception %s must not also be an approved product package family", exception.packagePath)
+		}
+	}
+	return nil
 }
 
-func directRootGeneratedCodeExceptions() []string {
+func isAllowedRootPackageFamily(policy boundaryPolicy, packageRoot string, packagePath string) bool {
+	return slices.Contains(policy.approvedProductPackageFamilies, packagePath) ||
+		slices.Contains(directRootGeneratedCodeExceptionPaths(policy, packageRoot), packagePath) ||
+		slices.Contains(policy.temporaryMigrationShimRoots, packagePath)
+}
+
+func directRootGeneratedCodeExceptionPaths(policy boundaryPolicy, packageRoot string) []string {
 	var roots []string
-	for _, exception := range documentedGeneratedCodeExceptions {
-		if filepath.Dir(filepath.ToSlash(exception)) == defaultScanRoot {
-			roots = append(roots, exception)
+	for _, exception := range policy.generatedCodeExceptions {
+		exceptionPath := filepath.ToSlash(exception.packagePath)
+		if filepath.Dir(exceptionPath) == filepath.ToSlash(packageRoot) {
+			roots = append(roots, exceptionPath)
 		}
 	}
 	return roots
+}
+
+func writeGeneratedCodeExceptionSummary(writer io.Writer, policy boundaryPolicy) {
+	exceptions := generatedCodeExceptionDescriptions(policy)
+	if len(exceptions) == 0 {
+		return
+	}
+	fmt.Fprintf(writer, "[agent-factory:pkg-boundary] active generated-code exceptions: %s\n", strings.Join(exceptions, ", "))
+}
+
+func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
+	descriptions := make([]string, 0, len(policy.generatedCodeExceptions))
+	for _, exception := range policy.generatedCodeExceptions {
+		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", filepath.ToSlash(exception.packagePath), exception.scope))
+	}
+	return descriptions
 }
