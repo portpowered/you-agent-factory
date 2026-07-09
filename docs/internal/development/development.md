@@ -551,6 +551,10 @@ behavior explicit inside the test that needs it.
 
 ## Local Gotchas
 
+- Runtime cleanup ownership searches should use the source-only command in
+  [Runtime Cleanup Relevant Files](../processes/runtime-cleanup-relevant-files.md)
+  so generated, dependency, coverage, and build artifacts do not become routine
+  source evidence.
 - Embedded dashboard builds are generated local artifacts. Rebuild `ui/dist/` with `make ui-build` or `make dashboard-verify` after dashboard source changes so Go picks up the refreshed embed registration.
 - Do not run `ui-build` in parallel with Go vet, build, or test commands; Vite rotates hashed files under `ui/dist/assets`.
 - Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/api/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.

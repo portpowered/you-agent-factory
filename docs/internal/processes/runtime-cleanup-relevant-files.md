@@ -1,10 +1,15 @@
 # Runtime Cleanup Relevant Files
 
-Use this map when changing runtime cleanup ownership, package placement, startup
-wiring, or documentation that tells maintainers where new runtime behavior
-belongs. Start with `docs/architecture/architecture.md`, especially the runtime
-startup path, Factory Session state ownership, target package-family ownership
-map, and migration-era surfaces sections.
+Use this map when changing or auditing runtime cleanup ownership, package
+placement, startup wiring, stale references, or documentation that tells
+maintainers where new runtime behavior belongs. Start with
+`docs/architecture/architecture.md`, especially the runtime startup path,
+Factory Session state ownership, target package-family ownership map, and
+migration-era surfaces sections.
+
+Routine ownership scans should search authored source roots only so ignored
+local artifacts and generated outputs do not look like source ownership
+evidence.
 
 ## Placement Decision Guide
 
@@ -29,6 +34,53 @@ When a change spans rows, place the durable state or policy in its owner and
 adapt outward. For example, a new session read that exposes JavaScript
 orchestrator progress should keep progress derivation in Factory Session or
 orchestrator owners, then map it through API, CLI, MCP, or UI boundaries.
+
+## Source-Only Search Hygiene
+
+Run the source-only search from the repository root:
+
+```bash
+rg -n \
+  --glob '!api/openapi.yaml' \
+  --glob '!pkg/api/generated/server.gen.go' \
+  --glob '!pkg/generatedclient/client.gen.go' \
+  --glob '!ui/src/api/generated/openapi.ts' \
+  --glob '!ui/coverage/**' \
+  --glob '!ui/**/node_modules/**' \
+  --glob '!**/dist/**' \
+  --glob '!storybook-static/**' \
+  --glob '!**/storybook-static/**' \
+  --glob '!ui/.vitest-reports/**' \
+  --glob '!ui/.vitest-report-timings/**' \
+  --glob '!*.tsbuildinfo' \
+  --glob '!**/*.tsbuildinfo' \
+  '<pattern>' \
+  api/openapi-main.yaml api/components cmd docs internal pkg scripts tests ui/src ui/packages/components/src
+```
+
+Do not add `--no-ignore` for routine cleanup ownership scans. If an audit must
+inspect ignored local output, run that as a separate artifact inspection and
+label the evidence as artifact-only.
+
+## Generated Artifact Evidence
+
+Routine cleanup ownership decisions must not use generated OpenAPI/client
+files, coverage reports, dependency installs, or build outputs as source
+ownership evidence. Treat the following generated contract files as excluded
+from routine ownership scans:
+
+- `api/openapi.yaml`
+- `pkg/api/generated/server.gen.go`
+- `pkg/generatedclient/client.gen.go`
+- `ui/src/api/generated/openapi.ts`
+
+Generated files are still valid evidence when the audit target is generated
+contract drift, API regeneration, or generated output consistency. In those
+audits, start from the authored contract source (`api/openapi-main.yaml` and
+`api/components/`), regenerate with `make generate-api`, and use `make api-smoke`
+or `make verify-build-contracts` to prove the generated files match the authored
+contract. Do not treat generated files as independent ownership sources outside
+that drift/regeneration context.
 
 ## Root Package Guardrails
 
