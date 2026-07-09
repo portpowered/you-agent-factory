@@ -144,7 +144,7 @@ Repository package-boundary policy:
 - Batch 001 migration-only compatibility shim roots such as `pkg/workflowpolicy`, `pkg/workflowpreview`, `pkg/workflowresult`, `pkg/workflowsource`, and `pkg/workflowvalidation` are temporary retained shims, not durable ownership boundaries. Core runtime, API, CLI, and UI code **MUST** import the canonical owner under `pkg/orchestrators/javascript/*` instead of adding behavior to these shim packages.
 - The package-boundary guard reports retained Batch 001 migration-only shim patterns in advisory mode until the migration-shim removal lane lands. The first PR after retained shims are removed **MUST** switch those findings to blocking enforcement so obsolete compatibility roots cannot reappear.
 - Package-boundary diagnostics **SHOULD** name the disallowed root package path, state that it is outside the approved package-family allowlist, and direct maintainers either to move code under an approved owner or to update the allowlist with ownership rationale.
-- Run `make pkg-boundary` for the focused package-boundary guard independent of `make lint`.
+- Run `make pkg-boundary` for the focused package-boundary guard independent of `make lint`; `make lint` also runs the blocking root-package-family portion for normal verification.
 
 ### 5. Error Handling and Contracts
 

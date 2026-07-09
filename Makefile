@@ -52,7 +52,7 @@ GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 78.3
 PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count deadcode
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary deadcode
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"

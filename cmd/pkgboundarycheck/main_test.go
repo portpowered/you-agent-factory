@@ -277,6 +277,33 @@ func TestMakePkgBoundaryTargetFailsForUnapprovedRootPackageFamily(t *testing.T) 
 	}
 }
 
+func TestMakeLintPathFailsForUnapprovedRootPackageFamily(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	makeDir(t, fixtureRoot, "pkg/experimental")
+
+	cmd := exec.Command("make", "lint", "LINT_TARGETS=pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("make lint succeeded, want unapproved root failure through lint path; output:\n%s", output)
+	}
+
+	got := string(output)
+	for _, want := range []string{
+		"go run ./cmd/pkgboundarycheck -root " + fixtureRoot,
+		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
+		"outside the approved package-family allowlist",
+		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
+		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
+		"*** [pkg-boundary]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("make lint output = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func writeMigrationShimCompatFile(t *testing.T, repoRoot string, packagePath string, canonicalTarget string) {
 	t.Helper()
 
