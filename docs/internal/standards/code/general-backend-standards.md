@@ -136,6 +136,15 @@ Repository package-size policy:
 - When `make pkg-file-count` or `make lint` reports an oversized package, contributors **SHOULD** split files by durable package responsibility or remove dead files. Broad permanent exceptions for oversized `pkg/` packages are prohibited.
 - Run `make pkg-file-count` for the focused package-size check, or `make lint` before review for the full backend lint path that includes this gate.
 
+Repository package-boundary policy:
+
+- Direct children of `pkg/` are package families. New root `pkg/` package families are **blocking** unless a maintainer deliberately updates the approved family allowlist with the owning domain and rationale.
+- The approved product-owned root package families are: `pkg/api`, `pkg/apisurface`, `pkg/cli`, `pkg/composebridge`, `pkg/config`, `pkg/factory`, `pkg/factorydefinition`, `pkg/factorysessionexecution`, `pkg/factorysessions`, `pkg/hostedworkers`, `pkg/initializer`, `pkg/interfaces`, `pkg/internal`, `pkg/invocations`, `pkg/localmodels`, `pkg/logging`, `pkg/materialize`, `pkg/mcp`, `pkg/modelhost`, `pkg/models`, `pkg/orchestrators`, `pkg/packagedfactories`, `pkg/petri`, `pkg/replay`, `pkg/runtimehost`, `pkg/service`, `pkg/sessionpersistence`, `pkg/testutil`, `pkg/timework`, `pkg/workcontent`, `pkg/workers`, `pkg/workgraph`, and `pkg/workquery`.
+- Generated-code exceptions are documented separately from product-owned package families: `pkg/generatedclient`, `pkg/api/generated`, and generated Go files marked with the standard `Code generated ... DO NOT EDIT.` header when a scanner evaluates files. Generated-code exceptions **MUST NOT** become homes for handwritten product behavior.
+- Batch 001 migration-only compatibility shim roots such as `pkg/workflowpolicy`, `pkg/workflowpreview`, `pkg/workflowresult`, `pkg/workflowsource`, and `pkg/workflowvalidation` are temporary retained shims, not durable ownership boundaries. Core runtime, API, CLI, and UI code **MUST** import the canonical owner under `pkg/orchestrators/javascript/*` instead of adding behavior to these shim packages.
+- The package-boundary guard reports retained Batch 001 migration-only shim patterns in advisory mode until the migration-shim removal lane lands. The first PR after retained shims are removed **MUST** switch those findings to blocking enforcement so obsolete compatibility roots cannot reappear.
+- Package-boundary diagnostics **SHOULD** name the disallowed root package path, state that it is outside the approved package-family allowlist, and direct maintainers either to move code under an approved owner or to update the allowlist with ownership rationale.
+
 ### 5. Error Handling and Contracts
 
 Backend systems **MUST** communicate failure clearly and preserve contract correctness.
