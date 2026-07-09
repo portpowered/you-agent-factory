@@ -3,14 +3,20 @@ package main
 import (
 	"flag"
 	"fmt"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
 const defaultScanRoot = "pkg"
+const batch001MigrationShimMarker = "Batch 001 compatibility shim"
+const javascriptOrchestratorImportPrefix = "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/"
+const migrationShimAdvisoryTransition = "migration-shim findings become blocking in the first PR after the migration-shim removal lane lands and retained shims are removed."
 
 const (
 	generatedCodeExceptionScopeRoot    = "root"
@@ -96,8 +102,19 @@ type config struct {
 	packageRoot string
 }
 
+type scanResult struct {
+	rootPackageFindings   []rootPackageFinding
+	migrationShimFindings []migrationShimFinding
+}
+
 type rootPackageFinding struct {
 	packagePath string
+}
+
+type migrationShimFinding struct {
+	packagePath     string
+	marker          string
+	canonicalTarget string
 }
 
 func main() {
@@ -130,62 +147,75 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(findings) == 0 {
-		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (approved root package families and documented exceptions only)")
+	if len(findings.rootPackageFindings) == 0 {
+		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking root package-family violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
+		writeMigrationShimAdvisories(stdout, findings.migrationShimFindings)
 		return nil
 	}
 
-	for _, finding := range findings {
+	for _, finding := range findings.rootPackageFindings {
 		fmt.Fprintf(stderr, "[agent-factory:pkg-boundary] unapproved root package family: %s\n", finding.packagePath)
 		fmt.Fprintf(stderr, "  reason: %s is outside the approved package-family allowlist.\n", finding.packagePath)
 		fmt.Fprintln(stderr, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
+	writeMigrationShimAdvisories(stderr, findings.migrationShimFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
-	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", len(findings))
+	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", len(findings.rootPackageFindings))
 }
 
-func scanRepo(cfg config, policy boundaryPolicy) ([]rootPackageFinding, error) {
+func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	repoRoot, err := filepath.Abs(cfg.root)
 	if err != nil {
-		return nil, fmt.Errorf("resolve repo root: %w", err)
+		return scanResult{}, fmt.Errorf("resolve repo root: %w", err)
 	}
 
 	scanRoot := filepath.Join(repoRoot, filepath.FromSlash(cfg.packageRoot))
 	info, err := os.Stat(scanRoot)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return scanResult{}, nil
 		}
-		return nil, fmt.Errorf("stat scan root %s: %w", filepath.ToSlash(scanRoot), err)
+		return scanResult{}, fmt.Errorf("stat scan root %s: %w", filepath.ToSlash(scanRoot), err)
 	}
 	if !info.IsDir() {
-		return nil, nil
+		return scanResult{}, nil
 	}
 
 	entries, err := os.ReadDir(scanRoot)
 	if err != nil {
-		return nil, fmt.Errorf("read scan root %s: %w", filepath.ToSlash(scanRoot), err)
+		return scanResult{}, fmt.Errorf("read scan root %s: %w", filepath.ToSlash(scanRoot), err)
 	}
 
-	var findings []rootPackageFinding
+	result := scanResult{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
 		packagePath := filepath.ToSlash(filepath.Join(cfg.packageRoot, entry.Name()))
+		migrationShimFinding, found, err := detectMigrationShimFinding(repoRoot, packagePath, policy)
+		if err != nil {
+			return scanResult{}, err
+		}
+		if found {
+			result.migrationShimFindings = append(result.migrationShimFindings, migrationShimFinding)
+		}
+
 		if isAllowedRootPackageFamily(policy, cfg.packageRoot, packagePath) {
 			continue
 		}
 
-		findings = append(findings, rootPackageFinding{packagePath: packagePath})
+		result.rootPackageFindings = append(result.rootPackageFindings, rootPackageFinding{packagePath: packagePath})
 	}
 
-	slices.SortFunc(findings, func(left, right rootPackageFinding) int {
+	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)
 	})
-	return findings, nil
+	slices.SortFunc(result.migrationShimFindings, func(left, right migrationShimFinding) int {
+		return strings.Compare(left.packagePath, right.packagePath)
+	})
+	return result, nil
 }
 
 func validatePolicy(policy boundaryPolicy) error {
@@ -204,6 +234,73 @@ func isAllowedRootPackageFamily(policy boundaryPolicy, packageRoot string, packa
 	return slices.Contains(policy.approvedProductPackageFamilies, packagePath) ||
 		slices.Contains(directRootGeneratedCodeExceptionPaths(policy, packageRoot), packagePath) ||
 		slices.Contains(policy.temporaryMigrationShimRoots, packagePath)
+}
+
+func detectMigrationShimFinding(repoRoot string, packagePath string, policy boundaryPolicy) (migrationShimFinding, bool, error) {
+	if !slices.Contains(policy.temporaryMigrationShimRoots, packagePath) {
+		return migrationShimFinding{}, false, nil
+	}
+
+	packageDir := filepath.Join(repoRoot, filepath.FromSlash(packagePath))
+	entries, err := os.ReadDir(packageDir)
+	if err != nil {
+		return migrationShimFinding{}, false, fmt.Errorf("read migration shim package %s: %w", packagePath, err)
+	}
+
+	finding := migrationShimFinding{packagePath: packagePath}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+			continue
+		}
+
+		goFilePath := filepath.Join(packageDir, entry.Name())
+		marker, canonicalTarget, err := readMigrationShimSignals(goFilePath)
+		if err != nil {
+			return migrationShimFinding{}, false, err
+		}
+		if finding.marker == "" {
+			finding.marker = marker
+		}
+		if finding.canonicalTarget == "" {
+			finding.canonicalTarget = canonicalTarget
+		}
+		if finding.marker != "" && finding.canonicalTarget != "" {
+			return finding, true, nil
+		}
+	}
+
+	return finding, finding.marker != "", nil
+}
+
+func readMigrationShimSignals(goFilePath string) (string, string, error) {
+	content, err := os.ReadFile(goFilePath)
+	if err != nil {
+		return "", "", fmt.Errorf("read migration shim file %s: %w", filepath.ToSlash(goFilePath), err)
+	}
+
+	marker := ""
+	if strings.Contains(string(content), batch001MigrationShimMarker) {
+		marker = batch001MigrationShimMarker
+	}
+	return marker, canonicalTargetImport(content), nil
+}
+
+func canonicalTargetImport(content []byte) string {
+	parsedFile, err := parser.ParseFile(token.NewFileSet(), "", content, parser.ImportsOnly)
+	if err != nil {
+		return ""
+	}
+
+	for _, importSpec := range parsedFile.Imports {
+		importPath, err := strconv.Unquote(importSpec.Path.Value)
+		if err != nil {
+			continue
+		}
+		if strings.HasPrefix(importPath, javascriptOrchestratorImportPrefix) {
+			return importPath
+		}
+	}
+	return ""
 }
 
 func directRootGeneratedCodeExceptionPaths(policy boundaryPolicy, packageRoot string) []string {
@@ -231,4 +328,22 @@ func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
 		descriptions = append(descriptions, fmt.Sprintf("%s (%s)", filepath.ToSlash(exception.packagePath), exception.scope))
 	}
 	return descriptions
+}
+
+func writeMigrationShimAdvisories(writer io.Writer, findings []migrationShimFinding) {
+	if len(findings) == 0 {
+		return
+	}
+
+	fmt.Fprintln(writer, "[agent-factory:pkg-boundary] advisory migration-only compatibility shims detected")
+	for _, finding := range findings {
+		canonicalTarget := finding.canonicalTarget
+		if canonicalTarget == "" {
+			canonicalTarget = "not detected"
+		}
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] advisory migration-only compatibility shim: %s\n", finding.packagePath)
+		fmt.Fprintf(writer, "  marker: %s\n", finding.marker)
+		fmt.Fprintf(writer, "  canonical target: %s\n", canonicalTarget)
+	}
+	fmt.Fprintf(writer, "[agent-factory:pkg-boundary] advisory enforcement transition: %s\n", migrationShimAdvisoryTransition)
 }

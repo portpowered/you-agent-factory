@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,7 +25,7 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run() error = %v, want nil", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "package boundary passed (approved root package families and documented exceptions only)") {
+	if got := stdout.String(); !strings.Contains(got, "package boundary passed (no blocking root package-family violations)") {
 		t.Fatalf("run() stdout = %q, want package-boundary success message", got)
 	}
 	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)") {
@@ -176,6 +177,70 @@ func TestRunReportsMultipleUnapprovedRootPackagesDeterministically(t *testing.T)
 	}
 }
 
+func TestRunReportsMigrationShimPatternsInAdvisoryMode(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/service")
+	writeMigrationShimCompatFile(t, repoRoot, "pkg/workflowpreview", "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v, want nil", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"package boundary passed (no blocking root package-family violations)",
+		"[agent-factory:pkg-boundary] advisory migration-only compatibility shims detected",
+		"[agent-factory:pkg-boundary] advisory migration-only compatibility shim: pkg/workflowpreview",
+		"marker: Batch 001 compatibility shim",
+		"canonical target: github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview",
+		"advisory enforcement transition: migration-shim findings become blocking in the first PR after the migration-shim removal lane lands and retained shims are removed.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stdout = %q, want substring %q", got, want)
+		}
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunReportsMigrationShimAdvisoryWithoutChangingBlockingExit(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/experimental")
+	writeMigrationShimCompatFile(t, repoRoot, "pkg/workflowsource", "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want unapproved root failure")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+
+	got := stderr.String()
+	for _, want := range []string{
+		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
+		"[agent-factory:pkg-boundary] advisory migration-only compatibility shim: pkg/workflowsource",
+		"marker: Batch 001 compatibility shim",
+		"canonical target: github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source",
+		"advisory enforcement transition: migration-shim findings become blocking in the first PR after the migration-shim removal lane lands and retained shims are removed.",
+		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
+	} {
+		if !strings.Contains(got, want) && !strings.Contains(err.Error(), want) {
+			t.Fatalf("run() diagnostics = stdout:%q stderr:%q err:%q, want substring %q", stdout.String(), got, err.Error(), want)
+		}
+	}
+}
+
 func TestRunRejectsEmptyPackageRoot(t *testing.T) {
 	t.Parallel()
 
@@ -209,6 +274,27 @@ func TestMakePkgBoundaryTargetFailsForUnapprovedRootPackageFamily(t *testing.T) 
 		if !strings.Contains(got, want) {
 			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)
 		}
+	}
+}
+
+func writeMigrationShimCompatFile(t *testing.T, repoRoot string, packagePath string, canonicalTarget string) {
+	t.Helper()
+
+	packageName := filepath.Base(filepath.FromSlash(packagePath))
+	absolutePath := filepath.Join(repoRoot, filepath.FromSlash(packagePath), "compat.go")
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+		t.Fatalf("create parent directory for %s: %v", packagePath, err)
+	}
+	content := fmt.Sprintf(`// Deprecated: use %s instead.
+// This package is a Batch 001 compatibility shim; core runtime and API code must import the orchestrator-owned path directly.
+package %s
+
+import target "%s"
+
+type Request = target.Request
+`, canonicalTarget, packageName, canonicalTarget)
+	if err := os.WriteFile(absolutePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write migration shim fixture %s: %v", packagePath, err)
 	}
 }
 
