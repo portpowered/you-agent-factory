@@ -113,6 +113,27 @@ flowchart LR
 The important rule is that `FactoryService` routes and coordinates, but does
 not become the canonical owner of per-session runtime state.
 
+### Factory Session state ownership
+
+A Factory Session owns both live and durable session state. That ownership
+includes the runtime instances created for the session, the ordered Factory
+event history, lifecycle and control state, current work, the Current Factory,
+and session read models derived for APIs, CLI callers, and dashboards.
+
+`FactoryService` coordinates APIs, CLI calls, session registries, persistence,
+runtime construction, and model/runtime dependencies. It can locate, construct,
+and route to Factory Sessions, but it must not become the owner of per-session
+runtime state. Stateful runtime changes should land in the Factory Session
+domain or the session execution owner that serves it, with `FactoryService`
+remaining a coordinator around those owners.
+
+Dynamic workflow execution follows the same rule. A JavaScript orchestrator is a
+Factory Session execution kind, so its source snapshots, progress, event
+history, lifecycle controls, current work, Provider Sessions, and result read
+models belong to Factory Session execution surfaces. Customer-facing APIs and
+docs should describe those runs as Factory Session execution, not as a separate
+public runtime resource.
+
 ### Logical session identity and restart recovery
 
 Dashboard tabs and other long-lived clients can persist logical session intent
