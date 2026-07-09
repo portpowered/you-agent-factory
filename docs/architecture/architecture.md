@@ -1,5 +1,55 @@
 # Backend
 
+## Runtime Startup Ownership
+
+Runtime cleanup work should move process wiring toward this preferred ownership
+path:
+
+`cmd/factory -> pkg/root -> pkg/inject -> pkg/initializer -> transports/app graph`
+
+```mermaid
+flowchart LR
+    cmd["cmd/factory"]
+    root["pkg/root"]
+    inject["pkg/inject"]
+    graph["app dependency graph"]
+    initializer["pkg/initializer"]
+    transports["API / CLI / MCP transports and sidecars"]
+    sessions["Factory Sessions"]
+
+    cmd --> root
+    root --> inject
+    inject --> graph
+    root --> initializer
+    graph --> initializer
+    initializer --> transports
+    graph --> sessions
+```
+
+`cmd/factory` is the thin process entrypoint. It should parse only the process
+boundary concerns required to hand control to the root package, then avoid
+owning runtime composition or transport-specific dependency construction.
+
+`pkg/root` selects the process mode and top-level behavior for the current
+invocation, such as API service hosting, local CLI execution, or sidecar startup.
+It owns root command flow and chooses which already-defined startup path to run.
+
+`pkg/inject` builds the application dependency graph from explicit inputs. It is
+the target owner for dependency construction, config-loaded collaborators, and
+service graph assembly. The graph it returns should be usable by multiple
+startup modes without hiding filesystem, environment, process, or transport
+dependencies in package globals.
+
+`pkg/initializer` starts transports and sidecars from already-built services. It
+attaches API, CLI, MCP, or other process adapters to the assembled graph rather
+than rebuilding session runtime state or reaching around the graph for ad hoc
+dependencies.
+
+This startup path preserves the event-first runtime model. Transports submit
+commands into Factory Session APIs, workers and agents emit outputs, and those
+outputs re-enter the runtime as Factory events. They do not mutate canonical
+Factory Session state directly.
+
 ## Core Loop
 
 The backend centers on a deterministic tick loop that updates a shared world state from submitted events. Each tick reads pending inputs, applies subsystem logic, and emits outputs that are handed off to queues and workers.
@@ -62,6 +112,82 @@ flowchart LR
 
 The important rule is that `FactoryService` routes and coordinates, but does
 not become the canonical owner of per-session runtime state.
+
+### Factory Session state ownership
+
+A Factory Session owns both live and durable session state. That ownership
+includes the runtime instances created for the session, the ordered Factory
+event history, lifecycle and control state, current work, the Current Factory,
+and session read models derived for APIs, CLI callers, and dashboards.
+
+`FactoryService` coordinates APIs, CLI calls, session registries, persistence,
+runtime construction, and model/runtime dependencies. It can locate, construct,
+and route to Factory Sessions, but it must not become the owner of per-session
+runtime state. Stateful runtime changes should land in the Factory Session
+domain or the session execution owner that serves it, with `FactoryService`
+remaining a coordinator around those owners.
+
+Dynamic workflow execution follows the same rule. A JavaScript orchestrator is a
+Factory Session execution kind, so its source snapshots, progress, event
+history, lifecycle controls, current work, Provider Sessions, and result read
+models belong to Factory Session execution surfaces. Customer-facing APIs and
+docs should describe those runs as Factory Session execution, not as a separate
+public runtime resource.
+
+### Target package-family ownership map
+
+Runtime cleanup work should place new behavior in the narrow owner for the
+responsibility being changed. Use this map before reading broad service,
+runtime-host, or composition-shim implementations. `pkg/service`,
+`pkg/runtimehost`, and `pkg/composebridge` are not the ownership source of truth
+for new placement decisions.
+
+| Responsibility | Preferred owner for new implementation | Placement rule |
+| --- | --- | --- |
+| Process root and mode selection | `cmd/factory` and target `pkg/root` | Keep `cmd/factory` as the thin process entrypoint; put root command flow and process-mode selection in `pkg/root`. |
+| Dependency injection and app graph assembly | target `pkg/inject` | Build explicit dependency graphs here so transports consume already-constructed services. |
+| Initializer startup | `pkg/initializer` | Start API, CLI, MCP, sidecars, and other process adapters from the assembled graph without rebuilding runtime state. |
+| Factory Session live state | `pkg/factorysessions` | Own live session registries, runtime identity, session projections, stream identity, and read models for the customer-facing Factory Session. |
+| Durable Factory Session execution | `pkg/factorysessionexecution` | Own durable start, resume, lifecycle/control, result, dispatch, artifact, event, and persisted execution behavior. |
+| Dynamic workflow / JavaScript orchestration | `pkg/orchestrators/javascript/*` | Put source resolution, validation, policy, preview preparation, runtime execution, result shaping, and checkpoints under the JavaScript orchestrator packages. |
+| Factory runtime loop and projections | `pkg/factory` | Own event-first runtime behavior, subsystem coordination, emitted Factory events, replay, and world-state projections. |
+| Internal Petri implementation | `pkg/petri` | Keep tokens, places, transitions, markings, and guard mechanics internal; do not promote them as the primary public resource model. |
+| Workers and providers | `pkg/workers` and `pkg/hostedworkers` | Put worker execution, provider adapters, mock workers, process runners, sidecars, and hosted-worker integrations in the worker owner. |
+| Models and managed runtimes | `pkg/modelhost` | Put process-wide model runtime lifecycle, readiness, supervised servers, leases, capacity, and diagnostics in the model host; keep API/CLI adapters in `pkg/models/service`. |
+| Invocation and work input | `pkg/invocations` and `pkg/workcontent` | Put invocation argument normalization, interpolation, inference envelopes, return-policy resolution, and payload conversion in shared invocation/work-content owners. |
+| Work query behavior | `pkg/workquery` | Put shared work filtering, state-type validation, and query semantics here before adapting them to CLI, API, or UI callers. |
+| Platform infrastructure | narrow platform packages such as `pkg/config`, `pkg/logging`, and `pkg/sessionpersistence` | Put config/default paths, diagnostics, metrics, persistence, and other infrastructure in the specific platform package that owns that resource, not in `FactoryService` as a grab bag. |
+
+When a change crosses rows, choose the owner that owns the durable state or
+policy decision, then keep CLI, API, MCP, and UI code as adapters around that
+owner. Customer-facing Factory Session behavior belongs in Factory Session
+owners; Petri-net concepts stay behind the internal runtime boundary.
+
+### Migration-era surfaces and compatibility aliases
+
+The following packages and aliases exist to keep current behavior working while
+runtime cleanup moves ownership into the target package families above. Treat
+them as temporary placement surfaces. New production behavior should not land
+there unless the change is a small compatibility delegation to the target owner
+or part of an active removal lane.
+
+| Migration-era surface | Temporary role | Target owner or sunset expectation |
+| --- | --- | --- |
+| Broad `pkg/service` runtime composition files, including `factory.go`, `factory_build.go`, `runtime_sessions.go`, `model_catalog.go`, and `factory_editable_definition.go` | Compatibility shell for existing API, CLI, session, model, save, and runtime construction entrypoints. | Move durable behavior to the narrow owner: Factory Session state to `pkg/factorysessions`, durable execution to `pkg/factorysessionexecution`, model behavior to `pkg/modelhost` and `pkg/models/service`, invocation/work input to `pkg/invocations` and `pkg/workcontent`, factory definition behavior to `pkg/factorydefinition/service`, and startup graph construction to target `pkg/inject`. Leave `pkg/service` as thin routing until callers no longer need the compatibility shell. |
+| `pkg/runtimehost` | Transitional wrapper around the service-backed runtime host shape. | Replace host ownership with explicit Factory Session, runtime loop, and initializer dependencies. Sunset the package once transports and session APIs no longer need a runtime-host facade around `FactoryService` compatibility. |
+| `pkg/composebridge` | Bridge that lets `pkg/initializer` reuse service-owned runtime bundle construction during the migration. | Move dependency graph assembly to target `pkg/inject` and keep startup in `pkg/initializer`. Delete the bridge when initializer paths can build from the explicit graph without reaching through service composition internals. |
+| Host-object dependency-injection adapters such as service-local `modelServiceHost`, `factoryDefinitionHost`, `factorySaveHost`, and `sessionGatewayHost` structs, plus cmd-owned Wire providers under `cmd/factory/compose` | Adapter objects that satisfy narrower service interfaces while the old coordinator still carries many collaborators. | Prefer explicit constructor inputs and graph assembly in target `pkg/inject`, with domain packages owning their own host interfaces only at the boundary they actually consume. Delete each adapter when the target owner accepts explicit collaborators or the old coordinator no longer fronts that behavior. |
+| Root `pkg/workflow*` packages: `pkg/workflowsource`, `pkg/workflowvalidation`, `pkg/workflowpolicy`, `pkg/workflowpreview`, and `pkg/workflowresult` | Batch 001 compatibility shims that type-alias JavaScript orchestrator packages. | Import `pkg/orchestrators/javascript/source`, `validation`, `policy`, `preview`, and `result` directly for runtime, API, CLI, MCP, and dashboard work. Remove the shims after downstream imports are gone and compatibility guarantees permit deletion. |
+| Retained workflow compatibility aliases, including `you workflow ...` CLI commands, `you.workflow.*` MCP tools, and obsolete workflow-named API routes such as workflow preview aliases | Backward-compatible names for existing operators and host integrations. | Document and test them only as aliases. Primary surfaces are Factory Session APIs (`POST /factory-sessions/async`, `POST /factory-sessions/sync`, session reads, result, dispatch, artifact, event, and lifecycle routes), Factory preview validation (`POST /factories/preview`), Factory Session CLI inspection and durable session execution semantics, and `you.factory_session.*` MCP tools. Where a `you workflow ...` command remains the only shipped CLI entrypoint, docs should describe the command as Factory Session execution or inspection. Sunset aliases only through an explicit compatibility-removal plan. |
+
+Compatibility documentation should name the successor first and the old surface
+second. For example, describe JavaScript orchestration as Factory Session
+execution with workflow-named CLI or MCP aliases, not as a separate public
+runtime resource.
+
+For review-time placement guardrails and focused vocabulary verification, use
+`docs/internal/processes/runtime-cleanup-relevant-files.md` alongside this
+ownership map.
 
 ### Logical session identity and restart recovery
 
