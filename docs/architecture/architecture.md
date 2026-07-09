@@ -134,6 +134,35 @@ models belong to Factory Session execution surfaces. Customer-facing APIs and
 docs should describe those runs as Factory Session execution, not as a separate
 public runtime resource.
 
+### Target package-family ownership map
+
+Runtime cleanup work should place new behavior in the narrow owner for the
+responsibility being changed. Use this map before reading broad service,
+runtime-host, or composition-shim implementations. `pkg/service`,
+`pkg/runtimehost`, and `pkg/composebridge` are not the ownership source of truth
+for new placement decisions.
+
+| Responsibility | Preferred owner for new implementation | Placement rule |
+| --- | --- | --- |
+| Process root and mode selection | `cmd/factory` and target `pkg/root` | Keep `cmd/factory` as the thin process entrypoint; put root command flow and process-mode selection in `pkg/root`. |
+| Dependency injection and app graph assembly | target `pkg/inject` | Build explicit dependency graphs here so transports consume already-constructed services. |
+| Initializer startup | `pkg/initializer` | Start API, CLI, MCP, sidecars, and other process adapters from the assembled graph without rebuilding runtime state. |
+| Factory Session live state | `pkg/factorysessions` | Own live session registries, runtime identity, session projections, stream identity, and read models for the customer-facing Factory Session. |
+| Durable Factory Session execution | `pkg/factorysessionexecution` | Own durable start, resume, lifecycle/control, result, dispatch, artifact, event, and persisted execution behavior. |
+| Dynamic workflow / JavaScript orchestration | `pkg/orchestrators/javascript/*` | Put source resolution, validation, policy, preview preparation, runtime execution, result shaping, and checkpoints under the JavaScript orchestrator packages. |
+| Factory runtime loop and projections | `pkg/factory` | Own event-first runtime behavior, subsystem coordination, emitted Factory events, replay, and world-state projections. |
+| Internal Petri implementation | `pkg/petri` | Keep tokens, places, transitions, markings, and guard mechanics internal; do not promote them as the primary public resource model. |
+| Workers and providers | `pkg/workers` and `pkg/hostedworkers` | Put worker execution, provider adapters, mock workers, process runners, sidecars, and hosted-worker integrations in the worker owner. |
+| Models and managed runtimes | `pkg/modelhost` | Put process-wide model runtime lifecycle, readiness, supervised servers, leases, capacity, and diagnostics in the model host; keep API/CLI adapters in `pkg/models/service`. |
+| Invocation and work input | `pkg/invocations` and `pkg/workcontent` | Put invocation argument normalization, interpolation, inference envelopes, return-policy resolution, and payload conversion in shared invocation/work-content owners. |
+| Work query behavior | `pkg/workquery` | Put shared work filtering, state-type validation, and query semantics here before adapting them to CLI, API, or UI callers. |
+| Platform infrastructure | narrow platform packages such as `pkg/config`, `pkg/logging`, and `pkg/sessionpersistence` | Put config/default paths, diagnostics, metrics, persistence, and other infrastructure in the specific platform package that owns that resource, not in `FactoryService` as a grab bag. |
+
+When a change crosses rows, choose the owner that owns the durable state or
+policy decision, then keep CLI, API, MCP, and UI code as adapters around that
+owner. Customer-facing Factory Session behavior belongs in Factory Session
+owners; Petri-net concepts stay behind the internal runtime boundary.
+
 ### Logical session identity and restart recovery
 
 Dashboard tabs and other long-lived clients can persist logical session intent
