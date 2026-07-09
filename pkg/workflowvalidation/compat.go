@@ -1,5 +1,10 @@
-// Deprecated: use github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation instead.
-// This package is a Batch 001 compatibility shim; core runtime and API code must import the orchestrator-owned path directly.
+// Package workflowvalidation is a Batch 001 compatibility shim for the legacy
+// root workflow validation import path.
+//
+// Deprecated: canonical ownership for JavaScript workflow validation lives in
+// github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation.
+// Core runtime and API code must import pkg/orchestrators/javascript/validation
+// directly.
 package workflowvalidation
 
 import target "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
