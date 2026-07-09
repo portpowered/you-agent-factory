@@ -185,6 +185,10 @@ second. For example, describe JavaScript orchestration as Factory Session
 execution with workflow-named CLI or MCP aliases, not as a separate public
 runtime resource.
 
+For review-time placement guardrails and focused vocabulary verification, use
+`docs/internal/processes/runtime-cleanup-relevant-files.md` alongside this
+ownership map.
+
 ### Logical session identity and restart recovery
 
 Dashboard tabs and other long-lived clients can persist logical session intent

@@ -1,0 +1,81 @@
+# Runtime Cleanup Relevant Files
+
+Use this map when changing runtime cleanup ownership, package placement, startup
+wiring, or documentation that tells maintainers where new runtime behavior
+belongs. Start with `docs/architecture/architecture.md`, especially the runtime
+startup path, Factory Session state ownership, target package-family ownership
+map, and migration-era surfaces sections.
+
+## Placement Decision Guide
+
+Classify the change by the owner of durable state or policy first, then keep
+API, CLI, MCP, UI, and compatibility code as adapters around that owner. Broad
+service facades, runtime-host wrappers, compose bridges, root workflow shims,
+and compatibility aliases are placement evidence only when the change is a thin
+delegation to the target owner or part of an active removal lane.
+
+| Change area | Preferred owner for new behavior | Review guidance |
+| --- | --- | --- |
+| Dynamic workflow runtime behavior | `pkg/orchestrators/javascript/*`, with durable lifecycle and resume behavior in `pkg/factorysessionexecution` | Put JavaScript source resolution, validation, policy, runtime execution, result shaping, checkpoints, and resume state in the JavaScript orchestrator packages. Route durable start, resume, lifecycle/control, artifact, result, and persisted execution through Factory Session execution owners. |
+| Factory Session state | `pkg/factorysessions` for live session state and read models; `pkg/factorysessionexecution` for durable execution state | A Factory Session owns runtime identity, event history, lifecycle/control state, current work, Current Factory, runtime instances, stream identity, and session projections. `FactoryService` may locate or route to sessions, but must not become the state owner. |
+| Model operations | `pkg/modelhost` for process-wide runtime lifecycle and leases; `pkg/models/service` for model API service behavior; `pkg/localmodels` for catalog compatibility projection | Keep readiness, supervised process lifecycle, capacity, leases, diagnostics, invocation gating, and host-owned execution in the model owner. Transport handlers should call model service or API-surface adapters instead of embedding model runtime policy. |
+| Worker and provider execution | `pkg/workers` and `pkg/hostedworkers` | Put provider adapters, script/agent/inference executors, mock workers, process runners, sidecars, hosted-worker integration, and worker execution diagnostics in the worker owner. Session or service code should inject callbacks and observers rather than owning provider behavior. |
+| Invocation and work input | `pkg/invocations` and `pkg/workcontent` | Put argument normalization, text/stdin resolution, interpolation, primary-result policy, inference envelopes, return-policy resolution, and payload conversion in shared invocation/work-content owners. CLI and API code should adapt requests into those shared contracts. |
+| Work query behavior | `pkg/workquery` | Put shared filtering, state-type validation, query semantics, and reusable work-selection policy in the work-query owner before adapting to CLI, API, or UI callers. |
+| Platform infrastructure | Narrow platform owners such as `pkg/config`, `pkg/config/defaultpaths`, `pkg/logging`, `pkg/sessionpersistence`, and targeted diagnostics packages | Put default paths, config loading, persistence, metrics, logging, runtime artifact roots, and diagnostics in the package that owns that platform resource. Do not add platform catch-all behavior to `FactoryService`. |
+| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/inject`, and `pkg/initializer` | Keep `cmd/factory` thin, put process-mode selection in `pkg/root`, build explicit dependency graphs in `pkg/inject`, and start transports or sidecars from already-built services in `pkg/initializer`. |
+
+When a change spans rows, place the durable state or policy in its owner and
+adapt outward. For example, a new session read that exposes JavaScript
+orchestrator progress should keep progress derivation in Factory Session or
+orchestrator owners, then map it through API, CLI, MCP, or UI boundaries.
+
+## Root Package Guardrails
+
+New root `pkg/` package families need an explicit target-owner rationale in the
+PRD, implementation notes, or PR conversation before production behavior lands
+there. The rationale should state:
+
+- which durable state or policy the package owns
+- why an existing target owner cannot own the behavior
+- which adapters are allowed to depend on it
+- whether the package is permanent or part of an active removal lane
+
+If that rationale is missing, the change should land in an existing target owner
+or be limited to a migration/removal lane that deletes, aliases, or delegates
+old behavior toward the documented owner.
+
+## Vocabulary Guardrails
+
+Changed customer-facing docs, API descriptions, CLI help, dashboard copy, and
+process guidance should use the public resource vocabulary from
+`docs/architecture/data-model.md`: Factory, Factory Session, Current Factory,
+Work, Work Request, and Provider Session.
+
+Do not describe JavaScript orchestration as a separate customer-facing
+`DynamicWorkflowRun` resource. Describe it as Factory Session execution with a
+JavaScript orchestrator kind, with workflow-named commands, tools, or routes
+treated as compatibility aliases when they still exist.
+
+Petri-net vocabulary such as tokens, places, transitions, markings, and guards
+is allowed only when the text explicitly describes internal implementation
+details or `pkg/petri` ownership. It should not be the primary wording for
+customer-facing Factory Session, Work, or event-stream behavior.
+
+## Focused Verification
+
+For runtime-cleanup documentation changes, run a changed-docs vocabulary check
+after review against `docs/architecture/data-model.md`:
+
+```sh
+changed_docs="$(git diff --name-only --diff-filter=ACMRT origin/main...HEAD -- docs prd.md)"
+test -z "$changed_docs" || rg -n "DynamicWorkflowRun|\\b(Petri|petri|tokens?|places|transitions|markings?)\\b" $changed_docs
+```
+
+Inspect each hit. Accept hits only when they are guardrail text or explicitly
+internal implementation notes; otherwise revise the changed docs to use Factory
+Session, Work, Work Request, Provider Session, event, or target-owner wording.
+
+Documentation-only runtime-cleanup changes should also run `git diff --check`
+and `make typecheck`. Add `make docs-reference-smoke` only when packaged
+`docs/reference/` content or `you docs` routing changes.
