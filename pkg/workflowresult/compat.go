@@ -1,5 +1,9 @@
-// Deprecated: use github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result instead.
-// This package is a Batch 001 compatibility shim; core runtime and API code must import the orchestrator-owned path directly.
+// Package workflowresult is a Batch 001 compatibility shim for the legacy root
+// workflow result import path.
+//
+// Deprecated: canonical ownership for JavaScript workflow result lives in
+// github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result. Core
+// runtime and API code must import pkg/orchestrators/javascript/result directly.
 package workflowresult
 
 import target "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"

@@ -1,5 +1,9 @@
-// Deprecated: use github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source instead.
-// This package is a Batch 001 compatibility shim; core runtime and API code must import the orchestrator-owned path directly.
+// Package workflowsource is a Batch 001 compatibility shim for the legacy root
+// workflow source import path.
+//
+// Deprecated: canonical ownership for JavaScript workflow source lives in
+// github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source. Core
+// runtime and API code must import pkg/orchestrators/javascript/source directly.
 package workflowsource
 
 import target "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
