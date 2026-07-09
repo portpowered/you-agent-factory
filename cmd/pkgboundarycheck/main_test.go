@@ -1,0 +1,353 @@
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/service")
+	makeDir(t, repoRoot, "pkg/orchestrators")
+	makeDir(t, repoRoot, "pkg/generatedclient")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v, want nil", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "package boundary passed (no blocking package-boundary violations)") {
+		t.Fatalf("run() stdout = %q, want package-boundary success message", got)
+	}
+	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)") {
+		t.Fatalf("run() stdout = %q, want generated-code exception summary", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGeneratedGoFile(t, repoRoot, "pkg/generatedclient/client.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/api/generated/server.gen.go")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v, want nil", err)
+	}
+	for _, want := range []string{
+		"package boundary passed",
+		"active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+	} {
+		if got := stdout.String(); !strings.Contains(got, want) {
+			t.Fatalf("run() stdout = %q, want substring %q", got, want)
+		}
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunRejectsGeneratedLookingRootOutsideDocumentedExceptions(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGeneratedGoFile(t, repoRoot, "pkg/generatedclient/client.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/generatedexperimental/client.gen.go")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want unapproved generated-looking root failure")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+
+	got := stderr.String()
+	for _, want := range []string{
+		"[agent-factory:pkg-boundary] unapproved root package family: pkg/generatedexperimental",
+		"outside the approved package-family allowlist",
+		"active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+	if strings.Contains(got, "unapproved root package family: pkg/generatedclient") {
+		t.Fatalf("run() stderr = %q, documented generated-code root should not be rejected", got)
+	}
+}
+
+func TestValidatePolicyRejectsGeneratedExceptionAsProductFamily(t *testing.T) {
+	t.Parallel()
+
+	policy := boundaryPolicy{
+		approvedProductPackageFamilies: []string{"pkg/generatedclient"},
+		generatedCodeExceptions: []generatedCodeException{
+			{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
+		},
+	}
+
+	err := validatePolicy(policy)
+	if err == nil {
+		t.Fatal("validatePolicy() error = nil, want generated-code/product-family overlap rejection")
+	}
+	if got := err.Error(); got != "generated-code exception pkg/generatedclient must not also be an approved product package family" {
+		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
+	}
+}
+
+func TestRunFailsForUnapprovedRootPackageFamily(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/service")
+	makeDir(t, repoRoot, "pkg/experimental")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want package-boundary violation")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+
+	wantOutput := strings.Join([]string{
+		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
+		"  reason: pkg/experimental is outside the approved package-family allowlist.",
+		"  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.",
+		"[agent-factory:pkg-boundary] active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+		"",
+	}, "\n")
+	if got := stderr.String(); got != wantOutput {
+		t.Fatalf("run() stderr = %q, want diagnostic %q", got, wantOutput)
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 1 package-boundary violation(s)" {
+		t.Fatalf("run() error = %q, want violation count", got)
+	}
+}
+
+func TestRunReportsMultipleUnapprovedRootPackagesDeterministically(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/zeta")
+	makeDir(t, repoRoot, "pkg/experimental")
+	makeDir(t, repoRoot, "pkg/alpha")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want package-boundary violations")
+	}
+
+	errOutput := stderr.String()
+	alphaIndex := strings.Index(errOutput, "[agent-factory:pkg-boundary] unapproved root package family: pkg/alpha")
+	experimentalIndex := strings.Index(errOutput, "[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental")
+	zetaIndex := strings.Index(errOutput, "[agent-factory:pkg-boundary] unapproved root package family: pkg/zeta")
+	if alphaIndex < 0 || experimentalIndex < 0 || zetaIndex < 0 {
+		t.Fatalf("run() stderr = %q, want all unapproved roots reported", errOutput)
+	}
+	if !(alphaIndex < experimentalIndex && experimentalIndex < zetaIndex) {
+		t.Fatalf("run() stderr = %q, want package roots reported in path order", errOutput)
+	}
+	if got := strings.Count(errOutput, "outside the approved package-family allowlist"); got != 3 {
+		t.Fatalf("run() stderr = %q, want remediation details for each violation", errOutput)
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 3 package-boundary violation(s)" {
+		t.Fatalf("run() error = %q, want three violation count", got)
+	}
+}
+
+func TestRunBlocksMigrationShimPatternEvenWhenRootFamilyApproved(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/service")
+	writeMigrationShimCompatFile(t, repoRoot, "pkg/workflowpreview", "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview")
+
+	policy := defaultBoundaryPolicy()
+	policy.approvedProductPackageFamilies = append(policy.approvedProductPackageFamilies, "pkg/workflowpreview")
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := runWithPolicy(config{root: repoRoot, packageRoot: defaultScanRoot}, policy, stdout, stderr)
+	if err == nil {
+		t.Fatal("runWithPolicy() error = nil, want migration-shim blocking failure")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("runWithPolicy() stdout = %q, want empty", got)
+	}
+
+	got := stderr.String()
+	for _, want := range []string{
+		"[agent-factory:pkg-boundary] blocked migration-only compatibility shim: pkg/workflowpreview",
+		"marker: Batch 001 compatibility shim",
+		"canonical target: github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview",
+		"remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("runWithPolicy() stderr = %q, want substring %q", got, want)
+		}
+	}
+	if strings.Contains(got, "unapproved root package family: pkg/workflowpreview") {
+		t.Fatalf("runWithPolicy() stderr = %q, migration-shim fixture should fail without root-family diagnostic", got)
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 1 package-boundary violation(s)" {
+		t.Fatalf("runWithPolicy() error = %q, want migration-shim violation count", got)
+	}
+}
+
+func TestRunReportsMigrationShimBlockingAlongsideRootViolations(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/experimental")
+	writeMigrationShimCompatFile(t, repoRoot, "pkg/workflowsource", "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want unapproved root failure")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("run() stdout = %q, want empty", got)
+	}
+
+	got := stderr.String()
+	for _, want := range []string{
+		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
+		"[agent-factory:pkg-boundary] blocked migration-only compatibility shim: pkg/workflowsource",
+		"marker: Batch 001 compatibility shim",
+		"canonical target: github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source",
+		"remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.",
+		"[agent-factory:pkg-boundary] found 3 package-boundary violation(s)",
+	} {
+		if !strings.Contains(got, want) && !strings.Contains(err.Error(), want) {
+			t.Fatalf("run() diagnostics = stdout:%q stderr:%q err:%q, want substring %q", stdout.String(), got, err.Error(), want)
+		}
+	}
+}
+
+func TestRunRejectsEmptyPackageRoot(t *testing.T) {
+	t.Parallel()
+
+	err := run(config{root: t.TempDir()}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || err.Error() != "package root must not be empty" {
+		t.Fatalf("run() error = %v, want package root validation", err)
+	}
+}
+
+func TestMakePkgBoundaryTargetFailsForUnapprovedRootPackageFamily(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	makeDir(t, fixtureRoot, "pkg/experimental")
+
+	cmd := exec.Command("make", "pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("make pkg-boundary succeeded, want unapproved root failure; output:\n%s", output)
+	}
+
+	got := string(output)
+	for _, want := range []string{
+		"go run ./cmd/pkgboundarycheck -root " + fixtureRoot,
+		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
+		"outside the approved package-family allowlist",
+		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
+		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
+		"*** [pkg-boundary]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestMakeLintPathFailsForUnapprovedRootPackageFamily(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	makeDir(t, fixtureRoot, "pkg/experimental")
+
+	cmd := exec.Command("make", "lint", "LINT_TARGETS=pkg-boundary", "PACKAGE_BOUNDARY_ROOT="+fixtureRoot)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("make lint succeeded, want unapproved root failure through lint path; output:\n%s", output)
+	}
+
+	got := string(output)
+	for _, want := range []string{
+		"go run ./cmd/pkgboundarycheck -root " + fixtureRoot,
+		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
+		"outside the approved package-family allowlist",
+		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
+		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
+		"*** [pkg-boundary]",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("make lint output = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func writeMigrationShimCompatFile(t *testing.T, repoRoot string, packagePath string, canonicalTarget string) {
+	t.Helper()
+
+	packageName := filepath.Base(filepath.FromSlash(packagePath))
+	absolutePath := filepath.Join(repoRoot, filepath.FromSlash(packagePath), "compat.go")
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+		t.Fatalf("create parent directory for %s: %v", packagePath, err)
+	}
+	content := fmt.Sprintf(`// Deprecated: use %s instead.
+// This package is a Batch 001 compatibility shim; core runtime and API code must import the orchestrator-owned path directly.
+package %s
+
+import target "%s"
+
+type Request = target.Request
+`, canonicalTarget, packageName, canonicalTarget)
+	if err := os.WriteFile(absolutePath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write migration shim fixture %s: %v", packagePath, err)
+	}
+}
+
+func makeDir(t *testing.T, repoRoot string, relativePath string) {
+	t.Helper()
+
+	absolutePath := filepath.Join(repoRoot, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(absolutePath, 0o755); err != nil {
+		t.Fatalf("create directory %s: %v", relativePath, err)
+	}
+}
+
+func writeGeneratedGoFile(t *testing.T, repoRoot string, relativePath string) {
+	t.Helper()
+
+	absolutePath := filepath.Join(repoRoot, filepath.FromSlash(relativePath))
+	if err := os.MkdirAll(filepath.Dir(absolutePath), 0o755); err != nil {
+		t.Fatalf("create parent directory for %s: %v", relativePath, err)
+	}
+	content := []byte("// Code generated by package-boundary test. DO NOT EDIT.\n\npackage generated\n")
+	if err := os.WriteFile(absolutePath, content, 0o644); err != nil {
+		t.Fatalf("write generated file %s: %v", relativePath, err)
+	}
+}
