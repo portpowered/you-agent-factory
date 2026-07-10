@@ -78,12 +78,13 @@ function renderProvider(children: ReactNode = <SessionScopeProbe />) {
 }
 
 function SessionScopeProbe() {
-  const { eventsPath, factoryPath, isPaused, sessionID, workPath } =
+  const { eventsPath, factoryPath, isDefault, isPaused, sessionID, workPath } =
     useDashboardSession();
 
   return (
     <div data-testid="session-scope-probe">
-      {sessionID}|{factoryPath}|{workPath}|{eventsPath}|{String(isPaused)}
+      {sessionID}|{factoryPath}|{workPath}|{eventsPath}|{String(isPaused)}|
+      {String(isDefault)}
     </div>
   );
 }
@@ -131,7 +132,7 @@ describe("DashboardSessionProvider", () => {
     });
 
     expect((await screen.findByTestId("session-scope-probe")).textContent).toBe(
-      `${RESOLVED_DEFAULT_SESSION_UUID}|/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/factory|/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/work|/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events|false`,
+      `${RESOLVED_DEFAULT_SESSION_UUID}|/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/factory|/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/work|/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events|false|true`,
     );
     await waitFor(() => {
       expect(useDashboardSessionStore.getState()).toMatchObject({
@@ -154,7 +155,7 @@ describe("DashboardSessionProvider", () => {
     });
 
     expect(screen.getByTestId("session-scope-probe").textContent).toBe(
-      "session-beta|/factory-sessions/session-beta/factory|/factory-sessions/session-beta/work|/factory-sessions/session-beta/events|false",
+      "session-beta|/factory-sessions/session-beta/factory|/factory-sessions/session-beta/work|/factory-sessions/session-beta/events|false|false",
     );
   });
 
@@ -235,7 +236,7 @@ describe("DashboardSessionProvider", () => {
     });
 
     expect(screen.getByTestId("session-scope-probe").textContent).toBe(
-      "session-beta|/factory-sessions/session-beta/factory|/factory-sessions/session-beta/work|/factory-sessions/session-beta/events|false",
+      "session-beta|/factory-sessions/session-beta/factory|/factory-sessions/session-beta/work|/factory-sessions/session-beta/events|false|false",
     );
     expect(useDashboardSessionStore.getState().sessionTabOrder).toEqual([
       RESOLVED_DEFAULT_SESSION_UUID,

@@ -85,8 +85,13 @@ export function DashboardSessionProvider({
   }, [resolveSessionIdentity, resolvedDefaultSession, sessionsQuery.data]);
 
   const scope = useMemo(
-    () => buildSessionScope(resolvedSelectedSessionID, pausedSessionIDs),
-    [pausedSessionIDs, resolvedSelectedSessionID],
+    () =>
+      buildSessionScope(
+        resolvedSelectedSessionID,
+        pausedSessionIDs,
+        resolvedDefaultSession?.id === resolvedSelectedSessionID,
+      ),
+    [pausedSessionIDs, resolvedDefaultSession, resolvedSelectedSessionID],
   );
 
   if (requiresDefaultResolution && !resolvedDefaultSession) {
