@@ -277,7 +277,7 @@ func assertGetResultSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysessi
 		"resultStatus",
 		"sessionStatus",
 		"availability",
-		"failure",
+		"failureDetail",
 	)
 	availability := nestedSchemaProperties(t, resultSchema, "availability")
 	requireSchemaFieldsMatchGenerated(
