@@ -705,6 +705,56 @@ func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *t
 	}
 }
 
+func TestParseClaudeProviderFailure_CredentialProseNeverPassesThrough(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name:        "StructuredSensitiveEnvironmentProse",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Set ANTHROPIC_AUTH_TOKEN to customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "CredentialProse",
+			stderr:      "Authentication error: Credential customer-private-value is invalid",
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: claudeAuthFailureMessage,
+		},
+		{
+			name:        "TokenProse",
+			stderr:      "Authentication error: Token customer-private-value is invalid",
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: claudeAuthFailureMessage,
+		},
+		{
+			name:        "SecretProse",
+			stderr:      "Authentication error: Secret customer-private-value was rejected",
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: claudeAuthFailureMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}
+			assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
+				reason:    tc.wantReason,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   tc.wantMessage,
+				terminal:  true,
+				retryable: false,
+			})
+			if parsed := ParseClaudeProviderFailure(result); strings.Contains(parsed.Message, "customer-private-value") {
+				t.Fatalf("message %q must not contain the credential value", parsed.Message)
+			}
+		})
+	}
+}
+
 func TestParseClaudeProviderFailure_LongCleanupTailCannotEvictStructuredRecord(t *testing.T) {
 	structured := `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`
 	cleanup := strings.Repeat("cleanup completed successfully\n", claudeFailureScanBytes/16)

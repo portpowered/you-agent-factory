@@ -235,6 +235,9 @@ func containsClaudeCredentialSignal(message string) bool {
 	) {
 		return true
 	}
+	if containsClaudeCredentialWord(message) || containsClaudeSensitiveIdentifier(message) {
+		return true
+	}
 
 	// Keep assignment and header detection aligned with the environment
 	// diagnostic policy so supported sensitive names cannot be published just
@@ -253,6 +256,38 @@ func containsClaudeCredentialSignal(message string) bool {
 			return true
 		}
 		remainder = remainder[separator+1:]
+	}
+	return false
+}
+
+func containsClaudeCredentialWord(message string) bool {
+	for _, field := range strings.Fields(message) {
+		switch strings.Trim(field, "\"'{}[](),.;:!?=") {
+		case "credential", "credentials", "password", "secret", "token":
+			return true
+		}
+	}
+	return false
+}
+
+func containsClaudeSensitiveIdentifier(message string) bool {
+	for _, field := range strings.Fields(message) {
+		identifier := strings.Trim(field, "\"'{}[](),.;:!?=")
+		if strings.Contains(identifier, "_") &&
+			containsClaudeSensitiveIdentifierPart(identifier) &&
+			ClassifyCommandEnvKey(identifier) == CommandEnvClassificationRedacted {
+			return true
+		}
+	}
+	return false
+}
+
+func containsClaudeSensitiveIdentifierPart(identifier string) bool {
+	for _, part := range strings.Split(identifier, "_") {
+		switch part {
+		case "auth", "credential", "credentials", "key", "pass", "password", "secret", "token":
+			return true
+		}
 	}
 	return false
 }
