@@ -108,7 +108,7 @@ func Show(cfg ShowConfig) error {
 }
 
 func showEndpoint(cfg ShowConfig) (url.URL, error) {
-	endpointPath := sessionpath.ScopedPath("/work/"+url.PathEscape(cfg.WorkID), cfg.SessionID)
+	endpointPath := sessionpath.WorkItemPath(cfg.SessionID, cfg.WorkID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
 		return url.URL{}, err

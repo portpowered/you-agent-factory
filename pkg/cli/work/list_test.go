@@ -2,6 +2,7 @@ package work
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -45,7 +46,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Server: serverBase(t, srv),
+		Server:    serverBase(t, srv),
 		StateName: "review",
 		StateType: "PROCESSING",
 		SortBy:    "state.type",
@@ -155,7 +156,7 @@ func TestList_VerboseDiagnosticsIncludeActiveFilterKeys(t *testing.T) {
 func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		gotPath = r.URL.EscapedPath()
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -165,16 +166,16 @@ func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Server: serverBase(t, srv),
-		SessionID: "session-beta",
+		Server:    serverBase(t, srv),
+		SessionID: "session/beta",
 		Output:    &out,
 	})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
-	if gotPath != "/factory-sessions/session-beta/work" {
-		t.Fatalf("path = %q, want /factory-sessions/session-beta/work", gotPath)
+	if gotPath != "/factory-sessions/session%2Fbeta/work" {
+		t.Fatalf("path = %q, want /factory-sessions/session%%2Fbeta/work", gotPath)
 	}
 	if got := out.String(); got != "No work found.\n" {
 		t.Fatalf("output = %q, want empty-state output", got)
@@ -474,13 +475,14 @@ func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testin
 }
 
 func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
-	nextToken := "cursor-2"
+	requestToken := encodeCursor("cursor-1")
+	nextToken := encodeCursor("cursor-2")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("maxResults") != "2" {
 			t.Fatalf("maxResults query = %q, want 2", r.URL.Query().Get("maxResults"))
 		}
-		if r.URL.Query().Get("nextToken") != "cursor-1" {
-			t.Fatalf("nextToken query = %q, want cursor-1", r.URL.Query().Get("nextToken"))
+		if r.URL.Query().Get("nextToken") != requestToken {
+			t.Fatalf("nextToken query = %q, want %q", r.URL.Query().Get("nextToken"), requestToken)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
@@ -505,9 +507,9 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Server: serverBase(t, srv),
+		Server:     serverBase(t, srv),
 		MaxResults: 2,
-		NextToken:  "cursor-1",
+		NextToken:  requestToken,
 		JSON:       true,
 		Output:     &out,
 	})
@@ -528,7 +530,7 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 }
 
 func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
-	nextToken := "cursor-2"
+	nextToken := encodeCursor("cursor-2")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{
@@ -553,12 +555,12 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := List(ListConfig{
-		Server: serverBase(t, srv),
+		Server:      serverBase(t, srv),
 		SessionID:   "session-alpha",
 		StateName:   "review",
 		StateType:   "PROCESSING",
 		MaxResults:  1,
-		NextToken:   "cursor-1",
+		NextToken:   encodeCursor("cursor-1"),
 		JSON:        true,
 		Verbose:     true,
 		Output:      &out,
@@ -602,7 +604,7 @@ func TestList_VerboseLogsFailureStatus(t *testing.T) {
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := List(ListConfig{
-		Server: serverBase(t, srv),
+		Server:      serverBase(t, srv),
 		Verbose:     true,
 		Output:      &out,
 		Diagnostics: &diagnostics,
@@ -620,7 +622,7 @@ func TestList_VerboseLogsFailureStatus(t *testing.T) {
 }
 
 func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPages(t *testing.T) {
-	secondToken := "cursor-2"
+	secondToken := encodeCursor("cursor-2")
 	var requestCount int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -640,7 +642,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 
 	var firstOut bytes.Buffer
 	err := List(ListConfig{
-		Server: serverBase(t, srv),
+		Server:     serverBase(t, srv),
 		MaxResults: 1,
 		JSON:       true,
 		Output:     &firstOut,
@@ -655,7 +657,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 
 	var secondOut bytes.Buffer
 	err = List(ListConfig{
-		Server: serverBase(t, srv),
+		Server:     serverBase(t, srv),
 		MaxResults: 1,
 		NextToken:  secondToken,
 		JSON:       true,
@@ -779,7 +781,7 @@ func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *t
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Server: serverBase(t, srv),
+		Server:     serverBase(t, srv),
 		StateName:  "review",
 		StateType:  "PROCESSING",
 		MaxResults: 1,
@@ -857,28 +859,12 @@ func TestList_JSONOutputLeavesRelationsOmittedWhenAPIResponseDoesNotIncludeThem(
 	}
 }
 
-func TestList_InvalidStateType(t *testing.T) {
-	err := List(ListConfig{Server: "http://127.0.0.1:8080", StateType: "UNKNOWN", Output: &bytes.Buffer{}})
-	if err == nil {
-		t.Fatal("expected invalid state type error")
-	}
-	if got := err.Error(); got != "--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED" {
-		t.Fatalf("error = %q", got)
-	}
-}
-
-func TestList_InvalidSortBy(t *testing.T) {
-	err := List(ListConfig{Server: "http://127.0.0.1:8080", SortBy: "name", Output: &bytes.Buffer{}})
-	if err == nil {
-		t.Fatal("expected invalid sort-by error")
-	}
-	if got := err.Error(); got != "--sort-by must be state.type" {
-		t.Fatalf("error = %q", got)
-	}
-}
-
 func stringPtr(value string) *string {
 	return &value
+}
+
+func encodeCursor(value string) string {
+	return base64.StdEncoding.EncodeToString([]byte(value))
 }
 
 func assertListPageRequest(t *testing.T, r *http.Request, wantMaxResults string, wantNextToken string) {

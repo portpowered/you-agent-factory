@@ -63,7 +63,7 @@ func (b Base) String() string {
 	return u.String()
 }
 
-// JoinPath joins an API path onto the base without producing double slashes.
+// JoinPath joins an escaped API path onto the base without producing double slashes.
 // path may be absolute (leading slash) or relative; an empty path returns the base URL.
 func (b Base) JoinPath(path string) (url.URL, error) {
 	joined := b.URL
@@ -75,13 +75,19 @@ func (b Base) JoinPath(path string) (url.URL, error) {
 	if !strings.HasPrefix(apiPath, "/") {
 		apiPath = "/" + apiPath
 	}
+	decodedAPIPath, err := url.PathUnescape(apiPath)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("invalid escaped API path %q: %w", path, err)
+	}
 
 	basePath := strings.TrimSuffix(joined.Path, "/")
+	escapedBasePath := strings.TrimSuffix(joined.EscapedPath(), "/")
 	if basePath == "" {
-		joined.Path = apiPath
+		joined.Path = decodedAPIPath
 	} else {
-		joined.Path = basePath + apiPath
+		joined.Path = basePath + decodedAPIPath
 	}
+	joined.RawPath = escapedBasePath + apiPath
 	return joined, nil
 }
 
