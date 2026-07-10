@@ -27,6 +27,68 @@ func TestScriptWrapProvider_Infer_CursorAndCodexExitFailuresKeepCodexDerivedBeha
 	}
 }
 
+func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDecision(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")
+	result := entry.CommandResult()
+	result.Stderr = append([]byte("session_id: sess-codex-gpt-5-6-sol\n"), result.Stderr...)
+	fakeExec := &recordingProviderExec{result: result}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		Model:         "gpt-5.6-sol",
+		UserMessage:   "private prompt that must not appear in the failure",
+	})
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	assertGPT56SolCanonicalFailure(t, providerErr)
+	assertGPT56SolFailureMetadata(t, providerErr, entry, result)
+}
+
+func assertGPT56SolCanonicalFailure(t *testing.T, providerErr *ProviderError) {
+	t.Helper()
+
+	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypePermanentBadRequest)
+	}
+	const wantMessage = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
+	if providerErr.Message != wantMessage {
+		t.Fatalf("provider error message = %q, want %q", providerErr.Message, wantMessage)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyTerminal {
+		t.Fatalf("provider error family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyTerminal)
+	}
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if decision.Retryable || !decision.Terminal || decision.TriggersThrottlePause {
+		t.Fatalf("provider failure decision = %#v, want terminal without retry or throttle pause", decision)
+	}
+}
+
+func assertGPT56SolFailureMetadata(t *testing.T, providerErr *ProviderError, entry ProviderErrorCorpusEntry, result CommandResult) {
+	t.Helper()
+
+	if providerErr.ProviderSession == nil || providerErr.ProviderSession.ID != "sess-codex-gpt-5-6-sol" {
+		t.Fatalf("provider session = %#v, want captured Codex session", providerErr.ProviderSession)
+	}
+	if providerErr.Diagnostics == nil || providerErr.Diagnostics.Command == nil {
+		t.Fatal("expected command diagnostics on provider error")
+	}
+	if providerErr.Diagnostics.Command.ExitCode != entry.ExitCode || providerErr.Diagnostics.Command.Stderr != string(result.Stderr) {
+		t.Fatalf("command diagnostics = %#v, want captured exit code and stderr", providerErr.Diagnostics.Command)
+	}
+	if providerErr.Diagnostics.Command.TimedOut {
+		t.Fatal("expected non-timeout Codex failure diagnostics")
+	}
+	if providerErr.Cause != nil {
+		t.Fatalf("provider error cause = %v, want nil for non-zero exit", providerErr.Cause)
+	}
+}
+
 type exitFailureInferenceTestCase struct {
 	name        string
 	provider    string

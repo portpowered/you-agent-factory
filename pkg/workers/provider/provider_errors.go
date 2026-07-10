@@ -249,6 +249,13 @@ func NewProviderErrorFromResult(result ProviderFailureResult, cause error) *Prov
 	}
 }
 
+func newProviderErrorFromResultWithDiagnostics(result ProviderFailureResult, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+	err := NewProviderErrorFromResult(result, cause)
+	err.ProviderSession = interfaces.CloneProviderSessionMetadata(session)
+	err.Diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
+	return err
+}
+
 func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
 	err := NewProviderError(errorType, message, cause)
 	err.ProviderSession = interfaces.CloneProviderSessionMetadata(session)
@@ -256,9 +263,10 @@ func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message s
 }
 
 func newProviderErrorWithDiagnostics(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	err := NewProviderErrorWithSession(errorType, message, cause, session)
-	err.Diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
-	return err
+	return newProviderErrorFromResultWithDiagnostics(ProviderFailureResult{
+		Reason:  errorType,
+		Message: message,
+	}, cause, session, diagnostics)
 }
 
 func (e *ProviderError) Error() string {
