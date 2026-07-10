@@ -142,7 +142,7 @@ func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
 func resultParseFailure(provider, message string, cause error) *ParseFailure {
 	_ = provider
 	return &ParseFailure{
-		Type:    interfaces.WorkFailureTypePermanentBadRequest,
+		Type:    interfaces.WorkFailureTypeUnknown,
 		Message: message,
 		Cause:   cause,
 	}

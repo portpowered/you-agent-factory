@@ -252,14 +252,22 @@ func TestScriptWrapProvider_Infer_CursorCompletionPublisherPreservesFinalRespons
 }
 
 func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *testing.T) {
-	stdout := []byte(`{"type":"result"`)
+	privateMalformedContent := "private malformed Cursor content"
+	stdout := []byte(`{"type":"assistant","message":"` + privateMalformedContent)
 	stderr := []byte("cursor stderr detail")
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: stdout, Stderr: stderr},
 	}
-	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-malformed-json"},
 		ModelProvider: string(interfaces.ModelProviderCursor),
 		UserMessage:   "run the tests",
 	})
@@ -270,8 +278,20 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("error type = %q, want permanent_bad_request", providerErr.Type)
+	if providerErr.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", providerErr.Type)
+	}
+	if providerErr.Message != string(stderr) || strings.Contains(providerErr.Message, privateMalformedContent) {
+		t.Fatalf("provider message = %q, want safe unknown stderr result", providerErr.Message)
+	}
+	if providerErr.Cause == nil {
+		t.Fatal("parse failure cause = nil, want original JSON parse cause")
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind {
+		t.Fatalf("published fragments = %#v, want one failed marker", published)
+	}
+	if published[0].Payload != providerErr.Message || strings.Contains(published[0].Payload, privateMalformedContent) {
+		t.Fatalf("failure fragment = %#v, want canonical safe unknown result", published[0])
 	}
 	if providerErr.Diagnostics == nil || providerErr.Diagnostics.Command == nil {
 		t.Fatal("expected command diagnostics on parse failure")

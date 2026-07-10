@@ -134,8 +134,8 @@ func TestParseInferenceResult_MissingSessionID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for missing session_id")
 	}
-	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	if err.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
 
@@ -152,8 +152,8 @@ func TestParseInferenceResult_InvalidSessionID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for invalid session_id")
 	}
-	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	if err.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
 
@@ -167,8 +167,8 @@ func TestParseInferenceResult_StreamJSONInvalidSessionID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for invalid stream session_id")
 	}
-	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	if err.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
 
@@ -177,8 +177,8 @@ func TestParseInferenceResult_MalformedJSON(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for malformed JSON")
 	}
-	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	if err.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
 
@@ -189,8 +189,8 @@ func TestParseInferenceResult_UnexpectedType(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for unexpected type")
 	}
-	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	if err.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
 
