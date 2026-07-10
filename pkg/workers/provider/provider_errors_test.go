@@ -82,6 +82,21 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 	}
 }
 
+func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.T) {
+	result := ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeThrottled,
+		Message: "request capacity exceeded",
+	}
+
+	providerErr := NewProviderErrorFromResult(result, nil)
+	if providerErr.Type != result.Reason || providerErr.Message != result.Message {
+		t.Fatalf("NewProviderErrorFromResult() = %#v, want canonical reason and message", providerErr)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
+	}
+}
+
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
 	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {
@@ -151,6 +166,16 @@ func TestClassifyProviderFailure_ReturnsDeterministicBehavior(t *testing.T) {
 			err:          NewProviderError(interfaces.WorkFailureTypeMisconfigured, "", nil),
 			wantTerminal: true,
 		},
+		{
+			name:         "EmptyReason_Terminates",
+			err:          NewProviderError("", "", nil),
+			wantTerminal: true,
+		},
+		{
+			name:         "UnsupportedReason_Terminates",
+			err:          NewProviderError(interfaces.WorkFailureType("unsupported"), "", nil),
+			wantTerminal: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -164,6 +189,51 @@ func TestClassifyProviderFailure_ReturnsDeterministicBehavior(t *testing.T) {
 			}
 			if got.TriggersThrottlePause != tc.wantThrottlePause {
 				t.Fatalf("expected TriggersThrottlePause=%t, got %t", tc.wantThrottlePause, got.TriggersThrottlePause)
+			}
+		})
+	}
+}
+
+func TestClassifyProviderFailure_CanonicalReasonOverridesConflictingFamily(t *testing.T) {
+	testCases := []struct {
+		name   string
+		reason interfaces.WorkFailureType
+		stale  interfaces.WorkFailureFamily
+		want   interfaces.WorkFailureDecision
+	}{
+		{
+			name:   "RetryableReasonOverridesTerminalFamily",
+			reason: interfaces.WorkFailureTypeInternalServerError,
+			stale:  interfaces.WorkFailureFamilyTerminal,
+			want:   interfaces.WorkFailureDecision{Retryable: true},
+		},
+		{
+			name:   "TerminalReasonOverridesThrottleFamily",
+			reason: interfaces.WorkFailureTypePermanentBadRequest,
+			stale:  interfaces.WorkFailureFamilyThrottle,
+			want:   interfaces.WorkFailureDecision{Terminal: true},
+		},
+		{
+			name:   "ThrottleReasonOverridesTerminalFamily",
+			reason: interfaces.WorkFailureTypeThrottled,
+			stale:  interfaces.WorkFailureFamilyTerminal,
+			want: interfaces.WorkFailureDecision{
+				Retryable:             true,
+				TriggersThrottlePause: true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			providerErr := NewProviderError(tc.reason, "failure", nil)
+			providerErr.Family = tc.stale
+			if got := ClassifyProviderFailure(providerErr); got != tc.want {
+				t.Fatalf("ClassifyProviderFailure() = %#v, want %#v", got, tc.want)
+			}
+			metadata := WorkFailureMetadataFromError(providerErr)
+			if metadata.Family != providerErrorFamilyForType(tc.reason) {
+				t.Fatalf("WorkFailureMetadataFromError().Family = %q, want reason-derived family", metadata.Family)
 			}
 		})
 	}

@@ -21,11 +21,28 @@ type ProviderError struct {
 	Cause           error
 }
 
+// ProviderFailureResult is the pure output of provider failure parsing. It
+// deliberately carries only the canonical reason and customer-visible message;
+// runtime policy is derived from Reason when the result crosses into execution.
+type ProviderFailureResult struct {
+	Reason  interfaces.WorkFailureType
+	Message string
+}
+
 func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {
-	return &ProviderError{
-		Family:  providerErrorFamilyForType(errorType),
-		Type:    errorType,
+	return NewProviderErrorFromResult(ProviderFailureResult{
+		Reason:  errorType,
 		Message: message,
+	}, cause)
+}
+
+// NewProviderErrorFromResult turns a pure parse result into the normalized
+// execution error while deriving all runtime policy from its canonical reason.
+func NewProviderErrorFromResult(result ProviderFailureResult, cause error) *ProviderError {
+	return &ProviderError{
+		Family:  providerFailurePolicyForReason(result.Reason).Family,
+		Type:    result.Reason,
+		Message: result.Message,
 		Cause:   cause,
 	}
 }
@@ -57,7 +74,7 @@ func ClassifyProviderFailure(err *ProviderError) interfaces.WorkFailureDecision 
 	if err == nil {
 		return interfaces.WorkFailureDecision{}
 	}
-	return providerFailureDecisionForFamily(err.Family)
+	return providerFailurePolicyForReason(err.Type).Decision
 }
 
 // WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
@@ -75,9 +92,45 @@ func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) i
 		return interfaces.WorkFailureDecision{}
 	}
 	if metadata.Type != "" {
-		return providerFailureDecisionForFamily(providerErrorFamilyForType(metadata.Type))
+		return providerFailurePolicyForReason(metadata.Type).Decision
 	}
 	return providerFailureDecisionForFamily(metadata.Family)
+}
+
+type providerFailurePolicy struct {
+	Family   interfaces.WorkFailureFamily
+	Decision interfaces.WorkFailureDecision
+}
+
+func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerFailurePolicy {
+	switch reason {
+	case interfaces.WorkFailureTypeThrottled:
+		return providerFailurePolicy{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Decision: interfaces.WorkFailureDecision{
+				Retryable:             true,
+				TriggersThrottlePause: true,
+			},
+		}
+	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyRetryable,
+			Decision: interfaces.WorkFailureDecision{Retryable: true},
+		}
+	case interfaces.WorkFailureTypeAuthFailure,
+		interfaces.WorkFailureTypePermanentBadRequest,
+		interfaces.WorkFailureTypeUnknown,
+		interfaces.WorkFailureTypeMisconfigured:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	default:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	}
 }
 
 func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
@@ -94,16 +147,7 @@ func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) inter
 }
 
 func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
-	switch errorType {
-	case interfaces.WorkFailureTypeThrottled:
-		return interfaces.WorkFailureFamilyThrottle
-	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
-		return interfaces.WorkFailureFamilyRetryable
-	case interfaces.WorkFailureTypeAuthFailure, interfaces.WorkFailureTypePermanentBadRequest, interfaces.WorkFailureTypeUnknown, interfaces.WorkFailureTypeMisconfigured:
-		return interfaces.WorkFailureFamilyTerminal
-	default:
-		return interfaces.WorkFailureFamilyTerminal
-	}
+	return providerFailurePolicyForReason(errorType).Family
 }
 
 // WorkFailureMetadataFromError projects a provider-shaped execution error onto
@@ -113,7 +157,7 @@ func WorkFailureMetadataFromError(err *ProviderError) *interfaces.WorkFailureMet
 		return nil
 	}
 	return &interfaces.WorkFailureMetadata{
-		Family: err.Family,
+		Family: providerFailurePolicyForReason(err.Type).Family,
 		Type:   err.Type,
 	}
 }
