@@ -121,7 +121,7 @@ type FactoryService struct {
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
-	durableExecutionAPI      apisurface.DurableSessionExecutionAPI
+	durableExecutionAPI      apisurface.DurableSessionAPI
 	sessionInvoker           invocations.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService

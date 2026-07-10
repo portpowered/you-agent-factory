@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -135,7 +136,7 @@ type Host struct {
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
-	durableExecutionAPI      apisurface.DurableSessionExecutionAPI
+	durableExecutionAPI      apisurface.DurableSessionAPI
 	sessionInvoker           invocations.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
@@ -163,7 +164,10 @@ func (h *Host) InvocationAPI() apisurface.InvocationAPI {
 // DurableExecutionAPI returns the canonical durable-start collaborator used by
 // the compatibility facade and composed HTTP surface.
 func (h *Host) DurableExecutionAPI() apisurface.DurableSessionAPI {
-	return durableSessionAPI{host: h}
+	if h != nil && h.durableExecutionAPI != nil {
+		return h.durableExecutionAPI
+	}
+	return factorysession.NewDurableAPI(h.durableExecutionService(), h.requireSessionGateway())
 }
 
 type RuntimeFileLoggingPolicy string

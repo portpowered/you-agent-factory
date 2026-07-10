@@ -35,6 +35,22 @@ func composeSessionAPISurface(
 	services *Services,
 	host *SessionRuntimeHost,
 ) (apisurface.SessionAPISurface, error) {
+	return composeSessionAPISurfaceWithConstructor(services, host, apisurface.NewSessionAPISurface)
+}
+
+type sessionAPISurfaceConstructor func(
+	apisurface.SessionAPI,
+	apisurface.ModelAPI,
+	apisurface.FactorySaveAPI,
+	apisurface.InvocationAPI,
+	apisurface.DurableSessionAPI,
+) (apisurface.SessionAPISurface, error)
+
+func composeSessionAPISurfaceWithConstructor(
+	services *Services,
+	host *SessionRuntimeHost,
+	constructor sessionAPISurfaceConstructor,
+) (apisurface.SessionAPISurface, error) {
 	var model apisurface.ModelAPI
 	if services != nil {
 		model = services.Models
@@ -49,7 +65,7 @@ func composeSessionAPISurface(
 		invocation = host.InvocationAPI()
 		durableExecution = host.DurableExecutionAPI()
 	}
-	return apisurface.NewSessionAPISurface(
+	return constructor(
 		session,
 		model,
 		factoryDefinition,

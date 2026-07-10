@@ -46,7 +46,7 @@ func (h *SessionRuntimeHost) SessionAPI() apisurface.SessionAPI {
 	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.host
+	return h.host.SessionAPI()
 }
 
 // FactoryDefinitionAPI returns the factory-definition read/write collaborator.
@@ -54,7 +54,7 @@ func (h *SessionRuntimeHost) FactoryDefinitionAPI() apisurface.FactorySaveAPI {
 	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.host
+	return h.host.FactoryDefinitionAPI()
 }
 
 // InvocationAPI returns the session invocation collaborator.

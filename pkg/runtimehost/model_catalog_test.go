@@ -146,8 +146,13 @@ func (f compatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, se
 }
 
 type compatibilityDurableExecutionAPI struct {
-	apisurface.DurableSessionExecutionAPI
+	apisurface.DurableSessionAPI
 	startAsync func(context.Context, factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error)
+	pause      func(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+}
+
+func (f compatibilityDurableExecutionAPI) PauseDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return f.pause(ctx, sessionID, request)
 }
 
 func (f compatibilityDurableExecutionAPI) StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
@@ -208,6 +213,66 @@ func TestHostCompatibilityFacadeForwardsToCanonicalCollaborators(t *testing.T) {
 		if !errors.Is(err, sentinel) || calls[role] != 1 {
 			t.Errorf("%s result = (%v, %d calls), want unchanged error and one call", role, err, calls[role])
 		}
+	}
+}
+
+func TestHostCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(context.Background(), struct{ name string }{"typed"}, "outcomes")
+	notFound := errors.New("missing host session")
+	validation := &apisurface.RequestValidationError{Message: "invalid factory definition"}
+	wantInvocation := apisurface.FactoryInvocationResult{
+		RequestID: "request-typed", TraceID: "trace-typed",
+		Status: factoryapi.InvocationTerminalStatusCompleted,
+	}
+	wantLifecycle := factoryapi.FactorySessionLifecycleControlResponse{
+		SessionId: "durable-1", Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+		Status: factoryapi.FactorySessionDurableLifecycleStatusPaused,
+	}
+	calls := map[string]int{}
+
+	host := &Host{
+		sessionGateway: compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+			calls["not-found"]++
+			requireHostCompatibility(t, gotCtx == ctx && sessionID == "missing", "session args = (%v, %q)", gotCtx, sessionID)
+			return factoryapi.FactorySession{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
+		}},
+		factorySave: compatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+			calls["validation"]++
+			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1" && mode == factoryapi.FactorySaveModeReplaceCurrent, "factory-definition args = (%v, %q, %q)", gotCtx, sessionID, mode)
+			return factoryapi.Factory{}, validation
+		}},
+		sessionInvoker: compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+			calls["invocation"]++
+			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1", "invocation args = (%v, %q)", gotCtx, sessionID)
+			return wantInvocation, nil
+		}},
+	}
+	host.durableExecutionAPI = compatibilityDurableExecutionAPI{pause: func(gotCtx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		calls["lifecycle"]++
+		requireHostCompatibility(t, gotCtx == ctx && sessionID == "durable-1", "lifecycle args = (%v, %q)", gotCtx, sessionID)
+		return wantLifecycle, nil
+	}}
+
+	_, sessionErr := host.GetFactorySession(ctx, "missing")
+	_, validationErr := host.SaveFactoryForSession(ctx, "session-1", factoryapi.FactorySaveModeReplaceCurrent, factoryapi.Factory{})
+	invocation, invocationErr := host.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{})
+	lifecycle, lifecycleErr := host.PauseDurableFactorySession(ctx, "durable-1", factoryapi.FactorySessionLifecycleControlRequest{})
+	requireHostCompatibility(t, errors.Is(sessionErr, apisurface.ErrFactorySessionNotFound) && errors.Is(sessionErr, notFound), "session error = %v, want typed not-found", sessionErr)
+	var gotValidation *apisurface.RequestValidationError
+	requireHostCompatibility(t, errors.As(validationErr, &gotValidation) && gotValidation == validation, "validation error = %#v, want unchanged %#v", validationErr, validation)
+	requireHostCompatibility(t, invocationErr == nil && reflect.DeepEqual(invocation, wantInvocation), "invocation = (%#v, %v), want %#v", invocation, invocationErr, wantInvocation)
+	requireHostCompatibility(t, lifecycleErr == nil && reflect.DeepEqual(lifecycle, wantLifecycle), "lifecycle = (%#v, %v), want %#v", lifecycle, lifecycleErr, wantLifecycle)
+	for outcome, count := range calls {
+		requireHostCompatibility(t, count == 1, "%s calls = %d, want 1", outcome, count)
+	}
+}
+
+func requireHostCompatibility(t *testing.T, condition bool, format string, args ...any) {
+	t.Helper()
+	if !condition {
+		t.Fatalf(format, args...)
 	}
 }
 
