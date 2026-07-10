@@ -67,8 +67,8 @@ primary-result behavior.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.
-- `pkg/service/session_invocation.go` and
-  `pkg/runtimehost/session_invocation.go` retain compatibility adapters for
+- `pkg/service/runtime_sessions.go` and
+  `pkg/runtimehost/session_invocation.go` retain session-runtime compatibility adapters for
   session config, canonical Work submission, event-derived observations,
   metric/log sinks, and packaged-factory terminal classification. Their
   `InvokeFactorySession` methods must remain transparent forwards to
@@ -357,7 +357,7 @@ primary-result behavior.
   `useDashboardInitialReconnectCursor`.
 - `pkg/invocations/session_wait.go` owns the session invocation wait loop and
   calls explicit packaged-factory hooks at active, completed, and terminal-failure
-  boundaries. `pkg/service/session_invocation.go` and
+  boundaries. `pkg/service/runtime_sessions.go` and
   `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,
   logs, and metrics to those hooks.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
