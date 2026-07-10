@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -135,6 +136,7 @@ type Host struct {
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
+	durableExecutionAPI      apisurface.DurableSessionAPI
 	sessionInvoker           invocations.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
@@ -152,6 +154,21 @@ var _ apisurface.SessionAPI = (*Host)(nil)
 var _ apisurface.WorkAPI = (*Host)(nil)
 var _ apisurface.APISurface = (*Host)(nil)
 var _ apisurface.SessionAPISurface = (*Host)(nil)
+
+// InvocationAPI returns the canonical invocation collaborator used by the
+// compatibility facade and composed HTTP surface.
+func (h *Host) InvocationAPI() apisurface.InvocationAPI {
+	return h.sessionInvocationOwner()
+}
+
+// DurableExecutionAPI returns the canonical durable-start collaborator used by
+// the compatibility facade and composed HTTP surface.
+func (h *Host) DurableExecutionAPI() apisurface.DurableSessionAPI {
+	if h != nil && h.durableExecutionAPI != nil {
+		return h.durableExecutionAPI
+	}
+	return factorysession.NewDurableAPI(h.durableExecutionService(), h.requireSessionGateway())
+}
 
 type RuntimeFileLoggingPolicy string
 
@@ -446,6 +463,16 @@ func (fs *Host) replacementExecutionBaseDir(folderPath string, factoryDir string
 // It blocks until ctx is cancelled or the factory reaches a terminal state.
 // portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
 func (fs *Host) Run(ctx context.Context) error {
+	return fs.run(ctx, fs)
+}
+
+// RunWithAPISurface starts the runtime lifecycle while supplying independently
+// composed HTTP handler dependencies to the configured API server starter.
+func (fs *Host) RunWithAPISurface(ctx context.Context, surface apisurface.APISurface) error {
+	return fs.run(ctx, surface)
+}
+
+func (fs *Host) run(ctx context.Context, surface apisurface.APISurface) error {
 	runCtx, cancelRunSidecars := context.WithCancel(ctx)
 	var sidecars sync.WaitGroup
 	var currentRuntime *liveRuntimeHandle
@@ -470,7 +497,7 @@ func (fs *Host) Run(ctx context.Context) error {
 	if err := fs.prepareRunInputs(ctx, serviceMode); err != nil {
 		return err
 	}
-	currentRuntime, err := fs.startRunRuntime(ctx, runCtx, &sidecars, serviceMode)
+	currentRuntime, err := fs.startRunRuntime(ctx, runCtx, &sidecars, serviceMode, surface)
 	if err != nil {
 		return err
 	}
@@ -502,12 +529,13 @@ func (fs *Host) startRunRuntime(
 	runCtx context.Context,
 	sidecars *sync.WaitGroup,
 	serviceMode bool,
+	surface apisurface.APISurface,
 ) (*liveRuntimeHandle, error) {
 	currentRuntime, err := fs.StartDefaultRuntime(ctx, runCtx, serviceMode)
 	if err != nil {
 		return nil, err
 	}
-	fs.startAPIServerSidecar(runCtx, sidecars)
+	fs.startAPIServerSidecar(runCtx, sidecars, surface)
 	if err := fs.waitForServiceModeStartupWorkReadability(ctx, serviceMode); err != nil {
 		return nil, fs.failServiceModeStartup(currentRuntime, err)
 	}
@@ -628,7 +656,11 @@ func (c *runtimeCoordinator) StartDefaultRuntime(
 	return currentRuntime, nil
 }
 
-func (fs *Host) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
+func (fs *Host) startAPIServerSidecar(
+	runCtx context.Context,
+	sidecars *sync.WaitGroup,
+	surface apisurface.APISurface,
+) {
 	if fs.cfg.APIServerStarter == nil || fs.cfg.Port <= 0 {
 		fs.apiServerExit = nil
 		return
@@ -638,7 +670,7 @@ func (fs *Host) startAPIServerSidecar(runCtx context.Context, sidecars *sync.Wai
 	sidecars.Add(1)
 	go func() {
 		defer sidecars.Done()
-		err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger)
+		err := fs.cfg.APIServerStarter(runCtx, surface, fs.cfg.Port, fs.logger)
 		apiServerExit <- err
 		close(apiServerExit)
 		if err != nil {

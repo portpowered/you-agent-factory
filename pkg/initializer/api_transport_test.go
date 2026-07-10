@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
@@ -73,11 +74,28 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	if _, ok := surface.(apisurface.SessionAPISurface); !ok {
 		t.Fatal("expected SessionAPISurface implementation")
 	}
+	assertComposedDurableCapabilities(t, surface)
+	if _, ok := surface.(*runtimehost.Host); ok {
+		t.Fatal("API transport surface must not be the runtime lifecycle host")
+	}
+	if _, ok := surface.(*service.FactoryService); ok {
+		t.Fatal("API transport surface must not be the FactoryService compatibility facade")
+	}
 	if transport.Services.Models == nil || transport.Services.FactoryDefinition == nil {
 		t.Fatal("expected initializer-produced model and factory-definition services")
 	}
 	if transport.Services.Models != transport.Host.ModelService() {
 		t.Fatal("expected API transport and runtime host to share one model service")
+	}
+}
+
+func assertComposedDurableCapabilities(t *testing.T, surface apisurface.SessionAPISurface) {
+	t.Helper()
+	if _, ok := surface.(apisurface.DurableSessionLifecycleAPI); !ok {
+		t.Fatal("expected composed surface to preserve durable lifecycle routes")
+	}
+	if _, ok := surface.(apisurface.DurableSessionProjectionAPI); !ok {
+		t.Fatal("expected composed surface to preserve durable projection routes")
 	}
 }
 
@@ -105,6 +123,7 @@ func TestInitializeAPITransport_ServesSessionModelAndFactoryEndpoints(t *testing
 	defer cancel()
 
 	ready := make(chan struct{})
+	var startedSurface apisurface.APISurface
 	svcCfg := &initializer.Config{
 		Dir:               dir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -112,6 +131,7 @@ func TestInitializeAPITransport_ServesSessionModelAndFactoryEndpoints(t *testing
 		Port:              port,
 		Logger:            zap.NewNop(),
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, bindPort int, l *zap.Logger) error {
+			startedSurface = runtime
 			apiListener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", bindPort))
 			if listenErr != nil {
 				return listenErr
@@ -137,6 +157,12 @@ func TestInitializeAPITransport_ServesSessionModelAndFactoryEndpoints(t *testing
 		t.Fatalf("Run exited before API server ready: %v", err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for API server starter")
+	}
+	if startedSurface != transport.SessionAPISurface() {
+		t.Fatal("API server starter did not receive the composed session API surface")
+	}
+	if _, ok := startedSurface.(*runtimehost.Host); ok {
+		t.Fatal("API server starter received the runtime lifecycle host")
 	}
 
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)

@@ -38,8 +38,12 @@ type FactorySaveAPI interface {
 	SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error)
 }
 
-// SessionAPI is the factory-session inventory and lifecycle seam.
+// SessionAPI owns legacy unscoped factory operations, factory-session
+// inventory and lifecycle, and session-scoped work operations.
 type SessionAPI interface {
+	factory.APIFactory
+	GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error)
+	WorkAPI
 	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error)
 	GetFactorySessionSyncPreflight(ctx context.Context, sessionID string, options interfaces.FactorySessionSyncPreflightOptions) (factoryapi.FactorySessionSyncPreflightResponse, error)
