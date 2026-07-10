@@ -4,6 +4,7 @@ package work
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,14 +48,12 @@ func List(cfg ListConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
-	if err := validateListConfig(cfg); err != nil {
-		return err
-	}
 
-	endpoint, err := listEndpoint(cfg)
+	request, err := buildListRequest(cfg)
 	if err != nil {
-		return err
+		return listConfigError(err)
 	}
+	endpoint := request.endpoint
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -63,7 +62,7 @@ func List(cfg ListConfig) error {
 		endpoint.String(),
 		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
-		listFilterSummary(cfg),
+		request.filterSummary,
 		cfg.MaxResults,
 		cfg.NextToken != "",
 	)
@@ -111,71 +110,54 @@ func List(cfg ListConfig) error {
 	return renderListResult(cfg.Output, result)
 }
 
-func validateListConfig(cfg ListConfig) error {
-	if cfg.StateType != "" && !workquery.ValidWorkStateType(factoryapi.WorkStateType(cfg.StateType)) {
+func listConfigError(err error) error {
+	var validationErr *workquery.ValidationError
+	if !errors.As(err, &validationErr) {
+		return err
+	}
+	switch validationErr.Field {
+	case workquery.FilterStateType:
 		return fmt.Errorf("--state-type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
-	}
-	if cfg.SortBy != "" && cfg.SortBy != string(factoryapi.SortByStateType) {
+	case "sortBy":
 		return fmt.Errorf("--sort-by must be state.type")
+	default:
+		return err
 	}
-	return nil
 }
 
-func listFilterSummary(cfg ListConfig) string {
-	parts := make([]string, 0, 6)
-	if cfg.StateName != "" {
-		parts = append(parts, "state.name")
-	}
-	if cfg.StateType != "" {
-		parts = append(parts, "state.type")
-	}
-	if cfg.Name != "" {
-		parts = append(parts, "name")
-	}
-	if cfg.WorkTypeName != "" {
-		parts = append(parts, "workTypeName")
-	}
-	if cfg.TraceID != "" {
-		parts = append(parts, "traceId")
-	}
-	if cfg.SortBy != "" {
-		parts = append(parts, "sortBy")
-	}
-	if len(parts) == 0 {
-		return "none"
-	}
-	return strings.Join(parts, ",")
+type listRequest struct {
+	endpoint      url.URL
+	filterSummary string
 }
 
-func listEndpoint(cfg ListConfig) (url.URL, error) {
+func buildListRequest(cfg ListConfig) (listRequest, error) {
+	query, err := workquery.NormalizeList(workquery.ListOptions{
+		Filters: map[string]string{
+			workquery.FilterStateName:    cfg.StateName,
+			workquery.FilterStateType:    cfg.StateType,
+			workquery.FilterName:         cfg.Name,
+			workquery.FilterWorkTypeName: cfg.WorkTypeName,
+			workquery.FilterTraceID:      cfg.TraceID,
+		},
+		SortBy:     cfg.SortBy,
+		MaxResults: cfg.MaxResults,
+		NextToken:  cfg.NextToken,
+	})
+	if err != nil {
+		return listRequest{}, err
+	}
+
 	endpointPath := sessionpath.WorkCollectionPath(cfg.SessionID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
-		return url.URL{}, err
+		return listRequest{}, err
 	}
 	endpoint, err := url.Parse(endpointURL)
 	if err != nil {
-		return url.URL{}, fmt.Errorf("parse work list endpoint: %w", err)
+		return listRequest{}, fmt.Errorf("parse work list endpoint: %w", err)
 	}
-	query := endpoint.Query()
-	setListQueryParam(query, "state.name", cfg.StateName)
-	setListQueryParam(query, "state.type", cfg.StateType)
-	setListQueryParam(query, "name", cfg.Name)
-	setListQueryParam(query, "workTypeName", cfg.WorkTypeName)
-	setListQueryParam(query, "traceId", cfg.TraceID)
-	setListQueryParam(query, "sortBy", cfg.SortBy)
-	if cfg.MaxResults > 0 {
-		query.Set("maxResults", fmt.Sprintf("%d", cfg.MaxResults))
-	}
-	setListQueryParam(query, "nextToken", cfg.NextToken)
-	endpoint.RawQuery = query.Encode()
-	return *endpoint, nil
-}
-
-func setListQueryParam(query url.Values, key, value string) {
-	if value != "" {
-		query.Set(key, value)
-	}
+	endpoint.RawQuery = query.Values().Encode()
+	return listRequest{endpoint: *endpoint, filterSummary: query.FilterSummary()}, nil
 }
 
 func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) error {

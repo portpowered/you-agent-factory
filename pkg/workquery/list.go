@@ -30,6 +30,21 @@ type ListOptions struct {
 	NextToken  string
 }
 
+// ValidationError identifies the public query field that failed validation.
+// Boundary adapters can use Field to present transport-specific field names.
+type ValidationError struct {
+	Field   string
+	message string
+}
+
+func (e *ValidationError) Error() string {
+	return e.message
+}
+
+func validationError(field, message string) error {
+	return &ValidationError{Field: field, message: message}
+}
+
 // ListQuery is a validated work-list query ready for use at a transport
 // boundary. Its values are immutable through the exported API.
 type ListQuery struct {
@@ -45,13 +60,16 @@ func NormalizeList(options ListOptions) (ListQuery, error) {
 	}
 	if stateType := options.Filters[FilterStateType]; stateType != "" &&
 		!ValidWorkStateType(factoryapi.WorkStateType(stateType)) {
-		return ListQuery{}, fmt.Errorf("%s must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", FilterStateType)
+		return ListQuery{}, validationError(
+			FilterStateType,
+			fmt.Sprintf("%s must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", FilterStateType),
+		)
 	}
 	if options.SortBy != "" && options.SortBy != SortByStateType {
-		return ListQuery{}, fmt.Errorf("sortBy must be %s", SortByStateType)
+		return ListQuery{}, validationError("sortBy", fmt.Sprintf("sortBy must be %s", SortByStateType))
 	}
 	if options.MaxResults < 0 {
-		return ListQuery{}, fmt.Errorf("maxResults must be zero or greater")
+		return ListQuery{}, validationError("maxResults", "maxResults must be zero or greater")
 	}
 	if err := validateNextToken(options.NextToken); err != nil {
 		return ListQuery{}, err
@@ -114,7 +132,7 @@ func validateFilterKeys(filters map[string]string) error {
 		return nil
 	}
 	sort.Strings(unsupported)
-	return fmt.Errorf("unsupported work-list filter %q", unsupported[0])
+	return validationError(unsupported[0], fmt.Sprintf("unsupported work-list filter %q", unsupported[0]))
 }
 
 func supportedFilterKey(key string) bool {
@@ -132,7 +150,7 @@ func validateNextToken(nextToken string) error {
 	}
 	decoded, err := base64.StdEncoding.DecodeString(nextToken)
 	if err != nil || len(decoded) == 0 {
-		return fmt.Errorf("nextToken must be valid standard base64 for a non-empty cursor")
+		return validationError("nextToken", "nextToken must be valid standard base64 for a non-empty cursor")
 	}
 	return nil
 }
