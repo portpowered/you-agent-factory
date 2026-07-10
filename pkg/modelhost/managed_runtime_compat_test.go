@@ -14,55 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func TestListModelsWithHost_ProjectsMissingManagedRuntimeFromHost(t *testing.T) {
-	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
-		byModel: map[string]CacheInspection{
-			"OMNIVOICE_Q4_K_M": {
-				Supported:     true,
-				MissingAssets: []string{"model.gguf"},
-			},
-		},
-	}, Options{})
-
-	models, err := ListModelsWithHost(context.Background(), host, loaded)
-	if err != nil {
-		t.Fatalf("ListModelsWithHost: %v", err)
-	}
-	if len(models.Results) != 1 {
-		t.Fatalf("models count = %d, want 1", len(models.Results))
-	}
-	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
-		t.Fatalf("readiness = %s, want MISSING", models.Results[0].ManagedRuntime.ReadinessState)
-	}
-}
-
-func TestGetModelWithHost_PreservesInstalledAssetReadinessWithoutLiveSlot(t *testing.T) {
-	factoryCfg := catalogFactoryConfig(true)
-	factoryCfg.Resources[0].Backend = "LLAMACPP"
-	loaded := mustLoadedCatalogConfig(t, factoryCfg)
-	host := NewCatalogHost(stubAssetGateway{
-		byModel: map[string]CacheInspection{
-			"OMNIVOICE_Q4_K_M": {
-				Supported:          true,
-				Installed:          true,
-				InstalledFileCount: 2,
-			},
-		},
-	}, Options{})
-
-	model, err := GetModelWithHost(context.Background(), host, loaded, "OMNIVOICE_Q4_K_M")
-	if err != nil {
-		t.Fatalf("GetModelWithHost: %v", err)
-	}
-	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
-	}
-	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
-		t.Fatalf("lifecycle = %s, want INSTALLED", model.ManagedRuntime.LifecycleState)
-	}
-}
-
 func TestEnsureInvocationReady_AllowsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	host := NewCatalogHost(stubAssetGateway{

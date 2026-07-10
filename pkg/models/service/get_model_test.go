@@ -10,8 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 )
 
 func TestService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.T) {
@@ -32,6 +32,27 @@ func TestService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.
 	}
 	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
 		t.Fatalf("managed lifecycle = %s, want NOT_INSTALLED", model.ManagedRuntime.LifecycleState)
+	}
+}
+
+func TestService_GetModel_PreservesInstalledAssetReadinessFromModelHost(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return installedCacheInspectHost{} },
+	})
+
+	model, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("GetModel: %v", err)
+	}
+	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
+	}
+	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+		t.Fatalf("managed lifecycle = %s, want INSTALLED", model.ManagedRuntime.LifecycleState)
 	}
 }
 
@@ -64,6 +85,18 @@ func TestService_GetModel_ReturnsUnavailableWhenRuntimeMissing(t *testing.T) {
 }
 
 type missingCacheInspectHost struct{}
+
+type installedCacheInspectHost struct {
+	missingCacheInspectHost
+}
+
+func (installedCacheInspectHost) InspectReadiness(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.ReadinessSnapshot, error) {
+	return modelhost.ReadinessSnapshot{
+		Identity:       modelhost.Identity{Name: modelName, Locality: factoryapi.WorkerModelLocalityLocal},
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+	}, nil
+}
 
 func (missingCacheInspectHost) ResolveIdentity(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.Identity, error) {
 	return modelhost.Identity{Name: modelName, Locality: factoryapi.WorkerModelLocalityLocal}, nil

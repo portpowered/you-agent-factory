@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -12,79 +11,6 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 )
-
-// CatalogDiscoveryOptions configures catalog structure projection without cache-backed readiness.
-func CatalogDiscoveryOptions() localmodels.CatalogOptions {
-	return localmodels.CatalogOptions{
-		SourceResolver: localmodels.DefaultManagedRuntimeSourceResolver(),
-	}
-}
-
-// ListModelsWithHost projects managed-runtime list responses through the process-wide model host.
-func ListModelsWithHost(
-	ctx context.Context,
-	host Host,
-	runtimeCfg *factoryconfig.LoadedFactoryConfig,
-) (factoryapi.ListModelsResponse, error) {
-	if runtimeCfg == nil {
-		return factoryapi.ListModelsResponse{}, fmt.Errorf("factory service runtime is not available")
-	}
-	if host == nil {
-		return localmodels.ListModelsWithOptions(runtimeCfg, localmodels.CatalogOptions{
-			RuntimeCacheInspector: nil,
-			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
-		})
-	}
-	catalog := localmodels.BuildCatalogWithOptions(runtimeCfg, CatalogDiscoveryOptions())
-	results := make([]factoryapi.ModelSummary, 0, len(catalog))
-	for _, entry := range catalog {
-		summary := entry.Summary
-		snapshot, err := host.InspectReadiness(ctx, runtimeCfg, summary.Name)
-		if err != nil {
-			return factoryapi.ListModelsResponse{}, err
-		}
-		summary.ManagedRuntime = overlayCatalogManagedRuntime(summary.ManagedRuntime, snapshot)
-		results = append(results, summary)
-	}
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Name < results[j].Name
-	})
-	return factoryapi.ListModelsResponse{Results: results}, nil
-}
-
-// GetModelWithHost projects managed-runtime inspect responses through the process-wide model host.
-func GetModelWithHost(
-	ctx context.Context,
-	host Host,
-	runtimeCfg *factoryconfig.LoadedFactoryConfig,
-	modelName string,
-) (factoryapi.ModelDetail, error) {
-	if runtimeCfg == nil {
-		return factoryapi.ModelDetail{}, fmt.Errorf("factory service runtime is not available")
-	}
-	if host == nil {
-		return localmodels.GetModelWithOptions(runtimeCfg, modelName, localmodels.CatalogOptions{
-			SourceResolver: localmodels.DefaultManagedRuntimeSourceResolver(),
-		})
-	}
-	catalog := localmodels.BuildCatalogWithOptions(runtimeCfg, CatalogDiscoveryOptions())
-	key := localmodels.CanonicalModelName(modelName)
-	if key == "" {
-		return factoryapi.ModelDetail{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
-	}
-	entry, ok := catalog[key]
-	if !ok {
-		return factoryapi.ModelDetail{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
-	}
-	snapshot, err := host.InspectReadiness(ctx, runtimeCfg, entry.Summary.Name)
-	if err != nil {
-		return factoryapi.ModelDetail{}, err
-	}
-	detail := entry.Detail
-	detail.ManagedRuntime = overlayCatalogManagedRuntime(detail.ManagedRuntime, snapshot)
-	detail.Diagnostics = mergeCatalogDiagnostics(detail.Diagnostics, detail.ManagedRuntime)
-	return detail, nil
-}
 
 // PullWithHost delegates managed-runtime pull materialization to the process-wide model host.
 func PullWithHost(
@@ -177,34 +103,6 @@ func ModelPullResultFromSnapshot(snapshot PullSnapshot) apisurface.ModelPullResu
 		SourceID:           strings.TrimSpace(snapshot.Identity.SourceID),
 		ResolverNotes:      strings.TrimSpace(snapshot.Identity.ResolverNotes),
 	}
-}
-
-func overlayCatalogManagedRuntime(
-	base factoryapi.ManagedRuntime,
-	snapshot ReadinessSnapshot,
-) factoryapi.ManagedRuntime {
-	projected := ManagedRuntimeFromSnapshot(snapshot)
-	if len(base.SupportedOperations) > 0 {
-		projected.SupportedOperations = append([]factoryapi.ModelOperation(nil), base.SupportedOperations...)
-	}
-	if projected.Locality == "" {
-		projected.Locality = base.Locality
-	}
-	return projected
-}
-
-func mergeCatalogDiagnostics(base factoryapi.StringMap, managed factoryapi.ManagedRuntime) factoryapi.StringMap {
-	merged := factoryapi.StringMap{}
-	for key, value := range base {
-		merged[key] = value
-	}
-	if managed.Diagnostics == nil {
-		return merged
-	}
-	for key, value := range *managed.Diagnostics {
-		merged[key] = value
-	}
-	return merged
 }
 
 func mapPullHostError(result apisurface.ModelPullResult, err error) error {

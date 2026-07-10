@@ -24,8 +24,8 @@ import (
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
@@ -1514,44 +1514,49 @@ type stubModelService struct {
 	calls        []string
 	modelNames   []string
 	requests     []factoryapi.ModelInvocationRequest
+	contexts     []context.Context
 }
 
-func (s *stubModelService) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+func (s *stubModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
 	s.calls = append(s.calls, "list")
+	s.contexts = append(s.contexts, ctx)
 	return s.listResult, s.listErr
 }
 
-func (s *stubModelService) GetModel(_ context.Context, modelName string) (factoryapi.ModelDetail, error) {
+func (s *stubModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 	s.calls = append(s.calls, "get")
+	s.contexts = append(s.contexts, ctx)
 	s.modelNames = append(s.modelNames, modelName)
 	return s.gotModel, s.getErr
 }
 
-func (s *stubModelService) PullModel(_ context.Context, modelName string) (apisurface.ModelPullResult, error) {
+func (s *stubModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
 	s.calls = append(s.calls, "pull")
+	s.contexts = append(s.contexts, ctx)
 	s.modelNames = append(s.modelNames, modelName)
 	return s.pullResult, s.pullErr
 }
 
-func (s *stubModelService) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+func (s *stubModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
 	s.calls = append(s.calls, "invoke")
+	s.contexts = append(s.contexts, ctx)
 	s.modelNames = append(s.modelNames, modelName)
 	s.requests = append(s.requests, request)
 	return s.invokeResult, s.invokeErr
 }
 
 type stubSessionGateway struct {
-	openResult         factoryapi.OpenFactorySessionResponse
-	openFromFolder     *FactorySessionOpenResult
-	listSessionsResult factoryapi.ListFactorySessionsResponse
-	getSessionResult   factoryapi.FactorySession
-	pauseResult        factoryapi.FactorySessionLifecycleControlResponse
-	resumeResult       factoryapi.FactorySessionLifecycleControlResponse
-	durablePauseResult factoryapi.FactorySessionLifecycleControlResponse
+	openResult          factoryapi.OpenFactorySessionResponse
+	openFromFolder      *FactorySessionOpenResult
+	listSessionsResult  factoryapi.ListFactorySessionsResponse
+	getSessionResult    factoryapi.FactorySession
+	pauseResult         factoryapi.FactorySessionLifecycleControlResponse
+	resumeResult        factoryapi.FactorySessionLifecycleControlResponse
+	durablePauseResult  factoryapi.FactorySessionLifecycleControlResponse
 	durableCancelResult factoryapi.FactorySessionLifecycleControlResponse
-	calls              []string
-	folderPaths        []string
-	sessionIDs           []string
+	calls               []string
+	folderPaths         []string
+	sessionIDs          []string
 }
 
 func (s *stubSessionGateway) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
@@ -1879,6 +1884,38 @@ func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 	}
 	if len(stub.requests) != 1 || stub.requests[0].Operation != "TTS" {
 		t.Fatalf("invoke requests = %#v, want delegated TTS request", stub.requests)
+	}
+}
+
+func TestFactoryService_CatalogMethodsForwardContextResultsAndErrorsUnchanged(t *testing.T) {
+	t.Parallel()
+
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("request"), "catalog-request")
+	listErr := errors.New("list sentinel")
+	getErr := errors.New("get sentinel")
+	stub := &stubModelService{
+		listResult: factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "list-result"}}},
+		listErr:    listErr,
+		gotModel:   factoryapi.ModelDetail{Name: "detail-result"},
+		getErr:     getErr,
+	}
+	svc := &FactoryService{modelService: stub}
+
+	listed, gotListErr := svc.ListModels(ctx)
+	detail, gotGetErr := svc.GetModel(ctx, "requested-model")
+
+	if listed.Results[0].Name != "list-result" || !errors.Is(gotListErr, listErr) {
+		t.Fatalf("ListModels = (%#v, %v), want exact result and sentinel error", listed, gotListErr)
+	}
+	if detail.Name != "detail-result" || !errors.Is(gotGetErr, getErr) {
+		t.Fatalf("GetModel = (%#v, %v), want exact result and sentinel error", detail, gotGetErr)
+	}
+	if len(stub.contexts) != 2 || stub.contexts[0] != ctx || stub.contexts[1] != ctx {
+		t.Fatalf("catalog contexts = %#v, want original context twice", stub.contexts)
+	}
+	if len(stub.modelNames) != 1 || stub.modelNames[0] != "requested-model" {
+		t.Fatalf("catalog model names = %#v, want requested-model", stub.modelNames)
 	}
 }
 

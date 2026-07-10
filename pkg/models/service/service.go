@@ -1,9 +1,6 @@
 package service
 
 import (
-	"context"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
@@ -29,16 +26,6 @@ type Service struct {
 // New constructs a model-domain service with explicit dependencies.
 func New(deps Dependencies) *Service {
 	return &Service{deps: deps}
-}
-
-// ListModels returns configured model summaries with managed-runtime readiness projection.
-func (s *Service) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	return modelhost.ListModelsWithHost(ctx, s.modelHost(), s.runtimeConfig())
-}
-
-// GetModel returns inspect detail for one configured model with managed-runtime readiness projection.
-func (s *Service) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	return modelhost.GetModelWithHost(ctx, s.modelHost(), s.runtimeConfig(), modelName)
 }
 
 func (s *Service) runtimeConfig() *factoryconfig.LoadedFactoryConfig {
