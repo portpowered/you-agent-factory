@@ -13,8 +13,10 @@ import (
 var executeCLI = cli.Execute
 
 func main() {
-	run.SetBuildFactoryService(func(ctx context.Context, cfg *service.FactoryServiceConfig) (run.RuntimeRunner, error) {
-		return compose.InjectCLIRunner(ctx, cfg)
-	})
+	run.SetBuildFactoryService(buildCLIRunner)
 	executeCLI()
+}
+
+func buildCLIRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (run.RuntimeRunner, error) {
+	return compose.InjectCLIRunner(ctx, cfg)
 }

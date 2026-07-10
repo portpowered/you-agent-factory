@@ -23,6 +23,36 @@ func TestNewDashboardSidecarRejectsMissingRequiredInputs(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "dashboard renderer is required") {
 		t.Fatalf("NewDashboardSidecar() error = %v, want missing renderer", err)
 	}
+
+	_, err = NewDashboardSidecar(DashboardSidecarConfig{
+		Reader:         dashboardReaderFunc(func(context.Context, time.Time) (DashboardRenderInput, error) { return DashboardRenderInput{}, nil }),
+		Renderer:       dashboardRendererFunc(func(DashboardRenderInput) {}),
+		RenderInterval: -time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "render interval must not be negative") {
+		t.Fatalf("NewDashboardSidecar() error = %v, want invalid interval", err)
+	}
+}
+
+func TestDashboardSidecarRejectsInvalidRuntimeState(t *testing.T) {
+	t.Parallel()
+
+	var sidecar *DashboardSidecar
+	if err := sidecar.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "sidecar is nil") {
+		t.Fatalf("Run() error = %v, want nil sidecar", err)
+	}
+
+	sidecar, err := NewDashboardSidecar(DashboardSidecarConfig{
+		Reader:   dashboardReaderFunc(func(context.Context, time.Time) (DashboardRenderInput, error) { return DashboardRenderInput{}, nil }),
+		Renderer: dashboardRendererFunc(func(DashboardRenderInput) {}),
+		Timing:   &fakeDashboardTiming{},
+	})
+	if err != nil {
+		t.Fatalf("NewDashboardSidecar() error = %v", err)
+	}
+	if err := sidecar.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "nil ticker") {
+		t.Fatalf("Run() error = %v, want nil ticker", err)
+	}
 }
 
 func TestDashboardSidecarReportsReadinessRendersAndObservesCancellation(t *testing.T) {
