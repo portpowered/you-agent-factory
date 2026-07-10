@@ -27,6 +27,22 @@ type lifecycleObserverFactory struct {
 	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 }
 
+type orderedStopFactory struct {
+	lifecycleObserverFactory
+	sidecarExited      <-chan struct{}
+	runStoppedTooEarly chan<- struct{}
+}
+
+func (f *orderedStopFactory) Run(ctx context.Context) error {
+	<-ctx.Done()
+	select {
+	case <-f.sidecarExited:
+	default:
+		close(f.runStoppedTooEarly)
+	}
+	return ctx.Err()
+}
+
 func (f *lifecycleObserverFactory) Run(context.Context) error { return nil }
 func (f *lifecycleObserverFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	return interfaces.WorkRequestSubmitResult{}, nil
@@ -150,6 +166,43 @@ func TestStop_EmitsCompletedLifecycleMetricWithoutRootService(t *testing.T) {
 		return metricNameAndValue(record, "runtime.lifecycle.stopped", 1) &&
 			metricRecordString(record, "outcome") == "completed"
 	}, "completed stop through extracted host")
+}
+
+func TestStop_CancelsAndJoinsSidecarsBeforeStoppingRunLoop(t *testing.T) {
+	sidecarExited := make(chan struct{})
+	runStoppedTooEarly := make(chan struct{})
+	factoryStub := &orderedStopFactory{
+		sidecarExited:      sidecarExited,
+		runStoppedTooEarly: runStoppedTooEarly,
+	}
+	handle := factoryservice.Start(context.Background(), &factoryservice.Bundle{
+		Factory: factoryStub,
+		Logger:  zap.NewNop(),
+	})
+
+	sidecarCtx, cancelSidecar := context.WithCancel(context.Background())
+	handle.SidecarCancel = cancelSidecar
+	handle.Sidecars.Add(1)
+	go func() {
+		defer handle.Sidecars.Done()
+		<-sidecarCtx.Done()
+		close(sidecarExited)
+	}()
+
+	err := factoryservice.Stop(handle, clockwork.NewFakeClock())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Stop error = %v, want context canceled", err)
+	}
+	select {
+	case <-sidecarExited:
+	default:
+		t.Fatal("Stop returned before the sidecar exited")
+	}
+	select {
+	case <-runStoppedTooEarly:
+		t.Fatal("runtime run loop stopped before its sidecars exited")
+	default:
+	}
 }
 
 func TestWaitForStart_ReportsRunningReadinessWithoutRootService(t *testing.T) {

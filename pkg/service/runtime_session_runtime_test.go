@@ -2595,9 +2595,10 @@ func TestObserveLiveLifecycleControl_LogsAcceptedPauseWithoutSensitiveFields(t *
 	core, observed := observer.New(zap.InfoLevel)
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		rootConfig: minimalFactoryConfig(),
+		logger:     zap.New(core),
 	})
-	harness.svc.logger = zap.New(core)
 	defer harness.stop(t)
+	observed.TakeAll()
 
 	if _, err := harness.svc.PauseLiveFactorySession(
 		context.Background(),
@@ -2624,9 +2625,10 @@ func TestObserveLiveLifecycleControl_LogsNoOpRepeatPause(t *testing.T) {
 	core, observed := observer.New(zap.InfoLevel)
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		rootConfig: minimalFactoryConfig(),
+		logger:     zap.New(core),
 	})
-	harness.svc.logger = zap.New(core)
 	defer harness.stop(t)
+	observed.TakeAll()
 
 	if _, err := harness.svc.PauseLiveFactorySession(
 		context.Background(),
@@ -2653,9 +2655,10 @@ func TestObserveLiveLifecycleControl_LogsNoOpResume(t *testing.T) {
 	core, observed := observer.New(zap.InfoLevel)
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		rootConfig: minimalFactoryConfig(),
+		logger:     zap.New(core),
 	})
-	harness.svc.logger = zap.New(core)
 	defer harness.stop(t)
+	observed.TakeAll()
 
 	response, err := harness.svc.ResumeLiveFactorySession(
 		context.Background(),
@@ -2678,9 +2681,10 @@ func TestObserveLiveLifecycleControl_LogsNotFound(t *testing.T) {
 	core, observed := observer.New(zap.WarnLevel)
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		rootConfig: minimalFactoryConfig(),
+		logger:     zap.New(core),
 	})
-	harness.svc.logger = zap.New(core)
 	defer harness.stop(t)
+	observed.TakeAll()
 
 	_, err := harness.svc.PauseLiveFactorySession(
 		context.Background(),
@@ -2694,7 +2698,7 @@ func TestObserveLiveLifecycleControl_LogsNotFound(t *testing.T) {
 		t.Fatalf("error = %v, want ErrFactorySessionNotFound", err)
 	}
 
-	entry := findLifecycleControlLog(t, observed, "factory session lifecycle control rejected")
+	entry := findLifecycleControlLogForSession(t, observed, "factory session lifecycle control rejected", "live-session-missing-001")
 	assertLogField(t, entry, "session_id", "live-session-missing-001")
 	assertLogField(t, entry, "outcome", "NOT_FOUND")
 }
@@ -2737,6 +2741,17 @@ func findLifecycleControlLog(t *testing.T, observed *observer.ObservedLogs, mess
 	return observer.LoggedEntry{}
 }
 
+func findLifecycleControlLogForSession(t *testing.T, observed *observer.ObservedLogs, message, sessionID string) observer.LoggedEntry {
+	t.Helper()
+	for _, entry := range observed.All() {
+		if entry.Message == message && entry.ContextMap()["session_id"] == sessionID {
+			return entry
+		}
+	}
+	t.Fatalf("lifecycle control log %q for session %q not found in %#v", message, sessionID, observed.All())
+	return observer.LoggedEntry{}
+}
+
 func findObservedLog(t *testing.T, observed *observer.ObservedLogs, message string) observer.LoggedEntry {
 	t.Helper()
 	for _, entry := range observed.All() {
@@ -2750,14 +2765,18 @@ func findObservedLog(t *testing.T, observed *observer.ObservedLogs, message stri
 
 func assertLogField(t *testing.T, entry observer.LoggedEntry, key, want string) {
 	t.Helper()
+	var values []string
 	for _, field := range entry.Context {
 		if field.Key != key {
 			continue
 		}
+		values = append(values, field.String)
 		if field.String == want {
 			return
 		}
-		t.Fatalf("log field %q = %q, want %q", key, field.String, want)
+	}
+	if len(values) > 0 {
+		t.Fatalf("log field %q values = %q, want one equal to %q", key, values, want)
 	}
 	t.Fatalf("log field %q missing from %#v", key, entry.Context)
 }

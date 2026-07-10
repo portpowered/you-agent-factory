@@ -786,14 +786,19 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 		}()
 	}
 
-	fs.startSchedulerSidecarsForRuntime(
+	if err := fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
 		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryDir(),
 		handle.Bundle.RuntimeCfg.FactoryConfig(),
 		handle.Bundle.RuntimeCfg,
 		submitWorkRequestWithFactory(handle.Bundle.Factory),
-	)
+	); err != nil {
+		sidecarCancel()
+		handle.Sidecars.Wait()
+		handle.SidecarCancel = nil
+		return fmt.Errorf("attach worker sidecars: %w", err)
+	}
 	if handle.Bundle.Listener != nil {
 		if err := handle.Bundle.Listener.PreseedInputs(sidecarCtx); err != nil {
 			sidecarCancel()
@@ -822,9 +827,7 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 	if handle == nil {
 		return nil
 	}
-	err := factoryservice.Stop(handle, fs.clock)
-	fs.stopLiveRuntimeSidecars(handle)
-	return err
+	return factoryservice.Stop(handle, fs.clock)
 }
 
 func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
