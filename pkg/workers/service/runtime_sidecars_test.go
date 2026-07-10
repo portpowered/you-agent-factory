@@ -38,7 +38,7 @@ func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision
 			scriptWorker.Name: scriptWorker,
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-			cronWS.Name:      &cronWS,
+			cronWS.Name:       &cronWS,
 			scriptPoller.Name: &scriptPoller,
 		},
 	})
@@ -80,7 +80,8 @@ func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision
 
 	var cronRequest interfaces.WorkRequest
 	var foundCron bool
-	for _, request := range submitted.submissions {
+	_, submissions := submitted.snapshot()
+	for _, request := range submissions {
 		if len(request.Works) > 0 && request.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation] == cronWS.Name {
 			cronRequest = request
 			foundCron = true

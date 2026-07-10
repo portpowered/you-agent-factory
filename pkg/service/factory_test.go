@@ -271,6 +271,7 @@ func stopServiceModeRun(t *testing.T, cancel context.CancelFunc, errCh <-chan er
 }
 
 type aggregateSnapshotFactory struct {
+	mu                       sync.Mutex
 	engineState              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	engineStateErr           error
 	engineStateSnapshotCalls int
@@ -295,12 +296,19 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	if len(normalized) > 0 {
 		result.TraceID = normalized[0].TraceID
 	}
+	f.mu.Lock()
 	f.submitCalls++
 	f.submissions = append(f.submissions, request)
+	f.mu.Unlock()
 	if f.submitFunc != nil {
 		return result, f.submitFunc(ctx, request)
 	}
 	return result, nil
+}
+func (f *aggregateSnapshotFactory) submissionSnapshot() (int, []interfaces.WorkRequest) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.submitCalls, append([]interfaces.WorkRequest(nil), f.submissions...)
 }
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	streamGenerationID := strings.TrimSpace(f.streamGenerationID)
@@ -716,6 +724,7 @@ type runningSessionServiceOptions struct {
 	runtimeLogDir  string
 	recordPath     string
 	extraOptions   []factory.FactoryOption
+	logger         *zap.Logger
 }
 
 type runningSessionService struct {
@@ -760,11 +769,15 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		}
 	}
 
+	logger := options.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:                 rootDir,
 		RuntimeMode:         interfaces.RuntimeModeService,
 		MockWorkersConfig:   config.NewEmptyMockWorkersConfig(),
-		Logger:              zap.NewNop(),
+		Logger:              logger,
 		RuntimeLogDir:       runtimeLogDir,
 		RuntimeMetricsDir:   runtimeMetricsDir,
 		RecordPath:          options.recordPath,

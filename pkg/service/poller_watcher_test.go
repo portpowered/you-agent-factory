@@ -317,10 +317,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 	defer svc.stopLiveRuntimeSidecars(handle)
 
 	waitForHostedPollerSubmission(t, submitted, 1, time.Second)
-	if submitted.submitCalls != 1 {
-		t.Fatalf("submit calls = %d, want 1", submitted.submitCalls)
+	calls, submissions := submitted.submissionSnapshot()
+	if calls != 1 {
+		t.Fatalf("submit calls = %d, want 1", calls)
 	}
-	if got := submitted.submissions[0].Works[0].WorkID; got != "linear:issue-new" {
+	if got := submissions[0].Works[0].WorkID; got != "linear:issue-new" {
 		t.Fatalf("submitted work id = %q, want linear:issue-new", got)
 	}
 }
@@ -1121,13 +1122,14 @@ func startHostedLinearPollerSidecars(t *testing.T, fixture hostedLinearPollerSer
 
 func assertHostedLinearBatchWorks(t *testing.T, submitted *aggregateSnapshotFactory, wantWorkIDs ...string) {
 	t.Helper()
-	if submitted.submitCalls != 1 {
-		t.Fatalf("submit calls = %d, want 1 batch submit for the poll cycle", submitted.submitCalls)
+	calls, submissions := submitted.submissionSnapshot()
+	if calls != 1 {
+		t.Fatalf("submit calls = %d, want 1 batch submit for the poll cycle", calls)
 	}
-	if len(submitted.submissions) != 1 {
-		t.Fatalf("submitted requests = %d, want 1", len(submitted.submissions))
+	if len(submissions) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submissions))
 	}
-	works := submitted.submissions[0].Works
+	works := submissions[0].Works
 	if len(works) != len(wantWorkIDs) {
 		t.Fatalf("submitted works = %d, want %d canonical outputs from one poll cycle", len(works), len(wantWorkIDs))
 	}
@@ -1136,18 +1138,19 @@ func assertHostedLinearBatchWorks(t *testing.T, submitted *aggregateSnapshotFact
 			t.Fatalf("submitted work ID[%d] = %q, want %q", i, works[i].WorkID, wantWorkID)
 		}
 	}
-	if submitted.submissions[0].RequestID == "" || works[0].RequestID != works[1].RequestID {
+	if submissions[0].RequestID == "" || works[0].RequestID != works[1].RequestID {
 		t.Fatalf("batch request IDs = [%q %q], want shared non-empty requestId", works[0].RequestID, works[1].RequestID)
 	}
 }
 
 func assertConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *aggregateSnapshotFactory) {
 	t.Helper()
-	if submitted.submitCalls < 2 {
-		t.Fatalf("submit calls = %d, want at least 2 from concurrent pollers", submitted.submitCalls)
+	calls, submissions := submitted.submissionSnapshot()
+	if calls < 2 {
+		t.Fatalf("submit calls = %d, want at least 2 from concurrent pollers", calls)
 	}
 	var hostedSubmitted, scriptSubmitted bool
-	for _, request := range submitted.submissions {
+	for _, request := range submissions {
 		for _, work := range request.Works {
 			if work.WorkID == "linear:issue-hosted" {
 				hostedSubmitted = true
@@ -1158,7 +1161,7 @@ func assertConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *a
 		}
 	}
 	if !hostedSubmitted || !scriptSubmitted {
-		t.Fatalf("submitted works = %#v, want both hosted linear:issue-hosted and script-issue outputs", submitted.submissions)
+		t.Fatalf("submitted works = %#v, want both hosted linear:issue-hosted and script-issue outputs", submissions)
 	}
 }
 
@@ -1166,12 +1169,14 @@ func waitForHostedPollerSubmission(t *testing.T, submitted *aggregateSnapshotFac
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if submitted.submitCalls >= want {
+		calls, _ := submitted.submissionSnapshot()
+		if calls >= want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, submitted.submitCalls)
+	calls, _ := submitted.submissionSnapshot()
+	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, calls)
 }
 
 func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {
