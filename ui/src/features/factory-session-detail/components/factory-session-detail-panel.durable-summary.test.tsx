@@ -46,6 +46,12 @@ describe("FactorySessionDetailPanel durable summary", () => {
           usage: { resources: [] },
         });
       }
+      if (url.endsWith("/factory-sessions/dur-sess-js-run-n-001/dispatches")) {
+        return jsonResponse({
+          dispatches: [],
+          sessionId: "dur-sess-js-run-n-001",
+        });
+      }
       return new Response("not found", { status: 404 });
     });
 
@@ -61,12 +67,12 @@ describe("FactorySessionDetailPanel durable summary", () => {
     expect(screen.getByText("verify")).toBeTruthy();
     expect(screen.queryAllByText("Idle")).toHaveLength(0);
 
-    const fetchUrls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) =>
-      String(input),
-    );
-    expect(fetchUrls).toHaveLength(1);
+    const fetchUrls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => String(input));
+    expect(fetchUrls).toHaveLength(2);
     expect(fetchUrls[0]).toContain("/factory-sessions/dur-sess-js-run-n-001");
-    expect(fetchUrls.some((url) => url.includes("/dispatches"))).toBe(false);
+    expect(fetchUrls.some((url) => url.includes("/dispatches"))).toBe(true);
     expect(fetchUrls.some((url) => url.includes("/results?mode=final"))).toBe(
       false,
     );
@@ -127,11 +133,11 @@ describe("FactorySessionDetailPanel durable summary", () => {
 
     expect(screen.getAllByText("Succeeded").length).toBeGreaterThanOrEqual(1);
 
-    const fetchUrls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) =>
-      String(input),
+    const fetchUrls = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.map(([input]) => String(input));
+    expect(fetchUrls.some((url) => url.includes("/results?mode=partial"))).toBe(
+      false,
     );
-    expect(
-      fetchUrls.some((url) => url.includes("/results?mode=partial")),
-    ).toBe(false);
   });
 });
