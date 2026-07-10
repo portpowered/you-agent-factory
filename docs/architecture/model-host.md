@@ -75,13 +75,11 @@ Diagnostic fields include:
 - `backend`
 - `readiness_state` / `lifecycle_state`
 - `failure_class`
-- `pull_outcome` (pull paths)
 - `lease_id` (lease paths)
 - `unload_reason` (`explicit`, `idle`, `pressure_eviction`)
 
 Counter names use the `model_host.*` prefix:
 
-- `model_host.pull.outcome`
 - `model_host.load.success` / `model_host.load.failure`
 - `model_host.readiness.timeout`
 - `model_host.process.crash`
@@ -90,8 +88,9 @@ Counter names use the `model_host.*` prefix:
 
 When configured, counters route through the service
 `InvocationMetricsRecorder` adapter in `pkg/service/modelhost_diagnostics.go`.
-Managed-runtime pull boundaries continue to emit separate `managed_runtime.pull.*`
-counters from `pkg/service/model_catalog.go`.
+Managed-runtime pull logging and `managed_runtime.pull.*` counters are owned by
+`pkg/models/service/pull.go`; model-host pull execution does not emit a second
+telemetry series.
 
 ## Failure Classes
 

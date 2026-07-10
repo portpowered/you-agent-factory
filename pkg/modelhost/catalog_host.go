@@ -141,7 +141,6 @@ func (h *CatalogHost) Pull(
 			ReadinessSnapshot: snapshot,
 			PullOutcome:       factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME,
 		}
-		h.diagnostics.logPullFailed(pullSnapshot, ErrUnsupportedRuntime)
 		return pullSnapshot, &ReadinessError{Snapshot: snapshot, Cause: ErrUnsupportedRuntime}
 	}
 	pullResult, err := h.assets.PullModel(ctx, runtimeCfg, modelName)
@@ -155,7 +154,6 @@ func (h *CatalogHost) Pull(
 			readiness = ClassifyReadiness(h.identityFromCatalog(runtimeCfg, entry), CacheInspection{}, false)
 		}
 		pullSnapshot := pullSnapshotFromAssetResult(pullResult, readiness)
-		h.diagnostics.logPullFailed(pullSnapshot, err)
 		return pullSnapshot, err
 	}
 	readiness := pullResult.Snapshot
@@ -167,7 +165,6 @@ func (h *CatalogHost) Pull(
 		readiness = ClassifyReadiness(h.identityFromCatalog(runtimeCfg, entry), inspected, false)
 	}
 	pullSnapshot := pullSnapshotFromAssetResult(pullResult, readiness)
-	h.diagnostics.logPullCompleted(pullSnapshot)
 	return pullSnapshot, nil
 }
 

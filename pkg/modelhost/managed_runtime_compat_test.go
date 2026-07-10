@@ -10,8 +10,6 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestEnsureInvocationReady_AllowsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
@@ -78,54 +76,5 @@ func TestEnsureInvocationReady_BlocksWhenSupervisedRuntimeCrashed(t *testing.T) 
 			t.Fatalf("timed out waiting for invocation readiness failure; last readiness = %s", managed.ReadinessState)
 		}
 		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func TestPullWithHost_MapsUnsupportedRuntimeToModelPullUnsupported(t *testing.T) {
-	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
-		Name: "factory",
-		Workers: []interfaces.WorkerConfig{{
-			Name:          "cloud-worker",
-			Type:          interfaces.WorkerTypeModel,
-			Model:         "GPT_CLOUD",
-			ModelLocality: interfaces.ModelLocalityCloud,
-		}},
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewLoadedFactoryConfig: %v", err)
-	}
-	host := NewCatalogHost(stubAssetGateway{}, Options{})
-
-	_, err = PullWithHost(context.Background(), host, loaded, "GPT_CLOUD")
-	if err == nil || !errors.Is(err, apisurface.ErrModelPullUnsupported) {
-		t.Fatalf("PullWithHost error = %v, want ErrModelPullUnsupported", err)
-	}
-}
-
-func TestModelPullResultFromSnapshot_PreservesPullMetadata(t *testing.T) {
-	result := ModelPullResultFromSnapshot(PullSnapshot{
-		ReadinessSnapshot: ReadinessSnapshot{
-			Identity: Identity{
-				Name:     "OMNIVOICE_Q4_K_M",
-				Locality: factoryapi.WorkerModelLocalityLocal,
-			},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
-		},
-		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
-		LegacyOutcome: "PULLED",
-		CachePath:     "/tmp/cache",
-		Revision:      "rev1",
-		DownloadedFiles: []PullDownloadedFile{{
-			Path:   "model.gguf",
-			Bytes:  42,
-			SHA256: "abc",
-		}},
-	})
-	if result.Outcome != "PULLED" || result.CachePath != "/tmp/cache" || len(result.DownloadedFiles) != 1 {
-		t.Fatalf("pull result = %#v, want pull metadata", result)
-	}
-	if result.ManagedPullOutcome != "INSTALLED_SUCCESSFULLY" || result.ReadinessState != "READY" {
-		t.Fatalf("managed pull fields = (%q, %q), want INSTALLED_SUCCESSFULLY READY", result.ManagedPullOutcome, result.ReadinessState)
 	}
 }

@@ -1887,23 +1887,27 @@ func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 	}
 }
 
-func TestFactoryService_CatalogMethodsForwardContextResultsAndErrorsUnchanged(t *testing.T) {
+func TestFactoryService_ModelMethodsForwardContextResultsAndErrorsUnchanged(t *testing.T) {
 	t.Parallel()
 
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("request"), "catalog-request")
 	listErr := errors.New("list sentinel")
 	getErr := errors.New("get sentinel")
+	pullErr := errors.New("pull sentinel")
 	stub := &stubModelService{
 		listResult: factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "list-result"}}},
 		listErr:    listErr,
 		gotModel:   factoryapi.ModelDetail{Name: "detail-result"},
 		getErr:     getErr,
+		pullResult: apisurface.ModelPullResult{ModelName: "pull-result", ManagedPullOutcome: "TIMED_OUT"},
+		pullErr:    pullErr,
 	}
 	svc := &FactoryService{modelService: stub}
 
 	listed, gotListErr := svc.ListModels(ctx)
 	detail, gotGetErr := svc.GetModel(ctx, "requested-model")
+	pulled, gotPullErr := svc.PullModel(ctx, "pull-model")
 
 	if listed.Results[0].Name != "list-result" || !errors.Is(gotListErr, listErr) {
 		t.Fatalf("ListModels = (%#v, %v), want exact result and sentinel error", listed, gotListErr)
@@ -1911,11 +1915,14 @@ func TestFactoryService_CatalogMethodsForwardContextResultsAndErrorsUnchanged(t 
 	if detail.Name != "detail-result" || !errors.Is(gotGetErr, getErr) {
 		t.Fatalf("GetModel = (%#v, %v), want exact result and sentinel error", detail, gotGetErr)
 	}
-	if len(stub.contexts) != 2 || stub.contexts[0] != ctx || stub.contexts[1] != ctx {
-		t.Fatalf("catalog contexts = %#v, want original context twice", stub.contexts)
+	if pulled.ModelName != "pull-result" || pulled.ManagedPullOutcome != "TIMED_OUT" || !errors.Is(gotPullErr, pullErr) {
+		t.Fatalf("PullModel = (%#v, %v), want exact result and sentinel error", pulled, gotPullErr)
 	}
-	if len(stub.modelNames) != 1 || stub.modelNames[0] != "requested-model" {
-		t.Fatalf("catalog model names = %#v, want requested-model", stub.modelNames)
+	if len(stub.contexts) != 3 || stub.contexts[0] != ctx || stub.contexts[1] != ctx || stub.contexts[2] != ctx {
+		t.Fatalf("model contexts = %#v, want original context three times", stub.contexts)
+	}
+	if len(stub.modelNames) != 2 || stub.modelNames[0] != "requested-model" || stub.modelNames[1] != "pull-model" {
+		t.Fatalf("model names = %#v, want requested-model then pull-model", stub.modelNames)
 	}
 }
 
