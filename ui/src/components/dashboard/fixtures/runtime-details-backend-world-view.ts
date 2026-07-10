@@ -79,7 +79,7 @@ export const runtimeDetailsBackendWorkstationRequestsByDispatchID = {
       end_time: "2026-04-18T12:00:11Z",
       failureDetail: {
         message: runtimeDetailsFixtureIDs.failedFailureMessage,
-        reason: "unknown",
+        reason: runtimeDetailsFixtureIDs.failedFailureReason,
       },
       outcome: "FAILED",
     },
