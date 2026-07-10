@@ -5,17 +5,18 @@ import {
   approveFactorySession,
   cancelFactorySession,
   type FactorySessionDurableReadModel,
+  type FactorySessionLifecycleControlResponse,
+  interruptFactorySessionDispatch,
   pauseFactorySession,
   resumeFactorySession,
   retryFactorySessionDispatch,
   terminateFactorySession,
-  type FactorySessionLifecycleControlResponse,
 } from "../../../api/factory-sessions";
 import { normalizeFactorySessionGetResponse } from "../../../api/factory-sessions/normalize-session-get";
 import { useDashboardStreamStore } from "../../dashboard/public/runtime-cache-scope";
-import type { FactorySessionDetailData } from "./use-factory-session-detail";
-import type { LifecycleControlFeedbackState } from "../lib/lifecycle/factory-session-lifecycle-feedback";
 import type { FactorySessionLifecycleActionID } from "../lib/factory-session-lifecycle-controls";
+import type { LifecycleControlFeedbackState } from "../lib/lifecycle/factory-session-lifecycle-feedback";
+import type { FactorySessionDetailData } from "./use-factory-session-detail";
 import { factorySessionDetailQueryKey } from "./use-factory-session-detail";
 
 interface LifecycleControlMutationInput {
@@ -62,6 +63,16 @@ export function useFactorySessionLifecycleControl({
           return resumeFactorySession(sessionID);
         case "terminate":
           return terminateFactorySession(sessionID);
+        case "interrupt-dispatch":
+          if (selectedDispatchID === null || selectedDispatchID.trim() === "") {
+            throw new Error(
+              "Interrupt dispatch requires a selected active dispatch.",
+            );
+          }
+
+          return interruptFactorySessionDispatch(sessionID, {
+            dispatchId: selectedDispatchID,
+          });
         case "retry-dispatch":
           if (selectedDispatchID === null || selectedDispatchID.trim() === "") {
             throw new Error(

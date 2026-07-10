@@ -10,6 +10,7 @@ export type FactorySessionLifecycleActionID =
   | "cancel"
   | "terminate"
   | "approve"
+  | "interrupt-dispatch"
   | "retry-dispatch";
 
 export interface FactorySessionLifecycleActionAvailability {
@@ -87,11 +88,17 @@ export function resolveFactorySessionLifecycleActionAvailability(input: {
     actions.push("retry-dispatch");
   }
 
-  const hasFailedDispatch = (input.dispatches ?? []).some(
-    (dispatch) => dispatch.status === "FAILED",
+  if (selectedDispatch?.status === "RUNNING") {
+    actions.push("interrupt-dispatch");
+  }
+
+  const hasControllableDispatch = (input.dispatches ?? []).some(
+    (dispatch) => dispatch.status === "FAILED" || dispatch.status === "RUNNING",
   );
   const showDispatchSelectionHint =
-    hasFailedDispatch && selectedDispatch?.status !== "FAILED";
+    hasControllableDispatch &&
+    selectedDispatch?.status !== "FAILED" &&
+    selectedDispatch?.status !== "RUNNING";
 
   return {
     actions,
