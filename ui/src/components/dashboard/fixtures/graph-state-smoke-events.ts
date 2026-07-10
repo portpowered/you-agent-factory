@@ -132,9 +132,10 @@ export const graphStateSmokeTimelineEvents: FactoryEvent[] = [
   factoryEvent("graph-state-smoke-8", 6, FACTORY_EVENT_TYPES.dispatchResponse, {
     dispatchId: "dispatch-smoke-failed",
     durationMillis: 900,
-    failureMessage:
-      "Provider rate limit exceeded while running the graph-state smoke.",
-    failureReason: "provider_rate_limit",
+    failureDetail: {
+      message: "Provider rate limit exceeded while running the graph-state smoke.",
+      reason: "throttled",
+    },
     outcome: "FAILED",
     outputWork: [
       {
