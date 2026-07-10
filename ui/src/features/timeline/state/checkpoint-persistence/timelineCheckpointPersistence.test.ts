@@ -53,6 +53,7 @@ function createIndexedDBTestDouble(
             records.delete(key);
           }),
         get: (key: string) => indexedDBRequest(records.get(key)),
+        getAll: () => indexedDBRequest(Array.from(records.values())),
         put: (value: StoredCheckpointEnvelope) =>
           options.failPut
             ? indexedDBErrorRequest<string>(new Error("put failed"))
@@ -324,10 +325,7 @@ describe("timeline checkpoint persistence resilience", () => {
     const readFailure = createIndexedDBTestDouble({ failOpen: true });
 
     await expect(
-      readTimelineCheckpoint(
-        readFailure.indexedDB,
-        streamIdentityFixture(),
-      ),
+      readTimelineCheckpoint(readFailure.indexedDB, streamIdentityFixture()),
     ).resolves.toBe(null);
   });
 });
@@ -395,9 +393,9 @@ describe("timeline checkpoint guard migration", () => {
 
     await persistTimelineCheckpoint(indexedDB, checkpoint, identityA);
 
-    await expect(
-      readTimelineCheckpoint(indexedDB, identityB),
-    ).resolves.toBe(null);
+    await expect(readTimelineCheckpoint(indexedDB, identityB)).resolves.toBe(
+      null,
+    );
   });
 });
 
