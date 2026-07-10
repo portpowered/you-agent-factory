@@ -119,7 +119,7 @@ func TestMockClient_ValidateSourceRoundTripDoesNotSurfaceTransportFailureForExpe
 	}
 }
 
-func TestMockClient_WorkflowValidateAliasMatchesCanonicalSuccess(t *testing.T) {
+func TestMockClient_WorkflowValidateCompatibilityOnlyAliasMatchesCanonicalSuccess(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflow(t, projectRoot, "review.js", simpleValidWorkflowSource)
 

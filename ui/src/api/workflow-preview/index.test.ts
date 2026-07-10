@@ -5,18 +5,18 @@ import {
   workflowPreviewAPIErrorMessages,
 } from "./index";
 
-describe("workflow-preview obsolete compatibility exports", () => {
+describe("workflow-preview compatibility-only export parity", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("re-exports the factory preview API surface under obsolete workflow names", () => {
+  it("re-exports the canonical factory preview API surface under compatibility-only names", () => {
     expect(previewWorkflow).toBeTypeOf("function");
     expect(WorkflowPreviewAPIError).toBe(factoryPreview.FactoryPreviewAPIError);
     expect(workflowPreviewAPIErrorMessages.network).toBeTruthy();
   });
 
-  it("delegates previewWorkflow to previewFactory", async () => {
+  it("delegates compatibility-only previewWorkflow to previewFactory", async () => {
     const previewFactorySpy = vi
       .spyOn(factoryPreview, "previewFactory")
       .mockResolvedValue({

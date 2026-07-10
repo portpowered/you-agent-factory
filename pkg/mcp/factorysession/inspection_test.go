@@ -117,7 +117,7 @@ func TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummarie
 	}
 }
 
-func TestMockClient_ListArtifacts_WorkflowAliasParity(t *testing.T) {
+func TestMockClient_ListArtifacts_WorkflowCompatibilityOnlyAliasParity(t *testing.T) {
 	canonicalClient := newFixtureMCPClient(t)
 	aliasClient := newFixtureMCPClient(t)
 	row := publishedScenario(t, fixtures.FixturePurposeArtifactInspection)
