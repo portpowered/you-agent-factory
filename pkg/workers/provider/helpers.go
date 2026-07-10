@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -29,7 +30,102 @@ const (
 const (
 	RedactedCommandEnvValue     = "<redacted>"
 	MetadataOnlyCommandEnvValue = "<metadata-only>"
+	ProviderDefaultModel        = "provider-default"
+	ProviderInvocationPrepared  = "provider.invocation_prepared"
+	RedactedProviderArgValue    = "<redacted>"
+	RedactedProviderPrompt      = "<redacted:prompt>"
 )
+
+var providerFlagsWithSafeValues = map[string]struct{}{
+	"--approval-mode": {}, "--model": {}, "--output-format": {}, "--sandbox": {},
+}
+
+var providerFlagsWithSensitiveValues = map[string]struct{}{
+	"--agent": {}, "--cd": {}, "--dir": {}, "--image": {}, "--prompt": {},
+	"--resume": {}, "--resume-id": {}, "--session": {}, "--system-prompt": {},
+	"--workspace": {}, "--worktree": {},
+}
+
+func providerModelForLog(model string) string {
+	if normalized := strings.TrimSpace(model); normalized != "" {
+		return normalized
+	}
+	return ProviderDefaultModel
+}
+
+func sanitizeProviderArgs(provider string, args []string) []string {
+	sanitized := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if providerInlineArgIsSensitive(arg) {
+			sanitized = append(sanitized, strings.SplitN(arg, "=", 2)[0]+"="+RedactedProviderArgValue)
+			continue
+		}
+		sanitized = append(sanitized, arg)
+		if _, ok := providerFlagsWithSafeValues[arg]; ok && index+1 < len(args) {
+			index++
+			sanitized = append(sanitized, args[index])
+			continue
+		}
+		if _, ok := providerFlagsWithSensitiveValues[arg]; ok && index+1 < len(args) {
+			index++
+			sanitized = append(sanitized, RedactedProviderArgValue)
+			continue
+		}
+		if providerArgIsSensitivePositional(provider, args, index) {
+			sanitized[len(sanitized)-1] = RedactedProviderPrompt
+		}
+	}
+	return sanitized
+}
+
+func providerInlineArgIsSensitive(arg string) bool {
+	name, _, ok := strings.Cut(arg, "=")
+	if !ok {
+		return false
+	}
+	normalized := strings.ToLower(name)
+	return strings.Contains(normalized, "key") || strings.Contains(normalized, "token") ||
+		strings.Contains(normalized, "secret") || strings.Contains(normalized, "password") ||
+		strings.Contains(normalized, "prompt") || strings.Contains(normalized, "credential")
+}
+
+func providerArgIsSensitivePositional(provider string, args []string, index int) bool {
+	if strings.HasPrefix(args[index], "-") {
+		return false
+	}
+	if index == 0 && (args[index] == "exec" || args[index] == "chat" || args[index] == "run") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case string(interfaces.ModelProviderCodex):
+		return args[index] != "-"
+	default:
+		return true
+	}
+}
+
+func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInferenceRequest, execReq CommandRequest) []any {
+	fields := workLogFields(req.Dispatch.Execution,
+		"event_name", ProviderInvocationPrepared,
+		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
+		"model", providerModelForLog(req.Model),
+		"command", execReq.Command,
+		"args", sanitizeProviderArgs(req.ModelProvider, execReq.Args),
+		"working_dir", execReq.WorkDir,
+		"stdin_bytes", len(execReq.Stdin),
+		"stdin_sha256", sha256Hex(execReq.Stdin),
+		"dispatch_id", req.Dispatch.DispatchID)
+	if deadline, ok := ctx.Deadline(); ok {
+		fields = append(fields, "deadline", deadline.UTC().Format(time.RFC3339Nano))
+	}
+	return fields
+}
+
+func sha256Hex(input []byte) string {
+	digest := sha256.Sum256(input)
+	return hex.EncodeToString(digest[:])
+}
 
 type CommandEnvClassification string
 

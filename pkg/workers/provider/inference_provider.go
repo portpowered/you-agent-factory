@@ -189,12 +189,8 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 			workDiagnosticsForInferenceRequest(req),
 		)
 	}
-	logger.Info("inferencer: request arguments",
-		workLogFields(req.Dispatch.Execution, "arguments", args)...)
 	execReq := behavior.BuildCommandRequest(req, args)
-
-	logger.Debug("inferencer: request input",
-		workLogFields(req.Dispatch.Execution, "request", req.UserMessage)...)
+	logger.Info("provider invocation prepared", providerPreparedLogFields(ctx, req, execReq)...)
 	started := time.Now()
 	result, err := p.commandExec().Run(ctx, execReq)
 	duration := time.Since(started)
@@ -229,8 +225,6 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	}
 
 	content := string(result.Stdout)
-	logger.Debug("inference results:",
-		workLogFields(req.Dispatch.Execution, "output", result.Stdout)...)
 	logger.Info("inferencer: request completed",
 		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
@@ -349,20 +343,8 @@ func formatProviderTimeoutFailure(provider string, result CommandResult) string 
 }
 
 func cursorFailureLogFields(req interfaces.RunnerExecutionRequest, cursorProvider bool, result CommandResult, extra ...any) []any {
-	fields := workLogFields(req.Dispatch.Execution,
+	return workLogFields(req.Dispatch.Execution,
 		append([]any{"dispatcher", string(req.ModelProvider)}, extra...)...)
-	if !cursorProvider {
-		fields = append(fields,
-			"output", string(result.Stdout),
-			"stderr", string(result.Stderr),
-		)
-		return fields
-	}
-	fields = append(fields,
-		"stdout_preview", cursorpkg.BoundedCommandOutputExcerpt(result.Stdout, cursorpkg.CommandOutputLogPreviewLimit),
-		"stderr_preview", cursorpkg.BoundedCommandOutputExcerpt(result.Stderr, cursorpkg.CommandOutputLogPreviewLimit),
-	)
-	return fields
 }
 
 func cursorInferenceFailureDiagnostics(
@@ -399,13 +381,10 @@ func (p *ScriptWrapProvider) completeCursorInference(
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
-	logger.Debug("inference results:",
-		workLogFields(req.Dispatch.Execution, "output", parsed.Content)...)
 	logger.Info("inferencer: request completed",
 		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
-			"output_len", len(parsed.Content),
-			"session_id", parsed.ProviderSession.ID)...)
+			"output_len", len(parsed.Content))...)
 	p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
 	return interfaces.InferenceResponse{
 		Content:         parsed.Content,
