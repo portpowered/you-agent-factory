@@ -21,9 +21,10 @@ func InitializeAPITransport(ctx context.Context, cfg *Config) (*APITransport, er
 	if err != nil {
 		return nil, err
 	}
+	host := NewSessionRuntimeHostFromCore(core, cfg)
 	return &APITransport{
-		Services: servicesFromCore(core),
-		Host:     NewSessionRuntimeHostFromCore(core, cfg),
+		Services: servicesFromCoreWithModels(core, host.ModelService()),
+		Host:     host,
 	}, nil
 }
 

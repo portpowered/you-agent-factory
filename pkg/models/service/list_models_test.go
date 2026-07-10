@@ -9,8 +9,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 )
 
 func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {
@@ -75,6 +75,27 @@ func TestService_ListModels_ReturnsInspectFailureFromModelHost(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "inspect failed") {
 		t.Fatalf("ListModels error = %v, want inspect failure", err)
+	}
+}
+
+func TestService_ListModels_ProjectsManagedRuntimeFromModelHost(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return missingCacheInspectHost{} },
+	})
+
+	models, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if len(models.Results) != 1 {
+		t.Fatalf("models count = %d, want 1", len(models.Results))
+	}
+	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
+		t.Fatalf("managed readiness = %s, want MISSING", models.Results[0].ManagedRuntime.ReadinessState)
 	}
 }
 

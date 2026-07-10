@@ -54,7 +54,7 @@ func (s *Service) InvokeModel(
 	}
 	failureContext.WorkerName = workerDef.Name
 	failureContext.ModelName = workerDef.Model
-	managed, readinessErr := modelhost.EnsureInvocationReady(ctx, s.modelHost(), runtimeCfg, workerDef.Model)
+	managed, readinessErr := s.ensureInvocationReady(ctx, runtimeCfg, workerDef.Model)
 	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
 	if readinessErr != nil {
 		if failure, ok := apisurface.ClassifyInferenceFailure(readinessErr, failureContext); ok {
@@ -118,6 +118,29 @@ func (s *Service) InvokeModel(
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
+}
+
+func (s *Service) ensureInvocationReady(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (factoryapi.ManagedRuntime, error) {
+	if runtimeCfg == nil {
+		return factoryapi.ManagedRuntime{}, fmt.Errorf("runtime config is not available")
+	}
+	host := s.modelHost()
+	if host == nil {
+		return localmodels.EnsureManagedRuntimeReadyForInvocation(runtimeCfg, modelName, catalogDiscoveryOptions())
+	}
+	snapshot, err := host.InspectReadiness(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return factoryapi.ManagedRuntime{}, err
+	}
+	managed := modelhost.ManagedRuntimeFromSnapshot(snapshot)
+	if invocationErr := apisurface.InvocationErrorFromManagedRuntime(managed); invocationErr != nil {
+		return managed, invocationErr
+	}
+	return managed, nil
 }
 
 func directModelInvocationWorkstationRequest(

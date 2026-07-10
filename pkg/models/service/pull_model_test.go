@@ -6,13 +6,15 @@ import (
 	"sync"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestService_PullModel_ReportsSuccessfulAlreadyPresentOutcome(t *testing.T) {
@@ -25,14 +27,14 @@ func TestService_PullModel_ReportsSuccessfulAlreadyPresentOutcome(t *testing.T) 
 		ModelAssetPuller: func() localmodels.AssetPuller {
 			return &stubPullAssetPuller{
 				result: apisurface.ModelPullResult{
-					ModelName:           "OMNIVOICE_Q4_K_M",
-					Outcome:             "ALREADY_PRESENT",
-					ManagedPullOutcome:  "ALREADY_READY",
-					ReadinessState:      "READY",
-					LifecycleState:      "READY",
-					SourceKind:          "MANAGED_RUNTIME",
-					CachePath:           "/tmp/cache",
-					Revision:            "rev1",
+					ModelName:          "OMNIVOICE_Q4_K_M",
+					Outcome:            "ALREADY_PRESENT",
+					ManagedPullOutcome: "ALREADY_READY",
+					ReadinessState:     "READY",
+					LifecycleState:     "READY",
+					SourceKind:         "MANAGED_RUNTIME",
+					CachePath:          "/tmp/cache",
+					Revision:           "rev1",
 				},
 				inspection: localmodels.RuntimeCacheInspection{
 					Supported: true,
@@ -58,6 +60,36 @@ func TestService_PullModel_ReportsSuccessfulAlreadyPresentOutcome(t *testing.T) 
 		"pull_outcome":    "ALREADY_READY",
 		"readiness_state": "READY",
 	})
+	if recorder.count("managed_runtime.pull.attempts") != 1 || recorder.count("managed_runtime.pull.success") != 1 {
+		t.Fatalf("pull metric counts = %#v, want one attempt and one success", recorder.metrics)
+	}
+}
+
+func TestService_PullModel_ReportsStillLoadingWhenAssetsRemainMissing(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: func() localmodels.AssetPuller {
+			return &stubPullAssetPuller{
+				result: apisurface.ModelPullResult{ModelName: "OMNIVOICE_Q4_K_M", Outcome: "PULLED"},
+				inspection: localmodels.RuntimeCacheInspection{
+					Supported:     true,
+					Installed:     false,
+					MissingAssets: []string{"model.gguf"},
+				},
+			}
+		},
+	})
+
+	result, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	if result.ManagedPullOutcome != "STILL_LOADING" || result.ReadinessState != "LOADING" || result.LifecycleState != "INSTALLING" {
+		t.Fatalf("pull result = %#v, want STILL_LOADING/LOADING/INSTALLING", result)
+	}
 }
 
 func TestService_PullModel_RecordsSourceFailureMetric(t *testing.T) {
@@ -92,6 +124,10 @@ func TestService_PullModel_RecordsSourceFailureMetric(t *testing.T) {
 	recorder.assertContainsMetric(t, "managed_runtime.pull.source_failure", map[string]string{
 		"model_name": "OMNIVOICE_Q4_K_M",
 	})
+	if recorder.count("managed_runtime.pull.attempts") != 1 || recorder.count("managed_runtime.pull.failure") != 1 ||
+		recorder.count("managed_runtime.pull.source_failure") != 1 {
+		t.Fatalf("pull metric counts = %#v, want one attempt, failure, and source failure", recorder.metrics)
+	}
 }
 
 func TestService_PullModel_ReturnsCanceledWhenContextCanceled(t *testing.T) {
@@ -114,11 +150,119 @@ func TestService_PullModel_ReturnsCanceledWhenContextCanceled(t *testing.T) {
 	}
 }
 
+func TestService_PullModel_ProjectsModelHostResult(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	host := &stubPullModelHost{snapshot: modelhost.PullSnapshot{
+		ReadinessSnapshot: modelhost.ReadinessSnapshot{
+			Identity: modelhost.Identity{
+				Name:       "OMNIVOICE_Q4_K_M",
+				Locality:   factoryapi.WorkerModelLocalityLocal,
+				SourceKind: "MANAGED_RUNTIME",
+				SourceID:   "managed:omnivoice",
+			},
+			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+		},
+		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		LegacyOutcome: "PULLED",
+		CachePath:     "/tmp/cache",
+		Revision:      "rev1",
+		DownloadedFiles: []modelhost.PullDownloadedFile{{
+			Path: "model.gguf", Bytes: 42, SHA256: "abc",
+		}},
+	}}
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return host },
+	})
+
+	result, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	if result.Outcome != "PULLED" || result.ManagedPullOutcome != "INSTALLED_SUCCESSFULLY" ||
+		result.ReadinessState != "READY" || result.CachePath != "/tmp/cache" || len(result.DownloadedFiles) != 1 {
+		t.Fatalf("pull result = %#v, want mapped host metadata", result)
+	}
+	if host.gotRuntimeCfg != runtimeCfg || host.gotModelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("host call = (%p, %q), want supplied runtime and model", host.gotRuntimeCfg, host.gotModelName)
+	}
+}
+
+func TestService_PullModel_ClassifiesModelHostTimeout(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	recorder := &capturingPullMetricsRecorder{}
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost: func() modelhost.Host {
+			return &stubPullModelHost{err: context.DeadlineExceeded}
+		},
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder { return recorder },
+	})
+
+	result, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("PullModel error = %v, want deadline exceeded cause", err)
+	}
+	if !apisurface.IsManagedRuntimePullError(err) || result.ManagedPullOutcome != "TIMED_OUT" || result.ReadinessState != "FAILED" {
+		t.Fatalf("PullModel = (%#v, %v), want classified TIMED_OUT failure", result, err)
+	}
+	recorder.assertContainsMetric(t, "managed_runtime.pull.failure", map[string]string{
+		"model_name": "OMNIVOICE_Q4_K_M", "pull_outcome": "TIMED_OUT",
+	})
+	if recorder.count("managed_runtime.pull.source_failure") != 0 {
+		t.Fatalf("source failure metrics = %d, want 0 for timeout", recorder.count("managed_runtime.pull.source_failure"))
+	}
+}
+
+func TestService_PullModel_PropagatesCancellationToModelHost(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	host := &stubPullModelHost{waitForContext: true}
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     func() modelhost.Host { return host },
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := svc.PullModel(ctx, "OMNIVOICE_Q4_K_M")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("PullModel error = %v, want context.Canceled", err)
+	}
+	if host.gotContext != ctx {
+		t.Fatal("model host did not receive the original canceled context")
+	}
+}
+
+func TestService_PullModel_MapsUnsupportedModelHostResult(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost: func() modelhost.Host {
+			return &stubPullModelHost{err: modelhost.ErrUnsupportedRuntime}
+		},
+	})
+
+	_, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	if !errors.Is(err, apisurface.ErrModelPullUnsupported) {
+		t.Fatalf("PullModel error = %v, want ErrModelPullUnsupported", err)
+	}
+}
+
 func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	logger := zaptest.NewLogger(t)
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		Logger:        func() *zap.Logger { return logger },
@@ -148,6 +292,12 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	})
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err == nil {
 		t.Fatal("PullModel failure path: nil error, want pull failure")
+	}
+	if observed.FilterMessage("managed runtime pull completed").Len() != 1 {
+		t.Fatalf("success logs = %d, want 1", observed.FilterMessage("managed runtime pull completed").Len())
+	}
+	if observed.FilterMessage("managed runtime pull failed").Len() != 1 {
+		t.Fatalf("failure logs = %d, want 1", observed.FilterMessage("managed runtime pull failed").Len())
 	}
 }
 
@@ -182,6 +332,56 @@ func (r *capturingPullMetricsRecorder) assertContainsMetric(t *testing.T, name s
 		}
 	}
 	t.Fatalf("metrics %#v do not contain %q with labels %#v", r.metrics, name, labels)
+}
+
+func (r *capturingPullMetricsRecorder) count(name string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	count := 0
+	for _, metric := range r.metrics {
+		if metric.Name == name {
+			count++
+		}
+	}
+	return count
+}
+
+type stubPullModelHost struct {
+	snapshot       modelhost.PullSnapshot
+	err            error
+	waitForContext bool
+	gotContext     context.Context
+	gotRuntimeCfg  *factoryconfig.LoadedFactoryConfig
+	gotModelName   string
+}
+
+func (h *stubPullModelHost) Pull(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.PullSnapshot, error) {
+	h.gotContext = ctx
+	h.gotRuntimeCfg = runtimeCfg
+	h.gotModelName = modelName
+	if h.waitForContext {
+		<-ctx.Done()
+		return modelhost.PullSnapshot{}, ctx.Err()
+	}
+	return h.snapshot, h.err
+}
+
+func (*stubPullModelHost) ResolveIdentity(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.Identity, error) {
+	return modelhost.Identity{}, nil
+}
+
+func (*stubPullModelHost) InspectReadiness(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.ReadinessSnapshot, error) {
+	return modelhost.ReadinessSnapshot{}, nil
+}
+
+func (*stubPullModelHost) AcquireLease(context.Context, *factoryconfig.LoadedFactoryConfig, string, modelhost.LeaseOptions) (modelhost.Lease, error) {
+	return modelhost.Lease{}, nil
+}
+
+func (*stubPullModelHost) ReleaseLease(context.Context, string) error { return nil }
+
+func (*stubPullModelHost) Unload(context.Context, *factoryconfig.LoadedFactoryConfig, string) error {
+	return nil
 }
 
 type stubPullAssetPuller struct {

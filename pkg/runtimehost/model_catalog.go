@@ -23,8 +23,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -102,68 +102,6 @@ func (fs *Host) InvokeModel(ctx context.Context, modelName string, request facto
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
-// modelServiceHost adapts Host runtime seams for pkg/models/service wiring.
-type modelServiceHost struct {
-	*Host
-}
-
-var _ modelsservice.Host = modelServiceHost{}
-
-func (h modelServiceHost) RuntimeConfig() func() *factoryconfig.LoadedFactoryConfig {
-	if h.Host == nil {
-		return func() *factoryconfig.LoadedFactoryConfig { return nil }
-	}
-	return h.Host.currentRuntimeConfig
-}
-
-func (h modelServiceHost) ModelHost() func() modelhost.Host {
-	if h.Host == nil {
-		return func() modelhost.Host { return nil }
-	}
-	return h.Host.modelHost
-}
-
-func (h modelServiceHost) ModelAssetPuller() func() localmodels.AssetPuller {
-	if h.Host == nil {
-		return func() localmodels.AssetPuller { return nil }
-	}
-	return h.Host.modelAssetPuller
-}
-
-func (h modelServiceHost) Logger() func() *zap.Logger {
-	if h.Host == nil {
-		return func() *zap.Logger { return nil }
-	}
-	return func() *zap.Logger { return h.Host.logger }
-}
-
-func (h modelServiceHost) ModelPullMetrics() func() modelsservice.PullMetricsRecorder {
-	if h.Host == nil {
-		return func() modelsservice.PullMetricsRecorder { return nil }
-	}
-	return func() modelsservice.PullMetricsRecorder {
-		recorder := h.Host.modelPullMetricsRecorder()
-		if recorder == nil {
-			return nil
-		}
-		return modelPullMetricsHostAdapter{inner: recorder}
-	}
-}
-
-func (h modelServiceHost) ModelInvocationExecutor() modelsservice.ModelInvocationExecutor {
-	if h.Host == nil {
-		return nil
-	}
-	return h.Host.modelInvocationExecutor
-}
-
-func (h modelServiceHost) FactoryRunnerID() func() string {
-	if h.Host == nil {
-		return func() string { return "" }
-	}
-	return h.Host.factoryRunnerID
-}
-
 type modelPullMetricsHostAdapter struct {
 	inner ModelPullMetricsRecorder
 }
@@ -179,7 +117,30 @@ func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
 	if cfg != nil && cfg.ModelAPI != nil {
 		return cfg.ModelAPI
 	}
-	return modelsservice.NewFromHost(modelServiceHost{Host: fs})
+	if fs == nil {
+		return modelsservice.New(modelsservice.Dependencies{})
+	}
+	return modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig:    fs.currentRuntimeConfig,
+		ModelHost:        fs.modelHost,
+		ModelAssetPuller: fs.modelAssetPuller,
+		Logger:           func() *zap.Logger { return fs.logger },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			recorder := fs.modelPullMetricsRecorder()
+			if recorder == nil {
+				return nil
+			}
+			return modelPullMetricsHostAdapter{inner: recorder}
+		},
+		ModelInvocationExecutor: fs.modelInvocationExecutor,
+		FactoryRunnerID:         fs.factoryRunnerID,
+	})
+}
+
+// ModelService returns the canonical model-domain collaborator used by the
+// compatibility methods on Host.
+func (fs *Host) ModelService() apisurface.ModelAPI {
+	return fs.requireModelService()
 }
 
 func (fs *Host) modelHost() modelhost.Host {

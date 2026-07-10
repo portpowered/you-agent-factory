@@ -2,7 +2,6 @@ package initializer
 
 import (
 	"context"
-
 )
 
 // CLITransport bundles initializer-produced domain services with the session
@@ -20,9 +19,10 @@ func InitializeCLITransport(ctx context.Context, cfg *Config) (*CLITransport, er
 	if err != nil {
 		return nil, err
 	}
+	host := NewSessionRuntimeHostFromCore(core, cfg)
 	return &CLITransport{
-		Services: servicesFromCore(core),
-		Host:     NewSessionRuntimeHostFromCore(core, cfg),
+		Services: servicesFromCoreWithModels(core, host.ModelService()),
+		Host:     host,
 	}, nil
 }
 
