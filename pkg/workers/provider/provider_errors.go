@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -72,17 +73,19 @@ type claudeStructuredFailure struct {
 
 // ParseClaudeProviderFailure parses Claude CLI API Error records before any
 // text fallback and returns the reason and customer-visible message together.
-// Both input scanning and actionable provider messages are bounded so a failed
-// command cannot turn its transcript into the normalized failure message.
+// Structured scanning covers the complete captured streams while bounding each
+// candidate record; text fallback and actionable messages are separately
+// bounded so a failed command cannot publish its transcript.
 func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
+	structuredStreams := [][]byte{result.Stderr, result.Stdout}
+	if failure, ok := lastClaudeStructuredFailure(structuredStreams); ok {
+		return failure
+	}
+
 	streams := []string{
 		tailForClaudeFailureScan(result.Stderr),
 		tailForClaudeFailureScan(result.Stdout),
 	}
-	if failure, ok := lastClaudeStructuredFailure(streams); ok {
-		return failure
-	}
-
 	if failure, ok := lastClaudeTextFailure(streams); ok {
 		return failure
 	}
@@ -101,12 +104,22 @@ func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
 // Streams are ordered stderr then stdout, and lines retain their stream order.
 // The final recognized record wins; malformed and unrelated later lines do not
 // displace it. This matches structured-record selection above.
-func lastClaudeStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+func lastClaudeStructuredFailure(streams [][]byte) (ProviderFailureResult, bool) {
 	var last ProviderFailureResult
 	var found bool
 	for _, stream := range streams {
-		for _, line := range strings.Split(stream, "\n") {
-			failure, ok := decodeClaudeAPIError(line)
+		for len(stream) > 0 {
+			line := stream
+			if newline := bytes.IndexByte(stream, '\n'); newline >= 0 {
+				line = stream[:newline]
+				stream = stream[newline+1:]
+			} else {
+				stream = nil
+			}
+			if len(line) > claudeFailureScanBytes {
+				continue
+			}
+			failure, ok := decodeClaudeAPIError(string(line))
 			if !ok {
 				continue
 			}
@@ -202,7 +215,10 @@ func claudeStructuredFailureMessage(message string, reason interfaces.WorkFailur
 func safeClaudeActionableMessage(message string) (string, bool) {
 	normalized := normalizeClaudeMessage(message)
 	lower := strings.ToLower(normalized)
-	if normalized == "" || strings.HasPrefix(lower, "api error:") || containsClaudeCredentialSignal(lower) {
+	if normalized == "" ||
+		strings.HasPrefix(lower, "api error:") ||
+		containsClaudeCredentialSignal(lower) ||
+		containsClaudeTranscriptMarker(lower) {
 		return "", false
 	}
 	return boundUTF8Bytes(normalized, claudeFailureMessageBytes), true
@@ -225,6 +241,9 @@ func lastClaudeTextFailure(streams []string) (ProviderFailureResult, bool) {
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
 			normalized := normalizeClaudeMessage(line)
+			if !isClaudeTextDiagnosticRecord(normalized) {
+				continue
+			}
 			reason, ok := claudeTextFailureReason(strings.ToLower(normalized))
 			if !ok {
 				continue
@@ -237,6 +256,58 @@ func lastClaudeTextFailure(streams []string) (ProviderFailureResult, bool) {
 		}
 	}
 	return last, found
+}
+
+// Text fallback accepts only known Claude diagnostic shapes. Transcript and
+// prompt markers are rejected wherever they appear so their content cannot
+// influence failure policy or become a customer-visible message.
+func isClaudeTextDiagnosticRecord(message string) bool {
+	lower := strings.ToLower(message)
+	if lower == "" || containsClaudeTranscriptMarker(lower) {
+		return false
+	}
+	return hasAnyPrefix(lower,
+		"api error:",
+		"error:",
+		"claude error:",
+		"request failed:",
+		"configuration error",
+		"configuration is invalid",
+		"invalid configuration",
+		"config file not found",
+		"anthropic_api_key is not set",
+		"model is not configured",
+		"api key",
+		"authentication error",
+		"permission error",
+		"not logged in",
+		"login required",
+		"unauthorized",
+		"forbidden",
+		"invalid_request_error",
+		"bad request",
+		"invalid request",
+		"request_too_large",
+		"rate limit",
+		"too many requests",
+		"overloaded",
+		"529",
+		"internal server error",
+		"unexpected status 500",
+		"unexpected status 502",
+		"unexpected status 503",
+		"unexpected status 504",
+		"request deadline exceeded",
+		"request timed out",
+		"request timeout",
+		"deadline exceeded",
+		"timed out",
+		"timeout",
+	)
+}
+
+func containsClaudeTranscriptMarker(message string) bool {
+	return containsAny(message, "user:", "human:", "assistant:", "system:", "prompt:")
 }
 
 func claudeTextFailureReason(message string) (interfaces.WorkFailureType, bool) {
@@ -316,13 +387,18 @@ func safeClaudeUnknownExcerpt(message string) bool {
 	lower := strings.ToLower(message)
 	return containsAny(lower, "error", "fail") &&
 		!containsClaudeCredentialSignal(lower) &&
+		!containsClaudeTranscriptMarker(lower) &&
 		!strings.HasPrefix(lower, "api error:") &&
-		!strings.HasPrefix(lower, "user:") &&
-		!strings.HasPrefix(lower, "human:") &&
-		!strings.HasPrefix(lower, "assistant:") &&
-		!strings.HasPrefix(lower, "system:") &&
-		!strings.HasPrefix(lower, "prompt:") &&
 		!strings.ContainsAny(message, "{}")
+}
+
+func hasAnyPrefix(value string, prefixes ...string) bool {
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeClaudeMessage(message string) string {

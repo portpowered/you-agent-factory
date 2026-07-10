@@ -590,6 +590,127 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 	}
 }
 
+func TestParseClaudeProviderFailure_TranscriptSignalsCannotDrivePolicy(t *testing.T) {
+	testCases := []string{
+		"User: debug this configuration error",
+		"Human: explain this api key failure",
+		"Assistant: an invalid request would fail",
+		"System: rate limit requests before dispatch",
+		"Prompt: the provider is overloaded",
+		"User: simulate an internal server error",
+		"Assistant: describe what timed out means",
+	}
+
+	for _, transcript := range testCases {
+		t.Run(strings.Fields(transcript)[0]+strings.Fields(transcript)[2], func(t *testing.T) {
+			assertClaudeFailureAndPolicy(t, CommandResult{ExitCode: 7, Stderr: []byte(transcript)}, claudeFailureExpectation{
+				reason:    interfaces.WorkFailureTypeUnknown,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   "claude exited with code 7",
+				terminal:  true,
+				retryable: false,
+			})
+		})
+	}
+}
+
+func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name:        "EmbeddedPromptMarkerRejectsTextRecord",
+			stderr:      "Invalid request: User: private prompt content",
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "claude exited with code 4",
+		},
+		{
+			name:        "StructuredPromptMarkerUsesCategoryFallback",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Invalid request: Prompt: private content"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "AuthorizationCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace Authorization: secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "BearerCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace Bearer secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "APIKeyCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace api_key=secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "AnthropicCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace sk-ant-secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertClaudeFailureAndPolicy(t, CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}, claudeFailureExpectation{
+				reason:    tc.wantReason,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   tc.wantMessage,
+				terminal:  true,
+				retryable: false,
+			})
+		})
+	}
+}
+
+func TestParseClaudeProviderFailure_LongCleanupTailCannotEvictStructuredRecord(t *testing.T) {
+	structured := `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`
+	cleanup := strings.Repeat("cleanup completed successfully\n", claudeFailureScanBytes/16)
+	result := CommandResult{ExitCode: 1, Stderr: []byte(structured + "\n" + cleanup)}
+
+	assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
+		reason:        interfaces.WorkFailureTypeThrottled,
+		family:        interfaces.WorkFailureFamilyThrottle,
+		message:       claudeThrottleFailureMessage,
+		retryable:     true,
+		throttlePause: true,
+	})
+}
+
+type claudeFailureExpectation struct {
+	reason        interfaces.WorkFailureType
+	family        interfaces.WorkFailureFamily
+	message       string
+	retryable     bool
+	terminal      bool
+	throttlePause bool
+}
+
+func assertClaudeFailureAndPolicy(t *testing.T, result CommandResult, want claudeFailureExpectation) {
+	t.Helper()
+	parsed := ParseClaudeProviderFailure(result)
+	if parsed.Reason != want.reason || parsed.Message != want.message {
+		t.Fatalf("parsed = %#v, want reason=%q message=%q", parsed, want.reason, want.message)
+	}
+	providerErr := NewProviderErrorFromResult(parsed, nil)
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if providerErr.Family != want.family ||
+		decision.Retryable != want.retryable ||
+		decision.Terminal != want.terminal ||
+		decision.TriggersThrottlePause != want.throttlePause {
+		t.Fatalf("policy = family %q decision %#v, want family=%q retryable=%t terminal=%t throttle=%t", providerErr.Family, decision, want.family, want.retryable, want.terminal, want.throttlePause)
+	}
+}
+
 func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *testing.T) {
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
 	capacityLine := providerErrorCorpusLastErrorLine(t, capacityEntry)
