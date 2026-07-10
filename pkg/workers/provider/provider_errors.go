@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -37,6 +36,7 @@ const codexFailureMessageBytes = 1024
 const (
 	codexAuthFailureMessage       = "Codex authentication failed."
 	codexBadRequestFailureMessage = "Codex rejected the request as invalid."
+	codexGPT56SolUpgradeMessage   = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
 	codexServerFailureMessage     = "Codex encountered a temporary server error."
 	codexThrottleFailureMessage   = "Codex is temporarily unavailable due to usage or capacity limits."
 	codexTimeoutFailureMessage    = "Codex request timed out."
@@ -58,11 +58,7 @@ func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
 		tailForCodexErrorScan(result.Stdout),
 	}
 	if failure, ok := lastCodexStructuredFailure(streams); ok {
-		reason := classifyCodexFailure(failure.Type, failure.Status, failure.Message, result.ExitCode)
-		return ProviderFailureResult{
-			Reason:  reason,
-			Message: safeCodexFailureMessage(failure.Message, codexExitFailureMessage(result.ExitCode)),
-		}
+		return failure
 	}
 
 	if failure, ok := lastCodexTextFailure(streams, result.ExitCode); ok {
@@ -73,13 +69,13 @@ func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
 	}
 
 	return ProviderFailureResult{
-		Reason:  classifyCodexFailure("", 0, "", result.ExitCode),
+		Reason:  classifyCodexExitFailure(result.ExitCode),
 		Message: codexExitFailureMessage(result.ExitCode),
 	}
 }
 
-func lastCodexStructuredFailure(streams []string) (codexStructuredFailure, bool) {
-	var last codexStructuredFailure
+func lastCodexStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
 	var found bool
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
@@ -88,12 +84,31 @@ func lastCodexStructuredFailure(streams []string) (codexStructuredFailure, bool)
 				continue
 			}
 			failure, ok := decodeCodexStructuredFailure(payload)
-			if ok {
-				last, found = failure, true
+			if !ok {
+				continue
+			}
+			reason, recognized := classifyCodexStructuredSignal(failure.Type, failure.Status)
+			if recognized {
+				last = ProviderFailureResult{
+					Reason:  reason,
+					Message: codexStructuredFailureMessage(failure.Message, reason),
+				}
+				found = true
 			}
 		}
 	}
 	return last, found
+}
+
+// codexStructuredFailureMessage publishes only positively audited text. Other
+// structured messages can contain prompts, transcripts, cleanup paths, or
+// credentials, so recognized reasons use fixed customer-visible messages.
+func codexStructuredFailureMessage(message string, reason interfaces.WorkFailureType) string {
+	message = strings.Join(strings.Fields(message), " ")
+	if reason == interfaces.WorkFailureTypePermanentBadRequest && message == codexGPT56SolUpgradeMessage {
+		return message
+	}
+	return codexTextFailureMessage(reason)
 }
 
 func codexErrorPayload(line string) (string, bool) {
@@ -232,12 +247,9 @@ func codexTextFailureMessage(reason interfaces.WorkFailureType) string {
 	}
 }
 
-func classifyCodexFailure(errorType string, status int, message string, exitCode int) interfaces.WorkFailureType {
-	if reason, ok := classifyCodexStructuredSignal(errorType, status); ok {
-		return reason
-	}
-	if reason := classifyCodexMessageSignal(message, exitCode); reason != interfaces.WorkFailureTypeUnknown {
-		return reason
+func classifyCodexExitFailure(exitCode int) interfaces.WorkFailureType {
+	if exitCode == 124 {
+		return interfaces.WorkFailureTypeTimeout
 	}
 	if exitCode == codexWindowsProcessFailureExitCode {
 		return interfaces.WorkFailureTypeInternalServerError
@@ -247,14 +259,31 @@ func classifyCodexFailure(errorType string, status int, message string, exitCode
 
 func classifyCodexStructuredSignal(errorType string, status int) (interfaces.WorkFailureType, bool) {
 	normalizedType := strings.ToLower(strings.TrimSpace(errorType))
-	switch {
-	case containsAny(normalizedType, "authentication_error", "permission_error") || status == 401 || status == 403:
+	switch normalizedType {
+	case "authentication_error", "permission_error":
 		return interfaces.WorkFailureTypeAuthFailure, true
-	case containsAny(normalizedType, "invalid_request_error") || status == 400:
+	case "invalid_request_error":
 		return interfaces.WorkFailureTypePermanentBadRequest, true
-	case containsAny(normalizedType, "rate_limit_error", "overloaded_error") || status == 429:
+	case "rate_limit_error", "overloaded_error":
 		return interfaces.WorkFailureTypeThrottled, true
-	case containsAny(normalizedType, "api_error", "server_error") || status >= 500 && status <= 599:
+	case "api_error", "server_error":
+		return interfaces.WorkFailureTypeInternalServerError, true
+	case "", "error":
+		// Generic Codex envelopes carry the provider classification in status.
+	default:
+		// An explicit unknown type can identify cleanup or diagnostic records;
+		// its status must not let it override a recognized provider failure.
+		return interfaces.WorkFailureTypeUnknown, false
+	}
+
+	switch {
+	case status == 401 || status == 403:
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case status == 400:
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case status == 429:
+		return interfaces.WorkFailureTypeThrottled, true
+	case status >= 500 && status <= 599:
 		return interfaces.WorkFailureTypeInternalServerError, true
 	case status == 408:
 		return interfaces.WorkFailureTypeTimeout, true
@@ -262,47 +291,6 @@ func classifyCodexStructuredSignal(errorType string, status int) (interfaces.Wor
 		return interfaces.WorkFailureTypeUnknown, false
 	}
 }
-
-func classifyCodexMessageSignal(message string, exitCode int) interfaces.WorkFailureType {
-	normalizedMessage := strings.ToLower(message)
-	switch {
-	case exitCode == 124:
-		return interfaces.WorkFailureTypeTimeout
-	case containsAny(normalizedMessage, "authentication_error", "api key", "unauthorized", "forbidden", "401 unauthorized", "403 forbidden"):
-		return interfaces.WorkFailureTypeAuthFailure
-	case containsAny(normalizedMessage, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.WorkFailureTypeTimeout
-	case containsAny(normalizedMessage, "invalid_request_error", "bad request", "400 item", "400 previous response", "400 "):
-		return interfaces.WorkFailureTypePermanentBadRequest
-	case containsAny(normalizedMessage, codexThrottledFailureNeedles...):
-		return interfaces.WorkFailureTypeThrottled
-	case containsAny(normalizedMessage, codexTemporaryServerFailureNeedles...):
-		return interfaces.WorkFailureTypeInternalServerError
-	default:
-		return interfaces.WorkFailureTypeUnknown
-	}
-}
-
-func safeCodexFailureMessage(message string, fallback string) string {
-	message = strings.Join(strings.Fields(message), " ")
-	if message == "" || containsSensitiveCodexFailureText(message) {
-		return fallback
-	}
-	if len(message) <= codexFailureMessageBytes {
-		return message
-	}
-	message = message[:codexFailureMessageBytes]
-	for message != "" && !utf8.ValidString(message) {
-		message = message[:len(message)-1]
-	}
-	return strings.TrimSpace(message)
-}
-
-func containsSensitiveCodexFailureText(message string) bool {
-	normalized := strings.ToLower(message)
-	return containsAny(normalized, "authorization:", "bearer ", "x-api-key", "api_key", "api-key", "sk-")
-}
-
 func codexExitFailureMessage(exitCode int) string {
 	return fmt.Sprintf("codex exited with code %d", exitCode)
 }

@@ -99,7 +99,7 @@ func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.
 
 func TestParseCodexProviderFailure_GPT56SolReturnsActionableNestedMessage(t *testing.T) {
 	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")
-	wantMessage := "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
+	wantMessage := codexGPT56SolUpgradeMessage
 
 	got := ParseCodexProviderFailure(entry.CommandResult())
 	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest {
@@ -130,7 +130,7 @@ func TestParseCodexProviderFailure_StructuredRecordsUseLastValidCrossStreamRecor
 	}
 
 	got := ParseCodexProviderFailure(result)
-	if got.Reason != interfaces.WorkFailureTypeInternalServerError || got.Message != "final stdout server failure" {
+	if got.Reason != interfaces.WorkFailureTypeInternalServerError || got.Message != codexServerFailureMessage {
 		t.Fatalf("ParseCodexProviderFailure() = %#v, want final valid stdout server failure", got)
 	}
 }
@@ -146,7 +146,7 @@ func TestParseCodexProviderFailure_StructuredFieldsPrecedeSubstringFallback(t *t
 	}
 
 	got := ParseCodexProviderFailure(result)
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "choose a supported model" {
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != codexBadRequestFailureMessage {
 		t.Fatalf("ParseCodexProviderFailure() = %#v, want structured bad request", got)
 	}
 }
@@ -158,7 +158,7 @@ func TestParseCodexProviderFailure_UsesOuterStructuredTypeAndMessage(t *testing.
 	}
 
 	got := ParseCodexProviderFailure(result)
-	if got.Reason != interfaces.WorkFailureTypeThrottled || got.Message != "request capacity reached" {
+	if got.Reason != interfaces.WorkFailureTypeThrottled || got.Message != codexThrottleFailureMessage {
 		t.Fatalf("ParseCodexProviderFailure() = %#v, want outer structured throttle failure", got)
 	}
 }
@@ -294,6 +294,62 @@ func TestParseCodexProviderFailure_UnstructuredFallbackIsSafeByConstruction(t *t
 			stderr:      "ERROR: arbitrary credential secret_token=customer-private-value",
 			wantReason:  interfaces.WorkFailureTypeUnknown,
 			wantMessage: "codex exited with code 1",
+			reject:      []string{"secret_token", "customer-private-value"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseCodexProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseCodexProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+			for _, rejected := range tc.reject {
+				if strings.Contains(got.Message, rejected) {
+					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+				}
+			}
+		})
+	}
+}
+
+func TestParseCodexProviderFailure_StructuredFallbackIsSafeByConstruction(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+		reject      []string
+	}{
+		{
+			name: "StructuredCleanupCannotDisplaceDecisiveFailure",
+			stderr: strings.Join([]string{
+				`ERROR: {"type":"error","status":429,"error":{"type":"rate_limit_error","message":"provider capacity reached"}}`,
+				`ERROR: {"type":"cleanup_error","status":500,"message":"cleanup failed for /private/customer/path"}`,
+			}, "\n"),
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: codexThrottleFailureMessage,
+			reject:      []string{"cleanup", "/private/customer/path", "provider capacity reached"},
+		},
+		{
+			name:        "StructuredPromptUsesFixedMessage",
+			stderr:      `ERROR: {"status":400,"error":{"type":"invalid_request_error","message":"customer prompt: explain private account details"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: codexBadRequestFailureMessage,
+			reject:      []string{"customer prompt", "private account"},
+		},
+		{
+			name:        "StructuredTranscriptUsesFixedMessage",
+			stderr:      `ERROR: {"status":500,"error":{"type":"server_error","message":"transcript: user's private response draft"}}`,
+			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantMessage: codexServerFailureMessage,
+			reject:      []string{"transcript", "private response"},
+		},
+		{
+			name:        "StructuredCredentialUsesFixedMessage",
+			stderr:      `ERROR: {"status":401,"error":{"type":"authentication_error","message":"secret_token=customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: codexAuthFailureMessage,
 			reject:      []string{"secret_token", "customer-private-value"},
 		},
 	}
