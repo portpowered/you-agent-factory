@@ -102,6 +102,41 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 	}
 }
 
+func TestScriptWrapProvider_Infer_KiroKnownFailuresUseCanonicalParserAndPolicy(t *testing.T) {
+	fixtureNames := []string{
+		"kiro_structured_authentication_error",
+		"kiro_structured_invalid_request_stdout",
+		"kiro_text_authentication_stdout",
+		"kiro_structured_throttle_precedes_text",
+		"kiro_text_capacity_error",
+		"kiro_text_timeout_malformed_structured",
+		"kiro_structured_service_unavailable",
+	}
+
+	for _, name := range fixtureNames {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+				result: entry.CommandResult(),
+			}))
+
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "private prompt that must stay out of normalized failures",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType:          entry.ExpectedType,
+				wantFamily:        entry.ExpectedFamily,
+				wantMessage:       knownKiroFailure(entry.ExpectedType).Message,
+				rejectTexts:       append(entry.RejectMessageContains, "private prompt"),
+				wantRetryable:     entry.Retryable,
+				wantTerminal:      !entry.Retryable,
+				wantThrottlePause: entry.TriggersThrottlePause,
+			})
+		})
+	}
+}
+
 func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *testing.T) {
 	testCases := []struct {
 		name              string

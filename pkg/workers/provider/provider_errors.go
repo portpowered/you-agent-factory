@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -34,6 +35,11 @@ type ProviderFailureResult struct {
 const codexFailureMessageBytes = 1024
 
 const (
+	kiroFailureMessageBytes = codexFailureMessageBytes
+	kiroErrorLineScanBytes  = codexErrorLineScanBytes
+)
+
+const (
 	codexAuthFailureMessage       = "Codex authentication failed."
 	codexBadRequestFailureMessage = "Codex rejected the request as invalid."
 	codexGPT56SolUpgradeMessage   = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
@@ -46,6 +52,245 @@ type codexStructuredFailure struct {
 	Type    string
 	Status  int
 	Message string
+}
+
+const (
+	kiroAuthFailureMessage       = "Kiro authentication failed. Sign in again and retry."
+	kiroBadRequestFailureMessage = "Kiro rejected the request as invalid."
+	kiroThrottleFailureMessage   = "Kiro is temporarily unavailable due to usage or capacity limits."
+	kiroTimeoutFailureMessage    = "Kiro request timed out."
+	kiroServerFailureMessage     = "Kiro encountered a temporary service error."
+)
+
+// ParseKiroProviderFailure is the pure Kiro-owned normalization boundary for
+// non-zero CLI exits. It inspects bounded stderr/stdout tails, gives recognized
+// structured records precedence over text, and returns only canonical reasons
+// with product-owned messages for known failures.
+func ParseKiroProviderFailure(result CommandResult) ProviderFailureResult {
+	if result.ExitCode == 124 {
+		return knownKiroFailure(interfaces.WorkFailureTypeTimeout)
+	}
+	streams := []string{
+		tailForKiroErrorScan(result.Stderr),
+		tailForKiroErrorScan(result.Stdout),
+	}
+	if failure, ok := firstKiroStructuredFailure(streams); ok {
+		return failure
+	}
+	if failure, ok := firstKiroTextFailure(streams, result.ExitCode); ok {
+		return failure
+	}
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: kiroExitFailureMessage(result.ExitCode),
+	}
+}
+
+func firstKiroStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			payload := kiroStructuredPayload(line)
+			if payload == "" {
+				continue
+			}
+			reason, ok := decodeKiroStructuredFailure(payload)
+			if ok {
+				return knownKiroFailure(reason), true
+			}
+		}
+	}
+	return ProviderFailureResult{}, false
+}
+
+func kiroStructuredPayload(line string) string {
+	trimmed := strings.TrimSpace(line)
+	for _, prefix := range []string{"ERROR:", "Error:", "KIRO_ERROR:"} {
+		trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+	}
+	if !strings.HasPrefix(trimmed, "{") {
+		return ""
+	}
+	return trimmed
+}
+
+func decodeKiroStructuredFailure(payload string) (interfaces.WorkFailureType, bool) {
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		return interfaces.WorkFailureTypeUnknown, false
+	}
+
+	signals := kiroStructuredSignals(envelope)
+	if nested, ok := envelope["error"].(map[string]any); ok {
+		signals = append(kiroStructuredSignals(nested), signals...)
+	}
+	for _, signal := range signals {
+		if reason := classifyKiroSignal(signal); reason != interfaces.WorkFailureTypeUnknown {
+			return reason, true
+		}
+	}
+	for _, status := range kiroStructuredStatuses(envelope) {
+		if reason := classifyKiroStatus(status); reason != interfaces.WorkFailureTypeUnknown {
+			return reason, true
+		}
+	}
+	if nested, ok := envelope["error"].(map[string]any); ok {
+		for _, status := range kiroStructuredStatuses(nested) {
+			if reason := classifyKiroStatus(status); reason != interfaces.WorkFailureTypeUnknown {
+				return reason, true
+			}
+		}
+	}
+	return interfaces.WorkFailureTypeUnknown, false
+}
+
+func kiroStructuredSignals(record map[string]any) []string {
+	keys := []string{"type", "code", "error_type", "errorType", "name"}
+	signals := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if value, ok := record[key].(string); ok {
+			signals = append(signals, value)
+		}
+	}
+	return signals
+}
+
+func kiroStructuredStatuses(record map[string]any) []int {
+	keys := []string{"status", "status_code", "statusCode"}
+	statuses := make([]int, 0, len(keys))
+	for _, key := range keys {
+		switch value := record[key].(type) {
+		case float64:
+			statuses = append(statuses, int(value))
+		case string:
+			var status int
+			if _, err := fmt.Sscanf(value, "%d", &status); err == nil {
+				statuses = append(statuses, status)
+			}
+		}
+	}
+	return statuses
+}
+
+func classifyKiroSignal(signal string) interfaces.WorkFailureType {
+	normalized := strings.ToLower(strings.TrimSpace(signal))
+	switch {
+	case containsAny(normalized, "authentication", "authorization", "unauthorized", "forbidden", "access_denied", "accessdenied"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalized, "invalid_request", "invalidrequest", "validation", "bad_request", "badrequest", "invalid_argument"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalized, "rate_limit", "ratelimit", "throttl", "too_many_requests", "capacity", "overloaded"):
+		return interfaces.WorkFailureTypeThrottled
+	case containsAny(normalized, "timeout", "timed_out", "deadline_exceeded"):
+		return interfaces.WorkFailureTypeTimeout
+	case containsAny(normalized, "internal_server", "internalserver", "server_error", "service_unavailable", "serviceunavailable", "api_error"):
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func classifyKiroStatus(status int) interfaces.WorkFailureType {
+	switch {
+	case status == 401 || status == 403:
+		return interfaces.WorkFailureTypeAuthFailure
+	case status == 400 || status == 422:
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case status == 429:
+		return interfaces.WorkFailureTypeThrottled
+	case status == 408 || status == 504:
+		return interfaces.WorkFailureTypeTimeout
+	case status >= 500 && status <= 599:
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func firstKiroTextFailure(streams []string, exitCode int) (ProviderFailureResult, bool) {
+	for _, stream := range streams {
+		lines := strings.Split(stream, "\n")
+		for _, line := range lines {
+			message, ok := kiroTextErrorCandidate(line, len(lines) == 1)
+			if !ok {
+				continue
+			}
+			if reason := classifyKiroTextFailure(message, exitCode); reason != interfaces.WorkFailureTypeUnknown {
+				return knownKiroFailure(reason), true
+			}
+		}
+	}
+	return ProviderFailureResult{}, false
+}
+
+func kiroTextErrorCandidate(line string, singleLine bool) (string, bool) {
+	trimmed := normalizeKiroText(line)
+	if trimmed == "" {
+		return "", false
+	}
+	lower := strings.ToLower(trimmed)
+	if singleLine || strings.HasPrefix(lower, "error:") || strings.HasPrefix(lower, "kiro error:") || strings.HasPrefix(lower, "api error:") {
+		return trimmed, true
+	}
+	return "", false
+}
+
+func normalizeKiroText(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, value)
+	return strings.Join(strings.Fields(value), " ")
+}
+
+func classifyKiroTextFailure(message string, exitCode int) interfaces.WorkFailureType {
+	normalized := strings.ToLower(message)
+	switch {
+	case exitCode == 124, containsAny(normalized, "request timed out", "operation timed out", "timeout waiting", "deadline exceeded"):
+		return interfaces.WorkFailureTypeTimeout
+	case containsAny(normalized, "authentication required", "authentication failed", "authorization failed", "not authorized", "unauthorized", "forbidden", "sign in required", "login required"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalized, "invalid request", "invalid input", "invalid argument", "bad request", "validation failed"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalized, "rate limit", "too many requests", "throttl", "capacity limit", "at capacity", "resource exhausted"):
+		return interfaces.WorkFailureTypeThrottled
+	case containsAny(normalized, "internal server error", "temporary service error", "service unavailable", "unexpected status 500", "unexpected status 502", "unexpected status 503"):
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func knownKiroFailure(reason interfaces.WorkFailureType) ProviderFailureResult {
+	message := ""
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		message = kiroAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		message = kiroBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		message = kiroThrottleFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		message = kiroTimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		message = kiroServerFailureMessage
+	}
+	if len(message) > kiroFailureMessageBytes {
+		message = message[:kiroFailureMessageBytes]
+	}
+	return ProviderFailureResult{Reason: reason, Message: message}
+}
+
+func tailForKiroErrorScan(output []byte) string {
+	if len(output) <= kiroErrorLineScanBytes {
+		return string(output)
+	}
+	return string(output[len(output)-kiroErrorLineScanBytes:])
+}
+
+func kiroExitFailureMessage(exitCode int) string {
+	return fmt.Sprintf("kiro-cli exited with code %d", exitCode)
 }
 
 // ParseCodexProviderFailure deterministically parses bounded subprocess output

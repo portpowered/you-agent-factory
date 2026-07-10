@@ -369,6 +369,74 @@ func TestParseCodexProviderFailure_StructuredFallbackIsSafeByConstruction(t *tes
 	}
 }
 
+func TestParseKiroProviderFailure_KnownCorpusFixtures(t *testing.T) {
+	fixtureNames := []string{
+		"kiro_structured_authentication_error",
+		"kiro_structured_invalid_request_stdout",
+		"kiro_text_authentication_stdout",
+		"kiro_structured_throttle_precedes_text",
+		"kiro_text_capacity_error",
+		"kiro_text_timeout_malformed_structured",
+		"kiro_structured_service_unavailable",
+	}
+
+	for _, name := range fixtureNames {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			got := ParseKiroProviderFailure(entry.CommandResult())
+			if got.Reason != entry.ExpectedType {
+				t.Fatalf("Reason = %q, want %q", got.Reason, entry.ExpectedType)
+			}
+			if got.Message != knownKiroFailure(entry.ExpectedType).Message {
+				t.Fatalf("Message = %q, want stable Kiro message %q", got.Message, knownKiroFailure(entry.ExpectedType).Message)
+			}
+			if len(got.Message) > kiroFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d bytes", len(got.Message), kiroFailureMessageBytes)
+			}
+			for _, rejected := range entry.RejectMessageContains {
+				if strings.Contains(got.Message, rejected) {
+					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+				}
+			}
+		})
+	}
+}
+
+func TestParseKiroProviderFailure_KnownTextMessagesNormalizeControlCharactersByReplacement(t *testing.T) {
+	got := ParseKiroProviderFailure(CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("ERROR:\tauthentication\x00 required\r for Kiro"),
+	})
+	if got.Reason != interfaces.WorkFailureTypeAuthFailure || got.Message != kiroAuthFailureMessage {
+		t.Fatalf("ParseKiroProviderFailure() = %#v, want fixed auth failure", got)
+	}
+	if strings.ContainsAny(got.Message, "\x00\r\n\t") {
+		t.Fatalf("Message = %q, want control-character-normalized text", got.Message)
+	}
+}
+
+func TestParseKiroProviderFailure_IgnoresKnownTextOutsideBoundedTail(t *testing.T) {
+	got := ParseKiroProviderFailure(CommandResult{
+		ExitCode: 7,
+		Stderr: []byte(
+			"ERROR: authentication required\n" + strings.Repeat("cleanup padding\n", kiroErrorLineScanBytes),
+		),
+	})
+	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "kiro-cli exited with code 7" {
+		t.Fatalf("ParseKiroProviderFailure() = %#v, want bounded-scan exit fallback", got)
+	}
+}
+
+func TestParseKiroProviderFailure_ExitTimeoutPrecedesOutput(t *testing.T) {
+	got := ParseKiroProviderFailure(CommandResult{
+		ExitCode: 124,
+		Stderr:   []byte(`{"type":"error","error":{"type":"authentication_error"}}`),
+	})
+	if got.Reason != interfaces.WorkFailureTypeTimeout || got.Message != kiroTimeoutFailureMessage {
+		t.Fatalf("ParseKiroProviderFailure() = %#v, want explicit process timeout", got)
+	}
+}
+
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
 	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {
@@ -601,7 +669,7 @@ func TestWorkFailureDecisionFromProviderError_UsesFailureMetadataProjection(t *t
 	}
 }
 
-func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
+func TestClassifyProviderFailure_SharedCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
 	testCases := []ProviderErrorCorpusEntry{
 		providerErrorCorpusEntryForTest(t, "codex_status_429_too_many_requests"),
 		providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached"),
@@ -614,6 +682,12 @@ func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpected
 		providerErrorCorpusEntryForTest(t, "codex_authentication_unauthorized"),
 		providerErrorCorpusEntryForTest(t, "cursor_usage_limit_reached"),
 		providerErrorCorpusEntryForTest(t, "cursor_high_demand_temporary_errors"),
+		providerErrorCorpusEntryForTest(t, "kiro_structured_authentication_error"),
+		providerErrorCorpusEntryForTest(t, "kiro_structured_invalid_request_stdout"),
+		providerErrorCorpusEntryForTest(t, "kiro_text_authentication_stdout"),
+		providerErrorCorpusEntryForTest(t, "kiro_structured_throttle_precedes_text"),
+		providerErrorCorpusEntryForTest(t, "kiro_text_timeout_malformed_structured"),
+		providerErrorCorpusEntryForTest(t, "kiro_structured_service_unavailable"),
 	}
 
 	for _, entry := range testCases {

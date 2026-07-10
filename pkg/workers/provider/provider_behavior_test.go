@@ -562,7 +562,6 @@ func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behaviors := map[string]providerBehavior{
 		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderGemini):   geminiProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
 	}
@@ -604,6 +603,21 @@ func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestKiroProviderBehavior_UsesSafeCanonicalFailureMessages(t *testing.T) {
+	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	authResult := providerErrorCorpusEntryForTest(t, "kiro_structured_authentication_error").CommandResult()
+
+	if got := behavior.FormatExitFailure(string(interfaces.ModelProviderKiro), authResult); got != kiroAuthFailureMessage {
+		t.Fatalf("FormatExitFailure() = %q, want %q", got, kiroAuthFailureMessage)
+	}
+	if got := behavior.ClassifyExitFailure(authResult); got != interfaces.WorkFailureTypeAuthFailure {
+		t.Fatalf("ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeAuthFailure)
+	}
+	if got := behavior.FormatTimeoutFailure(CommandResult{Stderr: []byte("private transcript")}); got != kiroTimeoutFailureMessage {
+		t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, kiroTimeoutFailureMessage)
 	}
 }
 
@@ -649,7 +663,6 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	for _, providerName := range []string{
 		string(interfaces.ModelProviderGemini),
-		string(interfaces.ModelProviderKiro),
 		string(interfaces.ModelProviderOpenCode),
 	} {
 		behavior := providerBehaviorForErrorClassification(providerName)
