@@ -261,26 +261,46 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 			want: []string{"chat", "--no-interactive", "summarize the workspace"},
 		},
 		{
-			name: "WithSystemPromptSessionAndTrustedTools",
+			name: "ComposedContextAndUserPrompt",
 			req: interfaces.ProviderInferenceRequest{
 				ModelProvider: string(interfaces.ModelProviderKiro),
 				SystemPrompt:  "You are a careful reviewer.",
 				UserMessage:   "run the tests",
-				SessionID:     "kiro-session-123",
 			},
-			skipPermissions: true,
 			want: []string{
 				"chat",
 				"--no-interactive",
-				"--resume-id",
-				"kiro-session-123",
-				"--trust-all-tools",
 				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
 			},
 		},
+		{
+			name: "EmptyPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+			},
+			want: []string{"chat", "--no-interactive"},
+		},
+		{
+			name: "TrustedTools",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"chat", "--no-interactive", "--trust-all-tools", "run the tests"},
+		},
+		{
+			name: "ResumeSession",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "continue the review",
+				SessionID:     "kiro-session-123",
+			},
+			want: []string{"chat", "--no-interactive", "--resume-id", "kiro-session-123", "continue the review"},
+		},
 	}
 
-	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	behavior := providerBehaviorFor(string(interfaces.ModelProviderKiro), logging.NoopLogger{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
