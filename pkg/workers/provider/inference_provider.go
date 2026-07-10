@@ -292,17 +292,23 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 }
 
 func normalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	if provider == string(interfaces.ModelProviderCodex) {
-		return newProviderErrorFromResultWithDiagnostics(
-			ParseCodexProviderFailure(result),
-			nil,
-			session,
-			diagnostics,
-		)
+	var parsed ProviderFailureResult
+	switch provider {
+	case string(interfaces.ModelProviderClaude):
+		parsed = ParseClaudeProviderFailure(result)
+	case string(interfaces.ModelProviderCodex):
+		parsed = ParseCodexProviderFailure(result)
+	default:
+		message := formatProviderExitFailure(provider, result)
+		errorType := classifyProviderExitFailure(provider, result)
+		return newProviderErrorWithDiagnostics(errorType, message, nil, session, diagnostics)
 	}
-	message := formatProviderExitFailure(provider, result)
-	errorType := classifyProviderExitFailure(provider, result)
-	return newProviderErrorWithDiagnostics(errorType, message, nil, session, diagnostics)
+	return newProviderErrorFromResultWithDiagnostics(
+		parsed,
+		nil,
+		session,
+		diagnostics,
+	)
 }
 
 // NormalizeProviderExitFailure exposes the canonical provider exit-failure

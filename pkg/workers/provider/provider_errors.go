@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -34,6 +36,18 @@ type ProviderFailureResult struct {
 const codexFailureMessageBytes = 1024
 
 const (
+	claudeFailureMessageBytes = 1024
+	claudeFailureScanBytes    = 64 * 1024
+)
+
+const (
+	claudeAuthFailureMessage       = "Claude authentication failed."
+	claudeBadRequestFailureMessage = "Claude rejected the request as invalid."
+	claudeServerFailureMessage     = "Claude encountered a temporary server error."
+	claudeThrottleFailureMessage   = "Claude is temporarily unavailable due to rate or capacity limits."
+)
+
+const (
 	codexAuthFailureMessage       = "Codex authentication failed."
 	codexBadRequestFailureMessage = "Codex rejected the request as invalid."
 	codexGPT56SolUpgradeMessage   = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
@@ -46,6 +60,204 @@ type codexStructuredFailure struct {
 	Type    string
 	Status  int
 	Message string
+}
+
+type claudeStructuredFailure struct {
+	Type    string
+	Status  int
+	Message string
+}
+
+// ParseClaudeProviderFailure parses Claude CLI API Error records before any
+// text fallback and returns the reason and customer-visible message together.
+// Both input scanning and actionable provider messages are bounded so a failed
+// command cannot turn its transcript into the normalized failure message.
+func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
+	streams := []string{
+		tailForClaudeFailureScan(result.Stderr),
+		tailForClaudeFailureScan(result.Stdout),
+	}
+	if failure, ok := lastClaudeStructuredFailure(streams); ok {
+		return failure
+	}
+
+	// Text-only and malformed-output hardening is extended by the follow-up
+	// story. Until then, retain the existing Claude reason coverage while still
+	// producing reason and message from this one parser result.
+	reason := claudeTextFailureReason(strings.ToLower(strings.Join(streams, "\n")), result.ExitCode)
+	return ProviderFailureResult{
+		Reason:  reason,
+		Message: claudeFallbackFailureMessage(reason, result.ExitCode),
+	}
+}
+
+func lastClaudeStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			failure, ok := decodeClaudeAPIError(line)
+			if !ok {
+				continue
+			}
+			reason, recognized := classifyClaudeStructuredFailure(failure.Type, failure.Status)
+			if !recognized {
+				continue
+			}
+			last = ProviderFailureResult{
+				Reason:  reason,
+				Message: claudeStructuredFailureMessage(failure.Message, reason),
+			}
+			found = true
+		}
+	}
+	return last, found
+}
+
+func decodeClaudeAPIError(line string) (claudeStructuredFailure, bool) {
+	const prefix = "API Error:"
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, prefix) {
+		return claudeStructuredFailure{}, false
+	}
+	remainder := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
+	statusText, payload, ok := strings.Cut(remainder, " ")
+	if !ok {
+		return claudeStructuredFailure{}, false
+	}
+	status, err := strconv.Atoi(statusText)
+	if err != nil || !strings.HasPrefix(strings.TrimSpace(payload), "{") {
+		return claudeStructuredFailure{}, false
+	}
+
+	var envelope struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+		Error   *struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(payload)), &envelope); err != nil {
+		return claudeStructuredFailure{}, false
+	}
+
+	failure := claudeStructuredFailure{Type: envelope.Type, Status: status, Message: envelope.Message}
+	if envelope.Error != nil {
+		if envelope.Error.Type != "" {
+			failure.Type = envelope.Error.Type
+		}
+		if envelope.Error.Message != "" {
+			failure.Message = envelope.Error.Message
+		}
+	}
+	return failure, true
+}
+
+func classifyClaudeStructuredFailure(errorType string, status int) (interfaces.WorkFailureType, bool) {
+	switch strings.ToLower(strings.TrimSpace(errorType)) {
+	case "authentication_error", "permission_error":
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case "invalid_request_error":
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case "rate_limit_error", "overloaded_error":
+		return interfaces.WorkFailureTypeThrottled, true
+	case "api_error", "server_error":
+		return interfaces.WorkFailureTypeInternalServerError, true
+	}
+
+	switch {
+	case status == 401 || status == 403:
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case status == 400 || status == 413 || status == 422:
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case status == 429 || status == 529:
+		return interfaces.WorkFailureTypeThrottled, true
+	case status >= 500 && status <= 599:
+		return interfaces.WorkFailureTypeInternalServerError, true
+	default:
+		return interfaces.WorkFailureTypeUnknown, false
+	}
+}
+
+func claudeStructuredFailureMessage(message string, reason interfaces.WorkFailureType) string {
+	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+		if normalized, ok := safeClaudeActionableMessage(message); ok {
+			return normalized
+		}
+	}
+	return claudeFallbackFailureMessage(reason, 0)
+}
+
+func safeClaudeActionableMessage(message string) (string, bool) {
+	normalized := strings.Join(strings.Fields(message), " ")
+	if normalized == "" || containsClaudeCredentialSignal(strings.ToLower(normalized)) {
+		return "", false
+	}
+	return boundUTF8Bytes(normalized, claudeFailureMessageBytes), true
+}
+
+func containsClaudeCredentialSignal(message string) bool {
+	return containsAny(message,
+		"authorization:",
+		"bearer ",
+		"api_key=",
+		"api-key:",
+		"api key:",
+		"sk-ant-",
+	)
+}
+
+func claudeTextFailureReason(message string, exitCode int) interfaces.WorkFailureType {
+	switch {
+	case containsAny(message, `"type":"authentication_error"`, `"type":"permission_error"`, "api key", "authentication error", "permission error", "unauthorized", "forbidden"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case containsAny(message, `"type":"invalid_request_error"`, "invalid_request_error", "bad request", "invalid request", "request_too_large"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(message, `"type":"rate_limit_error"`, `"type":"overloaded_error"`, "rate limit", "too many requests", "overloaded", "529"):
+		return interfaces.WorkFailureTypeThrottled
+	case containsAny(message, `"type":"api_error"`, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		return interfaces.WorkFailureTypeInternalServerError
+	case exitCode == 124 || containsAny(message, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.WorkFailureTypeTimeout
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func claudeFallbackFailureMessage(reason interfaces.WorkFailureType, exitCode int) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return claudeAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return claudeBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return claudeThrottleFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return claudeServerFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return "Claude request timed out."
+	default:
+		return fmt.Sprintf("claude exited with code %d", exitCode)
+	}
+}
+
+func tailForClaudeFailureScan(output []byte) string {
+	if len(output) <= claudeFailureScanBytes {
+		return string(output)
+	}
+	return string(output[len(output)-claudeFailureScanBytes:])
+}
+
+func boundUTF8Bytes(message string, limit int) string {
+	if limit <= 0 || len(message) <= limit {
+		return message
+	}
+	bounded := []byte(message)[:limit]
+	for !utf8.Valid(bounded) {
+		bounded = bounded[:len(bounded)-1]
+	}
+	return strings.TrimSpace(string(bounded))
 }
 
 // ParseCodexProviderFailure deterministically parses bounded subprocess output

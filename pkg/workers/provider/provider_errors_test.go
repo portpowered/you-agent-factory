@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -94,6 +95,138 @@ func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.
 	}
 	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
 		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
+	}
+}
+
+func TestParseClaudeProviderFailure_StructuredTypesAndStatusesAreCanonical(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name:        "AuthenticationTypePreservesActionableMessage",
+			stderr:      `API Error: 500 {"type":"error","error":{"type":"authentication_error","message":"  Sign in again\nwith Claude Code.  "}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Sign in again with Claude Code.",
+		},
+		{
+			name:        "PermissionStatusFallbackPreservesActionableMessage",
+			stderr:      `API Error: 403 {"type":"error","error":{"message":"Ask an organization owner to grant access."}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Ask an organization owner to grant access.",
+		},
+		{
+			name:        "InvalidRequestPreservesCorrection",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Reduce the request size below 20 MB."}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "Reduce the request size below 20 MB.",
+		},
+		{
+			name:        "RequestSizeStatusFallback",
+			stderr:      `API Error: 413 {"type":"error","error":{"message":"The request is too large; remove an attachment."}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "The request is too large; remove an attachment.",
+		},
+		{
+			name:        "RateLimitUsesStableGuidance",
+			stderr:      `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`,
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: claudeThrottleFailureMessage,
+		},
+		{
+			name:        "OverloadTypeWinsOverConflictingStatus",
+			stderr:      `API Error: 401 {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}`,
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: claudeThrottleFailureMessage,
+		},
+		{
+			name:        "ServerStatusFallback",
+			stderr:      `API Error: 502 {"type":"error","error":{"message":"gateway included internal diagnostics"}}`,
+			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantMessage: claudeServerFailureMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseClaudeProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseClaudeProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestParseClaudeProviderFailure_StructuredRecordPrecedesSurroundingText(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr: []byte(strings.Join([]string{
+			"cleanup mentioned 429 rate limit and forbidden credentials",
+			`API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Choose a model available to this project."}}`,
+			"post-command timeout while deleting a temporary directory",
+		}, "\n")),
+	}
+
+	got := ParseClaudeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a model available to this project." {
+		t.Fatalf("ParseClaudeProviderFailure() = %#v, want structured invalid-request result", got)
+	}
+}
+
+func TestParseClaudeProviderFailure_BoundsAndRejectsCredentialBearingMessages(t *testing.T) {
+	longCorrection := strings.Repeat("remove one attachment ", 100)
+	testCases := []struct {
+		name        string
+		message     string
+		wantMessage string
+	}{
+		{
+			name:        "BoundsNormalizedActionableDetail",
+			message:     longCorrection,
+			wantMessage: boundUTF8Bytes(strings.TrimSpace(longCorrection), claudeFailureMessageBytes),
+		},
+		{
+			name:        "CredentialSignalUsesProductFallback",
+			message:     "Replace Authorization: Bearer sk-ant-private",
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := json.Marshal(map[string]any{
+				"type": "error",
+				"error": map[string]string{
+					"type":    "invalid_request_error",
+					"message": tc.message,
+				},
+			})
+			if err != nil {
+				t.Fatalf("marshal fixture: %v", err)
+			}
+			got := ParseClaudeProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte("API Error: 400 " + string(payload))})
+			if got.Message != tc.wantMessage || len(got.Message) > claudeFailureMessageBytes {
+				t.Fatalf("Message = %q (%d bytes), want %q bounded to %d bytes", got.Message, len(got.Message), tc.wantMessage, claudeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestNormalizeProviderExitFailure_ClaudeUsesOneParsedReasonAndMessageForPolicy(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "claude_rate_limit_error")
+	providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Message != claudeThrottleFailureMessage {
+		t.Fatalf("normalized Claude failure = %#v, want parser reason and message", providerErr)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
+	}
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || !decision.TriggersThrottlePause || decision.Terminal {
+		t.Fatalf("decision = %#v, want retryable throttle pause", decision)
 	}
 }
 
