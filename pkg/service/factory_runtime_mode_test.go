@@ -1914,7 +1914,7 @@ func TestFactoryService_ModelMethodsForwardContextResultsAndErrorsUnchanged(t *t
 	detail, gotGetErr := svc.GetModel(ctx, "requested-model")
 	pulled, gotPullErr := svc.PullModel(ctx, "pull-model")
 
-	if listed.Results[0].Name != "list-result" || !errors.Is(gotListErr, listErr) {
+	if !reflect.DeepEqual(listed, stub.listResult) || gotListErr != listErr {
 		t.Fatalf("ListModels = (%#v, %v), want exact result and sentinel error", listed, gotListErr)
 	}
 	if detail.Name != "detail-result" || gotGetErr != getErr {
