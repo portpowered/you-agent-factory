@@ -136,7 +136,7 @@ func codexDerivedExitFailureTestCases() []exitFailureInferenceTestCase {
 			name:        "CodexUsesCodexErrorExtraction",
 			provider:    string(interfaces.ModelProviderCodex),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from codex upstream")},
-			wantMessage: "ERROR: unexpected status 500 from codex upstream",
+			wantMessage: codexServerFailureMessage,
 			wantType:    interfaces.WorkFailureTypeInternalServerError,
 		},
 	}

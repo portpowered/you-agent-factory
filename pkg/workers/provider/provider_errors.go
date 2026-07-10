@@ -34,6 +34,14 @@ type ProviderFailureResult struct {
 
 const codexFailureMessageBytes = 1024
 
+const (
+	codexAuthFailureMessage       = "Codex authentication failed."
+	codexBadRequestFailureMessage = "Codex rejected the request as invalid."
+	codexServerFailureMessage     = "Codex encountered a temporary server error."
+	codexThrottleFailureMessage   = "Codex is temporarily unavailable due to usage or capacity limits."
+	codexTimeoutFailureMessage    = "Codex request timed out."
+)
+
 type codexStructuredFailure struct {
 	Type    string
 	Status  int
@@ -57,10 +65,10 @@ func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
 		}
 	}
 
-	if message, ok := lastCodexTextFailure(streams); ok {
+	if failure, ok := lastCodexTextFailure(streams, result.ExitCode); ok {
 		return ProviderFailureResult{
-			Reason:  classifyCodexFailure("", 0, message, result.ExitCode),
-			Message: safeCodexFailureMessage(message, codexExitFailureMessage(result.ExitCode)),
+			Reason:  failure.Reason,
+			Message: failure.Message,
 		}
 	}
 
@@ -129,18 +137,21 @@ func decodeCodexStructuredFailure(payload string) (codexStructuredFailure, bool)
 	return failure, true
 }
 
-func lastCodexTextFailure(streams []string) (string, bool) {
-	var last string
+func lastCodexTextFailure(streams []string, exitCode int) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
-			trimmed := strings.TrimSpace(line)
-			payload, isError := codexErrorPayload(trimmed)
-			if isError && !strings.HasPrefix(payload, "{") {
-				last = trimmed
+			payload, isError := codexErrorPayload(line)
+			if !isError || strings.HasPrefix(payload, "{") {
+				continue
+			}
+			if failure, ok := recognizedCodexTextFailure(payload, exitCode); ok {
+				last, found = failure, true
 			}
 		}
 	}
-	if last != "" {
+	if found {
 		return last, true
 	}
 
@@ -149,11 +160,76 @@ func lastCodexTextFailure(streams []string) (string, bool) {
 	// or header noise unless it contains an explicit ERROR record.
 	for _, stream := range streams {
 		trimmed := strings.TrimSpace(stream)
-		if trimmed != "" && !strings.Contains(trimmed, "\n") && classifyCodexFailure("", 0, trimmed, 0) != interfaces.WorkFailureTypeUnknown {
-			last = trimmed
+		if trimmed == "" || strings.Contains(trimmed, "\n") {
+			continue
+		}
+		if failure, ok := recognizedCodexTextFailure(trimmed, exitCode); ok {
+			last, found = failure, true
 		}
 	}
-	return last, last != ""
+	return last, found
+}
+
+// recognizedCodexTextFailure accepts only audited Codex diagnostic shapes and
+// returns fixed customer-visible text. Unknown ERROR lines may contain echoed
+// prompts, transcripts, cleanup paths, or credentials, so they are never used
+// as message excerpts.
+func recognizedCodexTextFailure(message string, exitCode int) (ProviderFailureResult, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	reason := classifyRecognizedCodexTextFailure(normalized, exitCode)
+	if reason == interfaces.WorkFailureTypeUnknown {
+		return ProviderFailureResult{}, false
+	}
+	return ProviderFailureResult{
+		Reason:  reason,
+		Message: codexTextFailureMessage(reason),
+	}, true
+}
+
+func classifyRecognizedCodexTextFailure(message string, exitCode int) interfaces.WorkFailureType {
+	switch {
+	case exitCode == 124,
+		strings.HasPrefix(message, "context deadline exceeded"),
+		strings.HasPrefix(message, "command timed out"),
+		strings.HasPrefix(message, "request timed out"),
+		strings.HasPrefix(message, "provider timeout"),
+		strings.HasPrefix(message, "context canceled after command timed out"):
+		return interfaces.WorkFailureTypeTimeout
+	case strings.HasPrefix(message, "unexpected status 401"),
+		strings.HasPrefix(message, "unexpected status 403"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case strings.HasPrefix(message, "unexpected status 400"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case strings.HasPrefix(message, "unexpected status 429"),
+		strings.HasPrefix(message, "you've hit your usage limit"),
+		strings.HasPrefix(message, "selected model is at capacity"):
+		return interfaces.WorkFailureTypeThrottled
+	case strings.HasPrefix(message, "unexpected status 500"),
+		strings.HasPrefix(message, "unexpected status 502"),
+		strings.HasPrefix(message, "unexpected status 503"),
+		strings.HasPrefix(message, "unexpected status 504"),
+		message == codexHighDemandTemporaryErrorsNeedle:
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func codexTextFailureMessage(reason interfaces.WorkFailureType) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return codexAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return codexBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return codexThrottleFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return codexServerFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return codexTimeoutFailureMessage
+	default:
+		return ""
+	}
 }
 
 func classifyCodexFailure(errorType string, status int, message string, exitCode int) interfaces.WorkFailureType {
