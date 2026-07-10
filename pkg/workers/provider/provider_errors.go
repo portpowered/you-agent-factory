@@ -80,6 +80,12 @@ func ParseKiroProviderFailure(result CommandResult) ProviderFailureResult {
 	if failure, ok := firstKiroTextFailure(streams, result.ExitCode); ok {
 		return failure
 	}
+	if message, ok := firstKiroUnknownFailureExcerpt(streams); ok {
+		return ProviderFailureResult{
+			Reason:  interfaces.WorkFailureTypeUnknown,
+			Message: message,
+		}
+	}
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeUnknown,
 		Message: kiroExitFailureMessage(result.ExitCode),
@@ -235,6 +241,7 @@ func kiroTextErrorCandidate(line string, singleLine bool) (string, bool) {
 }
 
 func normalizeKiroText(value string) string {
+	value = strings.ToValidUTF8(value, " ")
 	value = strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
 			return ' '
@@ -242,6 +249,72 @@ func normalizeKiroText(value string) string {
 		return r
 	}, value)
 	return strings.Join(strings.Fields(value), " ")
+}
+
+// firstKiroUnknownFailureExcerpt considers stderr before stdout and selects the
+// first explicit error record in that stream. This precedence is intentional:
+// Kiro writes invocation failures to stderr, while stdout can contain model
+// output or an echoed prompt. Conservative rejection keeps ambiguous records
+// on the fixed exit-code fallback instead of risking customer-data exposure.
+func firstKiroUnknownFailureExcerpt(streams []string) (string, bool) {
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			detail, ok := kiroUnknownErrorDetail(line)
+			if !ok {
+				continue
+			}
+			message := truncateKiroFailureMessage("Kiro error: " + detail)
+			if message != "Kiro error:" {
+				return message, true
+			}
+		}
+	}
+	return "", false
+}
+
+func kiroUnknownErrorDetail(line string) (string, bool) {
+	normalized := normalizeKiroText(line)
+	lower := strings.ToLower(normalized)
+	prefixes := []string{"kiro_error:", "kiro error:", "api error:", "error:"}
+	for _, prefix := range prefixes {
+		if !strings.HasPrefix(lower, prefix) {
+			continue
+		}
+		detail := strings.TrimSpace(normalized[len(prefix):])
+		if detail == "" || unsafeKiroUnknownDetail(detail) {
+			return "", false
+		}
+		return detail, true
+	}
+	return "", false
+}
+
+func unsafeKiroUnknownDetail(detail string) bool {
+	lower := strings.ToLower(detail)
+	if strings.HasPrefix(detail, "{") || strings.HasPrefix(detail, "[") || strings.Contains(detail, "=") {
+		return true
+	}
+	return containsAny(lower,
+		"prompt", "transcript", "response draft", "model output", "user message",
+		"request body", "request payload", "input content", "output content",
+		"progress", "cleanup", "credential", "secret", "password",
+		"api key", "api_key", "access key", "authorization", "bearer ",
+		"access token", "refresh token", "session token", "environment", "env var",
+	)
+}
+
+func truncateKiroFailureMessage(message string) string {
+	if len(message) <= kiroFailureMessageBytes {
+		return message
+	}
+	end := 0
+	for index := range message {
+		if index > kiroFailureMessageBytes {
+			break
+		}
+		end = index
+	}
+	return strings.TrimSpace(message[:end])
 }
 
 func classifyKiroTextFailure(message string, exitCode int) interfaces.WorkFailureType {

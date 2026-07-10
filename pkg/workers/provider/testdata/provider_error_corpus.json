@@ -431,6 +431,54 @@
       "triggers_throttle_pause": false,
       "supported": true,
       "reject_message_contains": ["internal host details"]
+    },
+    {
+      "name": "kiro_unknown_stderr_excerpt_precedes_stdout",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "unknown",
+      "upstream_source_case": "Kiro unknown stderr error excerpt takes precedence over stdout",
+      "exit_code": 7,
+      "stdout": "ERROR: stdout fallback should not be selected",
+      "stderr": "progress: starting Kiro\nERROR: model registry handshake failed\ncleanup complete",
+      "expected_type": "unknown",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": ["stdout fallback", "progress", "cleanup"]
+    },
+    {
+      "name": "kiro_unknown_stdout_excerpt_after_unsafe_stderr",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "unknown",
+      "upstream_source_case": "Kiro unknown stdout error excerpt follows unsafe stderr rejection",
+      "exit_code": 9,
+      "stdout": "KIRO_ERROR:\tplugin\u0000bridge failed",
+      "stderr": "ERROR: prompt content must stay private",
+      "expected_type": "unknown",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": ["prompt content", "\u0000", "\t"]
+    },
+    {
+      "name": "kiro_unknown_noise_only_exit_fallback",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "unknown",
+      "upstream_source_case": "Kiro unknown transcript and cleanup output uses exit fallback",
+      "exit_code": 11,
+      "stdout": "customer transcript line\nprogress: writing response",
+      "stderr": "ERROR: cleanup failed for prompt transcript",
+      "expected_type": "unknown",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": ["customer transcript", "writing response", "cleanup", "prompt"]
     }
   ]
 }

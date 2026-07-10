@@ -137,6 +137,37 @@ func TestScriptWrapProvider_Infer_KiroKnownFailuresUseCanonicalParserAndPolicy(t
 	}
 }
 
+func TestScriptWrapProvider_Infer_KiroUnknownFailuresUseBoundedParserMessages(t *testing.T) {
+	testCases := map[string]string{
+		"kiro_unknown_stderr_excerpt_precedes_stdout":     "Kiro error: model registry handshake failed",
+		"kiro_unknown_stdout_excerpt_after_unsafe_stderr": "Kiro error: plugin bridge failed",
+		"kiro_unknown_noise_only_exit_fallback":           "kiro-cli exited with code 11",
+	}
+
+	for name, wantMessage := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+				result: entry.CommandResult(),
+			}))
+
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "private prompt that must stay out of normalized failures",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType:          interfaces.WorkFailureTypeUnknown,
+				wantFamily:        interfaces.WorkFailureFamilyTerminal,
+				wantMessage:       wantMessage,
+				rejectTexts:       append(entry.RejectMessageContains, "private prompt"),
+				wantRetryable:     false,
+				wantTerminal:      true,
+				wantThrottlePause: false,
+			})
+		})
+	}
+}
+
 func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *testing.T) {
 	testCases := []struct {
 		name              string

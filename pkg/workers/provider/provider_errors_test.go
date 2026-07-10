@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -437,6 +438,93 @@ func TestParseKiroProviderFailure_ExitTimeoutPrecedesOutput(t *testing.T) {
 	}
 }
 
+func TestParseKiroProviderFailure_UnknownCorpusFixturesUseSafeDeterministicMessages(t *testing.T) {
+	testCases := map[string]string{
+		"kiro_unknown_stderr_excerpt_precedes_stdout":     "Kiro error: model registry handshake failed",
+		"kiro_unknown_stdout_excerpt_after_unsafe_stderr": "Kiro error: plugin bridge failed",
+		"kiro_unknown_noise_only_exit_fallback":           "kiro-cli exited with code 11",
+	}
+
+	for name, wantMessage := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			got := ParseKiroProviderFailure(entry.CommandResult())
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != wantMessage {
+				t.Fatalf("ParseKiroProviderFailure() = %#v, want unknown message %q", got, wantMessage)
+			}
+			if len(got.Message) > kiroFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d bytes", len(got.Message), kiroFailureMessageBytes)
+			}
+			for _, rejected := range entry.RejectMessageContains {
+				if strings.Contains(got.Message, rejected) {
+					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+				}
+			}
+		})
+	}
+}
+
+func TestParseKiroProviderFailure_UnknownExcerptBoundsAndFallbacks(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantMessage string
+	}{
+		{
+			name:        "EmptyOutput",
+			result:      CommandResult{ExitCode: 2},
+			wantMessage: "kiro-cli exited with code 2",
+		},
+		{
+			name:        "EmptyAfterSanitization",
+			result:      CommandResult{ExitCode: 3, Stderr: []byte("ERROR:\x00\t\r")},
+			wantMessage: "kiro-cli exited with code 3",
+		},
+		{
+			name:        "StructuredUnknownRecord",
+			result:      CommandResult{ExitCode: 4, Stderr: []byte(`ERROR: {"type":"mystery","message":"private value"}`)},
+			wantMessage: "kiro-cli exited with code 4",
+		},
+		{
+			name:        "EnvironmentAssignment",
+			result:      CommandResult{ExitCode: 5, Stderr: []byte("ERROR: REGION=private-region is unsupported")},
+			wantMessage: "kiro-cli exited with code 5",
+		},
+		{
+			name:        "CredentialBearingError",
+			result:      CommandResult{ExitCode: 8, Stderr: []byte("ERROR: request failed with Bearer customer-token")},
+			wantMessage: "kiro-cli exited with code 8",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseKiroProviderFailure(tc.result)
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
+				t.Fatalf("ParseKiroProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestParseKiroProviderFailure_UnknownExcerptIsUTF8SafeAndBounded(t *testing.T) {
+	detail := strings.Repeat("é", kiroFailureMessageBytes)
+	got := ParseKiroProviderFailure(CommandResult{ExitCode: 6, Stderr: []byte("ERROR: " + detail)})
+
+	if got.Reason != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("Reason = %q, want unknown", got.Reason)
+	}
+	if len(got.Message) > kiroFailureMessageBytes {
+		t.Fatalf("message length = %d, want at most %d bytes", len(got.Message), kiroFailureMessageBytes)
+	}
+	if !utf8.ValidString(got.Message) {
+		t.Fatalf("Message is not valid UTF-8: %q", got.Message)
+	}
+	if !strings.HasPrefix(got.Message, "Kiro error: é") {
+		t.Fatalf("Message = %q, want normalized Kiro excerpt", got.Message)
+	}
+}
+
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
 	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {
@@ -688,6 +776,9 @@ func TestClassifyProviderFailure_SharedCorpusEntriesFollowExpectedRuntimeDecisio
 		providerErrorCorpusEntryForTest(t, "kiro_structured_throttle_precedes_text"),
 		providerErrorCorpusEntryForTest(t, "kiro_text_timeout_malformed_structured"),
 		providerErrorCorpusEntryForTest(t, "kiro_structured_service_unavailable"),
+		providerErrorCorpusEntryForTest(t, "kiro_unknown_stderr_excerpt_precedes_stdout"),
+		providerErrorCorpusEntryForTest(t, "kiro_unknown_stdout_excerpt_after_unsafe_stderr"),
+		providerErrorCorpusEntryForTest(t, "kiro_unknown_noise_only_exit_fallback"),
 	}
 
 	for _, entry := range testCases {
