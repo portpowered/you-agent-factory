@@ -101,7 +101,6 @@ export function buildFailedBridgedChildDispatchSummary() {
     attempt: 1,
     dispatchKind: "JAVASCRIPT_VERIFY",
     failureDetail: {
-      errorClass: "verification_error",
       message: "Expected release manifest checksum.",
       reason: "VERIFY_ASSERTION_FAILED",
     },
@@ -141,7 +140,6 @@ export function buildFailedBridgedChildDispatchDetail() {
     attempt: 1,
     dispatchKind: "JAVASCRIPT_VERIFY",
     failureDetail: {
-      errorClass: "verification_error",
       message: "Expected release manifest checksum.",
       reason: "VERIFY_ASSERTION_FAILED",
     },

@@ -22,7 +22,7 @@ function factoryEvent(
 export const scriptDashboardIntegrationFixtureIDs = {
   failedDispatchID: "dispatch-script-dashboard-failed",
   failedFailureMessage: "Script timed out while reviewing the dashboard story.",
-  failedFailureReason: "script_timeout",
+  failedFailureReason: "timeout",
   failedTraceID: "trace-script-dashboard-failed",
   failedWorkID: "work-script-dashboard-failed",
   failedWorkLabel: "Script Failed Story",
@@ -265,8 +265,10 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
     {
       dispatchId: scriptDashboardIntegrationFixtureIDs.failedDispatchID,
       durationMillis: 500,
-      failureMessage: scriptDashboardIntegrationFixtureIDs.failedFailureMessage,
-      failureReason: scriptDashboardIntegrationFixtureIDs.failedFailureReason,
+      failureDetail: {
+        message: scriptDashboardIntegrationFixtureIDs.failedFailureMessage,
+        reason: scriptDashboardIntegrationFixtureIDs.failedFailureReason,
+      },
       outcome: "FAILED",
       output: "legacy script failure output",
       outputWork: [
