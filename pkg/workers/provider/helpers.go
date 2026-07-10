@@ -146,7 +146,10 @@ func providerFailureLogFields(
 }
 
 func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) string {
-	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) {
+	// Codex exit failures are parsed into bounded, audited messages. Execution
+	// errors retain raw command diagnostics in the returned error, so they must
+	// use the same fixed reason-based messages as the other providers.
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && providerErr.Cause == nil {
 		return providerErr.Message
 	}
 	switch providerErr.Type {

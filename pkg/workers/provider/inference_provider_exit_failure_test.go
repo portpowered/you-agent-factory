@@ -151,6 +151,67 @@ func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCode
 	}
 }
 
+func TestScriptWrapProvider_Infer_CodexExecutionFailureJSONLogsExcludeCommandOutput(t *testing.T) {
+	const prompt = "codex execution prompt must not appear"
+	const stdoutSecret = "stdout-secret-must-not-appear"
+	const stderrSecret = "stderr-secret-must-not-appear"
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Provider request timed out."},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured, wantMessage: "Provider command could not be started."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			encoderConfig := zap.NewProductionEncoderConfig()
+			core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&output), zapcore.DebugLevel)
+			provider := NewScriptWrapProvider(
+				WithProviderLogger(logging.NewZapLogger(zap.New(core), false)),
+				WithProviderCommandRunner(&recordingProviderExec{
+					result: CommandResult{Stdout: []byte(stdoutSecret), Stderr: []byte(stderrSecret)},
+					err:    tc.err,
+				}),
+			)
+			_, _ = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderCodex),
+				UserMessage:   prompt,
+			})
+
+			record := normalizedFailureJSONRecord(t, output.String())
+			if record["failure_reason"] != string(tc.wantReason) || record["failure_message"] != tc.wantMessage {
+				t.Fatalf("normalized JSON failure = %#v", record)
+			}
+			encoded, err := json.Marshal(record)
+			if err != nil {
+				t.Fatalf("encode normalized failure: %v", err)
+			}
+			for _, secret := range []string{prompt, stdoutSecret, stderrSecret} {
+				if strings.Contains(string(encoded), secret) {
+					t.Fatalf("normalized JSON failure leaked %q: %s", secret, encoded)
+				}
+			}
+		})
+	}
+}
+
+func normalizedFailureJSONRecord(t *testing.T, logs string) map[string]any {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode JSON log: %v", err)
+		}
+		if record["event_name"] == ProviderFailureNormalized {
+			return record
+		}
+	}
+	t.Fatalf("normalized failure absent from JSON logs: %s", logs)
+	return nil
+}
+
 func TestScriptWrapProvider_Infer_CodexUpgradeFailureIsSearchableInJSONLogs(t *testing.T) {
 	var output bytes.Buffer
 	encoderConfig := zap.NewProductionEncoderConfig()
