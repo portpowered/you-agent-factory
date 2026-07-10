@@ -114,6 +114,77 @@ func TestParseProviderFailure_NormalizesBoundsAndRejectsUnsafeResultText(t *test
 	})
 }
 
+func TestParseProviderFailure_ClassifiesCursorStderrWithDeterministicPrecedence(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{name: "Authentication", stderr: "Cursor authentication failed; sign in again", wantReason: interfaces.WorkFailureTypeAuthFailure, wantMessage: "Cursor authentication failed; sign in again"},
+		{name: "InvalidConfiguration", stderr: "invalid configuration: unsupported model", wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: "invalid configuration: unsupported model"},
+		{name: "Capacity", stderr: "Cursor model capacity is exhausted", wantReason: interfaces.WorkFailureTypeThrottled, wantMessage: "Cursor model capacity is exhausted"},
+		{name: "Timeout", stderr: "Cursor request timed out", wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Cursor request timed out"},
+		{name: "Server", stderr: "Cursor provider unavailable with status 503", wantReason: interfaces.WorkFailureTypeInternalServerError, wantMessage: "Cursor provider unavailable with status 503"},
+		{
+			name:        "CategoryPrecedenceAndDuplicateNoise",
+			stderr:      "cleanup noise\nrate limit reached\nRATE LIMIT REACHED\nauthentication failed\nprocess already exited",
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "authentication failed",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseProviderFailure(FailureInput{Stderr: []byte(tc.stderr), ExitCode: 1})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("failure = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestParseProviderFailure_UsesStderrBeforeStdoutAndSafeUnknownFallback(t *testing.T) {
+	t.Run("StderrPrecedesRecognizedStdout", func(t *testing.T) {
+		got := ParseProviderFailure(FailureInput{
+			Stderr:   []byte("Cursor rejected this request"),
+			Stdout:   []byte("rate limit reached"),
+			ExitCode: 1,
+		})
+		if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "Cursor rejected this request" {
+			t.Fatalf("failure = %#v, want stderr-owned unknown result", got)
+		}
+	})
+
+	t.Run("UnknownUsesOneBoundedSanitizedLine", func(t *testing.T) {
+		unknown := strings.Repeat("x", FailureMessageLimit+20)
+		got := ParseProviderFailure(FailureInput{
+			Stderr:   []byte("cleanup noise\n" + unknown + "\n" + unknown),
+			ExitCode: 7,
+		})
+		if got.Reason != interfaces.WorkFailureTypeUnknown || len([]rune(strings.TrimSuffix(got.Message, "..."))) != FailureMessageLimit {
+			t.Fatalf("failure = %#v, want bounded unknown stderr excerpt", got)
+		}
+	})
+
+	t.Run("NoSafeExcerptUsesExitCode", func(t *testing.T) {
+		got := ParseProviderFailure(FailureInput{Stderr: []byte("Authorization: Bearer secret-token"), ExitCode: 7})
+		if got.Reason != interfaces.WorkFailureTypeAuthFailure || got.Message != cursorAuthFailureMessage {
+			t.Fatalf("failure = %#v, want safe auth guidance", got)
+		}
+	})
+}
+
+func TestParseProviderFailure_DoesNotBorrowCodexOnlyClassification(t *testing.T) {
+	got := ParseProviderFailure(FailureInput{
+		Stderr:   []byte("The gpt-5.6-sol model requires a newer version of Codex"),
+		ExitCode: 1,
+	})
+	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "The gpt-5.6-sol model requires a newer version of Codex" {
+		t.Fatalf("failure = %#v, want Cursor-owned unknown classification", got)
+	}
+}
+
 func terminalFailureJSONForTest(t *testing.T, subtype, result string) []byte {
 	t.Helper()
 	payload := resultPayload{

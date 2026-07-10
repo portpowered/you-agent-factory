@@ -668,7 +668,7 @@ func TestCursorAndCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 
 	result := CommandResult{
 		ExitCode: 1,
-		Stderr:   []byte("ERROR: unexpected status 500 from codex upstream"),
+		Stderr:   []byte(codexHighDemandTemporaryErrorsNeedle),
 	}
 	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeUnknown {
 		t.Fatalf("cursor ClassifyExitFailure() = %q, want Cursor-owned unknown classification", got)

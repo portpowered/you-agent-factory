@@ -271,6 +271,24 @@ func formatProviderExitFailure(provider string, result CommandResult) string {
 }
 
 func normalizeProviderExecutionError(provider string, result CommandResult, err error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+	if provider == string(interfaces.ModelProviderCursor) {
+		fallbackReason := interfaces.WorkFailureTypeUnknown
+		switch {
+		case isProviderExecutionTimeout(err, result):
+			fallbackReason = interfaces.WorkFailureTypeTimeout
+			if diagnostics != nil && diagnostics.Command != nil {
+				diagnostics.Command.TimedOut = true
+			}
+		case errors.Is(err, exec.ErrNotFound):
+			fallbackReason = interfaces.WorkFailureTypeMisconfigured
+		default:
+			var execErr *exec.Error
+			if errors.As(err, &execErr) {
+				fallbackReason = interfaces.WorkFailureTypeMisconfigured
+			}
+		}
+		return cursorProviderError(result, fallbackReason, "", err, session, diagnostics)
+	}
 	switch {
 	case isProviderExecutionTimeout(err, result):
 		if diagnostics != nil && diagnostics.Command != nil {
@@ -301,22 +319,37 @@ func normalizeProviderExitFailure(provider string, result CommandResult, session
 		)
 	}
 	if provider == string(interfaces.ModelProviderCursor) {
-		failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
-			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-		})
-		if failure.ProviderSession != nil {
-			session = failure.ProviderSession
-		}
-		return newProviderErrorFromResultWithDiagnostics(
-			ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
-			nil,
-			session,
-			diagnostics,
-		)
+		return cursorProviderError(result, "", "", nil, session, diagnostics)
 	}
 	message := formatProviderExitFailure(provider, result)
 	errorType := classifyProviderExitFailure(provider, result)
 	return newProviderErrorWithDiagnostics(errorType, message, nil, session, diagnostics)
+}
+
+func cursorProviderError(
+	result CommandResult,
+	fallbackReason interfaces.WorkFailureType,
+	fallbackMessage string,
+	cause error,
+	session *interfaces.ProviderSessionMetadata,
+	diagnostics *interfaces.WorkDiagnostics,
+) *ProviderError {
+	failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
+		Stdout:          result.Stdout,
+		Stderr:          result.Stderr,
+		ExitCode:        result.ExitCode,
+		FallbackReason:  fallbackReason,
+		FallbackMessage: fallbackMessage,
+	})
+	if failure.ProviderSession != nil {
+		session = failure.ProviderSession
+	}
+	return newProviderErrorFromResultWithDiagnostics(
+		ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
+		cause,
+		session,
+		diagnostics,
+	)
 }
 
 // NormalizeProviderExitFailure exposes the canonical provider exit-failure
@@ -406,12 +439,10 @@ func (p *ScriptWrapProvider) completeCursorInference(
 		if providerSession == nil {
 			providerSession = effectiveProviderSession(req, result)
 		}
-		providerErr := newProviderErrorFromResultWithDiagnostics(
-			ProviderFailureResult{Reason: parseErr.Type, Message: parseErr.Message},
-			parseErr.Cause,
-			providerSession,
-			failureDiagnostics,
+		providerErr := cursorProviderError(
+			result, parseErr.Type, parseErr.Message, parseErr.Cause, providerSession, failureDiagnostics,
 		)
+		providerSession = providerErr.ProviderSession
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}

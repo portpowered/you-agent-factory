@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -76,6 +77,67 @@ func TestScriptWrapProvider_Infer_CursorTerminalFailureUsesCanonicalResultAndDec
 	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != "cursor-terminal-session" {
 		t.Fatalf("published provider session = %#v, want cursor-terminal-session", published[0].ProviderSessionRef)
 	}
+}
+
+func TestScriptWrapProvider_Infer_CursorStderrFailureUsesCanonicalResultAndDecision(t *testing.T) {
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{
+			ExitCode: 1,
+			Stdout:   []byte("unrelated partial output"),
+			Stderr:   []byte("rate limit reached because Cursor capacity is busy"),
+		}}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-stderr-failure"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	assertNormalizedProviderFailure(t, providerErr, normalizedProviderFailureExpectation{
+		wantType:          interfaces.WorkFailureTypeThrottled,
+		wantFamily:        interfaces.WorkFailureFamilyThrottle,
+		wantMessage:       "rate limit reached because Cursor capacity is busy",
+		wantRetryable:     true,
+		wantThrottlePause: true,
+		rejectText:        "private prompt",
+	})
+	if len(published) != 1 || published[0].Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want canonical stderr failure", published)
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorExecutionFailureUsesParserAndPreservesCause(t *testing.T) {
+	runErr := errors.New("cursor pipe broke")
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+		result: CommandResult{ExitCode: 1, Stderr: []byte("Cursor authentication failed; sign in again")},
+		err:    runErr,
+	}))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if !errors.Is(providerErr.Cause, runErr) {
+		t.Fatalf("cause = %v, want %v", providerErr.Cause, runErr)
+	}
+	assertNormalizedProviderFailure(t, providerErr, normalizedProviderFailureExpectation{
+		wantType:    interfaces.WorkFailureTypeAuthFailure,
+		wantFamily:  interfaces.WorkFailureFamilyTerminal,
+		wantMessage: "Cursor authentication failed; sign in again",
+		rejectText:  "private prompt",
+	})
 }
 
 func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDecision(t *testing.T) {

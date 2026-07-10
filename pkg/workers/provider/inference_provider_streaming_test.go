@@ -162,6 +162,29 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 	assertSafeCursorFailureExcerpts(t, providerErr.Diagnostics)
 }
 
+func TestScriptWrapProvider_Infer_CursorParseFailureUsesStderrParserResult(t *testing.T) {
+	stdout := []byte(`{"type":"result"`)
+	stderr := []byte("Cursor authentication failed; sign in again")
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+		result: CommandResult{Stdout: stdout, Stderr: stderr},
+	}))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeAuthFailure || providerErr.Message != string(stderr) {
+		t.Fatalf("provider error = %#v, want canonical stderr authentication result", providerErr)
+	}
+	if providerErr.Cause == nil {
+		t.Fatal("parse failure cause = nil, want original JSON parse cause")
+	}
+}
+
 func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsExcerpts(t *testing.T) {
 	stdout := []byte("partial json output")
 	stderr := []byte("noise before\nERROR: unexpected status 500 from cursor upstream")
@@ -185,10 +208,10 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsEx
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeUnknown {
-		t.Fatalf("error type = %q, want unknown before Cursor stderr normalization", providerErr.Type)
+	if providerErr.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("error type = %q, want internal_server_error", providerErr.Type)
 	}
-	if providerErr.Message != "cursor exited with code 1" {
+	if providerErr.Message != "ERROR: unexpected status 500 from cursor upstream" {
 		t.Fatalf("error message = %q", providerErr.Message)
 	}
 	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
@@ -230,7 +253,7 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePublishesTerminalFailureMarke
 	if published[0].DispatchID != "dispatch-cursor-failure" {
 		t.Fatalf("dispatch id = %q, want dispatch-cursor-failure", published[0].DispatchID)
 	}
-	if published[0].Payload != "cursor exited with code 1" {
+	if published[0].Payload != "ERROR: unexpected status 500 from cursor upstream" {
 		t.Fatalf("failure payload = %q, want normalized provider error message", published[0].Payload)
 	}
 }
