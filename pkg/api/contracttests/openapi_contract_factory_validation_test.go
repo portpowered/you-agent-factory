@@ -103,7 +103,7 @@ func TestOpenAPIContract_DefinesFactoryPreviewEndpoint(t *testing.T) {
 	assertResponseRef(t, postOperation, "400", "#/components/responses/BadRequest")
 }
 
-func TestOpenAPIContract_DefinesWorkflowPreviewCompatibilityEndpoint(t *testing.T) {
+func TestOpenAPIContract_DefinesWorkflowPreviewCompatibilityOnlyEndpoint(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	paths, ok := doc["paths"].(map[string]any)
 	if !ok {
@@ -173,7 +173,7 @@ func TestOpenAPIContract_FactoryPreviewResultSchemaMatchesSharedContract(t *test
 	assertPropertyRef(t, resultProperties, "resultConstraints", "#/components/schemas/WorkflowResultConstraints")
 }
 
-func TestOpenAPIContract_WorkflowPreviewSchemasAliasFactoryPreview(t *testing.T) {
+func TestOpenAPIContract_WorkflowPreviewSchemasAreCompatibilityOnlyAliasesOfFactoryPreview(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	workflowRequest := schemaObject(t, schemas, "WorkflowPreviewRequest")
 	if deprecated, _ := workflowRequest["deprecated"].(bool); !deprecated {
