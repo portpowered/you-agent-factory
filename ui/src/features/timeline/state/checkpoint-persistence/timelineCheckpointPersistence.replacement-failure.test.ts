@@ -6,6 +6,7 @@ import {
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
+  clearTimelineCheckpointsForSession,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
@@ -99,5 +100,20 @@ describe("timeline checkpoint replacement failure", () => {
       afterSequence: 51,
       selectedTick: 11,
     });
+
+    const cleanup = clearTimelineCheckpointsForSession(
+      indexedDB,
+      streamIdentity.factorySessionID,
+    );
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    controls.succeed("getAll");
+    await flushPromiseContinuations();
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    controls.succeed("delete");
+    await cleanup;
+
+    expect(records.size).toBe(0);
   });
 });

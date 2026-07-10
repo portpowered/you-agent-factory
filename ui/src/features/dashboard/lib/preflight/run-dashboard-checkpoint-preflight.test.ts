@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import * as factorySessionsAPI from "../../../../api/factory-sessions";
 import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import * as timelinePublic from "../../../timeline/public";
 import { runDashboardCheckpointPreflight } from "./run-dashboard-checkpoint-preflight";
 
@@ -66,6 +65,7 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
     const onRemapSessionID = vi.fn();
 
     const hydration = await runDashboardCheckpointPreflight({
+      isCurrent: () => true,
       onRemapSessionID,
       onStreamOffline: vi.fn(),
       queryClient: queryClient as never,
@@ -88,7 +88,10 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
     const staleSessionID = "session-stale-001";
     const remappedSessionID = "session-remapped-002";
     const logicalSessionKeyID = "lsk-named-target";
-    vi.spyOn(timelinePublic, "peekPersistedTimelineCheckpoint").mockResolvedValue({
+    vi.spyOn(
+      timelinePublic,
+      "peekPersistedTimelineCheckpoint",
+    ).mockResolvedValue({
       checkpoint: {
         afterEventId: "event-7",
         afterSequence: 7,
@@ -121,6 +124,7 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
     const onRemapSessionID = vi.fn();
 
     const hydration = await runDashboardCheckpointPreflight({
+      isCurrent: () => true,
       onRemapSessionID,
       onStreamOffline: vi.fn(),
       queryClient: queryClient as never,
@@ -161,6 +165,7 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
     );
 
     const hydration = await runDashboardCheckpointPreflight({
+      isCurrent: () => true,
       onRemapSessionID,
       onStreamOffline: vi.fn(),
       queryClient: queryClient as never,
@@ -217,6 +222,7 @@ describe("runDashboardCheckpointPreflight recovery", () => {
     });
 
     const hydration = await runDashboardCheckpointPreflight({
+      isCurrent: () => true,
       onRemapSessionID: vi.fn(),
       onStreamOffline: vi.fn(),
       queryClient: queryClient as never,
@@ -242,6 +248,7 @@ describe("runDashboardCheckpointPreflight recovery", () => {
     );
 
     const hydration = await runDashboardCheckpointPreflight({
+      isCurrent: () => true,
       onRemapSessionID: vi.fn(),
       onStreamOffline: vi.fn(),
       queryClient: queryClient as never,
@@ -273,6 +280,7 @@ describe("runDashboardCheckpointPreflight recovery", () => {
     readCheckpointSpy.mockResolvedValue(checkpoint);
 
     const hydration = await runDashboardCheckpointPreflight({
+      isCurrent: () => true,
       onRemapSessionID: vi.fn(),
       onStreamOffline: vi.fn(),
       queryClient: queryClient as never,
