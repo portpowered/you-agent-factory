@@ -55,7 +55,9 @@ func TestRegistry_SelectUnknownReturnsFalse(t *testing.T) {
 	}
 }
 
-func TestIsDefaultSessionSelector(t *testing.T) {
+// The following compatibility-only cases prove retained selector acceptance.
+// Canonical live identity is covered by CanonicalFactorySessionID and UUID tests.
+func TestCompatibilityOnlyIsDefaultSessionSelector(t *testing.T) {
 	tests := []struct {
 		name      string
 		sessionID string
@@ -76,7 +78,7 @@ func TestIsDefaultSessionSelector(t *testing.T) {
 	}
 }
 
-func TestRegistry_DefaultSessionAndAliasLookup(t *testing.T) {
+func TestRegistry_CompatibilityOnlyDefaultSessionAliasLookupAndRemoval(t *testing.T) {
 	registry := NewRegistry()
 	defaultID := NewSessionID()
 	betaID := NewSessionID()
