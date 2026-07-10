@@ -1531,8 +1531,12 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	if err != nil {
 		t.Fatalf("GetFactorySession: %v", err)
 	}
-	if session.Id != defaultFactorySessionID {
-		t.Fatalf("session id = %q, want %q", session.Id, defaultFactorySessionID)
+	wantSessionID := factorysessions.CanonicalFactorySessionID(harness.requireSession(t, defaultFactorySessionID))
+	if wantSessionID == defaultFactorySessionID || !factorysessions.IsUUIDFactorySessionID(wantSessionID) {
+		t.Fatalf("default runtime session id = %q, want UUID distinct from %q", wantSessionID, defaultFactorySessionID)
+	}
+	if session.Id != wantSessionID {
+		t.Fatalf("session id = %q, want %q", session.Id, wantSessionID)
 	}
 	if session.Runtime.OrchestratorKind != factoryapi.PETRI {
 		t.Fatalf("orchestrator kind = %q, want PETRI", session.Runtime.OrchestratorKind)
@@ -1671,9 +1675,13 @@ func TestFactoryService_ListFactorySessions_IncludesRuntimeProjection(t *testing
 	if len(listed.Sessions) == 0 {
 		t.Fatal("expected at least one live session")
 	}
+	wantSessionID := factorysessions.CanonicalFactorySessionID(harness.requireSession(t, defaultFactorySessionID))
+	if wantSessionID == defaultFactorySessionID || !factorysessions.IsUUIDFactorySessionID(wantSessionID) {
+		t.Fatalf("default runtime session id = %q, want UUID distinct from %q", wantSessionID, defaultFactorySessionID)
+	}
 	found := false
 	for _, summary := range listed.Sessions {
-		if summary.Id != defaultFactorySessionID {
+		if summary.Id != wantSessionID {
 			continue
 		}
 		found = true

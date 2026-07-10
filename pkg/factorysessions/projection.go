@@ -37,7 +37,7 @@ type ProjectionContext struct {
 // SessionResponse maps a live session and runtime projection to the API detail shape.
 func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
 	summary := SummaryResponse(ctx.Session)
-	runtime := ProjectRuntime(ctx)
+	runtime := projectSessionReadRuntime(ctx)
 	return factoryapi.FactorySession{
 		FactoryDir: summary.FactoryDir,
 		FolderPath: summary.FolderPath,
@@ -52,9 +52,17 @@ func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
 // SummaryWithRuntime maps a live session to the API summary shape with runtime projection.
 func SummaryWithRuntime(ctx ProjectionContext) factoryapi.FactorySessionSummary {
 	summary := SummaryResponse(ctx.Session)
-	runtime := ProjectRuntime(ctx)
+	runtime := projectSessionReadRuntime(ctx)
 	summary.Runtime = &runtime
 	return summary
+}
+
+// projectSessionReadRuntime keeps collection reads on their dedicated API
+// endpoints while preserving the broader runtime projection for other callers.
+func projectSessionReadRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
+	runtime := ProjectRuntime(ctx)
+	runtime.Dispatches = nil
+	return runtime
 }
 
 // ProjectRuntime builds the orchestrator-aware runtime projection for one session.

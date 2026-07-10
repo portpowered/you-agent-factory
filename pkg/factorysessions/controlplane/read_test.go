@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 type readTestHost struct {
@@ -16,6 +20,31 @@ type readTestHost struct {
 	sessions        map[string]*factorysessions.LiveSession
 	projectionErr   error
 	requireSessionE error
+	snapshot        *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+}
+
+type defaultIdentityTestHost struct {
+	*readTestHost
+	session *factorysessions.LiveSession
+}
+
+func (h *defaultIdentityTestHost) ResolveSyncPreflightTarget(
+	_ string,
+	_ *interfaces.FactorySessionLogicalResolveHint,
+) (controlplane.SyncPreflightTarget, error) {
+	return controlplane.SyncPreflightTarget{Session: h.session}, nil
+}
+
+func (h *defaultIdentityTestHost) BackendScopeID() string {
+	return "backend-default-identity-test"
+}
+
+func (h *defaultIdentityTestHost) StreamGenerationID(*factorysessions.LiveSession) string {
+	return "stream-default-identity-test"
+}
+
+func (h *defaultIdentityTestHost) LiveSessionEvents(*factorysessions.LiveSession) []factoryapi.FactoryEvent {
+	return nil
 }
 
 func (h *readTestHost) DiscoverTargets(string) ([]factorysessions.Target, error) {
@@ -59,7 +88,7 @@ func (h *readTestHost) BuildSessionProjectionContext(
 	if h.projectionErr != nil {
 		return factorysessions.ProjectionContext{}, h.projectionErr
 	}
-	return factorysessions.ProjectionContext{Session: session}, nil
+	return factorysessions.ProjectionContext{Session: session, Snapshot: h.snapshot}, nil
 }
 
 func TestIsDurableExecutionSessionID(t *testing.T) {
@@ -103,6 +132,142 @@ func TestListLiveFactorySessions_OrdersDefaultFirst(t *testing.T) {
 	}
 	if !response.Sessions[0].IsDefault || response.Sessions[0].Id != "~default" {
 		t.Fatalf("first session = %#v, want default first", response.Sessions[0])
+	}
+}
+
+func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
+	t.Parallel()
+
+	const allocatedSessionID = "11111111-1111-4111-8111-111111111111"
+	if allocatedSessionID == factorysessions.DefaultSessionID || !factorysessions.IsUUIDFactorySessionID(allocatedSessionID) {
+		t.Fatalf("allocated session id %q must be a UUID distinct from the default selector", allocatedSessionID)
+	}
+
+	defaultSession := &factorysessions.LiveSession{
+		ID:                      factorysessions.DefaultSessionID,
+		IsDefault:               true,
+		RuntimeFactorySessionID: allocatedSessionID,
+		SessionState: factorysessions.SessionState{
+			FactoryDir: "/tmp/default/factory",
+			FolderPath: "/tmp/default",
+		},
+		Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+	}
+	host := &defaultIdentityTestHost{
+		readTestHost: &readTestHost{
+			sessionIDs: []string{factorysessions.DefaultSessionID},
+			sessions: map[string]*factorysessions.LiveSession{
+				factorysessions.DefaultSessionID: defaultSession,
+			},
+			snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				Dispatches: map[string]*interfaces.DispatchEntry{
+					"dispatch-underlying": {
+						DispatchID:   "dispatch-underlying",
+						TransitionID: "transition-underlying",
+					},
+				},
+			},
+		},
+		session: defaultSession,
+	}
+	underlyingRuntime := factorysessions.ProjectRuntime(factorysessions.ProjectionContext{
+		Session:  defaultSession,
+		Snapshot: host.snapshot,
+	})
+	assertUnderlyingDispatchFixture(t, underlyingRuntime)
+
+	listed, err := controlplane.ListLiveFactorySessions(context.Background(), host)
+	if err != nil {
+		t.Fatalf("ListLiveFactorySessions: %v", err)
+	}
+	assertDefaultSessionListProjection(t, listed, allocatedSessionID)
+
+	got, err := controlplane.GetLiveFactorySession(context.Background(), host, factorysessions.DefaultSessionID)
+	if err != nil {
+		t.Fatalf("GetLiveFactorySession(%q): %v", factorysessions.DefaultSessionID, err)
+	}
+	assertDefaultSessionDetailProjection(t, got, allocatedSessionID)
+
+	preflight, err := controlplane.GetLiveFactorySessionSyncPreflight(
+		context.Background(),
+		host,
+		factorysessions.DefaultSessionID,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("GetLiveFactorySessionSyncPreflight(%q): %v", factorysessions.DefaultSessionID, err)
+	}
+	assertDefaultSessionPreflightIdentity(t, preflight, allocatedSessionID)
+	assertResolvedSessionIDsAgree(t, listed, got, preflight)
+}
+
+func assertUnderlyingDispatchFixture(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
+	t.Helper()
+	if runtime.Dispatches == nil || len(*runtime.Dispatches) != 1 {
+		t.Fatalf("underlying runtime dispatches = %#v, want one dispatch", runtime.Dispatches)
+	}
+}
+
+func assertDefaultSessionListProjection(
+	t *testing.T,
+	listed factoryapi.ListFactorySessionsResponse,
+	allocatedSessionID string,
+) {
+	t.Helper()
+	if len(listed.Sessions) != 1 {
+		t.Fatalf("listed sessions = %d, want 1", len(listed.Sessions))
+	}
+	if listed.Sessions[0].Id != allocatedSessionID || !listed.Sessions[0].IsDefault {
+		t.Fatalf("listed default session = %#v, want id %q and isDefault true", listed.Sessions[0], allocatedSessionID)
+	}
+	if listed.Sessions[0].Runtime == nil || listed.Sessions[0].Runtime.Dispatches != nil {
+		t.Fatalf("listed runtime dispatches = %#v, want omitted", listed.Sessions[0].Runtime)
+	}
+}
+
+func assertDefaultSessionDetailProjection(
+	t *testing.T,
+	got factoryapi.FactorySession,
+	allocatedSessionID string,
+) {
+	t.Helper()
+	if got.Id != allocatedSessionID {
+		t.Fatalf("get-by-alias session id = %q, want %q", got.Id, allocatedSessionID)
+	}
+	if got.Runtime.Dispatches != nil {
+		t.Fatalf("get-by-alias runtime dispatches = %#v, want omitted", got.Runtime.Dispatches)
+	}
+}
+
+func assertDefaultSessionPreflightIdentity(
+	t *testing.T,
+	preflight factoryapi.FactorySessionSyncPreflightResponse,
+	allocatedSessionID string,
+) {
+	t.Helper()
+	if preflight.RequestedSessionId != factorysessions.DefaultSessionID {
+		t.Fatalf("requestedSessionId = %q, want %q", preflight.RequestedSessionId, factorysessions.DefaultSessionID)
+	}
+	if preflight.FactorySessionId == nil || *preflight.FactorySessionId != allocatedSessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", preflight.FactorySessionId, allocatedSessionID)
+	}
+}
+
+func assertResolvedSessionIDsAgree(
+	t *testing.T,
+	listed factoryapi.ListFactorySessionsResponse,
+	got factoryapi.FactorySession,
+	preflight factoryapi.FactorySessionSyncPreflightResponse,
+) {
+	t.Helper()
+	if listed.Sessions[0].Id != got.Id || got.Id != *preflight.FactorySessionId {
+		t.Fatalf(
+			"resolved ids differ: list=%q get=%q preflight=%q",
+			listed.Sessions[0].Id,
+			got.Id,
+			*preflight.FactorySessionId,
+		)
 	}
 }
 

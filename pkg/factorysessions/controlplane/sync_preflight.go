@@ -68,7 +68,7 @@ func GetLiveFactorySessionSyncPreflight(
 
 	response.BackendScopeId = stringPointer(host.BackendScopeID())
 	response.LogicalSessionKeyId = stringPointer(logicalSessionKeyID(session))
-	response.FactorySessionId = stringPointer(session.ID)
+	response.FactorySessionId = stringPointer(factorysessions.CanonicalFactorySessionID(session))
 	response.StreamGenerationId = stringPointer(host.StreamGenerationID(session))
 	if resolved.Remapped {
 		response.ReasonCode = factoryapi.LogicalSessionRemap
