@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -1893,8 +1895,11 @@ func TestFactoryService_ModelMethodsForwardContextResultsAndErrorsUnchanged(t *t
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("request"), "catalog-request")
 	listErr := errors.New("list sentinel")
-	getErr := errors.New("get sentinel")
-	pullErr := errors.New("pull sentinel")
+	getErr := fmt.Errorf("requested model: %w", apisurface.ErrModelNotFound)
+	pullErr := &apisurface.ManagedRuntimePullError{
+		Result: apisurface.ModelPullResult{ModelName: "pull-result", ManagedPullOutcome: "TIMED_OUT"},
+		Cause:  errors.New("pull sentinel"),
+	}
 	stub := &stubModelService{
 		listResult: factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "list-result"}}},
 		listErr:    listErr,
@@ -1909,20 +1914,31 @@ func TestFactoryService_ModelMethodsForwardContextResultsAndErrorsUnchanged(t *t
 	detail, gotGetErr := svc.GetModel(ctx, "requested-model")
 	pulled, gotPullErr := svc.PullModel(ctx, "pull-model")
 
-	if listed.Results[0].Name != "list-result" || !errors.Is(gotListErr, listErr) {
+	if !reflect.DeepEqual(listed, stub.listResult) || gotListErr != listErr {
 		t.Fatalf("ListModels = (%#v, %v), want exact result and sentinel error", listed, gotListErr)
 	}
-	if detail.Name != "detail-result" || !errors.Is(gotGetErr, getErr) {
+	if detail.Name != "detail-result" || gotGetErr != getErr {
 		t.Fatalf("GetModel = (%#v, %v), want exact result and sentinel error", detail, gotGetErr)
 	}
-	if pulled.ModelName != "pull-result" || pulled.ManagedPullOutcome != "TIMED_OUT" || !errors.Is(gotPullErr, pullErr) {
+	if pulled.ModelName != "pull-result" || pulled.ManagedPullOutcome != "TIMED_OUT" || gotPullErr != pullErr {
 		t.Fatalf("PullModel = (%#v, %v), want exact result and sentinel error", pulled, gotPullErr)
 	}
+	if !errors.Is(gotGetErr, apisurface.ErrModelNotFound) || !apisurface.IsManagedRuntimePullError(gotPullErr) {
+		t.Fatalf("typed errors = (%v, %v), want model-not-found and managed-runtime-pull errors", gotGetErr, gotPullErr)
+	}
+	assertModelCatalogCallsForwardedOnce(t, stub, ctx)
+}
+
+func assertModelCatalogCallsForwardedOnce(t *testing.T, stub *stubModelService, ctx context.Context) {
+	t.Helper()
 	if len(stub.contexts) != 3 || stub.contexts[0] != ctx || stub.contexts[1] != ctx || stub.contexts[2] != ctx {
 		t.Fatalf("model contexts = %#v, want original context three times", stub.contexts)
 	}
 	if len(stub.modelNames) != 2 || stub.modelNames[0] != "requested-model" || stub.modelNames[1] != "pull-model" {
 		t.Fatalf("model names = %#v, want requested-model then pull-model", stub.modelNames)
+	}
+	if !reflect.DeepEqual(stub.calls, []string{"list", "get", "pull"}) {
+		t.Fatalf("model calls = %#v, want each operation exactly once", stub.calls)
 	}
 }
 
@@ -1931,7 +1947,11 @@ func TestFactoryService_InvokeModelForwardsContextRequestResultAndErrorUnchanged
 
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("request"), "invoke-request")
-	invokeErr := errors.New("invoke sentinel")
+	invokeErr := &apisurface.ManagedRuntimeInvocationError{
+		Identity:       "invoke-model",
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+		Cause:          apisurface.ErrManagedRuntimeMissing,
+	}
 	request := factoryapi.ModelInvocationRequest{Operation: "TTS"}
 	stub := &stubModelService{
 		invokeResult: apisurface.ModelInvocationResult{ModelName: "invoke-result", Operation: "TTS"},
@@ -1939,14 +1959,20 @@ func TestFactoryService_InvokeModelForwardsContextRequestResultAndErrorUnchanged
 	}
 
 	result, err := (&FactoryService{modelService: stub}).InvokeModel(ctx, "invoke-model", request)
-	if result.ModelName != "invoke-result" || result.Operation != "TTS" || !errors.Is(err, invokeErr) {
+	if result.ModelName != "invoke-result" || result.Operation != "TTS" || err != invokeErr {
 		t.Fatalf("InvokeModel = (%#v, %v), want exact result and sentinel error", result, err)
+	}
+	if !apisurface.IsManagedRuntimeMissing(err) {
+		t.Fatalf("InvokeModel error = %v, want typed unavailable-runtime error", err)
 	}
 	if len(stub.contexts) != 1 || stub.contexts[0] != ctx || len(stub.modelNames) != 1 || stub.modelNames[0] != "invoke-model" {
 		t.Fatalf("forwarded context/model = (%#v, %#v), want original context and invoke-model", stub.contexts, stub.modelNames)
 	}
-	if len(stub.requests) != 1 || stub.requests[0].Operation != request.Operation {
-		t.Fatalf("invoke requests = %#v, want exact TTS request", stub.requests)
+	if len(stub.requests) != 1 || !reflect.DeepEqual(stub.requests[0], request) {
+		t.Fatalf("invoke requests = %#v, want exact request", stub.requests)
+	}
+	if !reflect.DeepEqual(stub.calls, []string{"invoke"}) {
+		t.Fatalf("model calls = %#v, want invoke exactly once", stub.calls)
 	}
 }
 
