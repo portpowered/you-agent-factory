@@ -2,10 +2,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import type { FactoryEventReconnectCursor } from "../../../../api/events";
-import type { FactoryTimelineCheckpoint } from "../../../timeline/public";
-import type { TimelineCheckpointStreamIdentity } from "../../../timeline/public";
-import { runDashboardCheckpointPreflight } from "../../lib/preflight/run-dashboard-checkpoint-preflight";
+import type {
+  FactoryTimelineCheckpoint,
+  TimelineCheckpointStreamIdentity,
+} from "../../../timeline/public";
 import type { DashboardSessionRecoveryState } from "../../lib/preflight/dashboard-session-sync-preflight";
+import { runDashboardCheckpointPreflight } from "../../lib/preflight/run-dashboard-checkpoint-preflight";
 import { useRemapDashboardSelectedSession } from "../../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
@@ -56,9 +58,12 @@ export function useDashboardCheckpointPreflight({
 }): UseDashboardCheckpointPreflightResult {
   const queryClient = useQueryClient();
   const remapSelectedSessionID = useRemapDashboardSelectedSession();
-  const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
-  const [checkpointHydratedKey, setCheckpointHydratedKey] =
-    useState<string | null>(null);
+  const setStreamState = useDashboardStreamStore(
+    (state) => state.setStreamState,
+  );
+  const [checkpointHydratedKey, setCheckpointHydratedKey] = useState<
+    string | null
+  >(null);
   const [preflightReadyKey, setPreflightReadyKey] = useState<string | null>(
     null,
   );
@@ -81,6 +86,7 @@ export function useDashboardCheckpointPreflight({
 
   useEffect(() => {
     let cancelled = false;
+    const abortController = new AbortController();
 
     resetDashboardCheckpointPreflightState(
       setCheckpointHydratedKey,
@@ -107,6 +113,7 @@ export function useDashboardCheckpointPreflight({
 
     void (async () => {
       const hydration = await runDashboardCheckpointPreflight({
+        isCurrent: () => !cancelled,
         onRemapSessionID: remapSelectedSessionID,
         onStreamOffline: (message) => {
           setStreamState({
@@ -117,6 +124,7 @@ export function useDashboardCheckpointPreflight({
         queryClient,
         rawSessionID,
         restoreCheckpoint,
+        signal: abortController.signal,
       });
       if (cancelled) {
         return;
@@ -146,6 +154,7 @@ export function useDashboardCheckpointPreflight({
 
     return () => {
       cancelled = true;
+      abortController.abort();
     };
   }, [
     checkpointHydrationKey,

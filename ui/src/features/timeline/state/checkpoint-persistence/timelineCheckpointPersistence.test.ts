@@ -247,6 +247,7 @@ describe("timeline checkpoint persistence diagnostics", () => {
     await expect(
       readTimelineCheckpoint(indexedDB, streamIdentity),
     ).resolves.toBe(null);
+    expect(records.has(storageKey)).toBe(false);
     expect(readSessionPersistenceInvalidationRecords()).toEqual([
       expect.objectContaining({
         reason: "stream_generation_changed",
@@ -318,6 +319,12 @@ describe("timeline checkpoint persistence resilience", () => {
       streamIdentityFixture(),
     );
 
+    expect(
+      writeFailure.records.has(checkpointStorageKey(streamIdentityFixture())),
+    ).toBe(true);
+    await expect(
+      readTimelineCheckpoint(writeFailure.indexedDB, streamIdentityFixture()),
+    ).resolves.toBe(null);
     expect(
       writeFailure.records.has(checkpointStorageKey(streamIdentityFixture())),
     ).toBe(false);
