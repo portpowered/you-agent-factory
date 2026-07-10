@@ -764,7 +764,7 @@ func TestWorkflowValidateHumanOutputUsesFactorySessionTerminology(t *testing.T) 
 	assertForbiddenWorkflowRunVocabulary(t, text)
 }
 
-func TestWorkflowPreviewHumanOutputRemainsCompatibilitySurface(t *testing.T) {
+func TestWorkflowPreviewHumanOutputRemainsCompatibilityOnly(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeTerminologyWorkflow(t, projectRoot, "review.js", validTerminologyWorkflowSource)
 

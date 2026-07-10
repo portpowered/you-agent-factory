@@ -639,7 +639,7 @@ func TestFactoryService_CloseFactorySession_LeavesServiceAliveWithoutLiveSession
 	}
 }
 
-func TestFactoryService_LegacyRuntimeSurfaceTargetsDefaultSessionAlias(t *testing.T) {
+func TestFactoryService_CompatibilityOnlyLegacyRuntimeSurfaceTargetsDefaultSessionSelector(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
 		namedFactories: []string{"alpha", "beta"},

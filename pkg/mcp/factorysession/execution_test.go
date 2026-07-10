@@ -431,7 +431,7 @@ func TestMockClient_StartSync_RepeatedInvocationReturnsStableSessionIdentity(t *
 	}
 }
 
-func TestMockClient_WorkflowRunAliasMatchesCanonicalSuccess(t *testing.T) {
+func TestMockClient_WorkflowRunCompatibilityOnlyAliasMatchesCanonicalSuccess(t *testing.T) {
 	request := syncSuccessExecutionRequest()
 	encoded, err := json.Marshal(request)
 	if err != nil {

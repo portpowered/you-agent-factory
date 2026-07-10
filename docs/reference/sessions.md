@@ -190,9 +190,13 @@ or `you run --dir <factory>` before retrying.
 
 ### Discover session ids
 
-Use the `SESSION ID` column when routing other commands with `--session` (for
-example `you submit --session session-beta` or `you work list --session session-beta`).
-On single-session local hosts the default compatibility session is often `~default`.
+The `SESSION ID` column contains the routable id for each list row. On
+single-session local hosts that id can remain the accepted `~default` selector,
+not the session's canonical identity. In JSON output, use
+`runtime.streamIdentity.factorySessionId` when that runtime projection is
+present. A session read, sync preflight, or stream handshake can also return the
+resolved `factorySessionId` UUID. Retain the resolved UUID for subsequent reads,
+dashboard persistence, and event connections.
 
 ## Session show
 
@@ -203,7 +207,7 @@ fields.
 ### Copy-paste examples
 
 ```bash
-# Default compatibility session (~default).
+# Resolve the default session through the compatibility selector.
 you session show
 
 # Named live session.
@@ -551,13 +555,15 @@ you --server http://localhost:9090 --json work list
 | Command family | Host selection | Session selection |
 |----------------|----------------|-----------------|
 | `you session list` / `create` / `delete` | `--port` (default `7437`) | Session id is a subcommand argument on `create` / `delete` |
-| `you session show`, `you session pause`, `you session resume` | Global `--server` | Session id is an optional subcommand argument (defaults to `~default`) |
+| `you session show`, `you session pause`, `you session resume` | Global `--server` | Session UUID is an optional subcommand argument; omission accepts the `~default` compatibility selector |
 | `you factory query`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
 | `you run` | Binds locally to host/port from `--server` | N/A — starts or attaches runtime |
 
-When `--session` is omitted on submit and work commands, the CLI targets the
-default compatibility session (`~default`). After `you session list`, pass the
-same session id on submit and verify commands:
+When `--session` is omitted on submit and work commands, the CLI accepts the
+`~default` compatibility selector. A list row's `SESSION ID` may itself remain
+`~default`; use `runtime.streamIdentity.factorySessionId` from JSON list output
+when present, or resolve the UUID through a session read, sync preflight, or
+stream handshake. Pass that resolved UUID on later submit and verify commands:
 
 ```bash
 you submit --session session-beta \
@@ -590,8 +596,8 @@ pre-submit checklist.
 
 API, CLI, dashboard, and future MCP tools observe the same canonical
 `FactoryEvent` stream for one selected Factory Session. Open the session-scoped
-route so reconnect cursors and stream recovery always carry the explicit session
-id:
+route with the resolved Factory Session UUID so reconnect cursors and stream
+recovery always carry canonical live identity:
 
 `GET /factory-sessions/{session_id}/events`
 

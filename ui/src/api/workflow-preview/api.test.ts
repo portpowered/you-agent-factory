@@ -6,12 +6,12 @@ import {
   type WorkflowPreviewResult,
 } from "./api";
 
-describe("previewWorkflow compatibility wrapper", () => {
+describe("previewWorkflow compatibility-only wrapper parity", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("delegates obsolete preview calls to previewFactory", async () => {
+  it("delegates compatibility-only preview calls to previewFactory", async () => {
     const previewResult: WorkflowPreviewResult = {
       valid: true,
       sourceResolution: {
@@ -59,7 +59,7 @@ describe("previewWorkflow compatibility wrapper", () => {
     expect(result).toBe(previewResult);
   });
 
-  it("re-exports FactoryPreviewAPIError under the obsolete WorkflowPreview name", () => {
+  it("re-exports FactoryPreviewAPIError under the compatibility-only WorkflowPreview name", () => {
     expect(WorkflowPreviewAPIError).toBe(factoryPreview.FactoryPreviewAPIError);
   });
 });
