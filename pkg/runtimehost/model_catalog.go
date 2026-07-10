@@ -220,9 +220,10 @@ func (fs *Host) sessionInvocationOwner() invocations.SessionInvoker {
 	return invocations.NewSessionOwner(invocations.SessionOwnerDependencies{
 		FactoryConfig: fs.sessionInvocationFactoryConfig,
 		SubmitWork:    fs.submitOwnedSessionInvocationWork,
-		Wait:          fs.waitForOwnedSessionInvocation,
+		Observe:       fs.observeSessionInvocation,
 		Metrics:       telemetry,
 		Logger:        telemetry,
+		SpecialCase:   hostSessionInvocationSpecialCase{host: fs},
 	})
 }
 
@@ -238,11 +239,24 @@ func (fs *Host) submitOwnedSessionInvocationWork(ctx context.Context, sessionID 
 	return fs.SubmitWorkRequestForSession(ctx, sessionID, factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{request}))
 }
 
-func (fs *Host) waitForOwnedSessionInvocation(ctx context.Context, sessionID string, input invocations.SessionInvocationWaitInput) (apisurface.FactoryInvocationResult, error) {
-	return fs.waitForSessionInvocationResult(ctx, sessionID, sessionInvocationWaitInput{
+func (fs *Host) observeSessionInvocation(ctx context.Context, sessionID string, input invocations.SessionInvocationWaitInput) (invocations.SessionInvocationObservation, error) {
+	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, sessionID)
+	if err != nil {
+		return invocations.SessionInvocationObservation{}, err
+	}
+	worldState, err := fs.sessionInvocationWorldState(ctx, sessionID, snapshot.TickCount)
+	if err != nil {
+		return invocations.SessionInvocationObservation{}, err
+	}
+	legacyInput := sessionInvocationWaitInput{
 		RequestID: input.RequestID, TraceID: input.TraceID, InputSource: input.InputSource,
 		InvocationReturn: input.InvocationReturn, FactoryConfig: input.FactoryConfig, TimeoutMillis: input.TimeoutMillis,
-	})
+	}
+	return invocations.SessionInvocationObservation{
+		WorldState: worldState, FactoryState: snapshot.FactoryState,
+		ActiveWork:           snapshotHasActiveWork(snapshot),
+		MissingPrimaryResult: classifyInvocationMissingPrimaryResultFromSnapshot(sessionID, snapshot, legacyInput),
+	}, nil
 }
 
 type runtimeHostSessionInvocationTelemetry struct{ host *Host }
@@ -271,6 +285,16 @@ func (t runtimeHostSessionInvocationTelemetry) InvocationSubmitted(cfg *interfac
 		t.host.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryAttempts, source, nil)
 	}
 }
+func (t runtimeHostSessionInvocationTelemetry) InvocationCompleted(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel, result []interfaces.WorkContentPart) {
+	t.host.recordInvocationMetric(invocationMetricSuccess, invocationMetricLabels(cfg, source))
+	t.host.recordInvocationMetric(invocationMetricResultType, mergeMetricLabels(invocationMetricLabels(cfg, source), map[string]string{"result_type": primaryResultMetricType(result)}))
+}
+func (t runtimeHostSessionInvocationTelemetry) InvocationFailed(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel, errorCode string) {
+	t.host.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(cfg, source))
+	if errorCode == string(invocations.PrimaryResultErrorCodeUnresolved) {
+		t.host.recordInvocationMetric(invocationMetricUnresolvedPrimary, invocationMetricLabels(cfg, source))
+	}
+}
 func (t runtimeHostSessionInvocationTelemetry) LogArgumentFailure(sessionID string, source invocations.InputSourceLabel, cfg *interfaces.FactoryConfig, normalized *invocations.NormalizedArguments, err error, failureClass string) {
 	t.host.logInvocationArgumentFailure(sessionID, source, cfg, normalized, err, failureClass)
 }
@@ -288,150 +312,43 @@ func (t runtimeHostSessionInvocationTelemetry) LogInvocationSubmitted(sessionID 
 	t.host.logger.Info("factory session invocation submitted", invocationLogFields(sessionID, source, cfg.InvocationReturn, cfg,
 		zap.String("request_id", result.RequestID), zap.String("trace_id", result.TraceID))...)
 }
-
-func (fs *Host) waitForSessionInvocationResult(
-	ctx context.Context,
-	sessionID string,
-	input sessionInvocationWaitInput,
-) (apisurface.FactoryInvocationResult, error) {
-	waitCtx, cancel := invocationWaitContext(ctx, input.TimeoutMillis)
-	defer cancel()
-
-	result := apisurface.FactoryInvocationResult{
-		RequestID: input.RequestID,
-		TraceID:   input.TraceID,
-	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	packagedTTSInvocation := fs.isPackagedTTSSession(sessionID)
-	loggedPackagedLoading := false
-
-	for {
-		tick := fs.processInvocationWaitTick(
-			waitCtx,
-			sessionID,
-			input,
-			result,
-			packagedTTSInvocation,
-			loggedPackagedLoading,
-		)
-		loggedPackagedLoading = tick.loggedLoading
-		if tick.done {
-			return tick.result, tick.err
-		}
-
-		select {
-		case <-waitCtx.Done():
-			return fs.invocationWaitTimedOut(sessionID, input, result, waitCtx.Err()), nil
-		case <-ticker.C:
-		}
-	}
+func (t runtimeHostSessionInvocationTelemetry) LogInvocationCompleted(sessionID string, input invocations.SessionInvocationWaitInput, selection invocations.PrimaryResultSelection) {
+	t.host.logger.Info("factory session invocation completed", invocationLogFields(sessionID, input.InputSource, input.InvocationReturn, input.FactoryConfig,
+		zap.String("request_id", input.RequestID), zap.String("trace_id", input.TraceID),
+		zap.String("status", string(factoryapi.InvocationTerminalStatusCompleted)), zap.String("resolved_work_id", selection.WorkID),
+		zap.String("resolved_work_type", selection.WorkTypeName), zap.String("resolved_work_name", selection.WorkName),
+		zap.String("resolved_terminal_state", selection.TerminalState), zap.String("result_type", primaryResultMetricType(selection.PrimaryResult)))...)
+}
+func (t runtimeHostSessionInvocationTelemetry) LogInvocationFailed(sessionID string, input invocations.SessionInvocationWaitInput, result invocations.FactoryInvocationResult, failureClass string) {
+	t.host.logger.Warn("factory session invocation failed", invocationLogFields(sessionID, input.InputSource, input.InvocationReturn, input.FactoryConfig,
+		zap.String("request_id", input.RequestID), zap.String("trace_id", input.TraceID),
+		zap.String("status", string(result.Status)), zap.String("error_code", result.ErrorCode), zap.String("failure_class", failureClass))...)
 }
 
-func (fs *Host) handleInvocationWaitError(
-	result apisurface.FactoryInvocationResult,
-	err error,
-) (apisurface.FactoryInvocationResult, error) {
-	if statusResult, ok := invocationContextResult(result, err); ok {
-		return statusResult, nil
-	}
-	return apisurface.FactoryInvocationResult{}, err
-}
+type hostSessionInvocationSpecialCase struct{ host *Host }
 
-func (fs *Host) handleInvocationSelectionSuccess(
-	sessionID string,
-	input sessionInvocationWaitInput,
-	selection invocations.PrimaryResultSelection,
-) apisurface.FactoryInvocationResult {
-	resultType := primaryResultMetricType(selection.PrimaryResult)
-	result := apisurface.FactoryInvocationResult{
-		RequestID:     input.RequestID,
-		TraceID:       input.TraceID,
-		Status:        factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: selection.PrimaryResult,
-	}
-	fs.recordInvocationMetric(invocationMetricSuccess, invocationMetricLabels(input.FactoryConfig, input.InputSource))
-	fs.recordInvocationMetric(
-		invocationMetricResultType,
-		mergeMetricLabels(
-			invocationMetricLabels(input.FactoryConfig, input.InputSource),
-			map[string]string{"result_type": resultType},
-		),
-	)
-	fs.logger.Info(
-		"factory session invocation completed",
-		invocationLogFields(
-			sessionID,
-			input.InputSource,
-			input.InvocationReturn,
-			input.FactoryConfig,
-			zap.String("request_id", input.RequestID),
-			zap.String("trace_id", input.TraceID),
-			zap.String("status", string(result.Status)),
-			zap.String("resolved_work_id", selection.WorkID),
-			zap.String("resolved_work_type", selection.WorkTypeName),
-			zap.String("resolved_work_name", selection.WorkName),
-			zap.String("resolved_terminal_state", selection.TerminalState),
-			zap.String("result_type", resultType),
-		)...,
-	)
-	return result
+func (s hostSessionInvocationSpecialCase) Active(cfg *interfaces.FactoryConfig) bool {
+	return tts.IsPackagedFactory(cfg)
 }
-
-func (fs *Host) handleInvocationPrimaryResultFailure(
-	sessionID string,
-	input sessionInvocationWaitInput,
-	primaryErr *invocations.PrimaryResultError,
-) apisurface.FactoryInvocationResult {
-	result := apisurface.FactoryInvocationResult{
-		RequestID: input.RequestID,
-		TraceID:   input.TraceID,
-		Status:    factoryapi.InvocationTerminalStatusFailed,
-		ErrorCode: string(primaryErr.Code),
-		Message:   primaryErr.Message,
-		SessionID: primaryErr.Context.SessionID,
-		WorkID:    primaryErr.Context.WorkID,
-		WorkName:  primaryErr.Context.WorkName,
-		WorkState: primaryErr.Context.WorkState,
-	}
-	failureClass := invocationFailureClassForPrimaryResultError(primaryErr.Code)
-	fs.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(input.FactoryConfig, input.InputSource))
-	if primaryErr.Code == invocations.PrimaryResultErrorCodeUnresolved {
-		fs.recordInvocationMetric(invocationMetricUnresolvedPrimary, invocationMetricLabels(input.FactoryConfig, input.InputSource))
-	}
-	fs.logger.Warn(
-		"factory session invocation failed",
-		invocationLogFields(
-			sessionID,
-			input.InputSource,
-			input.InvocationReturn,
-			input.FactoryConfig,
-			zap.String("request_id", input.RequestID),
-			zap.String("trace_id", input.TraceID),
-			zap.String("status", string(result.Status)),
-			zap.String("error_code", result.ErrorCode),
-			zap.String("failure_class", failureClass),
-		)...,
-	)
-	return result
+func (s hostSessionInvocationSpecialCase) InvocationActive(sessionID string, input invocations.SessionInvocationWaitInput) {
+	s.host.logPackagedTTSInvocationLoading(sessionID, hostWaitInput(input))
 }
-
-func invocationFailureClassForPrimaryResultError(code invocations.PrimaryResultErrorCode) string {
-	switch code {
-	case invocations.PrimaryResultErrorCodeFailed:
-		return "failed"
-	case invocations.PrimaryResultErrorCodePaused:
-		return "paused"
-	case invocations.PrimaryResultErrorCodeInterrupted:
-		return "interrupted"
-	case invocations.PrimaryResultErrorCodeBlocked:
-		return "blocked"
-	case invocations.PrimaryResultErrorCodeNeedsHuman:
-		return "needs_human"
-	default:
-		return "unresolved_primary"
+func (s hostSessionInvocationSpecialCase) InvocationCompleted(sessionID string, input invocations.SessionInvocationWaitInput, selection invocations.PrimaryResultSelection) {
+	s.host.logPackagedTTSInvocationCompleted(sessionID, hostWaitInput(input), selection)
+}
+func (s hostSessionInvocationSpecialCase) TerminalFailure(worldState interfaces.FactoryWorldState, requestID string) *invocations.SessionInvocationSpecialFailure {
+	_, failure := tts.ClassifyInvocationWait(worldState, requestID, false)
+	if failure == nil {
+		return nil
 	}
+	return &invocations.SessionInvocationSpecialFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass}
+}
+func (s hostSessionInvocationSpecialCase) InvocationFailed(sessionID string, input invocations.SessionInvocationWaitInput, failure invocations.SessionInvocationSpecialFailure) {
+	s.host.handlePackagedTTSInvocationFailure(sessionID, hostWaitInput(input), &tts.InvocationFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass})
+}
+func hostWaitInput(input invocations.SessionInvocationWaitInput) sessionInvocationWaitInput {
+	return sessionInvocationWaitInput{RequestID: input.RequestID, TraceID: input.TraceID, InputSource: input.InputSource,
+		InvocationReturn: input.InvocationReturn, FactoryConfig: input.FactoryConfig, TimeoutMillis: input.TimeoutMillis}
 }
 
 func (fs *Host) sessionInvocationWorldState(
@@ -450,37 +367,6 @@ func (fs *Host) sessionInvocationWorldState(
 	return projections.ReconstructFactoryWorldState(events, selectedTick)
 }
 
-func invocationContextResult(
-	result apisurface.FactoryInvocationResult,
-	err error,
-) (apisurface.FactoryInvocationResult, bool) {
-	if err == nil {
-		return apisurface.FactoryInvocationResult{}, false
-	}
-	return invocationContextTerminalResult(result, err), errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-func invocationContextTerminalResult(
-	result apisurface.FactoryInvocationResult,
-	err error,
-) apisurface.FactoryInvocationResult {
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		result.Status = factoryapi.InvocationTerminalStatusTimedOut
-		result.ErrorCode = string(factoryapi.INVOCATIONTIMEDOUT)
-		result.Message = "invocation timed out while waiting for primary result"
-	case errors.Is(err, context.Canceled):
-		result.Status = factoryapi.InvocationTerminalStatusCanceled
-		result.ErrorCode = string(factoryapi.INVOCATIONCANCELED)
-		result.Message = "invocation was canceled while waiting for primary result"
-	default:
-		result.Status = factoryapi.InvocationTerminalStatusFailed
-		result.ErrorCode = string(factoryapi.INVOCATIONRUNTIMEFAILURE)
-		result.Message = strings.TrimSpace(err.Error())
-	}
-	return result
-}
-
 const (
 	invocationPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
 	invocationPolicyExplicit              = "EXPLICIT"
@@ -488,45 +374,6 @@ const (
 	invocationPolicyModeAuthored = "authored"
 	invocationPolicyModeFallback = "fallback"
 )
-
-func (fs *Host) logInvocationTerminalResult(
-	sessionID string,
-	input sessionInvocationWaitInput,
-	result apisurface.FactoryInvocationResult,
-) {
-	failureClass := "runtime_failure"
-	switch result.Status {
-	case factoryapi.InvocationTerminalStatusTimedOut:
-		failureClass = "timeout"
-	case factoryapi.InvocationTerminalStatusCanceled:
-		failureClass = "cancellation"
-	case factoryapi.InvocationTerminalStatusFailed:
-		switch strings.TrimSpace(result.ErrorCode) {
-		case string(invocations.PrimaryResultErrorCodeFailed):
-			failureClass = "failed"
-		case string(invocations.PrimaryResultErrorCodeUnresolved):
-			failureClass = "unresolved_primary"
-		case string(invocations.PrimaryResultErrorCodePaused):
-			failureClass = "paused"
-		case string(invocations.PrimaryResultErrorCodeInterrupted):
-			failureClass = "interrupted"
-		}
-	}
-	fs.logger.Warn(
-		"factory session invocation failed",
-		invocationLogFields(
-			sessionID,
-			input.InputSource,
-			input.InvocationReturn,
-			input.FactoryConfig,
-			zap.String("request_id", input.RequestID),
-			zap.String("trace_id", input.TraceID),
-			zap.String("status", string(result.Status)),
-			zap.String("error_code", result.ErrorCode),
-			zap.String("failure_class", failureClass),
-		)...,
-	)
-}
 
 func (fs *Host) logInvocationArgumentFailure(
 	sessionID string,
@@ -849,108 +696,6 @@ func (fs *Host) commandRunnerOverride() workers.CommandRunner {
 	return fs.coordinatorPolicy().commandRunnerOverride
 }
 
-type invocationWaitTickResult struct {
-	done          bool
-	result        apisurface.FactoryInvocationResult
-	err           error
-	loggedLoading bool
-}
-
-func invocationWaitContext(ctx context.Context, timeoutMillis *int64) (context.Context, context.CancelFunc) {
-	if timeoutMillis != nil && *timeoutMillis > 0 {
-		return context.WithTimeout(ctx, time.Duration(*timeoutMillis)*time.Millisecond)
-	}
-	return ctx, func() {}
-}
-
-func (fs *Host) isPackagedTTSSession(sessionID string) bool {
-	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
-	return err == nil && runtimeCfg != nil && tts.IsPackagedFactory(runtimeCfg.FactoryConfig())
-}
-
-func (fs *Host) processInvocationWaitTick(
-	waitCtx context.Context,
-	sessionID string,
-	input sessionInvocationWaitInput,
-	result apisurface.FactoryInvocationResult,
-	packagedTTSInvocation bool,
-	loggedPackagedLoading bool,
-) invocationWaitTickResult {
-	snapshot, err := fs.GetEngineStateSnapshotForSession(waitCtx, sessionID)
-	if err != nil {
-		waitResult, waitErr := fs.handleInvocationWaitError(result, err)
-		return invocationWaitTickResult{done: true, result: waitResult, err: waitErr}
-	}
-
-	worldState, err := fs.sessionInvocationWorldState(waitCtx, sessionID, snapshot.TickCount)
-	if err != nil {
-		waitResult, waitErr := fs.handleInvocationWaitError(result, err)
-		return invocationWaitTickResult{done: true, result: waitResult, err: waitErr}
-	}
-
-	activeWork := snapshotHasActiveWork(snapshot)
-	if packagedTTSInvocation && activeWork && !loggedPackagedLoading {
-		fs.logPackagedTTSInvocationLoading(sessionID, input)
-		loggedPackagedLoading = true
-	}
-
-	selection, selectionErr := invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
-		RequestID:        input.RequestID,
-		InvocationReturn: input.InvocationReturn,
-		WorldState:       worldState,
-	})
-	if selectionErr == nil {
-		if packagedTTSInvocation {
-			fs.logPackagedTTSInvocationCompleted(sessionID, input, selection)
-		}
-		return invocationWaitTickResult{
-			done:   true,
-			result: fs.handleInvocationSelectionSuccess(sessionID, input, selection),
-		}
-	}
-
-	primaryErr, ok := selectionErr.(*invocations.PrimaryResultError)
-	if !ok {
-		return invocationWaitTickResult{done: true, err: selectionErr}
-	}
-
-	if classified := classifyInvocationMissingPrimaryResultFromSnapshot(sessionID, snapshot, input); classified != nil {
-		return invocationWaitTickResult{
-			done:   true,
-			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
-		}
-	}
-	if classified, ok := invocations.ClassifyInvocationControlState(sessionID, snapshot.FactoryState, invocations.PrimaryResultSelectionInput{
-		RequestID:        input.RequestID,
-		InvocationReturn: input.InvocationReturn,
-		WorldState:       worldState,
-	}); ok {
-		return invocationWaitTickResult{
-			done:   true,
-			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
-		}
-	}
-	if classified, ok := invocations.ClassifyMissingPrimaryResult(invocations.PrimaryResultSelectionInput{
-		RequestID:        input.RequestID,
-		InvocationReturn: input.InvocationReturn,
-		WorldState:       worldState,
-	}); ok {
-		return invocationWaitTickResult{
-			done:   true,
-			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
-		}
-	}
-
-	if _, exists := worldState.WorkRequestsByID[input.RequestID]; exists && !activeWork {
-		return invocationWaitTickResult{
-			done:   true,
-			result: fs.resolveInvocationWaitTerminal(sessionID, input, worldState, packagedTTSInvocation, primaryErr),
-		}
-	}
-
-	return invocationWaitTickResult{loggedLoading: loggedPackagedLoading}
-}
-
 func classifyInvocationMissingPrimaryResultFromSnapshot(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
@@ -1021,54 +766,6 @@ func tokenPlaceID(token *interfaces.Token) string {
 	return token.PlaceID
 }
 
-func (fs *Host) resolveInvocationWaitTerminal(
-	sessionID string,
-	input sessionInvocationWaitInput,
-	worldState interfaces.FactoryWorldState,
-	packagedTTSInvocation bool,
-	primaryErr *invocations.PrimaryResultError,
-) apisurface.FactoryInvocationResult {
-	if packagedTTSInvocation {
-		if _, failure := tts.ClassifyInvocationWait(worldState, input.RequestID, false); failure != nil {
-			return fs.handlePackagedTTSInvocationFailure(sessionID, input, failure)
-		}
-	}
-	if classified, ok := invocations.ClassifyInvocationControlState(sessionID, "", invocations.PrimaryResultSelectionInput{
-		RequestID:        input.RequestID,
-		InvocationReturn: input.InvocationReturn,
-		WorldState:       worldState,
-	}); ok {
-		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
-	}
-	if classified, ok := invocations.ClassifyFailedInvocation(sessionID, invocations.PrimaryResultSelectionInput{
-		RequestID:        input.RequestID,
-		InvocationReturn: input.InvocationReturn,
-		WorldState:       worldState,
-	}); ok {
-		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
-	}
-	if classified, ok := invocations.ClassifyMissingPrimaryResult(invocations.PrimaryResultSelectionInput{
-		RequestID:        input.RequestID,
-		InvocationReturn: input.InvocationReturn,
-		WorldState:       worldState,
-	}); ok {
-		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
-	}
-	return fs.handleInvocationPrimaryResultFailure(sessionID, input, primaryErr)
-}
-
-func (fs *Host) invocationWaitTimedOut(
-	sessionID string,
-	input sessionInvocationWaitInput,
-	result apisurface.FactoryInvocationResult,
-	waitErr error,
-) apisurface.FactoryInvocationResult {
-	terminalResult := invocationContextTerminalResult(result, waitErr)
-	fs.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(input.FactoryConfig, input.InputSource))
-	fs.logInvocationTerminalResult(sessionID, input, terminalResult)
-	return terminalResult
-}
-
 func (fs *Host) recordPackagedTTSInvocationMetric(
 	name string,
 	source invocations.InputSourceLabel,
@@ -1094,7 +791,6 @@ func (fs *Host) handlePackagedTTSInvocationFailure(
 		ErrorCode: failure.ErrorCode,
 		Message:   failure.Message,
 	}
-	fs.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(input.FactoryConfig, input.InputSource))
 	fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryFailure, input.InputSource, map[string]string{
 		"failure_class": failure.FailureClass,
 	})

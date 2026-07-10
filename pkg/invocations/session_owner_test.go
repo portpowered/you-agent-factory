@@ -36,10 +36,10 @@ func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *
 			submitted = append(submitted, request)
 			return interfaces.WorkRequestSubmitResult{RequestID: "runtime-request", TraceID: "trace-1"}, nil
 		},
-		Wait: func(gotCtx context.Context, sessionID string, input SessionInvocationWaitInput) (FactoryInvocationResult, error) {
+		Observe: func(gotCtx context.Context, sessionID string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			assertSessionOwnerEqual(t, "wait context", gotCtx, ctx)
 			waitInput = input
-			return wantResult, nil
+			return completedSessionInvocationObservation("runtime-request", "trace-1", "done"), nil
 		},
 	})
 
@@ -112,8 +112,8 @@ func TestSessionOwner_RejectsInvalidInputsBeforeSubmittingWork(t *testing.T) {
 					submitCalls++
 					return interfaces.WorkRequestSubmitResult{}, nil
 				},
-				Wait: func(context.Context, string, SessionInvocationWaitInput) (FactoryInvocationResult, error) {
-					return FactoryInvocationResult{}, nil
+				Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+					return SessionInvocationObservation{}, nil
 				},
 			})
 			if _, err := owner.InvokeFactorySession(context.Background(), "session-1", tt.request); err == nil {
@@ -139,8 +139,8 @@ func TestSessionOwner_RejectsInterpolationFailureBeforeSubmittingWork(t *testing
 			submitCalls++
 			return interfaces.WorkRequestSubmitResult{}, nil
 		},
-		Wait: func(context.Context, string, SessionInvocationWaitInput) (FactoryInvocationResult, error) {
-			return FactoryInvocationResult{}, nil
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return SessionInvocationObservation{}, nil
 		},
 	})
 
@@ -163,9 +163,9 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 		SubmitWork: func(ctx context.Context, _ string, _ interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
 			return interfaces.WorkRequestSubmitResult{}, ctx.Err()
 		},
-		Wait: func(context.Context, string, SessionInvocationWaitInput) (FactoryInvocationResult, error) {
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			waitCalls++
-			return FactoryInvocationResult{}, nil
+			return SessionInvocationObservation{}, nil
 		},
 	})
 	sourceKind := factoryapi.InvocationInputSourceKindText
@@ -186,10 +186,23 @@ func successfulSessionOwner(cfg *interfaces.FactoryConfig, capture func(interfac
 			capture(request)
 			return interfaces.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
 		},
-		Wait: func(context.Context, string, SessionInvocationWaitInput) (FactoryInvocationResult, error) {
-			return FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusCompleted}, nil
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
 		},
 	})
+}
+
+func completedSessionInvocationObservation(requestID, traceID, text string) SessionInvocationObservation {
+	work := interfaces.FactoryWorkItem{
+		ID: "work-1", WorkTypeID: "task", State: "done", TraceID: traceID,
+		Content: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: text}},
+	}
+	return SessionInvocationObservation{WorldState: interfaces.FactoryWorldState{
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{requestID: {
+			RequestID: requestID, TraceID: traceID, WorkItems: []interfaces.FactoryWorkItem{work},
+		}},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{work.ID: {WorkItem: work, Status: "done"}},
+	}}
 }
 
 func sessionOwnerFactoryConfig() *interfaces.FactoryConfig {

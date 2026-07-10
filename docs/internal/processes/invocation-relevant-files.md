@@ -7,8 +7,11 @@ primary-result behavior.
   and API adapters plus the canonical Factory Session invocation owner.
 - `pkg/invocations/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
-  sequencing, and delegation to the event-derived result waiter. Keep session
-  configuration, Work submission, result waiting, metrics, and safe logging as
+  sequencing, and delegation into the owner-local event-derived result waiter.
+  `pkg/invocations/session_wait.go` owns polling, timeout and cancellation,
+  primary-result selection, and terminal classification over narrow runtime
+  observations. Keep session configuration, Work submission, observation,
+  wait/time behavior, metrics, safe logging, and packaged-factory hooks as
   explicit collaborators; service and runtime-host facades should only adapt
   those dependencies and forward `InvokeFactorySession` unchanged.
 - `pkg/invocations/arguments.go` owns signature-backed invocation argument
@@ -63,10 +66,11 @@ primary-result behavior.
   shared invocation non-success context into the public `InvocationResponse`.
 - `pkg/service/model_catalog.go` and `pkg/runtimehost/model_catalog.go` retain
   compatibility adapters for session config, canonical Work submission,
-  event-derived waiting, logs, and metrics. Their `InvokeFactorySession`
+  event-derived observations, logs, metrics, and packaged-factory hooks. Their `InvokeFactorySession`
   methods must remain transparent forwards to `invocations.SessionInvoker`;
-  request normalization, interpolation validation, and submission sequencing
-  belong only to `pkg/invocations/session_owner.go`.
+  request normalization, interpolation validation, submission sequencing,
+  polling, timeout/cancellation, primary-result selection, and general terminal
+  classification belong only to `pkg/invocations`.
 - API structured args use the direct structured-argument carrier rather than
   being reinterpreted as CLI named flags, so canonical parameter-name keys
   still work for positional-only or stdin-bound parameters. Treat `args: {}` as
@@ -344,9 +348,10 @@ primary-result behavior.
   on that same-session refresh via `shouldResumeFromPersistedCheckpoint` in
   `ui/src/features/dashboard/lib/dashboard-session-lifecycle.ts` plus
   `useDashboardInitialReconnectCursor`.
-- `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
-  loading/completion/failure logs, and packaged-factory metrics while polling for
-  primary results.
+- `pkg/invocations/session_wait.go` owns the session invocation wait loop and
+  calls explicit packaged-factory hooks at active, completed, and terminal-failure
+  boundaries. `pkg/service/model_catalog.go` and `pkg/runtimehost/model_catalog.go`
+  currently adapt packaged TTS classification, logs, and metrics to those hooks.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata

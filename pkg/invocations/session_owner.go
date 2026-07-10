@@ -36,7 +36,7 @@ type SessionInvoker interface {
 }
 
 // SessionInvocationWaitInput carries the submitted invocation identity and
-// policy into the injected event-derived result waiter.
+// policy through canonical event-derived result waiting.
 type SessionInvocationWaitInput struct {
 	RequestID        string
 	TraceID          string
@@ -54,6 +54,8 @@ type SessionInvocationMetrics interface {
 	InterpolationFailure(*interfaces.FactoryConfig, InputSourceLabel, error)
 	SubmissionFailure(*interfaces.FactoryConfig, InputSourceLabel, error)
 	InvocationSubmitted(*interfaces.FactoryConfig, InputSourceLabel)
+	InvocationCompleted(*interfaces.FactoryConfig, InputSourceLabel, []interfaces.WorkContentPart)
+	InvocationFailed(*interfaces.FactoryConfig, InputSourceLabel, string)
 }
 
 // SessionInvocationLogger owns safe invocation boundary records coordinated by
@@ -62,6 +64,8 @@ type SessionInvocationLogger interface {
 	LogArgumentFailure(string, InputSourceLabel, *interfaces.FactoryConfig, *NormalizedArguments, error, string)
 	LogSubmissionFailure(string, InputSourceLabel, *interfaces.FactoryConfig, error)
 	LogInvocationSubmitted(string, InputSourceLabel, *interfaces.FactoryConfig, interfaces.WorkRequestSubmitResult)
+	LogInvocationCompleted(string, SessionInvocationWaitInput, PrimaryResultSelection)
+	LogInvocationFailed(string, SessionInvocationWaitInput, FactoryInvocationResult, string)
 }
 
 // SessionOwnerDependencies are the explicit runtime boundaries required to
@@ -69,9 +73,11 @@ type SessionInvocationLogger interface {
 type SessionOwnerDependencies struct {
 	FactoryConfig func(string) (*interfaces.FactoryConfig, error)
 	SubmitWork    func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error)
-	Wait          func(context.Context, string, SessionInvocationWaitInput) (FactoryInvocationResult, error)
+	Observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
+	WaitNext      func(context.Context) error
 	Metrics       SessionInvocationMetrics
 	Logger        SessionInvocationLogger
+	SpecialCase   SessionInvocationSpecialCase
 }
 
 // SessionOwner coordinates the complete session invocation lifecycle through
@@ -92,7 +98,7 @@ func (o *SessionOwner) InvokeFactorySession(
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (FactoryInvocationResult, error) {
-	if o == nil || o.deps.FactoryConfig == nil || o.deps.SubmitWork == nil || o.deps.Wait == nil {
+	if o == nil || o.deps.FactoryConfig == nil || o.deps.SubmitWork == nil || o.deps.Observe == nil {
 		return FactoryInvocationResult{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
 	}
 	factoryCfg, err := o.deps.FactoryConfig(sessionID)
@@ -141,7 +147,7 @@ func (o *SessionOwner) InvokeFactorySession(
 	if o.deps.Logger != nil {
 		o.deps.Logger.LogInvocationSubmitted(sessionID, resolved.Source, factoryCfg, submitResult)
 	}
-	return o.deps.Wait(ctx, sessionID, SessionInvocationWaitInput{
+	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
 		RequestID:        submitResult.RequestID,
 		TraceID:          submitResult.TraceID,
 		InputSource:      resolved.Source,
