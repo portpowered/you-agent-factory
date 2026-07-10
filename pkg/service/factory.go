@@ -15,16 +15,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -97,20 +98,20 @@ type serviceRunState struct {
 // session registry, pkg/localmodels owns managed model runtime wiring, and
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
-	runtimeMu      sync.RWMutex
-	activationMu   sync.RWMutex
-	runMu          sync.RWMutex
-	runState       *serviceRunState
-	apiServerExit  <-chan error
-	core           *FactoryCore
-	sessions       *factorysessions.Registry
-	factorySave    factorySaveSaver
-	sessionGateway sessionGateway
-	runtimeBuild      *runtimebuild.Service
-	workersScheduler  *workersservice.Service
-	hostedWorkers     hostedworkers.Config
-	factoryRootDir string
-	policy         serviceCoordinatorPolicy
+	runtimeMu        sync.RWMutex
+	activationMu     sync.RWMutex
+	runMu            sync.RWMutex
+	runState         *serviceRunState
+	apiServerExit    <-chan error
+	core             *FactoryCore
+	sessions         *factorysessions.Registry
+	factorySave      factorySaveSaver
+	sessionGateway   sessionGateway
+	runtimeBuild     *runtimebuild.Service
+	workersScheduler *workersservice.Service
+	hostedWorkers    hostedworkers.Config
+	factoryRootDir   string
+	policy           serviceCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
 	startupBundle            *factoryRuntimeBundle
 	cfg                      *FactoryServiceConfig
@@ -120,6 +121,7 @@ type FactoryService struct {
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
+	sessionInvoker           invocations.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream

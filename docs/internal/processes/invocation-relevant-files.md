@@ -3,8 +3,14 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
-- `pkg/invocations/` contains shared pure invocation contract logic used by CLI
-  and API adapters.
+- `pkg/invocations/` contains the shared invocation contract logic used by CLI
+  and API adapters plus the canonical Factory Session invocation owner.
+- `pkg/invocations/session_owner.go` owns live-session request normalization,
+  interpolation validation, default-handling Work submission, lifecycle
+  sequencing, and delegation to the event-derived result waiter. Keep session
+  configuration, Work submission, result waiting, metrics, and safe logging as
+  explicit collaborators; service and runtime-host facades should only adapt
+  those dependencies and forward `InvokeFactorySession` unchanged.
 - `pkg/invocations/arguments.go` owns signature-backed invocation argument
   normalization for positional, named, stdin, defaulted, repeated, variadic,
   alias-backed, and compatibility fallback inputs. Transport stories should
@@ -47,33 +53,25 @@ primary-result behavior.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/interfaces/factory_runtime.go` owns the backend canonical
-  `WorkContentPart` shape returned by invocation resolvers.
+  `WorkContentPart` and request-validation error shapes used below transport
+  and service boundaries; `pkg/invocations/session_owner.go` owns the shared
+  `FactoryInvocationResult` returned by the canonical owner.
 - `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
   backend-owned `interfaces.WorkContentPart` shape.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.
-- `pkg/service/runtime_sessions.go` owns the session-scoped invocation
-  orchestration that resolves API input, submits the default handling work
-  item, polls selected-tick world state, and maps timeout/cancel/unresolved
-  outcomes into `InvocationResponse`; it also owns invocation boundary logs and
-  optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
-- Live-session invocation request normalization lives in
-  `pkg/service/model_catalog.go` (`resolveSessionInvocationInput`). Keep API
-  `InvocationRequest.content` compatibility handling and
-  `InvocationRequest.args` signature handling as thin adapters into
-  `pkg/invocations.NormalizeArguments`; API structured args should use the
-  direct structured-argument carrier rather than being reinterpreted as CLI
-  named flags, so canonical parameter-name keys still work for positional-only
-  or stdin-bound parameters. Do not duplicate required-input, source-conflict,
-  alias, or string-shape rules in HTTP handlers. When signature-backed runtime
-  behavior needs per-invocation authored-field interpolation, carry the
-  normalized argument set on runtime-only `interfaces.InvocationArguments`
-  metadata and validate it through
-  `invocations.ValidateInvocationInterpolation` before submitting work. Treat
-  `args: {}` as an explicit structured invocation request, not as omitted args,
-  so all-optional or defaulted signatures stay transport-equivalent with CLI
-  invocation.
+- `pkg/service/model_catalog.go` and `pkg/runtimehost/model_catalog.go` retain
+  compatibility adapters for session config, canonical Work submission,
+  event-derived waiting, logs, and metrics. Their `InvokeFactorySession`
+  methods must remain transparent forwards to `invocations.SessionInvoker`;
+  request normalization, interpolation validation, and submission sequencing
+  belong only to `pkg/invocations/session_owner.go`.
+- API structured args use the direct structured-argument carrier rather than
+  being reinterpreted as CLI named flags, so canonical parameter-name keys
+  still work for positional-only or stdin-bound parameters. Treat `args: {}` as
+  an explicit structured invocation request, not as omitted args, so
+  all-optional or defaulted signatures stay transport-equivalent with CLI.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots

@@ -13,7 +13,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -23,11 +22,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	"go.uber.org/zap"
@@ -227,295 +225,163 @@ type sessionInvocationWaitInput struct {
 	TimeoutMillis    *int64
 }
 
-const invocationInputSourceStructuredArgs invocations.InputSourceLabel = "signature_args"
-
-type resolvedSessionInvocationInput struct {
-	Source              invocations.InputSourceLabel
-	Content             []interfaces.WorkContentPart
-	NormalizedArguments *invocations.NormalizedArguments
-}
-
 func (fs *FactoryService) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
+	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
+}
+
+func (fs *FactoryService) sessionInvocationOwner() invocations.SessionInvoker {
+	if fs.sessionInvoker != nil {
+		return fs.sessionInvoker
+	}
+	telemetry := serviceSessionInvocationTelemetry{service: fs}
+	return invocations.NewSessionOwner(invocations.SessionOwnerDependencies{
+		FactoryConfig: fs.sessionInvocationFactoryConfig,
+		SubmitWork:    fs.submitSessionInvocationWork,
+		Wait:          fs.waitForOwnedSessionInvocation,
+		Metrics:       telemetry,
+		Logger:        telemetry,
+	})
+}
+
+func (fs *FactoryService) sessionInvocationFactoryConfig(sessionID string) (*interfaces.FactoryConfig, error) {
 	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
 	if err != nil {
-		return apisurface.FactoryInvocationResult{}, err
+		return nil, err
 	}
-	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
-		return apisurface.FactoryInvocationResult{}, fmt.Errorf("factory session runtime config is unavailable")
+	if runtimeCfg == nil {
+		return nil, nil
 	}
-	factoryCfg := runtimeCfg.FactoryConfig()
-	sourceHint := sessionInvocationSourceHint(request)
-	fs.recordInvocationMetric(invocationMetricNormalizationAttempts, invocationMetricLabels(factoryCfg, sourceHint))
-
-	resolved, err := resolveSessionInvocationInput(factoryCfg, request)
-	if err != nil {
-		fs.recordInvocationMetric(
-			invocationMetricNormalizationFailure,
-			mergeMetricLabels(invocationMetricLabels(factoryCfg, sourceHint), invocationErrorMetricLabels(err)),
-		)
-		fs.logInvocationArgumentFailure(sessionID, sourceHint, factoryCfg, nil, err, "normalization_failure")
-		return apisurface.FactoryInvocationResult{}, err
-	}
-	fs.recordInvocationMetric(invocationMetricNormalizationSuccess, invocationMetricLabels(factoryCfg, resolved.Source))
-	if err := validateSessionInvocationInterpolation(factoryCfg, resolved.NormalizedArguments); err != nil {
-		return apisurface.FactoryInvocationResult{}, fs.handleSessionInvocationInterpolationFailure(
-			sessionID,
-			factoryCfg,
-			resolved,
-			err,
-		)
-	}
-
-	submitResult, err := fs.submitSessionInvocationRequest(ctx, sessionID, request, factoryCfg, resolved)
-	if err != nil {
-		fs.logInvocationFailure(
-			sessionID,
-			resolved.Source,
-			factoryCfg.InvocationReturn,
-			invocationMetricLabels(factoryCfg, resolved.Source),
-			"runtime_failure",
-			err,
-		)
-		return apisurface.FactoryInvocationResult{}, err
-	}
-	fs.recordSuccessfulSessionInvocation(sessionID, factoryCfg, resolved.Source, submitResult)
-	return fs.waitForSessionInvocationResult(
-		ctx,
-		sessionID,
-		sessionInvocationWaitInput{
-			RequestID:        submitResult.RequestID,
-			TraceID:          submitResult.TraceID,
-			InputSource:      resolved.Source,
-			InvocationReturn: factoryCfg.InvocationReturn,
-			FactoryConfig:    factoryCfg,
-			TimeoutMillis:    request.TimeoutMillis,
-		},
-	)
+	return runtimeCfg.FactoryConfig(), nil
 }
 
-func (fs *FactoryService) handleSessionInvocationInterpolationFailure(
-	sessionID string,
-	factoryCfg *interfaces.FactoryConfig,
-	resolved resolvedSessionInvocationInput,
-	err error,
-) error {
-	fs.recordInvocationMetric(
-		invocationMetricInterpolationFailure,
-		mergeMetricLabels(invocationMetricLabels(factoryCfg, resolved.Source), invocationErrorMetricLabels(err)),
-	)
-	fs.logInvocationArgumentFailure(sessionID, resolved.Source, factoryCfg, resolved.NormalizedArguments, err, "interpolation_failure")
-	return normalizeSessionInvocationError(err)
-}
-
-func (fs *FactoryService) submitSessionInvocationRequest(
+func (fs *FactoryService) submitSessionInvocationWork(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.InvocationRequest,
-	factoryCfg *interfaces.FactoryConfig,
-	resolved resolvedSessionInvocationInput,
+	request interfaces.SubmitRequest,
 ) (interfaces.WorkRequestSubmitResult, error) {
-	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(factoryCfg)
-	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, fmt.Errorf("resolve invocation work type: %w", err)
-	}
-	requestID := strings.TrimSpace(stringValue(request.RequestId))
-	submitRequest := interfaces.SubmitRequest{
-		RequestID:           requestID,
-		WorkTypeID:          workTypeName,
-		Content:             resolved.Content,
-		InvocationArguments: invocationArgumentsForSession(factoryCfg, resolved.NormalizedArguments),
-	}
 	return fs.SubmitWorkRequestForSession(
 		ctx,
 		sessionID,
-		factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitRequest}),
+		factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{request}),
 	)
 }
 
-func (fs *FactoryService) recordSuccessfulSessionInvocation(
+func (fs *FactoryService) waitForOwnedSessionInvocation(
+	ctx context.Context,
 	sessionID string,
-	factoryCfg *interfaces.FactoryConfig,
+	input invocations.SessionInvocationWaitInput,
+) (apisurface.FactoryInvocationResult, error) {
+	return fs.waitForSessionInvocationResult(ctx, sessionID, sessionInvocationWaitInput{
+		RequestID:        input.RequestID,
+		TraceID:          input.TraceID,
+		InputSource:      input.InputSource,
+		InvocationReturn: input.InvocationReturn,
+		FactoryConfig:    input.FactoryConfig,
+		TimeoutMillis:    input.TimeoutMillis,
+	})
+}
+
+type serviceSessionInvocationTelemetry struct {
+	service *FactoryService
+}
+
+func (t serviceSessionInvocationTelemetry) NormalizationAttempt(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel) {
+	t.service.recordInvocationMetric(invocationMetricNormalizationAttempts, invocationMetricLabels(cfg, source))
+}
+
+func (t serviceSessionInvocationTelemetry) NormalizationFailure(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel, err error) {
+	t.service.recordInvocationMetric(invocationMetricNormalizationFailure, mergeMetricLabels(invocationMetricLabels(cfg, source), invocationErrorMetricLabels(err)))
+}
+
+func (t serviceSessionInvocationTelemetry) NormalizationSuccess(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel) {
+	t.service.recordInvocationMetric(invocationMetricNormalizationSuccess, invocationMetricLabels(cfg, source))
+}
+
+func (t serviceSessionInvocationTelemetry) InterpolationFailure(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel, err error) {
+	t.service.recordInvocationMetric(invocationMetricInterpolationFailure, mergeMetricLabels(invocationMetricLabels(cfg, source), invocationErrorMetricLabels(err)))
+}
+
+func (t serviceSessionInvocationTelemetry) SubmissionFailure(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel, _ error) {
+	t.service.recordInvocationMetric(invocationMetricFailure, invocationMetricLabels(cfg, source))
+}
+
+func (t serviceSessionInvocationTelemetry) InvocationSubmitted(cfg *interfaces.FactoryConfig, source invocations.InputSourceLabel) {
+	t.service.recordInvocationMetric(invocationMetricAttempts, invocationMetricLabels(cfg, source))
+	if policyModeForInvocation(cfg.InvocationReturn) == invocationPolicyModeFallback {
+		t.service.recordInvocationMetric(invocationMetricFallbackPolicyUsed, invocationMetricLabels(cfg, source))
+	}
+	if tts.IsPackagedFactory(cfg) {
+		t.service.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryAttempts, source, nil)
+	}
+}
+
+func (t serviceSessionInvocationTelemetry) LogArgumentFailure(
+	sessionID string,
 	source invocations.InputSourceLabel,
-	submitResult interfaces.WorkRequestSubmitResult,
+	cfg *interfaces.FactoryConfig,
+	normalized *invocations.NormalizedArguments,
+	err error,
+	failureClass string,
 ) {
-	fs.recordInvocationMetric(invocationMetricAttempts, invocationMetricLabels(factoryCfg, source))
-	if policyModeForInvocation(factoryCfg.InvocationReturn) == invocationPolicyModeFallback {
-		fs.recordInvocationMetric(invocationMetricFallbackPolicyUsed, invocationMetricLabels(factoryCfg, source))
-	}
-	if tts.IsPackagedFactory(factoryCfg) {
-		fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryAttempts, source, nil)
-		fs.logger.Info(
-			"packaged tts invocation submitted",
-			packagedTTSInvocationLogFields(
-				sessionID,
-				source,
-				factoryCfg.InvocationReturn,
-				factoryCfg,
-				zap.String("request_id", submitResult.RequestID),
-				zap.String("trace_id", submitResult.TraceID),
-				zap.String("readiness_outcome", tts.FailureClassLoading),
-			)...,
-		)
-	}
-	fs.logger.Info(
-		"factory session invocation submitted",
+	t.service.logInvocationArgumentFailure(sessionID, source, cfg, normalized, err, failureClass)
+}
+
+func (t serviceSessionInvocationTelemetry) LogSubmissionFailure(
+	sessionID string,
+	source invocations.InputSourceLabel,
+	cfg *interfaces.FactoryConfig,
+	err error,
+) {
+	t.service.logger.Warn(
+		"factory session invocation failed",
 		invocationLogFields(
 			sessionID,
 			source,
-			factoryCfg.InvocationReturn,
-			factoryCfg,
-			zap.String("request_id", submitResult.RequestID),
-			zap.String("trace_id", submitResult.TraceID),
+			cfg.InvocationReturn,
+			nil,
+			zap.String("status", string(factoryapi.InvocationTerminalStatusFailed)),
+			zap.String("error_code", string(factoryapi.INVOCATIONRUNTIMEFAILURE)),
+			zap.String("failure_class", "runtime_failure"),
+			zap.Error(err),
 		)...,
 	)
 }
 
-func resolveSessionInvocationInput(
+func (t serviceSessionInvocationTelemetry) LogInvocationSubmitted(
+	sessionID string,
+	source invocations.InputSourceLabel,
 	cfg *interfaces.FactoryConfig,
-	request factoryapi.InvocationRequest,
-) (resolvedSessionInvocationInput, error) {
-	content, err := sessionInvocationCompatibilityContent(request)
-	if err != nil {
-		return resolvedSessionInvocationInput{}, err
+	result interfaces.WorkRequestSubmitResult,
+) {
+	if tts.IsPackagedFactory(cfg) {
+		t.service.logger.Info(
+			"packaged tts invocation submitted",
+			packagedTTSInvocationLogFields(
+				sessionID,
+				source,
+				cfg.InvocationReturn,
+				cfg,
+				zap.String("request_id", result.RequestID),
+				zap.String("trace_id", result.TraceID),
+				zap.String("readiness_outcome", tts.FailureClassLoading),
+			)...,
+		)
 	}
-	directArgs, err := sessionInvocationStructuredArgs(request)
-	if err != nil {
-		return resolvedSessionInvocationInput{}, err
-	}
-	argsProvided := request.Args != nil
-	signature := invocationSignatureFromFactoryConfig(cfg)
-
-	if !argsProvided {
-		return resolveCompatibilitySessionInvocationInput(content)
-	}
-	return resolveStructuredSessionInvocationInput(signature, directArgs, content)
-}
-
-func resolveCompatibilitySessionInvocationInput(
-	content []interfaces.WorkContentPart,
-) (resolvedSessionInvocationInput, error) {
-	if len(content) == 0 {
-		return resolvedSessionInvocationInput{}, &apisurface.RequestValidationError{
-			Message: "content is required when args are omitted",
-		}
-	}
-	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
-		CompatibilityContent: content,
-	})
-	if err != nil {
-		return resolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
-	}
-	if normalized.CompatibilityInput == nil {
-		return resolvedSessionInvocationInput{}, &apisurface.RequestValidationError{
-			Message: "content did not resolve to one logical invocation input",
-		}
-	}
-	return resolvedSessionInvocationInput{
-		Source:              normalized.CompatibilityInput.Source,
-		Content:             normalized.CompatibilityInput.Content,
-		NormalizedArguments: &normalized,
-	}, nil
-}
-
-func resolveStructuredSessionInvocationInput(
-	signature *interfaces.InvocationSignatureConfig,
-	directArgs []invocations.NamedArgumentInput,
-	content []interfaces.WorkContentPart,
-) (resolvedSessionInvocationInput, error) {
-	if signature == nil {
-		return resolvedSessionInvocationInput{}, &invocations.ArgumentError{
-			Code:     invocations.ArgumentErrorCodeInvalidActiveSignature,
-			Message:  "named arguments require a factory invocationSignature",
-			Argument: firstStructuredArgumentKey(directArgs),
-		}
-	}
-
-	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
-		Signature:            signature,
-		DirectArgs:           directArgs,
-		CompatibilityContent: content,
-	})
-	if err != nil {
-		return resolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
-	}
-	source := invocationInputSourceStructuredArgs
-	if normalized.CompatibilityInput != nil {
-		source = normalized.CompatibilityInput.Source
-	}
-	return resolvedSessionInvocationInput{
-		Source:              source,
-		Content:             nil,
-		NormalizedArguments: &normalized,
-	}, nil
-}
-
-func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest) ([]interfaces.WorkContentPart, error) {
-	if request.Content == nil {
-		if request.SourceKind != nil && *request.SourceKind != factoryapi.InvocationInputSourceKindText {
-			return nil, &apisurface.RequestValidationError{Message: "sourceKind must be text"}
-		}
-		return nil, nil
-	}
-	if request.SourceKind == nil || *request.SourceKind != factoryapi.InvocationInputSourceKindText {
-		return nil, &apisurface.RequestValidationError{Message: "sourceKind must be text"}
-	}
-	return workcontent.PartsFromGenerated(request.Content), nil
-}
-
-func sessionInvocationStructuredArgs(request factoryapi.InvocationRequest) ([]invocations.NamedArgumentInput, error) {
-	if request.Args == nil {
-		return nil, nil
-	}
-	directArgs, err := invocations.NamedArgumentInputsFromAnyMap(*request.Args)
-	if err != nil {
-		return nil, &apisurface.RequestValidationError{Message: err.Error()}
-	}
-	return directArgs, nil
-}
-
-func firstStructuredArgumentKey(arguments []invocations.NamedArgumentInput) string {
-	if len(arguments) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(arguments[0].Key)
-}
-
-func normalizeSessionInvocationError(err error) error {
-	var validationErr *invocations.TextContentValidationError
-	if errors.As(err, &validationErr) {
-		return &apisurface.RequestValidationError{
-			Message: validationErr.Message,
-		}
-	}
-	return err
-}
-
-func validateSessionInvocationInterpolation(
-	cfg *interfaces.FactoryConfig,
-	normalized *invocations.NormalizedArguments,
-) error {
-	return invocations.ValidateInvocationInterpolation(cfg, invocationArgumentsForSession(cfg, normalized))
-}
-
-func invocationArgumentsForSession(
-	cfg *interfaces.FactoryConfig,
-	normalized *invocations.NormalizedArguments,
-) *interfaces.InvocationArguments {
-	if cfg == nil {
-		return nil
-	}
-	return invocations.RuntimeInvocationArguments(cfg.InvocationSignature, normalized)
-}
-
-func invocationSignatureFromFactoryConfig(cfg *interfaces.FactoryConfig) *interfaces.InvocationSignatureConfig {
-	if cfg == nil {
-		return nil
-	}
-	return cfg.InvocationSignature
+	t.service.logger.Info(
+		"factory session invocation submitted",
+		invocationLogFields(
+			sessionID,
+			source,
+			cfg.InvocationReturn,
+			cfg,
+			zap.String("request_id", result.RequestID),
+			zap.String("trace_id", result.TraceID),
+		)...,
+	)
 }
 
 func (fs *FactoryService) waitForSessionInvocationResult(
@@ -772,30 +638,6 @@ func (fs *FactoryService) logInvocationTerminalResult(
 	)
 }
 
-func (fs *FactoryService) logInvocationFailure(
-	sessionID string,
-	source invocations.InputSourceLabel,
-	cfg *interfaces.InvocationReturnConfig,
-	labels map[string]string,
-	failureClass string,
-	err error,
-) {
-	fs.recordInvocationMetric(invocationMetricFailure, labels)
-	fs.logger.Warn(
-		"factory session invocation failed",
-		invocationLogFields(
-			sessionID,
-			source,
-			cfg,
-			nil,
-			zap.String("status", string(factoryapi.InvocationTerminalStatusFailed)),
-			zap.String("error_code", string(factoryapi.INVOCATIONRUNTIMEFAILURE)),
-			zap.String("failure_class", failureClass),
-			zap.Error(err),
-		)...,
-	)
-}
-
 func (fs *FactoryService) logInvocationArgumentFailure(
 	sessionID string,
 	source invocations.InputSourceLabel,
@@ -941,13 +783,6 @@ func cloneMetricLabels(labels map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
-}
-
-func sessionInvocationSourceHint(request factoryapi.InvocationRequest) invocations.InputSourceLabel {
-	if request.Args != nil {
-		return invocationInputSourceStructuredArgs
-	}
-	return invocations.InputSourceLabel(invocations.ArgumentSourceKindCompatibilityContent)
 }
 
 func invocationFactoryMetricLabels(factoryCfg *interfaces.FactoryConfig) map[string]string {
