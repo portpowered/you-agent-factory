@@ -27,6 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -36,10 +37,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
@@ -111,20 +111,20 @@ type hostRunState struct {
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 // pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
 type Host struct {
-	runtimeMu      sync.RWMutex
-	activationMu   sync.RWMutex
-	runMu          sync.RWMutex
-	runState       *hostRunState
-	apiServerExit  <-chan error
-	core           *Core
-	sessions       *factorysessions.Registry
-	factorySave    FactorySaveSaver
-	sessionGateway SessionGateway
-	runtimeBuild   *runtimebuild.Service
+	runtimeMu        sync.RWMutex
+	activationMu     sync.RWMutex
+	runMu            sync.RWMutex
+	runState         *hostRunState
+	apiServerExit    <-chan error
+	core             *Core
+	sessions         *factorysessions.Registry
+	factorySave      FactorySaveSaver
+	sessionGateway   SessionGateway
+	runtimeBuild     *runtimebuild.Service
 	workersScheduler *workersservice.Service
 	hostedWorkers    hostedworkers.Config
-	factoryRootDir string
-	policy         hostCoordinatorPolicy
+	factoryRootDir   string
+	policy           hostCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
 	startupBundle            *factoryRuntimeBundle
 	cfg                      *Config
@@ -444,6 +444,16 @@ func (fs *Host) replacementExecutionBaseDir(folderPath string, factoryDir string
 // It blocks until ctx is cancelled or the factory reaches a terminal state.
 // portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
 func (fs *Host) Run(ctx context.Context) error {
+	return fs.run(ctx, fs)
+}
+
+// RunWithAPISurface starts the runtime lifecycle while supplying independently
+// composed HTTP handler dependencies to the configured API server starter.
+func (fs *Host) RunWithAPISurface(ctx context.Context, surface apisurface.APISurface) error {
+	return fs.run(ctx, surface)
+}
+
+func (fs *Host) run(ctx context.Context, surface apisurface.APISurface) error {
 	runCtx, cancelRunSidecars := context.WithCancel(ctx)
 	var sidecars sync.WaitGroup
 	var currentRuntime *liveRuntimeHandle
@@ -468,7 +478,7 @@ func (fs *Host) Run(ctx context.Context) error {
 	if err := fs.prepareRunInputs(ctx, serviceMode); err != nil {
 		return err
 	}
-	currentRuntime, err := fs.startRunRuntime(ctx, runCtx, &sidecars, serviceMode)
+	currentRuntime, err := fs.startRunRuntime(ctx, runCtx, &sidecars, serviceMode, surface)
 	if err != nil {
 		return err
 	}
@@ -500,12 +510,13 @@ func (fs *Host) startRunRuntime(
 	runCtx context.Context,
 	sidecars *sync.WaitGroup,
 	serviceMode bool,
+	surface apisurface.APISurface,
 ) (*liveRuntimeHandle, error) {
 	currentRuntime, err := fs.StartDefaultRuntime(ctx, runCtx, serviceMode)
 	if err != nil {
 		return nil, err
 	}
-	fs.startAPIServerSidecar(runCtx, sidecars)
+	fs.startAPIServerSidecar(runCtx, sidecars, surface)
 	if err := fs.waitForServiceModeStartupWorkReadability(ctx, serviceMode); err != nil {
 		return nil, fs.failServiceModeStartup(currentRuntime, err)
 	}
@@ -626,7 +637,11 @@ func (c *runtimeCoordinator) StartDefaultRuntime(
 	return currentRuntime, nil
 }
 
-func (fs *Host) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
+func (fs *Host) startAPIServerSidecar(
+	runCtx context.Context,
+	sidecars *sync.WaitGroup,
+	surface apisurface.APISurface,
+) {
 	if fs.cfg.APIServerStarter == nil || fs.cfg.Port <= 0 {
 		fs.apiServerExit = nil
 		return
@@ -636,7 +651,7 @@ func (fs *Host) startAPIServerSidecar(runCtx context.Context, sidecars *sync.Wai
 	sidecars.Add(1)
 	go func() {
 		defer sidecars.Done()
-		err := fs.cfg.APIServerStarter(runCtx, fs, fs.cfg.Port, fs.logger)
+		err := fs.cfg.APIServerStarter(runCtx, surface, fs.cfg.Port, fs.logger)
 		apiServerExit <- err
 		close(apiServerExit)
 		if err != nil {

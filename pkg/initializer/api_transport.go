@@ -12,6 +12,7 @@ import (
 type APITransport struct {
 	Services *Services
 	Host     *SessionRuntimeHost
+	surface  apisurface.SessionAPISurface
 }
 
 // InitializeAPITransport loads factory configuration, composes domain services,
@@ -21,18 +22,48 @@ func InitializeAPITransport(ctx context.Context, cfg *Config) (*APITransport, er
 	if err != nil {
 		return nil, err
 	}
-	return &APITransport{
-		Services: servicesFromCore(core),
-		Host:     NewSessionRuntimeHostFromCore(core, cfg),
-	}, nil
+	services := servicesFromCore(core)
+	host := NewSessionRuntimeHostFromCore(core, cfg)
+	surface, err := composeSessionAPISurface(services, host)
+	if err != nil {
+		return nil, err
+	}
+	return &APITransport{Services: services, Host: host, surface: surface}, nil
+}
+
+func composeSessionAPISurface(
+	services *Services,
+	host *SessionRuntimeHost,
+) (apisurface.SessionAPISurface, error) {
+	var model apisurface.ModelAPI
+	if services != nil {
+		model = services.Models
+	}
+	var session apisurface.SessionAPI
+	var factoryDefinition apisurface.FactorySaveAPI
+	var invocation apisurface.InvocationAPI
+	var durableExecution apisurface.DurableSessionExecutionAPI
+	if host != nil {
+		session = host.SessionAPI()
+		factoryDefinition = host.FactoryDefinitionAPI()
+		invocation = host.InvocationAPI()
+		durableExecution = host.DurableExecutionAPI()
+	}
+	return apisurface.NewSessionAPISurface(
+		session,
+		model,
+		factoryDefinition,
+		invocation,
+		durableExecution,
+	)
 }
 
 // SessionAPISurface returns handler dependencies for api.NewServer.
 func (t *APITransport) SessionAPISurface() apisurface.SessionAPISurface {
-	if t == nil || t.Host == nil {
+	if t == nil {
 		return nil
 	}
-	return t.Host.SessionAPISurface()
+	return t.surface
 }
 
 // Run starts the session runtime loop for service-mode API hosting.
@@ -40,5 +71,5 @@ func (t *APITransport) Run(ctx context.Context) error {
 	if t == nil || t.Host == nil {
 		return nil
 	}
-	return t.Host.Run(ctx)
+	return t.Host.RunWithAPISurface(ctx, t.surface)
 }

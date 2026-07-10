@@ -41,12 +41,56 @@ func (h *SessionRuntimeHost) SessionAPISurface() apisurface.SessionAPISurface {
 	return h.host
 }
 
+// SessionAPI returns the session lifecycle and session-scoped work collaborator.
+func (h *SessionRuntimeHost) SessionAPI() apisurface.SessionAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host
+}
+
+// FactoryDefinitionAPI returns the factory-definition read/write collaborator.
+func (h *SessionRuntimeHost) FactoryDefinitionAPI() apisurface.FactorySaveAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host
+}
+
+// InvocationAPI returns the session invocation collaborator.
+func (h *SessionRuntimeHost) InvocationAPI() apisurface.InvocationAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host
+}
+
+// DurableExecutionAPI returns the durable execution collaborator.
+func (h *SessionRuntimeHost) DurableExecutionAPI() apisurface.DurableSessionExecutionAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host
+}
+
 // Run starts service-mode sidecars and the default session runtime loop.
 func (h *SessionRuntimeHost) Run(ctx context.Context) error {
 	if h == nil || h.host == nil {
 		return nil
 	}
 	return h.host.Run(ctx)
+}
+
+// RunWithAPISurface starts lifecycle-owned runtime work while providing the
+// independently composed handler surface to API startup.
+func (h *SessionRuntimeHost) RunWithAPISurface(
+	ctx context.Context,
+	surface apisurface.SessionAPISurface,
+) error {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host.RunWithAPISurface(ctx, surface)
 }
 
 // LocalRuntimeRunner returns the local in-process CLI runtime seam implemented
