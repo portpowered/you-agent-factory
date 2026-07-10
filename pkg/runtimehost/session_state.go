@@ -7,16 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	"go.uber.org/zap"
 )
 
 // LiveSessionState tracks per-session runtime state attached to live session handles.
@@ -127,52 +123,6 @@ func CoordinatorPolicyFromConfig(cfg *Config) hostCoordinatorPolicy {
 		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
 		commandRunnerOverride:         cfg.CommandRunnerOverride,
 	}
-}
-
-func (h *Host) renderDashboard(ctx context.Context) {
-	now := factory.EnsureClock(h.clock).Now()
-	input, err := h.buildSimpleDashboardRenderInput(ctx, now)
-	if err != nil {
-		if h.logger != nil {
-			h.logger.Error("simple dashboard render failed", zap.Error(err))
-		}
-		return
-	}
-	h.cfg.SimpleDashboardRenderer(input)
-}
-
-func (h *Host) buildSimpleDashboardRenderInput(ctx context.Context, now time.Time) (SimpleDashboardRenderInput, error) {
-	es, err := h.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return SimpleDashboardRenderInput{}, err
-	}
-	renderData, err := h.simpleDashboardRenderData(ctx, es.TickCount, es.ActiveThrottlePauses)
-	if err != nil {
-		return SimpleDashboardRenderInput{}, err
-	}
-	return SimpleDashboardRenderInput{
-		EngineState: *es,
-		RenderData:  renderData,
-		Now:         now,
-	}, nil
-}
-
-func (h *Host) simpleDashboardRenderData(
-	ctx context.Context,
-	selectedTick int,
-	activeThrottlePauses []interfaces.ActiveThrottlePause,
-) (dashboardrender.SimpleDashboardRenderData, error) {
-	events, err := h.GetFactoryEvents(ctx)
-	if err != nil {
-		return dashboardrender.SimpleDashboardRenderData{}, err
-	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
-	if err != nil {
-		return dashboardrender.SimpleDashboardRenderData{}, err
-	}
-	renderData := dashboardrender.SimpleDashboardRenderDataFromWorldState(worldState)
-	renderData.ActiveThrottlePauses = projections.ProjectActiveThrottlePauses(worldState.Topology, activeThrottlePauses)
-	return renderData, nil
 }
 
 // RuntimeLogDiagnostics describes the active runtime log selected during host construction.

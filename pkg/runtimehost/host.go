@@ -458,7 +458,8 @@ func (fs *Host) replacementExecutionBaseDir(folderPath string, factoryDir string
 	return ""
 }
 
-// Run starts the file watcher, dashboard, API server, and factory engine.
+// Run starts runtime-owned sidecars and the factory engine. Process-level
+// presentation sidecars are composed and owned outside Host.
 // It blocks until ctx is cancelled or the factory reaches a terminal state.
 // portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
 func (fs *Host) Run(ctx context.Context) error {
