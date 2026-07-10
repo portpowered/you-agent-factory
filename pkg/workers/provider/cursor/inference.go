@@ -64,9 +64,10 @@ type InferenceResult struct {
 
 // ParseFailure classifies Cursor JSON parse failures for the provider layer.
 type ParseFailure struct {
-	Type    interfaces.WorkFailureType
-	Message string
-	Cause   error
+	Type            interfaces.WorkFailureType
+	Message         string
+	ProviderSession *interfaces.ProviderSessionMetadata
+	Cause           error
 }
 
 func (f *ParseFailure) Error() string {
@@ -102,10 +103,7 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 		return nil, resultErrorSubtype(provider, payload)
 	}
 	if payload.IsError {
-		return nil, &ParseFailure{
-			Type:    interfaces.WorkFailureTypeInternalServerError,
-			Message: "cursor JSON result reported is_error=true",
-		}
+		return nil, resultErrorSubtype(provider, payload)
 	}
 
 	session := canonicalProviderSession(provider, payload.SessionID)
@@ -121,13 +119,12 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 }
 
 func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
-	message := fmt.Sprintf("cursor JSON output had subtype %q", payload.Subtype)
-	if strings.TrimSpace(payload.Result) != "" {
-		message += ": " + boundedTrimmedText(payload.Result, PublishedDiagnosticLimit)
-	}
+	_ = provider
+	failure := failureResultFromPayload(payload)
 	return &ParseFailure{
-		Type:    interfaces.WorkFailureTypeInternalServerError,
-		Message: message,
+		Type:            failure.Reason,
+		Message:         failure.Message,
+		ProviderSession: failure.ProviderSession,
 	}
 }
 

@@ -102,6 +102,25 @@ func TestParseInferenceResult_StreamJSONIgnoresMalformedAndUnknownLinesBeforeRes
 	}
 }
 
+func TestParseInferenceResult_StreamJSONUsesLastTerminalResult(t *testing.T) {
+	stdout := []byte(
+		"{\"type\":\"result\",\"subtype\":\"api_error\",\"is_error\":true,\"result\":\"old server failure\",\"session_id\":\"old-session\"}\n" +
+			"{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"ignored\"}]}}\n" +
+			"{\"type\":\"result\",\"subtype\":\"rate_limit_error\",\"is_error\":true,\"result\":\"Cursor capacity is busy\",\"session_id\":\"final-session\"}\n",
+	)
+
+	parsed, failure := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if parsed != nil {
+		t.Fatalf("parsed result = %#v, want no successful response", parsed)
+	}
+	if failure == nil || failure.Type != interfaces.WorkFailureTypeThrottled || failure.Message != "Cursor capacity is busy" {
+		t.Fatalf("failure = %#v, want final throttling result", failure)
+	}
+	if failure.ProviderSession == nil || failure.ProviderSession.ID != "final-session" {
+		t.Fatalf("provider session = %#v, want final-session", failure.ProviderSession)
+	}
+}
+
 func TestParseInferenceResult_MissingSessionID(t *testing.T) {
 	stdout := []byte(`{
 		"type": "result",
@@ -176,7 +195,7 @@ func TestParseInferenceResult_UnexpectedType(t *testing.T) {
 }
 
 func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
-	oversizedResult := strings.Repeat("x", PublishedDiagnosticLimit+20)
+	oversizedResult := strings.Repeat("x", FailureMessageLimit+20)
 	stdout := []byte(`{
 		"type": "result",
 		"subtype": "error",
@@ -189,11 +208,8 @@ func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected parse error for error subtype")
 	}
-	if err.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("error type = %q, want internal_server_error", err.Type)
-	}
-	if !strings.Contains(err.Message, `cursor JSON output had subtype "error": `) {
-		t.Fatalf("error message = %q, want subtype detail", err.Message)
+	if err.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 	if !strings.Contains(err.Message, "...") {
 		t.Fatalf("error message = %q, want bounded result preview", err.Message)

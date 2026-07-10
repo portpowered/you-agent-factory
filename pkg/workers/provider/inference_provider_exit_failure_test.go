@@ -19,11 +19,62 @@ func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndC
 	}
 }
 
-func TestScriptWrapProvider_Infer_CursorAndCodexExitFailuresKeepCodexDerivedBehavior(t *testing.T) {
+func TestScriptWrapProvider_Infer_CodexExitFailuresKeepCodexBehavior(t *testing.T) {
 	for _, tc := range codexDerivedExitFailureTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			assertInferenceExitFailure(t, tc)
 		})
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorTerminalFailureUsesCanonicalResultAndDecision(t *testing.T) {
+	stdout := []byte(strings.Join([]string{
+		`{"type":"system","subtype":"init","session_id":"cursor-terminal-session"}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"private transcript"}]}}`,
+		`{malformed}`,
+		`{"type":"result","subtype":"rate_limit_error","is_error":true,"result":"Cursor model capacity is busy","session_id":"cursor-terminal-session"}`,
+	}, "\n"))
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{
+			ExitCode: 1,
+			Stdout:   stdout,
+			Stderr:   []byte("unrelated invalid API key"),
+		}}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-terminal-failure"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		Model:         "gpt-5",
+		UserMessage:   "private prompt",
+	})
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	assertNormalizedProviderFailure(t, providerErr, normalizedProviderFailureExpectation{
+		wantType:          interfaces.WorkFailureTypeThrottled,
+		wantFamily:        interfaces.WorkFailureFamilyThrottle,
+		wantMessage:       "Cursor model capacity is busy",
+		wantRetryable:     true,
+		wantThrottlePause: true,
+		rejectTexts:       []string{"private prompt", "private transcript", "invalid API key"},
+	})
+	if providerErr.ProviderSession == nil || providerErr.ProviderSession.ID != "cursor-terminal-session" {
+		t.Fatalf("provider session = %#v, want cursor-terminal-session", providerErr.ProviderSession)
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind || published[0].Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want canonical failure message", published)
+	}
+	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != "cursor-terminal-session" {
+		t.Fatalf("published provider session = %#v, want cursor-terminal-session", published[0].ProviderSessionRef)
 	}
 }
 
@@ -125,13 +176,6 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 
 func codexDerivedExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
-		{
-			name:        "CursorUsesCodexErrorExtraction",
-			provider:    string(interfaces.ModelProviderCursor),
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
-			wantMessage: "ERROR: unexpected status 500 from cursor upstream",
-			wantType:    interfaces.WorkFailureTypeInternalServerError,
-		},
 		{
 			name:        "CodexUsesCodexErrorExtraction",
 			provider:    string(interfaces.ModelProviderCodex),
