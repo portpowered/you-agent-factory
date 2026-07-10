@@ -80,10 +80,38 @@ func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
 	if failure, ok := lastOpenCodeTextFailure(streams, result.ExitCode); ok {
 		return failure
 	}
+	if excerpt, ok := lastSafeOpenCodeUnknownExcerpt(streams); ok {
+		return ProviderFailureResult{
+			Reason:  interfaces.WorkFailureTypeUnknown,
+			Message: excerpt,
+		}
+	}
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeUnknown,
 		Message: fmt.Sprintf("opencode exited with code %d", result.ExitCode),
 	}
+}
+
+func lastSafeOpenCodeUnknownExcerpt(streams []string) (string, bool) {
+	var last string
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if failure, ok := decodeOpenCodeStructuredFailure(trimmed); ok {
+				if excerpt, safe := safeOpenCodeFailureDetail(failure.Message); safe {
+					last = excerpt
+				}
+				continue
+			}
+			if !openCodeErrorTextLine(trimmed) {
+				continue
+			}
+			if excerpt, safe := safeOpenCodeFailureDetail(trimmed); safe {
+				last = excerpt
+			}
+		}
+	}
+	return last, last != ""
 }
 
 func lastOpenCodeStructuredFailure(streams []string) (ProviderFailureResult, bool) {

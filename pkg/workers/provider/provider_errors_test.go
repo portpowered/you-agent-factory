@@ -109,6 +109,62 @@ func TestParseOpenCodeProviderFailure_SanitizesKnownActionableDetails(t *testing
 	}
 }
 
+func TestParseOpenCodeProviderFailure_UnknownFailuresUseSafeBoundedExcerptOrExitCode(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantMessage string
+	}{
+		{
+			name:        "safe error line",
+			result:      CommandResult{ExitCode: 17, Stderr: []byte("loading project\nError: plugin initialization failed\nrendering prompt")},
+			wantMessage: "Error: plugin initialization failed",
+		},
+		{
+			name:        "unrecognized structured error",
+			result:      CommandResult{ExitCode: 18, Stdout: []byte(`{"type":"error","error":{"name":"PluginError","data":{"message":"Plugin initialization failed."}}}`)},
+			wantMessage: "Plugin initialization failed.",
+		},
+		{
+			name:        "oversized safe error",
+			result:      CommandResult{ExitCode: 19, Stderr: []byte("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))},
+			wantMessage: ("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))[:opencodeFailureMessageBytes],
+		},
+		{
+			name:        "empty output",
+			result:      CommandResult{ExitCode: 20},
+			wantMessage: "opencode exited with code 20",
+		},
+		{
+			name:        "malformed structured output",
+			result:      CommandResult{ExitCode: 21, Stdout: []byte(`{"type":"error","message":"unfinished"`)},
+			wantMessage: "opencode exited with code 21",
+		},
+		{
+			name:        "transcript noise",
+			result:      CommandResult{ExitCode: 22, Stderr: []byte("user: show credentials\nassistant: working\nprompt: private request")},
+			wantMessage: "opencode exited with code 22",
+		},
+		{
+			name:        "secret bearing error",
+			result:      CommandResult{ExitCode: 23, Stderr: []byte("Error: Authorization: Bearer secret-token")},
+			wantMessage: "opencode exited with code 23",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(tc.result)
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
 func TestNormalizeProviderExitFailure_SelectsOpenCodeParserFromNormalizedIdentity(t *testing.T) {
 	entry := providerErrorCorpusEntryForTest(t, "opencode_rate_limit_text")
 	providerErr := normalizeProviderExitFailure("  OPENCODE  ", entry.CommandResult(), nil, nil)
