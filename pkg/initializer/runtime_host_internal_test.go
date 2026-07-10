@@ -46,7 +46,7 @@ func TestSessionRuntimeHostCancelsAndJoinsDashboardBeforeReturning(t *testing.T)
 	releaseRender := make(chan struct{})
 	sidecar, err := initializerdashboard.NewDashboardSidecar(initializerdashboard.DashboardSidecarConfig{
 		Reader: testDashboardReader{},
-		Renderer: blockingDashboardRenderer{
+		Renderer: &blockingDashboardRenderer{
 			started: renderStarted,
 			release: releaseRender,
 		},
@@ -88,6 +88,59 @@ func TestSessionRuntimeHostCancelsAndJoinsDashboardBeforeReturning(t *testing.T)
 	}
 }
 
+func TestSessionRuntimeHostRendersFinalDashboardAfterJoiningPeriodicLoop(t *testing.T) {
+	t.Parallel()
+
+	ready := make(chan struct{})
+	tickerStopped := make(chan struct{})
+	finalRenderStarted := make(chan struct{})
+	releaseFinalRender := make(chan struct{})
+	timing := &lifecycleDashboardTiming{
+		started: make(chan struct{}),
+		ticker: &lifecycleDashboardTicker{
+			ticks:   make(chan time.Time),
+			stopped: tickerStopped,
+		},
+	}
+	sidecar, err := initializerdashboard.NewDashboardSidecar(initializerdashboard.DashboardSidecarConfig{
+		Reader: testDashboardReader{},
+		Renderer: &blockingDashboardRenderer{
+			started: finalRenderStarted,
+			release: releaseFinalRender,
+		},
+		Timing: timing,
+		Ready:  func() { close(ready) },
+	})
+	if err != nil {
+		t.Fatalf("NewDashboardSidecar: %v", err)
+	}
+
+	runReturned := make(chan error, 1)
+	host := &SessionRuntimeHost{dashboard: sidecar}
+	go func() {
+		runReturned <- host.runWithDashboard(context.Background(), func(context.Context) error {
+			<-ready
+			return nil
+		})
+	}()
+
+	<-finalRenderStarted
+	select {
+	case <-tickerStopped:
+	default:
+		t.Fatal("final dashboard render started before periodic loop was joined")
+	}
+	select {
+	case err := <-runReturned:
+		t.Fatalf("runWithDashboard returned before final render completed: %v", err)
+	default:
+	}
+	close(releaseFinalRender)
+	if err := <-runReturned; err != nil {
+		t.Fatalf("runWithDashboard: %v", err)
+	}
+}
+
 type testDashboardReader struct{}
 
 func (testDashboardReader) ReadDashboard(context.Context, time.Time) (initializerdashboard.DashboardRenderInput, error) {
@@ -107,11 +160,14 @@ func (nilTickerTiming) NewTicker(time.Duration) initializerdashboard.DashboardTi
 type blockingDashboardRenderer struct {
 	started chan<- struct{}
 	release <-chan struct{}
+	once    sync.Once
 }
 
-func (r blockingDashboardRenderer) RenderDashboard(initializerdashboard.DashboardRenderInput) {
-	close(r.started)
-	<-r.release
+func (r *blockingDashboardRenderer) RenderDashboard(initializerdashboard.DashboardRenderInput) {
+	r.once.Do(func() {
+		close(r.started)
+		<-r.release
+	})
 }
 
 type lifecycleDashboardTiming struct {

@@ -97,6 +97,7 @@ func (h *SessionRuntimeHost) runWithDashboard(ctx context.Context, runHost func(
 	case err := <-hostErr:
 		cancel()
 		sidecarErr := <-dashboardErr
+		h.dashboard.RenderFinal(ctx)
 		if err != nil {
 			return err
 		}

@@ -122,6 +122,16 @@ func (s *DashboardSidecar) Run(ctx context.Context) error {
 	}
 }
 
+// RenderFinal emits the shutdown snapshot after the periodic loop has exited.
+// The process owner calls this synchronously so shutdown cannot return before
+// the final operator-visible dashboard output is complete.
+func (s *DashboardSidecar) RenderFinal(ctx context.Context) {
+	if s == nil {
+		return
+	}
+	s.render(ctx)
+}
+
 func (s *DashboardSidecar) render(ctx context.Context) {
 	input, err := s.reader.ReadDashboard(ctx, s.timing.Now())
 	if err != nil {
