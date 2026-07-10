@@ -46,8 +46,9 @@ type SessionInvocationWaitInput struct {
 	TimeoutMillis    *int64
 }
 
-// SessionInvocationMetrics owns counter emissions coordinated by SessionOwner.
-type SessionInvocationMetrics interface {
+// SessionInvocationTelemetry owns metric and safe-log emissions coordinated by
+// SessionOwner.
+type SessionInvocationTelemetry interface {
 	NormalizationAttempt(*interfaces.FactoryConfig, InputSourceLabel)
 	NormalizationFailure(*interfaces.FactoryConfig, InputSourceLabel, error)
 	NormalizationSuccess(*interfaces.FactoryConfig, InputSourceLabel)
@@ -56,11 +57,6 @@ type SessionInvocationMetrics interface {
 	InvocationSubmitted(*interfaces.FactoryConfig, InputSourceLabel)
 	InvocationCompleted(*interfaces.FactoryConfig, InputSourceLabel, []interfaces.WorkContentPart)
 	InvocationFailed(*interfaces.FactoryConfig, InputSourceLabel, string)
-}
-
-// SessionInvocationLogger owns safe invocation boundary records coordinated by
-// SessionOwner. Implementations must not log invocation payloads or secrets.
-type SessionInvocationLogger interface {
 	LogArgumentFailure(string, InputSourceLabel, *interfaces.FactoryConfig, *NormalizedArguments, error, string)
 	LogSubmissionFailure(string, InputSourceLabel, *interfaces.FactoryConfig, error)
 	LogInvocationSubmitted(string, InputSourceLabel, *interfaces.FactoryConfig, interfaces.WorkRequestSubmitResult)
@@ -75,8 +71,7 @@ type SessionOwnerDependencies struct {
 	SubmitWork    func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error)
 	Observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	WaitNext      func(context.Context) error
-	Metrics       SessionInvocationMetrics
-	Logger        SessionInvocationLogger
+	Telemetry     SessionInvocationTelemetry
 	SpecialCase   SessionInvocationSpecialCase
 }
 
@@ -133,19 +128,15 @@ func (o *SessionOwner) InvokeFactorySession(
 		InvocationArguments: RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
 	})
 	if err != nil {
-		if o.deps.Metrics != nil {
-			o.deps.Metrics.SubmissionFailure(factoryCfg, resolved.Source, err)
-		}
-		if o.deps.Logger != nil {
-			o.deps.Logger.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
+		if o.deps.Telemetry != nil {
+			o.deps.Telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
+			o.deps.Telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
 		}
 		return FactoryInvocationResult{}, err
 	}
-	if o.deps.Metrics != nil {
-		o.deps.Metrics.InvocationSubmitted(factoryCfg, resolved.Source)
-	}
-	if o.deps.Logger != nil {
-		o.deps.Logger.LogInvocationSubmitted(sessionID, resolved.Source, factoryCfg, submitResult)
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.InvocationSubmitted(factoryCfg, resolved.Source)
+		o.deps.Telemetry.LogInvocationSubmitted(sessionID, resolved.Source, factoryCfg, submitResult)
 	}
 	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
 		RequestID:        submitResult.RequestID,
@@ -278,23 +269,21 @@ func SessionInvocationSourceHint(request factoryapi.InvocationRequest) InputSour
 }
 
 func (o *SessionOwner) normalizationAttempt(cfg *interfaces.FactoryConfig, source InputSourceLabel) {
-	if o.deps.Metrics != nil {
-		o.deps.Metrics.NormalizationAttempt(cfg, source)
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.NormalizationAttempt(cfg, source)
 	}
 }
 
 func (o *SessionOwner) normalizationFailure(sessionID string, cfg *interfaces.FactoryConfig, source InputSourceLabel, err error) {
-	if o.deps.Metrics != nil {
-		o.deps.Metrics.NormalizationFailure(cfg, source, err)
-	}
-	if o.deps.Logger != nil {
-		o.deps.Logger.LogArgumentFailure(sessionID, source, cfg, nil, err, "normalization_failure")
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.NormalizationFailure(cfg, source, err)
+		o.deps.Telemetry.LogArgumentFailure(sessionID, source, cfg, nil, err, "normalization_failure")
 	}
 }
 
 func (o *SessionOwner) normalizationSuccess(cfg *interfaces.FactoryConfig, source InputSourceLabel) {
-	if o.deps.Metrics != nil {
-		o.deps.Metrics.NormalizationSuccess(cfg, source)
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.NormalizationSuccess(cfg, source)
 	}
 }
 
@@ -304,10 +293,8 @@ func (o *SessionOwner) interpolationFailure(
 	resolved ResolvedSessionInvocationInput,
 	err error,
 ) {
-	if o.deps.Metrics != nil {
-		o.deps.Metrics.InterpolationFailure(cfg, resolved.Source, err)
-	}
-	if o.deps.Logger != nil {
-		o.deps.Logger.LogArgumentFailure(sessionID, resolved.Source, cfg, resolved.NormalizedArguments, err, "interpolation_failure")
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.InterpolationFailure(cfg, resolved.Source, err)
+		o.deps.Telemetry.LogArgumentFailure(sessionID, resolved.Source, cfg, resolved.NormalizedArguments, err, "interpolation_failure")
 	}
 }

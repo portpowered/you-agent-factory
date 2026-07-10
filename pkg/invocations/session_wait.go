@@ -32,10 +32,7 @@ type SessionInvocationSpecialFailure struct {
 // classification and telemetry at explicit points in the canonical wait loop.
 type SessionInvocationSpecialCase interface {
 	Active(*interfaces.FactoryConfig) bool
-	InvocationActive(string, SessionInvocationWaitInput)
-	InvocationCompleted(string, SessionInvocationWaitInput, PrimaryResultSelection)
 	TerminalFailure(interfaces.FactoryWorldState, string) *SessionInvocationSpecialFailure
-	InvocationFailed(string, SessionInvocationWaitInput, SessionInvocationSpecialFailure)
 }
 
 func (o *SessionOwner) waitForResult(
@@ -54,7 +51,9 @@ func (o *SessionOwner) waitForResult(
 			return o.waitErrorResult(sessionID, input, err)
 		}
 		if packaged && observation.ActiveWork && !loggedActive {
-			o.deps.SpecialCase.InvocationActive(sessionID, input)
+			if telemetry, ok := o.deps.Telemetry.(SessionInvocationPackagedTelemetry); ok {
+				telemetry.PackagedInvocationActive(sessionID, input)
+			}
 			loggedActive = true
 		}
 		if result, done, err := o.resolveObservation(sessionID, input, observation, packaged); done {
@@ -78,7 +77,9 @@ func (o *SessionOwner) resolveObservation(
 	selection, err := ResolvePrimaryResult(selectionInput)
 	if err == nil {
 		if packaged {
-			o.deps.SpecialCase.InvocationCompleted(sessionID, input, selection)
+			if telemetry, ok := o.deps.Telemetry.(SessionInvocationPackagedTelemetry); ok {
+				telemetry.PackagedInvocationCompleted(sessionID, input, selection)
+			}
 		}
 		return o.completedResult(sessionID, input, selection), true, nil
 	}
@@ -116,7 +117,9 @@ func (o *SessionOwner) resolveStoppedInvocation(
 				ErrorCode: failure.ErrorCode, Message: failure.Message,
 			}
 			o.recordFailure(sessionID, input, result, failure.FailureClass)
-			o.deps.SpecialCase.InvocationFailed(sessionID, input, *failure)
+			if telemetry, ok := o.deps.Telemetry.(SessionInvocationPackagedTelemetry); ok {
+				telemetry.PackagedInvocationFailed(sessionID, input, *failure)
+			}
 			return result
 		}
 	}
@@ -141,11 +144,9 @@ func (o *SessionOwner) completedResult(
 		RequestID: input.RequestID, TraceID: input.TraceID,
 		Status: factoryapi.InvocationTerminalStatusCompleted, PrimaryResult: selection.PrimaryResult,
 	}
-	if o.deps.Metrics != nil {
-		o.deps.Metrics.InvocationCompleted(input.FactoryConfig, input.InputSource, selection.PrimaryResult)
-	}
-	if o.deps.Logger != nil {
-		o.deps.Logger.LogInvocationCompleted(sessionID, input, selection)
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.InvocationCompleted(input.FactoryConfig, input.InputSource, selection.PrimaryResult)
+		o.deps.Telemetry.LogInvocationCompleted(sessionID, input, selection)
 	}
 	return result
 }
@@ -199,11 +200,9 @@ func (o *SessionOwner) recordFailure(
 	result FactoryInvocationResult,
 	failureClass string,
 ) {
-	if o.deps.Metrics != nil {
-		o.deps.Metrics.InvocationFailed(input.FactoryConfig, input.InputSource, result.ErrorCode)
-	}
-	if o.deps.Logger != nil {
-		o.deps.Logger.LogInvocationFailed(sessionID, input, result, failureClass)
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.InvocationFailed(input.FactoryConfig, input.InputSource, result.ErrorCode)
+		o.deps.Telemetry.LogInvocationFailed(sessionID, input, result, failureClass)
 	}
 }
 

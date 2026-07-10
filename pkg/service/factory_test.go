@@ -4278,13 +4278,13 @@ func TestInvokeFactorySession_RecordsNormalizationFailureTelemetry(t *testing.T)
 	}
 
 	signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature)
-	recorder.assertContainsMetric(t, invocationMetricNormalizationAttempts, map[string]string{
+	recorder.assertContainsMetric(t, invocations.InvocationMetricNormalizationAttempts, map[string]string{
 		"input_source":    string(invocations.StructuredArgumentsInputSource),
 		"factory_name":    factoryCfg.Name,
 		"factory_project": factoryCfg.Project,
 		"signature_hash":  signatureHash,
 	})
-	recorder.assertContainsMetric(t, invocationMetricNormalizationFailure, map[string]string{
+	recorder.assertContainsMetric(t, invocations.InvocationMetricNormalizationFailure, map[string]string{
 		"input_source":    string(invocations.StructuredArgumentsInputSource),
 		"factory_name":    factoryCfg.Name,
 		"factory_project": factoryCfg.Project,
@@ -4348,7 +4348,7 @@ func TestInvokeFactorySession_InterpolationFailureLogsRedactedArgumentDiagnostic
 	}
 
 	signatureHash := invocations.InvocationSignatureHash(factoryCfg.InvocationSignature)
-	recorder.assertContainsMetric(t, invocationMetricInterpolationFailure, map[string]string{
+	recorder.assertContainsMetric(t, invocations.InvocationMetricInterpolationFailure, map[string]string{
 		"input_source":    string(invocations.StructuredArgumentsInputSource),
 		"factory_name":    factoryCfg.Name,
 		"factory_project": factoryCfg.Project,

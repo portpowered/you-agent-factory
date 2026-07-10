@@ -10,10 +10,13 @@ primary-result behavior.
   sequencing, and delegation into the owner-local event-derived result waiter.
   `pkg/invocations/session_wait.go` owns polling, timeout and cancellation,
   primary-result selection, and terminal classification over narrow runtime
-  observations. Keep session configuration, Work submission, observation,
-  wait/time behavior, metrics, safe logging, and packaged-factory hooks as
-  explicit collaborators; service and runtime-host facades should only adapt
-  those dependencies and forward `InvokeFactorySession` unchanged.
+  observations. `pkg/invocations/session_telemetry.go` owns invocation metric
+  names, low-cardinality labels, exactly-once emission points, safe structured
+  log fields, and packaged-factory telemetry policy. Keep session configuration,
+  Work submission, observation, wait/time behavior, telemetry sinks, and
+  packaged-factory classification as explicit collaborators; service and
+  runtime-host facades should only adapt those dependencies and forward
+  `InvokeFactorySession` unchanged.
 - `pkg/invocations/arguments.go` owns signature-backed invocation argument
   normalization for positional, named, stdin, defaulted, repeated, variadic,
   alias-backed, and compatibility fallback inputs. Transport stories should
@@ -66,8 +69,10 @@ primary-result behavior.
   shared invocation non-success context into the public `InvocationResponse`.
 - `pkg/service/model_catalog.go` and `pkg/runtimehost/model_catalog.go` retain
   compatibility adapters for session config, canonical Work submission,
-  event-derived observations, logs, metrics, and packaged-factory hooks. Their `InvokeFactorySession`
-  methods must remain transparent forwards to `invocations.SessionInvoker`;
+  event-derived observations, metric/log sinks, and packaged-factory terminal
+  classification. Their `InvokeFactorySession` methods must remain transparent
+  forwards to `invocations.SessionInvoker`; metric names, label policy, log
+  shaping, and emission sequencing must not be reimplemented in these adapters;
   request normalization, interpolation validation, submission sequencing,
   polling, timeout/cancellation, primary-result selection, and general terminal
   classification belong only to `pkg/invocations`.
