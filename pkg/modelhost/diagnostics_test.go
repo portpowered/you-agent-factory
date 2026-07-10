@@ -8,14 +8,11 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 )
 
 type capturingDiagnosticsLogger struct {
-	mu    sync.Mutex
-	logs  []diagnosticLogEntry
+	mu   sync.Mutex
+	logs []diagnosticLogEntry
 }
 
 type diagnosticLogEntry struct {
@@ -195,58 +192,8 @@ func TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric(t *testing
 	}
 }
 
-func TestCatalogHost_Diagnostics_PullCompletedEmitsOutcomeMetric(t *testing.T) {
-	logger := &capturingDiagnosticsLogger{}
-	metrics := &capturingMetricsRecorder{}
-	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(pullResultAssetGateway{
-		stubAssetGateway: stubAssetGateway{
-			byModel: map[string]CacheInspection{
-				"OMNIVOICE_Q4_K_M": {
-					Supported:          true,
-					Installed:          true,
-					InstalledFileCount: 2,
-				},
-			},
-		},
-		result: AssetPullResult{
-			PullOutcome: factoryapi.ManagedRuntimePullOutcomeALREADYREADY,
-			Snapshot: ReadinessSnapshot{
-				Identity:       Identity{Name: "OMNIVOICE_Q4_K_M", Backend: "OMNIVOICE"},
-				ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
-			},
-		},
-	}, Options{
-		Diagnostics: Diagnostics{Logger: logger, Metrics: metrics},
-	})
-
-	snapshot, err := host.Pull(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
-	if err != nil {
-		t.Fatalf("Pull: %v", err)
-	}
-	if snapshot.PullOutcome != factoryapi.ManagedRuntimePullOutcomeALREADYREADY {
-		t.Fatalf("pull outcome = %s, want ALREADY_READY", snapshot.PullOutcome)
-	}
-	if !metrics.contains(metricPullOutcome, map[string]string{
-		"managed_runtime_identity": "OMNIVOICE_Q4_K_M",
-		"outcome":                  string(factoryapi.ManagedRuntimePullOutcomeALREADYREADY),
-	}) {
-		t.Fatalf("metrics = %#v, want pull outcome metric", metrics.metrics)
-	}
-}
-
 type alwaysHealthyChecker struct{}
 
 func (alwaysHealthyChecker) Check(context.Context, string) error {
 	return nil
-}
-
-type pullResultAssetGateway struct {
-	stubAssetGateway
-	result AssetPullResult
-}
-
-func (g pullResultAssetGateway) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (AssetPullResult, error) {
-	return g.result, nil
 }

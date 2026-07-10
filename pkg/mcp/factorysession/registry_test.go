@@ -501,7 +501,7 @@ func TestMockClientDiscovery_RoundTripsJSON(t *testing.T) {
 	}
 }
 
-func TestMockClient_WorkflowValidateAliasMatchesCanonicalBehavior(t *testing.T) {
+func TestMockClient_WorkflowValidateCompatibilityOnlyAliasMatchesCanonicalBehavior(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
 

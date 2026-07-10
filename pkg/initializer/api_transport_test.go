@@ -74,12 +74,7 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	if _, ok := surface.(apisurface.SessionAPISurface); !ok {
 		t.Fatal("expected SessionAPISurface implementation")
 	}
-	if _, ok := surface.(apisurface.DurableSessionLifecycleAPI); !ok {
-		t.Fatal("expected composed surface to preserve durable lifecycle routes")
-	}
-	if _, ok := surface.(apisurface.DurableSessionProjectionAPI); !ok {
-		t.Fatal("expected composed surface to preserve durable projection routes")
-	}
+	assertComposedDurableCapabilities(t, surface)
 	if _, ok := surface.(*runtimehost.Host); ok {
 		t.Fatal("API transport surface must not be the runtime lifecycle host")
 	}
@@ -88,6 +83,19 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	}
 	if transport.Services.Models == nil || transport.Services.FactoryDefinition == nil {
 		t.Fatal("expected initializer-produced model and factory-definition services")
+	}
+	if transport.Services.Models != transport.Host.ModelService() {
+		t.Fatal("expected API transport and runtime host to share one model service")
+	}
+}
+
+func assertComposedDurableCapabilities(t *testing.T, surface apisurface.SessionAPISurface) {
+	t.Helper()
+	if _, ok := surface.(apisurface.DurableSessionLifecycleAPI); !ok {
+		t.Fatal("expected composed surface to preserve durable lifecycle routes")
+	}
+	if _, ok := surface.(apisurface.DurableSessionProjectionAPI); !ok {
+		t.Fatal("expected composed surface to preserve durable projection routes")
 	}
 }
 

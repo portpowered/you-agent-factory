@@ -192,7 +192,7 @@ func loadWorkStateBeforeMove(cfg MoveConfig) (string, error) {
 }
 
 func moveEndpoint(cfg MoveConfig) (url.URL, error) {
-	endpointPath := sessionpath.ScopedPath("/work/"+url.PathEscape(cfg.WorkID)+"/move", cfg.SessionID)
+	endpointPath := sessionpath.WorkMovePath(cfg.SessionID, cfg.WorkID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
 		return url.URL{}, err

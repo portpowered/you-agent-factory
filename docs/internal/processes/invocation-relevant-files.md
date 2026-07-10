@@ -3,8 +3,20 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
-- `pkg/invocations/` contains shared pure invocation contract logic used by CLI
-  and API adapters.
+- `pkg/invocations/` contains the shared invocation contract logic used by CLI
+  and API adapters plus the canonical Factory Session invocation owner.
+- `pkg/invocations/session_owner.go` owns live-session request normalization,
+  interpolation validation, default-handling Work submission, lifecycle
+  sequencing, and delegation into the owner-local event-derived result waiter.
+  `pkg/invocations/session_wait.go` owns polling, timeout and cancellation,
+  primary-result selection, and terminal classification over narrow runtime
+  observations. `pkg/invocations/session_telemetry.go` owns invocation metric
+  names, low-cardinality labels, exactly-once emission points, safe structured
+  log fields, and packaged-factory telemetry policy. Keep session configuration,
+  Work submission, observation, wait/time behavior, telemetry sinks, and
+  packaged-factory classification as explicit collaborators; service and
+  runtime-host facades should only adapt those dependencies and forward
+  `InvokeFactorySession` unchanged.
 - `pkg/invocations/arguments.go` owns signature-backed invocation argument
   normalization for positional, named, stdin, defaulted, repeated, variadic,
   alias-backed, and compatibility fallback inputs. Transport stories should
@@ -47,33 +59,30 @@ primary-result behavior.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/interfaces/factory_runtime.go` owns the backend canonical
-  `WorkContentPart` shape returned by invocation resolvers.
+  `WorkContentPart` and request-validation error shapes used below transport
+  and service boundaries; `pkg/invocations/session_owner.go` owns the shared
+  `FactoryInvocationResult` returned by the canonical owner.
 - `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
   backend-owned `interfaces.WorkContentPart` shape.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.
-- `pkg/service/runtime_sessions.go` owns the session-scoped invocation
-  orchestration that resolves API input, submits the default handling work
-  item, polls selected-tick world state, and maps timeout/cancel/unresolved
-  outcomes into `InvocationResponse`; it also owns invocation boundary logs and
-  optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
-- Live-session invocation request normalization lives in
-  `pkg/service/model_catalog.go` (`resolveSessionInvocationInput`). Keep API
-  `InvocationRequest.content` compatibility handling and
-  `InvocationRequest.args` signature handling as thin adapters into
-  `pkg/invocations.NormalizeArguments`; API structured args should use the
-  direct structured-argument carrier rather than being reinterpreted as CLI
-  named flags, so canonical parameter-name keys still work for positional-only
-  or stdin-bound parameters. Do not duplicate required-input, source-conflict,
-  alias, or string-shape rules in HTTP handlers. When signature-backed runtime
-  behavior needs per-invocation authored-field interpolation, carry the
-  normalized argument set on runtime-only `interfaces.InvocationArguments`
-  metadata and validate it through
-  `invocations.ValidateInvocationInterpolation` before submitting work. Treat
-  `args: {}` as an explicit structured invocation request, not as omitted args,
-  so all-optional or defaulted signatures stay transport-equivalent with CLI
-  invocation.
+- `pkg/service/runtime_sessions.go` and
+  `pkg/runtimehost/session_invocation.go` retain session-runtime compatibility adapters for
+  session config, canonical Work submission, event-derived observations,
+  metric/log sinks, and packaged-factory terminal classification. Their
+  `InvokeFactorySession` methods must remain transparent forwards to
+  `invocations.SessionInvoker`; model-catalog files must not own Factory
+  Session invocation behavior. Metric names, label policy, log shaping, and
+  emission sequencing must not be reimplemented in these adapters; request
+  normalization, interpolation validation, submission sequencing, polling,
+  timeout/cancellation, primary-result selection, and general terminal
+  classification belong only to `pkg/invocations`.
+- API structured args use the direct structured-argument carrier rather than
+  being reinterpreted as CLI named flags, so canonical parameter-name keys
+  still work for positional-only or stdin-bound parameters. Treat `args: {}` as
+  an explicit structured invocation request, not as omitted args, so
+  all-optional or defaulted signatures stay transport-equivalent with CLI.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots
@@ -346,9 +355,11 @@ primary-result behavior.
   on that same-session refresh via `shouldResumeFromPersistedCheckpoint` in
   `ui/src/features/dashboard/lib/dashboard-session-lifecycle.ts` plus
   `useDashboardInitialReconnectCursor`.
-- `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
-  loading/completion/failure logs, and packaged-factory metrics while polling for
-  primary results.
+- `pkg/invocations/session_wait.go` owns the session invocation wait loop and
+  calls explicit packaged-factory hooks at active, completed, and terminal-failure
+  boundaries. `pkg/service/runtime_sessions.go` and
+  `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,
+  logs, and metrics to those hooks.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata
@@ -373,4 +384,4 @@ primary-result behavior.
   authored fields when the current factory payload also declares that parameter
   in `invocationSignature`, or live session pages will fall back to legacy UI
   flows even when backend runtime validation already accepts the factory.
-- Managed-runtime invocation readiness gating lives in `pkg/modelhost/managed_runtime_compat.go` (`EnsureInvocationReady`) and `pkg/apisurface/managed_runtime_invocation.go`; direct model invocation wires through `pkg/service/model_catalog.go` and factory worker execution through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. `EnsureInvocationReady` consumes live host readiness via `InspectReadiness` so supervised loading and crash outcomes gate invocation. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for pull/load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; see `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.
+- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/modelhost.Host.InspectReadiness` snapshots, projects public readiness through `pkg/apisurface/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `FactoryService` and `runtimehost.Host` only compose or forward the model collaborator. Factory worker execution routes through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.

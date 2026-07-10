@@ -118,3 +118,12 @@ func (h *SessionRuntimeHost) RuntimeHost() *runtimehost.Host {
 	}
 	return h.host
 }
+
+// ModelService returns the canonical model service shared by transport-facing
+// model APIs and runtimehost compatibility methods.
+func (h *SessionRuntimeHost) ModelService() ModelService {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host.ModelService()
+}

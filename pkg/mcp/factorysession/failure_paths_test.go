@@ -169,7 +169,7 @@ func TestMockClient_GetResult_UnknownSessionReturnsTypedNotFoundEnvelope(t *test
 	}
 }
 
-func TestMockClient_WorkflowStatusAlias_MissingSessionMatchesCanonicalNotFound(t *testing.T) {
+func TestMockClient_WorkflowStatusCompatibilityOnlyAlias_MissingSessionMatchesCanonicalNotFound(t *testing.T) {
 	input := mcpfactorysession.GetSessionInput{SessionID: "dur-sess-missing-999"}
 	encoded, err := json.Marshal(input)
 	if err != nil {
@@ -185,6 +185,47 @@ func TestMockClient_WorkflowStatusAlias_MissingSessionMatchesCanonicalNotFound(t
 	aliasRaw, err := aliasClient.CallTool(mcpfactorysession.ToolWorkflowStatus, encoded)
 	if err != nil {
 		t.Fatalf("alias get session: %v", err)
+	}
+	if string(canonicalRaw) != string(aliasRaw) {
+		t.Fatalf("alias response = %s, want canonical %s", aliasRaw, canonicalRaw)
+	}
+}
+
+func TestMockClient_WorkflowResultCompatibilityOnlyAliasMatchesCanonicalTerminalResult(t *testing.T) {
+	canonicalClient := newFixtureMCPClient(t)
+	aliasClient := newFixtureMCPClient(t)
+	request := syncSuccessExecutionRequest()
+	var sessionID string
+	for _, client := range []*mcpfactorysession.Client{canonicalClient, aliasClient} {
+		started, err := client.StartSync(request)
+		if err != nil {
+			t.Fatalf("StartSync: %v", err)
+		}
+		if started.Error != nil || started.Result == nil {
+			t.Fatalf("start = %#v, want success", started)
+		}
+		if sessionID == "" {
+			sessionID = started.Result.SessionId
+		} else if started.Result.SessionId != sessionID {
+			t.Fatalf("sessionId = %q, want %q", started.Result.SessionId, sessionID)
+		}
+	}
+
+	mode := factoryapi.FactorySessionResultModeFinal
+	encoded, err := json.Marshal(mcpfactorysession.GetResultInput{
+		SessionID: sessionID,
+		Mode:      &mode,
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	canonicalRaw, err := canonicalClient.CallTool(mcpfactorysession.ToolGetResult, encoded)
+	if err != nil {
+		t.Fatalf("canonical get result: %v", err)
+	}
+	aliasRaw, err := aliasClient.CallTool(mcpfactorysession.ToolWorkflowResult, encoded)
+	if err != nil {
+		t.Fatalf("alias get result: %v", err)
 	}
 	if string(canonicalRaw) != string(aliasRaw) {
 		t.Fatalf("alias response = %s, want canonical %s", aliasRaw, canonicalRaw)

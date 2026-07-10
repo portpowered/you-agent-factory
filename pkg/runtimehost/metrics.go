@@ -1,5 +1,27 @@
 package runtimehost
 
+import "github.com/portpowered/infinite-you/pkg/invocations"
+
+// InvocationMetric records one emitted runtime counter together with its
+// low-cardinality dimensions.
+type InvocationMetric struct {
+	Name   string
+	Labels map[string]string
+}
+
+// InvocationMetricsRecorder receives invocation counter emissions from CLI and
+// session-runtime boundaries. Implementations should treat each call as a
+// single counter increment.
+type InvocationMetricsRecorder interface {
+	RecordInvocationMetric(InvocationMetric)
+}
+
+// ModelPullMetricsRecorder receives managed-runtime pull counter emissions.
+// Implementations should treat each call as a single counter increment.
+type ModelPullMetricsRecorder interface {
+	RecordModelPullMetric(InvocationMetric)
+}
+
 // Runtime metric names emitted by the transport runtime host.
 const (
 	RuntimeMetricLifecycleStarted               = "runtime.lifecycle.started"
@@ -73,16 +95,16 @@ const (
 )
 
 const (
-	InvocationMetricNormalizationAttempts = "invocation.normalization_attempts"
-	InvocationMetricNormalizationSuccess  = "invocation.normalization_success"
-	InvocationMetricNormalizationFailure  = "invocation.normalization_failure"
-	InvocationMetricInterpolationFailure  = "invocation.interpolation_failure"
-	InvocationMetricAttempts              = "invocation.attempts"
-	InvocationMetricSuccess               = "invocation.success"
-	InvocationMetricFailure               = "invocation.failure"
-	InvocationMetricUnresolvedPrimary     = "invocation.unresolved_primary"
-	InvocationMetricFallbackPolicyUsed    = "invocation.fallback_policy_used"
-	InvocationMetricResultType            = "invocation.result_type"
+	InvocationMetricNormalizationAttempts = invocations.InvocationMetricNormalizationAttempts
+	InvocationMetricNormalizationSuccess  = invocations.InvocationMetricNormalizationSuccess
+	InvocationMetricNormalizationFailure  = invocations.InvocationMetricNormalizationFailure
+	InvocationMetricInterpolationFailure  = invocations.InvocationMetricInterpolationFailure
+	InvocationMetricAttempts              = invocations.InvocationMetricAttempts
+	InvocationMetricSuccess               = invocations.InvocationMetricSuccess
+	InvocationMetricFailure               = invocations.InvocationMetricFailure
+	InvocationMetricUnresolvedPrimary     = invocations.InvocationMetricUnresolvedPrimary
+	InvocationMetricFallbackPolicyUsed    = invocations.InvocationMetricFallbackPolicyUsed
+	InvocationMetricResultType            = invocations.InvocationMetricResultType
 )
 
 const (

@@ -9,61 +9,9 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func TestListModelsWithHost_ProjectsMissingManagedRuntimeFromHost(t *testing.T) {
-	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
-		byModel: map[string]CacheInspection{
-			"OMNIVOICE_Q4_K_M": {
-				Supported:     true,
-				MissingAssets: []string{"model.gguf"},
-			},
-		},
-	}, Options{})
-
-	models, err := ListModelsWithHost(context.Background(), host, loaded)
-	if err != nil {
-		t.Fatalf("ListModelsWithHost: %v", err)
-	}
-	if len(models.Results) != 1 {
-		t.Fatalf("models count = %d, want 1", len(models.Results))
-	}
-	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
-		t.Fatalf("readiness = %s, want MISSING", models.Results[0].ManagedRuntime.ReadinessState)
-	}
-}
-
-func TestGetModelWithHost_PreservesInstalledAssetReadinessWithoutLiveSlot(t *testing.T) {
-	factoryCfg := catalogFactoryConfig(true)
-	factoryCfg.Resources[0].Backend = "LLAMACPP"
-	loaded := mustLoadedCatalogConfig(t, factoryCfg)
-	host := NewCatalogHost(stubAssetGateway{
-		byModel: map[string]CacheInspection{
-			"OMNIVOICE_Q4_K_M": {
-				Supported:          true,
-				Installed:          true,
-				InstalledFileCount: 2,
-			},
-		},
-	}, Options{})
-
-	model, err := GetModelWithHost(context.Background(), host, loaded, "OMNIVOICE_Q4_K_M")
-	if err != nil {
-		t.Fatalf("GetModelWithHost: %v", err)
-	}
-	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
-	}
-	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
-		t.Fatalf("lifecycle = %s, want INSTALLED", model.ManagedRuntime.LifecycleState)
-	}
-}
-
-func TestEnsureInvocationReady_AllowsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
+func TestInspectReadiness_ReportsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	host := NewCatalogHost(stubAssetGateway{
 		byModel: map[string]CacheInspection{
@@ -75,16 +23,16 @@ func TestEnsureInvocationReady_AllowsInstalledAssetsWithoutLiveSupervisedSlot(t 
 		},
 	}, Options{})
 
-	managed, err := EnsureInvocationReady(context.Background(), host, loaded, "OMNIVOICE_Q4_K_M")
+	snapshot, err := host.InspectReadiness(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
 	if err != nil {
-		t.Fatalf("EnsureInvocationReady: %v", err)
+		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
+	if snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("readiness = %s, want READY", snapshot.ReadinessState)
 	}
 }
 
-func TestEnsureInvocationReady_BlocksWhenSupervisedRuntimeCrashed(t *testing.T) {
+func TestInspectReadiness_ReportsSupervisedRuntimeCrash(t *testing.T) {
 	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -106,17 +54,10 @@ func TestEnsureInvocationReady_BlocksWhenSupervisedRuntimeCrashed(t *testing.T) 
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		managed, readinessErr := EnsureInvocationReady(context.Background(), host, loaded, "OMNIVOICE_Q4_K_M")
-		if readinessErr != nil {
-			var invocationErr *apisurface.ManagedRuntimeInvocationError
-			if !errors.As(readinessErr, &invocationErr) {
-				t.Fatalf("readiness error = %v, want *apisurface.ManagedRuntimeInvocationError", readinessErr)
-			}
-			if !errors.Is(readinessErr, apisurface.ErrManagedRuntimeFailed) {
-				t.Fatalf("readiness error = %v, want ErrManagedRuntimeFailed", readinessErr)
-			}
-			if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
-				t.Fatalf("readiness = %s, want FAILED", managed.ReadinessState)
+		snapshot, readinessErr := host.InspectReadiness(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
+		if readinessErr == nil && snapshot.ReadinessState == factoryapi.ManagedRuntimeReadinessStateFAILED {
+			if snapshot.FailureClass != FailureClassProcessCrash {
+				t.Fatalf("failure class = %s, want %s", snapshot.FailureClass, FailureClassProcessCrash)
 			}
 			if err := host.ReleaseLease(context.Background(), lease.ID); err != nil {
 				t.Fatalf("ReleaseLease: %v", err)
@@ -124,57 +65,8 @@ func TestEnsureInvocationReady_BlocksWhenSupervisedRuntimeCrashed(t *testing.T) 
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for invocation readiness failure; last readiness = %s", managed.ReadinessState)
+			t.Fatalf("timed out waiting for failed readiness snapshot; last readiness = %s err=%v", snapshot.ReadinessState, readinessErr)
 		}
 		time.Sleep(10 * time.Millisecond)
-	}
-}
-
-func TestPullWithHost_MapsUnsupportedRuntimeToModelPullUnsupported(t *testing.T) {
-	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
-		Name: "factory",
-		Workers: []interfaces.WorkerConfig{{
-			Name:          "cloud-worker",
-			Type:          interfaces.WorkerTypeModel,
-			Model:         "GPT_CLOUD",
-			ModelLocality: interfaces.ModelLocalityCloud,
-		}},
-	}, nil)
-	if err != nil {
-		t.Fatalf("NewLoadedFactoryConfig: %v", err)
-	}
-	host := NewCatalogHost(stubAssetGateway{}, Options{})
-
-	_, err = PullWithHost(context.Background(), host, loaded, "GPT_CLOUD")
-	if err == nil || !errors.Is(err, apisurface.ErrModelPullUnsupported) {
-		t.Fatalf("PullWithHost error = %v, want ErrModelPullUnsupported", err)
-	}
-}
-
-func TestModelPullResultFromSnapshot_PreservesPullMetadata(t *testing.T) {
-	result := ModelPullResultFromSnapshot(PullSnapshot{
-		ReadinessSnapshot: ReadinessSnapshot{
-			Identity: Identity{
-				Name:     "OMNIVOICE_Q4_K_M",
-				Locality: factoryapi.WorkerModelLocalityLocal,
-			},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
-		},
-		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
-		LegacyOutcome: "PULLED",
-		CachePath:     "/tmp/cache",
-		Revision:      "rev1",
-		DownloadedFiles: []PullDownloadedFile{{
-			Path:   "model.gguf",
-			Bytes:  42,
-			SHA256: "abc",
-		}},
-	})
-	if result.Outcome != "PULLED" || result.CachePath != "/tmp/cache" || len(result.DownloadedFiles) != 1 {
-		t.Fatalf("pull result = %#v, want pull metadata", result)
-	}
-	if result.ManagedPullOutcome != "INSTALLED_SUCCESSFULLY" || result.ReadinessState != "READY" {
-		t.Fatalf("managed pull fields = (%q, %q), want INSTALLED_SUCCESSFULLY READY", result.ManagedPullOutcome, result.ReadinessState)
 	}
 }

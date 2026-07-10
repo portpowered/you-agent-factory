@@ -84,6 +84,12 @@ func TestJoinPath(t *testing.T) {
 			want:    "https://remote.example.com/api/v1/work",
 		},
 		{
+			name:    "escaped slash remains within path segment",
+			baseRaw: "https://remote.example.com/api/v1",
+			path:    "/factory-sessions/session%2Fbeta/work/work%2Freview",
+			want:    "https://remote.example.com/api/v1/factory-sessions/session%2Fbeta/work/work%2Freview",
+		},
+		{
 			name:    "empty path returns base",
 			baseRaw: "http://localhost:7437",
 			path:    "",
@@ -106,6 +112,18 @@ func TestJoinPath(t *testing.T) {
 				t.Fatalf("joined = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestJoinPath_RejectsMalformedEscape(t *testing.T) {
+	t.Parallel()
+
+	base, err := ResolveBase(DefaultBaseURI)
+	if err != nil {
+		t.Fatalf("ResolveBase: %v", err)
+	}
+	if _, err := base.JoinPath("/work/%zz"); err == nil {
+		t.Fatal("JoinPath() error = nil, want malformed escape error")
 	}
 }
 

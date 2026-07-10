@@ -138,7 +138,7 @@ func TestHandleRequestInitializePingAndToolsList(t *testing.T) {
 	assertToolListed(t, tools, mcpfactorysession.ToolWorkflowRun)
 }
 
-func TestHandleToolsCallValidationAndResults(t *testing.T) {
+func TestHandleToolsCallValidationResultsAndCompatibilityOnlyAlias(t *testing.T) {
 	t.Parallel()
 
 	srv := newTestServer(t)

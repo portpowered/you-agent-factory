@@ -19,7 +19,7 @@ sessions.
 | Readiness and failure-class projection | `pkg/modelhost` |
 | Lease issuance, release, and capacity | `pkg/modelhost` |
 | Idle unload and resource-pressure eviction | `pkg/modelhost` |
-| Managed-runtime API/CLI vocabulary | `pkg/localmodels` + `pkg/modelhost/managed_runtime_compat.go` |
+| Managed-runtime API/CLI vocabulary | `pkg/models/service` + `pkg/apisurface` |
 | Factory session runtime state | per-session runtime only |
 
 Factory sessions and workers **borrow** local model capacity through host leases.
@@ -32,8 +32,9 @@ host is configured. Supervised leases pass `ServingEndpoint` metadata from
 boundary instead of bypassing it with a separate local runtime load path.
 `CatalogHost.InspectReadiness` preserves installed asset `READY`/`INSTALLED`
 projection until a supervised runtime slot exists; live slot state overlays
-loading, ready, and failed outcomes. Invocation readiness gating also consumes
-live host readiness through `EnsureInvocationReady`.
+loading, ready, and failed outcomes. The canonical model service consumes those
+neutral snapshots and applies invocation readiness gating and public failure
+classification.
 
 ## Service Wiring
 
@@ -44,9 +45,10 @@ assembly:
 - host contract: `pkg/modelhost.Host` / `CatalogHost`
 - session access: `FactoryCore.ModelHost()`
 
-Managed-runtime list, inspect, pull, and invocation-readiness surfaces route
-through `pkg/modelhost/managed_runtime_compat.go` from `pkg/service/model_catalog.go`
-while preserving public `/models` and CLI vocabulary.
+Managed-runtime list, inspect, pull, and invocation-readiness surfaces are owned
+by `pkg/models/service`; `FactoryService` and `runtimehost.Host` preserve only
+compatibility forwarding while the lower-level model host reports readiness
+snapshots and process-neutral failure classes.
 
 ## Supervised Local Runtimes
 
@@ -75,13 +77,11 @@ Diagnostic fields include:
 - `backend`
 - `readiness_state` / `lifecycle_state`
 - `failure_class`
-- `pull_outcome` (pull paths)
 - `lease_id` (lease paths)
 - `unload_reason` (`explicit`, `idle`, `pressure_eviction`)
 
 Counter names use the `model_host.*` prefix:
 
-- `model_host.pull.outcome`
 - `model_host.load.success` / `model_host.load.failure`
 - `model_host.readiness.timeout`
 - `model_host.process.crash`
@@ -90,8 +90,9 @@ Counter names use the `model_host.*` prefix:
 
 When configured, counters route through the service
 `InvocationMetricsRecorder` adapter in `pkg/service/modelhost_diagnostics.go`.
-Managed-runtime pull boundaries continue to emit separate `managed_runtime.pull.*`
-counters from `pkg/service/model_catalog.go`.
+Managed-runtime pull logging and `managed_runtime.pull.*` counters are owned by
+`pkg/models/service/pull.go`; model-host pull execution does not emit a second
+telemetry series.
 
 ## Failure Classes
 

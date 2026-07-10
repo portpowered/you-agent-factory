@@ -7,15 +7,14 @@ import (
 )
 
 const (
-	metricPullOutcome        = "model_host.pull.outcome"
-	metricLoadSuccess        = "model_host.load.success"
-	metricLoadFailure        = "model_host.load.failure"
-	metricReadinessTimeout   = "model_host.readiness.timeout"
-	metricProcessCrash       = "model_host.process.crash"
-	metricLeaseAcquire       = "model_host.lease.acquire"
-	metricLeaseRelease       = "model_host.lease.release"
-	metricLeaseExhausted     = "model_host.lease.exhausted"
-	metricUnload             = "model_host.unload"
+	metricLoadSuccess      = "model_host.load.success"
+	metricLoadFailure      = "model_host.load.failure"
+	metricReadinessTimeout = "model_host.readiness.timeout"
+	metricProcessCrash     = "model_host.process.crash"
+	metricLeaseAcquire     = "model_host.lease.acquire"
+	metricLeaseRelease     = "model_host.lease.release"
+	metricLeaseExhausted   = "model_host.lease.exhausted"
+	metricUnload           = "model_host.unload"
 )
 
 // Logger emits structured operator diagnostics for model host activity.
@@ -61,37 +60,6 @@ func identityDiagnosticFields(identity Identity) map[string]string {
 		"managed_runtime_identity": strings.TrimSpace(identity.Name),
 		"backend":                  strings.TrimSpace(identity.Backend),
 	}
-}
-
-func readinessDiagnosticFields(snapshot ReadinessSnapshot) map[string]string {
-	fields := identityDiagnosticFields(snapshot.Identity)
-	fields["readiness_state"] = string(snapshot.ReadinessState)
-	fields["lifecycle_state"] = string(snapshot.LifecycleState)
-	if snapshot.FailureClass != FailureClassNone {
-		fields["failure_class"] = string(snapshot.FailureClass)
-	}
-	return fields
-}
-
-func (d Diagnostics) logPullCompleted(snapshot PullSnapshot) {
-	fields := readinessDiagnosticFields(snapshot.ReadinessSnapshot)
-	fields["pull_outcome"] = string(snapshot.PullOutcome)
-	d.info("model host pull completed", fields)
-	d.record(metricPullOutcome, mergeDiagnosticLabels(fields, map[string]string{
-		"outcome": string(snapshot.PullOutcome),
-	}))
-}
-
-func (d Diagnostics) logPullFailed(snapshot PullSnapshot, err error) {
-	fields := readinessDiagnosticFields(snapshot.ReadinessSnapshot)
-	fields["pull_outcome"] = string(snapshot.PullOutcome)
-	if err != nil {
-		fields["error"] = err.Error()
-	}
-	d.warn("model host pull failed", fields)
-	d.record(metricPullOutcome, mergeDiagnosticLabels(fields, map[string]string{
-		"outcome": string(snapshot.PullOutcome),
-	}))
 }
 
 func (d Diagnostics) logLoadStarted(identity Identity) {
@@ -163,14 +131,6 @@ func (d Diagnostics) logUnload(identity Identity, reason string) {
 	fields["unload_reason"] = strings.TrimSpace(reason)
 	d.info("model host unload", fields)
 	d.record(metricUnload, fields)
-}
-
-func mergeDiagnosticLabels(base map[string]string, extra map[string]string) map[string]string {
-	merged := cloneDiagnosticLabels(base)
-	for key, value := range extra {
-		merged[key] = value
-	}
-	return merged
 }
 
 func cloneDiagnosticLabels(labels map[string]string) map[string]string {

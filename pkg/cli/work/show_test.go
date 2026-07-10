@@ -270,7 +270,7 @@ func TestShow_NotFoundExitsWithClearError(t *testing.T) {
 func TestShow_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		gotPath = r.URL.EscapedPath()
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.Work{
 			Name:         "Plan feature",
@@ -286,15 +286,15 @@ func TestShow_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var out bytes.Buffer
 	err := Show(ShowConfig{
 		Server:    serverBase(t, srv),
-		SessionID: "session-beta",
-		WorkID:    "work-1",
+		SessionID: "session/beta",
+		WorkID:    "work/review",
 		Output:    &out,
 	})
 	if err != nil {
 		t.Fatalf("Show: %v", err)
 	}
-	if gotPath != "/factory-sessions/session-beta/work/work-1" {
-		t.Fatalf("path = %q, want /factory-sessions/session-beta/work/work-1", gotPath)
+	if gotPath != "/factory-sessions/session%2Fbeta/work/work%2Freview" {
+		t.Fatalf("path = %q, want slash-sensitive identifiers escaped as segments", gotPath)
 	}
 }
 

@@ -34,6 +34,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -134,8 +135,8 @@ type Host struct {
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
-	invocationAPI            apisurface.InvocationAPI
 	durableExecutionAPI      apisurface.DurableSessionExecutionAPI
+	sessionInvoker           invocations.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
@@ -156,7 +157,7 @@ var _ apisurface.SessionAPISurface = (*Host)(nil)
 // InvocationAPI returns the canonical invocation collaborator used by the
 // compatibility facade and composed HTTP surface.
 func (h *Host) InvocationAPI() apisurface.InvocationAPI {
-	return h.requireInvocationAPI()
+	return h.sessionInvocationOwner()
 }
 
 // DurableExecutionAPI returns the canonical durable-start collaborator used by

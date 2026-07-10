@@ -17,6 +17,11 @@ const RECOVERY_FAILED_STREAM = {
   message: "The dashboard could not restore this session automatically.",
 };
 
+const LIVE_STREAM = {
+  status: "live" as const,
+  message: "Factory event stream connected.",
+};
+
 describe("deriveDashboardWorldViewShellState", () => {
   it("reports initial loading while a session is selected and the stream is still connecting", () => {
     expect(
@@ -100,5 +105,35 @@ describe("deriveDashboardWorldViewShellState", () => {
     expect(errored.isInitialLoading).toBe(false);
     expect(errored.error?.message).toBe(RECOVERY_FAILED_STREAM.message);
     expect(errored.hasEvents).toBe(false);
+  });
+
+  it.fails("treats a hydrated tick-zero checkpoint as current while the reopened stream is quiet", () => {
+    const ready = deriveDashboardWorldViewShellState({
+      eventCount: 0,
+      rawSessionID: "session-alpha",
+      selectedTick: 0,
+      streamState: LIVE_STREAM,
+    });
+
+    expect(ready).toEqual({
+      error: null,
+      hasEvents: false,
+      isInitialLoading: false,
+    });
+  });
+
+  it("treats a hydrated nonzero checkpoint as current while the reopened stream is quiet", () => {
+    const ready = deriveDashboardWorldViewShellState({
+      eventCount: 0,
+      rawSessionID: "session-alpha",
+      selectedTick: 7,
+      streamState: LIVE_STREAM,
+    });
+
+    expect(ready).toEqual({
+      error: null,
+      hasEvents: false,
+      isInitialLoading: false,
+    });
   });
 });

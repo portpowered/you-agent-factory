@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -129,18 +130,7 @@ type SessionAPISurface interface {
 
 // FactoryInvocationResult carries the runtime-owned outcome of one session
 // invocation request after input resolution and primary-result selection.
-type FactoryInvocationResult struct {
-	RequestID     string
-	TraceID       string
-	Status        factoryapi.InvocationTerminalStatus
-	PrimaryResult []interfaces.WorkContentPart
-	ErrorCode     string
-	Message       string
-	SessionID     string
-	WorkID        string
-	WorkName      string
-	WorkState     string
-}
+type FactoryInvocationResult = invocations.FactoryInvocationResult
 
 // InvocationResponseFromResult maps a shared invocation result onto the public
 // invocation response contract used by both API and CLI JSON surfaces.
@@ -856,16 +846,7 @@ func stringPtr(value string) *string {
 
 // RequestValidationError reports a stable client-side validation failure that
 // should map to HTTP 400 at the transport boundary.
-type RequestValidationError struct {
-	Message string
-}
-
-func (e *RequestValidationError) Error() string {
-	if e == nil {
-		return ""
-	}
-	return e.Message
-}
+type RequestValidationError = interfaces.RequestValidationError
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.

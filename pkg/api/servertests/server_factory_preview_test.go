@@ -110,7 +110,7 @@ func TestPreviewFactory_RejectsForbiddenHostAccess(t *testing.T) {
 	}
 }
 
-func TestPreviewWorkflowCompatibility_RejectsForbiddenHostAccessWithDeprecationHeaders(t *testing.T) {
+func TestPreviewWorkflowCompatibilityOnly_RejectsForbiddenHostAccessWithDeprecationHeaders(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflowPreviewFixture(t, projectRoot, "unsafe.js", "require('fs');")
 
@@ -151,7 +151,7 @@ func TestPreviewWorkflowCompatibility_RejectsForbiddenHostAccessWithDeprecationH
 	}
 }
 
-func TestPreviewWorkflow_ReturnsSamePreviewBodyAsCanonicalFactoryPreview(t *testing.T) {
+func TestPreviewWorkflowCompatibilityOnly_ReturnsSamePreviewBodyAsCanonicalFactoryPreview(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflowPreviewFixture(t, projectRoot, "review.js", validWorkflowPreviewSource)
 
@@ -187,7 +187,7 @@ func TestPreviewWorkflow_ReturnsSamePreviewBodyAsCanonicalFactoryPreview(t *test
 	}
 }
 
-func TestPreviewWorkflow_ReturnsCompatibilityAliasWithDeprecationHeaders(t *testing.T) {
+func TestPreviewWorkflowCompatibilityOnly_ReturnsAliasWithDeprecationHeaders(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflowPreviewFixture(t, projectRoot, "review.js", validWorkflowPreviewSource)
 
