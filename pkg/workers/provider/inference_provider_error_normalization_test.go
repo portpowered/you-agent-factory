@@ -620,6 +620,7 @@ func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *t
 		stderr      string
 		wantReason  interfaces.WorkFailureType
 		wantMessage string
+		rejectText  string
 	}{
 		{
 			name:        "EmbeddedPromptMarkerRejectsTextRecord",
@@ -657,17 +658,35 @@ func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *t
 			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
 			wantMessage: claudeBadRequestFailureMessage,
 		},
+		{
+			name:        "SensitiveEnvironmentAssignmentUsesCategoryFallback",
+			stderr:      "Configuration error: ANTHROPIC_AUTH_TOKEN=customer-private-value",
+			wantReason:  interfaces.WorkFailureTypeMisconfigured,
+			wantMessage: claudeConfigFailureMessage,
+			rejectText:  "customer-private-value",
+		},
+		{
+			name:        "StructuredSensitiveEnvironmentAssignmentUsesCategoryFallback",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Set ANTHROPIC_AUTH_TOKEN=customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+			rejectText:  "customer-private-value",
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertClaudeFailureAndPolicy(t, CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}, claudeFailureExpectation{
+			result := CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}
+			assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
 				reason:    tc.wantReason,
 				family:    interfaces.WorkFailureFamilyTerminal,
 				message:   tc.wantMessage,
 				terminal:  true,
 				retryable: false,
 			})
+			if parsed := ParseClaudeProviderFailure(result); tc.rejectText != "" && strings.Contains(parsed.Message, tc.rejectText) {
+				t.Fatalf("message %q must not contain %q", parsed.Message, tc.rejectText)
+			}
 		})
 	}
 }

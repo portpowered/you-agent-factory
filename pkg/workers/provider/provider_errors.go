@@ -225,14 +225,31 @@ func safeClaudeActionableMessage(message string) (string, bool) {
 }
 
 func containsClaudeCredentialSignal(message string) bool {
-	return containsAny(message,
+	if containsAny(message,
 		"authorization:",
 		"bearer ",
 		"api_key=",
 		"api-key:",
 		"api key:",
 		"sk-ant-",
-	)
+	) {
+		return true
+	}
+
+	// Keep assignment and header detection aligned with the environment
+	// diagnostic policy so supported sensitive names cannot be published just
+	// because their exact spelling was absent from the literals above.
+	for _, field := range strings.Fields(message) {
+		separator := strings.IndexAny(field, "=:")
+		if separator <= 0 {
+			continue
+		}
+		name := strings.Trim(field[:separator], "\"'{}[](),")
+		if ClassifyCommandEnvKey(name) == CommandEnvClassificationRedacted {
+			return true
+		}
+	}
+	return false
 }
 
 func lastClaudeTextFailure(streams []string) (ProviderFailureResult, bool) {
