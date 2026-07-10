@@ -6,10 +6,21 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 )
+
+func TestHostModelServiceClockUsesCompositionClock(t *testing.T) {
+	want := time.Date(2026, time.July, 10, 21, 30, 0, 0, time.UTC)
+	host := &Host{clock: clockwork.NewFakeClockAt(want)}
+
+	if got := host.modelServiceClock(); !got.Equal(want) {
+		t.Fatalf("modelServiceClock() = %s, want %s", got, want)
+	}
+}
 
 func TestHostModelMethodsForwardContextResultsAndErrorsUnchanged(t *testing.T) {
 	t.Parallel()
