@@ -120,8 +120,10 @@ For runtime-cleanup documentation changes, run a changed-docs vocabulary check
 after review against `docs/architecture/data-model.md`:
 
 ```sh
-changed_docs="$(git diff --name-only --diff-filter=ACMRT origin/main...HEAD -- docs prd.md)"
-test -z "$changed_docs" || rg -n "DynamicWorkflowRun|\\b(Petri|petri|tokens?|places|transitions|markings?)\\b" $changed_docs
+git diff --name-only --diff-filter=ACMRT origin/main...HEAD -- docs prd.md |
+  while IFS= read -r changed_doc; do
+    rg -n "DynamicWorkflowRun|\\b(Petri|petri|tokens?|places|transitions|markings?)\\b" "$changed_doc"
+  done
 ```
 
 Inspect each hit. Accept hits only when they are guardrail text or explicitly
