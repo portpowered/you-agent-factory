@@ -3,6 +3,10 @@ import {
   createControlledIndexedDBTestDouble,
   flushPromiseContinuations,
 } from "../../../../testing/controlled-indexeddb-test-utils";
+import {
+  readSessionPersistenceInvalidationRecords,
+  resetSessionPersistenceInvalidationRecords,
+} from "../../../dashboard/lib/session-persistence/diagnostics";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
@@ -16,9 +20,12 @@ interface StoredCheckpointEnvelope {
   checkpoint?: {
     afterEventId?: string;
     afterSequence?: number;
+    replayState?: object;
     selectedTick: number;
   };
+  schemaVersion?: number;
   storageKey?: string;
+  streamIdentity?: TimelineCheckpointStreamIdentity;
 }
 
 const streamIdentity = {
@@ -65,16 +72,12 @@ describe("timeline checkpoint replacement failure", () => {
     await flushPromiseContinuations();
     expect(controls.pendingOperations()).toEqual(["put", "put"]);
 
+    controls.fail("put", new Error("replacement put failed"), 1);
+    await replacementWrite;
+    expect(records.size).toBe(0);
+
     controls.succeed("put");
     await firstWrite;
-    expect([...records.values()][0]?.checkpoint).toMatchObject({
-      afterEventId: "event-7",
-      afterSequence: 42,
-      selectedTick: 7,
-    });
-
-    controls.fail("put", new Error("replacement put failed"));
-    await replacementWrite;
     expect(controls.pendingOperations()).not.toContain("delete");
     expect([...records.values()][0]?.checkpoint).toMatchObject({
       afterEventId: "event-7",
@@ -115,5 +118,44 @@ describe("timeline checkpoint replacement failure", () => {
     await cleanup;
 
     expect(records.size).toBe(0);
+  });
+
+  it("does not diagnose or delete a held read after cancellation", async () => {
+    resetSessionPersistenceInvalidationRecords();
+    const { controls, indexedDB, records } =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const write = persistTimelineCheckpoint(
+      indexedDB,
+      checkpoint(7, "event-7", 42),
+      streamIdentity,
+    );
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    controls.succeed("put");
+    await write;
+    const stored = [...records.entries()][0];
+    if (!stored) {
+      throw new Error("expected committed checkpoint fixture");
+    }
+    stored[1].streamIdentity = {
+      ...streamIdentity,
+      streamGenerationID: "superseded-generation",
+    };
+
+    const abortController = new AbortController();
+    const read = readTimelineCheckpoint(indexedDB, streamIdentity, {
+      signal: abortController.signal,
+    });
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    expect(controls.pendingOperations()).toEqual(["get"]);
+    abortController.abort();
+    controls.succeed("get");
+
+    await expect(read).resolves.toBeNull();
+    expect(records.has(stored[0])).toBe(true);
+    expect(controls.pendingOperations()).toEqual([]);
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([]);
+    resetSessionPersistenceInvalidationRecords();
   });
 });

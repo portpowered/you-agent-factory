@@ -11,6 +11,7 @@ interface StoredRecord {
 
 interface ControlledRequest<T> {
   beforeSuccess?: () => void;
+  isAborted: () => boolean;
   operation: ControlledIndexedDBOperation;
   request: IDBRequest<T>;
   result: () => T;
@@ -26,10 +27,10 @@ export function createControlledIndexedDBTestDouble<
     operation: ControlledIndexedDBOperation,
     result: () => T,
     beforeSuccess?: () => void,
+    isAborted: () => boolean = () => false,
   ): IDBRequest<T> {
     const request = {
       error: null,
-      onblocked: null,
       onerror: null,
       onsuccess: null,
       onupgradeneeded: null,
@@ -37,6 +38,7 @@ export function createControlledIndexedDBTestDouble<
     } as unknown as IDBRequest<T>;
     pending.push({
       beforeSuccess,
+      isAborted,
       operation,
       request,
       result,
@@ -49,36 +51,58 @@ export function createControlledIndexedDBTestDouble<
     objectStoreNames: {
       contains: () => true,
     },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          controlledRequest(
-            "delete",
-            () => undefined,
-            () => records.delete(key),
-          ),
-        get: (key: string) => controlledRequest("get", () => records.get(key)),
-        getAll: () => controlledRequest("getAll", () => [...records.values()]),
-        put: (value: RecordType) =>
-          controlledRequest(
-            "put",
-            () => value.storageKey ?? "",
-            () => {
-              if (value.storageKey) {
-                records.set(value.storageKey, value);
-              }
-            },
-          ),
-      }),
-    }),
+    transaction: () => {
+      let aborted = false;
+      return {
+        abort: () => {
+          aborted = true;
+        },
+        objectStore: () => ({
+          delete: (key: string) =>
+            controlledRequest(
+              "delete",
+              () => undefined,
+              () => records.delete(key),
+              () => aborted,
+            ),
+          get: (key: string) =>
+            controlledRequest(
+              "get",
+              () => records.get(key),
+              undefined,
+              () => aborted,
+            ),
+          getAll: () =>
+            controlledRequest(
+              "getAll",
+              () => [...records.values()],
+              undefined,
+              () => aborted,
+            ),
+          put: (value: RecordType) =>
+            controlledRequest(
+              "put",
+              () => value.storageKey ?? "",
+              () => {
+                if (value.storageKey) {
+                  records.set(value.storageKey, value);
+                }
+              },
+              () => aborted,
+            ),
+        }),
+      };
+    },
   };
 
   function take(
     operation: ControlledIndexedDBOperation,
+    ordinal = 0,
   ): ControlledRequest<unknown> {
-    const index = pending.findIndex(
-      (request) => request.operation === operation,
+    const matchingIndexes = pending.flatMap((request, index) =>
+      request.operation === operation ? [index] : [],
     );
+    const index = matchingIndexes[ordinal] ?? -1;
     const controlled = pending[index];
     if (index < 0 || !controlled) {
       throw new Error(`no pending IndexedDB ${operation} request`);
@@ -87,9 +111,11 @@ export function createControlledIndexedDBTestDouble<
     return controlled;
   }
 
-  function succeed(operation: ControlledIndexedDBOperation): void {
-    const controlled = take(operation);
-    controlled.beforeSuccess?.();
+  function succeed(operation: ControlledIndexedDBOperation, ordinal = 0): void {
+    const controlled = take(operation, ordinal);
+    if (!controlled.isAborted()) {
+      controlled.beforeSuccess?.();
+    }
     Object.defineProperty(controlled.request, "result", {
       configurable: true,
       value: controlled.result(),
@@ -97,8 +123,12 @@ export function createControlledIndexedDBTestDouble<
     controlled.request.onsuccess?.({} as Event);
   }
 
-  function fail(operation: ControlledIndexedDBOperation, error: Error): void {
-    const controlled = take(operation);
+  function fail(
+    operation: ControlledIndexedDBOperation,
+    error: Error,
+    ordinal = 0,
+  ): void {
+    const controlled = take(operation, ordinal);
     Object.defineProperty(controlled.request, "error", {
       configurable: true,
       value: error,

@@ -331,6 +331,7 @@ describe("useDashboardCheckpointPreflight superseded session races", () => {
     expect(race.readCheckpointSpy).toHaveBeenCalledWith(
       window.indexedDB,
       expect.objectContaining({ factorySessionID: SESSION_B }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(remapSelectedSessionID).not.toHaveBeenCalled();
     expect(race.setStreamState).not.toHaveBeenCalled();

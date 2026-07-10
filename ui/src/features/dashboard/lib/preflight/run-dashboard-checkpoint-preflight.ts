@@ -65,6 +65,7 @@ async function clearRequestedSessionCheckpoint(
   queryClient: QueryClient,
   requestedSessionId: string,
   isCurrent: () => boolean,
+  signal: AbortSignal,
 ): Promise<void> {
   if (!isCurrent()) {
     return;
@@ -72,6 +73,7 @@ async function clearRequestedSessionCheckpoint(
   await clearTimelineCheckpointsForSession(
     window.indexedDB,
     requestedSessionId,
+    { signal },
   );
   if (!isCurrent()) {
     return;
@@ -85,6 +87,7 @@ async function reconcileReconnectCursor({
   queryClient,
   requestedSessionId,
   resolvedStreamIdentity,
+  signal,
   validatedReconnectCursor,
 }: {
   peekedStreamIdentity: TimelineCheckpointStreamIdentity | null | undefined;
@@ -92,6 +95,7 @@ async function reconcileReconnectCursor({
   queryClient: QueryClient;
   requestedSessionId: string;
   resolvedStreamIdentity: TimelineCheckpointStreamIdentity;
+  signal: AbortSignal;
   validatedReconnectCursor: ResumePreflightResolution["reconnectCursor"];
 }): Promise<ResumePreflightResolution["reconnectCursor"]> {
   if (
@@ -105,6 +109,7 @@ async function reconcileReconnectCursor({
       queryClient,
       requestedSessionId,
       isCurrent,
+      signal,
     );
     return undefined;
   }
@@ -122,6 +127,7 @@ async function loadRestoredCheckpoint({
   resolvedStreamIdentity,
   response,
   restoreCheckpoint,
+  signal,
 }: {
   checkpointReusable: boolean;
   checkpointStreamIdentity: TimelineCheckpointStreamIdentity;
@@ -133,12 +139,14 @@ async function loadRestoredCheckpoint({
   resolvedStreamIdentity: TimelineCheckpointStreamIdentity;
   response: FactorySessionSyncPreflightResponse;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  signal: AbortSignal;
 }): Promise<FactoryTimelineCheckpoint | null> {
   if (shouldClearCheckpointAfterPreflight(response)) {
     await clearRequestedSessionCheckpoint(
       queryClient,
       requestedSessionId,
       isCurrent,
+      signal,
     );
     if (isCurrent() && resolvedSessionId !== requestedSessionId) {
       clearDashboardSessionRuntimeQueries(queryClient, requestedSessionId);
@@ -150,6 +158,7 @@ async function loadRestoredCheckpoint({
     checkpoint = await readTimelineCheckpoint(
       window.indexedDB,
       checkpointStreamIdentity,
+      { signal },
     );
   }
 
@@ -171,6 +180,7 @@ async function hydrateResumePreflight({
   resolution,
   response,
   restoreCheckpoint,
+  signal,
 }: {
   isCurrent: () => boolean;
   onRemapSessionID: (sessionID: string) => void;
@@ -179,6 +189,7 @@ async function hydrateResumePreflight({
   resolution: ResumePreflightResolution;
   response: FactorySessionSyncPreflightResponse;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  signal: AbortSignal;
 }): Promise<DashboardCheckpointPreflightHydration> {
   const {
     checkpointReusable,
@@ -201,6 +212,7 @@ async function hydrateResumePreflight({
     queryClient,
     requestedSessionId,
     resolvedStreamIdentity: checkpointStreamIdentity,
+    signal,
     validatedReconnectCursor,
   });
 
@@ -215,6 +227,7 @@ async function hydrateResumePreflight({
     resolvedStreamIdentity: checkpointStreamIdentity,
     response,
     restoreCheckpoint,
+    signal,
   });
 
   if (
@@ -242,6 +255,7 @@ export async function runDashboardCheckpointPreflight({
   queryClient,
   rawSessionID,
   restoreCheckpoint,
+  signal,
 }: {
   isCurrent: () => boolean;
   onRemapSessionID: (sessionID: string) => void;
@@ -249,7 +263,9 @@ export async function runDashboardCheckpointPreflight({
   queryClient: QueryClient;
   rawSessionID: string;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  signal?: AbortSignal;
 }): Promise<DashboardCheckpointPreflightHydration> {
+  const invocationSignal = signal ?? new AbortController().signal;
   const peekedCheckpoint = await peekPersistedTimelineCheckpoint(
     window.indexedDB,
     rawSessionID,
@@ -282,7 +298,9 @@ export async function runDashboardCheckpointPreflight({
           streamIdentity: null,
         };
       }
-      await clearTimelineCheckpointsForSession(window.indexedDB, rawSessionID);
+      await clearTimelineCheckpointsForSession(window.indexedDB, rawSessionID, {
+        signal: invocationSignal,
+      });
       if (isCurrent()) {
         recoverDashboardSessionScopedState(queryClient, rawSessionID, () => {});
       }
@@ -304,6 +322,7 @@ export async function runDashboardCheckpointPreflight({
       resolution,
       response,
       restoreCheckpoint,
+      signal: invocationSignal,
     });
   } catch (preflightFailure: unknown) {
     const message =
@@ -312,7 +331,9 @@ export async function runDashboardCheckpointPreflight({
         ? preflightFailure.message
         : "The dashboard could not validate the selected session.";
     if (isCurrent()) {
-      await clearTimelineCheckpointsForSession(window.indexedDB, rawSessionID);
+      await clearTimelineCheckpointsForSession(window.indexedDB, rawSessionID, {
+        signal: invocationSignal,
+      });
     }
     if (isCurrent()) {
       onStreamOffline(message);

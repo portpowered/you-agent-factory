@@ -86,6 +86,7 @@ export function useDashboardCheckpointPreflight({
 
   useEffect(() => {
     let cancelled = false;
+    const abortController = new AbortController();
 
     resetDashboardCheckpointPreflightState(
       setCheckpointHydratedKey,
@@ -123,6 +124,7 @@ export function useDashboardCheckpointPreflight({
         queryClient,
         rawSessionID,
         restoreCheckpoint,
+        signal: abortController.signal,
       });
       if (cancelled) {
         return;
@@ -152,6 +154,7 @@ export function useDashboardCheckpointPreflight({
 
     return () => {
       cancelled = true;
+      abortController.abort();
     };
   }, [
     checkpointHydrationKey,

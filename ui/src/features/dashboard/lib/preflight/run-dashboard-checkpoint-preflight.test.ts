@@ -1,12 +1,35 @@
+import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as factorySessionsAPI from "../../../../api/factory-sessions";
 import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import {
+  createControlledIndexedDBTestDouble,
+  flushPromiseContinuations,
+} from "../../../../testing/controlled-indexeddb-test-utils";
 import * as timelinePublic from "../../../timeline/public";
+import {
+  readSessionPersistenceInvalidationRecords,
+  resetSessionPersistenceInvalidationRecords,
+} from "../session-persistence/diagnostics";
 import { runDashboardCheckpointPreflight } from "./run-dashboard-checkpoint-preflight";
 
 const RESOLVED_SESSION_UUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+function storedSessionRecord(sessionID: string, selectedTick: number) {
+  return {
+    checkpoint: { replayState: {}, selectedTick },
+    schemaVersion: 3,
+    storageKey: `checkpoint-${sessionID}`,
+    streamIdentity: {
+      backendScopeID: `backend-${sessionID}`,
+      factorySessionID: sessionID,
+      logicalSessionKeyID: `logical-${sessionID}`,
+      streamGenerationID: `generation-${sessionID}`,
+    },
+  };
+}
 
 function buildPreflightResponse(
   overrides: Partial<FactorySessionSyncPreflightResponse> = {},
@@ -302,5 +325,120 @@ describe("runDashboardCheckpointPreflight recovery", () => {
       afterEventId: "event-3",
       afterSequence: 3,
     });
+  });
+});
+
+describe("runDashboardCheckpointPreflight persistence cancellation", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    resetSessionPersistenceInvalidationRecords();
+  });
+
+  it("aborts a held stale-session delete after the active session hydrates", async () => {
+    const sessionA = "session-a";
+    const sessionB = "session-b";
+    const { controls, indexedDB, records } =
+      createControlledIndexedDBTestDouble<{
+        checkpoint: { replayState: object; selectedTick: number };
+        schemaVersion: number;
+        storageKey: string;
+        streamIdentity: {
+          backendScopeID: string;
+          factorySessionID: string;
+          logicalSessionKeyID: string;
+          streamGenerationID: string;
+        };
+      }>();
+    records.set(`checkpoint-${sessionA}`, storedSessionRecord(sessionA, 11));
+    records.set(`checkpoint-${sessionB}`, storedSessionRecord(sessionB, 22));
+    vi.stubGlobal("indexedDB", indexedDB);
+    vi.spyOn(
+      timelinePublic,
+      "peekPersistedTimelineCheckpoint",
+    ).mockResolvedValue(null);
+    vi.spyOn(timelinePublic, "readTimelineCheckpoint").mockResolvedValue(null);
+    vi.spyOn(
+      factorySessionsAPI,
+      "getFactorySessionSyncPreflight",
+    ).mockImplementation(async (sessionID) =>
+      sessionID === sessionA
+        ? buildPreflightResponse({
+            checkpointReusable: false,
+            factorySessionId: sessionA,
+            reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,
+            reconnectCursor: {
+              provided: false,
+              validForStreamGeneration: false,
+            },
+            requestedSessionId: sessionA,
+          })
+        : buildPreflightResponse({
+            factorySessionId: sessionB,
+            requestedSessionId: sessionB,
+          }),
+    );
+
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["session-race", sessionA], "cache-a");
+    queryClient.setQueryData(["session-race", sessionB], "cache-b");
+    const removeQueries = vi.spyOn(queryClient, "removeQueries");
+    const restoreCheckpoint = vi.fn();
+    const onRemapSessionID = vi.fn();
+    const onStreamOffline = vi.fn();
+    const abortA = new AbortController();
+    let sessionACurrent = true;
+    const sessionAPreflight = runDashboardCheckpointPreflight({
+      isCurrent: () => sessionACurrent,
+      onRemapSessionID,
+      onStreamOffline,
+      queryClient,
+      rawSessionID: sessionA,
+      restoreCheckpoint,
+      signal: abortA.signal,
+    });
+
+    await flushPromiseContinuations();
+    await flushPromiseContinuations();
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    controls.succeed("getAll");
+    await flushPromiseContinuations();
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    expect(controls.pendingOperations()).toEqual(["delete"]);
+
+    const sessionBHydration = await runDashboardCheckpointPreflight({
+      isCurrent: () => true,
+      onRemapSessionID,
+      onStreamOffline,
+      queryClient,
+      rawSessionID: sessionB,
+      restoreCheckpoint,
+    });
+    expect(sessionBHydration.resolvedSessionID).toBe(sessionB);
+
+    sessionACurrent = false;
+    abortA.abort();
+    controls.succeed("delete");
+    await sessionAPreflight;
+
+    expect(records.get(`checkpoint-${sessionA}`)?.checkpoint.selectedTick).toBe(
+      11,
+    );
+    expect(records.get(`checkpoint-${sessionB}`)?.checkpoint.selectedTick).toBe(
+      22,
+    );
+    expect(queryClient.getQueryData(["session-race", sessionA])).toBe(
+      "cache-a",
+    );
+    expect(queryClient.getQueryData(["session-race", sessionB])).toBe(
+      "cache-b",
+    );
+    expect(removeQueries).not.toHaveBeenCalled();
+    expect(restoreCheckpoint).not.toHaveBeenCalled();
+    expect(onRemapSessionID).not.toHaveBeenCalled();
+    expect(onStreamOffline).not.toHaveBeenCalled();
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([]);
   });
 });
