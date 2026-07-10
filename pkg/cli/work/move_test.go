@@ -100,10 +100,12 @@ func TestMove_JSONOutputEmitsStableEnvelope(t *testing.T) {
 }
 
 func TestMove_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
-	var gotMovePath string
+	var gotShowPath, gotMovePath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			gotMovePath = r.URL.Path
+			gotMovePath = r.URL.EscapedPath()
+		} else {
+			gotShowPath = r.URL.EscapedPath()
 		}
 		writeJSON(t, w, factoryapi.Work{
 			WorkId: stringPtr("work-1"),
@@ -115,16 +117,19 @@ func TestMove_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var out bytes.Buffer
 	err := Move(MoveConfig{
 		Server:    serverBase(t, srv),
-		SessionID: "session-beta",
-		WorkID:    "work-1",
+		SessionID: "session/beta",
+		WorkID:    "work/review",
 		StateName: "complete",
 		Output:    &out,
 	})
 	if err != nil {
 		t.Fatalf("Move: %v", err)
 	}
-	if gotMovePath != "/factory-sessions/session-beta/work/work-1/move" {
-		t.Fatalf("move path = %q, want /factory-sessions/session-beta/work/work-1/move", gotMovePath)
+	if gotShowPath != "/factory-sessions/session%2Fbeta/work/work%2Freview" {
+		t.Fatalf("show path = %q, want slash-sensitive identifiers escaped as segments", gotShowPath)
+	}
+	if gotMovePath != "/factory-sessions/session%2Fbeta/work/work%2Freview/move" {
+		t.Fatalf("move path = %q, want slash-sensitive identifiers escaped as segments", gotMovePath)
 	}
 }
 

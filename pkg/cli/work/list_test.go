@@ -156,7 +156,7 @@ func TestList_VerboseDiagnosticsIncludeActiveFilterKeys(t *testing.T) {
 func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
+		gotPath = r.URL.EscapedPath()
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListWorkResponse{}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -167,15 +167,15 @@ func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	var out bytes.Buffer
 	err := List(ListConfig{
 		Server:    serverBase(t, srv),
-		SessionID: "session-beta",
+		SessionID: "session/beta",
 		Output:    &out,
 	})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
 
-	if gotPath != "/factory-sessions/session-beta/work" {
-		t.Fatalf("path = %q, want /factory-sessions/session-beta/work", gotPath)
+	if gotPath != "/factory-sessions/session%2Fbeta/work" {
+		t.Fatalf("path = %q, want /factory-sessions/session%%2Fbeta/work", gotPath)
 	}
 	if got := out.String(); got != "No work found.\n" {
 		t.Fatalf("output = %q, want empty-state output", got)

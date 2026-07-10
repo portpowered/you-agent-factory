@@ -10,7 +10,7 @@ func TestBuildListRequest_NormalizesQueryWithoutHTTP(t *testing.T) {
 	nextToken := encodeCursor("work/42")
 	request, err := buildListRequest(ListConfig{
 		Server:       "https://factory.example",
-		SessionID:    "session-alpha",
+		SessionID:    "session/alpha",
 		StateName:    "in review",
 		StateType:    "PROCESSING",
 		Name:         "Plan & review",
@@ -34,8 +34,11 @@ func TestBuildListRequest_NormalizesQueryWithoutHTTP(t *testing.T) {
 		"maxResults":   {"25"},
 		"nextToken":    {nextToken},
 	}
-	if got := request.endpoint.Path; got != "/factory-sessions/session-alpha/work" {
+	if got := request.endpoint.Path; got != "/factory-sessions/session/alpha/work" {
 		t.Fatalf("endpoint path = %q", got)
+	}
+	if got := request.endpoint.EscapedPath(); got != "/factory-sessions/session%2Falpha/work" {
+		t.Fatalf("escaped endpoint path = %q", got)
 	}
 	if got := request.endpoint.RawQuery; got != wantQuery.Encode() {
 		t.Fatalf("query = %q, want %q", got, wantQuery.Encode())
