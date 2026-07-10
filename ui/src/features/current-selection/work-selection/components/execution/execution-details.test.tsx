@@ -33,8 +33,10 @@ describe("ExecutionDetailsSection", () => {
         },
         response: {
           duration_millis: 640,
-          failure_message: "Provider timed out.",
-          failure_reason: "provider_timeout",
+          failureDetail: {
+            message: "Provider timed out.",
+            reason: "timeout",
+          },
           outcome: "FAILED",
         },
         transition_id: "review",
@@ -92,7 +94,7 @@ describe("ExecutionDetailsSection", () => {
       within(workstationRequest).queryByText("2026-04-08T12:00:00Z"),
     ).toBeNull();
     expect(
-      within(workstationRequest).getByText("provider_timeout"),
+      within(workstationRequest).getByText("timeout"),
     ).toBeTruthy();
     expect(
       within(workstationRequest).getByText("Provider timed out."),

@@ -268,7 +268,10 @@ describe("reconstructWorldState inference failures", () => {
           attempt: 1,
           diagnostics: { provider: "openai" },
           durationMillis: 250,
-          errorClass: "rate_limited",
+          failureDetail: {
+            message: "Provider rate limit exceeded.",
+            reason: "throttled",
+          },
           exitCode: 1,
           inferenceRequestId: inferenceRequestID,
           outcome: "FAILED",
@@ -287,7 +290,7 @@ describe("reconstructWorldState inference failures", () => {
       state.inferenceAttemptsByDispatchID[dispatchID]?.[inferenceRequestID],
     ).toEqual(
       expect.objectContaining({
-        error_class: "rate_limited",
+        error_class: "throttled",
         exit_code: 1,
         outcome: "FAILED",
       }),
