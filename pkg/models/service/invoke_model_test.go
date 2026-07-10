@@ -7,16 +7,19 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
@@ -127,7 +130,8 @@ func TestService_InvokeModel_LogsInvocationReadiness(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	logger := zaptest.NewLogger(t)
+	core, logs := observer.New(zapcore.DebugLevel)
+	logger := zap.New(core)
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     func() modelhost.Host { return missingCacheInspectHost{} },
@@ -142,6 +146,120 @@ func TestService_InvokeModel_LogsInvocationReadiness(t *testing.T) {
 	})
 	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
+	}
+	if got := logs.FilterMessage("managed runtime invocation blocked").Len(); got != 1 {
+		t.Fatalf("blocked readiness logs = %d, want 1", got)
+	}
+	if got := logs.FilterMessage("managed runtime invocation readiness satisfied").Len(); got != 0 {
+		t.Fatalf("successful readiness logs = %d, want 0", got)
+	}
+}
+
+func TestService_InvokeModel_PropagatesCancellationAndDeadlines(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		context func(t *testing.T) context.Context
+		wantErr error
+	}{
+		{
+			name: "cancellation",
+			context: func(t *testing.T) context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+			wantErr: context.Canceled,
+		},
+		{
+			name: "deadline",
+			context: func(t *testing.T) context.Context {
+				ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+				t.Cleanup(cancel)
+				return ctx
+			},
+			wantErr: context.DeadlineExceeded,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := tt.context(t)
+			runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+			svc := modelsservice.New(modelsservice.Dependencies{
+				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+				ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
+					return invocationExecutorFunc(func(got context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+						if got != ctx {
+							t.Fatal("executor received a different context")
+						}
+						return interfaces.WorkResult{}, got.Err()
+					}), nil
+				},
+			})
+
+			_, err := svc.InvokeModel(ctx, "OMNIVOICE_Q4_K_M", directInvokeRequest(t))
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("InvokeModel error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestService_InvokeModel_ClassifiesExecutorAndFailedResultFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		execute   invocationExecutorFunc
+		wantClass apisurface.InferenceFailureClass
+	}{
+		{
+			name: "provider timeout",
+			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+				return interfaces.WorkResult{}, workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", context.DeadlineExceeded)
+			},
+			wantClass: apisurface.InferenceFailureClassTimeout,
+		},
+		{
+			name: "provider failure",
+			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+				return interfaces.WorkResult{}, workerprovider.NewProviderError(interfaces.WorkFailureTypeUnknown, "provider failed", errors.New("provider failure"))
+			},
+			wantClass: apisurface.InferenceFailureClassRuntimeFailure,
+		},
+		{
+			name: "failed work result",
+			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+				return interfaces.WorkResult{
+					Outcome: interfaces.OutcomeFailed,
+					Error:   "provider timed out",
+					FailureMetadata: &interfaces.WorkFailureMetadata{
+						Type: interfaces.WorkFailureTypeTimeout,
+					},
+				}, nil
+			},
+			wantClass: apisurface.InferenceFailureClassTimeout,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+			svc := modelsservice.New(modelsservice.Dependencies{
+				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+				ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
+					return tt.execute, nil
+				},
+			})
+
+			_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", directInvokeRequest(t))
+			failure, ok := apisurface.AsInferenceFailure(err)
+			if !ok || failure.Class != tt.wantClass {
+				t.Fatalf("InvokeModel error = %v, want %s InferenceFailure", err, tt.wantClass)
+			}
+		})
 	}
 }
 
@@ -179,8 +297,8 @@ func TestService_InvokeModel_UsesFactoryRunnerID(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	var capturedRunnerID string
 	svc := modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+		RuntimeConfig:   func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:       func() modelhost.Host { return readyInvokeHost{} },
 		FactoryRunnerID: func() string { return "runner-42" },
 		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
 			return capturingInvocationExecutor{
@@ -240,6 +358,12 @@ type stubInvocationExecutor struct {
 	output     string
 }
 
+type invocationExecutorFunc func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error)
+
+func (f invocationExecutorFunc) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+	return f(ctx, request)
+}
+
 func (s stubInvocationExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
 	if request.WorkerType != s.workerName {
 		return interfaces.WorkResult{}, errors.New("unexpected worker")
@@ -278,6 +402,16 @@ func mustGeneratedInvokeTextPart(t *testing.T, text string) factoryapi.WorkConte
 		t.Fatalf("build text content part: %v", err)
 	}
 	return part
+}
+
+func directInvokeRequest(t *testing.T) factoryapi.ModelInvocationRequest {
+	t.Helper()
+	return factoryapi.ModelInvocationRequest{
+		Operation: "TTS",
+		Content: &factoryapi.WorkContent{
+			mustGeneratedInvokeTextPart(t, "hello world"),
+		},
+	}
 }
 
 func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {

@@ -12,22 +12,23 @@ func NewHostFromCore(core *Core) *Host {
 		return nil
 	}
 	host := &Host{
-		core:           core,
-		factoryRootDir: core.FactoryRootDir(),
-		sessions:       core.Sessions(),
-		hostedWorkers:  core.HostedWorkers(),
-		policy:         CoordinatorPolicyFromConfig(core.cfg),
-		startupBundle:  core.StartupBundle(),
-		cfg:            core.cfg,
-		modelAssets:    core.modelAssets,
-		baseLogger:     core.BaseLogger(),
-		logger:         core.Logger(),
+		core:             core,
+		factoryRootDir:   core.FactoryRootDir(),
+		sessions:         core.Sessions(),
+		hostedWorkers:    core.HostedWorkers(),
+		policy:           CoordinatorPolicyFromConfig(core.cfg),
+		startupBundle:    core.StartupBundle(),
+		cfg:              core.cfg,
+		modelAssets:      core.modelAssets,
+		baseLogger:       core.BaseLogger(),
+		logger:           core.Logger(),
 		clock:            core.Clock(),
 		runtimeBuild:     core.RuntimeBuild(),
 		workersScheduler: core.WorkersScheduler(),
 	}
 	host.coordinator = newCoordinator(host)
 	host.definitions = newFactoryDefinitionService(host)
+	host.modelService = wireModelServiceCollaborator(host, core.cfg)
 	return host
 }
 

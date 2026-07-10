@@ -38,6 +38,10 @@ func (s *Services) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, b
 }
 
 func servicesFromCore(core *Core) *Services {
+	return servicesFromCoreWithModels(core, NewModelServiceFromCore(core))
+}
+
+func servicesFromCoreWithModels(core *Core, models ModelService) *Services {
 	if core == nil {
 		return nil
 	}
@@ -45,7 +49,7 @@ func servicesFromCore(core *Core) *Services {
 		core:              core,
 		Sessions:          core.Sessions(),
 		FactoryDefinition: NewFactoryDefinitionServiceFromCore(core),
-		Models:            NewModelServiceFromCore(core),
+		Models:            models,
 		Workers:           core.HostedWorkers(),
 		RuntimeHost:       core.RuntimeBuild(),
 	}

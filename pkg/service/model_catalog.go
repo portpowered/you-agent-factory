@@ -70,68 +70,6 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
-// modelServiceHost adapts FactoryService runtime seams for pkg/models/service wiring.
-type modelServiceHost struct {
-	*FactoryService
-}
-
-var _ modelsservice.Host = modelServiceHost{}
-
-func (h modelServiceHost) RuntimeConfig() func() *factoryconfig.LoadedFactoryConfig {
-	if h.FactoryService == nil {
-		return func() *factoryconfig.LoadedFactoryConfig { return nil }
-	}
-	return h.FactoryService.currentRuntimeConfig
-}
-
-func (h modelServiceHost) ModelHost() func() modelhost.Host {
-	if h.FactoryService == nil {
-		return func() modelhost.Host { return nil }
-	}
-	return h.FactoryService.modelHost
-}
-
-func (h modelServiceHost) ModelAssetPuller() func() localmodels.AssetPuller {
-	if h.FactoryService == nil {
-		return func() localmodels.AssetPuller { return nil }
-	}
-	return h.FactoryService.modelAssetPuller
-}
-
-func (h modelServiceHost) Logger() func() *zap.Logger {
-	if h.FactoryService == nil {
-		return func() *zap.Logger { return nil }
-	}
-	return func() *zap.Logger { return h.FactoryService.logger }
-}
-
-func (h modelServiceHost) ModelPullMetrics() func() modelsservice.PullMetricsRecorder {
-	if h.FactoryService == nil {
-		return func() modelsservice.PullMetricsRecorder { return nil }
-	}
-	return func() modelsservice.PullMetricsRecorder {
-		recorder := h.FactoryService.modelPullMetricsRecorder()
-		if recorder == nil {
-			return nil
-		}
-		return modelPullMetricsHostAdapter{inner: recorder}
-	}
-}
-
-func (h modelServiceHost) ModelInvocationExecutor() modelsservice.ModelInvocationExecutor {
-	if h.FactoryService == nil {
-		return nil
-	}
-	return h.FactoryService.modelInvocationExecutor
-}
-
-func (h modelServiceHost) FactoryRunnerID() func() string {
-	if h.FactoryService == nil {
-		return func() string { return "" }
-	}
-	return h.FactoryService.factoryRunnerID
-}
-
 type modelPullMetricsHostAdapter struct {
 	inner ModelPullMetricsRecorder
 }
@@ -147,7 +85,24 @@ func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig)
 	if cfg != nil && cfg.ModelAPI != nil {
 		return cfg.ModelAPI
 	}
-	return modelsservice.NewFromHost(modelServiceHost{FactoryService: fs})
+	if fs == nil {
+		return modelsservice.New(modelsservice.Dependencies{})
+	}
+	return modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig:    fs.currentRuntimeConfig,
+		ModelHost:        fs.modelHost,
+		ModelAssetPuller: fs.modelAssetPuller,
+		Logger:           func() *zap.Logger { return fs.logger },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			recorder := fs.modelPullMetricsRecorder()
+			if recorder == nil {
+				return nil
+			}
+			return modelPullMetricsHostAdapter{inner: recorder}
+		},
+		ModelInvocationExecutor: fs.modelInvocationExecutor,
+		FactoryRunnerID:         fs.factoryRunnerID,
+	})
 }
 
 // ProvideModelServiceCollaborator constructs the model-domain collaborator for a
