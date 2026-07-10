@@ -97,6 +97,165 @@ func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.
 	}
 }
 
+func TestParseCodexProviderFailure_GPT56SolReturnsActionableNestedMessage(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")
+	wantMessage := "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
+
+	got := ParseCodexProviderFailure(entry.CommandResult())
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("Reason = %q, want %q", got.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	}
+	if got.Message != wantMessage {
+		t.Fatalf("Message = %q, want %q", got.Message, wantMessage)
+	}
+	for _, rejected := range entry.RejectMessageContains {
+		if strings.Contains(got.Message, rejected) {
+			t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+		}
+	}
+}
+
+func TestParseCodexProviderFailure_StructuredRecordsUseLastValidCrossStreamRecord(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr: []byte(strings.Join([]string{
+			`ERROR: {"type":"error","status":400,"error":`,
+			`ERROR: {"type":"error","status":401,"error":{"type":"authentication_error","message":"sign in again"}}`,
+		}, "\n")),
+		Stdout: []byte(strings.Join([]string{
+			`ERROR: {"type":"error","status":429,"error":{"type":"rate_limit_error","message":"earlier stdout limit"}}`,
+			`ERROR: {"type":"error","status":500,"error":{"type":"server_error","message":"final stdout server failure"}}`,
+			`ERROR: {"type":"error","status":400,"error":`,
+		}, "\n")),
+	}
+
+	got := ParseCodexProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypeInternalServerError || got.Message != "final stdout server failure" {
+		t.Fatalf("ParseCodexProviderFailure() = %#v, want final valid stdout server failure", got)
+	}
+}
+
+func TestParseCodexProviderFailure_StructuredFieldsPrecedeSubstringFallback(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr: []byte(strings.Join([]string{
+			`ERROR: transcript said 429 too many requests`,
+			`ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"choose a supported model"}}`,
+			`ERROR: cleanup failed after request`,
+		}, "\n")),
+	}
+
+	got := ParseCodexProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "choose a supported model" {
+		t.Fatalf("ParseCodexProviderFailure() = %#v, want structured bad request", got)
+	}
+}
+
+func TestParseCodexProviderFailure_UsesOuterStructuredTypeAndMessage(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte(`ERROR: {"type":"rate_limit_error","message":"request capacity reached"}`),
+	}
+
+	got := ParseCodexProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypeThrottled || got.Message != "request capacity reached" {
+		t.Fatalf("ParseCodexProviderFailure() = %#v, want outer structured throttle failure", got)
+	}
+}
+
+func TestParseCodexProviderFailure_KnownCodexShapesKeepCanonicalReasons(t *testing.T) {
+	testCases := []string{
+		"codex_status_429_too_many_requests",
+		"codex_internal_server_status_500",
+		"codex_invalid_request_error",
+		"codex_timeout_waiting_for_provider",
+		"codex_authentication_unauthorized",
+		"codex_windows_exit_code_4294967295",
+	}
+	for _, name := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(name, func(t *testing.T) {
+			got := ParseCodexProviderFailure(entry.CommandResult())
+			if got.Reason != entry.ExpectedType {
+				t.Fatalf("Reason = %q, want %q", got.Reason, entry.ExpectedType)
+			}
+		})
+	}
+}
+
+func TestParseCodexProviderFailure_BoundsAndSanitizesFallbackMessages(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+		reject      []string
+		wantMaxLen  int
+	}{
+		{
+			name: "TranscriptAndHeadersUseExitFallback",
+			result: CommandResult{ExitCode: 7, Stdout: []byte(strings.Join([]string{
+				"OpenAI Codex v0.143.0",
+				"model: gpt-5.6-sol",
+				"customer prompt must stay private",
+				"cleanup complete",
+			}, "\n"))},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 7",
+			reject:      []string{"customer prompt", "cleanup", "gpt-5.6-sol"},
+		},
+		{
+			name:        "MalformedJSONUsesExitFallback",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(`ERROR: {"type":"error","error":{"message":"private transcript"}`)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 1",
+			reject:      []string{"private transcript", "{"},
+		},
+		{
+			name:        "CredentialsUseExitFallback",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("ERROR: request failed with Authorization: Bearer secret-token")},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 1",
+			reject:      []string{"secret-token", "Bearer"},
+		},
+		{
+			name: "OutputBeforeScanTailIsIgnored",
+			result: CommandResult{ExitCode: 2, Stderr: []byte(
+				"ERROR: should not survive the bounded scan\n" + strings.Repeat("cleanup-padding\n", codexErrorLineScanBytes),
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 2",
+			reject:      []string{"should not survive"},
+		},
+		{
+			name:       "UnknownErrorExcerptIsMessageBounded",
+			result:     CommandResult{ExitCode: 3, Stderr: []byte("ERROR: operation failed " + strings.Repeat("x", codexFailureMessageBytes+200))},
+			wantReason: interfaces.WorkFailureTypeUnknown,
+			wantMaxLen: codexFailureMessageBytes,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseCodexProviderFailure(tc.result)
+			if got.Reason != tc.wantReason {
+				t.Fatalf("Reason = %q, want %q", got.Reason, tc.wantReason)
+			}
+			if tc.wantMessage != "" && got.Message != tc.wantMessage {
+				t.Fatalf("Message = %q, want %q", got.Message, tc.wantMessage)
+			}
+			if tc.wantMaxLen != 0 && len(got.Message) != tc.wantMaxLen {
+				t.Fatalf("message length = %d, want %d", len(got.Message), tc.wantMaxLen)
+			}
+			for _, rejected := range tc.reject {
+				if strings.Contains(got.Message, rejected) {
+					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+				}
+			}
+		})
+	}
+}
+
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
 	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {

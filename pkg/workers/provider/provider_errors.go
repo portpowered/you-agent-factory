@@ -2,8 +2,11 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -27,6 +30,205 @@ type ProviderError struct {
 type ProviderFailureResult struct {
 	Reason  interfaces.WorkFailureType
 	Message string
+}
+
+const codexFailureMessageBytes = 1024
+
+type codexStructuredFailure struct {
+	Type    string
+	Status  int
+	Message string
+}
+
+// ParseCodexProviderFailure deterministically parses bounded subprocess output
+// into the canonical provider-failure contract. Each stream is limited by
+// codexErrorLineScanBytes before parsing, and returned messages are limited by
+// codexFailureMessageBytes.
+func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
+	streams := []string{
+		tailForCodexErrorScan(result.Stderr),
+		tailForCodexErrorScan(result.Stdout),
+	}
+	if failure, ok := lastCodexStructuredFailure(streams); ok {
+		reason := classifyCodexFailure(failure.Type, failure.Status, failure.Message, result.ExitCode)
+		return ProviderFailureResult{
+			Reason:  reason,
+			Message: safeCodexFailureMessage(failure.Message, codexExitFailureMessage(result.ExitCode)),
+		}
+	}
+
+	if message, ok := lastCodexTextFailure(streams); ok {
+		return ProviderFailureResult{
+			Reason:  classifyCodexFailure("", 0, message, result.ExitCode),
+			Message: safeCodexFailureMessage(message, codexExitFailureMessage(result.ExitCode)),
+		}
+	}
+
+	return ProviderFailureResult{
+		Reason:  classifyCodexFailure("", 0, "", result.ExitCode),
+		Message: codexExitFailureMessage(result.ExitCode),
+	}
+}
+
+func lastCodexStructuredFailure(streams []string) (codexStructuredFailure, bool) {
+	var last codexStructuredFailure
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			payload, ok := codexErrorPayload(line)
+			if !ok || !strings.HasPrefix(payload, "{") {
+				continue
+			}
+			failure, ok := decodeCodexStructuredFailure(payload)
+			if ok {
+				last, found = failure, true
+			}
+		}
+	}
+	return last, found
+}
+
+func codexErrorPayload(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "ERROR:") {
+		return "", false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(trimmed, "ERROR:")), true
+}
+
+func decodeCodexStructuredFailure(payload string) (codexStructuredFailure, bool) {
+	var envelope struct {
+		Type    string `json:"type"`
+		Status  int    `json:"status"`
+		Message string `json:"message"`
+		Error   *struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		return codexStructuredFailure{}, false
+	}
+	if envelope.Error == nil && envelope.Type == "" && envelope.Status == 0 {
+		return codexStructuredFailure{}, false
+	}
+
+	failure := codexStructuredFailure{
+		Type:    envelope.Type,
+		Status:  envelope.Status,
+		Message: envelope.Message,
+	}
+	if envelope.Error != nil {
+		if envelope.Error.Type != "" {
+			failure.Type = envelope.Error.Type
+		}
+		if envelope.Error.Message != "" {
+			failure.Message = envelope.Error.Message
+		}
+	}
+	return failure, true
+}
+
+func lastCodexTextFailure(streams []string) (string, bool) {
+	var last string
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			trimmed := strings.TrimSpace(line)
+			payload, isError := codexErrorPayload(trimmed)
+			if isError && !strings.HasPrefix(payload, "{") {
+				last = trimmed
+			}
+		}
+	}
+	if last != "" {
+		return last, true
+	}
+
+	// A single unprefixed line is an existing Codex diagnostic shape (for
+	// example transport timeouts). Multi-line output is treated as transcript
+	// or header noise unless it contains an explicit ERROR record.
+	for _, stream := range streams {
+		trimmed := strings.TrimSpace(stream)
+		if trimmed != "" && !strings.Contains(trimmed, "\n") && classifyCodexFailure("", 0, trimmed, 0) != interfaces.WorkFailureTypeUnknown {
+			last = trimmed
+		}
+	}
+	return last, last != ""
+}
+
+func classifyCodexFailure(errorType string, status int, message string, exitCode int) interfaces.WorkFailureType {
+	if reason, ok := classifyCodexStructuredSignal(errorType, status); ok {
+		return reason
+	}
+	if reason := classifyCodexMessageSignal(message, exitCode); reason != interfaces.WorkFailureTypeUnknown {
+		return reason
+	}
+	if exitCode == codexWindowsProcessFailureExitCode {
+		return interfaces.WorkFailureTypeInternalServerError
+	}
+	return interfaces.WorkFailureTypeUnknown
+}
+
+func classifyCodexStructuredSignal(errorType string, status int) (interfaces.WorkFailureType, bool) {
+	normalizedType := strings.ToLower(strings.TrimSpace(errorType))
+	switch {
+	case containsAny(normalizedType, "authentication_error", "permission_error") || status == 401 || status == 403:
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case containsAny(normalizedType, "invalid_request_error") || status == 400:
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case containsAny(normalizedType, "rate_limit_error", "overloaded_error") || status == 429:
+		return interfaces.WorkFailureTypeThrottled, true
+	case containsAny(normalizedType, "api_error", "server_error") || status >= 500 && status <= 599:
+		return interfaces.WorkFailureTypeInternalServerError, true
+	case status == 408:
+		return interfaces.WorkFailureTypeTimeout, true
+	default:
+		return interfaces.WorkFailureTypeUnknown, false
+	}
+}
+
+func classifyCodexMessageSignal(message string, exitCode int) interfaces.WorkFailureType {
+	normalizedMessage := strings.ToLower(message)
+	switch {
+	case exitCode == 124:
+		return interfaces.WorkFailureTypeTimeout
+	case containsAny(normalizedMessage, "authentication_error", "api key", "unauthorized", "forbidden", "401 unauthorized", "403 forbidden"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalizedMessage, "deadline exceeded", "timed out", "timeout"):
+		return interfaces.WorkFailureTypeTimeout
+	case containsAny(normalizedMessage, "invalid_request_error", "bad request", "400 item", "400 previous response", "400 "):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalizedMessage, codexThrottledFailureNeedles...):
+		return interfaces.WorkFailureTypeThrottled
+	case containsAny(normalizedMessage, codexTemporaryServerFailureNeedles...):
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func safeCodexFailureMessage(message string, fallback string) string {
+	message = strings.Join(strings.Fields(message), " ")
+	if message == "" || containsSensitiveCodexFailureText(message) {
+		return fallback
+	}
+	if len(message) <= codexFailureMessageBytes {
+		return message
+	}
+	message = message[:codexFailureMessageBytes]
+	for message != "" && !utf8.ValidString(message) {
+		message = message[:len(message)-1]
+	}
+	return strings.TrimSpace(message)
+}
+
+func containsSensitiveCodexFailureText(message string) bool {
+	normalized := strings.ToLower(message)
+	return containsAny(normalized, "authorization:", "bearer ", "x-api-key", "api_key", "api-key", "sk-")
+}
+
+func codexExitFailureMessage(exitCode int) string {
+	return fmt.Sprintf("codex exited with code %d", exitCode)
 }
 
 func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {

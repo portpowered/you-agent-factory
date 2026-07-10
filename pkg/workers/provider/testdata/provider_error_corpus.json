@@ -186,6 +186,27 @@
       "supported": true
     },
     {
+      "name": "codex_gpt_5_6_sol_requires_newer_cli",
+      "provider": "codex",
+      "raw_provider_family": "codex",
+      "category": "permanent_bad_request",
+      "upstream_source_case": "Codex CLI 0.143.0 gpt-5.6-sol invalid_request_error",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "OpenAI Codex v0.143.0\nmodel: gpt-5.6-sol\nERROR: {\"type\":\"error\",\"status\":400,\"error\":{\"type\":\"invalid_request_error\",\"message\":\"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again.\"}}",
+      "expected_type": "permanent_bad_request",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "OpenAI Codex v0.143.0",
+        "model: gpt-5.6-sol",
+        "ERROR:",
+        "invalid_request_error"
+      ]
+    },
+    {
       "name": "codex_timeout_waiting_for_provider",
       "provider": "codex",
       "raw_provider_family": "codex",
