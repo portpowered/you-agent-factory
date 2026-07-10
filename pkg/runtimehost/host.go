@@ -41,7 +41,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
@@ -123,7 +122,7 @@ type Host struct {
 	factorySave      FactorySaveSaver
 	sessionGateway   SessionGateway
 	runtimeBuild     *runtimebuild.Service
-	workersScheduler *workersservice.Service
+	workersScheduler workerSidecarOwner
 	hostedWorkers    hostedworkers.Config
 	factoryRootDir   string
 	policy           hostCoordinatorPolicy

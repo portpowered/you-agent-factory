@@ -12,6 +12,12 @@ import (
 
 type workRequestSubmitter func(context.Context, interfaces.WorkRequest) error
 
+type workerSidecarOwner interface {
+	StartSchedulerSidecarsForRuntime(context.Context, *sync.WaitGroup, workersservice.RuntimeSidecarsInput)
+	WorkflowIdentityForFactoryDir(string) string
+	SubmitCronTick(context.Context, interfaces.RuntimeWorkstationLookup, string, workersservice.WorkRequestSubmitter, interfaces.FactoryWorkstationConfig, time.Time) error
+}
+
 func (fs *Host) startSchedulerSidecarsForRuntime(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
@@ -41,7 +47,7 @@ func (fs *Host) startSchedulerSidecarsForRuntime(
 	return nil
 }
 
-func (fs *Host) requireWorkersScheduler() (*workersservice.Service, error) {
+func (fs *Host) requireWorkersScheduler() (workerSidecarOwner, error) {
 	if fs == nil || fs.workersScheduler == nil {
 		return nil, fmt.Errorf("worker sidecar owner is not initialized: construct Host through the runtime initializer")
 	}
