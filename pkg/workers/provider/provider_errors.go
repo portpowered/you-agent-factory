@@ -33,6 +33,8 @@ type ProviderFailureResult struct {
 
 const codexFailureMessageBytes = 1024
 
+const geminiFailureMessageRunes = 1024
+
 const (
 	codexAuthFailureMessage       = "Codex authentication failed."
 	codexBadRequestFailureMessage = "Codex rejected the request as invalid."
@@ -42,10 +44,254 @@ const (
 	codexTimeoutFailureMessage    = "Codex request timed out."
 )
 
+const (
+	geminiAuthFailureMessage     = "Gemini authentication failed."
+	geminiBadRequestMessage      = "Gemini rejected the request."
+	geminiThrottleFailureMessage = "The provider is rate limited; retry after capacity becomes available."
+	geminiTimeoutFailureMessage  = "Gemini request timed out."
+	geminiServerFailureMessage   = "Gemini encountered a temporary server error."
+)
+
 type codexStructuredFailure struct {
 	Type    string
 	Status  int
 	Message string
+}
+
+type geminiStructuredFailure struct {
+	Type    string
+	Status  string
+	Code    string
+	Message string
+}
+
+// ParseGeminiProviderFailure converts Gemini-owned structured and text failure
+// shapes into one canonical reason/message pair. Structured error records are
+// evaluated before text so transcript content cannot override an explicit
+// provider signal.
+func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
+	streams := []string{
+		tailForCodexErrorScan(result.Stderr),
+		tailForCodexErrorScan(result.Stdout),
+	}
+	if failure, ok := lastGeminiStructuredFailure(streams); ok {
+		return failure
+	}
+	if result.ExitCode == 124 {
+		return geminiFailureResult(interfaces.WorkFailureTypeTimeout, "")
+	}
+	if failure, ok := lastGeminiTextFailure(streams); ok {
+		return failure
+	}
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: fmt.Sprintf("gemini exited with code %d", result.ExitCode),
+	}
+}
+
+func lastGeminiStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			failure, ok := decodeGeminiStructuredFailure(strings.TrimSpace(line))
+			if !ok {
+				continue
+			}
+			reason := classifyGeminiFailureSignal(failure.Type, failure.Status, failure.Code, failure.Message)
+			if reason == interfaces.WorkFailureTypeUnknown {
+				continue
+			}
+			last = geminiFailureResult(reason, failure.Message)
+			found = true
+		}
+	}
+	return last, found
+}
+
+func decodeGeminiStructuredFailure(payload string) (geminiStructuredFailure, bool) {
+	if !strings.HasPrefix(payload, "{") {
+		return geminiStructuredFailure{}, false
+	}
+	var envelope struct {
+		Type    string          `json:"type"`
+		Status  json.RawMessage `json:"status"`
+		Code    json.RawMessage `json:"code"`
+		Message string          `json:"message"`
+		Error   *struct {
+			Type    string          `json:"type"`
+			Status  json.RawMessage `json:"status"`
+			Code    json.RawMessage `json:"code"`
+			Message string          `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		return geminiStructuredFailure{}, false
+	}
+	if envelope.Error == nil && !isGeminiErrorRecordType(envelope.Type) {
+		return geminiStructuredFailure{}, false
+	}
+	failure := geminiStructuredFailure{
+		Type:    envelope.Type,
+		Status:  geminiJSONScalar(envelope.Status),
+		Code:    geminiJSONScalar(envelope.Code),
+		Message: envelope.Message,
+	}
+	if envelope.Error != nil {
+		if envelope.Error.Type != "" {
+			failure.Type = envelope.Error.Type
+		}
+		if status := geminiJSONScalar(envelope.Error.Status); status != "" {
+			failure.Status = status
+		}
+		if code := geminiJSONScalar(envelope.Error.Code); code != "" {
+			failure.Code = code
+		}
+		if envelope.Error.Message != "" {
+			failure.Message = envelope.Error.Message
+		}
+	}
+	if failure.Type == "" && failure.Status == "" && failure.Code == "" && failure.Message == "" {
+		return geminiStructuredFailure{}, false
+	}
+	return failure, true
+}
+
+func isGeminiErrorRecordType(recordType string) bool {
+	switch strings.ToLower(strings.TrimSpace(recordType)) {
+	case "error", "fatalauthenticationerror", "authenticationerror", "badrequesterror":
+		return true
+	default:
+		return false
+	}
+}
+
+func geminiJSONScalar(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func lastGeminiTextFailure(streams []string) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			message := strings.TrimSpace(line)
+			if strings.HasPrefix(message, "{") {
+				continue
+			}
+			reason := classifyGeminiFailureSignal("", "", "", message)
+			if reason == interfaces.WorkFailureTypeUnknown {
+				continue
+			}
+			last = geminiFailureResult(reason, "")
+			found = true
+		}
+	}
+	return last, found
+}
+
+func classifyGeminiFailureSignal(errorType, status, code, message string) interfaces.WorkFailureType {
+	structuredSignals := []string{
+		strings.ToLower(strings.TrimSpace(errorType)),
+		strings.ToLower(strings.TrimSpace(status)),
+		strings.ToLower(strings.TrimSpace(code)),
+	}
+	for _, signal := range structuredSignals {
+		switch signal {
+		case "fatalauthenticationerror", "authenticationerror", "unauthenticated", "permission_denied", "401", "403":
+			return interfaces.WorkFailureTypeAuthFailure
+		case "badrequesterror", "invalid_argument", "400":
+			return interfaces.WorkFailureTypePermanentBadRequest
+		case "resource_exhausted", "ratelimitexceeded", "429":
+			return interfaces.WorkFailureTypeThrottled
+		case "deadline_exceeded", "124", "408":
+			return interfaces.WorkFailureTypeTimeout
+		case "internal", "unavailable", "500", "502", "503", "504":
+			return interfaces.WorkFailureTypeInternalServerError
+		}
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case containsAny(normalized,
+		"fatalauthenticationerror", "unauthenticated", "permission_denied",
+		"permission denied", "http 401", "status 401", "code 401",
+		"http 403", "status 403", "code 403", "authentication failed",
+		"unauthorized", "forbidden"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalized,
+		"badrequesterror", "invalid_argument", "invalid argument", "invalid request",
+		"bad request", "http 400", "status 400", "code 400"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalized,
+		"resource_exhausted", "resource exhausted", "ratelimitexceeded", "rate limit",
+		"quota exceeded", "too many requests", "http 429", "status 429", "code 429"):
+		return interfaces.WorkFailureTypeThrottled
+	case containsAny(normalized,
+		"deadline_exceeded", "deadline exceeded", "request timed out", "request timeout",
+		"command timed out", "provider timed out"):
+		return interfaces.WorkFailureTypeTimeout
+	case containsAny(normalized,
+		"internal server error", "service unavailable", "upstream unavailable",
+		"http 500", "status 500", "code 500", "http 502", "status 502", "code 502",
+		"http 503", "status 503", "code 503", "http 504", "status 504", "code 504"):
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func geminiFailureResult(reason interfaces.WorkFailureType, upstreamMessage string) ProviderFailureResult {
+	message := geminiFixedFailureMessage(reason)
+	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+		if safe := safeGeminiStructuredMessage(upstreamMessage); safe != "" {
+			message = safe
+		}
+	}
+	return ProviderFailureResult{Reason: reason, Message: message}
+}
+
+func geminiFixedFailureMessage(reason interfaces.WorkFailureType) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return geminiAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return geminiBadRequestMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return geminiThrottleFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return geminiTimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return geminiServerFailureMessage
+	default:
+		return ""
+	}
+}
+
+func safeGeminiStructuredMessage(message string) string {
+	message = strings.Join(strings.Fields(message), " ")
+	if message == "" {
+		return ""
+	}
+	normalized := strings.ToLower(message)
+	if containsAny(normalized,
+		"bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
+		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
+		"customer prompt", "user prompt", "model response", "transcript:") {
+		return ""
+	}
+	runes := []rune(message)
+	if len(runes) > geminiFailureMessageRunes {
+		message = string(runes[:geminiFailureMessageRunes])
+	}
+	return message
 }
 
 // ParseCodexProviderFailure deterministically parses bounded subprocess output

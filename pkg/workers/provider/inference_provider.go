@@ -300,6 +300,14 @@ func normalizeProviderExitFailure(provider string, result CommandResult, session
 			diagnostics,
 		)
 	}
+	if provider == string(interfaces.ModelProviderGemini) {
+		return newProviderErrorFromResultWithDiagnostics(
+			ParseGeminiProviderFailure(result),
+			nil,
+			session,
+			diagnostics,
+		)
+	}
 	message := formatProviderExitFailure(provider, result)
 	errorType := classifyProviderExitFailure(provider, result)
 	return newProviderErrorWithDiagnostics(errorType, message, nil, session, diagnostics)

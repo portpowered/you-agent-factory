@@ -298,11 +298,15 @@ func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 }
 
 func (b geminiProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
+	return ParseGeminiProviderFailure(result).Message
 }
 
 func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
+	return ParseGeminiProviderFailure(result).Reason
+}
+
+func (b geminiProviderBehavior) FormatTimeoutFailure(_ CommandResult) string {
+	return geminiTimeoutFailureMessage
 }
 
 func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {

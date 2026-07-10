@@ -100,10 +100,10 @@ type exitFailureInferenceTestCase struct {
 func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
 		{
-			name:        "GeminiPrefersProcessOutputForThrottle",
+			name:        "GeminiUsesCanonicalThrottleMessage",
 			provider:    string(interfaces.ModelProviderGemini),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
-			wantMessage: "resource exhausted by 429 quota",
+			wantMessage: geminiThrottleFailureMessage,
 			wantType:    interfaces.WorkFailureTypeThrottled,
 		},
 		{

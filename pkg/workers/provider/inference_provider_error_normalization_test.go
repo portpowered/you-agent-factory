@@ -172,6 +172,75 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 	}
 }
 
+func TestScriptWrapProvider_Infer_GeminiCanonicalReasonDrivesFailurePolicy(t *testing.T) {
+	testCases := []struct {
+		name              string
+		stderr            string
+		wantType          interfaces.WorkFailureType
+		wantFamily        interfaces.WorkFailureFamily
+		wantRetryable     bool
+		wantTerminal      bool
+		wantThrottlePause bool
+	}{
+		{
+			name:         "AuthenticationIsTerminal",
+			stderr:       `{"error":{"status":"UNAUTHENTICATED"}}`,
+			wantType:     interfaces.WorkFailureTypeAuthFailure,
+			wantFamily:   interfaces.WorkFailureFamilyTerminal,
+			wantTerminal: true,
+		},
+		{
+			name:         "InvalidRequestIsTerminal",
+			stderr:       `{"error":{"code":400}}`,
+			wantType:     interfaces.WorkFailureTypePermanentBadRequest,
+			wantFamily:   interfaces.WorkFailureFamilyTerminal,
+			wantTerminal: true,
+		},
+		{
+			name:              "QuotaPausesAndRetries",
+			stderr:            `{"error":{"status":"RESOURCE_EXHAUSTED"}}`,
+			wantType:          interfaces.WorkFailureTypeThrottled,
+			wantFamily:        interfaces.WorkFailureFamilyThrottle,
+			wantRetryable:     true,
+			wantThrottlePause: true,
+		},
+		{
+			name:          "TimeoutRetriesWithoutPause",
+			stderr:        `{"error":{"status":"DEADLINE_EXCEEDED"}}`,
+			wantType:      interfaces.WorkFailureTypeTimeout,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+		},
+		{
+			name:          "ServerFailureRetriesWithoutPause",
+			stderr:        `{"error":{"code":503}}`,
+			wantType:      interfaces.WorkFailureTypeInternalServerError,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+				result: CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)},
+			}))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderGemini),
+				Model:         "gemini-2.5-flash",
+				UserMessage:   "private prompt",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType:          tc.wantType,
+				wantFamily:        tc.wantFamily,
+				wantRetryable:     tc.wantRetryable,
+				wantTerminal:      tc.wantTerminal,
+				wantThrottlePause: tc.wantThrottlePause,
+			})
+		})
+	}
+}
+
 func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuthFailure(t *testing.T) {
 	testCases := []struct {
 		entryName          string

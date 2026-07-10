@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -366,6 +367,142 @@ func TestParseCodexProviderFailure_StructuredFallbackIsSafeByConstruction(t *tes
 				}
 			}
 		})
+	}
+}
+
+func TestParseGeminiProviderFailure_NormalizesKnownStructuredFailures(t *testing.T) {
+	testCases := []struct {
+		name        string
+		output      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name:        "AuthenticationTypePreservesActionableMessage",
+			output:      `{"type":"error","error":{"type":"FatalAuthenticationError","message":"Run gemini auth login to continue."}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Run gemini auth login to continue.",
+		},
+		{
+			name:        "PermissionStatusUsesAuthenticationFallback",
+			output:      `{"type":"error","error":{"status":"PERMISSION_DENIED"}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
+		},
+		{
+			name:        "InvalidArgumentPreservesActionableMessage",
+			output:      `{"error":{"status":"INVALID_ARGUMENT","message":"The selected model name is invalid."}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "The selected model name is invalid.",
+		},
+		{
+			name:        "NumericQuotaCodeUsesFixedMessage",
+			output:      `{"error":{"code":429,"message":"quota exhausted for project private-project"}}`,
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: geminiThrottleFailureMessage,
+		},
+		{
+			name:        "DeadlineStatusUsesFixedMessage",
+			output:      `{"error":{"status":"DEADLINE_EXCEEDED","message":"request exceeded 60 seconds"}}`,
+			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantMessage: geminiTimeoutFailureMessage,
+		},
+		{
+			name:        "UnavailableStatusUsesFixedMessage",
+			output:      `{"error":{"status":"UNAVAILABLE","message":"backend unavailable"}}`,
+			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantMessage: geminiServerFailureMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.output)})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestParseGeminiProviderFailure_KnownTextAndStructuredPrecedenceAreSafe(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name: "StructuredErrorOutranksConflictingText",
+			result: CommandResult{
+				ExitCode: 1,
+				Stderr:   []byte("HTTP 429 too many requests"),
+				Stdout:   []byte(`{"error":{"status":"INVALID_ARGUMENT","message":"Unsupported generation config."}}`),
+			},
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "Unsupported generation config.",
+		},
+		{
+			name:        "AuthenticationTextUsesFixedMessage",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("FatalAuthenticationError: login required")},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
+		},
+		{
+			name:        "ExitCode124IsTimeout",
+			result:      CommandResult{ExitCode: 124},
+			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantMessage: geminiTimeoutFailureMessage,
+		},
+		{
+			name: "CredentialMessageUsesSafeFallback",
+			result: CommandResult{ExitCode: 1, Stderr: []byte(
+				`{"error":{"status":"UNAUTHENTICATED","message":"token=customer-secret-value"}}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
+		},
+		{
+			name: "OrdinaryJSONMessageIsNotAnErrorRecord",
+			result: CommandResult{ExitCode: 7, Stdout: []byte(
+				`{"type":"message","message":"Explain how rate limits work."}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "gemini exited with code 7",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(tc.result)
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestParseGeminiProviderFailure_BoundsAndNormalizesActionableMessage(t *testing.T) {
+	upstream := "Invalid generation config:\n\t" + strings.Repeat("é", geminiFailureMessageRunes+20)
+	payload, err := json.Marshal(map[string]any{
+		"error": map[string]any{
+			"status":  "INVALID_ARGUMENT",
+			"message": upstream,
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	got := ParseGeminiProviderFailure(CommandResult{ExitCode: 1, Stderr: payload})
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("Reason = %q, want %q", got.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	}
+	if strings.ContainsAny(got.Message, "\n\t") {
+		t.Fatalf("Message = %q, want normalized controls", got.Message)
+	}
+	if length := len([]rune(got.Message)); length != geminiFailureMessageRunes {
+		t.Fatalf("Message rune length = %d, want %d", length, geminiFailureMessageRunes)
 	}
 }
 
