@@ -859,9 +859,7 @@ func (c *runtimeCoordinator) StopLiveRuntime(handle *liveRuntimeHandle) error {
 	if handle == nil {
 		return nil
 	}
-	err := factoryservice.Stop(handle, fs.clock)
-	fs.StopLiveRuntimeSidecars(handle)
-	return err
+	return factoryservice.Stop(handle, fs.clock)
 }
 
 func (fs *Host) ShutdownOtherLiveSessions(except *liveRuntimeHandle) error {
