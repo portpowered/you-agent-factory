@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 
 import { useAppLocale } from "../../../i18n";
@@ -10,6 +11,17 @@ import {
 import { DashboardScreen } from "./index";
 
 const EXPECTED_DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
+
+function renderDashboardScreen() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <DashboardScreen />
+    </QueryClientProvider>,
+  );
+}
 
 let dashboardSnapshotState: ReturnType<
   typeof import("../hooks/useDashboardSnapshot").useDashboardSnapshot
@@ -83,7 +95,7 @@ describe("dashboard public barrel composition", () => {
   it("renders DashboardScreen from the public barrel with session-scoped loading shell", () => {
     const messages = getHeaderControlsMessages("en");
 
-    render(<DashboardScreen />);
+    renderDashboardScreen();
 
     expect(screen.getByRole("main").className).toBe(
       EXPECTED_DASHBOARD_SHELL_CLASS,
@@ -106,7 +118,7 @@ describe("dashboard public barrel composition", () => {
       },
     };
 
-    render(<DashboardScreen />);
+    renderDashboardScreen();
 
     expect(screen.getByRole("main").className).toBe(
       EXPECTED_DASHBOARD_SHELL_CLASS,

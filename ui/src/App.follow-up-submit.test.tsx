@@ -3,10 +3,8 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { describe, expect, it } from "vitest";
-
-import { selectComboboxOption } from "./testing/select-test-helpers";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   activeWorkLabel,
   submitWorkCardControls,
@@ -24,6 +22,7 @@ import {
   waitForDashboardShell,
 } from "./testing/app-shell-test-utils";
 import { seedTimelineSnapshot } from "./testing/app-shell-timeline-seed-utils";
+import { selectComboboxOption } from "./testing/select-test-helpers";
 import { isSessionFactoryRequest } from "./testing/session-factory-mocks";
 
 describe("App follow-up flows", () => {
@@ -63,7 +62,14 @@ describe("App follow-up flows", () => {
         snapshot: terminalSnapshot,
         seedCurrentFactoryDocument: false,
         fetchOverride: async (path, method) => {
-          if (method === "GET" && isSessionFactoryRequest(path, method)) {
+          if (
+            method === "GET" &&
+            isSessionFactoryRequest(
+              path,
+              method,
+              APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
+            )
+          ) {
             return jsonResponse(
               {
                 code: "NOT_FOUND",
@@ -233,9 +239,9 @@ describe("App follow-up flows", () => {
         await submitWorkScope.findByText("work_type_name is required"),
       ).toBeTruthy();
       expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/work`,
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/work`,
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/work`,
       ]);
       expect(workType).toHaveTextContent("story");
       expect(requestName.value).toBe("Retry dashboard request");
@@ -298,11 +304,7 @@ describe("App follow-up flows", () => {
       );
       fireEvent.click(await screen.findByRole("button", { name: "Image" }));
 
-      await selectComboboxOption(
-        userEvent.setup(),
-        workType,
-        "story",
-      );
+      await selectComboboxOption(userEvent.setup(), workType, "story");
       fireEvent.change(requestName, {
         target: { value: "Dashboard multimodal request" },
       });
@@ -354,8 +356,8 @@ describe("App follow-up flows", () => {
         workTypeName: "story",
       });
       expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work/staged-files`,
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/work/staged-files`,
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/work`,
       ]);
     });
   });

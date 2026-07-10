@@ -36,6 +36,46 @@ describe("useDashboardSessionStore", () => {
     ]);
   });
 
+  it("atomically replaces a transient selector in selection and tab order", () => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+      sessionTabOrder: [DEFAULT_FACTORY_SESSION_ID, "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .resolveSessionIdentity(
+        DEFAULT_FACTORY_SESSION_ID,
+        "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+        ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+      );
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      selectedSessionID: "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+      sessionTabOrder: ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+    });
+  });
+
+  it("does not replace a newer selection when delayed discovery completes", () => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: "session-beta",
+      sessionTabOrder: [DEFAULT_FACTORY_SESSION_ID, "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .resolveSessionIdentity(
+        DEFAULT_FACTORY_SESSION_ID,
+        "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+        ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+      );
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      selectedSessionID: "session-beta",
+      sessionTabOrder: ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+    });
+  });
+
   it("clears the selected session when set to null", () => {
     useDashboardSessionStore.getState().setSelectedSessionID(null);
     expect(useDashboardSessionStore.getState().selectedSessionID).toBeNull();

@@ -1,6 +1,16 @@
+import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo } from "react";
 
+import {
+  type FactorySessionSummary,
+  listFactorySessions,
+} from "../../../api/factory-sessions";
+import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
+import {
+  DEFAULT_FACTORY_SESSION_ID,
+  isDefaultFactorySessionID,
+} from "../../../api/session-routing";
 import {
   buildSessionScope,
   type SessionScope,
@@ -27,10 +37,17 @@ export function DashboardSessionScopeProvider({
 
 export interface DashboardSessionProviderProps {
   children: ReactNode;
+  renderDiscoveryState?: (state: DashboardSessionDiscoveryState) => ReactNode;
 }
+
+export type DashboardSessionDiscoveryState =
+  | { status: "loading" }
+  | { status: "empty" }
+  | { error: unknown; retry: () => void; status: "error" };
 
 export function DashboardSessionProvider({
   children,
+  renderDiscoveryState,
 }: DashboardSessionProviderProps) {
   const selectedSessionID = useDashboardSessionStore(
     (state) => state.selectedSessionID,
@@ -38,15 +55,76 @@ export function DashboardSessionProvider({
   const pausedSessionIDs = useDashboardSessionStore(
     (state) => state.pausedSessionIDs,
   );
-  const scope = useMemo(
-    () => buildSessionScope(selectedSessionID, pausedSessionIDs),
-    [pausedSessionIDs, selectedSessionID],
+  const resolveSessionIdentity = useDashboardSessionStore(
+    (state) => state.resolveSessionIdentity,
   );
+  const sessionsQuery = useQuery({
+    queryKey: FACTORY_SESSIONS_QUERY_KEY,
+    queryFn: () => listFactorySessions(),
+  });
+  const requiresDefaultResolution =
+    isDefaultFactorySessionID(selectedSessionID);
+  const resolvedDefaultSession = useMemo(
+    () => findResolvedDefaultSession(sessionsQuery.data),
+    [sessionsQuery.data],
+  );
+  const resolvedSelectedSessionID =
+    requiresDefaultResolution && resolvedDefaultSession
+      ? resolvedDefaultSession.id
+      : selectedSessionID;
+
+  useEffect(() => {
+    if (!resolvedDefaultSession) {
+      return;
+    }
+    resolveSessionIdentity(
+      DEFAULT_FACTORY_SESSION_ID,
+      resolvedDefaultSession.id,
+      (sessionsQuery.data ?? []).map((session) => session.id),
+    );
+  }, [resolveSessionIdentity, resolvedDefaultSession, sessionsQuery.data]);
+
+  const scope = useMemo(
+    () => buildSessionScope(resolvedSelectedSessionID, pausedSessionIDs),
+    [pausedSessionIDs, resolvedSelectedSessionID],
+  );
+
+  if (requiresDefaultResolution && !resolvedDefaultSession) {
+    if (sessionsQuery.isPending) {
+      return renderDiscoveryState?.({ status: "loading" }) ?? null;
+    }
+    if (sessionsQuery.isError) {
+      return (
+        renderDiscoveryState?.({
+          error: sessionsQuery.error,
+          retry: () => {
+            void sessionsQuery.refetch();
+          },
+          status: "error",
+        }) ?? null
+      );
+    }
+    return renderDiscoveryState?.({ status: "empty" }) ?? null;
+  }
 
   return (
     <DashboardSessionScopeProvider scope={scope}>
       {children}
     </DashboardSessionScopeProvider>
+  );
+}
+
+function findResolvedDefaultSession(
+  sessions: FactorySessionSummary[] | undefined,
+): FactorySessionSummary | null {
+  return (
+    sessions?.find(
+      (session) =>
+        session.isDefault &&
+        session.target.kind === "default" &&
+        session.id.trim().length > 0 &&
+        !isDefaultFactorySessionID(session.id),
+    ) ?? null
   );
 }
 

@@ -2,16 +2,19 @@ import { Button } from "../../../components/ui";
 import { useAppLocale } from "../../../i18n";
 import { DashboardBento } from "../../bento/public";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
+import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import {
   DashboardExportDialog,
   DashboardHeader,
   DashboardStatusPanel,
 } from "../../header/public";
-import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { useDashboardWorldView } from "../hooks/useDashboardWorldView";
 import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
+import {
+  type DashboardSessionDiscoveryState,
+  DashboardSessionProvider,
+} from "../session/dashboard-session-provider";
 import { DashboardSessionLifecycleBanner } from "./dashboard-session-lifecycle-banner";
 
 const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
@@ -22,9 +25,65 @@ export interface DashboardScreenProps {
 
 export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
   return (
-    <DashboardSessionProvider>
+    <DashboardSessionProvider
+      renderDiscoveryState={(state) => (
+        <DashboardSessionDiscoveryStatus locale={locale} state={state} />
+      )}
+    >
       <DashboardScreenContent locale={locale} />
     </DashboardSessionProvider>
+  );
+}
+
+function DashboardSessionDiscoveryStatus({
+  locale,
+  state,
+}: {
+  locale?: string;
+  state: DashboardSessionDiscoveryState;
+}) {
+  const { locale: resolvedLocale } = useAppLocale(locale);
+  const messages = getHeaderControlsMessages(resolvedLocale);
+
+  if (state.status === "loading") {
+    return (
+      <main className={DASHBOARD_SHELL_CLASS}>
+        <DashboardStatusPanel
+          locale={resolvedLocale}
+          title={messages.loadingSessionsLabel}
+        />
+      </main>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <main className={DASHBOARD_SHELL_CLASS}>
+        <DashboardStatusPanel
+          actions={
+            <Button onClick={state.retry} tone="outline">
+              {messages.retrySessionsLabel}
+            </Button>
+          }
+          detail={
+            state.error instanceof Error ? state.error.message : undefined
+          }
+          locale={resolvedLocale}
+          title={messages.sessionsErrorTitle}
+          tone="error"
+        />
+      </main>
+    );
+  }
+
+  return (
+    <main className={DASHBOARD_SHELL_CLASS}>
+      <DashboardHeader locale={locale} />
+      <DashboardStatusPanel
+        locale={resolvedLocale}
+        title={messages.sessionsEmptyTitle}
+      />
+    </main>
   );
 }
 

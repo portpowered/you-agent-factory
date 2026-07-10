@@ -80,6 +80,11 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   ),
 }));
 
+vi.mock("../session/dashboard-session-provider", () => ({
+  DashboardSessionProvider: ({ children }: { children: ReactNode }) => children,
+  useDashboardSession: () => ({ rawSessionID: "session-test" }),
+}));
+
 vi.mock("./dashboard-session-lifecycle-banner", () => ({
   DashboardSessionLifecycleBanner: () => (
     <section data-testid="dashboard-session-lifecycle-banner-probe" />
@@ -416,7 +421,9 @@ describe("DashboardScreen recovery states", () => {
       screen.getByRole("heading", { name: "Session recovery required" }),
     ).toBeTruthy();
     expect(
-      screen.getByText(/could not resolve the live session for "session-review"/i),
+      screen.getByText(
+        /could not resolve the live session for "session-review"/i,
+      ),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Retry clean replay" }),

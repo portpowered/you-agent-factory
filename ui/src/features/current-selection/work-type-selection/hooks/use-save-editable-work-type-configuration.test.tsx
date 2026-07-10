@@ -3,12 +3,12 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import { DashboardSessionStoreTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import {
   mockFactoryDocumentSave,
   mockPendingFactoryDocumentSave,
 } from "../../../../testing/factory-document-save-mocks";
 import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
-import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkTypeConfigurationState } from "../lib/detail-card-types";
 import { useSaveEditableWorkTypeConfiguration } from "./use-save-editable-work-type-configuration";
@@ -322,7 +322,9 @@ function createQueryClientWrapper() {
   return function QueryClientWrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };

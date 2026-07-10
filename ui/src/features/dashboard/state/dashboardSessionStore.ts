@@ -7,6 +7,11 @@ interface DashboardSessionStoreState {
   sessionTabOrder: string[];
   setSessionPaused: (sessionID: string, paused: boolean) => void;
   setSessionTabOrder: (sessionIDs: string[]) => void;
+  resolveSessionIdentity: (
+    selectorSessionID: string,
+    resolvedSessionID: string,
+    discoveredSessionIDs: string[],
+  ) => void;
   selectedSessionID: string | null;
   setSelectedSessionID: (sessionID: string | null) => void;
 }
@@ -54,6 +59,47 @@ export const useDashboardSessionStore = create<DashboardSessionStoreState>(
 
       set({
         sessionTabOrder: normalizedOrder,
+      });
+    },
+    resolveSessionIdentity: (
+      selectorSessionID,
+      resolvedSessionID,
+      discoveredSessionIDs,
+    ) => {
+      const normalizedSelector = selectorSessionID.trim();
+      const normalizedResolved = resolvedSessionID.trim();
+      if (normalizedSelector.length === 0 || normalizedResolved.length === 0) {
+        return;
+      }
+
+      set((current) => {
+        const nextOrder: string[] = [];
+        for (const sessionID of [
+          ...current.sessionTabOrder,
+          ...discoveredSessionIDs,
+        ]) {
+          const normalizedSessionID = sessionID.trim();
+          const canonicalSessionID =
+            normalizedSessionID === normalizedSelector
+              ? normalizedResolved
+              : normalizedSessionID;
+          if (
+            canonicalSessionID.length > 0 &&
+            !nextOrder.includes(canonicalSessionID)
+          ) {
+            nextOrder.push(canonicalSessionID);
+          }
+        }
+
+        return {
+          selectedSessionID:
+            current.selectedSessionID == null ||
+            current.selectedSessionID.trim().length === 0 ||
+            current.selectedSessionID === normalizedSelector
+              ? normalizedResolved
+              : current.selectedSessionID,
+          sessionTabOrder: nextOrder,
+        };
       });
     },
     setSelectedSessionID: (sessionID) => {

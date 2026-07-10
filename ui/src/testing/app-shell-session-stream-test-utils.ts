@@ -1,7 +1,7 @@
 import type { DashboardSnapshot } from "../api/dashboard";
 import type { FactorySessionSummary } from "../api/factory-sessions/api";
-import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./app-shell-session-preflight-test-utils";
 import { seedTimelineSnapshot } from "./app-shell-timeline-seed-utils";
 
 export class MockEventSource {
@@ -58,7 +58,7 @@ export class MockEventSource {
 export const defaultFactorySessionSummary: FactorySessionSummary = {
   factoryDir: "/workspace/default",
   folderPath: "/workspace",
-  id: DEFAULT_FACTORY_SESSION_ID,
+  id: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
   isDefault: true,
   project: "default",
   target: {
