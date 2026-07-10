@@ -119,7 +119,12 @@ func (o *SessionOwner) InvokeFactorySession(
 
 	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(factoryCfg)
 	if err != nil {
-		return FactoryInvocationResult{}, fmt.Errorf("resolve invocation work type: %w", err)
+		err = fmt.Errorf("resolve invocation work type: %w", err)
+		if o.deps.Telemetry != nil {
+			o.deps.Telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
+			o.deps.Telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
+		}
+		return FactoryInvocationResult{}, err
 	}
 	submitResult, err := o.deps.SubmitWork(ctx, sessionID, interfaces.SubmitRequest{
 		RequestID:           strings.TrimSpace(stringValue(request.RequestId)),

@@ -123,6 +123,54 @@ func TestSessionOwnerTelemetry_RedactsSensitiveArgumentFailure(t *testing.T) {
 	}
 }
 
+func TestSessionOwnerTelemetry_DefaultWorkTypeFailureIsReportedOnce(t *testing.T) {
+	recording := &recordingSessionTelemetry{}
+	cfg := sessionOwnerFactoryConfig()
+	cfg.Name = "general-factory"
+	cfg.Project = "telemetry-project"
+	cfg.WorkTypes = nil
+	owner := NewSessionOwner(SessionOwnerDependencies{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
+		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+			t.Fatal("SubmitWork called without a default handling Work type")
+			return interfaces.WorkRequestSubmitResult{}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			t.Fatal("Observe called without submitted Work")
+			return SessionInvocationObservation{}, nil
+		},
+		Telemetry: recording.telemetry(),
+	})
+
+	source := factoryapi.InvocationInputSourceKindText
+	content := sessionOwnerTextContent(t, "do not log this payload")
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+		SourceKind: &source,
+		Content:    &content,
+	})
+	if err == nil || !strings.Contains(err.Error(), "resolve invocation work type:") {
+		t.Fatalf("InvokeFactorySession error = %v, want wrapped Work-type resolution error", err)
+	}
+
+	labels := map[string]string{
+		"input_source":    string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+		"factory_name":    cfg.Name,
+		"factory_project": cfg.Project,
+	}
+	assertSingleSessionMetric(t, recording.metrics, InvocationMetricFailure, labels)
+	failed := singleSessionLog(t, recording.logs, "factory session invocation failed")
+	assertSessionOwnerEqual(t, "session ID", failed.Fields["session_id"], any("session-1"))
+	assertSessionOwnerEqual(t, "status", failed.Fields["status"], any(string(factoryapi.InvocationTerminalStatusFailed)))
+	assertSessionOwnerEqual(t, "error code", failed.Fields["error_code"], any(string(factoryapi.INVOCATIONRUNTIMEFAILURE)))
+	assertSessionOwnerEqual(t, "failure class", failed.Fields["failure_class"], any("runtime_failure"))
+	if failed.Error != err {
+		t.Fatalf("logged error = %v, want returned wrapped error %v", failed.Error, err)
+	}
+	if strings.Contains(fmt.Sprint(recording.metrics, recording.logs), "do not log this payload") {
+		t.Fatal("telemetry leaked invocation payload")
+	}
+}
+
 func TestSessionOwnerTelemetry_PackagedSuccessEmitsEachOutcomeOnce(t *testing.T) {
 	recording := &recordingSessionTelemetry{}
 	cfg := packagedSessionOwnerConfig()
