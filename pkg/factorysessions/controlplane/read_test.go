@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type readTestHost struct {
@@ -16,6 +18,30 @@ type readTestHost struct {
 	sessions        map[string]*factorysessions.LiveSession
 	projectionErr   error
 	requireSessionE error
+}
+
+type defaultIdentityTestHost struct {
+	*readTestHost
+	session *factorysessions.LiveSession
+}
+
+func (h *defaultIdentityTestHost) ResolveSyncPreflightTarget(
+	_ string,
+	_ *interfaces.FactorySessionLogicalResolveHint,
+) (controlplane.SyncPreflightTarget, error) {
+	return controlplane.SyncPreflightTarget{Session: h.session}, nil
+}
+
+func (h *defaultIdentityTestHost) BackendScopeID() string {
+	return "backend-default-identity-test"
+}
+
+func (h *defaultIdentityTestHost) StreamGenerationID(*factorysessions.LiveSession) string {
+	return "stream-default-identity-test"
+}
+
+func (h *defaultIdentityTestHost) LiveSessionEvents(*factorysessions.LiveSession) []factoryapi.FactoryEvent {
+	return nil
 }
 
 func (h *readTestHost) DiscoverTargets(string) ([]factorysessions.Target, error) {
@@ -103,6 +129,79 @@ func TestListLiveFactorySessions_OrdersDefaultFirst(t *testing.T) {
 	}
 	if !response.Sessions[0].IsDefault || response.Sessions[0].Id != "~default" {
 		t.Fatalf("first session = %#v, want default first", response.Sessions[0])
+	}
+}
+
+func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
+	t.Parallel()
+
+	const allocatedSessionID = "11111111-1111-4111-8111-111111111111"
+	if allocatedSessionID == factorysessions.DefaultSessionID || !factorysessions.IsUUIDFactorySessionID(allocatedSessionID) {
+		t.Fatalf("allocated session id %q must be a UUID distinct from the default selector", allocatedSessionID)
+	}
+
+	defaultSession := &factorysessions.LiveSession{
+		ID:                      factorysessions.DefaultSessionID,
+		IsDefault:               true,
+		RuntimeFactorySessionID: allocatedSessionID,
+		SessionState: factorysessions.SessionState{
+			FactoryDir: "/tmp/default/factory",
+			FolderPath: "/tmp/default",
+		},
+		Target: factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+	}
+	host := &defaultIdentityTestHost{
+		readTestHost: &readTestHost{
+			sessionIDs: []string{factorysessions.DefaultSessionID},
+			sessions: map[string]*factorysessions.LiveSession{
+				factorysessions.DefaultSessionID: defaultSession,
+			},
+		},
+		session: defaultSession,
+	}
+
+	listed, err := controlplane.ListLiveFactorySessions(context.Background(), host)
+	if err != nil {
+		t.Fatalf("ListLiveFactorySessions: %v", err)
+	}
+	if len(listed.Sessions) != 1 {
+		t.Fatalf("listed sessions = %d, want 1", len(listed.Sessions))
+	}
+	if listed.Sessions[0].Id != allocatedSessionID || !listed.Sessions[0].IsDefault {
+		t.Fatalf("listed default session = %#v, want id %q and isDefault true", listed.Sessions[0], allocatedSessionID)
+	}
+
+	got, err := controlplane.GetLiveFactorySession(context.Background(), host, factorysessions.DefaultSessionID)
+	if err != nil {
+		t.Fatalf("GetLiveFactorySession(%q): %v", factorysessions.DefaultSessionID, err)
+	}
+	if got.Id != allocatedSessionID {
+		t.Fatalf("get-by-alias session id = %q, want %q", got.Id, allocatedSessionID)
+	}
+
+	preflight, err := controlplane.GetLiveFactorySessionSyncPreflight(
+		context.Background(),
+		host,
+		factorysessions.DefaultSessionID,
+		nil,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("GetLiveFactorySessionSyncPreflight(%q): %v", factorysessions.DefaultSessionID, err)
+	}
+	if preflight.RequestedSessionId != factorysessions.DefaultSessionID {
+		t.Fatalf("requestedSessionId = %q, want %q", preflight.RequestedSessionId, factorysessions.DefaultSessionID)
+	}
+	if preflight.FactorySessionId == nil || *preflight.FactorySessionId != allocatedSessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", preflight.FactorySessionId, allocatedSessionID)
+	}
+	if listed.Sessions[0].Id != got.Id || got.Id != *preflight.FactorySessionId {
+		t.Fatalf(
+			"resolved ids differ: list=%q get=%q preflight=%q",
+			listed.Sessions[0].Id,
+			got.Id,
+			*preflight.FactorySessionId,
+		)
 	}
 }
 

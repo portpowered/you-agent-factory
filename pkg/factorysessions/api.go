@@ -46,7 +46,7 @@ func SummaryResponse(session *LiveSession) factoryapi.FactorySessionSummary {
 	return factoryapi.FactorySessionSummary{
 		FactoryDir: session.FactoryDir,
 		FolderPath: session.FolderPath,
-		Id:         session.ID,
+		Id:         CanonicalFactorySessionID(session),
 		IsDefault:  session.IsDefault,
 		Project:    session.Project,
 		Target: factoryapi.FactorySessionTargetRef{
