@@ -99,8 +99,12 @@ func (b *eventStreamArtifactBuilder) flushBlock(atEOF bool) error {
 	payload := strings.Join(b.dataLines, "\n")
 	b.dataLines = b.dataLines[:0]
 
+	normalized, err := normalizeHistoricalFailureDetails([]byte(payload))
+	if err != nil {
+		return b.decodeBlockError(atEOF, err)
+	}
 	var event factoryapi.FactoryEvent
-	if err := json.Unmarshal([]byte(payload), &event); err != nil {
+	if err := json.Unmarshal(normalized, &event); err != nil {
 		return b.decodeBlockError(atEOF, err)
 	}
 	if event.Id == "" || event.Type == "" {
