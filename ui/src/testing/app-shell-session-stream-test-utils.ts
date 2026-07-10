@@ -8,8 +8,10 @@ export class MockEventSource {
   public static instances: MockEventSource[] = [];
 
   public closed = false;
+  public messageEventCount = 0;
   public onerror: ((event: Event) => void) | null = null;
   public onopen: ((event: Event) => void) | null = null;
+  public opened = false;
 
   private readonly listeners = new Map<string, EventListener[]>();
 
@@ -27,7 +29,15 @@ export class MockEventSource {
     this.closed = true;
   }
 
+  public open(): void {
+    this.opened = true;
+    this.onopen?.(new Event("open"));
+  }
+
   public emit(type: string, data: unknown): void {
+    if (type === "message") {
+      this.messageEventCount += 1;
+    }
     if (type === "snapshot") {
       const state = useFactoryTimelineStore.getState();
       const tracesByWorkID =
