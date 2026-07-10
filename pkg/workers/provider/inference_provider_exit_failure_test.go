@@ -1,7 +1,10 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -9,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndClassification(t *testing.T) {
@@ -48,6 +54,197 @@ func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDeci
 	}
 	assertGPT56SolCanonicalFailure(t, providerErr)
 	assertGPT56SolFailureMetadata(t, providerErr, entry, result)
+}
+
+func TestScriptWrapProvider_Infer_LogsCorrelatedNormalizedCodexFailureAfterParsing(t *testing.T) {
+	const prompt = "synthetic prompt must not appear"
+	const credential = "credential-value-must-not-appear"
+	sequence := []string{}
+	logger := &preparedInvocationTestLogger{sequence: &sequence}
+	runner := &preparedInvocationTestRunner{
+		sequence: &sequence,
+		result: CommandResult{
+			ExitCode: 17,
+			Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}` + "\n" + credential),
+		},
+	}
+	provider := NewScriptWrapProvider(WithProviderLogger(logger), WithProviderCommandRunner(runner))
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		Model:         "gpt-5.6-sol",
+		UserMessage:   prompt,
+		EnvVars:       map[string]string{"API_TOKEN": credential},
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID: "dispatch-failure-1",
+			Execution: interfaces.ExecutionMetadata{
+				RequestID: "request-failure-1", TraceID: "trace-failure-1", WorkIDs: []string{"work-failure-1", "work-failure-2"},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("Infer returned nil error")
+	}
+	if logger.failureCount != 1 {
+		t.Fatalf("normalized failure records = %d, want 1", logger.failureCount)
+	}
+	if len(sequence) < 3 || sequence[0] != ProviderInvocationPrepared || sequence[1] != "runner" || sequence[2] != ProviderFailureNormalized {
+		t.Fatalf("record sequence = %#v, want prepared, runner, normalized failure", sequence)
+	}
+	assertNormalizedFailureFields(t, logger.failureFields)
+	if strings.Contains(logger.allValues, prompt) || strings.Contains(logger.allValues, credential) {
+		t.Fatalf("provider logs contain prompt or credential: %s", logger.allValues)
+	}
+}
+
+func assertNormalizedFailureFields(t *testing.T, fields map[string]any) {
+	t.Helper()
+	if fields["provider"] != "codex" || fields["model"] != "gpt-5.6-sol" {
+		t.Fatalf("provider/model = %#v/%#v", fields["provider"], fields["model"])
+	}
+	if fields["failure_reason"] != interfaces.WorkFailureTypePermanentBadRequest || fields["failure_message"] != codexGPT56SolUpgradeMessage {
+		t.Fatalf("canonical failure = %#v", fields)
+	}
+	if fields["retryable"] != false || fields["exit_code"] != 17 {
+		t.Fatalf("retry/exit fields = %#v", fields)
+	}
+	if fields["request_id"] != "request-failure-1" || fields["trace_id"] != "trace-failure-1" || fields["work_id"] != "work-failure-1" || fields["dispatch_id"] != "dispatch-failure-1" {
+		t.Fatalf("correlation fields = %#v", fields)
+	}
+	if _, ok := fields["duration_ms"]; !ok {
+		t.Fatalf("duration_ms absent: %#v", fields)
+	}
+}
+
+func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		err           error
+		wantReason    interfaces.WorkFailureType
+		wantRetryable bool
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantRetryable: true},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sequence := []string{}
+			logger := &preparedInvocationTestLogger{sequence: &sequence}
+			runner := &preparedInvocationTestRunner{sequence: &sequence, err: tc.err}
+			provider := NewScriptWrapProvider(WithProviderLogger(logger), WithProviderCommandRunner(runner))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderClaude),
+				UserMessage:   "private prompt",
+				Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-no-exit"},
+			})
+			if err == nil {
+				t.Fatal("Infer returned nil error")
+			}
+			if logger.failureCount != 1 || logger.failureFields["failure_reason"] != tc.wantReason || logger.failureFields["retryable"] != tc.wantRetryable {
+				t.Fatalf("normalized failure fields = %#v", logger.failureFields)
+			}
+			if _, ok := logger.failureFields["exit_code"]; ok {
+				t.Fatalf("failure record invented exit code: %#v", logger.failureFields)
+			}
+			if logger.failureFields["model"] != ProviderDefaultModel {
+				t.Fatalf("model = %#v, want provider default", logger.failureFields["model"])
+			}
+		})
+	}
+}
+
+func TestScriptWrapProvider_Infer_CodexExecutionFailureJSONLogsExcludeCommandOutput(t *testing.T) {
+	const prompt = "codex execution prompt must not appear"
+	const stdoutSecret = "stdout-secret-must-not-appear"
+	const stderrSecret = "stderr-secret-must-not-appear"
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Provider request timed out."},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured, wantMessage: "Provider command could not be started."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			encoderConfig := zap.NewProductionEncoderConfig()
+			core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&output), zapcore.DebugLevel)
+			provider := NewScriptWrapProvider(
+				WithProviderLogger(logging.NewZapLogger(zap.New(core), false)),
+				WithProviderCommandRunner(&recordingProviderExec{
+					result: CommandResult{Stdout: []byte(stdoutSecret), Stderr: []byte(stderrSecret)},
+					err:    tc.err,
+				}),
+			)
+			_, _ = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderCodex),
+				UserMessage:   prompt,
+			})
+
+			record := normalizedFailureJSONRecord(t, output.String())
+			if record["failure_reason"] != string(tc.wantReason) || record["failure_message"] != tc.wantMessage {
+				t.Fatalf("normalized JSON failure = %#v", record)
+			}
+			encoded, err := json.Marshal(record)
+			if err != nil {
+				t.Fatalf("encode normalized failure: %v", err)
+			}
+			for _, secret := range []string{prompt, stdoutSecret, stderrSecret} {
+				if strings.Contains(string(encoded), secret) {
+					t.Fatalf("normalized JSON failure leaked %q: %s", secret, encoded)
+				}
+			}
+		})
+	}
+}
+
+func normalizedFailureJSONRecord(t *testing.T, logs string) map[string]any {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode JSON log: %v", err)
+		}
+		if record["event_name"] == ProviderFailureNormalized {
+			return record
+		}
+	}
+	t.Fatalf("normalized failure absent from JSON logs: %s", logs)
+	return nil
+}
+
+func TestScriptWrapProvider_Infer_CodexUpgradeFailureIsSearchableInJSONLogs(t *testing.T) {
+	var output bytes.Buffer
+	encoderConfig := zap.NewProductionEncoderConfig()
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&output), zapcore.DebugLevel)
+	provider := NewScriptWrapProvider(
+		WithProviderLogger(logging.NewZapLogger(zap.New(core), false)),
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{
+			ExitCode: 2,
+			Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}`),
+		}}),
+	)
+	_, _ = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		UserMessage:   "json log prompt fixture",
+	})
+
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode JSON log: %v", err)
+		}
+		if record["event_name"] != ProviderFailureNormalized {
+			continue
+		}
+		if record["failure_reason"] != string(interfaces.WorkFailureTypePermanentBadRequest) || record["failure_message"] != codexGPT56SolUpgradeMessage {
+			t.Fatalf("normalized JSON failure = %#v", record)
+		}
+		if strings.Contains(line, "json log prompt fixture") || strings.Contains(line, `\"status\":400`) {
+			t.Fatalf("normalized JSON failure leaked prompt or envelope: %s", line)
+		}
+		return
+	}
+	t.Fatalf("normalized failure absent from JSON logs: %s", output.String())
 }
 
 func assertGPT56SolCanonicalFailure(t *testing.T, providerErr *ProviderError) {
