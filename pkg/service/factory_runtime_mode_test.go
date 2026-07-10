@@ -1926,6 +1926,30 @@ func TestFactoryService_ModelMethodsForwardContextResultsAndErrorsUnchanged(t *t
 	}
 }
 
+func TestFactoryService_InvokeModelForwardsContextRequestResultAndErrorUnchanged(t *testing.T) {
+	t.Parallel()
+
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("request"), "invoke-request")
+	invokeErr := errors.New("invoke sentinel")
+	request := factoryapi.ModelInvocationRequest{Operation: "TTS"}
+	stub := &stubModelService{
+		invokeResult: apisurface.ModelInvocationResult{ModelName: "invoke-result", Operation: "TTS"},
+		invokeErr:    invokeErr,
+	}
+
+	result, err := (&FactoryService{modelService: stub}).InvokeModel(ctx, "invoke-model", request)
+	if result.ModelName != "invoke-result" || result.Operation != "TTS" || !errors.Is(err, invokeErr) {
+		t.Fatalf("InvokeModel = (%#v, %v), want exact result and sentinel error", result, err)
+	}
+	if len(stub.contexts) != 1 || stub.contexts[0] != ctx || len(stub.modelNames) != 1 || stub.modelNames[0] != "invoke-model" {
+		t.Fatalf("forwarded context/model = (%#v, %#v), want original context and invoke-model", stub.contexts, stub.modelNames)
+	}
+	if len(stub.requests) != 1 || stub.requests[0].Operation != request.Operation {
+		t.Fatalf("invoke requests = %#v, want exact TTS request", stub.requests)
+	}
+}
+
 func TestWireModelServiceCollaborator_UsesModelsServiceByDefault(t *testing.T) {
 	t.Parallel()
 

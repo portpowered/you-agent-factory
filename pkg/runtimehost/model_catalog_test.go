@@ -49,15 +49,42 @@ func TestHostModelMethodsForwardContextResultsAndErrorsUnchanged(t *testing.T) {
 	}
 }
 
+func TestHostInvokeModelForwardsContextRequestResultAndErrorUnchanged(t *testing.T) {
+	t.Parallel()
+
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("request"), "invoke-request")
+	invokeErr := errors.New("invoke sentinel")
+	request := factoryapi.ModelInvocationRequest{Operation: "TTS"}
+	stub := &catalogModelServiceStub{
+		invokeResult: apisurface.ModelInvocationResult{ModelName: "invoke-result", Operation: "TTS"},
+		invokeErr:    invokeErr,
+	}
+
+	result, err := (&Host{modelService: stub}).InvokeModel(ctx, "invoke-model", request)
+	if !reflect.DeepEqual(result, stub.invokeResult) || !errors.Is(err, invokeErr) {
+		t.Fatalf("InvokeModel = (%#v, %v), want exact result and sentinel error", result, err)
+	}
+	if len(stub.contexts) != 1 || stub.contexts[0] != ctx || len(stub.modelNames) != 1 || stub.modelNames[0] != "invoke-model" {
+		t.Fatalf("forwarded context/model = (%#v, %#v), want original context and invoke-model", stub.contexts, stub.modelNames)
+	}
+	if len(stub.requests) != 1 || !reflect.DeepEqual(stub.requests[0], request) {
+		t.Fatalf("invoke requests = %#v, want exact TTS request", stub.requests)
+	}
+}
+
 type catalogModelServiceStub struct {
-	listResult factoryapi.ListModelsResponse
-	listErr    error
-	getResult  factoryapi.ModelDetail
-	getErr     error
-	pullResult apisurface.ModelPullResult
-	pullErr    error
-	contexts   []context.Context
-	modelNames []string
+	listResult   factoryapi.ListModelsResponse
+	listErr      error
+	getResult    factoryapi.ModelDetail
+	getErr       error
+	pullResult   apisurface.ModelPullResult
+	pullErr      error
+	invokeResult apisurface.ModelInvocationResult
+	invokeErr    error
+	contexts     []context.Context
+	modelNames   []string
+	requests     []factoryapi.ModelInvocationRequest
 }
 
 func (s *catalogModelServiceStub) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
@@ -77,6 +104,9 @@ func (s *catalogModelServiceStub) PullModel(ctx context.Context, modelName strin
 	return s.pullResult, s.pullErr
 }
 
-func (*catalogModelServiceStub) InvokeModel(context.Context, string, factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
-	return apisurface.ModelInvocationResult{}, nil
+func (s *catalogModelServiceStub) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	s.contexts = append(s.contexts, ctx)
+	s.modelNames = append(s.modelNames, modelName)
+	s.requests = append(s.requests, request)
+	return s.invokeResult, s.invokeErr
 }

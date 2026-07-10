@@ -9,10 +9,9 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 )
 
-func TestEnsureInvocationReady_AllowsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
+func TestInspectReadiness_ReportsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	host := NewCatalogHost(stubAssetGateway{
 		byModel: map[string]CacheInspection{
@@ -24,16 +23,16 @@ func TestEnsureInvocationReady_AllowsInstalledAssetsWithoutLiveSupervisedSlot(t 
 		},
 	}, Options{})
 
-	managed, err := EnsureInvocationReady(context.Background(), host, loaded, "OMNIVOICE_Q4_K_M")
+	snapshot, err := host.InspectReadiness(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
 	if err != nil {
-		t.Fatalf("EnsureInvocationReady: %v", err)
+		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
-		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
+	if snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("readiness = %s, want READY", snapshot.ReadinessState)
 	}
 }
 
-func TestEnsureInvocationReady_BlocksWhenSupervisedRuntimeCrashed(t *testing.T) {
+func TestInspectReadiness_ReportsSupervisedRuntimeCrash(t *testing.T) {
 	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -55,17 +54,10 @@ func TestEnsureInvocationReady_BlocksWhenSupervisedRuntimeCrashed(t *testing.T) 
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		managed, readinessErr := EnsureInvocationReady(context.Background(), host, loaded, "OMNIVOICE_Q4_K_M")
-		if readinessErr != nil {
-			var invocationErr *apisurface.ManagedRuntimeInvocationError
-			if !errors.As(readinessErr, &invocationErr) {
-				t.Fatalf("readiness error = %v, want *apisurface.ManagedRuntimeInvocationError", readinessErr)
-			}
-			if !errors.Is(readinessErr, apisurface.ErrManagedRuntimeFailed) {
-				t.Fatalf("readiness error = %v, want ErrManagedRuntimeFailed", readinessErr)
-			}
-			if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
-				t.Fatalf("readiness = %s, want FAILED", managed.ReadinessState)
+		snapshot, readinessErr := host.InspectReadiness(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
+		if readinessErr == nil && snapshot.ReadinessState == factoryapi.ManagedRuntimeReadinessStateFAILED {
+			if snapshot.FailureClass != FailureClassProcessCrash {
+				t.Fatalf("failure class = %s, want %s", snapshot.FailureClass, FailureClassProcessCrash)
 			}
 			if err := host.ReleaseLease(context.Background(), lease.ID); err != nil {
 				t.Fatalf("ReleaseLease: %v", err)
@@ -73,7 +65,7 @@ func TestEnsureInvocationReady_BlocksWhenSupervisedRuntimeCrashed(t *testing.T) 
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for invocation readiness failure; last readiness = %s", managed.ReadinessState)
+			t.Fatalf("timed out waiting for failed readiness snapshot; last readiness = %s err=%v", snapshot.ReadinessState, readinessErr)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
