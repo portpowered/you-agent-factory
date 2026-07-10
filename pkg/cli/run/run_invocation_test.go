@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -894,6 +895,81 @@ func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *t
 		t.Fatalf("decode CLI invocation response: %v\n%s", decodeErr, jsonOutput.String())
 	}
 	assertInvocationResponseMatchesFactoryResult(t, cliResponse, sharedResult)
+}
+
+func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
+	t.Run("structured arguments", func(t *testing.T) {
+		cliRequest, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+			Dir: "/tmp/signature-factory",
+			InvocationNormalizedArguments: &invocations.NormalizedArguments{Arguments: map[string]invocations.NormalizedArgument{
+				"input": {Values: []string{"draft"}},
+				"tag":   {Values: []string{"alpha", "beta"}},
+			}},
+		})
+		if err != nil || !invocationMode {
+			t.Fatalf("resolve CLI structured request: mode=%v err=%v", invocationMode, err)
+		}
+		var apiRequest factoryapi.InvocationRequest
+		if err := json.Unmarshal([]byte(`{"args":{"input":"draft","tag":["alpha","beta"]}}`), &apiRequest); err != nil {
+			t.Fatalf("decode API structured request: %v", err)
+		}
+		cliArgs, err := invocations.NamedArgumentInputsFromAnyMap(*cliRequest.Args)
+		if err != nil {
+			t.Fatalf("normalize CLI args: %v", err)
+		}
+		apiArgs, err := invocations.NamedArgumentInputsFromAnyMap(*apiRequest.Args)
+		if err != nil {
+			t.Fatalf("normalize API args: %v", err)
+		}
+		if !reflect.DeepEqual(cliArgs, apiArgs) {
+			t.Fatalf("CLI args = %#v, API args = %#v", cliArgs, apiArgs)
+		}
+	})
+
+	outcomes := []struct {
+		name   string
+		result apisurface.FactoryInvocationResult
+	}{
+		{name: "fallback return", result: invocationParityCompletedResult("request-fallback", "fallback output")},
+		{name: "explicit return", result: invocationParityCompletedResult("request-explicit", "explicit output")},
+		{name: "timeout", result: apisurface.FactoryInvocationResult{
+			RequestID: "request-timeout", TraceID: "trace-timeout", Status: factoryapi.InvocationTerminalStatusTimedOut,
+			ErrorCode: string(factoryapi.INVOCATIONTIMEDOUT), Message: "invocation timed out while waiting for primary result",
+		}},
+		{name: "cancellation", result: apisurface.FactoryInvocationResult{
+			RequestID: "request-canceled", TraceID: "trace-canceled", Status: factoryapi.InvocationTerminalStatusCanceled,
+			ErrorCode: string(factoryapi.INVOCATIONCANCELED), Message: "invocation was canceled while waiting for primary result",
+		}},
+		{name: "packaged TTS failure", result: apisurface.FactoryInvocationResult{
+			RequestID: "request-tts", TraceID: "trace-tts", Status: factoryapi.InvocationTerminalStatusFailed,
+			ErrorCode: string(factoryapi.INVOCATIONTTSGENERATIONFAILED), Message: "packaged TTS generation failed",
+			SessionID: defaultFactorySessionID, WorkID: "work-tts", WorkName: "Generate speech", WorkState: "tts:failed",
+		}},
+	}
+	for _, tt := range outcomes {
+		t.Run(tt.name, func(t *testing.T) {
+			var cliOutput bytes.Buffer
+			if err := writeInvocationJSON(RunConfig{Output: &cliOutput}, tt.result); err != nil {
+				t.Fatalf("write CLI invocation JSON: %v", err)
+			}
+			var cliResponse factoryapi.InvocationResponse
+			if err := json.Unmarshal(bytes.TrimSpace(cliOutput.Bytes()), &cliResponse); err != nil {
+				t.Fatalf("decode CLI response: %v", err)
+			}
+			apiResponse := apisurface.InvocationResponseFromResult(tt.result)
+			if !reflect.DeepEqual(cliResponse, apiResponse) {
+				t.Fatalf("CLI response = %#v, API response = %#v", cliResponse, apiResponse)
+			}
+			assertInvocationResponseMatchesFactoryResult(t, cliResponse, tt.result)
+		})
+	}
+}
+
+func invocationParityCompletedResult(requestID, text string) apisurface.FactoryInvocationResult {
+	return apisurface.FactoryInvocationResult{
+		RequestID: requestID, TraceID: requestID + "-trace", Status: factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: text}},
+	}
 }
 
 func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {

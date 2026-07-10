@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+// RequestValidationError reports a stable client-side validation failure.
+type RequestValidationError struct {
+	Message string
+}
+
+func (e *RequestValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
 // FactoryState represents the current lifecycle state of a Factory.
 type FactoryState string
 

@@ -27,19 +27,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
@@ -111,20 +112,20 @@ type hostRunState struct {
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 // pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
 type Host struct {
-	runtimeMu      sync.RWMutex
-	activationMu   sync.RWMutex
-	runMu          sync.RWMutex
-	runState       *hostRunState
-	apiServerExit  <-chan error
-	core           *Core
-	sessions       *factorysessions.Registry
-	factorySave    FactorySaveSaver
-	sessionGateway SessionGateway
-	runtimeBuild   *runtimebuild.Service
+	runtimeMu        sync.RWMutex
+	activationMu     sync.RWMutex
+	runMu            sync.RWMutex
+	runState         *hostRunState
+	apiServerExit    <-chan error
+	core             *Core
+	sessions         *factorysessions.Registry
+	factorySave      FactorySaveSaver
+	sessionGateway   SessionGateway
+	runtimeBuild     *runtimebuild.Service
 	workersScheduler *workersservice.Service
 	hostedWorkers    hostedworkers.Config
-	factoryRootDir string
-	policy         hostCoordinatorPolicy
+	factoryRootDir   string
+	policy           hostCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
 	startupBundle            *factoryRuntimeBundle
 	cfg                      *Config
@@ -134,6 +135,7 @@ type Host struct {
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
+	sessionInvoker           invocations.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream

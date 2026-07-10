@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,10 +28,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -2997,8 +2999,8 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 
 	valid, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
 		Reconnect: &interfaces.FactoryEventReconnectCursor{
-		AfterEventID: recorded[0].Id,
-	},
+			AfterEventID: recorded[0].Id,
+		},
 	})
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(valid): %v", err)
@@ -3010,8 +3012,8 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 
 	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, interfaces.FactorySessionSyncPreflightOptions{
 		Reconnect: &interfaces.FactoryEventReconnectCursor{
-		AfterEventID: "factory-event/missing-preflight-cursor",
-	},
+			AfterEventID: "factory-event/missing-preflight-cursor",
+		},
 	})
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight(stale): %v", err)
@@ -4254,4 +4256,51 @@ func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegraded
 	assertLogField(t, entry, "session_id", defaultFactorySessionID)
 	assertLogField(t, entry, "dispatch_id", "dispatch-unavailable")
 	assertLogField(t, entry, "reason", "STREAM_UNAVAILABLE")
+}
+
+type forwardingSessionInvoker struct {
+	ctx       context.Context
+	sessionID string
+	request   factoryapi.InvocationRequest
+	result    invocations.FactoryInvocationResult
+	err       error
+}
+
+func (s *forwardingSessionInvoker) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (invocations.FactoryInvocationResult, error) {
+	s.ctx = ctx
+	s.sessionID = sessionID
+	s.request = request
+	return s.result, s.err
+}
+
+func TestFactoryService_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.T) {
+	requestID := "request-1"
+	request := factoryapi.InvocationRequest{RequestId: &requestID, Args: &map[string]any{"input": "hello"}}
+	wantResult := invocations.FactoryInvocationResult{
+		RequestID: "result-request", TraceID: "trace-1",
+		Status: factoryapi.InvocationTerminalStatusCompleted,
+	}
+	wantErr := errors.New("owner failure")
+	invoker := &forwardingSessionInvoker{result: wantResult, err: wantErr}
+	svc := &FactoryService{sessionInvoker: invoker}
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("forwarding"), "preserved")
+
+	got, err := svc.InvokeFactorySession(ctx, "session-1", request)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want owner error %v", err, wantErr)
+	}
+	if !reflect.DeepEqual(got, wantResult) {
+		t.Fatalf("result = %#v, want %#v", got, wantResult)
+	}
+	if invoker.ctx != ctx || invoker.sessionID != "session-1" {
+		t.Fatalf("forwarded ctx/session = %#v/%q", invoker.ctx, invoker.sessionID)
+	}
+	if invoker.request.RequestId == nil || *invoker.request.RequestId != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
+		t.Fatalf("forwarded request = %#v", invoker.request)
+	}
 }
