@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: artifact drilldown states share one fetch harness and assertion seam.
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: artifact loading, download, unavailable, and error states share one end-to-end fetch harness.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -36,21 +37,6 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
                 kind: "CHILD_RESULT",
                 label: "review output",
                 visibility: "CUSTOMER",
-              },
-            ],
-            dispatches: [
-              {
-                dispatchKind: "JAVASCRIPT_AGENT",
-                id: "dispatch-1",
-                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                sessionId: "session-beta",
-                status: "COMPLETED",
-                warnings: [
-                  {
-                    code: "DISPATCH_WARNING",
-                    message: "child agent retry scheduled",
-                  },
-                ],
               },
             ],
             javascript: {
@@ -96,6 +82,24 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
           },
           sessionId: "session-beta",
           status: "IDLE",
+        });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/dispatches")) {
+        return jsonResponse({
+          dispatches: [
+            {
+              dispatchKind: "JAVASCRIPT_AGENT",
+              id: "dispatch-1",
+              status: "COMPLETED",
+              warnings: [
+                {
+                  code: "DISPATCH_WARNING",
+                  message: "child agent retry scheduled",
+                },
+              ],
+            },
+          ],
+          sessionId: "session-beta",
         });
       }
       if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
@@ -151,7 +155,9 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
     });
 
     expect(screen.getByText("review")).toBeTruthy();
-    expect(screen.getByText("cp-1 (plan) — saved plan checkpoint")).toBeTruthy();
+    expect(
+      screen.getByText("cp-1 (plan) — saved plan checkpoint"),
+    ).toBeTruthy();
     expect(screen.getByText("child agent retry scheduled")).toBeTruthy();
     expect(screen.getByText("artifact-final · FINAL_RESULT")).toBeTruthy();
     expect(screen.getByText("artifact-partial · CHILD_RESULT")).toBeTruthy();
@@ -201,7 +207,6 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
                 visibility: "CUSTOMER",
               },
             ],
-            dispatches: [],
             javascript: {
               checkpoints: [],
               childDispatchCounts: {
@@ -232,11 +237,16 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
       if (url.endsWith("/factory-sessions/session-beta/result")) {
         return new Response("not found", { status: 404 });
       }
+      if (url.endsWith("/factory-sessions/session-beta/dispatches")) {
+        return jsonResponse({ dispatches: [], sessionId: "session-beta" });
+      }
       if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
         return new Response("not found", { status: 404 });
       }
       if (
-        url.endsWith("/factory-sessions/session-beta/artifacts/artifact-download")
+        url.endsWith(
+          "/factory-sessions/session-beta/artifacts/artifact-download",
+        )
       ) {
         return jsonResponse({
           auditMode: "OFF",
@@ -298,7 +308,6 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
                 visibility: "CUSTOMER",
               },
             ],
-            dispatches: [],
             javascript: {
               checkpoints: [],
               childDispatchCounts: {
@@ -328,6 +337,9 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
       }
       if (url.endsWith("/factory-sessions/session-beta/result")) {
         return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/dispatches")) {
+        return jsonResponse({ dispatches: [], sessionId: "session-beta" });
       }
       if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
         return new Response("not found", { status: 404 });
@@ -393,7 +405,6 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
                 visibility: "CUSTOMER",
               },
             ],
-            dispatches: [],
             javascript: {
               checkpoints: [],
               childDispatchCounts: {
@@ -423,6 +434,9 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
       }
       if (url.endsWith("/factory-sessions/session-beta/result")) {
         return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/dispatches")) {
+        return jsonResponse({ dispatches: [], sessionId: "session-beta" });
       }
       if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
         return new Response("not found", { status: 404 });

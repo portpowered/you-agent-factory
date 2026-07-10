@@ -6,7 +6,7 @@ import {
 } from "./normalize-session-get";
 
 describe("normalizeFactorySessionGetResponse", () => {
-  it("passes through live factory sessions unchanged", () => {
+  it("normalizes dispatch-free live factory sessions without copying them", () => {
     const liveSession = {
       factoryDir: "/workspace/root/beta",
       folderPath: "/workspace/root",
@@ -34,6 +34,48 @@ describe("normalizeFactorySessionGetResponse", () => {
     expect(normalizeFactorySessionGetResponse(liveSession)).toEqual({
       session: liveSession,
     });
+    expect(normalizeFactorySessionGetResponse(liveSession).session).toBe(
+      liveSession,
+    );
+  });
+
+  it("discards legacy embedded dispatches without mutating the live response", () => {
+    const liveSession = {
+      factoryDir: "/workspace/root/beta",
+      folderPath: "/workspace/root",
+      id: "session-beta",
+      isDefault: false,
+      project: "beta",
+      runtime: {
+        dispatches: [{ id: "dispatch-legacy" }],
+        lifecycle: {
+          startedAt: "2026-06-08T14:00:00Z",
+          updatedAt: "2026-06-08T14:05:00Z",
+        },
+        orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+        progress: {
+          categories: {},
+          factoryState: "RUNNING",
+          inFlightCount: 1,
+          totalTokens: 12,
+        },
+        status: "ACTIVE",
+        usage: { resources: [] },
+      },
+      target: { kind: "named", name: "beta" },
+    };
+
+    const normalized = normalizeFactorySessionGetResponse(liveSession);
+
+    expect(normalized.session.runtime).toEqual({
+      lifecycle: liveSession.runtime.lifecycle,
+      orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+      progress: liveSession.runtime.progress,
+      status: "ACTIVE",
+      usage: { resources: [] },
+    });
+    expect("dispatches" in normalized.session.runtime).toBe(false);
+    expect(liveSession.runtime.dispatches).toEqual([{ id: "dispatch-legacy" }]);
   });
 
   it("maps durable JavaScript session reads into shared FactorySession runtime shape", () => {

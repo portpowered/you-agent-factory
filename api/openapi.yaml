@@ -2852,11 +2852,6 @@ components:
           $ref: '#/components/schemas/FactorySessionPetriProjection'
         javascript:
           $ref: '#/components/schemas/FactorySessionJavaScriptProjection'
-        dispatches:
-          type: array
-          items:
-            $ref: '#/components/schemas/FactoryDispatch'
-          description: Shared dispatch projections for the session runtime.
         artifacts:
           type: array
           items:

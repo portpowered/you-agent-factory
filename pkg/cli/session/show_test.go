@@ -55,7 +55,6 @@ func TestShow_HumanOutputRendersJavaScriptFactorySession(t *testing.T) {
 		"Stop result:\tDispatch interrupted while waiting for review output",
 		"Recovery surface:\texisting dispatch retry, work repair, or session workflow controls",
 		"Recovery action:\tInspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery.",
-		"Dispatch:\tdispatch-1 (review child) status=RECONCILED kind=JAVASCRIPT_AGENT",
 		"Artifact ref:\tartifact-1 (review output) kind=CHILD_RESULT visibility=PUBLIC",
 		"Partial result ref:\tartifact-partial (FINDING)",
 		"Final result ref:\tartifact-final (FINAL_RESULT)",
@@ -243,12 +242,6 @@ func sampleFactorySession() factoryapi.FactorySession {
 				Kind:       factoryapi.FactoryArtifactKindCHILDRESULT,
 				Label:      &artifactLabel,
 				Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
-			}},
-			Dispatches: &[]factoryapi.FactoryDispatch{{
-				DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
-				Id:           "dispatch-1",
-				Label:        &dispatchLabel,
-				Status:       factoryapi.FactoryDispatchStatus("RECONCILED"),
 			}},
 			Progress: factoryapi.FactorySessionProgress{
 				FactoryState:  "RUNNING",
