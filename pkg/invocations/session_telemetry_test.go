@@ -255,6 +255,8 @@ func TestSessionOwnerTelemetry_PackagedFailuresPreserveClassificationAndCounts(t
 			if tt.wantNotReady == 1 {
 				assertSingleSessionMetric(t, recording.metrics, testPackagedNotReady, packagedLabels)
 			}
+			assertSessionLogCount(t, recording.logs, "factory session invocation failed", 0)
+			assertSessionLogCount(t, recording.logs, "packaged tts invocation failed", 1)
 			failed := singleSessionLog(t, recording.logs, "packaged tts invocation failed")
 			assertSessionOwnerEqual(t, "failure request ID", failed.Fields["request_id"], any("request-1"))
 			assertSessionOwnerEqual(t, "failure trace ID", failed.Fields["trace_id"], any("trace-1"))
@@ -415,4 +417,17 @@ func singleSessionLog(t *testing.T, logs []SessionInvocationLogRecord, message s
 		t.Fatalf("log %q count = %d, want 1; logs = %#v", message, len(matches), logs)
 	}
 	return matches[0]
+}
+
+func assertSessionLogCount(t *testing.T, logs []SessionInvocationLogRecord, message string, want int) {
+	t.Helper()
+	got := 0
+	for _, record := range logs {
+		if record.Message == message {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("log %q count = %d, want %d; logs = %#v", message, got, want, logs)
+	}
 }

@@ -116,7 +116,11 @@ func (o *SessionOwner) resolveStoppedInvocation(
 				Status:    factoryapi.InvocationTerminalStatusFailed,
 				ErrorCode: failure.ErrorCode, Message: failure.Message,
 			}
-			o.recordFailure(sessionID, input, result, failure.FailureClass)
+			// Packaged terminal failures retain the general failure metric, but
+			// their diagnostic record is the packaged failure log emitted below.
+			if o.deps.Telemetry != nil {
+				o.deps.Telemetry.InvocationFailed(input.FactoryConfig, input.InputSource, result.ErrorCode)
+			}
 			if telemetry, ok := o.deps.Telemetry.(SessionInvocationPackagedTelemetry); ok {
 				telemetry.PackagedInvocationFailed(sessionID, input, *failure)
 			}
