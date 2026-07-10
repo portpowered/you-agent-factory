@@ -321,22 +321,49 @@ func TestSessionOwnerWait_PreservesTerminalFailureClassifications(t *testing.T) 
 		name        string
 		observation SessionInvocationObservation
 		wantCode    PrimaryResultErrorCode
+		wantMessage string
+		wantContext InvocationFailureContext
 	}{
-		{name: "blocked", observation: classifiedObservation(PrimaryResultErrorCodeBlocked, "blocked"), wantCode: PrimaryResultErrorCodeBlocked},
-		{name: "needs human", observation: classifiedObservation(PrimaryResultErrorCodeNeedsHuman, "needs-human"), wantCode: PrimaryResultErrorCodeNeedsHuman},
-		{name: "paused", observation: pausedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodePaused},
-		{name: "interrupted", observation: interruptedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeInterrupted},
-		{name: "failed", observation: failedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeFailed},
-		{name: "unresolved", observation: stoppedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeUnresolved},
+		{
+			name: "blocked", observation: classifiedObservation(PrimaryResultErrorCodeBlocked, "blocked"), wantCode: PrimaryResultErrorCodeBlocked,
+			wantMessage: `invocation blocked: work "Goal" is waiting in state "goal:blocked"`,
+			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:blocked"},
+		},
+		{
+			name: "needs human", observation: classifiedObservation(PrimaryResultErrorCodeNeedsHuman, "needs-human"), wantCode: PrimaryResultErrorCodeNeedsHuman,
+			wantMessage: `invocation needs human input: work "Goal" is waiting in state "goal:needs-human"`,
+			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:needs-human"},
+		},
+		{
+			name: "paused", observation: pausedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodePaused,
+			wantMessage: `invocation paused: session "session-1" is paused; resume the session to continue waiting for primary result`,
+			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:init"},
+		},
+		{
+			name: "interrupted", observation: interruptedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeInterrupted,
+			wantMessage: `invocation interrupted: session "session-1" dispatch "dispatch-1" for work "Goal" was interrupted before a primary result was available`,
+			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:init"},
+		},
+		{
+			name: "failed", observation: failedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeFailed,
+			wantMessage: `invocation failed: work "Goal" reached failed state "goal:failed" before a primary result was available`,
+			wantContext: InvocationFailureContext{WorkID: "work-root", WorkName: "Goal", WorkState: "goal:failed"},
+		},
+		{
+			name: "unresolved", observation: stoppedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeUnresolved,
+			wantMessage: "invocation primary result unresolved: submitted work did not resolve to terminal output",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := waitForSessionOwnerObservation(t, tt.observation, nil)
 			assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusFailed)
 			assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(tt.wantCode))
-			if result.Message == "" {
-				t.Fatal("message is empty")
-			}
+			assertSessionOwnerEqual(t, "message", result.Message, tt.wantMessage)
+			assertSessionOwnerEqual(t, "session ID", result.SessionID, tt.wantContext.SessionID)
+			assertSessionOwnerEqual(t, "work ID", result.WorkID, tt.wantContext.WorkID)
+			assertSessionOwnerEqual(t, "work name", result.WorkName, tt.wantContext.WorkName)
+			assertSessionOwnerEqual(t, "work state", result.WorkState, tt.wantContext.WorkState)
 		})
 	}
 }

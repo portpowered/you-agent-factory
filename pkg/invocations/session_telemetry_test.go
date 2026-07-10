@@ -2,7 +2,9 @@ package invocations
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -39,6 +41,44 @@ func (r *recordingSessionTelemetry) telemetry() SessionInvocationTelemetry {
 			NotReadyClass: testPackagedNotReadyClass,
 		},
 	})
+}
+
+func TestSessionOwnerTelemetry_NormalizationFailurePreservesStableLabels(t *testing.T) {
+	recording := &recordingSessionTelemetry{}
+	cfg := sessionOwnerSignatureFactoryConfig()
+	cfg.Name = "signature-factory"
+	cfg.Project = "telemetry-project"
+	owner := NewSessionOwner(SessionOwnerDependencies{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
+		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+			t.Fatal("SubmitWork called after normalization failure")
+			return interfaces.WorkRequestSubmitResult{}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			t.Fatal("Observe called after normalization failure")
+			return SessionInvocationObservation{}, nil
+		},
+		Telemetry: recording.telemetry(),
+	})
+
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+		Args: &map[string]any{},
+	})
+	var argumentErr *ArgumentError
+	if !errors.As(err, &argumentErr) || argumentErr.Code != ArgumentErrorCodeMissingRequiredInput {
+		t.Fatalf("error = %v, want %s", err, ArgumentErrorCodeMissingRequiredInput)
+	}
+
+	baseLabels := map[string]string{
+		"input_source":    string(StructuredArgumentsInputSource),
+		"factory_name":    cfg.Name,
+		"factory_project": cfg.Project,
+		"signature_hash":  InvocationSignatureHash(cfg.InvocationSignature),
+	}
+	assertSingleSessionMetric(t, recording.metrics, InvocationMetricNormalizationAttempts, baseLabels)
+	failureLabels := cloneMetricLabels(baseLabels)
+	failureLabels["error_code"] = string(ArgumentErrorCodeMissingRequiredInput)
+	assertSingleSessionMetric(t, recording.metrics, InvocationMetricNormalizationFailure, failureLabels)
 }
 
 func TestSessionOwnerTelemetry_RedactsSensitiveArgumentFailure(t *testing.T) {
@@ -101,6 +141,23 @@ func TestSessionOwnerTelemetry_PackagedSuccessEmitsEachOutcomeOnce(t *testing.T)
 	} {
 		assertSessionMetricCount(t, recording.metrics, metric, 1)
 	}
+	generalLabels := map[string]string{
+		"input_source": string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+		"factory_name": testPackagedFactory,
+	}
+	assertSingleSessionMetric(t, recording.metrics, InvocationMetricAttempts, generalLabels)
+	assertSingleSessionMetric(t, recording.metrics, InvocationMetricSuccess, generalLabels)
+	resultLabels := cloneMetricLabels(generalLabels)
+	resultLabels["result_type"] = "text"
+	assertSingleSessionMetric(t, recording.metrics, InvocationMetricResultType, resultLabels)
+	packagedLabels := map[string]string{
+		"input_source":     string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+		"packaged_factory": testPackagedFactory,
+	}
+	assertSingleSessionMetric(t, recording.metrics, testPackagedAttempts, packagedLabels)
+	packagedSuccessLabels := cloneMetricLabels(packagedLabels)
+	packagedSuccessLabels["readiness_outcome"] = testPackagedSuccessClass
+	assertSingleSessionMetric(t, recording.metrics, testPackagedSuccess, packagedSuccessLabels)
 	for _, message := range []string{
 		"packaged tts invocation submitted", "factory session invocation submitted",
 		"packaged tts invocation loading", "packaged tts invocation completed",
@@ -140,9 +197,76 @@ func TestSessionOwnerTelemetry_PackagedFailuresPreserveClassificationAndCounts(t
 				assertSessionMetricCount(t, recording.metrics, metric, 1)
 			}
 			assertSessionMetricCount(t, recording.metrics, testPackagedNotReady, tt.wantNotReady)
+			packagedLabels := map[string]string{
+				"input_source":     string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+				"packaged_factory": testPackagedFactory,
+			}
+			failureLabels := cloneMetricLabels(packagedLabels)
+			failureLabels["failure_class"] = tt.failureClass
+			assertSingleSessionMetric(t, recording.metrics, testPackagedFailure, failureLabels)
+			if tt.wantNotReady == 1 {
+				assertSingleSessionMetric(t, recording.metrics, testPackagedNotReady, packagedLabels)
+			}
 			failed := singleSessionLog(t, recording.logs, "packaged tts invocation failed")
 			assertSessionOwnerEqual(t, "failure request ID", failed.Fields["request_id"], any("request-1"))
 			assertSessionOwnerEqual(t, "failure trace ID", failed.Fields["trace_id"], any("trace-1"))
+			assertSessionOwnerEqual(t, "failure class", failed.Fields["failure_class"], any(tt.failureClass))
+		})
+	}
+}
+
+func TestSessionOwnerTelemetry_WaitFailuresPreserveCorrelationAndClassification(t *testing.T) {
+	tests := []struct {
+		name         string
+		observation  SessionInvocationObservation
+		waitErr      error
+		wantStatus   factoryapi.InvocationTerminalStatus
+		wantCode     string
+		failureClass string
+	}{
+		{
+			name: "timeout", observation: activeSessionInvocationObservation(), waitErr: context.DeadlineExceeded,
+			wantStatus: factoryapi.InvocationTerminalStatusTimedOut, wantCode: string(factoryapi.INVOCATIONTIMEDOUT), failureClass: "timeout",
+		},
+		{
+			name: "cancellation", observation: activeSessionInvocationObservation(), waitErr: context.Canceled,
+			wantStatus: factoryapi.InvocationTerminalStatusCanceled, wantCode: string(factoryapi.INVOCATIONCANCELED), failureClass: "cancellation",
+		},
+		{
+			name: "primary result failure", observation: classifiedObservation(PrimaryResultErrorCodeBlocked, "blocked"),
+			wantStatus: factoryapi.InvocationTerminalStatusFailed, wantCode: string(PrimaryResultErrorCodeBlocked), failureClass: "blocked",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recording := &recordingSessionTelemetry{}
+			cfg := sessionOwnerFactoryConfig()
+			cfg.Name = "general-factory"
+			owner := NewSessionOwner(SessionOwnerDependencies{
+				Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+					return tt.observation, nil
+				},
+				WaitNext:  func(context.Context) error { return tt.waitErr },
+				Telemetry: recording.telemetry(),
+			})
+			input := sessionWaitInput(nil)
+			input.FactoryConfig = cfg
+			input.InputSource = InputSourceLabel(ArgumentSourceKindCompatibilityContent)
+			result, err := owner.waitForResult(context.Background(), "session-1", input)
+			if err != nil {
+				t.Fatalf("waitForResult: %v", err)
+			}
+			assertSessionOwnerEqual(t, "status", result.Status, tt.wantStatus)
+			assertSessionOwnerEqual(t, "error code", result.ErrorCode, tt.wantCode)
+			assertSingleSessionMetric(t, recording.metrics, InvocationMetricFailure, map[string]string{
+				"input_source": string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+				"factory_name": cfg.Name,
+			})
+			failed := singleSessionLog(t, recording.logs, "factory session invocation failed")
+			assertSessionOwnerEqual(t, "request ID", failed.Fields["request_id"], any("request-1"))
+			assertSessionOwnerEqual(t, "trace ID", failed.Fields["trace_id"], any("trace-1"))
+			assertSessionOwnerEqual(t, "status field", failed.Fields["status"], any(string(tt.wantStatus)))
+			assertSessionOwnerEqual(t, "error code field", failed.Fields["error_code"], any(tt.wantCode))
 			assertSessionOwnerEqual(t, "failure class", failed.Fields["failure_class"], any(tt.failureClass))
 		})
 	}
@@ -212,6 +336,22 @@ func assertSessionMetricCount(t *testing.T, metrics []SessionInvocationMetric, n
 	}
 	if got != want {
 		t.Fatalf("metric %q count = %d, want %d; metrics = %#v", name, got, want, metrics)
+	}
+}
+
+func assertSingleSessionMetric(t *testing.T, metrics []SessionInvocationMetric, name string, wantLabels map[string]string) {
+	t.Helper()
+	matches := make([]SessionInvocationMetric, 0, 1)
+	for _, metric := range metrics {
+		if metric.Name == name {
+			matches = append(matches, metric)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("metric %q count = %d, want 1; metrics = %#v", name, len(matches), metrics)
+	}
+	if !reflect.DeepEqual(matches[0].Labels, wantLabels) {
+		t.Fatalf("metric %q labels = %#v, want %#v", name, matches[0].Labels, wantLabels)
 	}
 }
 
