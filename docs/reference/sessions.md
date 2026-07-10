@@ -190,13 +190,13 @@ or `you run --dir <factory>` before retrying.
 
 ### Discover session ids
 
-Use the UUID in the `SESSION ID` column when routing other commands with
-`--session` (for example `you submit --session <session-uuid>` or
-`you work list --session <session-uuid>`). On single-session local hosts,
-`~default` is accepted as an input selector for the current default session; it
-is not the session's identity. Once a read, sync preflight, or stream handshake
-returns the resolved `factorySessionId` UUID, retain that UUID for subsequent
-reads, dashboard persistence, and event connections.
+The `SESSION ID` column contains the routable id for each list row. On
+single-session local hosts that id can remain the accepted `~default` selector,
+not the session's canonical identity. In JSON output, use
+`runtime.streamIdentity.factorySessionId` when that runtime projection is
+present. A session read, sync preflight, or stream handshake can also return the
+resolved `factorySessionId` UUID. Retain the resolved UUID for subsequent reads,
+dashboard persistence, and event connections.
 
 ## Session show
 
@@ -560,8 +560,10 @@ you --server http://localhost:9090 --json work list
 | `you run` | Binds locally to host/port from `--server` | N/A — starts or attaches runtime |
 
 When `--session` is omitted on submit and work commands, the CLI accepts the
-`~default` compatibility selector. After `you session list`, pass the resolved
-UUID from `SESSION ID` on submit and verify commands:
+`~default` compatibility selector. A list row's `SESSION ID` may itself remain
+`~default`; use `runtime.streamIdentity.factorySessionId` from JSON list output
+when present, or resolve the UUID through a session read, sync preflight, or
+stream handshake. Pass that resolved UUID on later submit and verify commands:
 
 ```bash
 you submit --session session-beta \
