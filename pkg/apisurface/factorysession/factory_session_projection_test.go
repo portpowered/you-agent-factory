@@ -197,7 +197,6 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 			FailureDetail: &factorysessionexecution.DispatchFailureDetail{
 				Reason:     " TEMPORARY ",
 				Message:    " provider unavailable ",
-				ErrorClass: " transient ",
 			},
 		},
 		SessionID:         "dur-sess-1",
@@ -553,7 +552,6 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 		summary.FailureDetail = &factorysessionexecution.DispatchFailureDetail{
 			Reason:     stringValue(failure, "reason"),
 			Message:    stringValue(failure, "message"),
-			ErrorClass: stringValue(failure, "errorClass"),
 		}
 	}
 	if javascript, ok := dispatch["javascript"].(map[string]any); ok {

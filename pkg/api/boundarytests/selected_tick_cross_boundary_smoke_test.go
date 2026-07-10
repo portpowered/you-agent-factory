@@ -85,11 +85,11 @@ func assertSelectedTickCanonicalState(t *testing.T, worldState interfaces.Factor
 	if len(failedAttempts) != 1 {
 		t.Fatalf("failed inference attempts = %#v, want one attempt", failedAttempts)
 	}
-	if got := failedAttempts["dispatch-runtime-failed/inference-request/1"].ErrorClass; got != "throttled" {
-		t.Fatalf("failed inference error_class = %q, want throttled", got)
+	if detail := failedAttempts["dispatch-runtime-failed/inference-request/1"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("failed inference failureDetail = %#v, want throttled", detail)
 	}
-	if got := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureReason; got != "throttled" {
-		t.Fatalf("failed work detail reason = %q, want throttled", got)
+	if detail := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("failed work failureDetail = %#v, want throttled", detail)
 	}
 }
 
@@ -440,9 +440,9 @@ func crossBoundaryFailedResponseEvent(
 				Reason:  generated.WorkFailureTypeThrottled,
 				Message: "Provider rate limit exceeded while reviewing the failed runtime story.",
 			},
-			Outcome:        generated.WorkOutcomeFailed,
-			OutputWork:     &outputWork,
-			TransitionId:   "t-review",
+			Outcome:      generated.WorkOutcomeFailed,
+			OutputWork:   &outputWork,
+			TransitionId: "t-review",
 		},
 	)
 }

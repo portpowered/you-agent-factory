@@ -11,12 +11,12 @@ const (
 	// PackagedFactoryName is the canonical named factory identifier for @you/tts.
 	PackagedFactoryName = "@you/tts"
 
-	InvocationErrorCodeModelNotReady      = "INVOCATION_TTS_MODEL_NOT_READY"
-	InvocationErrorCodeGenerationFailed   = "INVOCATION_TTS_GENERATION_FAILED"
-	FailureClassModelNotReady             = "model_not_ready"
-	FailureClassGenerationFailed          = "generation_failed"
-	FailureClassLoading                   = "loading"
-	FailureClassSuccess                   = "success"
+	InvocationErrorCodeModelNotReady    = "INVOCATION_TTS_MODEL_NOT_READY"
+	InvocationErrorCodeGenerationFailed = "INVOCATION_TTS_GENERATION_FAILED"
+	FailureClassModelNotReady           = "model_not_ready"
+	FailureClassGenerationFailed        = "generation_failed"
+	FailureClassLoading                 = "loading"
+	FailureClassSuccess                 = "success"
 
 	MetricPackagedFactoryAttempts = "packaged_factory.invocation.attempts"
 	MetricPackagedFactorySuccess  = "packaged_factory.invocation.success"
@@ -126,9 +126,23 @@ func failureEvidence(detail interfaces.FactoryWorldFailureDetail, hasDetail bool
 		return ""
 	}
 	return strings.TrimSpace(strings.Join([]string{
-		strings.TrimSpace(detail.FailureReason),
-		strings.TrimSpace(detail.FailureMessage),
+		failureDetailReason(detail.FailureDetail),
+		failureDetailMessage(detail.FailureDetail),
 	}, " "))
+}
+
+func failureDetailReason(detail *interfaces.FailureDetail) string {
+	if detail == nil {
+		return ""
+	}
+	return strings.TrimSpace(string(detail.Reason))
+}
+
+func failureDetailMessage(detail *interfaces.FailureDetail) string {
+	if detail == nil {
+		return ""
+	}
+	return strings.TrimSpace(detail.Message)
 }
 
 func isModelNotReadyFailure(message string) bool {

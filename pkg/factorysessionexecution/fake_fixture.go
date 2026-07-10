@@ -408,9 +408,8 @@ func dispatchSummaryFromFixtureMap(dispatch map[string]any) DispatchSummary {
 	}
 	if failure, ok := dispatch["failureDetail"].(map[string]any); ok {
 		summary.FailureDetail = &DispatchFailureDetail{
-			Reason:     fixtureStringValue(failure, "reason"),
-			Message:    fixtureStringValue(failure, "message"),
-			ErrorClass: fixtureStringValue(failure, "errorClass"),
+			Reason:  fixtureStringValue(failure, "reason"),
+			Message: fixtureStringValue(failure, "message"),
 		}
 	}
 	if javascript, ok := dispatch["javascript"].(map[string]any); ok {

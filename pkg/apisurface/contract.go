@@ -697,7 +697,7 @@ func failureMessageFromDispatchState(dispatch interfaces.FactorySessionDispatchS
 	if dispatch.FailureDetail == nil {
 		return ""
 	}
-	return firstNonEmpty(dispatch.FailureDetail.Message, dispatch.FailureDetail.ErrorClass)
+	return strings.TrimSpace(dispatch.FailureDetail.Message)
 }
 
 func interruptedResultSummary(dispatch stopSummaryDispatch) string {

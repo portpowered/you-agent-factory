@@ -126,7 +126,10 @@ func (r *factoryWorldReducer) applyInferenceResponse(event factoryapi.FactoryEve
 	current.DurationMillis = payload.DurationMillis
 	current.ExitCode = intPtrValue(payload.ExitCode)
 	if payload.FailureDetail != nil {
-		current.ErrorClass = string(payload.FailureDetail.Reason)
+		current.FailureDetail = &interfaces.FailureDetail{
+			Reason:  interfaces.WorkFailureType(payload.FailureDetail.Reason),
+			Message: payload.FailureDetail.Message,
+		}
 	}
 	current.ProviderSession = interfaces.ProviderSessionMetadataFromGenerated(payload.ProviderSession)
 	current.Diagnostics = interfaces.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics)
@@ -385,8 +388,7 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 		PreviousChainingTraceIDs: cloneStringSlice(completion.PreviousChainingTraceIDs),
 		TraceIDs:                 cloneStringSlice(completion.TraceIDs),
 		Diagnostics:              interfaces.CloneSafeWorkDiagnostics(completion.Diagnostics),
-		FailureReason:            completion.Result.FailureReason,
-		FailureMessage:           completion.Result.FailureMessage,
+		FailureDetail:            interfaces.CloneFailureDetail(completion.Result.FailureDetail),
 	})
 }
 
@@ -616,8 +618,7 @@ func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.Facto
 		TransitionID:    completion.TransitionID,
 		WorkstationName: completion.Workstation.Name,
 		WorkItem:        item,
-		FailureReason:   completion.Result.FailureReason,
-		FailureMessage:  completion.Result.FailureMessage,
+		FailureDetail:   interfaces.CloneFailureDetail(completion.Result.FailureDetail),
 	}
 }
 

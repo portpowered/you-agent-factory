@@ -144,8 +144,8 @@ func TestReconstructFactoryWorldState_FailedWithPartialSessionBracketReconstruct
 	if len(bracket.ResultSummary) != 1 || bracket.ResultSummary[0].Text != "Partial findings before failure" {
 		t.Fatalf("result summary = %#v, want partial text summary", bracket.ResultSummary)
 	}
-	if !bracket.Terminal || bracket.FailureReason != "session_failed" {
-		t.Fatalf("terminal failure = %#v, want terminal with session_failed reason", bracket)
+	if !bracket.Terminal || bracket.FailureDetail == nil || bracket.FailureDetail.Reason != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("terminal failure = %#v, want terminal with normalized unknown reason", bracket)
 	}
 }
 
@@ -268,7 +268,7 @@ func failedWithPartialSessionBracketEvents(t *testing.T, t0 time.Time) []factory
 			OrchestratorKind: &kind,
 			Source:           &source,
 		}, factoryapi.SessionResultUpdatedEventPayload{
-			ResultStatus: factoryapi.FactoryEventSessionResultStatusFailedWithPartial,
+			ResultStatus:  factoryapi.FactoryEventSessionResultStatusFailedWithPartial,
 			ResultSummary: &summary,
 		}),
 		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionCompleted, "event-session-completed-beta", 4, t0.Add(3*time.Second), factoryapi.FactoryEventContext{

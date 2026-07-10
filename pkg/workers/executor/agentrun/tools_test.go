@@ -13,8 +13,8 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
-	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/api/workstationprojection"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -24,8 +24,8 @@ func TestPolicyToolExecutor_DisabledDeniesToolCalls(t *testing.T) {
 	recorder := NewToolDiagnosticRecorder()
 	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyDisabled, t.TempDir(), recorder)
 	_, err := executor.Execute(context.Background(), messages.ToolCall{
-		ID:   "tc1",
-		Name: ToolNameReadFile,
+		ID:        "tc1",
+		Name:      ToolNameReadFile,
 		Arguments: `{"path":"note.txt"}`,
 	})
 	if !errors.Is(err, ErrToolPolicyDenied) {
@@ -448,19 +448,21 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 			workItem.ID: workItem,
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID:      dispatch.DispatchID,
-			TransitionID:    dispatch.TransitionID,
-			Workstation:     interfaces.FactoryWorkstationRef{ID: "execute", Name: "Execute"},
-			WorkItemIDs:     []string{workItem.ID},
-			TraceIDs:        []string{workItem.TraceID},
-			StartedAt:       time.Unix(0, 0).UTC(),
-			CompletedAt:     completedAt,
-			DurationMillis:  1000,
+			DispatchID:     dispatch.DispatchID,
+			TransitionID:   dispatch.TransitionID,
+			Workstation:    interfaces.FactoryWorkstationRef{ID: "execute", Name: "Execute"},
+			WorkItemIDs:    []string{workItem.ID},
+			TraceIDs:       []string{workItem.TraceID},
+			StartedAt:      time.Unix(0, 0).UTC(),
+			CompletedAt:    completedAt,
+			DurationMillis: 1000,
 			Result: interfaces.WorkstationResult{
-				Outcome:        string(interfaces.OutcomeFailed),
-				Error:          result.Error,
-				FailureReason:  string(interfaces.WorkFailureTypeUnknown),
-				FailureMessage: result.Error,
+				Outcome: string(interfaces.OutcomeFailed),
+				Error:   result.Error,
+				FailureDetail: &interfaces.FailureDetail{
+					Reason:  interfaces.WorkFailureTypeUnknown,
+					Message: result.Error,
+				},
 			},
 		}},
 	}

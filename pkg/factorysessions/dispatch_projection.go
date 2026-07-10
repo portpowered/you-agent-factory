@@ -103,7 +103,6 @@ func failureDetailFromCompleted(completed interfaces.CompletedDispatch) *interfa
 	}
 	if completed.FailureMetadata != nil {
 		detail.Reason = string(completed.FailureMetadata.Type)
-		detail.ErrorClass = string(completed.FailureMetadata.Family)
 	}
 	return detail
 }
@@ -383,7 +382,6 @@ func projectedCheckpointArtifactStates(
 	}
 	return artifacts
 }
-
 
 // ArtifactStatesFromJavaScriptRuntime merges explicit artifact states with
 // checkpoint-derived internal artifacts for one JavaScript session.

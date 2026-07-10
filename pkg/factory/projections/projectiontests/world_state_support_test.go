@@ -509,6 +509,17 @@ func failureDetailForProjectionTest(reason, message string) *factoryapi.FailureD
 	return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(reason), Message: message}
 }
 
+func failureDetailForProjectionTestValue(detail *interfaces.FailureDetail) *factoryapi.FailureDetail {
+	if detail == nil {
+		return nil
+	}
+	return failureDetailForProjectionTest(string(detail.Reason), detail.Message)
+}
+
+func worldFailureDetailHasReason(detail interfaces.FactoryWorldFailureDetail, reason interfaces.WorkFailureType) bool {
+	return detail.FailureDetail != nil && detail.FailureDetail.Reason == reason
+}
+
 func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.WorkstationResponsePayload) factoryapi.FactoryEvent {
 	outputWork := generatedOutputWorkForProjectionTest(payload)
 	outcome := factoryapi.WorkOutcome(payload.Result.Outcome)
@@ -528,7 +539,7 @@ func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.
 		Error:                       stringPtrForProjectionTest(payload.Result.Error),
 		Feedback:                    stringPtrForProjectionTest(payload.Result.Feedback),
 		SelectedClassificationLabel: stringPtrForProjectionTest(payload.Result.SelectedClassificationLabel),
-		FailureDetail:               failureDetailForProjectionTest(payload.Result.FailureReason, payload.Result.FailureMessage),
+		FailureDetail:               failureDetailForProjectionTestValue(payload.Result.FailureDetail),
 		ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(payload.Result.FailureMetadata),
 		DurationMillis:              int64PtrForProjectionTest(payload.DurationMillis),
 		OutputWork:                  &outputWork,

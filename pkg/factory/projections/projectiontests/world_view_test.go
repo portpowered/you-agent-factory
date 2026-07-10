@@ -474,7 +474,7 @@ func TestBuildFactoryWorldView_ProjectsSelectedTickTerminalAndFailedPlaceOccupan
 			DispatchID:     "dispatch-failed",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureReason: "throttled", FailureMessage: "Provider rate limit exceeded."},
+			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
 			DurationMillis: 500,
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:     string(interfaces.MutationMove),
@@ -891,7 +891,7 @@ func TestBuildFactoryWorldView_ProjectsInferenceAttemptsForDashboard(t *testing.
 		completedAttempt.DurationMillis != 875 ||
 		completedAttempt.ExitCode == nil ||
 		*completedAttempt.ExitCode != 1 ||
-		completedAttempt.ErrorClass != "throttled" ||
+		completedAttempt.FailureDetail == nil || completedAttempt.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled ||
 		completedAttempt.ResponseTime.IsZero() {
 		t.Fatalf("completed inference attempt view = %#v, want failed response details", completedAttempt)
 	}

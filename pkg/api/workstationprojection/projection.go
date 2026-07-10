@@ -165,7 +165,7 @@ func workstationDispatchViewFromCompletion(
 			Outcome:                     workstationRequestStringPtr(completion.Result.Outcome),
 			Feedback:                    workstationRequestStringPtr(completion.Result.Feedback),
 			SelectedClassificationLabel: workstationRequestStringPtr(completion.Result.SelectedClassificationLabel),
-			FailureDetail:               workstationFailureDetail(completion.Result.FailureReason, completion.Result.FailureMessage),
+			FailureDetail:               workstationFailureDetailFromCanonical(completion.Result.FailureDetail),
 			ScriptResponse:              generatedFactoryWorldScriptResponse(latestScriptResponse),
 			AgentRunInspection:          generatedFactoryWorldAgentRunInspection(completion.Diagnostics),
 			EndTime:                     timePtr(completion.CompletedAt),
@@ -183,6 +183,13 @@ func workstationFailureDetail(reason, message string) *factoryapi.FailureDetail 
 		return nil
 	}
 	return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(reason), Message: message}
+}
+
+func workstationFailureDetailFromCanonical(detail *interfaces.FailureDetail) *factoryapi.FailureDetail {
+	if detail == nil {
+		return nil
+	}
+	return workstationFailureDetail(string(detail.Reason), detail.Message)
 }
 
 func workstationDispatchRequestView(
@@ -262,7 +269,7 @@ func buildFactoryWorldWorkstationRequestCounts(
 		if attempt.ResponseTime.IsZero() {
 			continue
 		}
-		if attempt.ErrorClass != "" || attempt.Outcome == "FAILED" {
+		if attempt.FailureDetail != nil || attempt.Outcome == "FAILED" {
 			counts.ErroredCount++
 			continue
 		}

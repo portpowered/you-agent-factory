@@ -674,7 +674,7 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 			DispatchID:     "dispatch-failed",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureReason: "throttled", FailureMessage: "Provider rate limit exceeded."},
+			Result:         interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
 			DurationMillis: 500,
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:     string(interfaces.MutationMove),
@@ -707,13 +707,13 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 	if detail.DispatchID != "dispatch-failed" || detail.WorkstationName != "Review" {
 		t.Fatalf("failure detail dispatch = %#v, want dispatch-failed from Review", detail)
 	}
-	if detail.FailureReason != "throttled" || detail.FailureMessage != "Provider rate limit exceeded." {
+	if detail.FailureDetail == nil || detail.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled || detail.FailureDetail.Message != "Provider rate limit exceeded." {
 		t.Fatalf("failure detail = %#v, want throttled reason and provider message", detail)
 	}
 	if _, ok := failedState.FailedWorkItemsByID["work-failed"]; !ok {
 		t.Fatalf("failed terminal work should be indexed as failed work")
 	}
-	if failedState.CompletedDispatches[0].Result.FailureReason != "throttled" {
+	if failedState.CompletedDispatches[0].Result.FailureDetail == nil || failedState.CompletedDispatches[0].Result.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled {
 		t.Fatalf("completion result = %#v, want failure reason retained", failedState.CompletedDispatches[0].Result)
 	}
 }
@@ -797,7 +797,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 			DispatchID:   "dispatch-failed",
 			TransitionID: "t-review",
 			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:       interfaces.WorkstationResult{Outcome: "FAILED", Error: "boom", FailureReason: "worker_error", FailureMessage: "boom"},
+			Result:       interfaces.WorkstationResult{Outcome: "FAILED", Error: "boom", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeUnknown, Message: "boom"}},
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-recover",
@@ -836,7 +836,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 	if got := recoveredState.PlaceOccupancyByID["task:failed"].WorkItemIDs; len(got) != 0 {
 		t.Fatalf("task:failed occupancy = %#v, want empty after move", got)
 	}
-	if detail, ok := recoveredState.FailureDetailsByWorkID["work-recover"]; !ok || detail.FailureReason != "worker_error" {
+	if detail, ok := recoveredState.FailureDetailsByWorkID["work-recover"]; !ok || !worldFailureDetailHasReason(detail, interfaces.WorkFailureTypeUnknown) {
 		t.Fatalf("failure details = %#v, want retained history after leaving FAILED", recoveredState.FailureDetailsByWorkID["work-recover"])
 	}
 	item := recoveredState.WorkItemsByID["work-recover"]

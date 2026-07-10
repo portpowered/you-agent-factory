@@ -799,7 +799,7 @@ func scriptProjectionStateFixture() interfaces.FactoryWorldState {
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
 			DispatchID: scriptProjectionCompletedDispatchID, TransitionID: "script-review", Workstation: interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
 			StartedAt: t0.Add(time.Minute), CompletedAt: t0.Add(2 * time.Minute), DurationMillis: 12_000, WorkItemIDs: []string{workItem.ID},
-			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), FailureReason: "script failed", FailureMessage: "script timed out"},
+			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeUnknown, Message: "script timed out"}},
 			ConsumedInputs: []interfaces.WorkstationInput{{TokenID: "token-script-completed", PlaceID: workItem.PlaceID, WorkItem: &workItem}},
 			InputWorkItems: []interfaces.FactoryWorkItem{workItem}, TraceIDs: []string{workItem.TraceID},
 		}},

@@ -169,7 +169,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 						DispatchID:     "dispatch-expire",
 						TransitionID:   interfaces.SystemTimeExpiryTransitionID,
 						Workstation:    interfaces.FactoryWorkstationRef{Name: interfaces.SystemTimeExpiryTransitionID},
-						Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "expired"},
+						Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: "expired", Message: "expired"}},
 						StartedAt:      now.Add(-15 * time.Second),
 						CompletedAt:    now.Add(-10 * time.Second),
 						DurationMillis: 5000,
@@ -180,7 +180,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 					TransitionID:    interfaces.SystemTimeExpiryTransitionID,
 					WorkstationName: interfaces.SystemTimeExpiryTransitionID,
 					Outcome:         string(interfaces.OutcomeFailed),
-					FailureReason:   "expired",
+					FailureDetail:   &interfaces.FailureDetail{Reason: "expired", Message: "expired"},
 					ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-expire"},
 				}},
 			},
@@ -342,7 +342,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 						Workstation:     interfaces.FactoryWorkstationRef{Name: "Publisher"},
 						InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Ship change"}},
 						OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}},
-						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "throttled", FailureMessage: "provider unavailable"},
+						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"}},
 						StartedAt:       now.Add(-40 * time.Second),
 						CompletedAt:     now.Add(-20 * time.Second),
 						DurationMillis:  20000,
@@ -354,8 +354,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 					WorkstationName: "Publisher",
 					ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
 					Outcome:         string(interfaces.OutcomeFailed),
-					FailureReason:   "throttled",
-					FailureMessage:  "provider unavailable",
+					FailureDetail:   &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"},
 					ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
 				}},
 			},
@@ -454,7 +453,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					OutputWorkItems: []interfaces.FactoryWorkItem{
 						{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "should not replace failed terminal"},
 					},
-					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "throttled", FailureMessage: "provider unavailable"},
+					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"}},
 					StartedAt:      now.Add(-29 * time.Second),
 					CompletedAt:    now.Add(-20 * time.Second),
 					DurationMillis: 9000,
@@ -470,7 +469,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					OutputWorkItems: []interfaces.FactoryWorkItem{
 						{ID: "failed-output", WorkTypeID: "story", DisplayName: "Expired artifact"},
 					},
-					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureReason: "expired"},
+					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: "expired", Message: "expired"}},
 					StartedAt:      now.Add(-19 * time.Second),
 					CompletedAt:    now.Add(-10 * time.Second),
 					DurationMillis: 9000,
@@ -498,14 +497,14 @@ func assertDispatchHistoryFallbackView(t *testing.T, view dashboardSessionView) 
 		detailsByLabel[detail.WorkItem.DisplayName] = detail
 	}
 	assertDashboardFailedWorkDetail(t, detailsByLabel["Publish blocked"], "failed-terminal", "ship", "Publisher", "throttled", "provider unavailable")
-	assertDashboardFailedWorkDetail(t, detailsByLabel["Expired artifact"], "failed-output-and-input-fallback", interfaces.SystemTimeDashboardExpiryTransitionID, interfaces.SystemTimeDashboardExpiryTransitionID, "expired", "")
-	assertDashboardFailedWorkDetail(t, detailsByLabel["Retry later"], "failed-output-and-input-fallback", interfaces.SystemTimeDashboardExpiryTransitionID, interfaces.SystemTimeDashboardExpiryTransitionID, "expired", "")
+	assertDashboardFailedWorkDetail(t, detailsByLabel["Expired artifact"], "failed-output-and-input-fallback", interfaces.SystemTimeDashboardExpiryTransitionID, interfaces.SystemTimeDashboardExpiryTransitionID, "expired", "expired")
+	assertDashboardFailedWorkDetail(t, detailsByLabel["Retry later"], "failed-output-and-input-fallback", interfaces.SystemTimeDashboardExpiryTransitionID, interfaces.SystemTimeDashboardExpiryTransitionID, "expired", "expired")
 }
 
 func assertDashboardFailedWorkDetail(t *testing.T, detail dashboardFailedWorkDetail, dispatchID, transitionID, workstationName, failureReason, failureMessage string) {
 	t.Helper()
 
-	if detail.DispatchID != dispatchID || detail.TransitionID != transitionID || detail.WorkstationName != workstationName || detail.FailureReason != failureReason || detail.FailureMessage != failureMessage {
+	if detail.DispatchID != dispatchID || detail.TransitionID != transitionID || detail.WorkstationName != workstationName || detail.FailureDetail == nil || string(detail.FailureDetail.Reason) != failureReason || detail.FailureDetail.Message != failureMessage {
 		t.Fatalf("failed work detail = %+v", detail)
 	}
 }

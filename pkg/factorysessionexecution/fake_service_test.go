@@ -12,6 +12,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -981,13 +982,14 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 		{
 			Kind: workflowruntime.RecordKindChildDispatch,
 			ChildDispatch: &workflowruntime.ChildDispatchRecord{
-				DispatchID:        "dispatch-2",
-				Status:            workflowruntime.ChildDispatchStatusFailed,
-				Label:             "child-1",
-				ExecutionMode:     ChildExecutorModeLive,
-				FailureReason:     workflowruntime.ChildExecutionFailureReason,
-				FailureMessage:    "live child failed: simulated child error",
-				FailureErrorClass: "terminal",
+				DispatchID:    "dispatch-2",
+				Status:        workflowruntime.ChildDispatchStatusFailed,
+				Label:         "child-1",
+				ExecutionMode: ChildExecutorModeLive,
+				FailureDetail: &interfaces.FailureDetail{
+					Reason:  interfaces.WorkFailureTypeUnknown,
+					Message: "live child failed: simulated child error",
+				},
 			},
 		},
 	}
@@ -1001,14 +1003,11 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 	if dispatch.Status != DispatchStatusFailed {
 		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
 	}
-	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != string(interfaces.WorkFailureTypeUnknown) {
 		t.Fatalf("failureDetail = %#v", dispatch.FailureDetail)
 	}
 	if dispatch.FailureDetail.Message != "live child failed: simulated child error" {
 		t.Fatalf("failure message = %q", dispatch.FailureDetail.Message)
-	}
-	if dispatch.FailureDetail.ErrorClass != "terminal" {
-		t.Fatalf("failure errorClass = %q, want terminal", dispatch.FailureDetail.ErrorClass)
 	}
 	if len(projection.Artifacts) != 0 {
 		t.Fatalf("artifacts = %#v, want none for failed child", projection.Artifacts)

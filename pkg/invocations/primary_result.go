@@ -483,7 +483,7 @@ func classifyInterruptedInvocation(
 	}
 
 	if bracket := input.WorldState.SessionBracket; bracket != nil {
-		if strings.TrimSpace(bracket.FinalStatus) == "INTERRUPTED" || strings.TrimSpace(bracket.FailureReason) == "DISPATCH_INTERRUPTED" {
+		if strings.TrimSpace(bracket.FinalStatus) == "INTERRUPTED" || (bracket.FailureDetail != nil && strings.TrimSpace(string(bracket.FailureDetail.Reason)) == "DISPATCH_INTERRUPTED") {
 			return &PrimaryResultError{
 				Code:      PrimaryResultErrorCodeInterrupted,
 				RequestID: requestID,
