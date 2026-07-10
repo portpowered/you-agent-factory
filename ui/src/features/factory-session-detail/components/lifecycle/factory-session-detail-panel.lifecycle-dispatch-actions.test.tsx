@@ -30,7 +30,9 @@ describe("failed dispatch retry actions", () => {
         return jsonResponse(buildFailedPartialDurableSession());
       }
       if (
-        url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}/dispatches`)
+        url.endsWith(
+          `/factory-sessions/${failedPartialReplaySessionID}/dispatches`,
+        )
       ) {
         return jsonResponse(buildFailedPartialReplayDispatchList());
       }
@@ -83,16 +85,6 @@ describe("failed dispatch retry actions", () => {
           isDefault: false,
           project: "beta",
           runtime: {
-            dispatches: [
-              {
-                dispatchKind: "JAVASCRIPT_VERIFY",
-                id: "dispatch-failed",
-                label: "Verify release manifest",
-                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                sessionId: "session-beta",
-                status: "FAILED",
-              },
-            ],
             javascript: {
               childDispatchCounts: {
                 completed: 0,
@@ -123,13 +115,28 @@ describe("failed dispatch retry actions", () => {
       if (url.endsWith("/factory-sessions/session-beta/result")) {
         return new Response("not found", { status: 404 });
       }
+      if (url.endsWith("/factory-sessions/session-beta/dispatches")) {
+        return jsonResponse({
+          dispatches: [
+            {
+              dispatchKind: "JAVASCRIPT_VERIFY",
+              id: "dispatch-failed",
+              label: "Verify release manifest",
+              status: "FAILED",
+            },
+          ],
+          sessionId: "session-beta",
+        });
+      }
       if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
         return new Response("not found", { status: 404 });
       }
       return new Response("not found", { status: 404 });
     });
 
-    renderWithQueryClient(<FactorySessionDetailPanel sessionID="session-beta" />);
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Runtime")).toBeTruthy();

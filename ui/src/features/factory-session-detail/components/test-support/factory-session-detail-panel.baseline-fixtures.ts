@@ -1,10 +1,41 @@
 import { vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
-import { createDeferred, jsonResponse } from "./factory-session-detail-panel.test-helpers";
+import {
+  createDeferred,
+  jsonResponse,
+} from "./factory-session-detail-panel.test-helpers";
 
 export const BASELINE_SESSION_ID = "session-beta";
 export const BASELINE_DISPATCH_ID = "dispatch-1";
+
+export function createJavaScriptSessionBetaDispatches() {
+  return [
+    {
+      dispatchKind: "JAVASCRIPT_AGENT",
+      id: BASELINE_DISPATCH_ID,
+      javascript: {
+        executionMode: " live ",
+        taskKind: "AGENT",
+        taskLabel: " Review child task ",
+      },
+      providerSessionRefs: [
+        {
+          id: "provider-session-1",
+          kind: "session_id",
+          provider: "codex",
+        },
+      ],
+      status: "COMPLETED",
+      warnings: [
+        {
+          code: "DISPATCH_WARNING",
+          message: "child agent retry scheduled",
+        },
+      ],
+    },
+  ];
+}
 
 export function createJavaScriptSessionBetaPayload() {
   return {
@@ -20,33 +51,6 @@ export function createJavaScriptSessionBetaPayload() {
           kind: "CHILD_RESULT",
           label: "review output",
           visibility: "CUSTOMER",
-        },
-      ],
-      dispatches: [
-        {
-          dispatchKind: "JAVASCRIPT_AGENT",
-          id: BASELINE_DISPATCH_ID,
-          javascript: {
-            executionMode: " live ",
-            taskKind: "AGENT",
-            taskLabel: " Review child task ",
-          },
-          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          providerSessionRefs: [
-            {
-              id: "provider-session-1",
-              kind: "session_id",
-              provider: "codex",
-            },
-          ],
-          sessionId: BASELINE_SESSION_ID,
-          status: "COMPLETED",
-          warnings: [
-            {
-              code: "DISPATCH_WARNING",
-              message: "child agent retry scheduled",
-            },
-          ],
         },
       ],
       javascript: {
@@ -90,6 +94,12 @@ export function mockJavaScriptSessionBetaFetch() {
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}`)) {
       return jsonResponse(createJavaScriptSessionBetaPayload());
     }
+    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/dispatches`)) {
+      return jsonResponse({
+        dispatches: createJavaScriptSessionBetaDispatches(),
+        sessionId: BASELINE_SESSION_ID,
+      });
+    }
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/result`)) {
       return jsonResponse({
         resultArtifactRef: {
@@ -101,7 +111,9 @@ export function mockJavaScriptSessionBetaFetch() {
         status: "IDLE",
       });
     }
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)) {
+    if (
+      url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)
+    ) {
       return jsonResponse({
         partialResultArtifactRef: {
           id: "artifact-partial",
@@ -161,6 +173,12 @@ export function mockJavaScriptSessionBetaFetchWithDeferredDispatch() {
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}`)) {
       return jsonResponse(createJavaScriptSessionBetaPayload());
     }
+    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/dispatches`)) {
+      return jsonResponse({
+        dispatches: createJavaScriptSessionBetaDispatches(),
+        sessionId: BASELINE_SESSION_ID,
+      });
+    }
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/result`)) {
       return jsonResponse({
         resultArtifactRef: {
@@ -172,7 +190,9 @@ export function mockJavaScriptSessionBetaFetchWithDeferredDispatch() {
         status: "IDLE",
       });
     }
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)) {
+    if (
+      url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)
+    ) {
       return jsonResponse({
         partialResultArtifactRef: {
           id: "artifact-partial",

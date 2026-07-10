@@ -53,11 +53,6 @@ properties:
     $ref: './FactorySessionPetriProjection.yaml'
   javascript:
     $ref: './FactorySessionJavaScriptProjection.yaml'
-  dispatches:
-    type: array
-    items:
-      $ref: '../data-models/FactoryDispatch.yaml'
-    description: Shared dispatch projections for the session runtime.
   artifacts:
     type: array
     items:

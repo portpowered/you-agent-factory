@@ -8,6 +8,7 @@ import type {
   FactorySessionPartialResult,
   FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
+import type { components } from "../../../api/generated/openapi";
 import {
   scopedRuntimeQueryKey,
   useDashboardStreamStore,
@@ -30,6 +31,7 @@ export function factorySessionDetailQueryKey(
 }
 
 export interface FactorySessionDetailData {
+  dispatches?: components["schemas"]["FactoryDispatch"][];
   durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
@@ -50,13 +52,12 @@ export function useFactorySessionDetail(
     (state) => state.backendRuntimeCacheScope,
   );
   const query = useQuery<FactorySessionDetailData, FactorySessionsAPIError>({
-    queryKey: factorySessionDetailQueryKey(
-      sessionID,
-      backendRuntimeCacheScope,
-    ),
+    queryKey: factorySessionDetailQueryKey(sessionID, backendRuntimeCacheScope),
     queryFn: async () => {
       if (sessionID === null || sessionID.trim() === "") {
-        throw new Error("Factory session detail requires a selected session id.");
+        throw new Error(
+          "Factory session detail requires a selected session id.",
+        );
       }
 
       return loadFactorySessionDetailData(sessionID);
@@ -89,11 +90,5 @@ export function useFactorySessionDetail(
     }
 
     return { data: query.data, status: "success" };
-  }, [
-    query.data,
-    query.error,
-    query.isFetching,
-    query.isPending,
-    sessionID,
-  ]);
+  }, [query.data, query.error, query.isFetching, query.isPending, sessionID]);
 }

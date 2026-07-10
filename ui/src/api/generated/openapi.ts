@@ -1351,8 +1351,6 @@ export interface components {
       streamIdentity?: components["schemas"]["FactorySessionStreamIdentity"];
       petri?: components["schemas"]["FactorySessionPetriProjection"];
       javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
-      /** @description Shared dispatch projections for the session runtime. */
-      dispatches?: components["schemas"]["FactoryDispatch"][];
       /** @description Shared artifact projections for the session runtime. */
       artifacts?: components["schemas"]["FactoryArtifact"][];
     };
