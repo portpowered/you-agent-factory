@@ -282,9 +282,9 @@ func failedWithPartialSessionBracketEvents(t *testing.T, t0 time.Time) []factory
 			CompletedAt:    t0.Add(3 * time.Second),
 			DurationMillis: int64PtrForProjectionTest(3000),
 			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FactoryEventSessionResultStatusFailedWithPartial),
-			FailureDetail: &factoryapi.FactoryDispatchFailureDetail{
-				Reason:  stringPointer("session_failed"),
-				Message: stringPointer("workflow execution failed after partial results"),
+			FailureDetail: &factoryapi.FailureDetail{
+				Reason:  factoryapi.WorkFailureTypeUnknown,
+				Message: "workflow execution failed after partial results",
 			},
 		}),
 	}

@@ -27,5 +27,5 @@ properties:
       type: string
     description: Artifact identifiers produced or updated by reconciliation.
   failureDetail:
-    $ref: '../../data-models/FactoryDispatchFailureDetail.yaml'
+    $ref: '../../data-models/FailureDetail.yaml'
     description: Canonical failure details when reconciliation failed.

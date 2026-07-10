@@ -393,7 +393,7 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     500,
-			ErrorClass:         stringPtrForProjectionTest("throttled"),
+			FailureDetail:      &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."},
 			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"}),
 			Diagnostics: generatedWorkDiagnosticsForProjectionTest(&interfaces.SafeWorkDiagnostics{
 				Provider: &interfaces.SafeProviderDiagnostic{

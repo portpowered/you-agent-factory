@@ -2,6 +2,7 @@ package workstationprojection
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -164,8 +165,7 @@ func workstationDispatchViewFromCompletion(
 			Outcome:                     workstationRequestStringPtr(completion.Result.Outcome),
 			Feedback:                    workstationRequestStringPtr(completion.Result.Feedback),
 			SelectedClassificationLabel: workstationRequestStringPtr(completion.Result.SelectedClassificationLabel),
-			FailureReason:               workstationRequestStringPtr(completion.Result.FailureReason),
-			FailureMessage:              workstationRequestStringPtr(completion.Result.FailureMessage),
+			FailureDetail:               workstationFailureDetail(completion.Result.FailureReason, completion.Result.FailureMessage),
 			ScriptResponse:              generatedFactoryWorldScriptResponse(latestScriptResponse),
 			AgentRunInspection:          generatedFactoryWorldAgentRunInspection(completion.Diagnostics),
 			EndTime:                     timePtr(completion.CompletedAt),
@@ -174,6 +174,15 @@ func workstationDispatchViewFromCompletion(
 			OutputMutations:             mutationViewsPtrForCompletion(completion),
 		},
 	}
+}
+
+func workstationFailureDetail(reason, message string) *factoryapi.FailureDetail {
+	reason = strings.TrimSpace(reason)
+	message = strings.TrimSpace(message)
+	if reason == "" || message == "" {
+		return nil
+	}
+	return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(reason), Message: message}
 }
 
 func workstationDispatchRequestView(

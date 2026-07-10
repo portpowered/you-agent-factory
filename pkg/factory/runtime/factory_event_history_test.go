@@ -262,7 +262,7 @@ func assertSafeBoundaryRequestViews(t *testing.T, worldState interfaces.FactoryW
 		string(interfaces.WorkFailureTypeInternalServerError),
 		"provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)",
 	)
-	assertNoAuthRemediationText(t, stringValueForRuntimeTest(windowsRequest.Response.FailureMessage))
+	assertNoAuthRemediationText(t, windowsRequest.Response.FailureDetail.Message)
 }
 
 func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {

@@ -157,7 +157,7 @@ func testDispatchUsageWarningsAndFailureProjection(t *testing.T) {
 		Message:    " msg ",
 		ErrorClass: " class ",
 	})
-	if failure == nil || failure.Reason == nil || *failure.Reason != "TEMP" {
+	if failure == nil || failure.Reason != factoryapi.WorkFailureTypeUnknown {
 		t.Fatalf("failure = %#v", failure)
 	}
 }
@@ -304,7 +304,7 @@ func testResultResponseOptionalBranches(t *testing.T) {
 			Retryable: true,
 		},
 	})
-	if result.PrimaryResult == nil || result.ArtifactRefs == nil || result.Failure == nil || result.Availability == nil {
+	if result.PrimaryResult == nil || result.ArtifactRefs == nil || result.FailureDetail == nil || result.Availability == nil {
 		t.Fatalf("result response = %#v", result)
 	}
 }

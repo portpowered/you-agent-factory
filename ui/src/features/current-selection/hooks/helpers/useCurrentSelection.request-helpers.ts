@@ -287,10 +287,8 @@ export function toDashboardWorkstationRequest(
       request.counts.dispatchedCount ?? request.counts.dispatched_count ?? 0,
     errored_request_count:
       request.counts.erroredCount ?? request.counts.errored_count ?? 0,
-    failure_message:
-      request.response?.failureMessage ?? request.response?.failure_message,
-    failure_reason:
-      request.response?.failureReason ?? request.response?.failure_reason,
+    failure_message: request.response?.failureDetail?.message,
+    failure_reason: request.response?.failureDetail?.reason,
     inference_attempts: sortInferenceAttempts(inferenceAttemptsByRequestID),
     outcome: request.response?.outcome,
     request_view: {
@@ -476,7 +474,7 @@ function requestFailureReason(
   request: DispatchWorkstationRequest,
 ): string | undefined {
   return "request" in request
-    ? (request.response?.failureReason ?? request.response?.failure_reason)
+    ? request.response?.failureDetail?.reason
     : request.failure_reason;
 }
 
@@ -484,7 +482,7 @@ function requestFailureMessage(
   request: DispatchWorkstationRequest,
 ): string | undefined {
   return "request" in request
-    ? (request.response?.failureMessage ?? request.response?.failure_message)
+    ? request.response?.failureDetail?.message
     : request.failure_message;
 }
 

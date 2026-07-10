@@ -535,13 +535,28 @@ func projectedStopDispatch(dispatch stopSummaryDispatch) *factoryapi.FactoryStop
 	if dispatch.workstationName != "" {
 		projected.WorkstationName = stringPtr(dispatch.workstationName)
 	}
-	if dispatch.failureReason != "" {
-		projected.FailureReason = stringPtr(dispatch.failureReason)
-	}
-	if dispatch.failureMessage != "" {
-		projected.FailureMessage = stringPtr(dispatch.failureMessage)
+	if dispatch.failureReason != "" && dispatch.failureMessage != "" {
+		projected.FailureDetail = &factoryapi.FailureDetail{
+			Reason:  publicFailureReason(dispatch.failureReason),
+			Message: dispatch.failureMessage,
+		}
 	}
 	return projected
+}
+
+func publicFailureReason(reason string) factoryapi.WorkFailureType {
+	candidate := factoryapi.WorkFailureType(strings.TrimSpace(reason))
+	switch candidate {
+	case factoryapi.WorkFailureTypeAuthFailure,
+		factoryapi.WorkFailureTypePermanentBadRequest,
+		factoryapi.WorkFailureTypeThrottled,
+		factoryapi.WorkFailureTypeInternalServerError,
+		factoryapi.WorkFailureTypeTimeout,
+		factoryapi.WorkFailureTypeMisconfigured:
+		return candidate
+	default:
+		return factoryapi.WorkFailureTypeUnknown
+	}
 }
 
 func latestRelevantWork(

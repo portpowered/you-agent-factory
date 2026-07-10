@@ -136,7 +136,11 @@ func applyOptionalSessionReadOutcomeFields(
 		response.ArtifactRefs = refs
 	}
 	if failure := failureSummaryToAPI(result.Failure); failure != nil {
-		response.Failure = failure
+		response.FailureDetail = failure
+		if result.Failure.PartialResultAvailable {
+			value := true
+			response.PartialResultAvailable = &value
+		}
 	}
 	if lifecycle := lifecycleTimestampsToAPI(result.Lifecycle); lifecycle != nil {
 		response.Lifecycle = lifecycle
@@ -305,28 +309,31 @@ func sessionActionAvailabilityFromAPI(actions factoryapi.FactorySessionDurableAc
 	return out
 }
 
-func failureSummaryToAPI(failure *factorysessionexecution.FailureSummary) *factoryapi.FactorySessionDurableFailureDetail {
+func failureSummaryToAPI(failure *factorysessionexecution.FailureSummary) *factoryapi.FailureDetail {
 	if failure == nil {
 		return nil
 	}
-	out := &factoryapi.FactorySessionDurableFailureDetail{}
-	if reason := strings.TrimSpace(failure.Reason); reason != "" {
-		out.Reason = &reason
-	}
-	if message := strings.TrimSpace(failure.Message); message != "" {
-		out.Message = &message
-	}
-	if errorClass := strings.TrimSpace(failure.ErrorClass); errorClass != "" {
-		out.ErrorClass = &errorClass
-	}
-	if failure.PartialResultAvailable {
-		value := true
-		out.PartialResultAvailable = &value
-	}
-	if out.Reason == nil && out.Message == nil && out.ErrorClass == nil && out.PartialResultAvailable == nil {
+	reason := strings.TrimSpace(failure.Reason)
+	message := strings.TrimSpace(failure.Message)
+	if reason == "" || message == "" {
 		return nil
 	}
-	return out
+	return &factoryapi.FailureDetail{Reason: failureReasonToAPI(reason), Message: message}
+}
+
+func failureReasonToAPI(reason string) factoryapi.WorkFailureType {
+	candidate := factoryapi.WorkFailureType(strings.TrimSpace(reason))
+	switch candidate {
+	case factoryapi.WorkFailureTypeAuthFailure,
+		factoryapi.WorkFailureTypePermanentBadRequest,
+		factoryapi.WorkFailureTypeThrottled,
+		factoryapi.WorkFailureTypeInternalServerError,
+		factoryapi.WorkFailureTypeTimeout,
+		factoryapi.WorkFailureTypeMisconfigured:
+		return candidate
+	default:
+		return factoryapi.WorkFailureTypeUnknown
+	}
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this mapper keeps optional durable lifecycle timestamp fields together on one API projection seam.

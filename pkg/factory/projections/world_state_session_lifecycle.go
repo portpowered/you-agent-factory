@@ -140,9 +140,8 @@ func (r *factoryWorldReducer) applySessionCompletedEvent(event factoryapi.Factor
 		}
 	}
 	if payload.FailureDetail != nil {
-		bracket.FailureReason = stringValue(payload.FailureDetail.Reason)
-		bracket.FailureMessage = stringValue(payload.FailureDetail.Message)
-		bracket.FailureErrorClass = stringValue(payload.FailureDetail.ErrorClass)
+		bracket.FailureReason = string(payload.FailureDetail.Reason)
+		bracket.FailureMessage = payload.FailureDetail.Message
 	}
 	return nil
 }

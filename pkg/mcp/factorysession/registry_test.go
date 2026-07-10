@@ -289,11 +289,11 @@ func assertGetResultSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysessi
 		"retryable",
 	)
 	requireSchemaFieldsAbsent(t, availability, "code")
-	failure := nestedSchemaProperties(t, resultSchema, "failure")
+	failure := nestedSchemaProperties(t, resultSchema, "failureDetail")
 	requireSchemaFieldsMatchGenerated(
 		t,
 		failure,
-		reflect.TypeOf(factoryapi.FactorySessionDurableFailureDetail{}),
+		reflect.TypeOf(factoryapi.FailureDetail{}),
 		"reason",
 		"message",
 	)

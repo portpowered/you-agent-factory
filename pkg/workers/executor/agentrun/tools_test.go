@@ -428,11 +428,11 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 	if err != nil {
 		t.Fatalf("dispatch response payload: %v", err)
 	}
-	if payload.FailureMessage == nil {
+	if payload.FailureDetail == nil {
 		t.Fatal("expected failure message on dispatch response")
 	}
-	if strings.Contains(*payload.FailureMessage, caseDir) {
-		t.Fatalf("dispatch failure message leaks absolute working directory %q: %q", caseDir, *payload.FailureMessage)
+	if strings.Contains(payload.FailureDetail.Message, caseDir) {
+		t.Fatalf("dispatch failure message leaks absolute working directory %q: %q", caseDir, payload.FailureDetail.Message)
 	}
 
 	workItem := interfaces.FactoryWorkItem{
@@ -459,6 +459,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 			Result: interfaces.WorkstationResult{
 				Outcome:        string(interfaces.OutcomeFailed),
 				Error:          result.Error,
+				FailureReason:  string(interfaces.WorkFailureTypeUnknown),
 				FailureMessage: result.Error,
 			},
 		}},
@@ -468,11 +469,11 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		t.Fatal("expected workstation request projection")
 	}
 	view := (*projection.WorkstationRequestsByDispatchId)[dispatch.DispatchID]
-	if view.Response == nil || view.Response.FailureMessage == nil {
+	if view.Response == nil || view.Response.FailureDetail == nil {
 		t.Fatalf("projected response = %#v, want failure message", view.Response)
 	}
-	if strings.Contains(*view.Response.FailureMessage, caseDir) {
-		t.Fatalf("projected failure message leaks absolute working directory %q: %q", caseDir, *view.Response.FailureMessage)
+	if strings.Contains(view.Response.FailureDetail.Message, caseDir) {
+		t.Fatalf("projected failure message leaks absolute working directory %q: %q", caseDir, view.Response.FailureDetail.Message)
 	}
 }
 

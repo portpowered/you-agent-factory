@@ -1368,10 +1368,8 @@ export interface components {
       dispatchKind: components["schemas"]["FactoryDispatchKind"];
       /** @description Customer-authored workstation name when one existing workstation run explains the stop. */
       workstationName?: string;
-      /** @description Stable failure or interruption reason when one is available from the latest relevant dispatch. */
-      failureReason?: string;
-      /** @description Human-readable failure or interruption detail from the latest relevant dispatch when available. */
-      failureMessage?: string;
+      /** @description Failure or interruption detail from the latest relevant dispatch when available. */
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     FactoryStopSummary: {
       stopKind: components["schemas"]["FactoryStopKind"];
@@ -1591,7 +1589,9 @@ export interface components {
       /** @description Artifact refs for large or non-text outputs when includeArtifacts is true. */
       artifactRefs?: components["schemas"]["FactoryArtifactRef"][];
       /** @description Failure details when resultStatus is FAILED_WITH_PARTIAL. */
-      failure?: components["schemas"]["FactorySessionDurableFailureDetail"];
+      failureDetail?: components["schemas"]["FailureDetail"];
+      /** @description Whether partial results remain inspectable after the failure. */
+      partialResultAvailable?: boolean;
       /** @description Availability details when resultStatus is NOT_READY or UNAVAILABLE. */
       availability?: components["schemas"]["FactorySessionResultAvailabilityDetail"];
     };
@@ -1635,7 +1635,7 @@ export interface components {
       warnings?: components["schemas"]["FactoryDispatchWarning"][];
       /** @description Artifact identifiers produced by the dispatch. */
       outputArtifactIds?: string[];
-      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      failureDetail?: components["schemas"]["FailureDetail"];
       javascript?: components["schemas"]["FactoryDispatchJavaScriptProjection"];
     };
     ListFactorySessionDispatchesResponse: {
@@ -1768,7 +1768,7 @@ export interface components {
       statusTransitions?: components["schemas"]["FactoryDispatchStatus"][];
       usage?: components["schemas"]["FactoryDispatchUsage"];
       warnings?: components["schemas"]["FactoryDispatchWarning"][];
-      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      failureDetail?: components["schemas"]["FailureDetail"];
       /** @description Petri-specific dispatch projection. Present for Petri transition dispatches. */
       petri?: components["schemas"]["FactoryDispatchPetriProjection"];
       /** @description JavaScript-specific dispatch projection. Present for JavaScript workflow task dispatches. */
@@ -1824,13 +1824,10 @@ export interface components {
       /** @description Customer-visible warning message. */
       message: string;
     };
-    FactoryDispatchFailureDetail: {
-      /** @description Stable failure reason code when the dispatch failed. */
-      reason?: string;
-      /** @description Customer-visible failure message. */
-      message?: string;
-      /** @description Provider or runtime error class when available. */
-      errorClass?: string;
+    FailureDetail: {
+      reason: components["schemas"]["WorkFailureType"];
+      /** @description Customer-safe, actionable explanation of the failure. */
+      message: string;
     };
     FactoryArtifact: {
       /** @description Stable artifact identifier referenced by session projections. */
@@ -1998,7 +1995,7 @@ export interface components {
       /** @description Dispatch queue, running, and completed counts at terminal completion. */
       dispatchCounts?: components["schemas"]["FactorySessionJavaScriptChildDispatchCounts"];
       /** @description Canonical failure details when the session completed unsuccessfully. */
-      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Orchestrator workflow phase transition recorded on the canonical factory event stream. Current phase identity lives in FactoryEvent.context. */
     OrchestratorPhaseChangedEventPayload: {
@@ -2097,7 +2094,7 @@ export interface components {
       /** @description Artifact identifiers produced or updated by reconciliation. */
       artifactIds?: string[];
       /** @description Canonical failure details when reconciliation failed. */
-      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload. */
     JavaScriptCheckpointRefEventPayload: {
@@ -2206,7 +2203,9 @@ export interface components {
       /** @description Customer-visible artifact refs without raw artifact bodies. */
       artifactRefs?: components["schemas"]["FactoryArtifactRef"][];
       resultSummary?: components["schemas"]["FactorySessionDurableResultSummary"];
-      failure?: components["schemas"]["FactorySessionDurableFailureDetail"];
+      failureDetail?: components["schemas"]["FailureDetail"];
+      /** @description Whether partial results remain inspectable after the failure. */
+      partialResultAvailable?: boolean;
       lifecycle?: components["schemas"]["FactorySessionDurableLifecycleTimestamps"];
       /** @description True when the durable session lease is stale or interrupted while status still appears active. */
       staleLease?: boolean;
@@ -2264,16 +2263,6 @@ export interface components {
       summary?: string;
       /** @description Artifact refs for large or non-text outputs without raw bodies. */
       artifactRefs?: components["schemas"]["FactoryArtifactRef"][];
-    };
-    FactorySessionDurableFailureDetail: {
-      /** @description Stable failure reason code when the session failed or was interrupted. */
-      reason?: string;
-      /** @description Customer-visible failure message. */
-      message?: string;
-      /** @description Provider or runtime error class when available. */
-      errorClass?: string;
-      /** @description Whether partial results remain inspectable after the failure. */
-      partialResultAvailable?: boolean;
     };
     FactorySessionDurableLifecycleTimestamps: {
       /**
@@ -2980,8 +2969,7 @@ export interface components {
       outcome?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
-      failureReason?: string;
-      failureMessage?: string;
+      failureDetail?: components["schemas"]["FailureDetail"];
       scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
       agentRunInspection?: components["schemas"]["FactoryWorldAgentRunInspectionView"];
       /** Format: date-time */
@@ -3218,8 +3206,7 @@ export interface components {
       outputPreview?: string;
       outputContent?: components["schemas"]["WorkContent"];
       diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
-      /** @description Stable failure classification when available. */
-      errorClass?: string;
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics. */
     InferenceRequestEventPayload: {
@@ -3252,8 +3239,7 @@ export interface components {
       diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
       /** @description Process exit code when the provider failure exposes one. */
       exitCode?: number;
-      /** @description Stable failure classification when available. */
-      errorClass?: string;
+      failureDetail?: components["schemas"]["FailureDetail"];
     };
     /** @description Request details captured immediately before a script-backed worker invokes a concrete command. Raw environment values and raw stdin content are intentionally excluded from the public script event contract. */
     ScriptRequestEventPayload: {
@@ -3321,8 +3307,7 @@ export interface components {
       error?: string;
       feedback?: string;
       selectedClassificationLabel?: string;
-      failureReason?: string;
-      failureMessage?: string;
+      failureDetail?: components["schemas"]["FailureDetail"];
       providerFailure?: components["schemas"]["ProviderFailureMetadata"];
       metrics?: components["schemas"]["WorkMetrics"];
       /** Format: int64 */

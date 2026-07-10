@@ -125,7 +125,9 @@ func (r *factoryWorldReducer) applyInferenceResponse(event factoryapi.FactoryEve
 	current.Response = stringValue(payload.Response)
 	current.DurationMillis = payload.DurationMillis
 	current.ExitCode = intPtrValue(payload.ExitCode)
-	current.ErrorClass = stringValue(payload.ErrorClass)
+	if payload.FailureDetail != nil {
+		current.ErrorClass = string(payload.FailureDetail.Reason)
+	}
 	current.ProviderSession = interfaces.ProviderSessionMetadataFromGenerated(payload.ProviderSession)
 	current.Diagnostics = interfaces.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics)
 	current.ResponseTime = event.Context.EventTime
@@ -725,9 +727,8 @@ func (r *factoryWorldReducer) applyDispatchReconciledEvent(event factoryapi.Fact
 	}
 	if payload.FailureDetail != nil {
 		state.FailureDetail = &interfaces.FactorySessionDispatchFailureDetail{
-			Reason:     stringValue(payload.FailureDetail.Reason),
-			Message:    stringValue(payload.FailureDetail.Message),
-			ErrorClass: stringValue(payload.FailureDetail.ErrorClass),
+			Reason:  string(payload.FailureDetail.Reason),
+			Message: payload.FailureDetail.Message,
 		}
 	}
 	if payload.ResultArtifactRef != nil {

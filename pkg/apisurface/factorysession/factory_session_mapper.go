@@ -102,8 +102,11 @@ func SessionReadResultFromAPI(response factoryapi.FactorySessionDurableReadModel
 	if response.ArtifactRefs != nil {
 		result.ArtifactRefs = artifactRefsFromAPI(*response.ArtifactRefs)
 	}
-	if response.Failure != nil {
-		result.Failure = failureSummaryFromAPI(*response.Failure)
+	if response.FailureDetail != nil {
+		result.Failure = failureSummaryFromAPI(*response.FailureDetail)
+		if response.PartialResultAvailable != nil {
+			result.Failure.PartialResultAvailable = *response.PartialResultAvailable
+		}
 	}
 	if response.Lifecycle != nil {
 		result.Lifecycle = lifecycleTimestampsFromAPI(*response.Lifecycle)
@@ -144,8 +147,11 @@ func ResultReadResultFromAPI(response factoryapi.FactorySessionResult) factoryse
 	if response.ArtifactRefs != nil {
 		result.ArtifactRefs = artifactRefsFromAPI(*response.ArtifactRefs)
 	}
-	if response.Failure != nil {
-		result.Failure = failureSummaryFromAPI(*response.Failure)
+	if response.FailureDetail != nil {
+		result.Failure = failureSummaryFromAPI(*response.FailureDetail)
+		if response.PartialResultAvailable != nil {
+			result.Failure.PartialResultAvailable = *response.PartialResultAvailable
+		}
 	}
 	if response.Availability != nil {
 		result.Availability = resultAvailabilityFromAPI(*response.Availability)
@@ -589,21 +595,8 @@ func progressCountsFromAPI(counts factoryapi.FactorySessionDurableProgressCounts
 	return out
 }
 
-func failureSummaryFromAPI(failure factoryapi.FactorySessionDurableFailureDetail) *factorysessionexecution.FailureSummary {
-	out := &factorysessionexecution.FailureSummary{}
-	if failure.Reason != nil {
-		out.Reason = strings.TrimSpace(*failure.Reason)
-	}
-	if failure.Message != nil {
-		out.Message = strings.TrimSpace(*failure.Message)
-	}
-	if failure.ErrorClass != nil {
-		out.ErrorClass = strings.TrimSpace(*failure.ErrorClass)
-	}
-	if failure.PartialResultAvailable != nil {
-		out.PartialResultAvailable = *failure.PartialResultAvailable
-	}
-	return out
+func failureSummaryFromAPI(failure factoryapi.FailureDetail) *factorysessionexecution.FailureSummary {
+	return &factorysessionexecution.FailureSummary{Reason: strings.TrimSpace(string(failure.Reason)), Message: strings.TrimSpace(failure.Message)}
 }
 
 func lifecycleTimestampsFromAPI(lifecycle factoryapi.FactorySessionDurableLifecycleTimestamps) *factorysessionexecution.LifecycleTimestamps {
@@ -689,18 +682,8 @@ func dispatchWarningsFromAPI(warnings []factoryapi.FactoryDispatchWarning) []fac
 	return out
 }
 
-func dispatchFailureFromAPI(failure factoryapi.FactoryDispatchFailureDetail) *factorysessionexecution.DispatchFailureDetail {
-	out := &factorysessionexecution.DispatchFailureDetail{}
-	if failure.Reason != nil {
-		out.Reason = strings.TrimSpace(*failure.Reason)
-	}
-	if failure.Message != nil {
-		out.Message = strings.TrimSpace(*failure.Message)
-	}
-	if failure.ErrorClass != nil {
-		out.ErrorClass = strings.TrimSpace(*failure.ErrorClass)
-	}
-	return out
+func dispatchFailureFromAPI(failure factoryapi.FailureDetail) *factorysessionexecution.DispatchFailureDetail {
+	return &factorysessionexecution.DispatchFailureDetail{Reason: strings.TrimSpace(string(failure.Reason)), Message: strings.TrimSpace(failure.Message)}
 }
 
 func dispatchJavaScriptFromAPI(javascript factoryapi.FactoryDispatchJavaScriptProjection) *factorysessionexecution.DispatchJavaScriptProjection {

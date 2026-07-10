@@ -867,7 +867,7 @@ func TestBuildFactoryWorldView_ProjectsInferenceAttemptsForDashboard(t *testing.
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     875,
 			ExitCode:           &exitCode,
-			ErrorClass:         stringPtrForProjectionTest("rate_limited"),
+			FailureDetail:      &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."},
 		}),
 	}
 
@@ -891,7 +891,7 @@ func TestBuildFactoryWorldView_ProjectsInferenceAttemptsForDashboard(t *testing.
 		completedAttempt.DurationMillis != 875 ||
 		completedAttempt.ExitCode == nil ||
 		*completedAttempt.ExitCode != 1 ||
-		completedAttempt.ErrorClass != "rate_limited" ||
+		completedAttempt.ErrorClass != "throttled" ||
 		completedAttempt.ResponseTime.IsZero() {
 		t.Fatalf("completed inference attempt view = %#v, want failed response details", completedAttempt)
 	}

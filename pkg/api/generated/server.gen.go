@@ -1030,8 +1030,8 @@ type DispatchQueuedEventPayload struct {
 // DispatchReconciledEventPayload Dispatch reconciliation recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context.
 type DispatchReconciledEventPayload struct {
 	// ArtifactIds Artifact identifiers produced or updated by reconciliation.
-	ArtifactIds   *[]string                     `json:"artifactIds,omitempty"`
-	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+	ArtifactIds   *[]string      `json:"artifactIds,omitempty"`
+	FailureDetail *FailureDetail `json:"failureDetail,omitempty"`
 
 	// ReconciledStatus Canonical dispatch lifecycle status shared across orchestrators.
 	ReconciledStatus FactoryDispatchStatus `json:"reconciledStatus"`
@@ -1083,14 +1083,13 @@ type DispatchResponseEventPayload struct {
 
 	// CurrentChainingTraceId Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
 	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
-	CurrentChainingTraceId *string      `json:"currentChainingTraceId,omitempty"`
-	DurationMillis         *int64       `json:"durationMillis,omitempty"`
-	Error                  *string      `json:"error,omitempty"`
-	FailureMessage         *string      `json:"failureMessage,omitempty"`
-	FailureReason          *string      `json:"failureReason,omitempty"`
-	Feedback               *string      `json:"feedback,omitempty"`
-	Metadata               *StringMap   `json:"metadata,omitempty"`
-	Metrics                *WorkMetrics `json:"metrics,omitempty"`
+	CurrentChainingTraceId *string        `json:"currentChainingTraceId,omitempty"`
+	DurationMillis         *int64         `json:"durationMillis,omitempty"`
+	Error                  *string        `json:"error,omitempty"`
+	FailureDetail          *FailureDetail `json:"failureDetail,omitempty"`
+	Feedback               *string        `json:"feedback,omitempty"`
+	Metadata               *StringMap     `json:"metadata,omitempty"`
+	Metrics                *WorkMetrics   `json:"metrics,omitempty"`
 
 	// Outcome Result category returned by a workstation execution.
 	Outcome         WorkOutcome `json:"outcome"`
@@ -1282,8 +1281,8 @@ type FactoryDispatch struct {
 	Attempt *int32 `json:"attempt,omitempty"`
 
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
-	DispatchKind  FactoryDispatchKind           `json:"dispatchKind"`
-	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+	DispatchKind  FactoryDispatchKind `json:"dispatchKind"`
+	FailureDetail *FailureDetail      `json:"failureDetail,omitempty"`
 
 	// Id Stable dispatch identifier.
 	Id         string                               `json:"id"`
@@ -1330,18 +1329,6 @@ type FactoryDispatch struct {
 	StatusTransitions *[]FactoryDispatchStatus  `json:"statusTransitions,omitempty"`
 	Usage             *FactoryDispatchUsage     `json:"usage,omitempty"`
 	Warnings          *[]FactoryDispatchWarning `json:"warnings,omitempty"`
-}
-
-// FactoryDispatchFailureDetail defines model for FactoryDispatchFailureDetail.
-type FactoryDispatchFailureDetail struct {
-	// ErrorClass Provider or runtime error class when available.
-	ErrorClass *string `json:"errorClass,omitempty"`
-
-	// Message Customer-visible failure message.
-	Message *string `json:"message,omitempty"`
-
-	// Reason Stable failure reason code when the dispatch failed.
-	Reason *string `json:"reason,omitempty"`
 }
 
 // FactoryDispatchJavaScriptProjection defines model for FactoryDispatchJavaScriptProjection.
@@ -1981,8 +1968,8 @@ type FactorySessionDispatchSummary struct {
 	Attempt *int32 `json:"attempt,omitempty"`
 
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
-	DispatchKind  FactoryDispatchKind           `json:"dispatchKind"`
-	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+	DispatchKind  FactoryDispatchKind `json:"dispatchKind"`
+	FailureDetail *FailureDetail      `json:"failureDetail,omitempty"`
 
 	// Id Stable dispatch identifier.
 	Id         string                               `json:"id"`
@@ -2037,21 +2024,6 @@ type FactorySessionDurableActionAvailability struct {
 
 	// CanTerminate True when terminate is currently valid for the session status.
 	CanTerminate *bool `json:"canTerminate,omitempty"`
-}
-
-// FactorySessionDurableFailureDetail defines model for FactorySessionDurableFailureDetail.
-type FactorySessionDurableFailureDetail struct {
-	// ErrorClass Provider or runtime error class when available.
-	ErrorClass *string `json:"errorClass,omitempty"`
-
-	// Message Customer-visible failure message.
-	Message *string `json:"message,omitempty"`
-
-	// PartialResultAvailable Whether partial results remain inspectable after the failure.
-	PartialResultAvailable *bool `json:"partialResultAvailable,omitempty"`
-
-	// Reason Stable failure reason code when the session failed or was interrupted.
-	Reason *string `json:"reason,omitempty"`
 }
 
 // FactorySessionDurableLifecycleStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
@@ -2139,7 +2111,7 @@ type FactorySessionDurableReadModel struct {
 
 	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
 	EffectivePolicyHash *string                                   `json:"effectivePolicyHash,omitempty"`
-	Failure             *FactorySessionDurableFailureDetail       `json:"failure,omitempty"`
+	FailureDetail       *FailureDetail                            `json:"failureDetail,omitempty"`
 	Lifecycle           *FactorySessionDurableLifecycleTimestamps `json:"lifecycle,omitempty"`
 
 	// Links Relative links for polling and inspecting one durable factory session.
@@ -2147,6 +2119,9 @@ type FactorySessionDurableReadModel struct {
 
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// PartialResultAvailable Whether partial results remain inspectable after the failure.
+	PartialResultAvailable *bool `json:"partialResultAvailable,omitempty"`
 
 	// Phase Current workflow phase when execution is in progress.
 	Phase *string `json:"phase,omitempty"`
@@ -2660,15 +2635,18 @@ type FactorySessionResult struct {
 	ArtifactIds *[]string `json:"artifactIds,omitempty"`
 
 	// ArtifactRefs Artifact refs for large or non-text outputs when includeArtifacts is true.
-	ArtifactRefs *[]FactoryArtifactRef                   `json:"artifactRefs,omitempty"`
-	Availability *FactorySessionResultAvailabilityDetail `json:"availability,omitempty"`
-	Failure      *FactorySessionDurableFailureDetail     `json:"failure,omitempty"`
+	ArtifactRefs  *[]FactoryArtifactRef                   `json:"artifactRefs,omitempty"`
+	Availability  *FactorySessionResultAvailabilityDetail `json:"availability,omitempty"`
+	FailureDetail *FailureDetail                          `json:"failureDetail,omitempty"`
 
 	// IncludeArtifacts Whether artifact metadata was included in this response.
 	IncludeArtifacts *bool `json:"includeArtifacts,omitempty"`
 
 	// Mode Durable session result retrieval mode.
 	Mode *FactorySessionResultMode `json:"mode,omitempty"`
+
+	// PartialResultAvailable Whether partial results remain inspectable after the failure.
+	PartialResultAvailable *bool `json:"partialResultAvailable,omitempty"`
 
 	// PrimaryResult Ordered canonical content parts for one work item.
 	PrimaryResult *WorkContent `json:"primaryResult,omitempty"`
@@ -2936,13 +2914,8 @@ type FactoryStopDispatchSummary struct {
 	DispatchId string `json:"dispatchId"`
 
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
-	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
-
-	// FailureMessage Human-readable failure or interruption detail from the latest relevant dispatch when available.
-	FailureMessage *string `json:"failureMessage,omitempty"`
-
-	// FailureReason Stable failure or interruption reason when one is available from the latest relevant dispatch.
-	FailureReason *string `json:"failureReason,omitempty"`
+	DispatchKind  FactoryDispatchKind `json:"dispatchKind"`
+	FailureDetail *FailureDetail      `json:"failureDetail,omitempty"`
 
 	// Status Canonical dispatch lifecycle status shared across orchestrators.
 	Status FactoryDispatchStatus `json:"status"`
@@ -3252,8 +3225,7 @@ type FactoryWorldWorkstationRequestResponseView struct {
 	AgentRunInspection          *FactoryWorldAgentRunInspectionView `json:"agentRunInspection,omitempty"`
 	DurationMillis              *int64                              `json:"durationMillis,omitempty"`
 	EndTime                     *time.Time                          `json:"endTime,omitempty"`
-	FailureMessage              *string                             `json:"failureMessage,omitempty"`
-	FailureReason               *string                             `json:"failureReason,omitempty"`
+	FailureDetail               *FailureDetail                      `json:"failureDetail,omitempty"`
 	Feedback                    *string                             `json:"feedback,omitempty"`
 	Outcome                     *string                             `json:"outcome,omitempty"`
 	OutputMutations             *[]FactoryWorldMutationView         `json:"outputMutations,omitempty"`
@@ -3271,6 +3243,15 @@ type FactoryWorldWorkstationRequestView struct {
 	Response        *FactoryWorldWorkstationRequestResponseView `json:"response,omitempty"`
 	TransitionId    string                                      `json:"transitionId"`
 	WorkstationName *string                                     `json:"workstationName,omitempty"`
+}
+
+// FailureDetail defines model for FailureDetail.
+type FailureDetail struct {
+	// Message Customer-safe, actionable explanation of the failure.
+	Message string `json:"message"`
+
+	// Reason Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	Reason WorkFailureType `json:"reason"`
 }
 
 // Guard Shared guard attached either to a workstation as a whole or to one specific workstation input.
@@ -3389,11 +3370,9 @@ type InferenceResponseEventPayload struct {
 	// DurationMillis Provider call duration in milliseconds.
 	DurationMillis int64 `json:"durationMillis"`
 
-	// ErrorClass Stable failure classification when available.
-	ErrorClass *string `json:"errorClass,omitempty"`
-
 	// ExitCode Process exit code when the provider failure exposes one.
-	ExitCode *int `json:"exitCode,omitempty"`
+	ExitCode      *int           `json:"exitCode,omitempty"`
+	FailureDetail *FailureDetail `json:"failureDetail,omitempty"`
 
 	// InferenceRequestId Identifier from the matching inference request event.
 	InferenceRequestId string `json:"inferenceRequestId"`
@@ -3910,10 +3889,8 @@ type ModelResponseEventPayload struct {
 	Diagnostics *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
 
 	// DurationMillis End-to-end model invocation duration in milliseconds.
-	DurationMillis int64 `json:"durationMillis"`
-
-	// ErrorClass Stable failure classification when available.
-	ErrorClass *string `json:"errorClass,omitempty"`
+	DurationMillis int64          `json:"durationMillis"`
+	FailureDetail  *FailureDetail `json:"failureDetail,omitempty"`
 
 	// LoadDurationMillis Duration of the managed local-model load call when one occurred.
 	LoadDurationMillis *int64 `json:"loadDurationMillis,omitempty"`
@@ -4630,8 +4607,8 @@ type SessionCompletedEventPayload struct {
 	DispatchCounts *FactorySessionJavaScriptChildDispatchCounts `json:"dispatchCounts,omitempty"`
 
 	// DurationMillis Total session execution duration in milliseconds.
-	DurationMillis *int64                        `json:"durationMillis,omitempty"`
-	FailureDetail  *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+	DurationMillis *int64         `json:"durationMillis,omitempty"`
+	FailureDetail  *FailureDetail `json:"failureDetail,omitempty"`
 
 	// FinalStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
 	FinalStatus FactorySessionDurableLifecycleStatus `json:"finalStatus"`

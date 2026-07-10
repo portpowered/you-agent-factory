@@ -115,7 +115,7 @@ func TestOpenAPIContract_CursorStreamParserDetailsRemainInternal(t *testing.T) {
 	assertSchemaNamesPresent(t, schemas, bundledFactoryEventContractSchemaNames)
 
 	inferenceResponseProperties := schemaProperties(t, schemaObject(t, schemas, "InferenceResponseEventPayload"), "InferenceResponseEventPayload")
-	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "outcome", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "errorClass")
+	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "outcome", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "failureDetail")
 	assertPropertiesAbsent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "kind", "payload", "providerSessionRef", "timestamp_ms", "model_call_id")
 
 	providerSessionProperties := schemaProperties(t, schemaObject(t, schemas, "ProviderSessionMetadata"), "ProviderSessionMetadata")

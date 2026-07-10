@@ -372,7 +372,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     900,
-			ErrorClass:         stringPtrForProjectionTest(string(interfaces.WorkFailureTypeTimeout)),
+			FailureDetail:      &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeTimeout, Message: "provider timed out"},
 			ProviderSession: generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",

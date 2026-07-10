@@ -77,8 +77,10 @@ export const runtimeDetailsBackendWorkstationRequestsByDispatchID = {
     response: {
       duration_millis: runtimeDetailsFixtureIDs.failedDurationMillis,
       end_time: "2026-04-18T12:00:11Z",
-      failure_message: runtimeDetailsFixtureIDs.failedFailureMessage,
-      failure_reason: runtimeDetailsFixtureIDs.failedFailureReason,
+      failureDetail: {
+        message: runtimeDetailsFixtureIDs.failedFailureMessage,
+        reason: "unknown",
+      },
       outcome: "FAILED",
     },
     transition_id: "review",

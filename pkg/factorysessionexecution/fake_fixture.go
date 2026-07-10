@@ -264,12 +264,11 @@ func sessionReadFromFixtureMap(session map[string]any) SessionReadResult {
 			Summary:      fixtureStringValue(summary, "summary"),
 		}
 	}
-	if failure, ok := session["failure"].(map[string]any); ok {
+	if failure, ok := session["failureDetail"].(map[string]any); ok {
 		result.Failure = &FailureSummary{
 			Reason:                 fixtureStringValue(failure, "reason"),
 			Message:                fixtureStringValue(failure, "message"),
-			ErrorClass:             fixtureStringValue(failure, "errorClass"),
-			PartialResultAvailable: fixtureBoolValue(failure, "partialResultAvailable"),
+			PartialResultAvailable: fixtureBoolValue(session, "partialResultAvailable"),
 		}
 	}
 	if lifecycle, ok := session["lifecycle"].(map[string]any); ok {
@@ -321,12 +320,11 @@ func resultReadFromFixtureMap(result map[string]any) ResultReadResult {
 			}
 		}
 	}
-	if failure, ok := result["failure"].(map[string]any); ok {
+	if failure, ok := result["failureDetail"].(map[string]any); ok {
 		out.Failure = &FailureSummary{
 			Reason:                 fixtureStringValue(failure, "reason"),
 			Message:                fixtureStringValue(failure, "message"),
-			ErrorClass:             fixtureStringValue(failure, "errorClass"),
-			PartialResultAvailable: fixtureBoolValue(failure, "partialResultAvailable"),
+			PartialResultAvailable: fixtureBoolValue(result, "partialResultAvailable"),
 		}
 	}
 	if availability, ok := result["availability"].(map[string]any); ok {

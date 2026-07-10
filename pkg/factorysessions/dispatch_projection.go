@@ -269,25 +269,13 @@ func projectedDispatchWarnings(warnings []interfaces.FactorySessionDispatchWarni
 
 func projectedDispatchFailureDetail(
 	detail interfaces.FactorySessionDispatchFailureDetail,
-) *factoryapi.FactoryDispatchFailureDetail {
-	projected := &factoryapi.FactoryDispatchFailureDetail{}
-	hasValue := false
-	if reason := strings.TrimSpace(detail.Reason); reason != "" {
-		projected.Reason = &reason
-		hasValue = true
-	}
-	if message := strings.TrimSpace(detail.Message); message != "" {
-		projected.Message = &message
-		hasValue = true
-	}
-	if errorClass := strings.TrimSpace(detail.ErrorClass); errorClass != "" {
-		projected.ErrorClass = &errorClass
-		hasValue = true
-	}
-	if !hasValue {
+) *factoryapi.FailureDetail {
+	reason := strings.TrimSpace(detail.Reason)
+	message := strings.TrimSpace(detail.Message)
+	if reason == "" || message == "" {
 		return nil
 	}
-	return projected
+	return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(reason), Message: message}
 }
 
 func projectedDispatchPetri(

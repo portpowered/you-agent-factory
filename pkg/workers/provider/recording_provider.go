@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -140,7 +141,7 @@ func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interf
 	baseDiagnostics := workDiagnosticsForInferenceRequest(req)
 	if err != nil {
 		payload.Outcome = factoryapi.InferenceOutcomeFailed
-		payload.ErrorClass = stringPtr(providerErrorClass(err))
+		payload.FailureDetail = providerFailureDetail(err)
 		payload.ExitCode = providerErrorExitCode(err)
 		payload.ProviderSession = interfaces.GeneratedProviderSessionMetadata(providerSessionFromInferenceError(err))
 		payload.Diagnostics = interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
@@ -163,6 +164,21 @@ func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interf
 		Id:            fmt.Sprintf("%s/%s", inferenceResponseEventIDPrefix, inferenceRequestID),
 		Context:       inferenceEventContext(req, eventTime),
 		Payload:       inferenceResponseFactoryEventPayload(payload),
+	}
+}
+
+func providerFailureDetail(err error) *factoryapi.FailureDetail {
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		message := strings.TrimSpace(providerErr.Message)
+		if message == "" {
+			message = "The provider request failed without an available explanation."
+		}
+		return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(providerErrorClass(err)), Message: message}
+	}
+	return &factoryapi.FailureDetail{
+		Reason:  factoryapi.WorkFailureTypeUnknown,
+		Message: "The provider request failed without an available explanation.",
 	}
 }
 

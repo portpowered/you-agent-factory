@@ -454,17 +454,17 @@ func assertSafeBoundaryRequestView(
 			t.Fatalf("inference attempt response metadata = %#v, want provider_session_id=%q", attempt.Diagnostics.Provider.ResponseMetadata, sessionID)
 		}
 	}
-	if family == "" && stringValueForRuntimeTest(request.Response.FailureReason) != "" {
-		t.Fatalf("failure reason = %q, want empty for successful request", stringValueForRuntimeTest(request.Response.FailureReason))
+	if family == "" && request.Response.FailureDetail != nil {
+		t.Fatalf("failure detail = %#v, want empty for successful request", request.Response.FailureDetail)
 	}
 	if family == "" {
 		return
 	}
-	if stringValueForRuntimeTest(request.Response.FailureReason) != providerFailureType {
-		t.Fatalf("failure reason = %q, want %q", stringValueForRuntimeTest(request.Response.FailureReason), providerFailureType)
+	if request.Response.FailureDetail == nil || string(request.Response.FailureDetail.Reason) != providerFailureType {
+		t.Fatalf("failure detail = %#v, want reason %q", request.Response.FailureDetail, providerFailureType)
 	}
-	if stringValueForRuntimeTest(request.Response.FailureMessage) != failureMessage {
-		t.Fatalf("failure message = %q, want %q", stringValueForRuntimeTest(request.Response.FailureMessage), failureMessage)
+	if request.Response.FailureDetail.Message != failureMessage {
+		t.Fatalf("failure message = %q, want %q", request.Response.FailureDetail.Message, failureMessage)
 	}
 	if ok {
 		metadata := attempt.Diagnostics.Provider.ResponseMetadata
