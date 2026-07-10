@@ -1,5 +1,11 @@
 package service
 
+import "github.com/portpowered/infinite-you/pkg/invocations"
+
+// InvocationMetricNormalizationAttempts remains an exported compatibility
+// alias while metric-name ownership lives in pkg/invocations.
+const InvocationMetricNormalizationAttempts = invocations.InvocationMetricNormalizationAttempts
+
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.
 type InvocationMetric struct {

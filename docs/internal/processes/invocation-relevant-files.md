@@ -67,14 +67,16 @@ primary-result behavior.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.
-- `pkg/service/model_catalog.go` and `pkg/runtimehost/model_catalog.go` retain
-  compatibility adapters for session config, canonical Work submission,
-  event-derived observations, metric/log sinks, and packaged-factory terminal
-  classification. Their `InvokeFactorySession` methods must remain transparent
-  forwards to `invocations.SessionInvoker`; metric names, label policy, log
-  shaping, and emission sequencing must not be reimplemented in these adapters;
-  request normalization, interpolation validation, submission sequencing,
-  polling, timeout/cancellation, primary-result selection, and general terminal
+- `pkg/service/session_invocation.go` and
+  `pkg/runtimehost/session_invocation.go` retain compatibility adapters for
+  session config, canonical Work submission, event-derived observations,
+  metric/log sinks, and packaged-factory terminal classification. Their
+  `InvokeFactorySession` methods must remain transparent forwards to
+  `invocations.SessionInvoker`; model-catalog files must not own Factory
+  Session invocation behavior. Metric names, label policy, log shaping, and
+  emission sequencing must not be reimplemented in these adapters; request
+  normalization, interpolation validation, submission sequencing, polling,
+  timeout/cancellation, primary-result selection, and general terminal
   classification belong only to `pkg/invocations`.
 - API structured args use the direct structured-argument carrier rather than
   being reinterpreted as CLI named flags, so canonical parameter-name keys
@@ -355,8 +357,9 @@ primary-result behavior.
   `useDashboardInitialReconnectCursor`.
 - `pkg/invocations/session_wait.go` owns the session invocation wait loop and
   calls explicit packaged-factory hooks at active, completed, and terminal-failure
-  boundaries. `pkg/service/model_catalog.go` and `pkg/runtimehost/model_catalog.go`
-  currently adapt packaged TTS classification, logs, and metrics to those hooks.
+  boundaries. `pkg/service/session_invocation.go` and
+  `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,
+  logs, and metrics to those hooks.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata
