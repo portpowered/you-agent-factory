@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -298,6 +299,46 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	}
 	if observed.FilterMessage("managed runtime pull failed").Len() != 1 {
 		t.Fatalf("failure logs = %d, want 1", observed.FilterMessage("managed runtime pull failed").Len())
+	}
+}
+
+func TestService_PullModel_UsesInjectedClockForDuration(t *testing.T) {
+	t.Parallel()
+
+	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	core, observed := observer.New(zap.InfoLevel)
+	times := []time.Time{
+		time.Date(2026, time.July, 10, 12, 0, 0, 0, time.UTC),
+		time.Date(2026, time.July, 10, 12, 0, 2, 500_000_000, time.UTC),
+	}
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		Clock: func() time.Time {
+			now := times[0]
+			times = times[1:]
+			return now
+		},
+		Logger: func() *zap.Logger { return zap.New(core) },
+		ModelAssetPuller: func() localmodels.AssetPuller {
+			return &stubPullAssetPuller{result: apisurface.ModelPullResult{
+				ModelName:          "OMNIVOICE_Q4_K_M",
+				ManagedPullOutcome: "ALREADY_READY",
+				ReadinessState:     "READY",
+				LifecycleState:     "READY",
+				SourceKind:         "MANAGED_RUNTIME",
+			}}
+		},
+	})
+
+	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	entries := observed.FilterMessage("managed runtime pull completed").All()
+	if len(entries) != 1 {
+		t.Fatalf("success logs = %d, want 1", len(entries))
+	}
+	if got := entries[0].ContextMap()["duration"]; got != 2500*time.Millisecond {
+		t.Fatalf("logged duration = %#v, want 2.5s in nanoseconds", got)
 	}
 }
 
