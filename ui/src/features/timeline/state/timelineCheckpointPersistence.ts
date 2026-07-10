@@ -5,13 +5,13 @@ import {
 import {
   identityMismatchDiagnostic,
   recordSessionPersistenceInvalidation,
-  userClearedSessionsDiagnostic,
   type SessionPersistenceIdentityScope,
+  userClearedSessionsDiagnostic,
 } from "../../dashboard/public/session-persistence-diagnostics";
 import {
   normalizeStreamDerivedCacheIdentity,
-  streamDerivedCheckpointStorageKey,
   type StreamDerivedCacheIdentity,
+  streamDerivedCheckpointStorageKey,
 } from "../lib/stream-derived-cache-identity";
 import type { FactoryTimelineCheckpoint } from "./timeline/storeState";
 import type { ReplayWorldState } from "./timeline/types";
@@ -213,10 +213,7 @@ export async function clearTimelineCheckpointsForSession(
     const envelopes = await listIndexedCheckpoints(indexedDB);
     const storageKeys = envelopes
       .filter((envelope) =>
-        matchesStoredCheckpointFactorySessionID(
-          envelope,
-          normalizedSessionID,
-        ),
+        matchesStoredCheckpointFactorySessionID(envelope, normalizedSessionID),
       )
       .map((envelope) => envelope.storageKey)
       .filter((storageKey) => storageKey.trim() !== "");
@@ -366,7 +363,8 @@ function matchesStreamIdentity(
     normalizedActual.factorySessionID === normalizedExpected.factorySessionID &&
     normalizedActual.logicalSessionKeyID ===
       normalizedExpected.logicalSessionKeyID &&
-    normalizedActual.streamGenerationID === normalizedExpected.streamGenerationID
+    normalizedActual.streamGenerationID ===
+      normalizedExpected.streamGenerationID
   );
 }
 
@@ -439,7 +437,7 @@ export async function persistTimelineCheckpoint(
   try {
     await writeIndexedCheckpoint(indexedDB, envelope);
   } catch {
-    await deleteIndexedCheckpoint(indexedDB, storageKey).catch(() => {});
+    // Preserve any previously committed checkpoint when its replacement fails.
   }
 }
 

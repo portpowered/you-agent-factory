@@ -246,6 +246,7 @@ describe("timeline checkpoint persistence diagnostics", () => {
     await expect(
       readTimelineCheckpoint(indexedDB, streamIdentity),
     ).resolves.toBe(null);
+    expect(records.has(storageKey)).toBe(false);
     expect(readSessionPersistenceInvalidationRecords()).toEqual([
       expect.objectContaining({
         reason: "stream_generation_changed",
@@ -319,15 +320,18 @@ describe("timeline checkpoint persistence resilience", () => {
 
     expect(
       writeFailure.records.has(checkpointStorageKey(streamIdentityFixture())),
+    ).toBe(true);
+    await expect(
+      readTimelineCheckpoint(writeFailure.indexedDB, streamIdentityFixture()),
+    ).resolves.toBe(null);
+    expect(
+      writeFailure.records.has(checkpointStorageKey(streamIdentityFixture())),
     ).toBe(false);
 
     const readFailure = createIndexedDBTestDouble({ failOpen: true });
 
     await expect(
-      readTimelineCheckpoint(
-        readFailure.indexedDB,
-        streamIdentityFixture(),
-      ),
+      readTimelineCheckpoint(readFailure.indexedDB, streamIdentityFixture()),
     ).resolves.toBe(null);
   });
 });
@@ -395,9 +399,9 @@ describe("timeline checkpoint guard migration", () => {
 
     await persistTimelineCheckpoint(indexedDB, checkpoint, identityA);
 
-    await expect(
-      readTimelineCheckpoint(indexedDB, identityB),
-    ).resolves.toBe(null);
+    await expect(readTimelineCheckpoint(indexedDB, identityB)).resolves.toBe(
+      null,
+    );
   });
 });
 
