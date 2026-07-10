@@ -1,7 +1,6 @@
 import { waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 
-import type { FactoryEvent } from "../api/events";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import { emptyReplayWorldState } from "../features/timeline/state/timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../features/timeline/state/timeline/storeState";
@@ -228,11 +227,4 @@ export function createQuietCheckpointReloadFixture(
       return stream as MockEventSource;
     },
   };
-}
-
-export function emitQuietReloadEvent(
-  stream: MockEventSource,
-  event: FactoryEvent,
-): void {
-  stream.emit("message", event);
 }
