@@ -1356,8 +1356,7 @@ func NewModelServiceFromCore(core *runtimehost.Core) ModelService {
 	if core == nil {
 		return wireModelServiceCollaborator(nil, nil)
 	}
-	shell := FactoryServiceShell{Service: NewFactoryServiceFromCore(adaptRuntimeHostCore(core))}
-	return ProvideModelServiceCollaborator(shell, FactoryServiceConfigFromRuntimeHost(core.ServiceConfig()))
+	return runtimehost.NewHostFromCore(core).ModelService()
 }
 
 // NewFactoryDefinitionServiceFromCore constructs a factory definition service from a core.
