@@ -54,6 +54,96 @@ func providerErrorCorpusLastErrorLine(t *testing.T, entry ProviderErrorCorpusEnt
 	return lastMatch
 }
 
+func TestParseOpenCodeProviderFailure_KnownCorpusShapesUseCanonicalContract(t *testing.T) {
+	testCases := []struct {
+		name        string
+		wantMessage string
+	}{
+		{name: "opencode_provider_auth_error", wantMessage: "Authentication required for openai. Run opencode auth login."},
+		{name: "opencode_invalid_request_api_error", wantMessage: "The selected model does not support this request."},
+		{name: "opencode_rate_limit_text", wantMessage: opencodeThrottleFailureMessage},
+		{name: "opencode_timeout_error", wantMessage: opencodeTimeoutFailureMessage},
+		{name: "opencode_server_api_error", wantMessage: opencodeServerFailureMessage},
+	}
+
+	for _, tc := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, tc.name)
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(entry.CommandResult())
+			if got.Reason != entry.ExpectedType || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want reason=%q message=%q", got, entry.ExpectedType, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestParseOpenCodeProviderFailure_StructuredFailurePrecedesText(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("Error: rate limit exceeded"),
+		Stdout:   []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"Choose a supported model."}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a supported model." {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want structured bad request", got)
+	}
+}
+
+func TestParseOpenCodeProviderFailure_SanitizesKnownActionableDetails(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout: []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"prompt: ` +
+			strings.Repeat("private ", 100) + ` Authorization: Bearer secret-token"}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != opencodeBadRequestFailureMessage {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want sanitized fixed bad-request message", got)
+	}
+	if len(got.Message) > opencodeFailureMessageBytes || strings.Contains(got.Message, "secret-token") || strings.Contains(got.Message, "private") {
+		t.Fatalf("message = %q, want bounded message without sensitive detail", got.Message)
+	}
+}
+
+func TestNormalizeProviderExitFailure_SelectsOpenCodeParserFromNormalizedIdentity(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "opencode_rate_limit_text")
+	providerErr := normalizeProviderExitFailure("  OPENCODE  ", entry.CommandResult(), nil, nil)
+
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Message != opencodeThrottleFailureMessage {
+		t.Fatalf("normalizeProviderExitFailure() = %#v, want OpenCode throttle failure", providerErr)
+	}
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || decision.Terminal || !decision.TriggersThrottlePause {
+		t.Fatalf("decision = %#v, want central throttle policy", decision)
+	}
+}
+
+func TestNormalizeProviderExitFailure_OpenCodeCorpusUsesCentralPolicy(t *testing.T) {
+	for _, name := range []string{
+		"opencode_provider_auth_error",
+		"opencode_invalid_request_api_error",
+		"opencode_rate_limit_text",
+		"opencode_timeout_error",
+		"opencode_server_api_error",
+	} {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(name, func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("normalized failure = %#v, want type=%q family=%q", providerErr, entry.ExpectedType, entry.ExpectedFamily)
+			}
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			if decision.Retryable != entry.Retryable || decision.Terminal == entry.Retryable || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, !entry.Retryable, entry.TriggersThrottlePause)
+			}
+		})
+	}
+}
+
 func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 	testCases := []struct {
 		name       string

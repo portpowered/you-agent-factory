@@ -292,9 +292,18 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 }
 
 func normalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	if provider == string(interfaces.ModelProviderCodex) {
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	switch normalizedProvider {
+	case string(interfaces.ModelProviderCodex):
 		return newProviderErrorFromResultWithDiagnostics(
 			ParseCodexProviderFailure(result),
+			nil,
+			session,
+			diagnostics,
+		)
+	case string(interfaces.ModelProviderOpenCode):
+		return newProviderErrorFromResultWithDiagnostics(
+			ParseOpenCodeProviderFailure(result),
 			nil,
 			session,
 			diagnostics,

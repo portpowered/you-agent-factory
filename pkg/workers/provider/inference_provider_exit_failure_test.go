@@ -114,10 +114,12 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 			wantType:    interfaces.WorkFailureTypeUnknown,
 		},
 		{
-			name:        "OpenCodeClassifiesAuthenticationOutput",
-			provider:    string(interfaces.ModelProviderOpenCode),
-			result:      CommandResult{ExitCode: 1, Stdout: []byte("login required before continuing")},
-			wantMessage: "login required before continuing",
+			name:     "OpenCodeUsesStructuredAuthenticationFailure",
+			provider: string(interfaces.ModelProviderOpenCode),
+			result: CommandResult{ExitCode: 1, Stdout: []byte(
+				`{"type":"error","error":{"name":"ProviderAuthError","data":{"message":"Authentication required. Run opencode auth login."}}}`,
+			)},
+			wantMessage: "Authentication required. Run opencode auth login.",
 			wantType:    interfaces.WorkFailureTypeAuthFailure,
 		},
 	}
