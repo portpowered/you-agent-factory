@@ -239,15 +239,20 @@ func containsClaudeCredentialSignal(message string) bool {
 	// Keep assignment and header detection aligned with the environment
 	// diagnostic policy so supported sensitive names cannot be published just
 	// because their exact spelling was absent from the literals above.
-	for _, field := range strings.Fields(message) {
-		separator := strings.IndexAny(field, "=:")
-		if separator <= 0 {
-			continue
+	for remainder := message; ; {
+		separator := strings.IndexAny(remainder, "=:")
+		if separator < 0 {
+			break
 		}
-		name := strings.Trim(field[:separator], "\"'{}[](),")
+		prefix := strings.TrimSpace(remainder[:separator])
+		if boundary := strings.LastIndexAny(prefix, " \t\r\n"); boundary >= 0 {
+			prefix = prefix[boundary+1:]
+		}
+		name := strings.Trim(prefix, "\"'{}[](),")
 		if ClassifyCommandEnvKey(name) == CommandEnvClassificationRedacted {
 			return true
 		}
+		remainder = remainder[separator+1:]
 	}
 	return false
 }

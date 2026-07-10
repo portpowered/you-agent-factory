@@ -672,6 +672,20 @@ func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *t
 			wantMessage: claudeBadRequestFailureMessage,
 			rejectText:  "customer-private-value",
 		},
+		{
+			name:        "SpacedSensitiveEnvironmentAssignmentUsesCategoryFallback",
+			stderr:      "Configuration error: ANTHROPIC_AUTH_TOKEN = customer-private-value",
+			wantReason:  interfaces.WorkFailureTypeMisconfigured,
+			wantMessage: claudeConfigFailureMessage,
+			rejectText:  "customer-private-value",
+		},
+		{
+			name:        "StructuredSpacedSensitiveHeaderUsesCategoryFallback",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace X_API_KEY : customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+			rejectText:  "customer-private-value",
+		},
 	}
 
 	for _, tc := range testCases {
