@@ -129,20 +129,6 @@ func CoordinatorPolicyFromConfig(cfg *Config) hostCoordinatorPolicy {
 	}
 }
 
-func (h *Host) dashboardLoop(ctx context.Context) {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			h.renderDashboard(ctx)
-		}
-	}
-}
-
 func (h *Host) renderDashboard(ctx context.Context) {
 	now := factory.EnsureClock(h.clock).Now()
 	input, err := h.buildSimpleDashboardRenderInput(ctx, now)

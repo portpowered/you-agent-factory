@@ -2,8 +2,10 @@ package initializer
 
 import (
 	"context"
+	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 )
 
@@ -16,7 +18,8 @@ type LocalRuntimeRunner interface {
 // SessionRuntimeHost is the transport-facing session/runtime shell composed from
 // a Core without exposing root FactoryService at transport boundaries.
 type SessionRuntimeHost struct {
-	host *runtimehost.Host
+	host      *runtimehost.Host
+	dashboard *initializerdashboard.DashboardSidecar
 }
 
 // NewSessionRuntimeHostFromCore composes the API/CLI session runtime host from a
@@ -78,7 +81,37 @@ func (h *SessionRuntimeHost) Run(ctx context.Context) error {
 	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.host.Run(ctx)
+	return h.runWithDashboard(ctx, h.host.Run)
+}
+
+func (h *SessionRuntimeHost) runWithDashboard(ctx context.Context, runHost func(context.Context) error) error {
+	if h.dashboard == nil {
+		return runHost(ctx)
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	dashboardErr := make(chan error, 1)
+	hostErr := make(chan error, 1)
+	go func() { dashboardErr <- h.dashboard.Run(runCtx) }()
+	go func() { hostErr <- runHost(runCtx) }()
+	select {
+	case err := <-hostErr:
+		cancel()
+		sidecarErr := <-dashboardErr
+		if err != nil {
+			return err
+		}
+		if sidecarErr != nil && !errors.Is(sidecarErr, context.Canceled) {
+			return sidecarErr
+		}
+		return nil
+	case err := <-dashboardErr:
+		cancel()
+		runtimeErr := <-hostErr
+		if err != nil && !errors.Is(err, context.Canceled) {
+			return err
+		}
+		return runtimeErr
+	}
 }
 
 // RunWithAPISurface starts lifecycle-owned runtime work while providing the

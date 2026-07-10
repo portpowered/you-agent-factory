@@ -1306,6 +1306,16 @@ func FactoryServiceConfigFromRuntimeHost(cfg *runtimehost.Config) *FactoryServic
 	return (*FactoryServiceConfig)(unsafe.Pointer(cfg))
 }
 
+// RuntimeHostConfigFromFactoryService maps the legacy CLI composition config
+// onto initializer-owned runtime composition while both migration structs are
+// kept layout-compatible.
+func RuntimeHostConfigFromFactoryService(cfg *FactoryServiceConfig) *runtimehost.Config {
+	if cfg == nil {
+		return nil
+	}
+	return (*runtimehost.Config)(unsafe.Pointer(cfg))
+}
+
 // EnsureBackendScopeForCompose resolves backend scope before core composition.
 func EnsureBackendScopeForCompose(cfg *runtimehost.Config, logger *zap.Logger) error {
 	return ensureServiceBackendScope(FactoryServiceConfigFromRuntimeHost(cfg), logger)
