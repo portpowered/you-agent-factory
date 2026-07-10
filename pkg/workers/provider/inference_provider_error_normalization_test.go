@@ -556,14 +556,8 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 			entry: providerErrorCorpusEntryForTest(t, "claude_authentication_error"),
 		},
 		{
-			name: "Unknown_Unclassified",
-			entry: ProviderErrorCorpusEntry{
-				Name:           "claude_unknown_unclassified",
-				ExitCode:       1,
-				Stderr:         `some brand new claude failure`,
-				ExpectedType:   interfaces.WorkFailureTypeUnknown,
-				ExpectedFamily: interfaces.WorkFailureFamilyTerminal,
-			},
+			name:  "Unknown_Unclassified",
+			entry: providerErrorCorpusEntryForTest(t, "claude_unknown_unclassified"),
 		},
 	}
 
