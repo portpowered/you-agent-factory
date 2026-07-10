@@ -2,8 +2,10 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -21,13 +23,301 @@ type ProviderError struct {
 	Cause           error
 }
 
+// ProviderFailureResult is the pure output of provider failure parsing. It
+// deliberately carries only the canonical reason and customer-visible message;
+// runtime policy is derived from Reason when the result crosses into execution.
+type ProviderFailureResult struct {
+	Reason  interfaces.WorkFailureType
+	Message string
+}
+
+const codexFailureMessageBytes = 1024
+
+const (
+	codexAuthFailureMessage       = "Codex authentication failed."
+	codexBadRequestFailureMessage = "Codex rejected the request as invalid."
+	codexGPT56SolUpgradeMessage   = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
+	codexServerFailureMessage     = "Codex encountered a temporary server error."
+	codexThrottleFailureMessage   = "Codex is temporarily unavailable due to usage or capacity limits."
+	codexTimeoutFailureMessage    = "Codex request timed out."
+)
+
+type codexStructuredFailure struct {
+	Type    string
+	Status  int
+	Message string
+}
+
+// ParseCodexProviderFailure deterministically parses bounded subprocess output
+// into the canonical provider-failure contract. Each stream is limited by
+// codexErrorLineScanBytes before parsing, and returned messages are limited by
+// codexFailureMessageBytes.
+func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
+	streams := []string{
+		tailForCodexErrorScan(result.Stderr),
+		tailForCodexErrorScan(result.Stdout),
+	}
+	if failure, ok := lastCodexStructuredFailure(streams); ok {
+		return failure
+	}
+
+	if failure, ok := lastCodexTextFailure(streams, result.ExitCode); ok {
+		return ProviderFailureResult{
+			Reason:  failure.Reason,
+			Message: failure.Message,
+		}
+	}
+
+	return ProviderFailureResult{
+		Reason:  classifyCodexExitFailure(result.ExitCode),
+		Message: codexExitFailureMessage(result.ExitCode),
+	}
+}
+
+func lastCodexStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			payload, ok := codexErrorPayload(line)
+			if !ok || !strings.HasPrefix(payload, "{") {
+				continue
+			}
+			failure, ok := decodeCodexStructuredFailure(payload)
+			if !ok {
+				continue
+			}
+			reason, recognized := classifyCodexStructuredSignal(failure.Type, failure.Status)
+			if recognized {
+				last = ProviderFailureResult{
+					Reason:  reason,
+					Message: codexStructuredFailureMessage(failure.Message, reason),
+				}
+				found = true
+			}
+		}
+	}
+	return last, found
+}
+
+// codexStructuredFailureMessage publishes only positively audited text. Other
+// structured messages can contain prompts, transcripts, cleanup paths, or
+// credentials, so recognized reasons use fixed customer-visible messages.
+func codexStructuredFailureMessage(message string, reason interfaces.WorkFailureType) string {
+	message = strings.Join(strings.Fields(message), " ")
+	if reason == interfaces.WorkFailureTypePermanentBadRequest && message == codexGPT56SolUpgradeMessage {
+		return message
+	}
+	return codexTextFailureMessage(reason)
+}
+
+func codexErrorPayload(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "ERROR:") {
+		return "", false
+	}
+	return strings.TrimSpace(strings.TrimPrefix(trimmed, "ERROR:")), true
+}
+
+func decodeCodexStructuredFailure(payload string) (codexStructuredFailure, bool) {
+	var envelope struct {
+		Type    string `json:"type"`
+		Status  int    `json:"status"`
+		Message string `json:"message"`
+		Error   *struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		return codexStructuredFailure{}, false
+	}
+	if envelope.Error == nil && envelope.Type == "" && envelope.Status == 0 {
+		return codexStructuredFailure{}, false
+	}
+
+	failure := codexStructuredFailure{
+		Type:    envelope.Type,
+		Status:  envelope.Status,
+		Message: envelope.Message,
+	}
+	if envelope.Error != nil {
+		if envelope.Error.Type != "" {
+			failure.Type = envelope.Error.Type
+		}
+		if envelope.Error.Message != "" {
+			failure.Message = envelope.Error.Message
+		}
+	}
+	return failure, true
+}
+
+func lastCodexTextFailure(streams []string, exitCode int) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			payload, isError := codexErrorPayload(line)
+			if !isError || strings.HasPrefix(payload, "{") {
+				continue
+			}
+			if failure, ok := recognizedCodexTextFailure(payload, exitCode); ok {
+				last, found = failure, true
+			}
+		}
+	}
+	if found {
+		return last, true
+	}
+
+	// A single unprefixed line is an existing Codex diagnostic shape (for
+	// example transport timeouts). Multi-line output is treated as transcript
+	// or header noise unless it contains an explicit ERROR record.
+	for _, stream := range streams {
+		trimmed := strings.TrimSpace(stream)
+		if trimmed == "" || strings.Contains(trimmed, "\n") {
+			continue
+		}
+		if failure, ok := recognizedCodexTextFailure(trimmed, exitCode); ok {
+			last, found = failure, true
+		}
+	}
+	return last, found
+}
+
+// recognizedCodexTextFailure accepts only audited Codex diagnostic shapes and
+// returns fixed customer-visible text. Unknown ERROR lines may contain echoed
+// prompts, transcripts, cleanup paths, or credentials, so they are never used
+// as message excerpts.
+func recognizedCodexTextFailure(message string, exitCode int) (ProviderFailureResult, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	reason := classifyRecognizedCodexTextFailure(normalized, exitCode)
+	if reason == interfaces.WorkFailureTypeUnknown {
+		return ProviderFailureResult{}, false
+	}
+	return ProviderFailureResult{
+		Reason:  reason,
+		Message: codexTextFailureMessage(reason),
+	}, true
+}
+
+func classifyRecognizedCodexTextFailure(message string, exitCode int) interfaces.WorkFailureType {
+	switch {
+	case exitCode == 124,
+		strings.HasPrefix(message, "context deadline exceeded"),
+		strings.HasPrefix(message, "command timed out"),
+		strings.HasPrefix(message, "request timed out"),
+		strings.HasPrefix(message, "provider timeout"),
+		strings.HasPrefix(message, "context canceled after command timed out"):
+		return interfaces.WorkFailureTypeTimeout
+	case strings.HasPrefix(message, "unexpected status 401"),
+		strings.HasPrefix(message, "unexpected status 403"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case strings.HasPrefix(message, "unexpected status 400"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case strings.HasPrefix(message, "unexpected status 429"),
+		strings.HasPrefix(message, "you've hit your usage limit"),
+		strings.HasPrefix(message, "selected model is at capacity"):
+		return interfaces.WorkFailureTypeThrottled
+	case strings.HasPrefix(message, "unexpected status 500"),
+		strings.HasPrefix(message, "unexpected status 502"),
+		strings.HasPrefix(message, "unexpected status 503"),
+		strings.HasPrefix(message, "unexpected status 504"),
+		message == codexHighDemandTemporaryErrorsNeedle:
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func codexTextFailureMessage(reason interfaces.WorkFailureType) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return codexAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return codexBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return codexThrottleFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return codexServerFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return codexTimeoutFailureMessage
+	default:
+		return ""
+	}
+}
+
+func classifyCodexExitFailure(exitCode int) interfaces.WorkFailureType {
+	if exitCode == 124 {
+		return interfaces.WorkFailureTypeTimeout
+	}
+	if exitCode == codexWindowsProcessFailureExitCode {
+		return interfaces.WorkFailureTypeInternalServerError
+	}
+	return interfaces.WorkFailureTypeUnknown
+}
+
+func classifyCodexStructuredSignal(errorType string, status int) (interfaces.WorkFailureType, bool) {
+	normalizedType := strings.ToLower(strings.TrimSpace(errorType))
+	switch normalizedType {
+	case "authentication_error", "permission_error":
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case "invalid_request_error":
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case "rate_limit_error", "overloaded_error":
+		return interfaces.WorkFailureTypeThrottled, true
+	case "api_error", "server_error":
+		return interfaces.WorkFailureTypeInternalServerError, true
+	case "", "error":
+		// Generic Codex envelopes carry the provider classification in status.
+	default:
+		// An explicit unknown type can identify cleanup or diagnostic records;
+		// its status must not let it override a recognized provider failure.
+		return interfaces.WorkFailureTypeUnknown, false
+	}
+
+	switch {
+	case status == 401 || status == 403:
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case status == 400:
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case status == 429:
+		return interfaces.WorkFailureTypeThrottled, true
+	case status >= 500 && status <= 599:
+		return interfaces.WorkFailureTypeInternalServerError, true
+	case status == 408:
+		return interfaces.WorkFailureTypeTimeout, true
+	default:
+		return interfaces.WorkFailureTypeUnknown, false
+	}
+}
+func codexExitFailureMessage(exitCode int) string {
+	return fmt.Sprintf("codex exited with code %d", exitCode)
+}
+
 func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {
-	return &ProviderError{
-		Family:  providerErrorFamilyForType(errorType),
-		Type:    errorType,
+	return NewProviderErrorFromResult(ProviderFailureResult{
+		Reason:  errorType,
 		Message: message,
+	}, cause)
+}
+
+// NewProviderErrorFromResult turns a pure parse result into the normalized
+// execution error while deriving all runtime policy from its canonical reason.
+func NewProviderErrorFromResult(result ProviderFailureResult, cause error) *ProviderError {
+	return &ProviderError{
+		Family:  providerFailurePolicyForReason(result.Reason).Family,
+		Type:    result.Reason,
+		Message: result.Message,
 		Cause:   cause,
 	}
+}
+
+func newProviderErrorFromResultWithDiagnostics(result ProviderFailureResult, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+	err := NewProviderErrorFromResult(result, cause)
+	err.ProviderSession = interfaces.CloneProviderSessionMetadata(session)
+	err.Diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
+	return err
 }
 
 func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
@@ -37,9 +327,10 @@ func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message s
 }
 
 func newProviderErrorWithDiagnostics(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	err := NewProviderErrorWithSession(errorType, message, cause, session)
-	err.Diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
-	return err
+	return newProviderErrorFromResultWithDiagnostics(ProviderFailureResult{
+		Reason:  errorType,
+		Message: message,
+	}, cause, session, diagnostics)
 }
 
 func (e *ProviderError) Error() string {
@@ -57,7 +348,7 @@ func ClassifyProviderFailure(err *ProviderError) interfaces.WorkFailureDecision 
 	if err == nil {
 		return interfaces.WorkFailureDecision{}
 	}
-	return providerFailureDecisionForFamily(err.Family)
+	return providerFailurePolicyForReason(err.Type).Decision
 }
 
 // WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
@@ -75,9 +366,45 @@ func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) i
 		return interfaces.WorkFailureDecision{}
 	}
 	if metadata.Type != "" {
-		return providerFailureDecisionForFamily(providerErrorFamilyForType(metadata.Type))
+		return providerFailurePolicyForReason(metadata.Type).Decision
 	}
 	return providerFailureDecisionForFamily(metadata.Family)
+}
+
+type providerFailurePolicy struct {
+	Family   interfaces.WorkFailureFamily
+	Decision interfaces.WorkFailureDecision
+}
+
+func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerFailurePolicy {
+	switch reason {
+	case interfaces.WorkFailureTypeThrottled:
+		return providerFailurePolicy{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Decision: interfaces.WorkFailureDecision{
+				Retryable:             true,
+				TriggersThrottlePause: true,
+			},
+		}
+	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyRetryable,
+			Decision: interfaces.WorkFailureDecision{Retryable: true},
+		}
+	case interfaces.WorkFailureTypeAuthFailure,
+		interfaces.WorkFailureTypePermanentBadRequest,
+		interfaces.WorkFailureTypeUnknown,
+		interfaces.WorkFailureTypeMisconfigured:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	default:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	}
 }
 
 func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
@@ -94,16 +421,7 @@ func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) inter
 }
 
 func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
-	switch errorType {
-	case interfaces.WorkFailureTypeThrottled:
-		return interfaces.WorkFailureFamilyThrottle
-	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
-		return interfaces.WorkFailureFamilyRetryable
-	case interfaces.WorkFailureTypeAuthFailure, interfaces.WorkFailureTypePermanentBadRequest, interfaces.WorkFailureTypeUnknown, interfaces.WorkFailureTypeMisconfigured:
-		return interfaces.WorkFailureFamilyTerminal
-	default:
-		return interfaces.WorkFailureFamilyTerminal
-	}
+	return providerFailurePolicyForReason(errorType).Family
 }
 
 // WorkFailureMetadataFromError projects a provider-shaped execution error onto
@@ -113,7 +431,7 @@ func WorkFailureMetadataFromError(err *ProviderError) *interfaces.WorkFailureMet
 		return nil
 	}
 	return &interfaces.WorkFailureMetadata{
-		Family: err.Family,
+		Family: providerFailurePolicyForReason(err.Type).Family,
 		Type:   err.Type,
 	}
 }

@@ -82,6 +82,293 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 	}
 }
 
+func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.T) {
+	result := ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeThrottled,
+		Message: "request capacity exceeded",
+	}
+
+	providerErr := NewProviderErrorFromResult(result, nil)
+	if providerErr.Type != result.Reason || providerErr.Message != result.Message {
+		t.Fatalf("NewProviderErrorFromResult() = %#v, want canonical reason and message", providerErr)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
+	}
+}
+
+func TestParseCodexProviderFailure_GPT56SolReturnsActionableNestedMessage(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")
+	wantMessage := codexGPT56SolUpgradeMessage
+
+	got := ParseCodexProviderFailure(entry.CommandResult())
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("Reason = %q, want %q", got.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	}
+	if got.Message != wantMessage {
+		t.Fatalf("Message = %q, want %q", got.Message, wantMessage)
+	}
+	for _, rejected := range entry.RejectMessageContains {
+		if strings.Contains(got.Message, rejected) {
+			t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+		}
+	}
+}
+
+func TestParseCodexProviderFailure_StructuredRecordsUseLastValidCrossStreamRecord(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr: []byte(strings.Join([]string{
+			`ERROR: {"type":"error","status":400,"error":`,
+			`ERROR: {"type":"error","status":401,"error":{"type":"authentication_error","message":"sign in again"}}`,
+		}, "\n")),
+		Stdout: []byte(strings.Join([]string{
+			`ERROR: {"type":"error","status":429,"error":{"type":"rate_limit_error","message":"earlier stdout limit"}}`,
+			`ERROR: {"type":"error","status":500,"error":{"type":"server_error","message":"final stdout server failure"}}`,
+			`ERROR: {"type":"error","status":400,"error":`,
+		}, "\n")),
+	}
+
+	got := ParseCodexProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypeInternalServerError || got.Message != codexServerFailureMessage {
+		t.Fatalf("ParseCodexProviderFailure() = %#v, want final valid stdout server failure", got)
+	}
+}
+
+func TestParseCodexProviderFailure_StructuredFieldsPrecedeSubstringFallback(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr: []byte(strings.Join([]string{
+			`ERROR: transcript said 429 too many requests`,
+			`ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"choose a supported model"}}`,
+			`ERROR: cleanup failed after request`,
+		}, "\n")),
+	}
+
+	got := ParseCodexProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != codexBadRequestFailureMessage {
+		t.Fatalf("ParseCodexProviderFailure() = %#v, want structured bad request", got)
+	}
+}
+
+func TestParseCodexProviderFailure_UsesOuterStructuredTypeAndMessage(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte(`ERROR: {"type":"rate_limit_error","message":"request capacity reached"}`),
+	}
+
+	got := ParseCodexProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypeThrottled || got.Message != codexThrottleFailureMessage {
+		t.Fatalf("ParseCodexProviderFailure() = %#v, want outer structured throttle failure", got)
+	}
+}
+
+func TestParseCodexProviderFailure_KnownCodexShapesKeepCanonicalReasons(t *testing.T) {
+	testCases := []string{
+		"codex_status_429_too_many_requests",
+		"codex_internal_server_status_500",
+		"codex_invalid_request_error",
+		"codex_timeout_waiting_for_provider",
+		"codex_authentication_unauthorized",
+		"codex_windows_exit_code_4294967295",
+	}
+	for _, name := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(name, func(t *testing.T) {
+			got := ParseCodexProviderFailure(entry.CommandResult())
+			if got.Reason != entry.ExpectedType {
+				t.Fatalf("Reason = %q, want %q", got.Reason, entry.ExpectedType)
+			}
+		})
+	}
+}
+
+func TestParseCodexProviderFailure_BoundsAndSanitizesFallbackMessages(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+		reject      []string
+		wantMaxLen  int
+	}{
+		{
+			name: "TranscriptAndHeadersUseExitFallback",
+			result: CommandResult{ExitCode: 7, Stdout: []byte(strings.Join([]string{
+				"OpenAI Codex v0.143.0",
+				"model: gpt-5.6-sol",
+				"customer prompt must stay private",
+				"cleanup complete",
+			}, "\n"))},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 7",
+			reject:      []string{"customer prompt", "cleanup", "gpt-5.6-sol"},
+		},
+		{
+			name:        "MalformedJSONUsesExitFallback",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(`ERROR: {"type":"error","error":{"message":"private transcript"}`)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 1",
+			reject:      []string{"private transcript", "{"},
+		},
+		{
+			name:        "CredentialsUseExitFallback",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("ERROR: request failed with Authorization: Bearer secret-token")},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 1",
+			reject:      []string{"secret-token", "Bearer"},
+		},
+		{
+			name: "OutputBeforeScanTailIsIgnored",
+			result: CommandResult{ExitCode: 2, Stderr: []byte(
+				"ERROR: should not survive the bounded scan\n" + strings.Repeat("cleanup-padding\n", codexErrorLineScanBytes),
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 2",
+			reject:      []string{"should not survive"},
+		},
+		{
+			name:        "UnknownErrorExcerptUsesExitFallback",
+			result:      CommandResult{ExitCode: 3, Stderr: []byte("ERROR: operation failed " + strings.Repeat("x", codexFailureMessageBytes+200))},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 3",
+			reject:      []string{"operation failed", "xxx"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseCodexProviderFailure(tc.result)
+			if got.Reason != tc.wantReason {
+				t.Fatalf("Reason = %q, want %q", got.Reason, tc.wantReason)
+			}
+			if tc.wantMessage != "" && got.Message != tc.wantMessage {
+				t.Fatalf("Message = %q, want %q", got.Message, tc.wantMessage)
+			}
+			if tc.wantMaxLen != 0 && len(got.Message) != tc.wantMaxLen {
+				t.Fatalf("message length = %d, want %d", len(got.Message), tc.wantMaxLen)
+			}
+			for _, rejected := range tc.reject {
+				if strings.Contains(got.Message, rejected) {
+					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+				}
+			}
+		})
+	}
+}
+
+func TestParseCodexProviderFailure_UnstructuredFallbackIsSafeByConstruction(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+		reject      []string
+	}{
+		{
+			name: "ErrorPrefixedCleanupCannotDisplaceCapacityFailure",
+			stderr: strings.Join([]string{
+				"ERROR: Selected model is at capacity. Please try a different model.",
+				"ERROR: cleanup failed for /private/customer/path",
+			}, "\n"),
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: codexThrottleFailureMessage,
+			reject:      []string{"cleanup", "/private/customer/path"},
+		},
+		{
+			name:        "PromptBearingErrorUsesExitFallback",
+			stderr:      "ERROR: customer prompt: explain unexpected status 429 with private details",
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 1",
+			reject:      []string{"customer prompt", "private details"},
+		},
+		{
+			name:        "TranscriptBearingErrorUsesExitFallback",
+			stderr:      "ERROR: transcript: selected model is at capacity in the user's example",
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 1",
+			reject:      []string{"transcript", "user's example"},
+		},
+		{
+			name:        "CredentialBearingErrorUsesExitFallback",
+			stderr:      "ERROR: arbitrary credential secret_token=customer-private-value",
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "codex exited with code 1",
+			reject:      []string{"secret_token", "customer-private-value"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseCodexProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseCodexProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+			for _, rejected := range tc.reject {
+				if strings.Contains(got.Message, rejected) {
+					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+				}
+			}
+		})
+	}
+}
+
+func TestParseCodexProviderFailure_StructuredFallbackIsSafeByConstruction(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+		reject      []string
+	}{
+		{
+			name: "StructuredCleanupCannotDisplaceDecisiveFailure",
+			stderr: strings.Join([]string{
+				`ERROR: {"type":"error","status":429,"error":{"type":"rate_limit_error","message":"provider capacity reached"}}`,
+				`ERROR: {"type":"cleanup_error","status":500,"message":"cleanup failed for /private/customer/path"}`,
+			}, "\n"),
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: codexThrottleFailureMessage,
+			reject:      []string{"cleanup", "/private/customer/path", "provider capacity reached"},
+		},
+		{
+			name:        "StructuredPromptUsesFixedMessage",
+			stderr:      `ERROR: {"status":400,"error":{"type":"invalid_request_error","message":"customer prompt: explain private account details"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: codexBadRequestFailureMessage,
+			reject:      []string{"customer prompt", "private account"},
+		},
+		{
+			name:        "StructuredTranscriptUsesFixedMessage",
+			stderr:      `ERROR: {"status":500,"error":{"type":"server_error","message":"transcript: user's private response draft"}}`,
+			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantMessage: codexServerFailureMessage,
+			reject:      []string{"transcript", "private response"},
+		},
+		{
+			name:        "StructuredCredentialUsesFixedMessage",
+			stderr:      `ERROR: {"status":401,"error":{"type":"authentication_error","message":"secret_token=customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: codexAuthFailureMessage,
+			reject:      []string{"secret_token", "customer-private-value"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseCodexProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseCodexProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+			for _, rejected := range tc.reject {
+				if strings.Contains(got.Message, rejected) {
+					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
+				}
+			}
+		})
+	}
+}
+
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
 	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {
@@ -151,6 +438,16 @@ func TestClassifyProviderFailure_ReturnsDeterministicBehavior(t *testing.T) {
 			err:          NewProviderError(interfaces.WorkFailureTypeMisconfigured, "", nil),
 			wantTerminal: true,
 		},
+		{
+			name:         "EmptyReason_Terminates",
+			err:          NewProviderError("", "", nil),
+			wantTerminal: true,
+		},
+		{
+			name:         "UnsupportedReason_Terminates",
+			err:          NewProviderError(interfaces.WorkFailureType("unsupported"), "", nil),
+			wantTerminal: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -164,6 +461,51 @@ func TestClassifyProviderFailure_ReturnsDeterministicBehavior(t *testing.T) {
 			}
 			if got.TriggersThrottlePause != tc.wantThrottlePause {
 				t.Fatalf("expected TriggersThrottlePause=%t, got %t", tc.wantThrottlePause, got.TriggersThrottlePause)
+			}
+		})
+	}
+}
+
+func TestClassifyProviderFailure_CanonicalReasonOverridesConflictingFamily(t *testing.T) {
+	testCases := []struct {
+		name   string
+		reason interfaces.WorkFailureType
+		stale  interfaces.WorkFailureFamily
+		want   interfaces.WorkFailureDecision
+	}{
+		{
+			name:   "RetryableReasonOverridesTerminalFamily",
+			reason: interfaces.WorkFailureTypeInternalServerError,
+			stale:  interfaces.WorkFailureFamilyTerminal,
+			want:   interfaces.WorkFailureDecision{Retryable: true},
+		},
+		{
+			name:   "TerminalReasonOverridesThrottleFamily",
+			reason: interfaces.WorkFailureTypePermanentBadRequest,
+			stale:  interfaces.WorkFailureFamilyThrottle,
+			want:   interfaces.WorkFailureDecision{Terminal: true},
+		},
+		{
+			name:   "ThrottleReasonOverridesTerminalFamily",
+			reason: interfaces.WorkFailureTypeThrottled,
+			stale:  interfaces.WorkFailureFamilyTerminal,
+			want: interfaces.WorkFailureDecision{
+				Retryable:             true,
+				TriggersThrottlePause: true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			providerErr := NewProviderError(tc.reason, "failure", nil)
+			providerErr.Family = tc.stale
+			if got := ClassifyProviderFailure(providerErr); got != tc.want {
+				t.Fatalf("ClassifyProviderFailure() = %#v, want %#v", got, tc.want)
+			}
+			metadata := WorkFailureMetadataFromError(providerErr)
+			if metadata.Family != providerErrorFamilyForType(tc.reason) {
+				t.Fatalf("WorkFailureMetadataFromError().Family = %q, want reason-derived family", metadata.Family)
 			}
 		})
 	}
@@ -300,7 +642,7 @@ func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpected
 	}
 }
 
-func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecisiveErrorLine(t *testing.T) {
+func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecisiveFailure(t *testing.T) {
 	testCases := []ProviderErrorCorpusEntry{
 		providerErrorCorpusEntryForTest(t, "codex_model_capacity_cleanup_noise"),
 		providerErrorCorpusEntryForTest(t, "codex_timeout_cleanup_noise"),
@@ -309,7 +651,7 @@ func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecis
 	for _, entry := range testCases {
 		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
 			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
-			wantMessage := providerErrorCorpusLastErrorLine(t, entry)
+			wantMessage := codexTextFailureMessage(entry.ExpectedType)
 			if providerErr.Message != wantMessage {
 				t.Fatalf("%s normalized message = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, wantMessage)
 			}
@@ -367,8 +709,8 @@ func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
 	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
 		t.Fatalf("expected usage limit to be in family %q, got %q", interfaces.WorkFailureFamilyThrottle, providerErr.Family)
 	}
-	if !strings.Contains(providerErr.Message, "usage limit") {
-		t.Fatalf("expected normalized error to preserve usage limit message, got %q", providerErr.Message)
+	if providerErr.Message != codexThrottleFailureMessage {
+		t.Fatalf("expected normalized error to use the safe throttle message, got %q", providerErr.Message)
 	}
 }
 

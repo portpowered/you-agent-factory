@@ -268,7 +268,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 			},
 			wantType:          interfaces.WorkFailureTypeAuthFailure,
 			wantFamily:        interfaces.WorkFailureFamilyTerminal,
-			wantMessage:       `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`,
+			wantMessage:       codexAuthFailureMessage,
 			wantRetryable:     false,
 			wantTerminal:      true,
 			wantThrottlePause: false,
@@ -297,7 +297,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 	}
 }
 
-func TestScriptWrapProvider_Infer_CodexExitFailureExtractsBoundedErrorLine(t *testing.T) {
+func TestScriptWrapProvider_Infer_CodexExitFailureReturnsSafeBoundedMessage(t *testing.T) {
 	capacityEntry := providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model")
 	capacityLine := providerErrorCorpusLastErrorLine(t, capacityEntry)
 
@@ -317,7 +317,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailureExtractsBoundedErrorLine(t *te
 					capacityLine,
 				}, "\n")),
 			},
-			wantLine:   capacityLine,
+			wantLine:   codexThrottleFailureMessage,
 			rejectText: "inference transcript token",
 		},
 		{
@@ -331,7 +331,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailureExtractsBoundedErrorLine(t *te
 					"retry after cleanup",
 				}, "\n")),
 			},
-			wantLine:   "ERROR: The process with PID 1234 could not be terminated",
+			wantLine:   "codex exited with code 1",
 			rejectText: "trailing cleanup note",
 		},
 		{
@@ -341,7 +341,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailureExtractsBoundedErrorLine(t *te
 				Stderr:   []byte("ERROR: First provider failure"),
 				Stdout:   []byte("  ERROR: Final provider failure  \nnot final"),
 			},
-			wantLine:   "ERROR: Final provider failure",
+			wantLine:   "codex exited with code 1",
 			rejectText: "ERROR: First provider failure",
 		},
 	}
@@ -387,7 +387,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 			},
 			wantType:             interfaces.WorkFailureTypeThrottled,
 			wantFamily:           interfaces.WorkFailureFamilyThrottle,
-			wantMessage:          capacityLine,
+			wantMessage:          codexThrottleFailureMessage,
 			wantRetryable:        true,
 			wantThrottlePause:    true,
 			rejectMessageContent: "thinking transcript",
@@ -400,7 +400,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 			},
 			wantType:      interfaces.WorkFailureTypeTimeout,
 			wantFamily:    interfaces.WorkFailureFamilyRetryable,
-			wantMessage:   "ERROR: command timed out while waiting for codex",
+			wantMessage:   codexTimeoutFailureMessage,
 			wantRetryable: true,
 		},
 		{
@@ -411,7 +411,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 			},
 			wantType:      interfaces.WorkFailureTypeTimeout,
 			wantFamily:    interfaces.WorkFailureFamilyRetryable,
-			wantMessage:   "ERROR: context deadline exceeded",
+			wantMessage:   codexTimeoutFailureMessage,
 			wantRetryable: true,
 		},
 		{
@@ -422,7 +422,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 			},
 			wantType:          interfaces.WorkFailureTypeUnknown,
 			wantFamily:        interfaces.WorkFailureFamilyTerminal,
-			wantMessage:       "ERROR: The process with PID 1234 could not be terminated",
+			wantMessage:       "codex exited with code 1",
 			wantTerminal:      true,
 			wantThrottlePause: false,
 		},
@@ -435,7 +435,7 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 			},
 			wantType:             interfaces.WorkFailureTypeThrottled,
 			wantFamily:           interfaces.WorkFailureFamilyThrottle,
-			wantMessage:          capacityLine,
+			wantMessage:          codexThrottleFailureMessage,
 			wantRetryable:        true,
 			wantThrottlePause:    true,
 			rejectMessageContent: "bad request",
