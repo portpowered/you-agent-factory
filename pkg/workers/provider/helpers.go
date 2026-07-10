@@ -32,6 +32,7 @@ const (
 	MetadataOnlyCommandEnvValue = "<metadata-only>"
 	ProviderDefaultModel        = "provider-default"
 	ProviderInvocationPrepared  = "provider.invocation_prepared"
+	ProviderFailureNormalized   = "provider.failure_normalized"
 	RedactedProviderArgValue    = "<redacted>"
 	RedactedProviderPrompt      = "<redacted:prompt>"
 )
@@ -120,6 +121,50 @@ func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInfer
 		fields = append(fields, "deadline", deadline.UTC().Format(time.RFC3339Nano))
 	}
 	return fields
+}
+
+func providerFailureLogFields(
+	req interfaces.ProviderInferenceRequest,
+	providerErr *ProviderError,
+	result CommandResult,
+	duration time.Duration,
+) []any {
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	fields := workLogFields(req.Dispatch.Execution,
+		"event_name", ProviderFailureNormalized,
+		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
+		"model", providerModelForLog(req.Model),
+		"failure_reason", providerErr.Type,
+		"failure_message", safeProviderFailureLogMessage(req.ModelProvider, providerErr),
+		"retryable", decision.Retryable,
+		"duration_ms", duration.Milliseconds(),
+		"dispatch_id", req.Dispatch.DispatchID)
+	if result.ExitCode != 0 {
+		fields = append(fields, "exit_code", result.ExitCode)
+	}
+	return fields
+}
+
+func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) string {
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) {
+		return providerErr.Message
+	}
+	switch providerErr.Type {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return "Provider authentication failed."
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return "Provider rejected the request as invalid."
+	case interfaces.WorkFailureTypeThrottled:
+		return "Provider is temporarily unavailable due to usage or capacity limits."
+	case interfaces.WorkFailureTypeInternalServerError:
+		return "Provider encountered a temporary server error."
+	case interfaces.WorkFailureTypeTimeout:
+		return "Provider request timed out."
+	case interfaces.WorkFailureTypeMisconfigured:
+		return "Provider command could not be started."
+	default:
+		return "Provider execution failed."
+	}
 }
 
 func sha256Hex(input []byte) string {

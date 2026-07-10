@@ -432,29 +432,55 @@ func TestSanitizeProviderArgs_RedactsPromptCredentialsAndFreeFormValues(t *testi
 	}
 }
 
-type preparedInvocationTestRunner struct{ sequence *[]string }
+type preparedInvocationTestRunner struct {
+	sequence *[]string
+	result   CommandResult
+	err      error
+}
 
 func (r *preparedInvocationTestRunner) Run(_ context.Context, _ CommandRequest) (CommandResult, error) {
 	*r.sequence = append(*r.sequence, "runner")
-	return CommandResult{Stdout: []byte("ok")}, nil
+	if r.result.ExitCode == 0 && len(r.result.Stdout) == 0 && len(r.result.Stderr) == 0 {
+		r.result = CommandResult{Stdout: []byte("ok")}
+	}
+	return r.result, r.err
 }
 
 type preparedInvocationTestLogger struct {
 	sequence       *[]string
 	preparedCount  int
 	preparedFields map[string]any
+	failureCount   int
+	failureFields  map[string]any
 	allValues      string
 }
 
 func (l *preparedInvocationTestLogger) capture(keysAndValues ...any) {
 	l.allValues += strings.TrimSpace(strings.Join(anyValues(keysAndValues), " "))
 }
-func (l *preparedInvocationTestLogger) Debug(_ string, fields ...any)   { l.capture(fields...) }
-func (l *preparedInvocationTestLogger) Warn(_ string, fields ...any)    { l.capture(fields...) }
-func (l *preparedInvocationTestLogger) Error(_ string, fields ...any)   { l.capture(fields...) }
+func (l *preparedInvocationTestLogger) Debug(_ string, fields ...any) { l.capture(fields...) }
+func (l *preparedInvocationTestLogger) Warn(_ string, fields ...any)  { l.capture(fields...) }
+func (l *preparedInvocationTestLogger) Error(_ string, fields ...any) {
+	l.capture(fields...)
+	values := logFieldMap(fields)
+	if values["event_name"] == ProviderFailureNormalized {
+		l.failureCount++
+		l.failureFields = values
+		*l.sequence = append(*l.sequence, ProviderFailureNormalized)
+	}
+}
 func (l *preparedInvocationTestLogger) Verbose(_ string, fields ...any) { l.capture(fields...) }
 func (l *preparedInvocationTestLogger) Info(_ string, fields ...any) {
 	l.capture(fields...)
+	values := logFieldMap(fields)
+	if values["event_name"] == ProviderInvocationPrepared {
+		l.preparedCount++
+		l.preparedFields = values
+		*l.sequence = append(*l.sequence, ProviderInvocationPrepared)
+	}
+}
+
+func logFieldMap(fields []any) map[string]any {
 	values := make(map[string]any, len(fields)/2)
 	for i := 0; i+1 < len(fields); i += 2 {
 		key, ok := fields[i].(string)
@@ -462,11 +488,7 @@ func (l *preparedInvocationTestLogger) Info(_ string, fields ...any) {
 			values[key] = fields[i+1]
 		}
 	}
-	if values["event_name"] == ProviderInvocationPrepared {
-		l.preparedCount++
-		l.preparedFields = values
-		*l.sequence = append(*l.sequence, ProviderInvocationPrepared)
-	}
+	return values
 }
 
 func anyValues(values []any) []string {

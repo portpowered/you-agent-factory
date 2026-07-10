@@ -198,24 +198,24 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	providerSession := effectiveProviderSession(req, result)
 	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
 	if err != nil {
-		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result,
-				"error", err.Error())...)
 		providerErr := normalizeProviderExecutionError(
 			req.ModelProvider, result, err, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
+		logger.Error("inferencer: request failed",
+			cursorFailureLogFields(req, cursorProvider, result, "has_error", true)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	if result.ExitCode != 0 {
-		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result,
-				"exit_code", result.ExitCode)...)
 		providerErr := normalizeProviderExitFailure(
 			req.ModelProvider, result, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
+		logger.Error("inferencer: request failed",
+			cursorFailureLogFields(req, cursorProvider, result, "exit_code", result.ExitCode)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
