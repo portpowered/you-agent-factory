@@ -9,9 +9,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -612,17 +612,17 @@ func NewHostedWorkersConfig(
 // ComposeCollaboratorSnapshot records whether S6 collaborators were initialized
 // on a built FactoryService. Tests compare snapshots across wire and direct build paths.
 type ComposeCollaboratorSnapshot struct {
-	SessionsInitialized          bool
-	RuntimeBuildInitialized      bool
-	WorkersSchedulerInitialized  bool
-	LocalModelsInitialized       bool
-	ModelAssetsInitialized   bool
-	ModelServiceInitialized  bool
-	FactorySaveInitialized   bool
-	DefinitionsInitialized   bool
-	HostedWorkersLoggerReady bool
-	BundleModelResources     bool
-	BundleLocalModels        bool
+	SessionsInitialized         bool
+	RuntimeBuildInitialized     bool
+	WorkersSchedulerInitialized bool
+	LocalModelsInitialized      bool
+	ModelAssetsInitialized      bool
+	ModelServiceInitialized     bool
+	FactorySaveInitialized      bool
+	DefinitionsInitialized      bool
+	HostedWorkersLoggerReady    bool
+	BundleModelResources        bool
+	BundleLocalModels           bool
 }
 
 // FactoryCore owns the normalized runtime graph assembled before transport
@@ -747,9 +747,9 @@ func (core *FactoryCore) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapsh
 		RuntimeBuildInitialized:     core.RuntimeBuild() != nil,
 		WorkersSchedulerInitialized: core.WorkersScheduler() != nil,
 		LocalModelsInitialized:      core.LocalModels().Manager != nil,
-		ModelAssetsInitialized:   core.ModelAssetPuller() != nil,
-		DefinitionsInitialized:   true,
-		HostedWorkersLoggerReady: core.HostedWorkers().Logger != nil,
+		ModelAssetsInitialized:      core.ModelAssetPuller() != nil,
+		DefinitionsInitialized:      true,
+		HostedWorkersLoggerReady:    core.HostedWorkers().Logger != nil,
 	}
 	if bundle != nil {
 		snapshot.BundleModelResources = bundle.ModelResources != nil
@@ -873,6 +873,9 @@ func ComposeFactoryCore(
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
 ) (*FactoryCore, error) {
+	if collaborators.WorkersScheduler == nil {
+		return nil, fmt.Errorf("compose factory core: worker sidecar owner is required")
+	}
 	if err := validateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -903,14 +906,14 @@ func ComposeFactoryCore(
 		return nil, err
 	}
 	defaultSessionSpec, err := collaborators.RuntimeBuild.BuildSpec(ctx, runtimebuild.SessionSpecInput{
-		Dir:                                   cfg.Dir,
-		FolderPath:                            root.FactoryRootDir,
-		SessionID:                             defaultFactorySessionID,
-		ExecutionBaseDir:                      cfg.ExecutionBaseDir,
-		LoadedFactoryCfg:                      load.LoadedFactoryCfg,
-		RuntimeInstanceID:                     cfg.RuntimeInstanceID,
-		SideEffects:                           replaySideEffects,
-		AdditionalFactoryOpts:                 replayFactoryOpts,
+		Dir:                                    cfg.Dir,
+		FolderPath:                             root.FactoryRootDir,
+		SessionID:                              defaultFactorySessionID,
+		ExecutionBaseDir:                       cfg.ExecutionBaseDir,
+		LoadedFactoryCfg:                       load.LoadedFactoryCfg,
+		RuntimeInstanceID:                      cfg.RuntimeInstanceID,
+		SideEffects:                            replaySideEffects,
+		AdditionalFactoryOpts:                  replayFactoryOpts,
 		PreserveCompatibilityDefaultRecordPath: true,
 	})
 	if err != nil {
@@ -957,17 +960,17 @@ func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
 		return nil
 	}
 	svc := &FactoryService{
-		core:           core,
-		factoryRootDir: core.FactoryRootDir(),
-		sessions:       core.Sessions(),
-		hostedWorkers:  core.HostedWorkers(),
-		policy:         serviceCoordinatorPolicyFromConfig(core.cfg),
-		startupBundle:  core.StartupBundle(),
-		cfg:            core.cfg,
-		modelAssets:    core.ModelAssetPuller(),
-		baseLogger:     core.BaseLogger(),
-		logger:         core.Logger(),
-		clock:          core.Clock(),
+		core:             core,
+		factoryRootDir:   core.FactoryRootDir(),
+		sessions:         core.Sessions(),
+		hostedWorkers:    core.HostedWorkers(),
+		policy:           serviceCoordinatorPolicyFromConfig(core.cfg),
+		startupBundle:    core.StartupBundle(),
+		cfg:              core.cfg,
+		modelAssets:      core.ModelAssetPuller(),
+		baseLogger:       core.BaseLogger(),
+		logger:           core.Logger(),
+		clock:            core.Clock(),
 		runtimeBuild:     core.RuntimeBuild(),
 		workersScheduler: core.WorkersScheduler(),
 	}

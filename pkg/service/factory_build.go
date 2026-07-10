@@ -36,12 +36,51 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
+
+// NewWorkersSchedulerService constructs the worker-sidecar owner at the
+// runtime composition boundary. Watcher paths must only use this initialized
+// instance and never reconstruct its dependencies.
+func NewWorkersSchedulerService(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	logger *zap.Logger,
+	hostedWorkers hostedworkers.Config,
+) *workersservice.Service {
+	supervisorClock := clockwork.NewRealClock()
+	if clockworkClock, ok := clock.(clockwork.Clock); ok && clockworkClock != nil {
+		supervisorClock = clockworkClock
+	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	runner := workers.CommandRunner(workers.ExecCommandRunner{})
+	workflowID := ""
+	defaultFactoryDir := ""
+	if cfg != nil {
+		if cfg.CommandRunnerOverride != nil {
+			runner = cfg.CommandRunnerOverride
+		}
+		workflowID = cfg.WorkflowID
+		defaultFactoryDir = cfg.Dir
+	}
+	return workersservice.New(workersservice.Config{
+		Logger:               logger,
+		Clock:                supervisorClock,
+		CommandRunner:        runner,
+		WorkflowID:           workflowID,
+		DefaultFactoryDir:    defaultFactoryDir,
+		HostedHTTPClient:     hostedWorkers.HTTPClient,
+		HostedSecretResolver: hostedWorkers.SecretResolver,
+		HostedLinearEndpoint: hostedWorkers.LinearEndpoint,
+	})
+}
 
 type runtimeBundleBuildInput struct {
 	dir                           string
@@ -1400,9 +1439,9 @@ func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryS
 		return FactoryServiceCollaborators{}
 	}
 	return FactoryServiceCollaborators{
-		Sessions:       core.Sessions(),
-		LocalModels:    core.LocalModels(),
-		RuntimeBuild:   core.RuntimeBuild(),
+		Sessions:         core.Sessions(),
+		LocalModels:      core.LocalModels(),
+		RuntimeBuild:     core.RuntimeBuild(),
 		WorkersScheduler: core.WorkersScheduler(),
 	}
 }

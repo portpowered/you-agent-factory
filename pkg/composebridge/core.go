@@ -51,6 +51,9 @@ func ComposeCore(
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
 ) (*runtimehost.Core, error) {
+	if collaborators.WorkersScheduler == nil {
+		return nil, fmt.Errorf("compose runtime host core: worker sidecar owner is required")
+	}
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
