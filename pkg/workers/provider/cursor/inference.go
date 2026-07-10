@@ -68,6 +68,16 @@ type ParseFailure struct {
 	Message         string
 	ProviderSession *interfaces.ProviderSessionMetadata
 	Cause           error
+	canonicalResult *FailureResult
+}
+
+// CanonicalResult returns the terminal failure result already produced while
+// parsing stdout, so provider boundaries do not classify the same record again.
+func (f *ParseFailure) CanonicalResult() (FailureResult, bool) {
+	if f == nil || f.canonicalResult == nil {
+		return FailureResult{}, false
+	}
+	return *f.canonicalResult, true
 }
 
 func (f *ParseFailure) Error() string {
@@ -125,6 +135,7 @@ func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
 		Type:            failure.Reason,
 		Message:         failure.Message,
 		ProviderSession: failure.ProviderSession,
+		canonicalResult: &failure,
 	}
 }
 

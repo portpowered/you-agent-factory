@@ -63,6 +63,45 @@ func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonica
 	}
 }
 
+func TestScriptWrapProvider_Infer_CursorZeroExitTerminalFailureCarriesCanonicalResultOnce(t *testing.T) {
+	stdout := []byte(
+		"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-initial-session\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"timeout\",\"is_error\":true,\"result\":\"Cursor terminal request timed out\",\"session_id\":\"cursor-final-session\"}\n",
+	)
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{
+			Stdout: stdout,
+			Stderr: []byte("unrelated authentication failed"),
+		}}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-zero-exit-failure"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeTimeout || providerErr.Message != "Cursor terminal request timed out" {
+		t.Fatalf("provider error = %#v, want canonical terminal timeout", providerErr)
+	}
+	if providerErr.ProviderSession == nil || providerErr.ProviderSession.ID != "cursor-final-session" {
+		t.Fatalf("provider session = %#v, want cursor-final-session", providerErr.ProviderSession)
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind || published[0].Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want one canonical failed marker", published)
+	}
+	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != providerErr.ProviderSession.ID {
+		t.Fatalf("published provider session = %#v, want final provider error session %#v", published[0].ProviderSessionRef, providerErr.ProviderSession)
+	}
+}
+
 func TestScriptWrapProvider_Infer_CursorMalformedStructuredOutputDoesNotPublishPromptText(t *testing.T) {
 	privatePrompt := "deploy production using the customer launch phrase"
 	stdout := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"` + privatePrompt + `"}]}`)

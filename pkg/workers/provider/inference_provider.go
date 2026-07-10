@@ -209,7 +209,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 			req.ModelProvider, result, err, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
-		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	if result.ExitCode != 0 {
@@ -220,7 +220,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 			req.ModelProvider, result, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
-		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
 
@@ -439,11 +439,8 @@ func (p *ScriptWrapProvider) completeCursorInference(
 		if providerSession == nil {
 			providerSession = effectiveProviderSession(req, result)
 		}
-		providerErr := cursorProviderError(
-			result, parseErr.Type, parseErr.Message, parseErr.Cause, providerSession, failureDiagnostics,
-		)
-		providerSession = providerErr.ProviderSession
-		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+		providerErr := cursorParseProviderError(result, parseErr, providerSession, failureDiagnostics)
+		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
@@ -460,6 +457,29 @@ func (p *ScriptWrapProvider) completeCursorInference(
 		ProviderSession: parsed.ProviderSession,
 		Diagnostics:     diagnostics,
 	}, nil
+}
+
+func cursorParseProviderError(
+	result CommandResult,
+	parseErr *cursorpkg.ParseFailure,
+	session *interfaces.ProviderSessionMetadata,
+	diagnostics *interfaces.WorkDiagnostics,
+) *ProviderError {
+	failure, canonical := parseErr.CanonicalResult()
+	if !canonical {
+		return cursorProviderError(
+			result, parseErr.Type, parseErr.Message, parseErr.Cause, session, diagnostics,
+		)
+	}
+	if failure.ProviderSession != nil {
+		session = failure.ProviderSession
+	}
+	return newProviderErrorFromResultWithDiagnostics(
+		ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
+		parseErr.Cause,
+		session,
+		diagnostics,
+	)
 }
 
 func (p *ScriptWrapProvider) publishCompletedFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata) {

@@ -30,7 +30,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresKeepCodexBehavior(t *testing.
 
 func TestScriptWrapProvider_Infer_CursorTerminalFailureUsesCanonicalResultAndDecision(t *testing.T) {
 	stdout := []byte(strings.Join([]string{
-		`{"type":"system","subtype":"init","session_id":"cursor-terminal-session"}`,
+		`{"type":"system","subtype":"init","session_id":"cursor-initial-session"}`,
 		`{"type":"assistant","message":{"content":[{"type":"text","text":"private transcript"}]}}`,
 		`{malformed}`,
 		`{"type":"result","subtype":"rate_limit_error","is_error":true,"result":"Cursor model capacity is busy","session_id":"cursor-terminal-session"}`,
