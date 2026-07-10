@@ -753,6 +753,58 @@ func TestGeneratedDispatchArtifactContracts_RuntimeTypesAgreeWithOpenAPI(t *test
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryArtifact{}), "AuditMode", reflect.TypeOf((*factoryapi.FactoryArtifactAuditMode)(nil)))
 }
 
+func TestOpenAPIAuthoring_FactorySessionRuntimeDispatchesRemainsOptionalArray(t *testing.T) {
+	data, err := os.ReadFile("../../../api/components/schemas/api/FactorySessionRuntime.yaml")
+	if err != nil {
+		t.Fatalf("read authored FactorySessionRuntime schema: %v", err)
+	}
+	var schema map[string]any
+	if err := yaml.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("parse authored FactorySessionRuntime schema: %v", err)
+	}
+
+	properties := schemaProperties(t, schema, "FactorySessionRuntime")
+	assertArrayItemRef(t, properties, "dispatches", "../data-models/FactoryDispatch.yaml")
+	required, ok := schema["required"].([]any)
+	if !ok {
+		t.Fatal("FactorySessionRuntime.required is missing")
+	}
+	if containsString(required, "dispatches") {
+		t.Fatal("FactorySessionRuntime.dispatches is required, want optional")
+	}
+}
+
+func TestGeneratedFactorySessionRuntimeDispatches_RemainsOptionalJSONField(t *testing.T) {
+	runtimeType := reflect.TypeOf(factoryapi.FactorySessionRuntime{})
+	field, ok := runtimeType.FieldByName("Dispatches")
+	if !ok {
+		t.Fatal("generated FactorySessionRuntime.Dispatches is missing")
+	}
+	if got := field.Tag.Get("json"); got != "dispatches,omitempty" {
+		t.Fatalf("generated FactorySessionRuntime.Dispatches JSON tag = %q, want dispatches,omitempty", got)
+	}
+
+	assertRuntimeDispatchesJSON := func(t *testing.T, runtime factoryapi.FactorySessionRuntime, wantPresent bool) {
+		t.Helper()
+		encoded, err := json.Marshal(runtime)
+		if err != nil {
+			t.Fatalf("marshal generated FactorySessionRuntime: %v", err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(encoded, &payload); err != nil {
+			t.Fatalf("unmarshal generated FactorySessionRuntime JSON: %v", err)
+		}
+		_, present := payload["dispatches"]
+		if present != wantPresent {
+			t.Fatalf("generated FactorySessionRuntime JSON dispatches presence = %t, want %t: %s", present, wantPresent, encoded)
+		}
+	}
+
+	assertRuntimeDispatchesJSON(t, factoryapi.FactorySessionRuntime{}, false)
+	dispatches := []factoryapi.FactoryDispatch{}
+	assertRuntimeDispatchesJSON(t, factoryapi.FactorySessionRuntime{Dispatches: &dispatches}, true)
+}
+
 func TestGeneratedDispatchArtifactContracts_SessionReadListDetailTypesAgreeWithOpenAPI(t *testing.T) {
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.ListFactorySessionDispatchesResponse{}), "Dispatches", reflect.TypeOf([]factoryapi.FactorySessionDispatchSummary{}))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.ListFactorySessionArtifactsResponse{}), "Artifacts", reflect.TypeOf([]factoryapi.FactorySessionArtifactSummary{}))
