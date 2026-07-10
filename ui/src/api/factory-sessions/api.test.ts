@@ -24,7 +24,6 @@ afterEach(() => {
 });
 
 describe("factory sessions API", () => {
-
   it("lists live factory sessions from the typed API surface", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -36,6 +35,10 @@ describe("factory sessions API", () => {
               id: "~default",
               isDefault: true,
               project: "alpha",
+              runtime: {
+                dispatches: [{ id: "dispatch-legacy" }],
+                orchestratorKind: "PETRI_NET",
+              },
               target: {
                 kind: "default",
               },
@@ -59,6 +62,9 @@ describe("factory sessions API", () => {
         id: "~default",
         isDefault: true,
         project: "alpha",
+        runtime: {
+          orchestratorKind: "PETRI_NET",
+        },
         target: {
           kind: "default",
         },
@@ -68,6 +74,7 @@ describe("factory sessions API", () => {
       "/factory-sessions",
       expect.objectContaining({ method: "GET" }),
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("posts folder and target selection when opening a factory session", async () => {
@@ -80,6 +87,10 @@ describe("factory sessions API", () => {
             id: "session-beta",
             isDefault: false,
             project: "beta",
+            runtime: {
+              dispatches: [{ id: "dispatch-legacy" }],
+              orchestratorKind: "JAVASCRIPT",
+            },
             target: {
               kind: "named",
               name: "beta",
@@ -120,6 +131,9 @@ describe("factory sessions API", () => {
         id: "session-beta",
         isDefault: false,
         project: "beta",
+        runtime: {
+          orchestratorKind: "JAVASCRIPT",
+        },
         target: {
           kind: "named",
           name: "beta",
@@ -151,6 +165,7 @@ describe("factory sessions API", () => {
         method: "POST",
       }),
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("posts validateOnly when checking a folder before launch", async () => {
@@ -783,6 +798,7 @@ describe("factory sessions read and durable API", () => {
         JSON.stringify({
           id: "session-beta",
           runtime: {
+            dispatches: [{ id: "dispatch-legacy" }],
             orchestratorKind: "JAVASCRIPT",
             streamGenerationID: "stream-gen-live-001",
           },
@@ -810,6 +826,7 @@ describe("factory sessions read and durable API", () => {
       "/factory-sessions/session-beta",
       expect.objectContaining({ method: "GET" }),
     );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("normalizes durable factory session reads into shared FactorySession runtime shape", async () => {

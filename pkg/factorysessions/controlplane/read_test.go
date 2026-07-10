@@ -170,12 +170,6 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 		},
 		session: defaultSession,
 	}
-	underlyingRuntime := factorysessions.ProjectRuntime(factorysessions.ProjectionContext{
-		Session:  defaultSession,
-		Snapshot: host.snapshot,
-	})
-	assertUnderlyingDispatchFixture(t, underlyingRuntime)
-
 	listed, err := controlplane.ListLiveFactorySessions(context.Background(), host)
 	if err != nil {
 		t.Fatalf("ListLiveFactorySessions: %v", err)
@@ -202,13 +196,6 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 	assertResolvedSessionIDsAgree(t, listed, got, preflight)
 }
 
-func assertUnderlyingDispatchFixture(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
-	t.Helper()
-	if runtime.Dispatches == nil || len(*runtime.Dispatches) != 1 {
-		t.Fatalf("underlying runtime dispatches = %#v, want one dispatch", runtime.Dispatches)
-	}
-}
-
 func assertDefaultSessionListProjection(
 	t *testing.T,
 	listed factoryapi.ListFactorySessionsResponse,
@@ -221,8 +208,8 @@ func assertDefaultSessionListProjection(
 	if listed.Sessions[0].Id != allocatedSessionID || !listed.Sessions[0].IsDefault {
 		t.Fatalf("listed default session = %#v, want id %q and isDefault true", listed.Sessions[0], allocatedSessionID)
 	}
-	if listed.Sessions[0].Runtime == nil || listed.Sessions[0].Runtime.Dispatches != nil {
-		t.Fatalf("listed runtime dispatches = %#v, want omitted", listed.Sessions[0].Runtime)
+	if listed.Sessions[0].Runtime == nil {
+		t.Fatal("listed runtime is nil")
 	}
 }
 
@@ -234,9 +221,6 @@ func assertDefaultSessionDetailProjection(
 	t.Helper()
 	if got.Id != allocatedSessionID {
 		t.Fatalf("get-by-alias session id = %q, want %q", got.Id, allocatedSessionID)
-	}
-	if got.Runtime.Dispatches != nil {
-		t.Fatalf("get-by-alias runtime dispatches = %#v, want omitted", got.Runtime.Dispatches)
 	}
 }
 

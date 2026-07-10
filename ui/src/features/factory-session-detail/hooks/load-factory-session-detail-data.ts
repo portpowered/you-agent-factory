@@ -1,5 +1,4 @@
 import {
-  type FactorySession,
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
   durableResultSurfacesFromResultsResponse,
@@ -21,14 +20,9 @@ export async function loadFactorySessionDetailData(
   sessionID: string,
 ): Promise<FactorySessionDetailData> {
   const normalized = await getFactorySession(sessionID);
-  let {
-    durableLifecycleStatus,
-    durableProgress,
-    partialResult,
-    result,
-    resultSummary,
-    session,
-  } = normalized;
+  const { durableLifecycleStatus, durableProgress, resultSummary, session } =
+    normalized;
+  let { partialResult, result } = normalized;
 
   if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
     return { durableLifecycleStatus, session };
@@ -52,29 +46,45 @@ export async function loadFactorySessionDetailData(
         fetchFinalResults: false,
         fetchPartialResults: false,
       };
+  const fetchDispatches = durableJavaScript
+    ? supplementalReads.fetchDispatches
+    : true;
 
-  const [dispatchList, liveResult, livePartialResult, durableFinalResult, durablePartialResult] =
-    await Promise.all([
-      supplementalReads.fetchDispatches
-        ? listFactorySessionDispatches(sessionID).catch(() => undefined)
-        : Promise.resolve(undefined),
-      durableJavaScript
-        ? Promise.resolve(undefined)
-        : getFactorySessionResult(sessionID).catch(() => undefined),
-      durableJavaScript
-        ? Promise.resolve(undefined)
-        : getFactorySessionPartialResult(sessionID).catch(() => undefined),
-      supplementalReads.fetchFinalResults
-        ? getFactorySessionDurableResults(sessionID, "final").catch(() => undefined)
-        : Promise.resolve(undefined),
-      supplementalReads.fetchPartialResults
-        ? getFactorySessionDurableResults(sessionID, "partial").catch(() => undefined)
-        : Promise.resolve(undefined),
-    ]);
+  const [
+    dispatchList,
+    liveResult,
+    livePartialResult,
+    durableFinalResult,
+    durablePartialResult,
+  ] = await Promise.all([
+    fetchDispatches
+      ? listFactorySessionDispatches(sessionID).catch(() => undefined)
+      : Promise.resolve(undefined),
+    durableJavaScript
+      ? Promise.resolve(undefined)
+      : getFactorySessionResult(sessionID).catch(() => undefined),
+    durableJavaScript
+      ? Promise.resolve(undefined)
+      : getFactorySessionPartialResult(sessionID).catch(() => undefined),
+    supplementalReads.fetchFinalResults
+      ? getFactorySessionDurableResults(sessionID, "final").catch(
+          () => undefined,
+        )
+      : Promise.resolve(undefined),
+    supplementalReads.fetchPartialResults
+      ? getFactorySessionDurableResults(sessionID, "partial").catch(
+          () => undefined,
+        )
+      : Promise.resolve(undefined),
+  ]);
 
-  if (dispatchList && dispatchList.dispatches.length > 0) {
-    session = mergeDispatchSummaries(session, dispatchList.dispatches);
-  }
+  const dispatches = dispatchList
+    ? dispatchSummariesToFactoryDispatches(
+        session.id,
+        session.runtime.orchestratorKind,
+        dispatchList.dispatches,
+      )
+    : undefined;
 
   if (!result) {
     result = resolveFactorySessionResult(
@@ -93,6 +103,7 @@ export async function loadFactorySessionDetailData(
   }
 
   return {
+    dispatches,
     durableLifecycleStatus,
     partialResult,
     result,
@@ -100,25 +111,10 @@ export async function loadFactorySessionDetailData(
   };
 }
 
-function mergeDispatchSummaries(
-  session: FactorySession,
-  dispatches: Parameters<typeof dispatchSummariesToFactoryDispatches>[2],
-): FactorySession {
-  return {
-    ...session,
-    runtime: {
-      ...session.runtime,
-      dispatches: dispatchSummariesToFactoryDispatches(
-        session.id,
-        session.runtime.orchestratorKind,
-        dispatches,
-      ),
-    },
-  };
-}
-
 function resolveFactorySessionResult(
-  durableFinalResult: Awaited<ReturnType<typeof getFactorySessionDurableResults>> | undefined,
+  durableFinalResult:
+    | Awaited<ReturnType<typeof getFactorySessionDurableResults>>
+    | undefined,
   liveResult: FactorySessionLiveResult | undefined,
   fallbackPhase?: string,
 ): FactorySessionLiveResult | undefined {
@@ -133,7 +129,9 @@ function resolveFactorySessionResult(
 }
 
 function resolveFactorySessionPartialResult(
-  durablePartialResult: Awaited<ReturnType<typeof getFactorySessionDurableResults>> | undefined,
+  durablePartialResult:
+    | Awaited<ReturnType<typeof getFactorySessionDurableResults>>
+    | undefined,
   livePartialResult: FactorySessionPartialResult | undefined,
   fallbackPhase?: string,
 ): FactorySessionPartialResult | undefined {

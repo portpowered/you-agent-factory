@@ -189,12 +189,8 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 			workDiagnosticsForInferenceRequest(req),
 		)
 	}
-	logger.Info("inferencer: request arguments",
-		workLogFields(req.Dispatch.Execution, "arguments", args)...)
 	execReq := behavior.BuildCommandRequest(req, args)
-
-	logger.Debug("inferencer: request input",
-		workLogFields(req.Dispatch.Execution, "request", req.UserMessage)...)
+	logger.Info("provider invocation prepared", providerPreparedLogFields(ctx, req, execReq)...)
 	started := time.Now()
 	result, err := p.commandExec().Run(ctx, execReq)
 	duration := time.Since(started)
@@ -202,24 +198,24 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	providerSession := effectiveProviderSession(req, result)
 	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
 	if err != nil {
-		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result,
-				"error", err.Error())...)
 		providerErr := normalizeProviderExecutionError(
 			req.ModelProvider, result, err, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
+		logger.Error("inferencer: request failed",
+			cursorFailureLogFields(req, cursorProvider, result, "has_error", true)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	if result.ExitCode != 0 {
-		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result,
-				"exit_code", result.ExitCode)...)
 		providerErr := normalizeProviderExitFailure(
 			req.ModelProvider, result, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
+		logger.Error("inferencer: request failed",
+			cursorFailureLogFields(req, cursorProvider, result, "exit_code", result.ExitCode)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
@@ -229,8 +225,6 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	}
 
 	content := string(result.Stdout)
-	logger.Debug("inference results:",
-		workLogFields(req.Dispatch.Execution, "output", result.Stdout)...)
 	logger.Info("inferencer: request completed",
 		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
@@ -292,9 +286,18 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 }
 
 func normalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	if provider == string(interfaces.ModelProviderCodex) {
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	switch normalizedProvider {
+	case string(interfaces.ModelProviderCodex):
 		return newProviderErrorFromResultWithDiagnostics(
 			ParseCodexProviderFailure(result),
+			nil,
+			session,
+			diagnostics,
+		)
+	case string(interfaces.ModelProviderOpenCode):
+		return newProviderErrorFromResultWithDiagnostics(
+			ParseOpenCodeProviderFailure(result),
 			nil,
 			session,
 			diagnostics,
@@ -349,20 +352,8 @@ func formatProviderTimeoutFailure(provider string, result CommandResult) string 
 }
 
 func cursorFailureLogFields(req interfaces.RunnerExecutionRequest, cursorProvider bool, result CommandResult, extra ...any) []any {
-	fields := workLogFields(req.Dispatch.Execution,
+	return workLogFields(req.Dispatch.Execution,
 		append([]any{"dispatcher", string(req.ModelProvider)}, extra...)...)
-	if !cursorProvider {
-		fields = append(fields,
-			"output", string(result.Stdout),
-			"stderr", string(result.Stderr),
-		)
-		return fields
-	}
-	fields = append(fields,
-		"stdout_preview", cursorpkg.BoundedCommandOutputExcerpt(result.Stdout, cursorpkg.CommandOutputLogPreviewLimit),
-		"stderr_preview", cursorpkg.BoundedCommandOutputExcerpt(result.Stderr, cursorpkg.CommandOutputLogPreviewLimit),
-	)
-	return fields
 }
 
 func cursorInferenceFailureDiagnostics(
@@ -399,13 +390,10 @@ func (p *ScriptWrapProvider) completeCursorInference(
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
-	logger.Debug("inference results:",
-		workLogFields(req.Dispatch.Execution, "output", parsed.Content)...)
 	logger.Info("inferencer: request completed",
 		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
-			"output_len", len(parsed.Content),
-			"session_id", parsed.ProviderSession.ID)...)
+			"output_len", len(parsed.Content))...)
 	p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
 	return interfaces.InferenceResponse{
 		Content:         parsed.Content,

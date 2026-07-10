@@ -37,7 +37,9 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
       if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}`)) {
         return jsonResponse(buildSuccessfulDurableSession());
       }
-      if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)) {
+      if (
+        url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)
+      ) {
         return new Response(buildSuccessfulReplayEventStream(), {
           headers: {
             "Content-Type": "text/event-stream",
@@ -66,9 +68,7 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
     await user.click(replayTrigger);
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Showing 5 Factory Events."),
-      ).toBeTruthy();
+      expect(screen.getByText("Showing 5 Factory Events.")).toBeTruthy();
     });
 
     expect(replayTrigger.getAttribute("aria-expanded")).toBe("true");
@@ -76,10 +76,14 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
     expect(screen.getByText("Phase changed")).toBeTruthy();
     expect(screen.getByText("Review work scheduled.")).toBeTruthy();
     expect(screen.getByText("Dispatch queued")).toBeTruthy();
-    expect(screen.getByText("Draft release notes · Queue position 1")).toBeTruthy();
+    expect(
+      screen.getByText("Draft release notes · Queue position 1"),
+    ).toBeTruthy();
     expect(screen.getByText("Dispatch reconciled")).toBeTruthy();
     expect(screen.getByText("Dispatch status completed")).toBeTruthy();
-    expect(screen.getAllByText(/artifact-release-notes/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/artifact-release-notes/).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Session completed")).toBeTruthy();
     expect(screen.getByText("Lifecycle status succeeded")).toBeTruthy();
     expect(screen.getByText("Dispatch Queued")).toBeTruthy();
@@ -134,7 +138,9 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
 
     expect(screen.getByText("Checkpoint before publish")).toBeTruthy();
     expect(screen.getByText("Dispatch interrupted")).toBeTruthy();
-    expect(screen.getByText("Provider session timed out · Retry planned")).toBeTruthy();
+    expect(
+      screen.getByText("Provider session timed out · Retry planned"),
+    ).toBeTruthy();
     expect(screen.getByText("Session completed")).toBeTruthy();
     expect(screen.getByText("Release verification failed.")).toBeTruthy();
     expect(
@@ -180,9 +186,7 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
 
     expect(screen.getByText("Session started")).toBeTruthy();
     expect(screen.getByText("Session result updated")).toBeTruthy();
-    expect(
-      screen.getByText("Result status not ready"),
-    ).toBeTruthy();
+    expect(screen.getByText("Result status not ready")).toBeTruthy();
     expect(screen.getAllByText("Phase approval").length).toBe(2);
   });
 
@@ -196,7 +200,6 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
         project: "beta",
         runtime: {
           artifacts: [],
-          dispatches: [],
           javascript: {
             checkpoints: [],
             childDispatchCounts: {

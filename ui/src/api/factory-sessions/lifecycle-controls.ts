@@ -13,6 +13,8 @@ export type FactorySessionApproveRequest =
   components["schemas"]["FactorySessionApproveRequest"];
 export type FactorySessionRetryDispatchRequest =
   components["schemas"]["FactorySessionRetryDispatchRequest"];
+export type FactorySessionInterruptDispatchRequest =
+  components["schemas"]["FactorySessionInterruptDispatchRequest"];
 export type FactorySessionLifecycleControlResponse =
   components["schemas"]["FactorySessionLifecycleControlResponse"];
 
@@ -38,7 +40,12 @@ export async function pauseFactorySession(
   request: FactorySessionLifecycleControlRequest = {},
   options: FactorySessionLifecycleControlOptions = {},
 ): Promise<FactorySessionLifecycleControlResponse> {
-  return postFactorySessionLifecycleControl(sessionID, "/pause", request, options);
+  return postFactorySessionLifecycleControl(
+    sessionID,
+    "/pause",
+    request,
+    options,
+  );
 }
 
 export async function resumeFactorySession(
@@ -93,11 +100,25 @@ export async function retryFactorySessionDispatch(
   );
 }
 
+export async function interruptFactorySessionDispatch(
+  sessionID: string,
+  request: FactorySessionInterruptDispatchRequest,
+  options: FactorySessionLifecycleControlOptions = {},
+): Promise<FactorySessionLifecycleControlResponse> {
+  return postFactorySessionLifecycleControl(
+    sessionID,
+    "/interrupt-dispatch",
+    request,
+    options,
+  );
+}
+
 async function postFactorySessionLifecycleControl(
   sessionID: string,
   actionPath: string,
   request:
     | FactorySessionApproveRequest
+    | FactorySessionInterruptDispatchRequest
     | FactorySessionLifecycleControlRequest
     | FactorySessionRetryDispatchRequest,
   options: FactorySessionLifecycleControlOptions,

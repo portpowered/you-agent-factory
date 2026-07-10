@@ -140,3 +140,171 @@ func (s *catalogModelServiceStub) InvokeModel(ctx context.Context, modelName str
 	s.requests = append(s.requests, request)
 	return s.invokeResult, s.invokeErr
 }
+
+type compatibilitySessionGateway struct {
+	SessionGateway
+	getFactorySession func(context.Context, string) (factoryapi.FactorySession, error)
+}
+
+func (f compatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	return f.getFactorySession(ctx, sessionID)
+}
+
+type compatibilityModelAPI struct {
+	apisurface.ModelAPI
+	getModel func(context.Context, string) (factoryapi.ModelDetail, error)
+}
+
+func (f compatibilityModelAPI) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	return f.getModel(ctx, modelName)
+}
+
+type compatibilityFactorySave struct {
+	save func(context.Context, string, factoryapi.FactorySaveMode, factoryapi.Factory) (factoryapi.Factory, error)
+}
+
+func (f compatibilityFactorySave) Save(ctx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+	return f.save(ctx, sessionID, mode, request)
+}
+
+type compatibilityInvocationAPI struct {
+	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+}
+
+func (f compatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	return f.invoke(ctx, sessionID, request)
+}
+
+type compatibilityDurableExecutionAPI struct {
+	apisurface.DurableSessionAPI
+	startAsync func(context.Context, factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error)
+	pause      func(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+}
+
+func (f compatibilityDurableExecutionAPI) PauseDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return f.pause(ctx, sessionID, request)
+}
+
+func (f compatibilityDurableExecutionAPI) StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+	return f.startAsync(ctx, request)
+}
+
+func TestHostCompatibilityFacadeForwardsToCanonicalCollaborators(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(context.Background(), struct{}{}, "compatibility-context")
+	sentinel := errors.New("typed collaborator outcome")
+	requestFactory := factoryapi.Factory{Name: "submitted"}
+	calls := map[string]int{}
+
+	host := &Host{}
+	host.sessionGateway = compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+		calls["session"]++
+		if gotCtx != ctx || sessionID != "missing-session" {
+			t.Fatalf("session args = (%v, %q)", gotCtx, sessionID)
+		}
+		return factoryapi.FactorySession{}, sentinel
+	}}
+	host.modelService = compatibilityModelAPI{getModel: func(gotCtx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+		calls["model"]++
+		if gotCtx != ctx || modelName != "missing-model" {
+			t.Fatalf("model args = (%v, %q)", gotCtx, modelName)
+		}
+		return factoryapi.ModelDetail{}, sentinel
+	}}
+	host.factorySave = compatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+		calls["factory-definition"]++
+		if gotCtx != ctx || sessionID != "session-1" || mode != factoryapi.FactorySaveModeReplaceCurrent || request.Name != requestFactory.Name {
+			t.Fatalf("factory-definition args = (%v, %q, %q, %#v)", gotCtx, sessionID, mode, request)
+		}
+		return factoryapi.Factory{}, sentinel
+	}}
+	host.sessionInvoker = compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		calls["invocation"]++
+		if gotCtx != ctx || sessionID != "session-1" {
+			t.Fatalf("invocation args = (%v, %q, %#v)", gotCtx, sessionID, request)
+		}
+		return apisurface.FactoryInvocationResult{}, sentinel
+	}}
+	host.durableExecutionAPI = compatibilityDurableExecutionAPI{startAsync: func(gotCtx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+		calls["durable-execution"]++
+		if gotCtx != ctx {
+			t.Fatalf("durable context was not preserved")
+		}
+		return factoryapi.FactorySessionExecutionResponse{}, sentinel
+	}}
+
+	_, sessionErr := host.GetFactorySession(ctx, "missing-session")
+	_, modelErr := host.GetModel(ctx, "missing-model")
+	_, definitionErr := host.SaveFactoryForSession(ctx, "session-1", factoryapi.FactorySaveModeReplaceCurrent, requestFactory)
+	_, invocationErr := host.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{})
+	_, durableErr := host.StartDurableFactorySessionAsync(ctx, factoryapi.FactorySessionExecutionRequest{})
+	for role, err := range map[string]error{"session": sessionErr, "model": modelErr, "factory-definition": definitionErr, "invocation": invocationErr, "durable-execution": durableErr} {
+		if !errors.Is(err, sentinel) || calls[role] != 1 {
+			t.Errorf("%s result = (%v, %d calls), want unchanged error and one call", role, err, calls[role])
+		}
+	}
+}
+
+func TestHostCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(context.Background(), struct{ name string }{"typed"}, "outcomes")
+	notFound := errors.New("missing host session")
+	validation := &apisurface.RequestValidationError{Message: "invalid factory definition"}
+	wantInvocation := apisurface.FactoryInvocationResult{
+		RequestID: "request-typed", TraceID: "trace-typed",
+		Status: factoryapi.InvocationTerminalStatusCompleted,
+	}
+	wantLifecycle := factoryapi.FactorySessionLifecycleControlResponse{
+		SessionId: "durable-1", Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+		Status: factoryapi.FactorySessionDurableLifecycleStatusPaused,
+	}
+	calls := map[string]int{}
+
+	host := &Host{
+		sessionGateway: compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+			calls["not-found"]++
+			requireHostCompatibility(t, gotCtx == ctx && sessionID == "missing", "session args = (%v, %q)", gotCtx, sessionID)
+			return factoryapi.FactorySession{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
+		}},
+		factorySave: compatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+			calls["validation"]++
+			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1" && mode == factoryapi.FactorySaveModeReplaceCurrent, "factory-definition args = (%v, %q, %q)", gotCtx, sessionID, mode)
+			return factoryapi.Factory{}, validation
+		}},
+		sessionInvoker: compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+			calls["invocation"]++
+			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1", "invocation args = (%v, %q)", gotCtx, sessionID)
+			return wantInvocation, nil
+		}},
+	}
+	host.durableExecutionAPI = compatibilityDurableExecutionAPI{pause: func(gotCtx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		calls["lifecycle"]++
+		requireHostCompatibility(t, gotCtx == ctx && sessionID == "durable-1", "lifecycle args = (%v, %q)", gotCtx, sessionID)
+		return wantLifecycle, nil
+	}}
+
+	_, sessionErr := host.GetFactorySession(ctx, "missing")
+	_, validationErr := host.SaveFactoryForSession(ctx, "session-1", factoryapi.FactorySaveModeReplaceCurrent, factoryapi.Factory{})
+	invocation, invocationErr := host.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{})
+	lifecycle, lifecycleErr := host.PauseDurableFactorySession(ctx, "durable-1", factoryapi.FactorySessionLifecycleControlRequest{})
+	requireHostCompatibility(t, errors.Is(sessionErr, apisurface.ErrFactorySessionNotFound) && errors.Is(sessionErr, notFound), "session error = %v, want typed not-found", sessionErr)
+	var gotValidation *apisurface.RequestValidationError
+	requireHostCompatibility(t, errors.As(validationErr, &gotValidation) && gotValidation == validation, "validation error = %#v, want unchanged %#v", validationErr, validation)
+	requireHostCompatibility(t, invocationErr == nil && reflect.DeepEqual(invocation, wantInvocation), "invocation = (%#v, %v), want %#v", invocation, invocationErr, wantInvocation)
+	requireHostCompatibility(t, lifecycleErr == nil && reflect.DeepEqual(lifecycle, wantLifecycle), "lifecycle = (%#v, %v), want %#v", lifecycle, lifecycleErr, wantLifecycle)
+	for outcome, count := range calls {
+		requireHostCompatibility(t, count == 1, "%s calls = %d, want 1", outcome, count)
+	}
+}
+
+func requireHostCompatibility(t *testing.T, condition bool, format string, args ...any) {
+	t.Helper()
+	if !condition {
+		t.Fatalf(format, args...)
+	}
+}
+
+var _ apisurface.APISurface = (*Host)(nil)
+var _ apisurface.SessionAPISurface = (*Host)(nil)

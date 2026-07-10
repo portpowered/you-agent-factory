@@ -19,7 +19,6 @@ function createIdleJavaScriptSessionRuntime(
   overrides?: { scriptStatus?: string; status?: string },
 ) {
   return {
-    dispatches,
     javascript: {
       childDispatchCounts: {
         completed: dispatches.length,
@@ -57,6 +56,13 @@ function createSessionPayload(runtime: unknown) {
   };
 }
 
+function dispatchListResponse(dispatches: unknown[]) {
+  return jsonResponse({
+    dispatches,
+    sessionId: DISPATCH_DETAIL_SESSION_ID,
+  });
+}
+
 export function mockSuccessfulDispatchDetailFetch() {
   vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
     const url = String(input);
@@ -80,6 +86,18 @@ export function mockSuccessfulDispatchDetailFetch() {
       url.endsWith(`/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}/result`)
     ) {
       return new Response("not found", { status: 404 });
+    }
+    if (
+      url.endsWith(`/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}/dispatches`)
+    ) {
+      return dispatchListResponse([
+        {
+          dispatchKind: "JAVASCRIPT_AGENT",
+          id: DISPATCH_SUCCESS_ID,
+          label: "Draft response",
+          status: "COMPLETED",
+        },
+      ]);
     }
     if (
       url.endsWith(
@@ -153,6 +171,17 @@ export function mockFailedDispatchDetailFetch() {
       return new Response("not found", { status: 404 });
     }
     if (
+      url.endsWith(`/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}/dispatches`)
+    ) {
+      return dispatchListResponse([
+        {
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          id: DISPATCH_FAILED_ID,
+          status: "FAILED",
+        },
+      ]);
+    }
+    if (
       url.endsWith(
         `/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}/partial-result`,
       )
@@ -219,6 +248,23 @@ export function mockWarningDispatchDetailFetch() {
       return new Response("not found", { status: 404 });
     }
     if (
+      url.endsWith(`/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}/dispatches`)
+    ) {
+      return dispatchListResponse([
+        {
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          id: DISPATCH_WARNING_ID,
+          status: "COMPLETED",
+          warnings: [
+            {
+              code: "DISPATCH_WARNING",
+              message: "Verification completed with non-blocking warnings.",
+            },
+          ],
+        },
+      ]);
+    }
+    if (
       url.endsWith(
         `/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}/partial-result`,
       )
@@ -260,71 +306,6 @@ export function mockDispatchDetailBoundaryFetch() {
     if (url.endsWith(`/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}`)) {
       return jsonResponse(
         createSessionPayload({
-          dispatches: [
-            {
-              dispatchKind: "JAVASCRIPT_AGENT",
-              id: DISPATCH_SUCCESS_ID,
-              javascript: {
-                executionMode: "live",
-                taskKind: "AGENT",
-                taskLabel: "Review child task",
-              },
-              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-              providerSessionRefs: [
-                {
-                  id: "provider-session-1",
-                  kind: "session_id",
-                  provider: "codex",
-                },
-              ],
-              sessionId: DISPATCH_DETAIL_SESSION_ID,
-              status: "COMPLETED",
-              warnings: [
-                {
-                  code: "DISPATCH_WARNING",
-                  message: "Token budget was nearly exhausted.",
-                },
-              ],
-            },
-            {
-              dispatchKind: "JAVASCRIPT_AGENT",
-              id: DISPATCH_MISSING_ID,
-              javascript: {
-                executionMode: "live",
-                taskKind: "AGENT",
-                taskLabel: "Missing child detail",
-              },
-              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-              providerSessionRefs: [
-                {
-                  id: "provider-session-2",
-                  kind: "session_id",
-                  provider: "codex",
-                },
-              ],
-              sessionId: DISPATCH_DETAIL_SESSION_ID,
-              status: "FAILED",
-            },
-            {
-              dispatchKind: "JAVASCRIPT_AGENT",
-              id: DISPATCH_ERROR_ID,
-              javascript: {
-                executionMode: "live",
-                taskKind: "AGENT",
-                taskLabel: "Errored child detail",
-              },
-              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-              providerSessionRefs: [
-                {
-                  id: "provider-session-3",
-                  kind: "session_id",
-                  provider: "codex",
-                },
-              ],
-              sessionId: DISPATCH_DETAIL_SESSION_ID,
-              status: "FAILED",
-            },
-          ],
           javascript: {
             childDispatchCounts: {
               completed: 1,
@@ -363,6 +344,69 @@ export function mockDispatchDetailBoundaryFetch() {
         sessionId: DISPATCH_DETAIL_SESSION_ID,
         status: "IDLE",
       });
+    }
+    if (
+      url.endsWith(`/factory-sessions/${DISPATCH_DETAIL_SESSION_ID}/dispatches`)
+    ) {
+      return dispatchListResponse([
+        {
+          dispatchKind: "JAVASCRIPT_AGENT",
+          id: DISPATCH_SUCCESS_ID,
+          javascript: {
+            executionMode: "live",
+            taskKind: "AGENT",
+            taskLabel: "Review child task",
+          },
+          providerSessionRefs: [
+            {
+              id: "provider-session-1",
+              kind: "session_id",
+              provider: "codex",
+            },
+          ],
+          status: "COMPLETED",
+          warnings: [
+            {
+              code: "DISPATCH_WARNING",
+              message: "Token budget was nearly exhausted.",
+            },
+          ],
+        },
+        {
+          dispatchKind: "JAVASCRIPT_AGENT",
+          id: DISPATCH_MISSING_ID,
+          javascript: {
+            executionMode: "live",
+            taskKind: "AGENT",
+            taskLabel: "Missing child detail",
+          },
+          providerSessionRefs: [
+            {
+              id: "provider-session-2",
+              kind: "session_id",
+              provider: "codex",
+            },
+          ],
+          status: "FAILED",
+        },
+        {
+          dispatchKind: "JAVASCRIPT_AGENT",
+          id: DISPATCH_ERROR_ID,
+          javascript: {
+            executionMode: "live",
+            taskKind: "AGENT",
+            taskLabel: "Errored child detail",
+          },
+          providerSessionRefs: [
+            {
+              id: "provider-session-3",
+              kind: "session_id",
+              provider: "codex",
+            },
+          ],
+          status: "FAILED",
+        },
+      ]);
     }
     if (
       url.endsWith(

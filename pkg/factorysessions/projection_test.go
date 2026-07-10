@@ -507,7 +507,7 @@ func assertJavaScriptSessionRuntimeFields(t *testing.T, javascript *factoryapi.F
 		t.Fatalf("child dispatch counts = %#v", javascript.ChildDispatchCounts)
 	}
 }
-func TestProjectRuntime_PetriTransitionDispatchProjection(t *testing.T) {
+func TestSessionResponse_PetriRuntimeOmitsDispatchesWhenCanonicalStateExists(t *testing.T) {
 	now := time.Date(2026, 6, 8, 16, 0, 0, 0, time.UTC)
 	token := &interfaces.Token{
 		ID:      "tok-1",
@@ -521,6 +521,7 @@ func TestProjectRuntime_PetriTransitionDispatchProjection(t *testing.T) {
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  "RUNNING",
+		InFlightCount: 1,
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"dispatch-petri-1": {
 				DispatchID:      "dispatch-petri-1",
@@ -539,7 +540,7 @@ func TestProjectRuntime_PetriTransitionDispatchProjection(t *testing.T) {
 			},
 		},
 	}
-	runtime := ProjectRuntime(ProjectionContext{
+	session := SessionResponse(ProjectionContext{
 		Session: &LiveSession{ID: "~default"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "legacy-petri",
@@ -547,30 +548,15 @@ func TestProjectRuntime_PetriTransitionDispatchProjection(t *testing.T) {
 		Snapshot: snapshot,
 		Now:      now,
 	})
-	if runtime.Dispatches == nil || len(*runtime.Dispatches) != 1 {
-		t.Fatalf("dispatches = %#v, want one Petri transition dispatch", runtime.Dispatches)
-	}
-	dispatch := (*runtime.Dispatches)[0]
-	if dispatch.DispatchKind != factoryapi.FactoryDispatchKindPETRITRANSITION {
-		t.Fatalf("dispatch kind = %q, want PETRI_TRANSITION", dispatch.DispatchKind)
-	}
-	if dispatch.Status != factoryapi.FactoryDispatchStatusRUNNING {
-		t.Fatalf("dispatch status = %q, want RUNNING", dispatch.Status)
-	}
-	if dispatch.Petri == nil || dispatch.Petri.TransitionId != "tr-process" {
-		t.Fatalf("petri projection = %#v, want tr-process", dispatch.Petri)
-	}
-	if dispatch.Javascript != nil {
-		t.Fatalf("javascript projection = %#v, want nil for Petri dispatch", dispatch.Javascript)
-	}
-	if dispatch.RelatedWorkIds == nil || len(*dispatch.RelatedWorkIds) != 1 || (*dispatch.RelatedWorkIds)[0] != "work-1" {
-		t.Fatalf("related work ids = %#v, want work-1", dispatch.RelatedWorkIds)
+	assertRuntimeJSONOmitsDispatches(t, session.Runtime)
+	if session.Runtime.Progress.InFlightCount != 1 {
+		t.Fatalf("in-flight count = %d, want 1", session.Runtime.Progress.InFlightCount)
 	}
 }
 
-func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *testing.T) {
+func TestSessionResponse_JavaScriptRuntimeOmitsDispatchesAndPreservesArtifacts(t *testing.T) {
 	now := time.Date(2026, 6, 8, 16, 5, 0, 0, time.UTC)
-	runtime := ProjectRuntime(ProjectionContext{
+	session := SessionResponse(ProjectionContext{
 		Session: &LiveSession{ID: "session-js"},
 		FactoryCfg: &interfaces.FactoryConfig{
 			Name: "dynamic-workflow",
@@ -618,29 +604,22 @@ func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *tes
 		},
 		Now: now,
 	})
-	assertJavaScriptChildAgentDispatchProjection(t, runtime)
+	assertRuntimeJSONOmitsDispatches(t, session.Runtime)
+	assertJavaScriptChildResultArtifact(t, session.Runtime.Artifacts)
 }
 
-func assertJavaScriptChildAgentDispatchProjection(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
+func assertRuntimeJSONOmitsDispatches(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
 	t.Helper()
-	assertJavaScriptChildAgentDispatch(t, runtime.Dispatches)
-	assertJavaScriptChildResultArtifact(t, runtime.Artifacts)
-}
-
-func assertJavaScriptChildAgentDispatch(t *testing.T, dispatches *[]factoryapi.FactoryDispatch) {
-	t.Helper()
-	if dispatches == nil || len(*dispatches) != 1 {
-		t.Fatalf("dispatches = %#v, want one JavaScript child-agent dispatch", dispatches)
+	encoded, err := json.Marshal(runtime)
+	if err != nil {
+		t.Fatalf("marshal runtime: %v", err)
 	}
-	dispatch := (*dispatches)[0]
-	if dispatch.DispatchKind != factoryapi.FactoryDispatchKindJAVASCRIPTAGENT {
-		t.Fatalf("dispatch kind = %q, want JAVASCRIPT_AGENT", dispatch.DispatchKind)
+	var payload map[string]any
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		t.Fatalf("unmarshal runtime: %v", err)
 	}
-	if dispatch.Petri != nil {
-		t.Fatalf("petri projection = %#v, want nil for JavaScript dispatch", dispatch.Petri)
-	}
-	if dispatch.Javascript == nil || dispatch.Javascript.TaskKind != factoryapi.FactoryDispatchJavaScriptTaskKindAGENT {
-		t.Fatalf("javascript projection = %#v, want AGENT task kind", dispatch.Javascript)
+	if _, ok := payload["dispatches"]; ok {
+		t.Fatalf("runtime JSON contains dispatches: %s", encoded)
 	}
 }
 
