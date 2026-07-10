@@ -134,6 +134,8 @@ type Host struct {
 	clock                    factory.Clock
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
+	invocationAPI            apisurface.InvocationAPI
+	durableExecutionAPI      apisurface.DurableSessionExecutionAPI
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
@@ -150,6 +152,18 @@ var _ apisurface.SessionAPI = (*Host)(nil)
 var _ apisurface.WorkAPI = (*Host)(nil)
 var _ apisurface.APISurface = (*Host)(nil)
 var _ apisurface.SessionAPISurface = (*Host)(nil)
+
+// InvocationAPI returns the canonical invocation collaborator used by the
+// compatibility facade and composed HTTP surface.
+func (h *Host) InvocationAPI() apisurface.InvocationAPI {
+	return h.requireInvocationAPI()
+}
+
+// DurableExecutionAPI returns the canonical durable-start collaborator used by
+// the compatibility facade and composed HTTP surface.
+func (h *Host) DurableExecutionAPI() apisurface.DurableSessionAPI {
+	return durableSessionAPI{host: h}
+}
 
 type RuntimeFileLoggingPolicy string
 

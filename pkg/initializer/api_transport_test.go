@@ -74,6 +74,12 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	if _, ok := surface.(apisurface.SessionAPISurface); !ok {
 		t.Fatal("expected SessionAPISurface implementation")
 	}
+	if _, ok := surface.(apisurface.DurableSessionLifecycleAPI); !ok {
+		t.Fatal("expected composed surface to preserve durable lifecycle routes")
+	}
+	if _, ok := surface.(apisurface.DurableSessionProjectionAPI); !ok {
+		t.Fatal("expected composed surface to preserve durable projection routes")
+	}
 	if _, ok := surface.(*runtimehost.Host); ok {
 		t.Fatal("API transport surface must not be the runtime lifecycle host")
 	}

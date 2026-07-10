@@ -62,15 +62,15 @@ func (h *SessionRuntimeHost) InvocationAPI() apisurface.InvocationAPI {
 	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.host
+	return h.host.InvocationAPI()
 }
 
 // DurableExecutionAPI returns the durable execution collaborator.
-func (h *SessionRuntimeHost) DurableExecutionAPI() apisurface.DurableSessionExecutionAPI {
+func (h *SessionRuntimeHost) DurableExecutionAPI() apisurface.DurableSessionAPI {
 	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.host
+	return h.host.DurableExecutionAPI()
 }
 
 // Run starts service-mode sidecars and the default session runtime loop.

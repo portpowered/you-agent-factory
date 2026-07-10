@@ -20,8 +20,8 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -1418,6 +1418,13 @@ func (fs *FactoryService) StartDurableFactorySessionAsync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionExecutionResponse, error) {
+	return fs.requireDurableExecutionAPI().StartDurableFactorySessionAsync(ctx, request)
+}
+
+func (fs *FactoryService) startDurableFactorySessionAsync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionExecutionResponse, error) {
 	startReq, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionExecutionResponse{}, err
@@ -1433,6 +1440,13 @@ func (fs *FactoryService) StartDurableFactorySessionSync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	return fs.requireDurableExecutionAPI().StartDurableFactorySessionSync(ctx, request)
+}
+
+func (fs *FactoryService) startDurableFactorySessionSync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
 	startReq, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
@@ -1442,6 +1456,34 @@ func (fs *FactoryService) StartDurableFactorySessionSync(
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
 	}
 	return factorysession.SyncStartResponseToAPI(result), nil
+}
+
+type durableExecutionAPI struct {
+	service *FactoryService
+}
+
+func (api durableExecutionAPI) StartDurableFactorySessionAsync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionExecutionResponse, error) {
+	return api.service.startDurableFactorySessionAsync(ctx, request)
+}
+
+func (api durableExecutionAPI) StartDurableFactorySessionSync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	return api.service.startDurableFactorySessionSync(ctx, request)
+}
+
+func (fs *FactoryService) requireDurableExecutionAPI() apisurface.DurableSessionExecutionAPI {
+	if fs == nil {
+		return durableExecutionAPI{}
+	}
+	if fs.durableExecutionAPI != nil {
+		return fs.durableExecutionAPI
+	}
+	return durableExecutionAPI{service: fs}
 }
 
 func (fs *FactoryService) durableExecutionService() factorysessionexecution.Service {

@@ -13,8 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -22,13 +22,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"os"
@@ -1059,14 +1059,14 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	}
 
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		RuntimeMode:       interfaces.RuntimeModeService,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-		RuntimeLogDir:     runtimeLogDir,
-		RuntimeMetricsDir: runtimeMetricsDir,
-		RecordPath:        options.recordPath,
-		ExtraOptions:      options.extraOptions,
+		Dir:                 rootDir,
+		RuntimeMode:         interfaces.RuntimeModeService,
+		MockWorkersConfig:   config.NewEmptyMockWorkersConfig(),
+		Logger:              zap.NewNop(),
+		RuntimeLogDir:       runtimeLogDir,
+		RuntimeMetricsDir:   runtimeMetricsDir,
+		RecordPath:          options.recordPath,
+		ExtraOptions:        options.extraOptions,
 		SystemConfigHomeDir: t.TempDir(),
 	})
 	if err != nil {
@@ -4976,3 +4976,106 @@ func testModelHostMetricsAndDiagnosticsBranches(t *testing.T) {
 		t.Fatalf("modelHostDiagnostics = %#v, want logger and metrics", diagnostics)
 	}
 }
+
+type serviceCompatibilitySessionGateway struct {
+	sessionGateway
+	getFactorySession func(context.Context, string) (factoryapi.FactorySession, error)
+}
+
+func (f serviceCompatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	return f.getFactorySession(ctx, sessionID)
+}
+
+type serviceCompatibilityModelAPI struct {
+	apisurface.ModelAPI
+	getModel func(context.Context, string) (factoryapi.ModelDetail, error)
+}
+
+func (f serviceCompatibilityModelAPI) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	return f.getModel(ctx, modelName)
+}
+
+type serviceCompatibilityFactorySave struct {
+	save func(context.Context, string, factoryapi.FactorySaveMode, factoryapi.Factory) (factoryapi.Factory, error)
+}
+
+func (f serviceCompatibilityFactorySave) Save(ctx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+	return f.save(ctx, sessionID, mode, request)
+}
+
+type serviceCompatibilityInvocationAPI struct {
+	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+}
+
+func (f serviceCompatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	return f.invoke(ctx, sessionID, request)
+}
+
+type serviceCompatibilityDurableExecutionAPI struct {
+	apisurface.DurableSessionExecutionAPI
+	startAsync func(context.Context, factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error)
+}
+
+func (f serviceCompatibilityDurableExecutionAPI) StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+	return f.startAsync(ctx, request)
+}
+
+func TestFactoryServiceCompatibilityFacadeForwardsToCanonicalCollaborators(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(context.Background(), struct{}{}, "compatibility-context")
+	sentinel := errors.New("typed collaborator outcome")
+	requestFactory := factoryapi.Factory{Name: "submitted"}
+	calls := map[string]int{}
+
+	service := &FactoryService{}
+	service.sessionGateway = serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+		calls["session"]++
+		if gotCtx != ctx || sessionID != "missing-session" {
+			t.Fatalf("session args = (%v, %q)", gotCtx, sessionID)
+		}
+		return factoryapi.FactorySession{}, sentinel
+	}}
+	service.modelService = serviceCompatibilityModelAPI{getModel: func(gotCtx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+		calls["model"]++
+		if gotCtx != ctx || modelName != "missing-model" {
+			t.Fatalf("model args = (%v, %q)", gotCtx, modelName)
+		}
+		return factoryapi.ModelDetail{}, sentinel
+	}}
+	service.factorySave = serviceCompatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+		calls["factory-definition"]++
+		if gotCtx != ctx || sessionID != "session-1" || mode != factoryapi.FactorySaveModeReplaceCurrent || request.Name != requestFactory.Name {
+			t.Fatalf("factory-definition args = (%v, %q, %q, %#v)", gotCtx, sessionID, mode, request)
+		}
+		return factoryapi.Factory{}, sentinel
+	}}
+	service.invocationAPI = serviceCompatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		calls["invocation"]++
+		if gotCtx != ctx || sessionID != "session-1" {
+			t.Fatalf("invocation args = (%v, %q, %#v)", gotCtx, sessionID, request)
+		}
+		return apisurface.FactoryInvocationResult{}, sentinel
+	}}
+	service.durableExecutionAPI = serviceCompatibilityDurableExecutionAPI{startAsync: func(gotCtx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+		calls["durable-execution"]++
+		if gotCtx != ctx {
+			t.Fatalf("durable context was not preserved")
+		}
+		return factoryapi.FactorySessionExecutionResponse{}, sentinel
+	}}
+
+	_, sessionErr := service.GetFactorySession(ctx, "missing-session")
+	_, modelErr := service.GetModel(ctx, "missing-model")
+	_, definitionErr := service.SaveFactoryForSession(ctx, "session-1", factoryapi.FactorySaveModeReplaceCurrent, requestFactory)
+	_, invocationErr := service.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{})
+	_, durableErr := service.StartDurableFactorySessionAsync(ctx, factoryapi.FactorySessionExecutionRequest{})
+	for role, err := range map[string]error{"session": sessionErr, "model": modelErr, "factory-definition": definitionErr, "invocation": invocationErr, "durable-execution": durableErr} {
+		if !errors.Is(err, sentinel) || calls[role] != 1 {
+			t.Errorf("%s result = (%v, %d calls), want unchanged error and one call", role, err, calls[role])
+		}
+	}
+}
+
+var _ apisurface.APISurface = (*FactoryService)(nil)
+var _ apisurface.SessionAPISurface = (*FactoryService)(nil)

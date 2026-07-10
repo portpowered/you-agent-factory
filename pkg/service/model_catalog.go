@@ -23,8 +23,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -240,6 +240,39 @@ func (fs *FactoryService) InvokeFactorySession(
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
+	return fs.requireInvocationAPI().InvokeFactorySession(ctx, sessionID, request)
+}
+
+type factoryInvocationAPI struct {
+	service *FactoryService
+}
+
+func (api factoryInvocationAPI) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	return api.service.invokeFactorySession(ctx, sessionID, request)
+}
+
+func (fs *FactoryService) requireInvocationAPI() apisurface.InvocationAPI {
+	if fs == nil {
+		return factoryInvocationAPI{}
+	}
+	if fs.invocationAPI != nil {
+		return fs.invocationAPI
+	}
+	return factoryInvocationAPI{service: fs}
+}
+
+func (fs *FactoryService) invokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	if fs == nil {
+		return apisurface.FactoryInvocationResult{}, fmt.Errorf("factory service is required")
+	}
 	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
 	if err != nil {
 		return apisurface.FactoryInvocationResult{}, err

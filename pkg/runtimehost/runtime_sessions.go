@@ -19,8 +19,8 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -37,9 +37,9 @@ import (
 )
 
 const (
-	DefaultFactorySessionID                     = factorysessions.DefaultSessionID
-	FactorySessionTargetKindDefault             = factorysessions.TargetKindDefault
-	FactorySessionTargetKindNamed               = factorysessions.TargetKindNamed
+	DefaultFactorySessionID         = factorysessions.DefaultSessionID
+	FactorySessionTargetKindDefault = factorysessions.TargetKindDefault
+	FactorySessionTargetKindNamed   = factorysessions.TargetKindNamed
 )
 
 type (
@@ -1291,6 +1291,13 @@ func (fs *Host) StartDurableFactorySessionAsync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionExecutionResponse, error) {
+	return fs.requireDurableExecutionAPI().StartDurableFactorySessionAsync(ctx, request)
+}
+
+func (fs *Host) startDurableFactorySessionAsync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionExecutionResponse, error) {
 	startReq, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionExecutionResponse{}, err
@@ -1306,6 +1313,13 @@ func (fs *Host) StartDurableFactorySessionSync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	return fs.requireDurableExecutionAPI().StartDurableFactorySessionSync(ctx, request)
+}
+
+func (fs *Host) startDurableFactorySessionSync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
 	startReq, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
@@ -1315,6 +1329,108 @@ func (fs *Host) StartDurableFactorySessionSync(
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
 	}
 	return factorysession.SyncStartResponseToAPI(result), nil
+}
+
+type durableExecutionAPI struct {
+	host *Host
+}
+
+type durableSessionAPI struct {
+	host *Host
+}
+
+func (api durableSessionAPI) StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
+	return api.host.requireDurableExecutionAPI().StartDurableFactorySessionAsync(ctx, request)
+}
+
+func (api durableSessionAPI) StartDurableFactorySessionSync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	return api.host.requireDurableExecutionAPI().StartDurableFactorySessionSync(ctx, request)
+}
+
+func (api durableSessionAPI) ListDurableFactorySessions(ctx context.Context, params factoryapi.ListFactorySessionsParams) (factoryapi.ListFactorySessionsResponse, error) {
+	return api.host.ListDurableFactorySessions(ctx, params)
+}
+
+func (api durableSessionAPI) GetDurableFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySessionDurableReadModel, error) {
+	return api.host.GetDurableFactorySession(ctx, sessionID)
+}
+
+func (api durableSessionAPI) GetDurableFactorySessionResult(ctx context.Context, sessionID string, params factoryapi.GetFactorySessionResultsParams) (factoryapi.FactorySessionResult, error) {
+	return api.host.GetDurableFactorySessionResult(ctx, sessionID, params)
+}
+
+func (api durableSessionAPI) ListDurableFactorySessionDispatches(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	return api.host.ListDurableFactorySessionDispatches(ctx, sessionID)
+}
+
+func (api durableSessionAPI) GetDurableFactorySessionDispatch(ctx context.Context, sessionID, dispatchID string) (factoryapi.FactoryDispatch, error) {
+	return api.host.GetDurableFactorySessionDispatch(ctx, sessionID, dispatchID)
+}
+
+func (api durableSessionAPI) ListDurableFactorySessionArtifacts(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+	return api.host.ListDurableFactorySessionArtifacts(ctx, sessionID)
+}
+
+func (api durableSessionAPI) GetDurableFactorySessionArtifact(ctx context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error) {
+	return api.host.GetDurableFactorySessionArtifact(ctx, sessionID, artifactID)
+}
+
+func (api durableSessionAPI) ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, params factoryapi.GetEventsBySessionIdParams) (*interfaces.FactoryEventStream, error) {
+	return api.host.ReadDurableFactorySessionEvents(ctx, sessionID, params)
+}
+
+func (api durableSessionAPI) PauseDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return api.host.PauseDurableFactorySession(ctx, sessionID, request)
+}
+
+func (api durableSessionAPI) ResumeDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return api.host.ResumeDurableFactorySession(ctx, sessionID, request)
+}
+
+func (api durableSessionAPI) CancelDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return api.host.CancelDurableFactorySession(ctx, sessionID, request)
+}
+
+func (api durableSessionAPI) TerminateDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return api.host.TerminateDurableFactorySession(ctx, sessionID, request)
+}
+
+func (api durableSessionAPI) ApproveDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return api.host.ApproveDurableFactorySession(ctx, sessionID, request)
+}
+
+func (api durableSessionAPI) RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return api.host.RetryDurableFactorySessionDispatch(ctx, sessionID, request)
+}
+
+func (api durableSessionAPI) InterruptDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return api.host.InterruptDurableFactorySessionDispatch(ctx, sessionID, request)
+}
+
+var _ apisurface.DurableSessionAPI = durableSessionAPI{}
+
+func (api durableExecutionAPI) StartDurableFactorySessionAsync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionExecutionResponse, error) {
+	return api.host.startDurableFactorySessionAsync(ctx, request)
+}
+
+func (api durableExecutionAPI) StartDurableFactorySessionSync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	return api.host.startDurableFactorySessionSync(ctx, request)
+}
+
+func (fs *Host) requireDurableExecutionAPI() apisurface.DurableSessionExecutionAPI {
+	if fs == nil {
+		return durableExecutionAPI{}
+	}
+	if fs.durableExecutionAPI != nil {
+		return fs.durableExecutionAPI
+	}
+	return durableExecutionAPI{host: fs}
 }
 
 func (fs *Host) durableExecutionService() factorysessionexecution.Service {
@@ -1533,7 +1649,6 @@ func (fs *Host) ResumeLiveFactorySession(
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	return fs.requireSessionGateway().ResumeLiveFactorySession(ctx, sessionID, request)
 }
-
 
 func (fs *Host) observeLiveLifecycleControl(
 	sessionID string,

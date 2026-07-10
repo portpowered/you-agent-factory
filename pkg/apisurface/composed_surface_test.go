@@ -79,7 +79,7 @@ func (f *invocationCollaboratorFake) InvokeFactorySession(
 }
 
 type durableExecutionCollaboratorFake struct {
-	DurableSessionExecutionAPI
+	DurableSessionAPI
 	startAsync func(context.Context, factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error)
 	startSync  func(context.Context, factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionSyncExecutionResponse, error)
 }
@@ -346,7 +346,7 @@ func mustComposeSurface(
 	model ModelAPI,
 	definition FactorySaveAPI,
 	invocation InvocationAPI,
-	durable DurableSessionExecutionAPI,
+	durable DurableSessionAPI,
 ) SessionAPISurface {
 	t.Helper()
 	surface, err := NewSessionAPISurface(session, model, definition, invocation, durable)

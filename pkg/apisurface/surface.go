@@ -8,12 +8,23 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 )
 
+// DurableSessionAPI groups the durable execution role consumed by HTTP
+// handlers, including start, listing, projection, and lifecycle operations.
+// Keeping these capabilities on one collaborator preserves the server's
+// optional-interface routes when the handler surface is composed.
+type DurableSessionAPI interface {
+	DurableSessionExecutionAPI
+	DurableSessionListingAPI
+	DurableSessionProjectionAPI
+	DurableSessionLifecycleAPI
+}
+
 type composedSessionAPISurface struct {
 	SessionAPI
 	ModelAPI
 	FactorySaveAPI
 	InvocationAPI
-	DurableSessionExecutionAPI
+	DurableSessionAPI
 }
 
 // NewSessionAPISurface composes the handler contract from five explicit domain
@@ -24,7 +35,7 @@ func NewSessionAPISurface(
 	model ModelAPI,
 	factoryDefinition FactorySaveAPI,
 	invocation InvocationAPI,
-	durableExecution DurableSessionExecutionAPI,
+	durableExecution DurableSessionAPI,
 ) (SessionAPISurface, error) {
 	required := []struct {
 		role         string
@@ -43,11 +54,11 @@ func NewSessionAPISurface(
 	}
 
 	return &composedSessionAPISurface{
-		SessionAPI:                 session,
-		ModelAPI:                   model,
-		FactorySaveAPI:             factoryDefinition,
-		InvocationAPI:              invocation,
-		DurableSessionExecutionAPI: durableExecution,
+		SessionAPI:        session,
+		ModelAPI:          model,
+		FactorySaveAPI:    factoryDefinition,
+		InvocationAPI:     invocation,
+		DurableSessionAPI: durableExecution,
 	}, nil
 }
 

@@ -42,7 +42,7 @@ func composeSessionAPISurface(
 	var session apisurface.SessionAPI
 	var factoryDefinition apisurface.FactorySaveAPI
 	var invocation apisurface.InvocationAPI
-	var durableExecution apisurface.DurableSessionExecutionAPI
+	var durableExecution apisurface.DurableSessionAPI
 	if host != nil {
 		session = host.SessionAPI()
 		factoryDefinition = host.FactoryDefinitionAPI()
