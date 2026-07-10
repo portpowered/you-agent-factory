@@ -4222,28 +4222,6 @@ func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric Invoc
 	r.metrics = append(r.metrics, metric)
 }
 
-func (r *capturingInvocationMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
-	t.Helper()
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, metric := range r.metrics {
-		if metric.Name != name {
-			continue
-		}
-		match := true
-		for key, value := range labels {
-			if metric.Labels[key] != value {
-				match = false
-				break
-			}
-		}
-		if match {
-			return
-		}
-	}
-	t.Fatalf("metrics %#v do not contain %q with labels %#v", r.metrics, name, labels)
-}
-
 func TestResolveFactoryServiceRoot_AssignsLoggerAndRuntimeInstanceID(t *testing.T) {
 	t.Parallel()
 
