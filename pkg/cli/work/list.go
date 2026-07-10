@@ -15,10 +15,10 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/workquery"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
+	"github.com/portpowered/infinite-you/pkg/workquery"
 )
 
 const listRequestTimeout = 10 * time.Second
@@ -35,11 +35,11 @@ type ListConfig struct {
 	SortBy       string
 	MaxResults   int
 	NextToken    string
-	JSON        bool
-	Verbose     bool
-	Debug       bool
-	Output      io.Writer
-	Diagnostics io.Writer
+	JSON         bool
+	Verbose      bool
+	Debug        bool
+	Output       io.Writer
+	Diagnostics  io.Writer
 }
 
 // List requests available work from a running factory via HTTP.
@@ -148,7 +148,7 @@ func listFilterSummary(cfg ListConfig) string {
 }
 
 func listEndpoint(cfg ListConfig) (url.URL, error) {
-	endpointPath := sessionpath.ScopedPath("/work", cfg.SessionID)
+	endpointPath := sessionpath.WorkCollectionPath(cfg.SessionID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
 		return url.URL{}, err
@@ -258,7 +258,6 @@ func formatRelationSummary(relation factoryapi.Relation) string {
 	}
 	return builder.String()
 }
-
 
 func stringValue(value *string) string {
 	if value == nil {
