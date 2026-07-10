@@ -69,7 +69,6 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
 		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
 	}
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := NewProviderError(tc.errorType, "normalized failure", nil)
@@ -506,6 +505,108 @@ func TestParseGeminiProviderFailure_BoundsAndNormalizesActionableMessage(t *test
 	}
 }
 
+func TestParseGeminiProviderFailure_DeterministicFallbackPrecedence(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name: "FinalStructuredErrorWinsAcrossStreams",
+			result: CommandResult{
+				ExitCode: 1,
+				Stdout: []byte(
+					"{malformed\n" +
+						`{"error":{"status":"INVALID_ARGUMENT","message":"Earlier structured error."}}`,
+				),
+				Stderr: []byte(
+					`{"error":{"status":"UNAUTHENTICATED","message":"Run gemini auth login."}}`,
+				),
+			},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Run gemini auth login.",
+		},
+		{
+			name: "FinalUnknownStructuredErrorUsesKnownFieldOnly",
+			result: CommandResult{ExitCode: 9, Stderr: []byte(
+				"{\"error\":{\"status\":\"UNAVAILABLE\"}}\n" +
+					`{"error":{"status":"NEW_PROVIDER_STATUS","message":"Error: selected region is unsupported."}}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: selected region is unsupported.",
+		},
+		{
+			name: "UnknownStructuredCredentialUsesExitFallback",
+			result: CommandResult{ExitCode: 9, Stderr: []byte(
+				`{"error":{"status":"NEW_PROVIDER_STATUS","message":"token=customer-secret"}}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "gemini exited with code 9",
+		},
+		{
+			name: "MalformedStructuredRecordAllowsTextFallback",
+			result: CommandResult{ExitCode: 1, Stderr: []byte(
+				"{\"error\":\nError: unsupported response mode",
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: unsupported response mode",
+		},
+		{
+			name: "MeaningfulStderrOutranksConflictingStdout",
+			result: CommandResult{
+				ExitCode: 1,
+				Stdout:   []byte("Error: internal server error"),
+				Stderr:   []byte("Error: invalid request payload"),
+			},
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: geminiBadRequestMessage,
+		},
+		{
+			name: "StdoutErrorRecoversFromNoisyStderr",
+			result: CommandResult{
+				ExitCode: 6,
+				Stdout:   []byte("Error: unsupported response mode"),
+				Stderr:   []byte("[debug] Error report written to /tmp/gemini-report.txt\ncleanup complete"),
+			},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: unsupported response mode",
+		},
+		{
+			name: "FinalSafeErrorCandidateWins",
+			result: CommandResult{ExitCode: 6, Stderr: []byte(
+				"Error: earlier provider failure\ncleanup failed for /tmp/private\nError: final provider failure",
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: final provider failure",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(tc.result)
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestParseGeminiProviderFailure_BoundsInspectedOutputAndUnknownMessage(t *testing.T) {
+	outsideScan := "Error: must not survive bounded scan\n" + strings.Repeat("padding without a signal\n", geminiFailureScanBytes)
+	got := ParseGeminiProviderFailure(CommandResult{ExitCode: 5, Stderr: []byte(outsideScan)})
+	if got.Message != "gemini exited with code 5" {
+		t.Fatalf("Message = %q, want bounded-scan exit fallback", got.Message)
+	}
+	unknown := "Error:\x00\t" + strings.Repeat("é", geminiFailureMessageRunes+20)
+	got = ParseGeminiProviderFailure(CommandResult{ExitCode: 5, Stderr: []byte(unknown)})
+	if strings.ContainsAny(got.Message, "\x00\t\n") {
+		t.Fatalf("Message = %q, want normalized controls", got.Message)
+	}
+	if length := len([]rune(got.Message)); length != geminiFailureMessageRunes {
+		t.Fatalf("Message rune length = %d, want %d", length, geminiFailureMessageRunes)
+	}
+}
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
 	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {

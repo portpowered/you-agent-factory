@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -33,7 +34,10 @@ type ProviderFailureResult struct {
 
 const codexFailureMessageBytes = 1024
 
-const geminiFailureMessageRunes = 1024
+const (
+	geminiFailureScanBytes    = 64 * 1024
+	geminiFailureMessageRunes = 1024
+)
 
 const (
 	codexAuthFailureMessage       = "Codex authentication failed."
@@ -66,22 +70,38 @@ type geminiStructuredFailure struct {
 }
 
 // ParseGeminiProviderFailure converts Gemini-owned structured and text failure
-// shapes into one canonical reason/message pair. Structured error records are
-// evaluated before text so transcript content cannot override an explicit
-// provider signal.
+// shapes into one canonical reason/message pair. The final valid structured
+// record wins (stderr is the deterministic cross-stream tie-breaker), followed
+// by recognized stderr text, recognized stdout text, then safe unknown excerpts
+// in that same stderr/stdout order. Both inspected streams and published text
+// are bounded by the Gemini-specific limits above.
 func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
 	streams := []string{
-		tailForCodexErrorScan(result.Stderr),
-		tailForCodexErrorScan(result.Stdout),
+		tailForGeminiFailureScan(result.Stdout),
+		tailForGeminiFailureScan(result.Stderr),
 	}
 	if failure, ok := lastGeminiStructuredFailure(streams); ok {
+		if failure.Message == "" {
+			failure.Message = fmt.Sprintf("gemini exited with code %d", result.ExitCode)
+		}
 		return failure
 	}
 	if result.ExitCode == 124 {
 		return geminiFailureResult(interfaces.WorkFailureTypeTimeout, "")
 	}
-	if failure, ok := lastGeminiTextFailure(streams); ok {
+	stderr := tailForGeminiFailureScan(result.Stderr)
+	if failure, ok := lastGeminiTextFailure(stderr); ok {
 		return failure
+	}
+	stdout := tailForGeminiFailureScan(result.Stdout)
+	if failure, ok := lastGeminiTextFailure(stdout); ok {
+		return failure
+	}
+	if message := lastGeminiUnknownMessage(stderr); message != "" {
+		return ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: message}
+	}
+	if message := lastGeminiUnknownMessage(stdout); message != "" {
+		return ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: message}
 	}
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeUnknown,
@@ -90,7 +110,7 @@ func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
 }
 
 func lastGeminiStructuredFailure(streams []string) (ProviderFailureResult, bool) {
-	var last ProviderFailureResult
+	var last geminiStructuredFailure
 	var found bool
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
@@ -98,15 +118,21 @@ func lastGeminiStructuredFailure(streams []string) (ProviderFailureResult, bool)
 			if !ok {
 				continue
 			}
-			reason := classifyGeminiFailureSignal(failure.Type, failure.Status, failure.Code, failure.Message)
-			if reason == interfaces.WorkFailureTypeUnknown {
-				continue
-			}
-			last = geminiFailureResult(reason, failure.Message)
+			last = failure
 			found = true
 		}
 	}
-	return last, found
+	if !found {
+		return ProviderFailureResult{}, false
+	}
+	reason := classifyGeminiFailureSignal(last.Type, last.Status, last.Code, last.Message)
+	if reason != interfaces.WorkFailureTypeUnknown {
+		return geminiFailureResult(reason, last.Message), true
+	}
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: safeGeminiStructuredMessage(last.Message),
+	}, true
 }
 
 func decodeGeminiStructuredFailure(payload string) (geminiStructuredFailure, bool) {
@@ -177,24 +203,62 @@ func geminiJSONScalar(raw json.RawMessage) string {
 	return strings.TrimSpace(string(raw))
 }
 
-func lastGeminiTextFailure(streams []string) (ProviderFailureResult, bool) {
+func lastGeminiTextFailure(stream string) (ProviderFailureResult, bool) {
 	var last ProviderFailureResult
 	var found bool
-	for _, stream := range streams {
-		for _, line := range strings.Split(stream, "\n") {
-			message := strings.TrimSpace(line)
-			if strings.HasPrefix(message, "{") {
-				continue
-			}
-			reason := classifyGeminiFailureSignal("", "", "", message)
-			if reason == interfaces.WorkFailureTypeUnknown {
-				continue
-			}
-			last = geminiFailureResult(reason, "")
-			found = true
+	for _, line := range strings.Split(stream, "\n") {
+		message := safeGeminiTextCandidate(line)
+		if message == "" {
+			continue
 		}
+		reason := classifyGeminiFailureSignal("", "", "", message)
+		if reason == interfaces.WorkFailureTypeUnknown {
+			continue
+		}
+		last = geminiFailureResult(reason, "")
+		found = true
 	}
 	return last, found
+}
+
+func lastGeminiUnknownMessage(stream string) string {
+	var last string
+	for _, line := range strings.Split(stream, "\n") {
+		if candidate := safeGeminiTextCandidate(line); candidate != "" {
+			last = candidate
+		}
+	}
+	return last
+}
+
+func safeGeminiTextCandidate(line string) string {
+	message := sanitizeGeminiMessage(line)
+	if message == "" || strings.HasPrefix(message, "{") {
+		return ""
+	}
+	normalized := strings.ToLower(message)
+	if isRejectedGeminiMessage(normalized) || !isGeminiErrorSignal(normalized) {
+		return ""
+	}
+	return message
+}
+
+func isGeminiErrorSignal(normalized string) bool {
+	if strings.HasPrefix(normalized, "error:") ||
+		strings.HasPrefix(normalized, "gemini error:") ||
+		strings.HasPrefix(normalized, "fatal") ||
+		strings.HasPrefix(normalized, "failed") ||
+		strings.HasPrefix(normalized, "failure:") ||
+		strings.HasPrefix(normalized, "cannot ") ||
+		strings.HasPrefix(normalized, "could not ") {
+		return true
+	}
+	return containsAny(normalized,
+		"http 4", "http 5", "status 4", "status 5",
+		"unauthenticated", "permission_denied", "resource_exhausted", "resource exhausted",
+		"deadline_exceeded", "timed out", "timeout", "permission denied",
+		"rate limit exceeded", "quota exceeded", "too many requests",
+		"invalid request", "bad request", "service unavailable", "upstream unavailable")
 }
 
 func classifyGeminiFailureSignal(errorType, status, code, message string) interfaces.WorkFailureType {
@@ -276,22 +340,49 @@ func geminiFixedFailureMessage(reason interfaces.WorkFailureType) string {
 }
 
 func safeGeminiStructuredMessage(message string) string {
-	message = strings.Join(strings.Fields(message), " ")
+	message = sanitizeGeminiMessage(message)
 	if message == "" {
 		return ""
 	}
 	normalized := strings.ToLower(message)
-	if containsAny(normalized,
-		"bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
-		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
-		"customer prompt", "user prompt", "model response", "transcript:") {
+	if isRejectedGeminiMessage(normalized) {
 		return ""
 	}
+	return message
+}
+
+func sanitizeGeminiMessage(message string) string {
+	message = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, message)
+	message = strings.Join(strings.Fields(message), " ")
 	runes := []rune(message)
 	if len(runes) > geminiFailureMessageRunes {
 		message = string(runes[:geminiFailureMessageRunes])
 	}
 	return message
+}
+
+func isRejectedGeminiMessage(normalized string) bool {
+	if strings.HasPrefix(normalized, "at ") || strings.HasPrefix(normalized, "goroutine ") {
+		return true
+	}
+	return containsAny(normalized,
+		"bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
+		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
+		"customer prompt", "user prompt", "prompt:", "model response", "transcript:",
+		"[debug]", "debug:", "[progress]", "progress:", "traceback", "stack trace",
+		"error report", "report written", "cleanup", "cleaning up", "/tmp/", "/var/tmp/", ".gemini/tmp/")
+}
+
+func tailForGeminiFailureScan(output []byte) string {
+	if len(output) <= geminiFailureScanBytes {
+		return string(output)
+	}
+	return string(output[len(output)-geminiFailureScanBytes:])
 }
 
 // ParseCodexProviderFailure deterministically parses bounded subprocess output

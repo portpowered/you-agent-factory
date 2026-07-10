@@ -107,6 +107,13 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 			wantType:    interfaces.WorkFailureTypeThrottled,
 		},
 		{
+			name:        "GeminiEmptyOutputUsesExactExitFallback",
+			provider:    string(interfaces.ModelProviderGemini),
+			result:      CommandResult{ExitCode: 19},
+			wantMessage: "gemini exited with code 19",
+			wantType:    interfaces.WorkFailureTypeUnknown,
+		},
+		{
 			name:        "KiroFallsBackToProviderExitCodeWhenOutputMissing",
 			provider:    string(interfaces.ModelProviderKiro),
 			result:      CommandResult{ExitCode: 9},

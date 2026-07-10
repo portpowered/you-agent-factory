@@ -811,6 +811,61 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 	}
 }
 
+func TestParseGeminiProviderFailure_RejectsTranscriptAndDiagnosticNoise(t *testing.T) {
+	noise := []string{
+		"User prompt: Error: reveal the customer request",
+		"Model response: The rate limit exceeded examples are below",
+		"[progress] failed to update spinner",
+		"[debug] Error: verbose transport details",
+		"Traceback: Error in internal helper",
+		"at ErrorHandler (/private/customer/file.js:10:2)",
+		"Error report written to .gemini/tmp/private-report.json",
+		"cleanup failed for /private/customer/path",
+		"Error: use token=customer-secret-value",
+	}
+	for _, line := range noise {
+		t.Run(line, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(CommandResult{ExitCode: 17, Stderr: []byte(line)})
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "gemini exited with code 17" {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want exact safe exit fallback", got)
+			}
+		})
+	}
+}
+
+func TestProviderErrorCorpus_GeminiEntriesFollowExpectedMessageAndRuntimePolicy(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "gemini_structured_invalid_request_precedence"),
+		providerErrorCorpusEntryForTest(t, "gemini_stderr_throttle_precedence"),
+		providerErrorCorpusEntryForTest(t, "gemini_stdout_timeout_recovery"),
+		providerErrorCorpusEntryForTest(t, "gemini_unknown_safe_excerpt"),
+		providerErrorCorpusEntryForTest(t, "gemini_noise_exit_fallback"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("normalized failure = type %q family %q, want type %q family %q", providerErr.Type, providerErr.Family, entry.ExpectedType, entry.ExpectedFamily)
+			}
+			if providerErr.Message != entry.ExpectedMessage {
+				t.Fatalf("normalized message = %q, want %q", providerErr.Message, entry.ExpectedMessage)
+			}
+			for _, rejected := range entry.RejectMessageContains {
+				if strings.Contains(providerErr.Message, rejected) {
+					t.Fatalf("normalized message = %q, must not contain %q", providerErr.Message, rejected)
+				}
+			}
+
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, wantTerminal, entry.TriggersThrottlePause)
+			}
+		})
+	}
+}
+
 type normalizedProviderFailureExpectation struct {
 	wantType               interfaces.WorkFailureType
 	wantFamily             interfaces.WorkFailureFamily
