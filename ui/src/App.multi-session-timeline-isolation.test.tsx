@@ -1,0 +1,257 @@
+import "./testing/app-shell-work-outcome-stub";
+import "./testing/app-shell-workflow-activity-stub";
+
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { requireEventStream } from "./App.session-stream.test-helpers";
+import type { DashboardSnapshot } from "./api/dashboard";
+import type { FactorySessionSummary } from "./api/factory-sessions/api";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import { useDashboardSessionStore } from "./features/dashboard/state/dashboardSessionStore";
+import { sessionStreamToggleLabel } from "./features/header/lib/dashboard-session-tabs-utils";
+import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
+import {
+  persistTimelineCheckpoint,
+  readTimelineCheckpoint,
+  useFactoryTimelineStore,
+} from "./features/timeline/public";
+import {
+  jsonResponse,
+  MockEventSource,
+  type RenderAppFetchOverride,
+  registerAppDashboardTestLifecycle,
+  renderAppWithDashboardShell,
+} from "./testing/app-shell-test-utils";
+import { MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO } from "./testing/multi-session-timeline-checkpoint-scenario";
+import { createTimelineCheckpointIndexedDBTestDouble } from "./testing/timeline-checkpoint-indexeddb-test-utils";
+
+const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+
+const factorySessions: FactorySessionSummary[] = [
+  sessionSummary(A.streamIdentity.factorySessionID, "alpha"),
+  sessionSummary(B.streamIdentity.factorySessionID, "beta"),
+];
+
+function sessionSummary(id: string, name: string): FactorySessionSummary {
+  return {
+    factoryDir: `/workspace/${name}`,
+    folderPath: `/workspace/${name}`,
+    id,
+    isDefault: false,
+    project: name,
+    target: { kind: "named", name },
+  };
+}
+
+function snapshotFor(fixture: typeof A | typeof B): DashboardSnapshot {
+  const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+  snapshot.tick_count = fixture.checkpoint.selectedTick;
+  snapshot.runtime.session.dispatched_count = fixture.eventCount;
+  return snapshot;
+}
+
+function multiSessionPreflightFetch(): RenderAppFetchOverride {
+  return async (path, method) => {
+    if (
+      method === "DELETE" &&
+      path === `/factory-sessions/${A.streamIdentity.factorySessionID}`
+    ) {
+      return new Response(null, { status: 204 });
+    }
+    if (method !== "GET") {
+      return undefined;
+    }
+
+    const preflightMatch = path.match(
+      /^\/factory-sessions\/([^/]+)\/sync-preflight/,
+    );
+    if (preflightMatch) {
+      const sessionID = decodeURIComponent(preflightMatch[1] ?? "");
+      const fixture = sessionID === A.streamIdentity.factorySessionID ? A : B;
+      return jsonResponse({
+        backendScopeId: fixture.streamIdentity.backendScopeID,
+        checkpointReusable: true,
+        factorySessionId: fixture.streamIdentity.factorySessionID,
+        logicalSessionKeyId: fixture.streamIdentity.logicalSessionKeyID,
+        reasonCode: "ok",
+        reconnectCursor: {
+          afterEventId: fixture.checkpoint.afterEventId,
+          afterSequence: fixture.checkpoint.afterSequence,
+          provided: true,
+          validForStreamGeneration: true,
+        },
+        requestedSessionId: sessionID,
+        streamGenerationId: fixture.streamIdentity.streamGenerationID,
+      });
+    }
+
+    if (/^\/factory-sessions\/[^/]+\/events\?/.test(path)) {
+      return new Response("event: ready\n\n", { status: 200 });
+    }
+    return undefined;
+  };
+}
+
+function expectedStreamURL(fixture: typeof A | typeof B): string {
+  const query = new URLSearchParams({
+    after_event_id: fixture.checkpoint.afterEventId ?? "",
+    after_sequence: String(fixture.checkpoint.afterSequence),
+  });
+  return `/factory-sessions/${fixture.streamIdentity.factorySessionID}/events?${query}`;
+}
+
+async function selectSessionTab(name: "alpha" | "beta"): Promise<void> {
+  fireEvent.click(await screen.findByRole("tab", { name }));
+}
+
+function expectRenderedFixture(fixture: typeof A | typeof B): void {
+  const timeline = useFactoryTimelineStore.getState();
+  expect(timeline.selectedTick).toBe(fixture.checkpoint.selectedTick);
+  expect(
+    timeline.currentReplayCheckpoint?.replayState.runtime.session
+      .dispatched_count,
+  ).toBe(fixture.eventCount);
+  expect(
+    screen.getByRole<HTMLInputElement>("slider", { name: "Timeline tick" })
+      .value,
+  ).toBe(String(fixture.checkpoint.selectedTick));
+}
+
+describe("App multi-session timeline switching regression", () => {
+  registerAppDashboardTestLifecycle();
+
+  it.fails("restores each live A to B to A timeline instead of retaining the singleton's latest contents", async () => {
+    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+    vi.stubGlobal("indexedDB", indexedDB);
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: A.streamIdentity.factorySessionID,
+    });
+
+    await renderAppWithDashboardShell({
+      factorySessions,
+      fetchOverride: multiSessionPreflightFetch(),
+      seedTimelineFromSnapshot: false,
+      snapshot: snapshotFor(A),
+    });
+
+    await waitFor(() => {
+      expect(requireEventStream(MockEventSource.instances).url).toBe(
+        expectedStreamURL(A),
+      );
+    });
+    act(() => {
+      requireEventStream(MockEventSource.instances).emit(
+        "snapshot",
+        snapshotFor(A),
+      );
+    });
+    await waitFor(() => expectRenderedFixture(A));
+
+    await selectSessionTab("beta");
+    await waitFor(() => {
+      expect(requireEventStream(MockEventSource.instances).url).toBe(
+        expectedStreamURL(B),
+      );
+    });
+    act(() => {
+      requireEventStream(MockEventSource.instances).emit(
+        "snapshot",
+        snapshotFor(B),
+      );
+    });
+    await waitFor(() => expectRenderedFixture(B));
+
+    await selectSessionTab("alpha");
+    await waitFor(() => {
+      expect(requireEventStream(MockEventSource.instances).url).toBe(
+        expectedStreamURL(A),
+      );
+      expectRenderedFixture(A);
+    });
+  });
+});
+
+describe("App multi-session timeline action isolation", () => {
+  registerAppDashboardTestLifecycle();
+
+  it("pauses only A while B keeps its persisted timeline, cursor, and live stream", async () => {
+    const messages = getHeaderControlsMessages("en");
+    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+    vi.stubGlobal("indexedDB", indexedDB);
+    await persistTimelineCheckpoint(indexedDB, A.checkpoint, A.streamIdentity);
+    await persistTimelineCheckpoint(indexedDB, B.checkpoint, B.streamIdentity);
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: A.streamIdentity.factorySessionID,
+    });
+
+    await renderAppWithDashboardShell({
+      factorySessions,
+      fetchOverride: multiSessionPreflightFetch(),
+      seedTimelineFromSnapshot: false,
+      snapshot: snapshotFor(A),
+    });
+    await waitFor(() => expectRenderedFixture(A));
+    const aStream = requireEventStream(MockEventSource.instances);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: sessionStreamToggleLabel(factorySessions[0], false, messages),
+      }),
+    );
+    await waitFor(() => {
+      expect(aStream.closed).toBe(true);
+      expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([
+        A.streamIdentity.factorySessionID,
+      ]);
+    });
+
+    await selectSessionTab("beta");
+    await waitFor(() => {
+      expect(requireEventStream(MockEventSource.instances).url).toBe(
+        expectedStreamURL(B),
+      );
+      expectRenderedFixture(B);
+    });
+    expect(requireEventStream(MockEventSource.instances).closed).toBe(false);
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).not.toContain(
+      B.streamIdentity.factorySessionID,
+    );
+    await expect(
+      readTimelineCheckpoint(indexedDB, B.streamIdentity),
+    ).resolves.toEqual(B.checkpoint);
+  });
+
+  it.fails("clears only A's recovery checkpoint when A is closed from the session tabs", async () => {
+    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+    vi.stubGlobal("indexedDB", indexedDB);
+    await persistTimelineCheckpoint(indexedDB, A.checkpoint, A.streamIdentity);
+    await persistTimelineCheckpoint(indexedDB, B.checkpoint, B.streamIdentity);
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: A.streamIdentity.factorySessionID,
+    });
+
+    await renderAppWithDashboardShell({
+      factorySessions,
+      fetchOverride: multiSessionPreflightFetch(),
+      seedTimelineFromSnapshot: false,
+      snapshot: snapshotFor(A),
+    });
+    await waitFor(() => expectRenderedFixture(A));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close alpha session" }),
+    );
+
+    await waitFor(async () => {
+      await expect(
+        readTimelineCheckpoint(indexedDB, A.streamIdentity),
+      ).resolves.toBe(null);
+      await expect(
+        readTimelineCheckpoint(indexedDB, B.streamIdentity),
+      ).resolves.toEqual(B.checkpoint);
+    });
+  });
+});
