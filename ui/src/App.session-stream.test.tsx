@@ -25,6 +25,7 @@ import {
   renderAppWithDashboardShell,
   settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
+import { createQuietCheckpointReloadFixture } from "./testing/quiet-checkpoint-reload-test-utils";
 import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import { selectedTickTimelineEvents } from "./testing/app-shell-timeline-test-utils";
 
@@ -88,6 +89,67 @@ describe("App dashboard session stream loading", () => {
       expect(slider.value).toBe("1");
     });
     await settleAppShellDashboardEffects();
+  });
+
+  it("renders a restored tick-zero checkpoint after preflight and a quiet stream open", async () => {
+    const messages = getHeaderControlsMessages("en");
+    const fixture = createQuietCheckpointReloadFixture(0);
+    await fixture.installCheckpoint();
+
+    renderApp({
+      fetchOverride: fixture.fetchOverride,
+      seedTimelineFromSnapshot: false,
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    expect(fixture.observations()).toEqual({
+      checkpointHydrated: false,
+      eventArrived: false,
+      preflightCompleted: false,
+      streamOpened: false,
+    });
+
+    fixture.completePreflight();
+    await fixture.waitForCheckpointHydration();
+    const stream = await fixture.waitForStreamCreation();
+
+    expect(fixture.observations()).toEqual({
+      checkpointHydrated: true,
+      eventArrived: false,
+      preflightCompleted: true,
+      streamOpened: false,
+    });
+
+    act(() => {
+      fixture.openStream(stream);
+    });
+
+    expect(fixture.observations()).toEqual({
+      checkpointHydrated: true,
+      eventArrived: false,
+      preflightCompleted: true,
+      streamOpened: true,
+    });
+    expect(stream.messageEventCount).toBe(0);
+    expect(useFactoryTimelineStore.getState()).toMatchObject({
+      events: [],
+      mode: "current",
+      selectedTick: 0,
+    });
+    expect(
+      useFactoryTimelineStore.getState().worldViewCache[0]?.factory_state,
+    ).toBe("CHECKPOINT_CURRENT_AT_0");
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: messages.loadingDashboardTitle }),
+      ).toBeNull();
+      expect(
+        screen.getByRole<HTMLInputElement>("slider", {
+          name: messages.sliderAriaLabel,
+        }).value,
+      ).toBe("0");
+    });
   });
 });
 
