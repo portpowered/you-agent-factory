@@ -175,6 +175,20 @@ func TestParseProviderFailure_UsesStderrBeforeStdoutAndSafeUnknownFallback(t *te
 	})
 }
 
+func TestParseProviderFailure_DoesNotSurfaceMalformedStructuredRecords(t *testing.T) {
+	privatePrompt := "deploy production using the customer launch phrase"
+	got := ParseProviderFailure(FailureInput{
+		Stdout:   []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"` + privatePrompt + `"}]}`),
+		ExitCode: 7,
+	})
+	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "cursor exited with code 7" {
+		t.Fatalf("failure = %#v, want exit fallback for malformed structured output", got)
+	}
+	if strings.Contains(got.Message, privatePrompt) {
+		t.Fatalf("message = %q, must not surface malformed assistant content", got.Message)
+	}
+}
+
 func TestParseProviderFailure_DoesNotBorrowCodexOnlyClassification(t *testing.T) {
 	got := ParseProviderFailure(FailureInput{
 		Stderr:   []byte("The gpt-5.6-sol model requires a newer version of Codex"),

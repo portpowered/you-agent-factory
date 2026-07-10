@@ -2,12 +2,97 @@ package provider
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
+
+func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonicalFailure(t *testing.T) {
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
+	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Request timed out\",\"session_id\":\"cursor-session-error\"}'\n")
+	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var publishedMu sync.Mutex
+	var published []InferenceProgressFragment
+	publish := func(fragment InferenceProgressFragment) {
+		publishedMu.Lock()
+		published = append(published, fragment)
+		publishedMu.Unlock()
+	}
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(NewInferenceProgressPublishingCommandRunner(publish, nil)),
+		WithInferenceProgressPublisher(publish),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-error-flagged-success"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeTimeout || providerErr.Message != "Request timed out" {
+		t.Fatalf("provider error = %#v, want canonical timeout", providerErr)
+	}
+
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
+	var failed *InferenceProgressFragment
+	for i := range published {
+		if published[i].Kind == ResponseFragmentKind {
+			t.Fatalf("published fragments = %#v, error result must not emit a response", published)
+		}
+		if published[i].Kind == FailedFragmentKind {
+			failed = &published[i]
+		}
+	}
+	if failed == nil || failed.Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want canonical failed marker", published)
+	}
+	if failed.ProviderSessionRef == nil || failed.ProviderSessionRef.ID != "cursor-session-error" {
+		t.Fatalf("failed provider session = %#v, want cursor-session-error", failed.ProviderSessionRef)
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorMalformedStructuredOutputDoesNotPublishPromptText(t *testing.T) {
+	privatePrompt := "deploy production using the customer launch phrase"
+	stdout := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"` + privatePrompt + `"}]}`)
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{Stdout: stdout, ExitCode: 1}}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-malformed-structured"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   privatePrompt,
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if strings.Contains(providerErr.Message, privatePrompt) {
+		t.Fatalf("provider message = %q, must not surface malformed assistant content", providerErr.Message)
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind || published[0].Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want one canonical failure marker", published)
+	}
+	if strings.Contains(published[0].Payload, privatePrompt) {
+		t.Fatalf("failure fragment = %q, must not surface malformed assistant content", published[0].Payload)
+	}
+}
 
 func TestScriptWrapProvider_Infer_CursorParsesStreamJSONResult(t *testing.T) {
 	stdout := []byte(

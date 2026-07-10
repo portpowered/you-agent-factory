@@ -127,8 +127,12 @@ func cursorFailureTextCandidates(output []byte) []cursorFailureTextCandidate {
 }
 
 func isCursorStructuredRecord(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+		return true
+	}
 	var record any
-	return json.Unmarshal([]byte(line), &record) == nil
+	return json.Unmarshal([]byte(trimmed), &record) == nil
 }
 
 func isCursorCleanupNoise(line string) bool {

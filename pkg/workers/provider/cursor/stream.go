@@ -153,7 +153,8 @@ func (p *StreamParser) consumeResultEvent(event map[string]any) {
 
 	session := streamProviderSession(p.provider, event)
 	resultText := boundedText(rawStringField(event, "result"), PublishedTextLimit)
-	if subtype == ResultSubtypeSuccess {
+	isError, _ := event["is_error"].(bool)
+	if subtype == ResultSubtypeSuccess && !isError {
 		p.emitResultResponse(resultText, session)
 		return
 	}
