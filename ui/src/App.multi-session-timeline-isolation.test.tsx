@@ -223,7 +223,7 @@ describe("App multi-session timeline action isolation", () => {
     ).resolves.toEqual(B.checkpoint);
   });
 
-  it.fails("clears only A's recovery checkpoint when A is closed from the session tabs", async () => {
+  it.fails("clears only A while B keeps its timeline, cursor, checkpoint, and live stream", async () => {
     const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
     vi.stubGlobal("indexedDB", indexedDB);
     await persistTimelineCheckpoint(indexedDB, A.checkpoint, A.streamIdentity);
@@ -240,18 +240,28 @@ describe("App multi-session timeline action isolation", () => {
       snapshot: snapshotFor(A),
     });
     await waitFor(() => expectRenderedFixture(A));
+    const aStream = requireEventStream(MockEventSource.instances);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Close alpha session" }),
     );
 
-    await waitFor(async () => {
-      await expect(
-        readTimelineCheckpoint(indexedDB, A.streamIdentity),
-      ).resolves.toBe(null);
-      await expect(
-        readTimelineCheckpoint(indexedDB, B.streamIdentity),
-      ).resolves.toEqual(B.checkpoint);
+    await waitFor(() => {
+      expect(aStream.closed).toBe(true);
+      expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
+        B.streamIdentity.factorySessionID,
+      );
+      expect(requireEventStream(MockEventSource.instances).url).toBe(
+        expectedStreamURL(B),
+      );
+      expectRenderedFixture(B);
     });
+    expect(requireEventStream(MockEventSource.instances).closed).toBe(false);
+    await expect(
+      readTimelineCheckpoint(indexedDB, B.streamIdentity),
+    ).resolves.toEqual(B.checkpoint);
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toBe(null);
   });
 });
