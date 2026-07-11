@@ -205,6 +205,10 @@ type Config struct {
 	// runtime execution paths such as workstation workingDirectory values.
 	// Empty defaults to the loaded factory directory.
 	ExecutionBaseDir string
+	// DurableSessionPersistencePolicy selects enabled project-local snapshots
+	// or explicitly disabled in-memory-only durable execution. Empty defaults
+	// to enabled for production-facing behavior.
+	DurableSessionPersistencePolicy factorysessionexecution.PersistencePolicy
 	// RuntimeMode controls whether the runtime exits on idle completion or
 	// stays alive until its context is canceled. Empty defaults to batch mode.
 	RuntimeMode interfaces.RuntimeMode

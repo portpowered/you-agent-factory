@@ -919,6 +919,7 @@ func testExecutionServiceProviders(t *testing.T) {
 func testExecutionServicePersistenceChoices(t *testing.T) {
 	t.Helper()
 	projectRoot := t.TempDir()
+	testApplicationPersistencePolicies(t, projectRoot)
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot}); err == nil {
 		t.Fatal("NewExecutionService(runtime without persistence choice) error = nil, want validation error")
 	}
@@ -950,6 +951,38 @@ func testExecutionServicePersistenceChoices(t *testing.T) {
 		t.Fatal("ProjectPersistence(unavailable root) error = nil, want validation error")
 	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
 		t.Fatalf("unavailable persistence error = %#v, want persistence ValidationError", err)
+	}
+}
+
+func testApplicationPersistencePolicies(t *testing.T, projectRoot string) {
+	t.Helper()
+	for _, tc := range []struct {
+		name     string
+		policy   PersistencePolicy
+		disabled bool
+	}{
+		{name: "default enabled"},
+		{name: "enabled", policy: PersistencePolicyEnabled},
+		{name: "disabled", policy: PersistencePolicyDisabled, disabled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			choice, err := PersistenceChoiceForPolicy(tc.policy, projectRoot)
+			if err != nil {
+				t.Fatalf("PersistenceChoiceForPolicy: %v", err)
+			}
+			store, err := choice.resolve()
+			if err != nil {
+				t.Fatalf("resolve policy choice: %v", err)
+			}
+			if (store == nil) != tc.disabled {
+				t.Fatalf("store nil = %t, want disabled = %t", store == nil, tc.disabled)
+			}
+		})
+	}
+	if _, err := PersistenceChoiceForPolicy(PersistencePolicy("invalid"), projectRoot); err == nil {
+		t.Fatal("PersistenceChoiceForPolicy(invalid) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence.policy" {
+		t.Fatalf("invalid policy error = %#v, want persistence.policy ValidationError", err)
 	}
 }
 

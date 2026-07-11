@@ -162,6 +162,32 @@ type PersistenceChoice struct {
 	disabled bool
 }
 
+// PersistencePolicy is the application-level durable snapshot policy. The
+// zero value preserves production persistence; callers must select Disabled
+// explicitly when durable snapshots are not wanted.
+type PersistencePolicy string
+
+const (
+	PersistencePolicyEnabled  PersistencePolicy = "enabled"
+	PersistencePolicyDisabled PersistencePolicy = "disabled"
+)
+
+// PersistenceChoiceForPolicy resolves application policy into the closed
+// persistence choice consumed by durable execution composition.
+func PersistenceChoiceForPolicy(policy PersistencePolicy, projectRoot string) (PersistenceChoice, error) {
+	switch policy {
+	case "", PersistencePolicyEnabled:
+		return ProjectPersistence(projectRoot)
+	case PersistencePolicyDisabled:
+		return DisabledPersistence(), nil
+	default:
+		return PersistenceChoice{}, NewValidationError(
+			"persistence.policy",
+			fmt.Sprintf("unsupported durable session persistence policy %q", policy),
+		)
+	}
+}
+
 // EnabledPersistence selects durable snapshots through the injected store.
 func EnabledPersistence(store runtimepersist.Store) PersistenceChoice {
 	return PersistenceChoice{store: store}
