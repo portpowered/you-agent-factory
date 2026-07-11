@@ -96,6 +96,10 @@ export function syncCompletedDispatchAttempt(
     completion.diagnostics = attempt.diagnostics ?? completion.diagnostics;
     completion.providerSession =
       attempt.provider_session ?? completion.providerSession;
+    completion.failureMessage =
+      attempt.failure_detail?.message ?? completion.failureMessage;
+    completion.failureReason =
+      attempt.failure_detail?.reason ?? completion.failureReason;
 
     if (
       completion.providerSession?.id &&

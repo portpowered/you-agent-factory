@@ -386,6 +386,9 @@ function applyInferenceResponse(
     duration_millis: payload.durationMillis,
     error_class: payload.errorClass,
     exit_code: payload.exitCode,
+    failure_detail: payload.failureDetail
+      ? { ...payload.failureDetail }
+      : undefined,
     inference_request_id: payload.inferenceRequestId,
     outcome: payload.outcome,
     prompt: current?.prompt ?? "",

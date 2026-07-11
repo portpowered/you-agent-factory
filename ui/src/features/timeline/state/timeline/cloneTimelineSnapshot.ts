@@ -295,6 +295,9 @@ export function cloneInferenceAttemptsByDispatchID(
             requestID,
             {
               ...attempt,
+              failure_detail: attempt.failure_detail
+                ? { ...attempt.failure_detail }
+                : undefined,
               diagnostics: attempt.diagnostics
                 ? {
                     ...attempt.diagnostics,

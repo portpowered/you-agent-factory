@@ -131,6 +131,12 @@ func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t
 	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.WorkFailureTypeTimeout) {
 		t.Fatalf("errorClass = %#v, want timeout", response.ErrorClass)
 	}
+	if response.FailureDetail == nil || response.FailureDetail.Reason == nil || *response.FailureDetail.Reason != string(interfaces.WorkFailureTypeTimeout) {
+		t.Fatalf("failureDetail = %#v, want timeout reason", response.FailureDetail)
+	}
+	if response.FailureDetail.Message == nil || !strings.Contains(*response.FailureDetail.Message, "provider timed out") {
+		t.Fatalf("failureDetail message = %#v, want provider timeout detail", response.FailureDetail.Message)
+	}
 	if response.ExitCode == nil || *response.ExitCode != 124 {
 		t.Fatalf("exitCode = %#v, want 124", response.ExitCode)
 	}

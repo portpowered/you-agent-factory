@@ -3390,7 +3390,8 @@ type InferenceResponseEventPayload struct {
 	ErrorClass *string `json:"errorClass,omitempty"`
 
 	// ExitCode Process exit code when the provider failure exposes one.
-	ExitCode *int `json:"exitCode,omitempty"`
+	ExitCode      *int                          `json:"exitCode,omitempty"`
+	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
 
 	// InferenceRequestId Identifier from the matching inference request event.
 	InferenceRequestId string `json:"inferenceRequestId"`

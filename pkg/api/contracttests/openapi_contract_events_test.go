@@ -330,7 +330,7 @@ func assertUnifiedInferenceEvents(t *testing.T, schemas map[string]any) {
 	assertRequiredFields(t, inferenceResponse, "inferenceRequestId", "attempt", "outcome", "durationMillis")
 	inferenceResponseProperties := schemaProperties(t, inferenceResponse, "InferenceResponseEventPayload")
 	assertPropertyRef(t, inferenceResponseProperties, "outcome", "#/components/schemas/InferenceOutcome")
-	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "errorClass")
+	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "errorClass", "failureDetail")
 	assertPropertiesAbsent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "dispatchId", "transitionId")
 	assertEnumValues(t, schemaObject(t, schemas, "InferenceOutcome"), "InferenceOutcome", []string{"SUCCEEDED", "FAILED"})
 }

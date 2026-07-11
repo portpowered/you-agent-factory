@@ -6570,6 +6570,8 @@ components:
         errorClass:
           type: string
           description: Stable failure classification when available.
+        failureDetail:
+          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
     ScriptRequestEventPayload:
       type: object
       additionalProperties: false

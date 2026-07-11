@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -140,7 +141,13 @@ func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interf
 	baseDiagnostics := workDiagnosticsForInferenceRequest(req)
 	if err != nil {
 		payload.Outcome = factoryapi.InferenceOutcomeFailed
-		payload.ErrorClass = stringPtr(providerErrorClass(err))
+		errorClass := providerErrorClass(err)
+		payload.ErrorClass = stringPtr(errorClass)
+		payload.FailureDetail = &factoryapi.FactoryDispatchFailureDetail{
+			ErrorClass: stringPtr(errorClass),
+			Message:    stringPtr(providerErrorMessage(err)),
+			Reason:     stringPtr(errorClass),
+		}
 		payload.ExitCode = providerErrorExitCode(err)
 		payload.ProviderSession = interfaces.GeneratedProviderSessionMetadata(providerSessionFromInferenceError(err))
 		payload.Diagnostics = interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
@@ -214,6 +221,14 @@ func providerErrorClass(err error) string {
 		return string(providerErr.Type)
 	}
 	return string(interfaces.WorkFailureTypeUnknown)
+}
+
+func providerErrorMessage(err error) string {
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) && strings.TrimSpace(providerErr.Message) != "" {
+		return providerErr.Message
+	}
+	return err.Error()
 }
 
 func providerErrorExitCode(err error) *int {

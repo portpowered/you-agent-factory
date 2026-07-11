@@ -3252,6 +3252,7 @@ export interface components {
       exitCode?: number;
       /** @description Stable failure classification when available. */
       errorClass?: string;
+      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
     };
     /** @description Request details captured immediately before a script-backed worker invokes a concrete command. Raw environment values and raw stdin content are intentionally excluded from the public script event contract. */
     ScriptRequestEventPayload: {

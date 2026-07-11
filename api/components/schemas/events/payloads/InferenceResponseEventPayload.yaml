@@ -40,3 +40,5 @@ properties:
   errorClass:
     type: string
     description: Stable failure classification when available.
+  failureDetail:
+    $ref: '../../data-models/FactoryDispatchFailureDetail.yaml'

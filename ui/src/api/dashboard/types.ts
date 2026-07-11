@@ -176,6 +176,11 @@ export interface DashboardInferenceAttempt {
   dispatch_id: string;
   duration_millis?: number;
   error_class?: string;
+  failure_detail?: {
+    errorClass?: string;
+    message?: string;
+    reason?: string;
+  };
   exit_code?: number;
   inference_request_id: string;
   outcome?: InferenceOutcome;
