@@ -15,9 +15,13 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSession(t *testing.T) {
@@ -228,6 +232,58 @@ func setupAPIRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName stri
 		t.Fatalf("write workflow: %v", err)
 	}
 	return projectRoot
+}
+
+func newAPIJavaScriptExecutionService(t *testing.T, projectRoot, childExecutorMode string, provider workers.Provider) factorysessionexecution.Service {
+	t.Helper()
+	service, err := testharness.New(testharness.Config{
+		Mode:              testharness.ModeJavaScript,
+		ProjectRoot:       projectRoot,
+		Clock:             factory.RealClock{},
+		Provider:          provider,
+		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
+		ChildExecutorMode: childExecutorMode,
+	})
+	if err != nil {
+		t.Fatalf("compose API JavaScript execution service: %v", err)
+	}
+	return service
+}
+
+func newAPIJavaScriptRuntimeService(t *testing.T, projectRoot, childExecutorMode string, provider workers.Provider) *factorysessionexecution.JavaScriptRuntimeService {
+	t.Helper()
+	service := newAPIJavaScriptExecutionService(t, projectRoot, childExecutorMode, provider)
+	runtimeService, ok := service.(*factorysessionexecution.JavaScriptRuntimeService)
+	if !ok {
+		t.Fatalf("API JavaScript harness returned %T", service)
+	}
+	return runtimeService
+}
+
+func newAPIFakeExecutionService(t *testing.T, options ...factorysessionexecution.FakeServiceOption) *factorysessionexecution.FakeService {
+	t.Helper()
+	service, err := testharness.New(testharness.Config{Mode: testharness.ModeFake, FakeOptions: options})
+	if err != nil {
+		t.Fatalf("compose API fake execution service: %v", err)
+	}
+	fakeService, ok := service.(*factorysessionexecution.FakeService)
+	if !ok {
+		t.Fatalf("API fake harness returned %T", service)
+	}
+	return fakeService
+}
+
+func newAPIFixtureExecutionService(t *testing.T, fixturePath string) *factorysessionexecution.FakeService {
+	t.Helper()
+	service, err := testharness.New(testharness.Config{Mode: testharness.ModeFake, FakeFixturePath: fixturePath})
+	if err != nil {
+		t.Fatalf("compose API fixture execution service: %v", err)
+	}
+	fakeService, ok := service.(*factorysessionexecution.FakeService)
+	if !ok {
+		t.Fatalf("API fixture harness returned %T", service)
+	}
+	return fakeService
 }
 
 func strPtr(value string) *string {

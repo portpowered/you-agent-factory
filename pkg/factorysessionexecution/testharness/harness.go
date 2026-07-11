@@ -31,6 +31,7 @@ type Config struct {
 	Persistence       runtimepersist.Store
 	ChildExecutorMode string
 	FakeOptions       []factorysessionexecution.FakeServiceOption
+	FakeFixturePath   string
 }
 
 // New creates one isolated durable execution service or returns a clear error
@@ -40,6 +41,16 @@ func New(config Config) (factorysessionexecution.Service, error) {
 	case ModeFake:
 		if hasRuntimeDependencies(config) {
 			return nil, fmt.Errorf("durable execution test harness: fake mode does not accept JavaScript runtime dependencies")
+		}
+		if strings.TrimSpace(config.FakeFixturePath) != "" {
+			if len(config.FakeOptions) != 0 {
+				return nil, fmt.Errorf("durable execution test harness: fake mode accepts fixture path or options, not both")
+			}
+			service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(strings.TrimSpace(config.FakeFixturePath))
+			if err != nil {
+				return nil, fmt.Errorf("durable execution test harness: load fake fixtures: %w", err)
+			}
+			return service, nil
 		}
 		return factorysessionexecution.NewFakeService(config.FakeOptions...), nil
 	case ModeJavaScript:

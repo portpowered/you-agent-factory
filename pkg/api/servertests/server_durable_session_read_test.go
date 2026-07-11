@@ -453,13 +453,9 @@ func setupAPILifecycleWorkflowFixture(t *testing.T, fixtureName, workflowName st
 
 func newAPILifecycleFakeService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
+	return newAPIFixtureExecutionService(t,
 		filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json"),
 	)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-	return service
 }
 
 func startAPIAwaitingApprovalSession(t *testing.T, service *factorysessionexecution.FakeService) {

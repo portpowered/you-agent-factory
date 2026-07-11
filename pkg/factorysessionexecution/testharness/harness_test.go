@@ -180,6 +180,8 @@ func TestNew_RejectsUnsupportedAndIncompleteConfiguration(t *testing.T) {
 	}{
 		{name: "missing mode", config: testharness.Config{}, want: "unsupported mode"},
 		{name: "fake runtime dependency", config: testharness.Config{Mode: testharness.ModeFake, ProjectRoot: t.TempDir()}, want: "does not accept"},
+		{name: "fake fixture and options", config: testharness.Config{Mode: testharness.ModeFake, FakeFixturePath: "fixtures.json", FakeOptions: []factorysessionexecution.FakeServiceOption{factorysessionexecution.WithFakeScenarios()}}, want: "not both"},
+		{name: "missing fake fixture", config: testharness.Config{Mode: testharness.ModeFake, FakeFixturePath: filepath.Join(t.TempDir(), "missing.json")}, want: "load fake fixtures"},
 		{name: "missing root", config: withConfig(valid, func(c *testharness.Config) { c.ProjectRoot = "" }), want: "project root is required"},
 		{name: "missing clock", config: withConfig(valid, func(c *testharness.Config) { c.Clock = nil }), want: "clock is required"},
 		{name: "missing persistence", config: withConfig(valid, func(c *testharness.Config) { c.Persistence = nil }), want: "persistence is required"},

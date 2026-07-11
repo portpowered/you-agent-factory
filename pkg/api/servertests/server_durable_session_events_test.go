@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
-	"time"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
@@ -385,11 +385,8 @@ func assertFactoryEventsJSONEqual(t *testing.T, want, got []factoryapi.FactoryEv
 func newAPILiveProviderRuntimeService(t *testing.T) factorysessionexecution.Service {
 	t.Helper()
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
-		Provider:          factorysessionexecution.SmokeLiveChildProvider(),
-	})
+	return newAPIJavaScriptExecutionService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive,
+		factorysessionexecution.SmokeLiveChildProvider())
 }
 
 func newAPILiveProviderBlockingRuntimeService(t *testing.T) (
@@ -399,11 +396,7 @@ func newAPILiveProviderBlockingRuntimeService(t *testing.T) (
 	t.Helper()
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	provider := &apiLiveProviderBlockingFixtureProvider{}
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
-		Provider:          provider,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive, provider)
 	return service, provider
 }
 
@@ -639,8 +632,8 @@ func assertAPIDispatchReconciledLifecycleEvent(
 	}
 	var reconciledBody struct {
 		ReconciledStatus     factoryapi.FactoryDispatchStatus         `json:"reconciledStatus"`
-		ReconciliationSource factoryapi.DispatchReconciliationSource `json:"reconciliationSource"`
-		ArtifactIds          *[]string                               `json:"artifactIds"`
+		ReconciliationSource factoryapi.DispatchReconciliationSource  `json:"reconciliationSource"`
+		ArtifactIds          *[]string                                `json:"artifactIds"`
 		FailureDetail        *factoryapi.FactoryDispatchFailureDetail `json:"failureDetail"`
 	}
 	if err := json.Unmarshal(reconciledPayload, &reconciledBody); err != nil {

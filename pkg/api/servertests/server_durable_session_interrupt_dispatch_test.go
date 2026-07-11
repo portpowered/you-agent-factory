@@ -12,9 +12,9 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
@@ -116,7 +116,7 @@ func TestInterruptFactorySessionDispatch_CompletedDispatchReturnsTypedConflict(t
 }
 
 func TestInterruptFactorySessionDispatch_QueuedDispatchReturnsTypedConflict(t *testing.T) {
-	service := factorysessionexecution.NewFakeService(factorysessionexecution.WithFakeScenarios(factorysessionexecution.FakeScenario{
+	service := newAPIFakeExecutionService(t, factorysessionexecution.WithFakeScenarios(factorysessionexecution.FakeScenario{
 		ID:        "queued-interrupt-invalid-state",
 		RequestID: "req-js-queued-interrupt-001",
 		Session: factorysessionexecution.SessionReadResult{
@@ -247,9 +247,7 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 func newInterruptedLateResultTransportHarness(t *testing.T) (*factorysessionexecution.JavaScriptRuntimeService, string, string) {
 	t.Helper()
 	projectRoot := setupAPILifecycleWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	sessionID := "dur-sess-interrupt-transport-late-001"
 	if err := factorysessionexecution.SeedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "summarize-findings"); err != nil {
 		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
@@ -548,9 +546,7 @@ func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsQueuedRunningComplete
 func TestLiveProviderAndFakeChildSessions_APIPreserveDistinctProviderAndArtifactProjections(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 
-	fakeService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	fakeService := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	fakeCompleted, err := fakeService.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-live-provider-fake-child-coexist-001",
 		Source: factorysessionexecution.Source{
@@ -565,11 +561,8 @@ func TestLiveProviderAndFakeChildSessions_APIPreserveDistinctProviderAndArtifact
 		t.Fatalf("fake StartSync: %v", err)
 	}
 
-	liveService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
-		Provider:          factorysessionexecution.SmokeLiveChildProvider(),
-	})
+	liveService := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive,
+		factorysessionexecution.SmokeLiveChildProvider())
 	liveCompleted, err := liveService.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-live-provider-live-child-coexist-001",
 		Source: factorysessionexecution.Source{
