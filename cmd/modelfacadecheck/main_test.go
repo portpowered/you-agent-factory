@@ -49,6 +49,54 @@ func TestRunRejectsCopiedPullPolicy(t *testing.T) {
 	}
 }
 
+func TestRunRejectsRetiredNewFromHostConstruction(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFacadeFixture(t, root, "pkg/service/catalog.go", thinDelegateFixture("service", "FactoryService"))
+	writeFacadeFixture(t, root, "pkg/runtimehost/catalog.go", thinDelegateFixture("runtimehost", "Host"))
+	writeFacadeFixture(t, root, "pkg/service/construction.go", `package service
+
+import modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
+
+func construct(fs *FactoryService) any { return modelsservice.NewFromHost(fs) }
+`)
+
+	assertRunRejected(t, root, "NewFromHost")
+}
+
+func TestRunRejectsBroadFacadeCarrierConstruction(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFacadeFixture(t, root, "pkg/service/catalog.go", thinDelegateFixture("service", "FactoryService"))
+	writeFacadeFixture(t, root, "pkg/runtimehost/catalog.go", thinDelegateFixture("runtimehost", "Host"))
+	writeFacadeFixture(t, root, "pkg/runtimehost/construction.go", `package runtimehost
+
+import modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
+
+	func construct(host *Host) any { return modelsservice.New(&modelServiceHost{host: host}) }
+`)
+	writeFacadeFixture(t, root, "pkg/runtimehost/adapter.go", `package runtimehost
+
+type modelServiceHost struct { host *Host }
+`)
+
+	assertRunRejected(t, root, "broad Host carrier")
+}
+
+func assertRunRejected(t *testing.T, root string, finding string) {
+	t.Helper()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: root}, stdout, stderr); err == nil {
+		t.Fatalf("run() error = nil, want %q rejection", finding)
+	}
+	if got := stderr.String(); !strings.Contains(got, finding) {
+		t.Fatalf("run() stderr = %q, want %q", got, finding)
+	}
+}
+
 func thinDelegateFixture(packageName string, receiverType string) string {
 	return "package " + packageName + `
 
