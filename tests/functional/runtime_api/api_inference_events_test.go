@@ -334,7 +334,7 @@ func assertDashboardInferenceProjection(t *testing.T, dashboard DashboardRespons
 		if attempt.Attempt < 1 || attempt.Attempt > 3 {
 			t.Fatalf("dashboard inference attempt number = %d, want 1..3", attempt.Attempt)
 		}
-		if attempt.Attempt < 3 && (attempt.Outcome != string(factoryapi.InferenceOutcomeFailed) || attempt.ErrorClass == "") {
+		if attempt.Attempt < 3 && (attempt.Outcome != string(factoryapi.InferenceOutcomeFailed) || attempt.FailureDetail == nil) {
 			t.Fatalf("dashboard failed retry attempt = %#v, want FAILED with errorClass", attempt)
 		}
 		if attempt.Attempt == 3 && (attempt.Outcome != string(factoryapi.InferenceOutcomeSucceeded) || attempt.Response != "Step one recovered. COMPLETE" || attempt.ResponseTime == "") {
@@ -547,20 +547,20 @@ type DashboardThrottlePause struct {
 }
 
 type InferenceAttempt struct {
-	Attempt            int    `json:"attempt"`
-	DispatchId         string `json:"dispatch_id"`
-	DurationMillis     int64  `json:"duration_millis,omitempty"`
-	ErrorClass         string `json:"error_class,omitempty"`
-	ExitCode           *int   `json:"exit_code,omitempty"`
-	InferenceRequestId string `json:"inference_request_id"`
-	Outcome            string `json:"outcome,omitempty"`
-	Prompt             string `json:"prompt"`
-	RequestTime        string `json:"request_time"`
-	Response           string `json:"response,omitempty"`
-	ResponseTime       string `json:"response_time,omitempty"`
-	TransitionId       string `json:"transition_id"`
-	WorkingDirectory   string `json:"working_directory,omitempty"`
-	Worktree           string `json:"worktree,omitempty"`
+	Attempt            int                       `json:"attempt"`
+	DispatchId         string                    `json:"dispatch_id"`
+	DurationMillis     int64                     `json:"duration_millis,omitempty"`
+	FailureDetail      *interfaces.FailureDetail `json:"failureDetail,omitempty"`
+	ExitCode           *int                      `json:"exit_code,omitempty"`
+	InferenceRequestId string                    `json:"inference_request_id"`
+	Outcome            string                    `json:"outcome,omitempty"`
+	Prompt             string                    `json:"prompt"`
+	RequestTime        string                    `json:"request_time"`
+	Response           string                    `json:"response,omitempty"`
+	ResponseTime       string                    `json:"response_time,omitempty"`
+	TransitionId       string                    `json:"transition_id"`
+	WorkingDirectory   string                    `json:"working_directory,omitempty"`
+	Worktree           string                    `json:"worktree,omitempty"`
 }
 
 type DashboardSessionRuntime struct {
@@ -655,7 +655,7 @@ func dashboardInferenceAttemptsByDispatchID(input map[string]map[string]interfac
 				Attempt:            attempt.Attempt,
 				DispatchId:         attempt.DispatchID,
 				DurationMillis:     attempt.DurationMillis,
-				ErrorClass:         attempt.ErrorClass,
+				FailureDetail:      interfaces.CloneFailureDetail(attempt.FailureDetail),
 				ExitCode:           copyIntPointer(attempt.ExitCode),
 				InferenceRequestId: attempt.InferenceRequestID,
 				Outcome:            attempt.Outcome,

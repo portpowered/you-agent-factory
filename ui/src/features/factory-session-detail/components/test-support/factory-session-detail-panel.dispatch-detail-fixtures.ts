@@ -197,7 +197,6 @@ export function mockFailedDispatchDetailFetch() {
         artifactIds: ["artifact-failure-log"],
         dispatchKind: "JAVASCRIPT_VERIFY",
         failureDetail: {
-          errorClass: " verification_error ",
           message: " Expected release manifest checksum. ",
           reason: " VERIFY_ASSERTION_FAILED ",
         },

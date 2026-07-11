@@ -228,17 +228,17 @@ func assertSafeBoundaryWorldState(t *testing.T, worldState interfaces.FactoryWor
 	if got := len(worldState.CompletedDispatches); got != 3 {
 		t.Fatalf("completed dispatch count = %d, want 3", got)
 	}
-	if got := worldState.FailureDetailsByWorkID["work-safe-failure"].FailureReason; got != string(interfaces.WorkFailureTypeTimeout) {
+	if got := worldState.FailureDetailsByWorkID["work-safe-failure"].FailureDetail.Reason; got != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("failed work detail reason = %q, want timeout", got)
 	}
 	windowsDetail := worldState.FailureDetailsByWorkID["work-safe-windows-process-failure"]
-	if windowsDetail.FailureReason != string(interfaces.WorkFailureTypeInternalServerError) {
-		t.Fatalf("windows failed work detail reason = %q, want %q", windowsDetail.FailureReason, interfaces.WorkFailureTypeInternalServerError)
+	if windowsDetail.FailureDetail == nil || windowsDetail.FailureDetail.Reason != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("windows failed work detail = %#v, want %q", windowsDetail.FailureDetail, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if windowsDetail.FailureMessage != "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)" {
-		t.Fatalf("windows failed work detail message = %q", windowsDetail.FailureMessage)
+	if windowsDetail.FailureDetail.Message != "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)" {
+		t.Fatalf("windows failed work detail message = %q", windowsDetail.FailureDetail.Message)
 	}
-	assertNoAuthRemediationText(t, windowsDetail.FailureMessage)
+	assertNoAuthRemediationText(t, windowsDetail.FailureDetail.Message)
 	assertSafeBoundaryDoesNotLeakJSON(t, worldState)
 }
 
@@ -262,7 +262,7 @@ func assertSafeBoundaryRequestViews(t *testing.T, worldState interfaces.FactoryW
 		string(interfaces.WorkFailureTypeInternalServerError),
 		"provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)",
 	)
-	assertNoAuthRemediationText(t, stringValueForRuntimeTest(windowsRequest.Response.FailureMessage))
+	assertNoAuthRemediationText(t, windowsRequest.Response.FailureDetail.Message)
 }
 
 func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {

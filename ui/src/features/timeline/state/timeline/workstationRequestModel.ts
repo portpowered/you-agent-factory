@@ -50,8 +50,7 @@ export interface TimelineWorkstationRequestRequest {
 export interface TimelineWorkstationRequestResponse {
   durationMillis?: number;
   endTime?: string;
-  failureMessage?: string;
-  failureReason?: string;
+  failureDetail?: DashboardRuntimeWorkstationRequestResponse["failureDetail"];
   feedback?: string;
   outcome?: string;
   outputMutations?: DashboardTraceMutation[];
@@ -161,10 +160,7 @@ export function toDashboardRuntimeWorkstationRequestResponse(
     duration_millis: response.durationMillis,
     endTime: response.endTime,
     end_time: response.endTime,
-    failureMessage: response.failureMessage,
-    failure_message: response.failureMessage,
-    failureReason: response.failureReason,
-    failure_reason: response.failureReason,
+    failureDetail: response.failureDetail,
     feedback: response.feedback,
     outcome: response.outcome,
     outputMutations: response.outputMutations,

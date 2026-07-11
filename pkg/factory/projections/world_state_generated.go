@@ -23,15 +23,21 @@ func resourceUnitsFromGenerated(resources *[]factoryapi.Resource) []interfaces.F
 
 func workstationResultFromGenerated(payload factoryapi.DispatchResponseEventPayload) interfaces.WorkstationResult {
 	failureMetadata := interfaces.WorkFailureMetadataFromGenerated(payload.ProviderFailure)
+	var failureDetail *interfaces.FailureDetail
+	if payload.FailureDetail != nil {
+		failureDetail = &interfaces.FailureDetail{
+			Reason:  interfaces.WorkFailureType(payload.FailureDetail.Reason),
+			Message: payload.FailureDetail.Message,
+		}
+	}
 	return interfaces.WorkstationResult{
 		Outcome:                     string(payload.Outcome),
 		Output:                      stringValue(payload.Output),
 		Error:                       stringValue(payload.Error),
 		Feedback:                    stringValue(payload.Feedback),
 		SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
-		FailureReason:               stringValue(payload.FailureReason),
-		FailureMessage:              stringValue(payload.FailureMessage),
-		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
+		FailureDetail:               failureDetail,
+		FailureMetadata:             interfaces.CloneWorkFailureMetadata(failureMetadata),
 	}
 }
 

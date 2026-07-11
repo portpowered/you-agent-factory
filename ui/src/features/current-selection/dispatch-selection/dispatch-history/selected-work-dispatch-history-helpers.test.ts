@@ -72,8 +72,10 @@ function buildProjectedRequest(
     responded_request_count: 1,
     response_view: {
       duration_millis: 1250,
-      failure_message: "Dispatch failed after response view fallback.",
-      failure_reason: "response_view_failed",
+      failureDetail: {
+        message: "Dispatch failed after response view fallback.",
+        reason: "unknown",
+      },
       outcome: "FAILED",
       output_work_items: [outputWorkItem],
     },
@@ -103,8 +105,10 @@ function buildRuntimeRequest(
     },
     response: {
       duration_millis: 900,
-      failure_message: "Runtime failure message",
-      failure_reason: "runtime_failed",
+      failureDetail: {
+        message: "Runtime failure message",
+        reason: "unknown",
+      },
       outcome: "ACCEPTED",
       output_work_items: [outputWorkItem],
     },
@@ -271,8 +275,10 @@ describe("selected-work-dispatch-history-helpers", () => {
       },
       response: {
         duration_millis: 900,
-        failure_message: "Runtime failure message",
-        failure_reason: "runtime_failed",
+        failureDetail: {
+          message: "Runtime failure message",
+          reason: "unknown",
+        },
         outcome: "ACCEPTED",
         output_work_items: [outputWorkItem],
         script_response: {
@@ -299,12 +305,12 @@ describe("selected-work-dispatch-history-helpers", () => {
     expect(requestOutcome(runtime)).toBe("ACCEPTED");
 
     expect(requestFailureReason(projectedFromResponseView)).toBe(
-      "response_view_failed",
+      "unknown",
     );
     expect(requestFailureMessage(projectedFromResponseView)).toBe(
       "Dispatch failed after response view fallback.",
     );
-    expect(requestFailureReason(runtime)).toBe("runtime_failed");
+    expect(requestFailureReason(runtime)).toBe("unknown");
     expect(requestFailureMessage(runtime)).toBe("Runtime failure message");
 
     expect(requestScriptRequest(projectedFromScript)?.script_request_id).toBe(

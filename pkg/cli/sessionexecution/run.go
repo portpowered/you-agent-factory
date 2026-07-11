@@ -395,17 +395,17 @@ func writeResultAvailabilityHuman(output io.Writer, availability *factoryapi.Fac
 	return nil
 }
 
-func writeResultFailureHuman(output io.Writer, failure *factoryapi.FactorySessionDurableFailureDetail) error {
+func writeResultFailureHuman(output io.Writer, failure *factoryapi.FailureDetail) error {
 	if failure == nil {
 		return nil
 	}
-	if reason := failure.Reason; reason != nil {
-		if err := writeOptionalTrimmedLine(output, "Failure reason", *reason); err != nil {
+	if reason := string(failure.Reason); reason != "" {
+		if err := writeOptionalTrimmedLine(output, "Failure reason", reason); err != nil {
 			return err
 		}
 	}
-	if message := failure.Message; message != nil {
-		if err := writeOptionalTrimmedLine(output, "Failure message", *message); err != nil {
+	if message := failure.Message; message != "" {
+		if err := writeOptionalTrimmedLine(output, "Failure message", message); err != nil {
 			return err
 		}
 	}

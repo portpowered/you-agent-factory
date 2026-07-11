@@ -751,11 +751,11 @@
           "resultStatus": "FAILED_WITH_PARTIAL",
           "summary": "Partial synthesis available before verify failed."
         },
-        "failure": {
-          "reason": "DISPATCH_FAILED",
-          "message": "Verify step failed after partial synthesis.",
-          "partialResultAvailable": true
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Verify step failed after partial synthesis."
         },
+        "partialResultAvailable": true,
         "links": {
           "session": "/factory-sessions/dur-sess-js-failed-partial-001",
           "results": "/factory-sessions/dur-sess-js-failed-partial-001/results"
@@ -804,9 +804,8 @@
             "executionMode": "live"
           },
           "failureDetail": {
-            "reason": "VERIFY_ASSERTION_FAILED",
-            "message": "Expected release manifest checksum.",
-            "errorClass": "verification_error"
+            "reason": "unknown",
+            "message": "Expected release manifest checksum."
           }
         }
       ],
@@ -832,9 +831,8 @@
         ],
         "statusTransitions": ["QUEUED", "RUNNING", "FAILED"],
         "failureDetail": {
-          "reason": "VERIFY_ASSERTION_FAILED",
-          "message": "Expected release manifest checksum.",
-          "errorClass": "verification_error"
+          "reason": "unknown",
+          "message": "Expected release manifest checksum."
         }
       },
       "artifacts": [],
@@ -852,11 +850,11 @@
             }
           }
         ],
-        "failure": {
-          "reason": "DISPATCH_FAILED",
-          "message": "Verify step failed after partial synthesis.",
-          "partialResultAvailable": true
-        }
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Verify step failed after partial synthesis."
+        },
+        "partialResultAvailable": true
       }
     },
     {
@@ -1529,11 +1527,11 @@
           "sourceRef": "workflow/experimental-runner",
           "sourceHash": "sha256:js-workflow-experimental"
         },
-        "failure": {
-          "reason": "UNSUPPORTED_RUNNER",
-          "message": "Requested runner is not available in this environment.",
-          "partialResultAvailable": false
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Requested runner is not available in this environment."
         },
+        "partialResultAvailable": false,
         "links": {
           "session": "/factory-sessions/dur-sess-unsupported-runner-001",
           "results": "/factory-sessions/dur-sess-unsupported-runner-001/results"
@@ -1564,7 +1562,7 @@
           "attempt": 1,
           "runnerId": "experimental-runner",
           "failureDetail": {
-            "reason": "UNSUPPORTED_RUNNER",
+            "reason": "unknown",
             "message": "Runner experimental-runner is not registered."
           }
         }
@@ -1583,7 +1581,7 @@
           "taskLabel": "experimental-agent"
         },
         "failureDetail": {
-          "reason": "UNSUPPORTED_RUNNER",
+          "reason": "unknown",
           "message": "Runner experimental-runner is not registered."
         }
       },
@@ -1594,11 +1592,11 @@
         "sessionStatus": "FAILED",
         "mode": "final",
         "includeArtifacts": false,
-        "failure": {
-          "reason": "UNSUPPORTED_RUNNER",
-          "message": "Requested runner is not available in this environment.",
-          "partialResultAvailable": false
-        }
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Requested runner is not available in this environment."
+        },
+        "partialResultAvailable": false
       }
     },
     {
@@ -1651,11 +1649,11 @@
             "BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES"
           ]
         },
-        "failure": {
-          "reason": "MISSING_SOURCE",
-          "message": "Workflow does-not-exist could not be resolved.",
-          "partialResultAvailable": false
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Workflow does-not-exist could not be resolved."
         },
+        "partialResultAvailable": false,
         "links": {
           "session": "/factory-sessions/dur-sess-missing-source-001"
         },
@@ -1682,11 +1680,11 @@
         "sessionStatus": "FAILED",
         "mode": "final",
         "includeArtifacts": false,
-        "failure": {
-          "reason": "MISSING_SOURCE",
-          "message": "Workflow does-not-exist could not be resolved.",
-          "partialResultAvailable": false
-        }
+        "failureDetail": {
+          "reason": "unknown",
+          "message": "Workflow does-not-exist could not be resolved."
+        },
+        "partialResultAvailable": false
       }
     }
   ],

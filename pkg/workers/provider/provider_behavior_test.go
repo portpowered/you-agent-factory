@@ -261,26 +261,46 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 			want: []string{"chat", "--no-interactive", "summarize the workspace"},
 		},
 		{
-			name: "WithSystemPromptSessionAndTrustedTools",
+			name: "ComposedContextAndUserPrompt",
 			req: interfaces.ProviderInferenceRequest{
 				ModelProvider: string(interfaces.ModelProviderKiro),
 				SystemPrompt:  "You are a careful reviewer.",
 				UserMessage:   "run the tests",
-				SessionID:     "kiro-session-123",
 			},
-			skipPermissions: true,
 			want: []string{
 				"chat",
 				"--no-interactive",
-				"--resume-id",
-				"kiro-session-123",
-				"--trust-all-tools",
 				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
 			},
 		},
+		{
+			name: "EmptyPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+			},
+			want: []string{"chat", "--no-interactive"},
+		},
+		{
+			name: "TrustedTools",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"chat", "--no-interactive", "--trust-all-tools", "run the tests"},
+		},
+		{
+			name: "ResumeSession",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "continue the review",
+				SessionID:     "kiro-session-123",
+			},
+			want: []string{"chat", "--no-interactive", "--resume-id", "kiro-session-123", "continue the review"},
+		},
 	}
 
-	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	behavior := providerBehaviorFor(string(interfaces.ModelProviderKiro), logging.NoopLogger{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
@@ -561,7 +581,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behaviors := map[string]providerBehavior{
 		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
 	}
@@ -602,6 +621,75 @@ func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 					}
 				})
 			}
+		})
+	}
+}
+
+func TestKiroProviderBehavior_UsesSafeCanonicalFailureMessages(t *testing.T) {
+	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	authResult := providerErrorCorpusEntryForTest(t, "kiro_structured_authentication_error").CommandResult()
+
+	if got := behavior.FormatExitFailure(string(interfaces.ModelProviderKiro), authResult); got != kiroAuthFailureMessage {
+		t.Fatalf("FormatExitFailure() = %q, want %q", got, kiroAuthFailureMessage)
+	}
+	if got := behavior.ClassifyExitFailure(authResult); got != interfaces.WorkFailureTypeAuthFailure {
+		t.Fatalf("ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeAuthFailure)
+	}
+	if got := behavior.FormatTimeoutFailure(CommandResult{Stderr: []byte("private transcript")}); got != kiroTimeoutFailureMessage {
+		t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, kiroTimeoutFailureMessage)
+	}
+}
+
+func TestScriptWrapProvider_Infer_KiroKnownFailuresUseCanonicalParserAndPolicy(t *testing.T) {
+	fixtureNames := []string{
+		"kiro_structured_authentication_error",
+		"kiro_structured_invalid_request_stdout",
+		"kiro_text_authentication_stdout",
+		"kiro_structured_throttle_precedes_text",
+		"kiro_text_capacity_error",
+		"kiro_text_timeout_malformed_structured",
+		"kiro_structured_service_unavailable",
+	}
+
+	for _, name := range fixtureNames {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: entry.CommandResult()}))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "private prompt that must stay out of normalized failures",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType: entry.ExpectedType, wantFamily: entry.ExpectedFamily,
+				wantMessage:   knownKiroFailure(entry.ExpectedType).Message,
+				rejectTexts:   append(entry.RejectMessageContains, "private prompt"),
+				wantRetryable: entry.Retryable, wantTerminal: !entry.Retryable,
+				wantThrottlePause: entry.TriggersThrottlePause,
+			})
+		})
+	}
+}
+
+func TestScriptWrapProvider_Infer_KiroUnknownFailuresUseBoundedParserMessages(t *testing.T) {
+	testCases := map[string]string{
+		"kiro_unknown_stderr_excerpt_precedes_stdout":     "Kiro error: model registry handshake failed",
+		"kiro_unknown_stdout_excerpt_after_unsafe_stderr": "Kiro error: plugin bridge failed",
+		"kiro_unknown_noise_only_exit_fallback":           "kiro-cli exited with code 11",
+	}
+
+	for name, wantMessage := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: entry.CommandResult()}))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "private prompt that must stay out of normalized failures",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal,
+				wantMessage: wantMessage, rejectTexts: append(entry.RejectMessageContains, "private prompt"),
+				wantTerminal: true,
+			})
 		})
 	}
 }
@@ -647,7 +735,6 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 
 func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	for _, providerName := range []string{
-		string(interfaces.ModelProviderKiro),
 		string(interfaces.ModelProviderOpenCode),
 	} {
 		behavior := providerBehaviorForErrorClassification(providerName)

@@ -213,7 +213,10 @@ func modelResponseEvent(
 
 	if err != nil {
 		payload.Outcome = factoryapi.InferenceOutcomeFailed
-		payload.ErrorClass = modelEventStringPtr(modelEventErrorClass(err))
+		payload.FailureDetail = &factoryapi.FailureDetail{
+			Reason:  factoryapi.WorkFailureTypeUnknown,
+			Message: "The model request failed without an available explanation.",
+		}
 		payload.Diagnostics = modelEventDiagnostics(nil, err)
 	} else {
 		payload.Outcome = factoryapi.InferenceOutcomeSucceeded

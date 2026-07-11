@@ -13,8 +13,8 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
-	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/api/workstationprojection"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -24,8 +24,8 @@ func TestPolicyToolExecutor_DisabledDeniesToolCalls(t *testing.T) {
 	recorder := NewToolDiagnosticRecorder()
 	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyDisabled, t.TempDir(), recorder)
 	_, err := executor.Execute(context.Background(), messages.ToolCall{
-		ID:   "tc1",
-		Name: ToolNameReadFile,
+		ID:        "tc1",
+		Name:      ToolNameReadFile,
 		Arguments: `{"path":"note.txt"}`,
 	})
 	if !errors.Is(err, ErrToolPolicyDenied) {
@@ -428,11 +428,11 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 	if err != nil {
 		t.Fatalf("dispatch response payload: %v", err)
 	}
-	if payload.FailureMessage == nil {
+	if payload.FailureDetail == nil {
 		t.Fatal("expected failure message on dispatch response")
 	}
-	if strings.Contains(*payload.FailureMessage, caseDir) {
-		t.Fatalf("dispatch failure message leaks absolute working directory %q: %q", caseDir, *payload.FailureMessage)
+	if strings.Contains(payload.FailureDetail.Message, caseDir) {
+		t.Fatalf("dispatch failure message leaks absolute working directory %q: %q", caseDir, payload.FailureDetail.Message)
 	}
 
 	workItem := interfaces.FactoryWorkItem{
@@ -448,18 +448,21 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 			workItem.ID: workItem,
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
-			DispatchID:      dispatch.DispatchID,
-			TransitionID:    dispatch.TransitionID,
-			Workstation:     interfaces.FactoryWorkstationRef{ID: "execute", Name: "Execute"},
-			WorkItemIDs:     []string{workItem.ID},
-			TraceIDs:        []string{workItem.TraceID},
-			StartedAt:       time.Unix(0, 0).UTC(),
-			CompletedAt:     completedAt,
-			DurationMillis:  1000,
+			DispatchID:     dispatch.DispatchID,
+			TransitionID:   dispatch.TransitionID,
+			Workstation:    interfaces.FactoryWorkstationRef{ID: "execute", Name: "Execute"},
+			WorkItemIDs:    []string{workItem.ID},
+			TraceIDs:       []string{workItem.TraceID},
+			StartedAt:      time.Unix(0, 0).UTC(),
+			CompletedAt:    completedAt,
+			DurationMillis: 1000,
 			Result: interfaces.WorkstationResult{
-				Outcome:        string(interfaces.OutcomeFailed),
-				Error:          result.Error,
-				FailureMessage: result.Error,
+				Outcome: string(interfaces.OutcomeFailed),
+				Error:   result.Error,
+				FailureDetail: &interfaces.FailureDetail{
+					Reason:  interfaces.WorkFailureTypeUnknown,
+					Message: result.Error,
+				},
 			},
 		}},
 	}
@@ -468,11 +471,11 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		t.Fatal("expected workstation request projection")
 	}
 	view := (*projection.WorkstationRequestsByDispatchId)[dispatch.DispatchID]
-	if view.Response == nil || view.Response.FailureMessage == nil {
+	if view.Response == nil || view.Response.FailureDetail == nil {
 		t.Fatalf("projected response = %#v, want failure message", view.Response)
 	}
-	if strings.Contains(*view.Response.FailureMessage, caseDir) {
-		t.Fatalf("projected failure message leaks absolute working directory %q: %q", caseDir, *view.Response.FailureMessage)
+	if strings.Contains(view.Response.FailureDetail.Message, caseDir) {
+		t.Fatalf("projected failure message leaks absolute working directory %q: %q", caseDir, view.Response.FailureDetail.Message)
 	}
 }
 

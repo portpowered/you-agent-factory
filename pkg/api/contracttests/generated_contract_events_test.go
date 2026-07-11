@@ -203,7 +203,7 @@ func TestGeneratedInferenceEventJSONRoundTripPreservesAttemptCorrelation(t *test
 			"outcome": "FAILED",
 			"durationMillis": 251,
 			"exitCode": 1,
-			"errorClass": "provider_error"
+			"failureDetail": {"reason": "unknown", "message": "Provider request failed."}
 		}
 	}`)
 

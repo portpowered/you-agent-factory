@@ -1668,8 +1668,8 @@ components:
       $ref: './components/schemas/data-models/FactoryDispatchUsage.yaml'
     FactoryDispatchWarning:
       $ref: './components/schemas/data-models/FactoryDispatchWarning.yaml'
-    FactoryDispatchFailureDetail:
-      $ref: './components/schemas/data-models/FactoryDispatchFailureDetail.yaml'
+    FailureDetail:
+      $ref: './components/schemas/data-models/FailureDetail.yaml'
     FactoryArtifact:
       $ref: './components/schemas/data-models/FactoryArtifact.yaml'
     FactoryArtifactRef:
@@ -1738,8 +1738,6 @@ components:
       $ref: './components/schemas/api/FactorySessionDurableActionAvailability.yaml'
     FactorySessionDurableResultSummary:
       $ref: './components/schemas/api/FactorySessionDurableResultSummary.yaml'
-    FactorySessionDurableFailureDetail:
-      $ref: './components/schemas/api/FactorySessionDurableFailureDetail.yaml'
     FactorySessionDurableLifecycleTimestamps:
       $ref: './components/schemas/api/FactorySessionDurableLifecycleTimestamps.yaml'
     FactorySessionResultStatus:

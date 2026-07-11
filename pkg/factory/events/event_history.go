@@ -405,8 +405,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfa
 			Error:                       stringPtrIfNotEmpty(result.Error),
 			Feedback:                    stringPtrIfNotEmpty(result.Feedback),
 			SelectedClassificationLabel: stringPtrIfNotEmpty(result.SelectedClassificationLabel),
-			FailureReason:               stringPtrIfNotEmpty(failureReason),
-			FailureMessage:              stringPtrIfNotEmpty(failureMessage),
+			FailureDetail:               failureDetail(failureReason, failureMessage),
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
 			OutputWork:                  generatedWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
 			OutputResources:             h.generatedOutputResourcesPtr(completed.OutputMutations),
@@ -879,6 +878,37 @@ func cloneStringMap(input map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
+}
+
+func failureDetail(reason, message string) *factoryapi.FailureDetail {
+	return failureDetailValue(reason, message)
+}
+
+func failureDetailValue(reason, message string) *factoryapi.FailureDetail {
+	reason = strings.TrimSpace(reason)
+	message = strings.TrimSpace(message)
+	if reason == "" || message == "" {
+		return nil
+	}
+	return &factoryapi.FailureDetail{
+		Reason:  normalizedFailureReason(reason),
+		Message: message,
+	}
+}
+
+func normalizedFailureReason(reason string) factoryapi.WorkFailureType {
+	candidate := factoryapi.WorkFailureType(strings.TrimSpace(reason))
+	switch candidate {
+	case factoryapi.WorkFailureTypeAuthFailure,
+		factoryapi.WorkFailureTypePermanentBadRequest,
+		factoryapi.WorkFailureTypeThrottled,
+		factoryapi.WorkFailureTypeInternalServerError,
+		factoryapi.WorkFailureTypeTimeout,
+		factoryapi.WorkFailureTypeMisconfigured:
+		return candidate
+	default:
+		return factoryapi.WorkFailureTypeUnknown
+	}
 }
 
 func uniqueStrings(input []string) []string {

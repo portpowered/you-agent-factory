@@ -57,8 +57,11 @@ properties:
     description: Customer-visible artifact refs without raw artifact bodies.
   resultSummary:
     $ref: './FactorySessionDurableResultSummary.yaml'
-  failure:
-    $ref: './FactorySessionDurableFailureDetail.yaml'
+  failureDetail:
+    $ref: '../data-models/FailureDetail.yaml'
+  partialResultAvailable:
+    type: boolean
+    description: Whether partial results remain inspectable after the failure.
   lifecycle:
     $ref: './FactorySessionDurableLifecycleTimestamps.yaml'
   staleLease:

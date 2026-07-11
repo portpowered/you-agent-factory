@@ -117,8 +117,10 @@ function failedDispatchEvents(tick: number, workID: string): FactoryEvent[] {
       FACTORY_EVENT_TYPES.dispatchResponse,
       {
         durationMillis: 1,
-        failureMessage: "boom",
-        failureReason: "worker_error",
+        failureDetail: {
+          message: "boom",
+          reason: "unknown",
+        },
         outcome: "FAILED",
         outputWork: [
           {

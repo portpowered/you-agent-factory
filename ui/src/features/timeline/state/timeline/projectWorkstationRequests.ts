@@ -1,6 +1,7 @@
 import type {
   DashboardInferenceAttempt,
   DashboardRuntimeWorkstationRequest,
+  DashboardRuntimeWorkstationRequestResponse,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
 import type { FactoryWorkItem } from "../../../../api/events";
@@ -273,8 +274,13 @@ function workstationRequestFromCompletion(
     response: {
       durationMillis: completion.durationMillis,
       endTime: completion.endTime,
-      failureMessage: completion.failureMessage,
-      failureReason: completion.failureReason,
+      failureDetail:
+        completion.failureReason && completion.failureMessage
+          ? {
+              reason: timelineFailureReason(completion.failureReason),
+              message: completion.failureMessage,
+            }
+          : undefined,
       feedback:
         completion.feedbackTextBlobID && textBlobsByID
           ? textBlobsByID[completion.feedbackTextBlobID]
@@ -294,6 +300,24 @@ function workstationRequestFromCompletion(
     transitionId: completion.transitionID,
     workstationName: completion.workstationName,
   };
+}
+
+function timelineFailureReason(
+  reason: string,
+): NonNullable<
+  DashboardRuntimeWorkstationRequestResponse["failureDetail"]
+>["reason"] {
+  switch (reason) {
+    case "auth_failure":
+    case "permanent_bad_request":
+    case "throttled":
+    case "internal_server_error":
+    case "timeout":
+    case "misconfigured":
+      return reason;
+    default:
+      return "unknown";
+  }
 }
 
 function workstationRequestCounts(

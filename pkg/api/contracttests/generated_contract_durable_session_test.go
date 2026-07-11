@@ -566,7 +566,7 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, durableReadModelProperties, "usage", "#/components/schemas/FactorySessionUsage")
 	assertArrayItemRef(t, durableReadModelProperties, "artifactRefs", "#/components/schemas/FactoryArtifactRef")
 	assertPropertyRef(t, durableReadModelProperties, "resultSummary", "#/components/schemas/FactorySessionDurableResultSummary")
-	assertPropertyRef(t, durableReadModelProperties, "failure", "#/components/schemas/FactorySessionDurableFailureDetail")
+	assertPropertyRef(t, durableReadModelProperties, "failureDetail", "#/components/schemas/FailureDetail")
 	assertPropertyRef(t, durableReadModelProperties, "lifecycle", "#/components/schemas/FactorySessionDurableLifecycleTimestamps")
 	assertPropertyRef(t, durableReadModelProperties, "links", "#/components/schemas/FactorySessionExecutionLinks")
 	assertPropertyRef(t, durableReadModelProperties, "requestedPolicy", "#/components/schemas/FactorySessionRequestedPolicy")
@@ -574,7 +574,7 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertSchemaPropertiesPresent(t, durableReadModelProperties, "FactorySessionDurableReadModel",
 		"sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash",
 		"requestedPolicy", "effectivePolicy", "effectivePolicyHash", "phase", "phaseSummaries", "progress", "budgets", "usage",
-		"artifactRefs", "resultSummary", "failure", "lifecycle", "staleLease", "links")
+		"artifactRefs", "resultSummary", "failureDetail", "partialResultAvailable", "lifecycle", "staleLease", "links")
 
 	durableSummary := schemaObject(t, schemas, "FactorySessionDurableSummary")
 	assertRequiredFields(t, durableSummary, "sessionId", "status", "orchestratorKind", "resolvedSource")
@@ -628,11 +628,11 @@ func assertDurableSessionResultSurfaceSchemas(t *testing.T, schemas map[string]a
 	assertPropertyRef(t, resultProperties, "mode", "#/components/schemas/FactorySessionResultMode")
 	assertPropertyRef(t, resultProperties, "primaryResult", "#/components/schemas/WorkContent")
 	assertArrayItemRef(t, resultProperties, "artifactRefs", "#/components/schemas/FactoryArtifactRef")
-	assertPropertyRef(t, resultProperties, "failure", "#/components/schemas/FactorySessionDurableFailureDetail")
+	assertPropertyRef(t, resultProperties, "failureDetail", "#/components/schemas/FailureDetail")
 	assertPropertyRef(t, resultProperties, "availability", "#/components/schemas/FactorySessionResultAvailabilityDetail")
 	assertSchemaPropertiesPresent(t, resultProperties, "FactorySessionResult",
 		"sessionId", "resultStatus", "sessionStatus", "mode", "includeArtifacts",
-		"primaryResult", "artifactIds", "artifactRefs", "failure", "availability")
+		"primaryResult", "artifactIds", "artifactRefs", "failureDetail", "partialResultAvailable", "availability")
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionResultMode"), "FactorySessionResultMode", []string{"final", "partial"})
 
 	liveResultSchema := schemaObject(t, schemas, "FactorySessionLiveResult")
@@ -694,7 +694,7 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 	assertPropertyRef(t, dispatchSummaryProperties, "status", "#/components/schemas/FactoryDispatchStatus")
 	assertPropertyRef(t, dispatchSummaryProperties, "dispatchKind", "#/components/schemas/FactoryDispatchKind")
 	assertPropertyRef(t, dispatchSummaryProperties, "usage", "#/components/schemas/FactoryDispatchUsage")
-	assertPropertyRef(t, dispatchSummaryProperties, "failureDetail", "#/components/schemas/FactoryDispatchFailureDetail")
+	assertPropertyRef(t, dispatchSummaryProperties, "failureDetail", "#/components/schemas/FailureDetail")
 	assertPropertyRef(t, dispatchSummaryProperties, "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
 	assertArrayItemRef(t, dispatchSummaryProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
 	assertArrayItemRef(t, dispatchSummaryProperties, "warnings", "#/components/schemas/FactoryDispatchWarning")

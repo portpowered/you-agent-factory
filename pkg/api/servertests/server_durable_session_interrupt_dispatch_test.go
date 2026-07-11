@@ -726,9 +726,8 @@ func assertAPILiveProviderFailedSessionRead(t *testing.T, snapshot durableSessio
 		snapshot.read.Progress.FailedDispatches == nil || *snapshot.read.Progress.FailedDispatches != 1 {
 		t.Fatalf("session progress = %#v, want one failed dispatch", snapshot.read.Progress)
 	}
-	if snapshot.read.Failure == nil || snapshot.read.Failure.Reason == nil ||
-		*snapshot.read.Failure.Reason == "" {
-		t.Fatalf("session failure = %#v, want typed workflow failure", snapshot.read.Failure)
+	if snapshot.read.FailureDetail == nil || snapshot.read.FailureDetail.Reason == "" {
+		t.Fatalf("session failure = %#v, want typed workflow failure", snapshot.read.FailureDetail)
 	}
 }
 

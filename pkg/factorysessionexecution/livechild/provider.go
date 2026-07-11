@@ -109,10 +109,7 @@ func (e *ProviderChildExecutor) failedChildResult(
 	failed.Status = workflowruntime.ChildDispatchStatusFailed
 	failed.Provider = providerName
 	failed.ProviderSessionRef = providerSessionRef
-	reason, message, errorClass := childExecutionFailureFields(err)
-	failed.FailureReason = reason
-	failed.FailureMessage = message
-	failed.FailureErrorClass = errorClass
+	failed.FailureDetail = childExecutionFailureDetail(err)
 	e.records.Append(workflowruntime.RuntimeRecord{
 		Kind:          workflowruntime.RecordKindChildDispatch,
 		ChildDispatch: &failed,
@@ -190,20 +187,19 @@ func providerSessionFields(session *interfaces.ProviderSessionMetadata) (provide
 	return providerName, sessionRef
 }
 
-func childExecutionFailureFields(err error) (reason, message, errorClass string) {
-	reason = workflowruntime.ChildExecutionFailureReason
-	message = err.Error()
+func childExecutionFailureDetail(err error) *interfaces.FailureDetail {
+	detail := &interfaces.FailureDetail{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: err.Error(),
+	}
 	var providerErr *provider.ProviderError
 	if errors.As(err, &providerErr) {
 		if providerErr.Type != "" {
-			reason = string(providerErr.Type)
+			detail.Reason = providerErr.Type
 		}
 		if providerErr.Message != "" {
-			message = providerErr.Message
-		}
-		if providerErr.Family != "" {
-			errorClass = string(providerErr.Family)
+			detail.Message = providerErr.Message
 		}
 	}
-	return reason, message, errorClass
+	return detail
 }

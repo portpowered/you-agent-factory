@@ -777,7 +777,9 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, responsePayloadProperties, "agentRunInspection", "#/components/schemas/FactoryWorldAgentRunInspectionView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
-	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
+	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureDetail", "endTime", "durationMillis")
+	assertPropertyRef(t, responsePayloadProperties, "failureDetail", "#/components/schemas/FailureDetail")
+	assertPropertiesAbsent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "failureReason", "failureMessage", "errorClass")
 	assertDateTimeStringProperty(t, responsePayloadProperties, "endTime")
 	assertInt64Property(t, responsePayloadProperties, "durationMillis")
 }
@@ -803,7 +805,7 @@ func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
-	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
+	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureDetail", "endTime", "durationMillis")
 }
 
 func pathOperation(t *testing.T, paths map[string]any, path string, method string) map[string]any {

@@ -60,12 +60,12 @@ describe("dashboard fixture catalog", () => {
     expect(
       runtimeDetailsBackendWorkstationRequestsByDispatchID[
         runtimeDetailsFixtureIDs.failedDispatchID
-      ]?.response?.failure_reason,
+      ]?.response?.failureDetail?.reason,
     ).toBe(runtimeDetailsFixtureIDs.failedFailureReason);
     expect(
       scriptDashboardIntegrationBackendWorkstationRequestsByDispatchID[
         scriptDashboardIntegrationFixtureIDs.failedDispatchID
-      ]?.response?.failure_reason,
+      ]?.response?.failureDetail?.reason,
     ).toBe(scriptDashboardIntegrationFixtureIDs.failedFailureReason);
     expect(runtimeDetailsFixtureIDs.completedSystemPromptHash).toMatch(
       /^sha256:/,

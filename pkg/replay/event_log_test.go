@@ -701,7 +701,7 @@ func replayInferenceResponseEvent(
 	}
 	if errorClass != "" {
 		payload.Outcome = factoryapi.InferenceOutcomeFailed
-		payload.ErrorClass = stringPtrIfNotEmpty(errorClass)
+		payload.FailureDetail = &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeUnknown, Message: errorClass}
 	} else {
 		payload.Outcome = factoryapi.InferenceOutcomeSucceeded
 		payload.Response = stringPtrIfNotEmpty(response)

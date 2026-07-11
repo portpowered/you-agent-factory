@@ -53,6 +53,6 @@ properties:
       type: string
     description: Artifact identifiers produced by the dispatch.
   failureDetail:
-    $ref: '../data-models/FactoryDispatchFailureDetail.yaml'
+    $ref: '../data-models/FailureDetail.yaml'
   javascript:
     $ref: '../data-models/FactoryDispatchJavaScriptProjection.yaml'

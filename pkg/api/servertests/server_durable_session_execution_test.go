@@ -59,6 +59,7 @@ func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSe
 	if replay.Status != first.Status {
 		t.Fatalf("replay status = %q, want %q", replay.Status, first.Status)
 	}
+	waitForRuntimeSessionTerminal(t, service, first.SessionId)
 }
 
 func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *testing.T) {
@@ -69,7 +70,8 @@ func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *t
 	defer server.Close()
 
 	first := runtimeBackedAsyncStartRequest("req-api-runtime-conflict-001")
-	if _, err := postDurableAsyncStartRaw(t, server.URL, first); err != nil {
+	firstResponse, err := postDurableAsyncStartRaw(t, server.URL, first)
+	if err != nil {
 		t.Fatalf("first start: %v", err)
 	}
 
@@ -86,6 +88,7 @@ func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *t
 	if errResp.Code != factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT {
 		t.Fatalf("code = %q, want EXECUTION_REQUEST_ID_CONFLICT", errResp.Code)
 	}
+	waitForRuntimeSessionTerminal(t, service, firstResponse.SessionId)
 }
 
 func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *testing.T) {
@@ -110,6 +113,7 @@ func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *te
 	if started.SessionId == "" {
 		t.Fatal("expected valid start to create a session")
 	}
+	waitForRuntimeSessionTerminal(t, service, started.SessionId)
 }
 
 func TestStartDurableFactorySessionAsync_MissingRequestIDReturnsValidationError(t *testing.T) {

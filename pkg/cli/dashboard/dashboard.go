@@ -271,8 +271,7 @@ type dashboardFailedWorkDetail struct {
 	DispatchID      string
 	TransitionID    string
 	WorkstationName string
-	FailureReason   string
-	FailureMessage  string
+	FailureDetail   *interfaces.FailureDetail
 }
 
 type dashboardProviderSessionView struct {

@@ -39,9 +39,12 @@ properties:
       $ref: '../data-models/FactoryArtifactRef.yaml'
     description: >-
       Artifact refs for large or non-text outputs when includeArtifacts is true.
-  failure:
-    $ref: './FactorySessionDurableFailureDetail.yaml'
+  failureDetail:
+    $ref: '../data-models/FailureDetail.yaml'
     description: Failure details when resultStatus is FAILED_WITH_PARTIAL.
+  partialResultAvailable:
+    type: boolean
+    description: Whether partial results remain inspectable after the failure.
   availability:
     $ref: './FactorySessionResultAvailabilityDetail.yaml'
     description: Availability details when resultStatus is NOT_READY or UNAVAILABLE.

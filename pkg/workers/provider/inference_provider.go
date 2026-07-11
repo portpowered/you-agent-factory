@@ -315,6 +315,13 @@ func normalizeProviderExitFailure(provider string, result CommandResult, session
 			session,
 			diagnostics,
 		)
+	case string(interfaces.ModelProviderKiro):
+		return newProviderErrorFromResultWithDiagnostics(
+			ParseKiroProviderFailure(result),
+			nil,
+			session,
+			diagnostics,
+		)
 	case string(interfaces.ModelProviderOpenCode):
 		return newProviderErrorFromResultWithDiagnostics(
 			ParseOpenCodeProviderFailure(result),

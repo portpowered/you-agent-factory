@@ -28,5 +28,5 @@ properties:
     $ref: '../../api/FactorySessionJavaScriptChildDispatchCounts.yaml'
     description: Dispatch queue, running, and completed counts at terminal completion.
   failureDetail:
-    $ref: '../../data-models/FactoryDispatchFailureDetail.yaml'
+    $ref: '../../data-models/FailureDetail.yaml'
     description: Canonical failure details when the session completed unsuccessfully.

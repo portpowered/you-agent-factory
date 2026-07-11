@@ -46,7 +46,7 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	if failedMapped.ResultStatus != factoryapi.FactorySessionResultStatusFailedWithPartial {
 		t.Fatalf("failed-with-partial status = %q", failedMapped.ResultStatus)
 	}
-	if failedMapped.Failure == nil || failedMapped.Failure.PartialResultAvailable == nil || !*failedMapped.Failure.PartialResultAvailable {
+	if failedMapped.FailureDetail == nil || failedMapped.PartialResultAvailable == nil || !*failedMapped.PartialResultAvailable {
 		t.Fatal("failed-with-partial failure detail missing")
 	}
 
@@ -197,7 +197,6 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 			FailureDetail: &factorysessionexecution.DispatchFailureDetail{
 				Reason:     " TEMPORARY ",
 				Message:    " provider unavailable ",
-				ErrorClass: " transient ",
 			},
 		},
 		SessionID:         "dur-sess-1",
@@ -210,7 +209,7 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 	if dispatchMapped.Warnings == nil || len(*dispatchMapped.Warnings) != 1 || (*dispatchMapped.Warnings)[0].Message != "retried once" {
 		t.Fatalf("dispatch warnings = %#v, want trimmed warning", dispatchMapped.Warnings)
 	}
-	if dispatchMapped.FailureDetail == nil || dispatchMapped.FailureDetail.Reason == nil || *dispatchMapped.FailureDetail.Reason != "TEMPORARY" {
+	if dispatchMapped.FailureDetail == nil || dispatchMapped.FailureDetail.Reason != factoryapi.WorkFailureTypeUnknown {
 		t.Fatalf("dispatch failure detail = %#v, want trimmed failure", dispatchMapped.FailureDetail)
 	}
 	if dispatchMapped.StatusTransitions == nil || len(*dispatchMapped.StatusTransitions) != 2 {
@@ -365,8 +364,8 @@ func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 	if mapped.ArtifactIds == nil || len(*mapped.ArtifactIds) != 2 || (*mapped.ArtifactIds)[0] != "one" {
 		t.Fatalf("artifactIds = %#v", mapped.ArtifactIds)
 	}
-	if mapped.Failure != nil {
-		t.Fatalf("failure = %#v, want omitted", mapped.Failure)
+	if mapped.FailureDetail != nil {
+		t.Fatalf("failure = %#v, want omitted", mapped.FailureDetail)
 	}
 	if mapped.Availability != nil {
 		t.Fatalf("availability = %#v, want omitted", mapped.Availability)
@@ -483,12 +482,11 @@ func resultFromFixture(result map[string]any) factorysessionexecution.ResultRead
 			}
 		}
 	}
-	if failure, ok := result["failure"].(map[string]any); ok {
+	if failure, ok := result["failureDetail"].(map[string]any); ok {
 		out.Failure = &factorysessionexecution.FailureSummary{
 			Reason:                 stringValue(failure, "reason"),
 			Message:                stringValue(failure, "message"),
-			ErrorClass:             stringValue(failure, "errorClass"),
-			PartialResultAvailable: boolValue(failure, "partialResultAvailable"),
+			PartialResultAvailable: boolValue(result, "partialResultAvailable"),
 		}
 	}
 	if availability, ok := result["availability"].(map[string]any); ok {
@@ -554,7 +552,6 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 		summary.FailureDetail = &factorysessionexecution.DispatchFailureDetail{
 			Reason:     stringValue(failure, "reason"),
 			Message:    stringValue(failure, "message"),
-			ErrorClass: stringValue(failure, "errorClass"),
 		}
 	}
 	if javascript, ok := dispatch["javascript"].(map[string]any); ok {

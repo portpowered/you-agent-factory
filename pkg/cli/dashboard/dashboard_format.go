@@ -258,17 +258,24 @@ func displayDashboardFailedWorkDetail(detail dashboardFailedWorkDetail) string {
 	if workstation := displayDispatchWorkstationName(detail.WorkstationName, detail.TransitionID); workstation != "n/a" {
 		parts = append(parts, workstation)
 	}
-	if reason := dashboardFailureReason(detail.FailureReason, detail.FailureMessage); reason != "" {
+	if reason := dashboardFailureDetail(detail.FailureDetail); reason != "" {
 		parts = append(parts, reason)
 	}
 	return strings.Join(parts, " ")
 }
 
 func worldDispatchReason(dispatch interfaces.FactoryWorldDispatchCompletion) string {
-	return dashboardFailureReason(
-		firstNonEmpty(dispatch.Result.FailureReason, dispatch.Result.Feedback),
-		dispatch.Result.FailureMessage,
-	)
+	if detail := dashboardFailureDetail(dispatch.Result.FailureDetail); detail != "" {
+		return detail
+	}
+	return strings.TrimSpace(dispatch.Result.Feedback)
+}
+
+func dashboardFailureDetail(detail *interfaces.FailureDetail) string {
+	if detail == nil {
+		return ""
+	}
+	return dashboardFailureReason(string(detail.Reason), detail.Message)
 }
 
 func dashboardFailureReason(reason, message string) string {
@@ -284,15 +291,6 @@ func dashboardFailureReason(reason, message string) string {
 	default:
 		return ""
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func formatProviderSession(session *interfaces.ProviderSessionMetadata) string {

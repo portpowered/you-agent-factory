@@ -298,12 +298,11 @@ func applySessionReadFixtureOutcomeFields(result *factorysessionexecution.Sessio
 			Summary:      stringValue(summary, "summary"),
 		}
 	}
-	if failure, ok := session["failure"].(map[string]any); ok {
+	if failure, ok := session["failureDetail"].(map[string]any); ok {
 		result.Failure = &factorysessionexecution.FailureSummary{
 			Reason:                 stringValue(failure, "reason"),
 			Message:                stringValue(failure, "message"),
-			ErrorClass:             stringValue(failure, "errorClass"),
-			PartialResultAvailable: boolValue(failure, "partialResultAvailable"),
+			PartialResultAvailable: boolValue(session, "partialResultAvailable"),
 		}
 	}
 	if lifecycle, ok := session["lifecycle"].(map[string]any); ok {

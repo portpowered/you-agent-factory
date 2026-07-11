@@ -190,9 +190,8 @@ type DispatchWarning struct {
 
 // DispatchFailureDetail exposes one customer-visible dispatch failure.
 type DispatchFailureDetail struct {
-	Reason     string
-	Message    string
-	ErrorClass string
+	Reason  string
+	Message string
 }
 
 // DispatchPetriProjection carries Petri-specific dispatch metadata.
@@ -551,9 +550,8 @@ func (r *sessionProjectionReducer) applySessionCompleted(envelope canonicalFacto
 		ResultStatus  *string  `json:"resultStatus"`
 		ArtifactIDs   []string `json:"artifactIds"`
 		FailureDetail *struct {
-			Reason     *string `json:"reason"`
-			Message    *string `json:"message"`
-			ErrorClass *string `json:"errorClass"`
+			Reason  *string `json:"reason"`
+			Message *string `json:"message"`
 		} `json:"failureDetail"`
 	}
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
@@ -583,9 +581,8 @@ func (r *sessionProjectionReducer) applySessionCompleted(envelope canonicalFacto
 
 	if payload.FailureDetail != nil {
 		r.session.Failure = &FailureSummary{
-			Reason:     stringValuePtr(payload.FailureDetail.Reason),
-			Message:    stringValuePtr(payload.FailureDetail.Message),
-			ErrorClass: stringValuePtr(payload.FailureDetail.ErrorClass),
+			Reason:  stringValuePtr(payload.FailureDetail.Reason),
+			Message: stringValuePtr(payload.FailureDetail.Message),
 		}
 	}
 	return nil

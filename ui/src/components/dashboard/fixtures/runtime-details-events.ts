@@ -39,7 +39,7 @@ export const runtimeDetailsFixtureIDs = {
   failedErrorClass: "rate_limited",
   failedFailureMessage:
     "Provider rate limit exceeded while reviewing the failed runtime story.",
-  failedFailureReason: "provider_rate_limit",
+  failedFailureReason: "throttled",
   failedPromptSource: "retry-renderer",
   failedProviderSessionID: "sess-runtime-failed",
   failedTraceID: "trace-runtime-failed",
@@ -252,7 +252,10 @@ export const runtimeDetailsTimelineEvents: FactoryEvent[] = [
       attempt: 1,
       dispatchId: runtimeDetailsFixtureIDs.failedDispatchID,
       durationMillis: runtimeDetailsFixtureIDs.failedDurationMillis,
-      errorClass: runtimeDetailsFixtureIDs.failedErrorClass,
+      failureDetail: {
+        message: runtimeDetailsFixtureIDs.failedFailureMessage,
+        reason: runtimeDetailsFixtureIDs.failedFailureReason,
+      },
       inferenceRequestId: `${runtimeDetailsFixtureIDs.failedDispatchID}/inference-request/1`,
       outcome: "FAILED",
       transitionId: "review",
@@ -275,8 +278,10 @@ export const runtimeDetailsTimelineEvents: FactoryEvent[] = [
     },
     dispatchId: runtimeDetailsFixtureIDs.failedDispatchID,
     durationMillis: runtimeDetailsFixtureIDs.failedDurationMillis,
-    failureMessage: runtimeDetailsFixtureIDs.failedFailureMessage,
-    failureReason: runtimeDetailsFixtureIDs.failedFailureReason,
+    failureDetail: {
+      message: runtimeDetailsFixtureIDs.failedFailureMessage,
+      reason: runtimeDetailsFixtureIDs.failedFailureReason,
+    },
     outcome: "FAILED",
     outputWork: [
       {

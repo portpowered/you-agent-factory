@@ -201,16 +201,15 @@ func buildWorldViewJavaScriptRuntime() *interfaces.FactorySessionJavaScriptRunti
 
 func buildWorldViewSessionBracket(t0 time.Time) *interfaces.FactoryWorldSessionBracketState {
 	return &interfaces.FactoryWorldSessionBracketState{
-		SessionID:      "session-1",
-		StartedAt:      t0,
-		ResultStatus:   "running",
-		ResultSummary:  []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "summary"}},
-		ArtifactIDs:    []string{"artifact-1"},
-		Terminal:       true,
-		FinalStatus:    "SUCCESS",
-		CompletedAt:    t0.Add(3 * time.Minute),
-		FailureReason:  "none",
-		FailureMessage: "none",
+		SessionID:     "session-1",
+		StartedAt:     t0,
+		ResultStatus:  "running",
+		ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "summary"}},
+		ArtifactIDs:   []string{"artifact-1"},
+		Terminal:      true,
+		FinalStatus:   "SUCCESS",
+		CompletedAt:   t0.Add(3 * time.Minute),
+		FailureDetail: &interfaces.FailureDetail{Reason: "none", Message: "none"},
 	}
 }
 
@@ -614,8 +613,7 @@ func TestSessionLifecycleHelperFunctions_ProjectStableCopies(t *testing.T) {
 			FinalStatus:    "FAILED",
 			CompletedAt:    time.Date(2026, 6, 17, 12, 1, 0, 0, time.UTC),
 			DurationMillis: 60000,
-			FailureReason:  "timeout",
-			FailureMessage: "timed out",
+			FailureDetail:  &interfaces.FailureDetail{Reason: "timeout", Message: "timed out"},
 		},
 	}
 	projected := buildFactoryWorldSessionBracketProjection(state)

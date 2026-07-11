@@ -203,11 +203,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	if err != nil {
 		t.Fatalf("dispatch completed payload: %v", err)
 	}
-	if stringValueForEventHistoryTest(payload.FailureReason) != "throttled" {
-		t.Fatalf("failure reason = %q, want throttled", stringValueForEventHistoryTest(payload.FailureReason))
+	if payload.FailureDetail == nil || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeThrottled {
+		t.Fatalf("failure detail = %#v, want throttled", payload.FailureDetail)
 	}
-	if stringValueForEventHistoryTest(payload.FailureMessage) != result.Error {
-		t.Fatalf("failure message = %q, want %q", stringValueForEventHistoryTest(payload.FailureMessage), result.Error)
+	if payload.FailureDetail.Message != result.Error {
+		t.Fatalf("failure message = %q, want %q", payload.FailureDetail.Message, result.Error)
 	}
 
 	data, err := json.Marshal(events[0])
@@ -223,8 +223,9 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	assertJSONField(t, payloadObject, "output", "partial output")
 	assertJSONField(t, payloadObject, "error", result.Error)
 	assertJSONField(t, payloadObject, "feedback", "retry later")
-	assertJSONField(t, payloadObject, "failureReason", "throttled")
-	assertJSONField(t, payloadObject, "failureMessage", result.Error)
+	failureDetail := assertJSONObject(t, payloadObject, "failureDetail")
+	assertJSONField(t, failureDetail, "reason", "throttled")
+	assertJSONField(t, failureDetail, "message", result.Error)
 	providerFailure := assertJSONObject(t, payloadObject, "providerFailure")
 	assertJSONField(t, providerFailure, "family", "throttle")
 	assertJSONField(t, providerFailure, "type", "throttled")
@@ -296,11 +297,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 	if err != nil {
 		t.Fatalf("dispatch completed payload: %v", err)
 	}
-	if stringValueForEventHistoryTest(payload.FailureReason) != string(interfaces.WorkFailureTypeInternalServerError) {
-		t.Fatalf("failure reason = %q, want %q", stringValueForEventHistoryTest(payload.FailureReason), interfaces.WorkFailureTypeInternalServerError)
+	if payload.FailureDetail == nil || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeInternalServerError {
+		t.Fatalf("failure detail = %#v, want %q", payload.FailureDetail, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if stringValueForEventHistoryTest(payload.FailureMessage) != errorText {
-		t.Fatalf("failure message = %q, want %q", stringValueForEventHistoryTest(payload.FailureMessage), errorText)
+	if payload.FailureDetail.Message != errorText {
+		t.Fatalf("failure message = %q, want %q", payload.FailureDetail.Message, errorText)
 	}
 	if payload.ProviderFailure == nil {
 		t.Fatal("expected provider failure metadata on dispatch completed payload")
