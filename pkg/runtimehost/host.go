@@ -458,7 +458,8 @@ func (fs *Host) replacementExecutionBaseDir(folderPath string, factoryDir string
 	return ""
 }
 
-// Run starts the file watcher, dashboard, API server, and factory engine.
+// Run starts runtime-owned sidecars and the factory engine. Process-level
+// presentation sidecars are composed and owned outside Host.
 // It blocks until ctx is cancelled or the factory reaches a terminal state.
 // portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
 func (fs *Host) Run(ctx context.Context) error {
@@ -472,6 +473,7 @@ func (fs *Host) RunWithAPISurface(ctx context.Context, surface apisurface.APISur
 }
 
 func (fs *Host) run(ctx context.Context, surface apisurface.APISurface) error {
+	fs.startTime = fs.clock.Now()
 	runCtx, cancelRunSidecars := context.WithCancel(ctx)
 	var sidecars sync.WaitGroup
 	var currentRuntime *liveRuntimeHandle
@@ -512,11 +514,6 @@ func (fs *Host) run(ctx context.Context, surface apisurface.APISurface) error {
 	fs.clearRunState()
 	cancelRunSidecars()
 	sidecars.Wait()
-	// Print final dashboard.
-	if fs.cfg.SimpleDashboardRenderer != nil {
-		fs.renderDashboard(ctx)
-	}
-
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run: %w", err)
 	}
@@ -553,7 +550,6 @@ func (fs *Host) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGrou
 		}
 		fs.startListenerSidecar(runCtx, sidecars, listener, fs.logger)
 	}
-	fs.startDashboardSidecar(runCtx, sidecars)
 }
 
 func (fs *Host) startListenerSidecar(
@@ -571,18 +567,6 @@ func (fs *Host) startListenerSidecar(
 		if err := listener.Watch(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("file watcher error", zap.Error(err))
 		}
-	}()
-}
-
-func (fs *Host) startDashboardSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
-	fs.startTime = fs.clock.Now()
-	if fs.cfg.SimpleDashboardRenderer == nil {
-		return
-	}
-	sidecars.Add(1)
-	go func() {
-		defer sidecars.Done()
-		fs.dashboardLoop(runCtx)
 	}()
 }
 

@@ -13,8 +13,40 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
+
+func TestInjectCLIRunner_ComposesDashboardEnabledRunsOutsideFactoryService(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	runner, err := compose.InjectCLIRunner(context.Background(), &service.FactoryServiceConfig{
+		Dir:                     dir,
+		SimpleDashboardRenderer: func(service.SimpleDashboardRenderInput) {},
+	})
+	if err != nil {
+		t.Fatalf("InjectCLIRunner: %v", err)
+	}
+	if _, legacy := runner.(*service.FactoryService); legacy {
+		t.Fatal("dashboard-enabled runner used legacy FactoryService composition")
+	}
+}
+
+func TestInjectCLIRunner_KeepsDashboardSuppressedRunsInactive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	runner, err := compose.InjectCLIRunner(context.Background(), &service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("InjectCLIRunner: %v", err)
+	}
+	if _, legacy := runner.(*service.FactoryService); !legacy {
+		t.Fatalf("dashboard-suppressed runner type = %T, want compatibility service runner", runner)
+	}
+}
 
 func TestInjectFactoryService_RejectsMissingFactoryDir(t *testing.T) {
 	t.Parallel()
