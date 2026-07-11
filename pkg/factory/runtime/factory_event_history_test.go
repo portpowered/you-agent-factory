@@ -135,12 +135,9 @@ func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent)
 	if session.Diagnostics == nil || session.Diagnostics.Provider == nil || session.ProviderSession.ID == "" {
 		t.Fatalf("public provider session = %#v, want identity and safe metadata", session)
 	}
-	if dispatch.Status != string(factoryapi.FactoryDispatchStatusCOMPLETED) || dispatch.Attempt != 1 {
-		t.Fatalf("public Petri dispatch status/attempt = %q/%d, want COMPLETED/1", dispatch.Status, dispatch.Attempt)
-	}
 	return petriPublicProviderContract{
 		DispatchID:       dispatch.DispatchID,
-		Status:           dispatch.Status,
+		Status:           string(dispatch.Result.Outcome),
 		Attempt:          attempt.Attempt,
 		Provider:         attempt.Diagnostics.Provider.Provider,
 		Model:            attempt.Diagnostics.Provider.Model,

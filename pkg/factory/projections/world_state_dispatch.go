@@ -320,8 +320,6 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 	latestAttempt := r.latestInferenceAttemptForDispatch(dispatchID)
 	return interfaces.FactoryWorldDispatchCompletion{
 		DispatchID:      dispatchID,
-		Status:          completedDispatchStatus(payload.Outcome),
-		Attempt:         completedDispatchAttempt(latestAttempt),
 		TransitionID:    payload.TransitionId,
 		Workstation:     dispatch.Workstation,
 		StartedTick:     dispatch.StartedTick,
@@ -351,20 +349,6 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 		Diagnostics:     dispatchCompletionDiagnostics(r.latestAgentRunResponseForDispatch(dispatchID), latestAttempt),
 		TerminalWork:    r.terminalWorkForCompletion(payload.Outcome, workIDs),
 	}
-}
-
-func completedDispatchStatus(outcome factoryapi.WorkOutcome) string {
-	if outcome == factoryapi.WorkOutcomeFailed {
-		return string(factoryapi.FactoryDispatchStatusFAILED)
-	}
-	return string(factoryapi.FactoryDispatchStatusCOMPLETED)
-}
-
-func completedDispatchAttempt(attempt *interfaces.FactoryWorldInferenceAttempt) int {
-	if attempt != nil && attempt.Attempt > 0 {
-		return attempt.Attempt
-	}
-	return 1
 }
 
 func (r *factoryWorldReducer) recordDispatchCompletionState(

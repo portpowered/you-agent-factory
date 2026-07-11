@@ -1634,7 +1634,6 @@ export interface components {
       /** @description Artifact identifiers produced by the dispatch. */
       outputArtifactIds?: string[];
       failureDetail?: components["schemas"]["FailureDetail"];
-      diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
       javascript?: components["schemas"]["FactoryDispatchJavaScriptProjection"];
     };
     ListFactorySessionDispatchesResponse: {

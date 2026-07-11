@@ -75,8 +75,6 @@ type FactoryWorldDispatch struct {
 // from a workstation response event.
 type FactoryWorldDispatchCompletion struct {
 	DispatchID               string                   `json:"dispatch_id"`
-	Status                   string                   `json:"status"`
-	Attempt                  int                      `json:"attempt"`
 	TransitionID             string                   `json:"transition_id"`
 	Workstation              FactoryWorkstationRef    `json:"workstation"`
 	RunnerID                 string                   `json:"runner_id,omitempty"`

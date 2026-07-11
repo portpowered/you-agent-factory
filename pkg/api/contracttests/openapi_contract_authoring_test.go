@@ -787,7 +787,6 @@ func TestGeneratedDispatchArtifactContracts_SessionReadListDetailTypesAgreeWithO
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "Status", reflect.TypeOf(factoryapi.FactoryDispatchStatus("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "DispatchKind", reflect.TypeOf(factoryapi.FactoryDispatchKind("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "Javascript", reflect.TypeOf((*factoryapi.FactoryDispatchJavaScriptProjection)(nil)))
-	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "Diagnostics", reflect.TypeOf((*factoryapi.SafeWorkDiagnostics)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactSummary{}), "Kind", reflect.TypeOf(factoryapi.FactoryArtifactKind("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactSummary{}), "Visibility", reflect.TypeOf(factoryapi.FactoryArtifactVisibility("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactDetail{}), "ContentRef", reflect.TypeOf((*factoryapi.FactorySessionArtifactRetrievalRef)(nil)))

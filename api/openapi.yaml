@@ -3386,8 +3386,6 @@ components:
           description: Artifact identifiers produced by the dispatch.
         failureDetail:
           $ref: '#/components/schemas/FailureDetail'
-        diagnostics:
-          $ref: '#/components/schemas/SafeWorkDiagnostics'
         javascript:
           $ref: '#/components/schemas/FactoryDispatchJavaScriptProjection'
     ListFactorySessionDispatchesResponse:
