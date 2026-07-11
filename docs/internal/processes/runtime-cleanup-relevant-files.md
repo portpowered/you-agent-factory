@@ -79,3 +79,10 @@ Session, Work, Work Request, Provider Session, event, or target-owner wording.
 Documentation-only runtime-cleanup changes should also run `git diff --check`
 and `make typecheck`. Add `make docs-reference-smoke` only when packaged
 `docs/reference/` content or `you docs` routing changes.
+
+When changing durable Factory Session execution construction, run
+`make durable-runtime-construction-check`. The guard permits direct
+`NewJavaScriptRuntimeService` calls only in the application composition owners
+and the package-local execution-provider factory; package tests, `testdata`
+fixtures, generated code, dependencies, coverage, and build artifacts are not
+production construction sites.

@@ -1726,6 +1726,7 @@ func TestFactoryService_CancelDurableFactorySession_RuntimeBackedSession(t *test
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceling {
 		t.Fatalf("status = %q, want CANCELING", response.Status)
 	}
+	waitForDurableLifecycleStatus(t, fs, started.SessionId, factorysessionexecution.LifecycleStatusCanceled)
 }
 
 func TestFactoryService_CancelDurableFactorySession_HTTPUsesProductionRuntime(t *testing.T) {
@@ -1765,6 +1766,7 @@ func TestFactoryService_CancelDurableFactorySession_HTTPUsesProductionRuntime(t 
 	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
 	}
+	waitForDurableLifecycleStatus(t, fs, started.SessionId, factorysessionexecution.LifecycleStatusCanceled)
 }
 
 func TestFactoryService_PauseDurableFactorySession_HTTPUsesProductionRuntime(t *testing.T) {
@@ -2158,6 +2160,28 @@ func newFactoryServiceForDurableLifecycleTest(t *testing.T, fixtureName, workflo
 		factoryRootDir:   projectRoot,
 		durableExecution: execution,
 	}
+}
+
+func waitForDurableLifecycleStatus(
+	t *testing.T,
+	fs *FactoryService,
+	sessionID string,
+	want factorysessionexecution.LifecycleStatus,
+) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		read, err := fs.durableExecution.GetSession(context.Background(), sessionID)
+		if err == nil && read.Status == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	read, err := fs.durableExecution.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession(%q): %v", sessionID, err)
+	}
+	t.Fatalf("session %q status = %q, want %q", sessionID, read.Status, want)
 }
 
 func setupDurableLifecycleWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
