@@ -581,7 +581,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behaviors := map[string]providerBehavior{
 		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
 	}
@@ -682,7 +681,6 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 
 func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	for _, providerName := range []string{
-		string(interfaces.ModelProviderKiro),
 		string(interfaces.ModelProviderOpenCode),
 	} {
 		behavior := providerBehaviorForErrorClassification(providerName)

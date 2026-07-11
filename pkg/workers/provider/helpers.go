@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -834,4 +835,107 @@ func safeOpenCodeFailureDetail(detail string) (string, bool) {
 		end--
 	}
 	return detail[:end], true
+}
+
+func safeGeminiTextCandidate(line string) string {
+	message := sanitizeGeminiMessage(line)
+	if message == "" || strings.HasPrefix(message, "{") {
+		return ""
+	}
+	normalized := strings.ToLower(message)
+	if isRejectedGeminiMessage(normalized) || !isGeminiErrorSignal(normalized) {
+		return ""
+	}
+	return message
+}
+
+func isGeminiErrorSignal(normalized string) bool {
+	if strings.HasPrefix(normalized, "error:") ||
+		strings.HasPrefix(normalized, "gemini error:") ||
+		strings.HasPrefix(normalized, "fatal") ||
+		strings.HasPrefix(normalized, "failed") ||
+		strings.HasPrefix(normalized, "failure:") ||
+		strings.HasPrefix(normalized, "cannot ") ||
+		strings.HasPrefix(normalized, "could not ") {
+		return true
+	}
+	return containsAny(normalized,
+		"http 4", "http 5", "status 4", "status 5",
+		"unauthenticated", "permission_denied", "resource_exhausted", "resource exhausted",
+		"deadline_exceeded", "timed out", "timeout", "permission denied",
+		"rate limit exceeded", "quota exceeded", "too many requests",
+		"invalid request", "bad request", "service unavailable", "upstream unavailable")
+}
+
+func geminiFailureResult(reason interfaces.WorkFailureType, upstreamMessage string) ProviderFailureResult {
+	message := geminiFixedFailureMessage(reason)
+	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+		if safe := safeGeminiStructuredMessage(upstreamMessage); safe != "" {
+			message = safe
+		}
+	}
+	return ProviderFailureResult{Reason: reason, Message: message}
+}
+
+func geminiFixedFailureMessage(reason interfaces.WorkFailureType) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return geminiAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return geminiBadRequestMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return geminiThrottleFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return geminiTimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return geminiServerFailureMessage
+	default:
+		return ""
+	}
+}
+
+func safeGeminiStructuredMessage(message string) string {
+	message = sanitizeGeminiMessage(message)
+	if message == "" {
+		return ""
+	}
+	normalized := strings.ToLower(message)
+	if isRejectedGeminiMessage(normalized) {
+		return ""
+	}
+	return message
+}
+
+func sanitizeGeminiMessage(message string) string {
+	message = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, message)
+	message = strings.Join(strings.Fields(message), " ")
+	runes := []rune(message)
+	if len(runes) > geminiFailureMessageRunes {
+		message = string(runes[:geminiFailureMessageRunes])
+	}
+	return message
+}
+
+func isRejectedGeminiMessage(normalized string) bool {
+	if strings.HasPrefix(normalized, "at ") || strings.HasPrefix(normalized, "goroutine ") {
+		return true
+	}
+	return containsAny(normalized,
+		"authorization:", "basic ", "bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
+		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
+		"customer prompt", "user prompt", "prompt:", "model response", "transcript:",
+		"[debug]", "debug:", "[progress]", "progress:", "traceback", "stack trace",
+		"error report", "report written", "cleanup", "cleaning up", "/tmp/", "/var/tmp/", ".gemini/tmp/")
+}
+
+func tailForGeminiFailureScan(output []byte) string {
+	if len(output) <= geminiFailureScanBytes {
+		return string(output)
+	}
+	return string(output[len(output)-geminiFailureScanBytes:])
 }

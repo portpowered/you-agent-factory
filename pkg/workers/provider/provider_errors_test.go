@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )

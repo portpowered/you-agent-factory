@@ -37,6 +37,11 @@ const codexFailureMessageBytes = 1024
 const opencodeFailureMessageBytes = 512
 
 const (
+	kiroFailureMessageBytes = codexFailureMessageBytes
+	kiroErrorLineScanBytes  = codexErrorLineScanBytes
+)
+
+const (
 	geminiFailureScanBytes    = 64 * 1024
 	geminiFailureMessageRunes = 1024
 )
@@ -238,36 +243,6 @@ func lastGeminiUnknownMessage(stream string) string {
 	return last
 }
 
-func safeGeminiTextCandidate(line string) string {
-	message := sanitizeGeminiMessage(line)
-	if message == "" || strings.HasPrefix(message, "{") {
-		return ""
-	}
-	normalized := strings.ToLower(message)
-	if isRejectedGeminiMessage(normalized) || !isGeminiErrorSignal(normalized) {
-		return ""
-	}
-	return message
-}
-
-func isGeminiErrorSignal(normalized string) bool {
-	if strings.HasPrefix(normalized, "error:") ||
-		strings.HasPrefix(normalized, "gemini error:") ||
-		strings.HasPrefix(normalized, "fatal") ||
-		strings.HasPrefix(normalized, "failed") ||
-		strings.HasPrefix(normalized, "failure:") ||
-		strings.HasPrefix(normalized, "cannot ") ||
-		strings.HasPrefix(normalized, "could not ") {
-		return true
-	}
-	return containsAny(normalized,
-		"http 4", "http 5", "status 4", "status 5",
-		"unauthenticated", "permission_denied", "resource_exhausted", "resource exhausted",
-		"deadline_exceeded", "timed out", "timeout", "permission denied",
-		"rate limit exceeded", "quota exceeded", "too many requests",
-		"invalid request", "bad request", "service unavailable", "upstream unavailable")
-}
-
 func classifyGeminiFailureSignal(errorType, status, code, message string) interfaces.WorkFailureType {
 	structuredSignals := []string{
 		strings.ToLower(strings.TrimSpace(errorType)),
@@ -319,33 +294,6 @@ func classifyGeminiFailureSignal(errorType, status, code, message string) interf
 	}
 }
 
-func geminiFailureResult(reason interfaces.WorkFailureType, upstreamMessage string) ProviderFailureResult {
-	message := geminiFixedFailureMessage(reason)
-	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
-		if safe := safeGeminiStructuredMessage(upstreamMessage); safe != "" {
-			message = safe
-		}
-	}
-	return ProviderFailureResult{Reason: reason, Message: message}
-}
-
-func geminiFixedFailureMessage(reason interfaces.WorkFailureType) string {
-	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
-		return geminiAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		return geminiBadRequestMessage
-	case interfaces.WorkFailureTypeThrottled:
-		return geminiThrottleFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
-		return geminiTimeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
-		return geminiServerFailureMessage
-	default:
-		return ""
-	}
-}
-
 type opencodeStructuredFailure struct {
 	Name       string
 	Type       string
@@ -377,6 +325,44 @@ func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeUnknown,
 		Message: fmt.Sprintf("opencode exited with code %d", result.ExitCode),
+	}
+}
+
+const (
+	kiroAuthFailureMessage       = "Kiro authentication failed. Sign in again and retry."
+	kiroBadRequestFailureMessage = "Kiro rejected the request as invalid."
+	kiroThrottleFailureMessage   = "Kiro is temporarily unavailable due to usage or capacity limits."
+	kiroTimeoutFailureMessage    = "Kiro request timed out."
+	kiroServerFailureMessage     = "Kiro encountered a temporary service error."
+)
+
+// ParseKiroProviderFailure is the pure Kiro-owned normalization boundary for
+// non-zero CLI exits. It inspects bounded stderr/stdout tails, gives recognized
+// structured records precedence over text, and returns only canonical reasons
+// with product-owned messages for known failures.
+func ParseKiroProviderFailure(result CommandResult) ProviderFailureResult {
+	if result.ExitCode == 124 {
+		return knownKiroFailure(interfaces.WorkFailureTypeTimeout)
+	}
+	streams := []string{
+		tailForKiroErrorScan(result.Stderr),
+		tailForKiroErrorScan(result.Stdout),
+	}
+	if failure, ok := firstKiroStructuredFailure(streams); ok {
+		return failure
+	}
+	if failure, ok := firstKiroTextFailure(streams, result.ExitCode); ok {
+		return failure
+	}
+	if message, ok := firstKiroUnknownFailureExcerpt(streams); ok {
+		return ProviderFailureResult{
+			Reason:  interfaces.WorkFailureTypeUnknown,
+			Message: message,
+		}
+	}
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: kiroExitFailureMessage(result.ExitCode),
 	}
 }
 
@@ -516,105 +502,9 @@ func firstKiroTextFailure(streams []string, exitCode int) (ProviderFailureResult
 	return ProviderFailureResult{}, false
 }
 
-func openCodeErrorTextLine(line string) bool {
-	normalized := strings.ToLower(line)
-	return strings.HasPrefix(normalized, "error:") || strings.HasPrefix(normalized, "api error:")
-}
-
-func recognizedOpenCodeTextFailure(message string, exitCode int) (ProviderFailureResult, bool) {
-	normalized := strings.ToLower(strings.TrimSpace(message))
-	var reason interfaces.WorkFailureType
-	switch {
-	case exitCode == 124 || containsAny(normalized, "deadline exceeded", "request timed out", "timed out", "timeout"):
-		reason = interfaces.WorkFailureTypeTimeout
-	case containsAny(normalized, "authentication", "login required", "not authenticated", "unauthorized", "forbidden", "api key"):
-		reason = interfaces.WorkFailureTypeAuthFailure
-	case containsAny(normalized, "invalid request", "bad request", "invalid argument", "model not found"):
-		reason = interfaces.WorkFailureTypePermanentBadRequest
-	case containsAny(normalized, "rate limit", "too many requests", "usage limit", "at capacity", "status 429"):
-		reason = interfaces.WorkFailureTypeThrottled
-	case containsAny(normalized, "internal server error", "server error", "status 500", "status 502", "status 503", "status 504"):
-		reason = interfaces.WorkFailureTypeInternalServerError
-	default:
-		return ProviderFailureResult{}, false
-	}
-	return ProviderFailureResult{Reason: reason, Message: openCodeFailureMessage(reason, message)}, true
-}
-
-func openCodeFailureMessage(reason interfaces.WorkFailureType, detail string) string {
-	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
-		if sanitized, ok := safeOpenCodeFailureDetail(detail); ok {
-			return sanitized
-		}
-	}
-	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
-		return opencodeAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		return opencodeBadRequestFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
-		return opencodeThrottleFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
-		return opencodeTimeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
-		return opencodeServerFailureMessage
-	default:
-		return ""
-	}
-}
-
-func safeGeminiStructuredMessage(message string) string {
-	message = sanitizeGeminiMessage(message)
-	if message == "" {
-		return ""
-	}
-	normalized := strings.ToLower(message)
-	if isRejectedGeminiMessage(normalized) {
-		return ""
-	}
-	return message
-}
-
-func sanitizeGeminiMessage(message string) string {
-	message = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, message)
-	message = strings.Join(strings.Fields(message), " ")
-	runes := []rune(message)
-	if len(runes) > geminiFailureMessageRunes {
-		message = string(runes[:geminiFailureMessageRunes])
-	}
-	return message
-}
-
-func isRejectedGeminiMessage(normalized string) bool {
-	if strings.HasPrefix(normalized, "at ") || strings.HasPrefix(normalized, "goroutine ") {
-		return true
-	}
-	return containsAny(normalized,
-		"authorization:", "basic ", "bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
-		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
-		"customer prompt", "user prompt", "prompt:", "model response", "transcript:",
-		"[debug]", "debug:", "[progress]", "progress:", "traceback", "stack trace",
-		"error report", "report written", "cleanup", "cleaning up", "/tmp/", "/var/tmp/", ".gemini/tmp/")
-}
-
-func tailForGeminiFailureScan(output []byte) string {
-	if len(output) <= geminiFailureScanBytes {
-		return string(output)
-	}
-	return string(output[len(output)-geminiFailureScanBytes:])
-}
-
-func safeOpenCodeFailureDetail(detail string) (string, bool) {
-	detail = strings.ToValidUTF8(strings.Join(strings.Fields(detail), " "), "")
-	normalized := strings.ToLower(detail)
-	if detail == "" || containsAny(normalized,
-		"authorization:", "bearer ", "api_key=", "api-key=", `"token":`, "secret=", "sk-", "prompt:", "transcript:",
-	) {
+func kiroTextErrorCandidate(line string, singleLine bool) (string, bool) {
+	trimmed := normalizeKiroText(line)
+	if trimmed == "" {
 		return "", false
 	}
 	lower := strings.ToLower(trimmed)
