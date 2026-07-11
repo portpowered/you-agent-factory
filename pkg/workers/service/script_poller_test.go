@@ -27,18 +27,27 @@ const (
 )
 
 type recordingSubmitter struct {
+	mu             sync.Mutex
 	calls          int
 	submissions    []interfaces.WorkRequest
 	submitOverride func(context.Context, interfaces.WorkRequest) error
 }
 
 func (r *recordingSubmitter) submit(ctx context.Context, request interfaces.WorkRequest) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.calls++
 	r.submissions = append(r.submissions, request)
 	if r.submitOverride != nil {
 		return r.submitOverride(ctx, request)
 	}
 	return nil
+}
+
+func (r *recordingSubmitter) snapshot() (int, []interfaces.WorkRequest) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls, append([]interfaces.WorkRequest(nil), r.submissions...)
 }
 
 func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdout(t *testing.T) {
@@ -436,12 +445,14 @@ type pollerRunOutcome struct {
 }
 
 type pollerSequenceCommandRunner struct {
+	mu       sync.Mutex
 	calls    int
 	reqs     []workers.CommandRequest
 	outcomes []pollerRunOutcome
 }
 
 func (r *pollerSequenceCommandRunner) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+	r.mu.Lock()
 	r.calls++
 	r.reqs = append(r.reqs, req)
 	index := r.calls - 1
@@ -451,6 +462,7 @@ func (r *pollerSequenceCommandRunner) Run(ctx context.Context, req workers.Comma
 	} else if len(r.outcomes) > 0 {
 		outcome = r.outcomes[len(r.outcomes)-1]
 	}
+	r.mu.Unlock()
 
 	if outcome.waitForCancel {
 		<-ctx.Done()
@@ -459,14 +471,20 @@ func (r *pollerSequenceCommandRunner) Run(ctx context.Context, req workers.Comma
 	return outcome.result, outcome.err
 }
 
+func (r *pollerSequenceCommandRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
 func waitForPollerRunnerCalls(t *testing.T, runner *pollerSequenceCommandRunner, want int, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if runner.calls >= want {
+		if runner.callCount() >= want {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %d poller runner call(s); got %d", want, runner.calls)
+	t.Fatalf("timed out waiting for %d poller runner call(s); got %d", want, runner.callCount())
 }

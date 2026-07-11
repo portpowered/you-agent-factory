@@ -56,6 +56,35 @@ func TestServiceTestHarnessMarkingFallsBackToCachedSnapshot(t *testing.T) {
 	}
 }
 
+func TestServiceTestHarnessRunUntilCompleteAcceptsRunThatFinishesBeforeAvailabilityPoll(t *testing.T) {
+	cfg := PipelineConfig(1, "processor")
+	dir := ScaffoldFactoryDir(t, cfg)
+
+	h := NewServiceTestHarness(t, dir)
+	h.MockWorker("processor", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	if err := h.SubmitWork("task", []byte(`{"title":"finish immediately"}`)); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.run(ctx); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	runErrCh := make(chan error, 1)
+	runErrCh <- nil
+
+	if err := h.waitForRuntimeAvailability(ctx, runErrCh); err != nil {
+		t.Fatalf("waitForRuntimeAvailability after clean run: %v", err)
+	}
+	if err := <-runErrCh; err != nil {
+		t.Fatalf("preserved run result: %v", err)
+	}
+	if got := len(h.Marking().TokensInPlace("task:complete")); got != 1 {
+		t.Fatalf("TokensInPlace(task:complete) = %d, want 1", got)
+	}
+}
+
 func TestNewServiceTestHarness_WithZapLogger_PreservesCapturingLoggerThroughRun(t *testing.T) {
 	cfg := PipelineConfig(1, "processor")
 	dir := ScaffoldFactoryDir(t, cfg)

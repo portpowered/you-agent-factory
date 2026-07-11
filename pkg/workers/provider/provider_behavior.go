@@ -165,18 +165,18 @@ func (b claudeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 		args = append(args, "--dangerously-skip-permissions")
 	}
 	if req.Worktree != "" {
-		logger.Info("inferencer: adding work directory to arguments", "worktree", req.Worktree)
+		logger.Info("inferencer: adding work directory to arguments")
 		args = append(args, "--worktree", req.Worktree)
 	}
 	if req.SystemPrompt != "" {
-		logger.Info("inferencer: adding system prompt to arguments", "system-prompt", req.SystemPrompt)
+		logger.Info("inferencer: adding system prompt to arguments")
 		args = append(args, "--system-prompt", req.SystemPrompt)
 	}
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
 	if req.SessionID != "" {
-		logger.Info("inferencer: resuming claude session", "session_id", req.SessionID)
+		logger.Info("inferencer: resuming claude session")
 		args = append(args, "--resume", req.SessionID)
 	}
 	args = append(args, req.UserMessage)
@@ -218,7 +218,7 @@ func (b codexProviderBehavior) BuildArgs(ctx context.Context, req interfaces.Pro
 
 	if req.WorkingDirectory != "" {
 		// TODO: we should check and validate the working directory target for an inference dispatch at runtime and handle the request as failing if the working directory is invalid.
-		logger.Debug("inferencer: codex passed a working directory argument", "working_directory", req.WorkingDirectory)
+		logger.Debug("inferencer: codex passed a working directory argument")
 		// args = append(args, "--cd", req.WorkingDirectory)
 	}
 
@@ -613,3 +613,79 @@ func formatProviderOutputOrDefault(result CommandResult, fallback string) string
 	}
 	return fallback
 }
+
+// WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
+// provider error using the same FailureMetadata projection as WorkResult.
+func WorkFailureDecisionFromProviderError(err *ProviderError) interfaces.WorkFailureDecision {
+	return WorkFailureDecisionFromMetadata(WorkFailureMetadataFromError(err))
+}
+
+// WorkFailureDecisionFromMetadata resolves retry behavior from durable
+// generalized failure metadata carried across runtime boundaries.
+// The normalized type is canonical when present; family remains a fallback for
+// older or partial metadata that omitted type.
+func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) interfaces.WorkFailureDecision {
+	if metadata == nil {
+		return interfaces.WorkFailureDecision{}
+	}
+	if metadata.Type != "" {
+		return providerFailurePolicyForReason(metadata.Type).Decision
+	}
+	return providerFailureDecisionForFamily(metadata.Family)
+}
+
+type providerFailurePolicy struct {
+	Family   interfaces.WorkFailureFamily
+	Decision interfaces.WorkFailureDecision
+}
+
+func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerFailurePolicy {
+	switch reason {
+	case interfaces.WorkFailureTypeThrottled:
+		return providerFailurePolicy{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Decision: interfaces.WorkFailureDecision{
+				Retryable:             true,
+				TriggersThrottlePause: true,
+			},
+		}
+	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyRetryable,
+			Decision: interfaces.WorkFailureDecision{Retryable: true},
+		}
+	case interfaces.WorkFailureTypeAuthFailure,
+		interfaces.WorkFailureTypePermanentBadRequest,
+		interfaces.WorkFailureTypeUnknown,
+		interfaces.WorkFailureTypeMisconfigured:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	default:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	}
+}
+
+func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
+	switch family {
+	case interfaces.WorkFailureFamilyRetryable:
+		return interfaces.WorkFailureDecision{Retryable: true}
+	case interfaces.WorkFailureFamilyThrottle:
+		return interfaces.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
+	case interfaces.WorkFailureFamilyTerminal:
+		return interfaces.WorkFailureDecision{Terminal: true}
+	default:
+		return interfaces.WorkFailureDecision{Terminal: true}
+	}
+}
+
+func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
+	return providerFailurePolicyForReason(errorType).Family
+}
+
+// WorkFailureMetadataFromError projects a provider-shaped execution error onto
+// the in-process failure contract carried on WorkResult.FailureMetadata.

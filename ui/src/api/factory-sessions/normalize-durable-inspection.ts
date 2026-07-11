@@ -32,7 +32,9 @@ export function resultSurfacesFromDurableReadModel(
   }
 
   const resultStatus = durable.resultSummary?.resultStatus;
-  if (resultStatus === FactorySessionResultStatus.FactorySessionResultStatusFinal) {
+  if (
+    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusFinal
+  ) {
     const resultArtifactRef = pickFinalArtifactRef(artifactRefs);
     if (!resultArtifactRef) {
       return {};
@@ -47,7 +49,8 @@ export function resultSurfacesFromDurableReadModel(
   }
 
   if (
-    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusPartial ||
+    resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusPartial ||
     resultStatus ===
       FactorySessionResultStatus.FactorySessionResultStatusFailedWithPartial
   ) {
@@ -221,7 +224,17 @@ export function shouldFetchDurableDispatches(input: {
     return false;
   }
 
-  return isInspectableDurableLifecycle(input.durableLifecycleStatus);
+  if (isInspectableDurableLifecycle(input.durableLifecycleStatus)) {
+    return true;
+  }
+
+  const hasActiveDispatch = (input.progress?.inFlightDispatches ?? 0) > 0;
+  return (
+    hasActiveDispatch &&
+    (input.durableLifecycleStatus === "RUNNING" ||
+      input.durableLifecycleStatus === "PAUSED" ||
+      input.durableLifecycleStatus === "RESUMING")
+  );
 }
 
 export function shouldFetchDurableFinalResults(input: {
@@ -239,7 +252,8 @@ export function shouldFetchDurableFinalResults(input: {
 
   const resultStatus = input.resultSummary?.resultStatus;
   if (
-    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusPartial ||
+    resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusPartial ||
     resultStatus ===
       FactorySessionResultStatus.FactorySessionResultStatusFailedWithPartial
   ) {
@@ -259,12 +273,15 @@ export function shouldFetchDurablePartialResults(input: {
   }
 
   const resultStatus = input.resultSummary?.resultStatus;
-  if (resultStatus === FactorySessionResultStatus.FactorySessionResultStatusFinal) {
+  if (
+    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusFinal
+  ) {
     return false;
   }
 
   return (
-    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusPartial ||
+    resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusPartial ||
     resultStatus ===
       FactorySessionResultStatus.FactorySessionResultStatusFailedWithPartial
   );

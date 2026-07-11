@@ -31,6 +31,7 @@ export interface FactorySessionDetailMessages
     FactorySessionLifecycleOutcomeMessages {
   lifecycleActionApproveLabel: string;
   lifecycleActionCancelLabel: string;
+  lifecycleActionInterruptDispatchLabel: string;
   lifecycleActionPauseLabel: string;
   lifecycleActionResumeLabel: string;
   lifecycleActionRetryDispatchLabel: string;
@@ -238,6 +239,7 @@ const factorySessionDetailMessagesByLocale = {
     ...englishFactorySessionArtifactDetailMessages,
     lifecycleActionApproveLabel: "Approve",
     lifecycleActionCancelLabel: "Cancel",
+    lifecycleActionInterruptDispatchLabel: "Interrupt dispatch",
     lifecycleActionPauseLabel: "Pause",
     lifecycleActionResumeLabel: "Resume",
     lifecycleActionRetryDispatchLabel: "Retry dispatch",
@@ -247,7 +249,7 @@ const factorySessionDetailMessagesByLocale = {
       "No lifecycle controls are available for this Factory Session state.",
     lifecycleControlsHeading: "Lifecycle controls",
     lifecycleControlsRetrySelectionHint:
-      "Select a failed dispatch to make retry available on this detail surface.",
+      "Select a running or failed dispatch to make interrupt or retry available on this detail surface.",
     lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
       `Selected dispatch: ${dispatchID}`,
     checkpointRefsHeading: "Checkpoint refs",
@@ -336,6 +338,7 @@ const factorySessionDetailMessagesByLocale = {
     ...chineseFactorySessionArtifactDetailMessages,
     lifecycleActionApproveLabel: "批准",
     lifecycleActionCancelLabel: "取消",
+    lifecycleActionInterruptDispatchLabel: "中断调度",
     lifecycleActionPauseLabel: "暂停",
     lifecycleActionResumeLabel: "恢复",
     lifecycleActionRetryDispatchLabel: "重试调度",
@@ -344,7 +347,7 @@ const factorySessionDetailMessagesByLocale = {
     lifecycleControlsEmptyState: "当前工厂会话状态没有可用的生命周期控制。",
     lifecycleControlsHeading: "生命周期控制",
     lifecycleControlsRetrySelectionHint:
-      "选择失败的调度后，当前详情界面才会显示重试操作。",
+      "选择运行中或失败的调度后，当前详情界面才会显示中断或重试操作。",
     lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
       `已选择调度：${dispatchID}`,
     checkpointRefsHeading: "检查点引用",

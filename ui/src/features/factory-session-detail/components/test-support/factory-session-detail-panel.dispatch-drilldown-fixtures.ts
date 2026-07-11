@@ -56,17 +56,8 @@ export function createBaselineDispatchDetailPayload() {
   };
 }
 
-function createFailedSessionRuntime(dispatchId: string) {
+function createFailedSessionRuntime() {
   return {
-    dispatches: [
-      {
-        dispatchKind: "JAVASCRIPT_AGENT",
-        id: dispatchId,
-        orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-        sessionId: BASELINE_SESSION_ID,
-        status: "FAILED",
-      },
-    ],
     javascript: {
       childDispatchCounts: {
         completed: 0,
@@ -89,6 +80,14 @@ function createFailedSessionRuntime(dispatchId: string) {
     },
     status: "FAILED",
     usage: { resources: [] },
+  };
+}
+
+function failedDispatchSummary(dispatchId: string) {
+  return {
+    dispatchKind: "JAVASCRIPT_AGENT",
+    id: dispatchId,
+    status: "FAILED",
   };
 }
 
@@ -120,15 +119,21 @@ export function mockDispatchNotFoundFetch() {
     const url = String(input);
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}`)) {
       return jsonResponse(
-        createSessionBetaPayload(
-          createFailedSessionRuntime(DISPATCH_NOT_FOUND_ID),
-        ),
+        createSessionBetaPayload(createFailedSessionRuntime()),
       );
     }
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/result`)) {
       return sessionResult;
     }
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)) {
+    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/dispatches`)) {
+      return jsonResponse({
+        dispatches: [failedDispatchSummary(DISPATCH_NOT_FOUND_ID)],
+        sessionId: BASELINE_SESSION_ID,
+      });
+    }
+    if (
+      url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)
+    ) {
       return partialResult;
     }
     if (
@@ -144,30 +149,26 @@ export function mockDispatchNotFoundFetch() {
 
 export function mockDispatchReplacementFetch() {
   const { sessionResult, partialResult } = mockSessionBetaResultNotFound();
+  const dispatches = [
+    {
+      dispatchKind: "JAVASCRIPT_AGENT",
+      id: DISPATCH_REPLACEMENT_ALPHA_ID,
+      label: "Alpha review task",
+      status: "COMPLETED",
+    },
+    {
+      dispatchKind: "JAVASCRIPT_VERIFY",
+      id: DISPATCH_REPLACEMENT_BETA_ID,
+      label: "Beta verify task",
+      status: "FAILED",
+    },
+  ];
 
   vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
     const url = String(input);
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}`)) {
       return jsonResponse(
         createSessionBetaPayload({
-          dispatches: [
-            {
-              dispatchKind: "JAVASCRIPT_AGENT",
-              id: DISPATCH_REPLACEMENT_ALPHA_ID,
-              label: "Alpha review task",
-              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-              sessionId: BASELINE_SESSION_ID,
-              status: "COMPLETED",
-            },
-            {
-              dispatchKind: "JAVASCRIPT_VERIFY",
-              id: DISPATCH_REPLACEMENT_BETA_ID,
-              label: "Beta verify task",
-              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-              sessionId: BASELINE_SESSION_ID,
-              status: "FAILED",
-            },
-          ],
           javascript: {
             childDispatchCounts: {
               completed: 1,
@@ -197,7 +198,12 @@ export function mockDispatchReplacementFetch() {
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/result`)) {
       return sessionResult;
     }
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)) {
+    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/dispatches`)) {
+      return jsonResponse({ dispatches, sessionId: BASELINE_SESSION_ID });
+    }
+    if (
+      url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)
+    ) {
       return partialResult;
     }
     if (
@@ -258,15 +264,21 @@ export function mockDispatchApiErrorFetch() {
     const url = String(input);
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}`)) {
       return jsonResponse(
-        createSessionBetaPayload(
-          createFailedSessionRuntime(DISPATCH_API_ERROR_ID),
-        ),
+        createSessionBetaPayload(createFailedSessionRuntime()),
       );
     }
     if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/result`)) {
       return sessionResult;
     }
-    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)) {
+    if (url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/dispatches`)) {
+      return jsonResponse({
+        dispatches: [failedDispatchSummary(DISPATCH_API_ERROR_ID)],
+        sessionId: BASELINE_SESSION_ID,
+      });
+    }
+    if (
+      url.endsWith(`/factory-sessions/${BASELINE_SESSION_ID}/partial-result`)
+    ) {
       return partialResult;
     }
     if (

@@ -57,12 +57,10 @@ func SummaryWithRuntime(ctx ProjectionContext) factoryapi.FactorySessionSummary 
 	return summary
 }
 
-// projectSessionReadRuntime keeps collection reads on their dedicated API
-// endpoints while preserving the broader runtime projection for other callers.
+// projectSessionReadRuntime builds the dispatch-free runtime shared by list and
+// detail reads. Dispatch inspection remains on its dedicated API endpoints.
 func projectSessionReadRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
-	runtime := ProjectRuntime(ctx)
-	runtime.Dispatches = nil
-	return runtime
+	return ProjectRuntime(ctx)
 }
 
 // ProjectRuntime builds the orchestrator-aware runtime projection for one session.
@@ -93,10 +91,7 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 	default:
 		runtime.Petri = projectedPetriRuntime(ctx)
 	}
-	dispatches, artifacts := projectedSessionDispatchArtifacts(ctx, kind)
-	if dispatches != nil {
-		runtime.Dispatches = dispatches
-	}
+	artifacts := projectedSessionArtifacts(ctx, kind)
 	if artifacts != nil {
 		runtime.Artifacts = artifacts
 	}
@@ -147,27 +142,19 @@ func projectedSessionStreamIdentity(
 	}
 }
 
-func projectedSessionDispatchArtifacts(
+func projectedSessionArtifacts(
 	ctx ProjectionContext,
 	kind string,
-) (*[]factoryapi.FactoryDispatch, *[]factoryapi.FactoryArtifact) {
-	sessionID := ""
-	if ctx.Session != nil {
-		sessionID = strings.TrimSpace(ctx.Session.ID)
-	}
-	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(kind)
+) *[]factoryapi.FactoryArtifact {
 	switch kind {
 	case interfaces.OrchestratorKindJavaScript:
 		if ctx.JavaScript == nil {
-			return nil, nil
+			return nil
 		}
-		dispatchStates := projectedJavaScriptDispatchStates(ctx.JavaScript.Dispatches)
 		artifactStates := ArtifactStatesFromJavaScriptRuntime(ctx.JavaScriptCheckpoints, ctx.JavaScript.Artifacts)
-		return projectedDispatches(sessionID, orchestratorKind, dispatchStates),
-			projectedArtifacts(artifactStates)
+		return projectedArtifacts(artifactStates)
 	default:
-		dispatchStates := PetriDispatchStatesFromSnapshot(ctx.Snapshot)
-		return projectedDispatches(sessionID, orchestratorKind, dispatchStates), nil
+		return nil
 	}
 }
 

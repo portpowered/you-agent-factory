@@ -15,9 +15,7 @@ import (
 
 func TestListFactorySessionDispatches_RuntimeBackedReturnsTypedEmptyList(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-dispatch-list-001",
 		Source: factorysessionexecution.Source{
@@ -65,9 +63,7 @@ func TestListFactorySessionDispatches_RuntimeBackedReturnsTypedEmptyList(t *test
 
 func TestListFactorySessionDispatches_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -113,9 +109,7 @@ func TestListFactorySessionDispatches_LivePetriSessionReturnsNotFound(t *testing
 
 func TestGetFactorySessionDispatch_RuntimeBackedReturnsTypedDetail(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-dispatch-detail-001",
 		Source: factorysessionexecution.Source{
@@ -163,9 +157,7 @@ func TestGetFactorySessionDispatch_RuntimeBackedReturnsTypedDetail(t *testing.T)
 
 func TestGetFactorySessionDispatch_RuntimeBackedUnknownDispatchReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-dispatch-detail-missing-001",
 		Source: factorysessionexecution.Source{
@@ -206,9 +198,7 @@ func TestGetFactorySessionDispatch_RuntimeBackedUnknownDispatchReturnsNotFound(t
 
 func TestGetFactorySessionDispatch_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -254,9 +244,7 @@ func TestGetFactorySessionDispatch_LivePetriSessionReturnsNotFound(t *testing.T)
 
 func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedEmptyList(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-list-001",
 		Source: factorysessionexecution.Source{
@@ -304,9 +292,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedEmptyList(t *testi
 
 func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedArtifactList(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-list-002",
 		Source: factorysessionexecution.Source{
@@ -353,9 +339,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedArtifactList(t *te
 
 func TestListFactorySessionArtifacts_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -401,9 +385,7 @@ func TestListFactorySessionArtifacts_LivePetriSessionReturnsNotFound(t *testing.
 
 func TestGetFactorySessionArtifact_RuntimeBackedReturnsTypedDetail(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-detail-001",
 		Source: factorysessionexecution.Source{
@@ -449,9 +431,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedReturnsTypedDetail(t *testing.T)
 
 func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-detail-missing-001",
 		Source: factorysessionexecution.Source{
@@ -492,9 +472,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t
 
 func TestGetFactorySessionArtifact_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -540,9 +518,7 @@ func TestGetFactorySessionArtifact_LivePetriSessionReturnsNotFound(t *testing.T)
 
 func TestDispatchArtifactReads_PreserveSessionParityWithoutMutation(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()

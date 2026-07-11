@@ -1,13 +1,11 @@
 package provider
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
@@ -53,6 +51,152 @@ func providerErrorCorpusLastErrorLine(t *testing.T, entry ProviderErrorCorpusEnt
 		t.Fatalf("provider error corpus entry %q contains no ERROR: line", providerErrorCorpusEntryLabel(entry))
 	}
 	return lastMatch
+}
+
+func TestParseOpenCodeProviderFailure_KnownCorpusShapesUseCanonicalContract(t *testing.T) {
+	testCases := []struct {
+		name        string
+		wantMessage string
+	}{
+		{name: "opencode_provider_auth_error", wantMessage: "Authentication required for openai. Run opencode auth login."},
+		{name: "opencode_invalid_request_api_error", wantMessage: "The selected model does not support this request."},
+		{name: "opencode_rate_limit_text", wantMessage: opencodeThrottleFailureMessage},
+		{name: "opencode_timeout_error", wantMessage: opencodeTimeoutFailureMessage},
+		{name: "opencode_server_api_error", wantMessage: opencodeServerFailureMessage},
+	}
+
+	for _, tc := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, tc.name)
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(entry.CommandResult())
+			if got.Reason != entry.ExpectedType || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want reason=%q message=%q", got, entry.ExpectedType, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestParseOpenCodeProviderFailure_StructuredFailurePrecedesText(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("Error: rate limit exceeded"),
+		Stdout:   []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"Choose a supported model."}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a supported model." {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want structured bad request", got)
+	}
+}
+
+func TestParseOpenCodeProviderFailure_SanitizesKnownActionableDetails(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout: []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"prompt: ` +
+			strings.Repeat("private ", 100) + ` Authorization: Bearer secret-token"}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != opencodeBadRequestFailureMessage {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want sanitized fixed bad-request message", got)
+	}
+	if len(got.Message) > opencodeFailureMessageBytes || strings.Contains(got.Message, "secret-token") || strings.Contains(got.Message, "private") {
+		t.Fatalf("message = %q, want bounded message without sensitive detail", got.Message)
+	}
+}
+
+func TestParseOpenCodeProviderFailure_UnknownFailuresUseSafeBoundedExcerptOrExitCode(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantMessage string
+	}{
+		{
+			name:        "safe error line",
+			result:      CommandResult{ExitCode: 17, Stderr: []byte("loading project\nError: plugin initialization failed\nrendering prompt")},
+			wantMessage: "Error: plugin initialization failed",
+		},
+		{
+			name:        "unrecognized structured error",
+			result:      CommandResult{ExitCode: 18, Stdout: []byte(`{"type":"error","error":{"name":"PluginError","data":{"message":"Plugin initialization failed."}}}`)},
+			wantMessage: "Plugin initialization failed.",
+		},
+		{
+			name:        "oversized safe error",
+			result:      CommandResult{ExitCode: 19, Stderr: []byte("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))},
+			wantMessage: ("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))[:opencodeFailureMessageBytes],
+		},
+		{
+			name:        "empty output",
+			result:      CommandResult{ExitCode: 20},
+			wantMessage: "opencode exited with code 20",
+		},
+		{
+			name:        "malformed structured output",
+			result:      CommandResult{ExitCode: 21, Stdout: []byte(`{"type":"error","message":"unfinished"`)},
+			wantMessage: "opencode exited with code 21",
+		},
+		{
+			name:        "transcript noise",
+			result:      CommandResult{ExitCode: 22, Stderr: []byte("user: show credentials\nassistant: working\nprompt: private request")},
+			wantMessage: "opencode exited with code 22",
+		},
+		{
+			name:        "secret bearing error",
+			result:      CommandResult{ExitCode: 23, Stderr: []byte("Error: Authorization: Bearer secret-token")},
+			wantMessage: "opencode exited with code 23",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(tc.result)
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestNormalizeProviderExitFailure_SelectsOpenCodeParserFromNormalizedIdentity(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "opencode_rate_limit_text")
+	providerErr := normalizeProviderExitFailure("  OPENCODE  ", entry.CommandResult(), nil, nil)
+
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Message != opencodeThrottleFailureMessage {
+		t.Fatalf("normalizeProviderExitFailure() = %#v, want OpenCode throttle failure", providerErr)
+	}
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || decision.Terminal || !decision.TriggersThrottlePause {
+		t.Fatalf("decision = %#v, want central throttle policy", decision)
+	}
+}
+
+func TestNormalizeProviderExitFailure_OpenCodeCorpusUsesCentralPolicy(t *testing.T) {
+	for _, name := range []string{
+		"opencode_provider_auth_error",
+		"opencode_invalid_request_api_error",
+		"opencode_rate_limit_text",
+		"opencode_timeout_error",
+		"opencode_server_api_error",
+	} {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(name, func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("normalized failure = %#v, want type=%q family=%q", providerErr, entry.ExpectedType, entry.ExpectedFamily)
+			}
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			if decision.Retryable != entry.Retryable || decision.Terminal == entry.Retryable || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, !entry.Retryable, entry.TriggersThrottlePause)
+			}
+		})
+	}
 }
 
 func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
@@ -836,163 +980,5 @@ func TestWorkFailureDecisionFromProviderError_UsesFailureMetadataProjection(t *t
 	decision := WorkFailureDecisionFromProviderError(providerErr)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
 		t.Fatalf("WorkFailureDecisionFromProviderError() = %#v, want retryable non-terminal non-throttle", decision)
-	}
-}
-
-func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
-	testCases := []ProviderErrorCorpusEntry{
-		providerErrorCorpusEntryForTest(t, "codex_status_429_too_many_requests"),
-		providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached"),
-		providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model"),
-		providerErrorCorpusEntryForTest(t, "codex_internal_server_status_500"),
-		providerErrorCorpusEntryForTest(t, "codex_high_demand_temporary_errors"),
-		providerErrorCorpusEntryForTest(t, "codex_windows_exit_code_4294967295"),
-		providerErrorCorpusEntryForTest(t, "codex_invalid_request_error"),
-		providerErrorCorpusEntryForTest(t, "codex_timeout_waiting_for_provider"),
-		providerErrorCorpusEntryForTest(t, "codex_authentication_unauthorized"),
-		providerErrorCorpusEntryForTest(t, "cursor_usage_limit_reached"),
-		providerErrorCorpusEntryForTest(t, "cursor_high_demand_temporary_errors"),
-	}
-
-	for _, entry := range testCases {
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
-			if providerErr.Type != entry.ExpectedType {
-				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
-			}
-			if providerErr.Family != entry.ExpectedFamily {
-				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
-			}
-
-			decision := WorkFailureDecisionFromProviderError(providerErr)
-			wantTerminal := !entry.Retryable
-			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
-				t.Fatalf(
-					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
-					providerErrorCorpusEntryLabel(entry),
-					decision,
-					entry.Retryable,
-					wantTerminal,
-					entry.TriggersThrottlePause,
-				)
-			}
-		})
-	}
-}
-
-func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecisiveFailure(t *testing.T) {
-	testCases := []ProviderErrorCorpusEntry{
-		providerErrorCorpusEntryForTest(t, "codex_model_capacity_cleanup_noise"),
-		providerErrorCorpusEntryForTest(t, "codex_timeout_cleanup_noise"),
-	}
-
-	for _, entry := range testCases {
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
-			wantMessage := codexTextFailureMessage(entry.ExpectedType)
-			if providerErr.Message != wantMessage {
-				t.Fatalf("%s normalized message = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, wantMessage)
-			}
-			for _, reject := range entry.RejectMessageContains {
-				if strings.Contains(providerErr.Message, reject) {
-					t.Fatalf("%s normalized message = %q, want decisive error line without %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, reject)
-				}
-			}
-			if providerErr.Type != entry.ExpectedType {
-				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
-			}
-			if providerErr.Family != entry.ExpectedFamily {
-				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
-			}
-
-			decision := WorkFailureDecisionFromProviderError(providerErr)
-			wantTerminal := !entry.Retryable
-			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
-				t.Fatalf(
-					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
-					providerErrorCorpusEntryLabel(entry),
-					decision,
-					entry.Retryable,
-					wantTerminal,
-					entry.TriggersThrottlePause,
-				)
-			}
-		})
-	}
-}
-
-func TestProviderErrorCorpus_ContainsSupportedCoverageForEachFailureCategory(t *testing.T) {
-	corpus := loadProviderErrorCorpusForTest(t)
-
-	for _, category := range []string{
-		"throttled",
-		"internal_server_error",
-		"auth_failure",
-		"permanent_bad_request",
-		"timeout",
-	} {
-		if got := len(corpus.SupportedEntriesForCategory(category)); got == 0 {
-			t.Fatalf("supported corpus entries for category %q = %d, want at least 1", category, got)
-		}
-	}
-}
-
-func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
-	result := providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached").CommandResult()
-
-	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
-	if providerErr.Type != interfaces.WorkFailureTypeThrottled {
-		t.Fatalf("expected usage limit to classify as %q, got %q", interfaces.WorkFailureTypeThrottled, providerErr.Type)
-	}
-	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
-		t.Fatalf("expected usage limit to be in family %q, got %q", interfaces.WorkFailureFamilyThrottle, providerErr.Family)
-	}
-	if providerErr.Message != codexThrottleFailureMessage {
-		t.Fatalf("expected normalized error to use the safe throttle message, got %q", providerErr.Message)
-	}
-}
-
-func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
-	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
-	req := interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(interfaces.ModelProviderCodex),
-		Model:            "gpt-5.3-codex-spark",
-		UserMessage:      "line one\nline two",
-		WorkingDirectory: "workspace",
-	}
-
-	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
-	if err != nil {
-		t.Fatalf("BuildArgs returned error: %v", err)
-	}
-	commandReq := behavior.BuildCommandRequest(req, args)
-
-	if len(args) == 0 || args[len(args)-1] != "-" {
-		t.Fatalf("expected codex args to end with stdin marker, got %#v", args)
-	}
-	if string(commandReq.Stdin) != req.UserMessage {
-		t.Fatalf("expected codex request to stream prompt on stdin, got %q", string(commandReq.Stdin))
-	}
-}
-
-func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
-	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
-	req := interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderClaude),
-		Model:         "claude-sonnet",
-		UserMessage:   "line one\nline two",
-	}
-
-	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
-	if err != nil {
-		t.Fatalf("BuildArgs returned error: %v", err)
-	}
-	commandReq := behavior.BuildCommandRequest(req, args)
-
-	if len(args) == 0 || args[len(args)-1] != req.UserMessage {
-		t.Fatalf("expected claude args to end with user message, got %#v", args)
-	}
-	if len(commandReq.Stdin) != 0 {
-		t.Fatalf("expected claude request not to use stdin, got %q", string(commandReq.Stdin))
 	}
 }

@@ -74,7 +74,7 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 		assertRuntimeStartupRollingPolicy(t, result.records, result.logPath, rollingConfig)
 	})
 
-	t.Run("FailureIncludesSystemOutputAndRecordsEnvDiagnostics", func(t *testing.T) {
+	t.Run("FailureSuppressesSystemOutputAndRecordsEnvDiagnostics", func(t *testing.T) {
 		result := runRuntimeLoggingSmoke(t, runtimeLoggingSmokeRunner{
 			stdout:   "failure stdout context",
 			stderr:   "failure stderr context",
@@ -93,11 +93,11 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 		if completionRecord["exit_code"] != float64(23) {
 			t.Fatalf("failure exit_code = %#v, want 23 in record %#v", completionRecord["exit_code"], completionRecord)
 		}
-		if completionRecord["stdout"] != "failure stdout context" {
-			t.Fatalf("failure stdout = %#v, want failure stdout context in record %#v", completionRecord["stdout"], completionRecord)
+		if _, ok := completionRecord["stdout"]; ok {
+			t.Fatalf("failure completion unexpectedly included stdout in system log: %#v", completionRecord)
 		}
-		if completionRecord["stderr"] != "failure stderr context" {
-			t.Fatalf("failure stderr = %#v, want failure stderr context in record %#v", completionRecord["stderr"], completionRecord)
+		if _, ok := completionRecord["stderr"]; ok {
+			t.Fatalf("failure completion unexpectedly included stderr in system log: %#v", completionRecord)
 		}
 
 		completion := requireRecordedCompletion(t, result.artifact)

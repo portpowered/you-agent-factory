@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -1264,6 +1265,15 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	}
 	if svc.coordinatorPolicy().dir != alphaDir {
 		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
+	}
+}
+
+func TestFactoryService_ModelServiceClockUsesCompositionClock(t *testing.T) {
+	want := time.Date(2026, time.July, 10, 21, 30, 0, 0, time.UTC)
+	svc := &FactoryService{clock: clockwork.NewFakeClockAt(want)}
+
+	if got := svc.modelServiceClock(); !got.Equal(want) {
+		t.Fatalf("modelServiceClock() = %s, want %s", got, want)
 	}
 }
 

@@ -30,7 +30,9 @@ describe("failed dispatch retry actions", () => {
         return jsonResponse(buildFailedPartialDurableSession());
       }
       if (
-        url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}/dispatches`)
+        url.endsWith(
+          `/factory-sessions/${failedPartialReplaySessionID}/dispatches`,
+        )
       ) {
         return jsonResponse(buildFailedPartialReplayDispatchList());
       }
@@ -52,7 +54,7 @@ describe("failed dispatch retry actions", () => {
     expect(screen.queryByRole("button", { name: "Retry dispatch" })).toBeNull();
     expect(
       screen.getByText(
-        "Select a failed dispatch to make retry available on this detail surface.",
+        "Select a running or failed dispatch to make interrupt or retry available on this detail surface.",
       ),
     ).toBeTruthy();
 
@@ -83,16 +85,6 @@ describe("failed dispatch retry actions", () => {
           isDefault: false,
           project: "beta",
           runtime: {
-            dispatches: [
-              {
-                dispatchKind: "JAVASCRIPT_VERIFY",
-                id: "dispatch-failed",
-                label: "Verify release manifest",
-                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                sessionId: "session-beta",
-                status: "FAILED",
-              },
-            ],
             javascript: {
               childDispatchCounts: {
                 completed: 0,
@@ -123,13 +115,28 @@ describe("failed dispatch retry actions", () => {
       if (url.endsWith("/factory-sessions/session-beta/result")) {
         return new Response("not found", { status: 404 });
       }
+      if (url.endsWith("/factory-sessions/session-beta/dispatches")) {
+        return jsonResponse({
+          dispatches: [
+            {
+              dispatchKind: "JAVASCRIPT_VERIFY",
+              id: "dispatch-failed",
+              label: "Verify release manifest",
+              status: "FAILED",
+            },
+          ],
+          sessionId: "session-beta",
+        });
+      }
       if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
         return new Response("not found", { status: 404 });
       }
       return new Response("not found", { status: 404 });
     });
 
-    renderWithQueryClient(<FactorySessionDetailPanel sessionID="session-beta" />);
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Runtime")).toBeTruthy();
@@ -139,9 +146,113 @@ describe("failed dispatch retry actions", () => {
     expect(screen.queryByRole("button", { name: "Retry dispatch" })).toBeNull();
     expect(
       screen.queryByText(
-        "Select a failed dispatch to make retry available on this detail surface.",
+        "Select a running or failed dispatch to make interrupt or retry available on this detail surface.",
       ),
     ).toBeNull();
+  });
+});
+
+describe("active dispatch interrupt actions", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("selects a running dispatch and submits the dedicated interrupt route", async () => {
+    const fetchMock = vi
+      .mocked(globalThis.fetch)
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.endsWith("/factory-sessions/dur-sess-js-running-001")) {
+          return jsonResponse({
+            dialect: "you-workflow-v1",
+            lifecycle: {
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:05:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            phase: "execute",
+            progress: {
+              completedDispatches: 0,
+              failedDispatches: 0,
+              inFlightDispatches: 1,
+              totalDispatches: 1,
+            },
+            resolvedSource: {
+              kind: "WORKFLOW_NAME",
+              sourceHash: "sha256:workflow-running",
+              sourceRef: "workflow/running",
+            },
+            sessionId: "dur-sess-js-running-001",
+            status: "RUNNING",
+            usage: { resources: [] },
+          });
+        }
+        if (
+          url.endsWith("/factory-sessions/dur-sess-js-running-001/dispatches")
+        ) {
+          return jsonResponse({
+            dispatches: [
+              {
+                dispatchKind: "JAVASCRIPT_AGENT",
+                id: "dispatch-running",
+                status: "RUNNING",
+              },
+            ],
+            sessionId: "dur-sess-js-running-001",
+          });
+        }
+        if (
+          url.endsWith(
+            "/factory-sessions/dur-sess-js-running-001/interrupt-dispatch",
+          ) &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse(
+            {
+              dispatchId: "dispatch-running",
+              operation: "INTERRUPT_DISPATCH",
+              outcome: "ACCEPTED",
+              sessionId: "dur-sess-js-running-001",
+              status: "RUNNING",
+            },
+            202,
+          );
+        }
+        return new Response("not found", { status: 404 });
+      });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-js-running-001" />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Expand dispatch detail for dispatch-running",
+      }),
+    );
+
+    const interruptButton = await screen.findByRole("button", {
+      name: "Interrupt dispatch",
+    });
+    await user.click(interruptButton);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factory-sessions/dur-sess-js-running-001/interrupt-dispatch",
+        expect.objectContaining({
+          body: JSON.stringify({ dispatchId: "dispatch-running" }),
+          method: "POST",
+        }),
+      );
+    });
+    expect(
+      screen.getByText("Selected dispatch: dispatch-running"),
+    ).toBeTruthy();
   });
 });
 

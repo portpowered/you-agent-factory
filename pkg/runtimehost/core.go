@@ -3,6 +3,7 @@ package runtimehost
 import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -19,13 +20,13 @@ type ComposeCollaboratorSnapshot struct {
 	RuntimeBuildInitialized     bool
 	WorkersSchedulerInitialized bool
 	LocalModelsInitialized      bool
-	ModelAssetsInitialized   bool
-	ModelServiceInitialized  bool
-	FactorySaveInitialized   bool
-	DefinitionsInitialized   bool
-	HostedWorkersLoggerReady bool
-	BundleModelResources     bool
-	BundleLocalModels        bool
+	ModelAssetsInitialized      bool
+	ModelServiceInitialized     bool
+	FactorySaveInitialized      bool
+	DefinitionsInitialized      bool
+	HostedWorkersLoggerReady    bool
+	BundleModelResources        bool
+	BundleLocalModels           bool
 }
 
 // LocalModelDomain wires pkg/localmodels runtime dependencies constructed at
@@ -35,18 +36,19 @@ type LocalModelDomain = factoryservice.LocalModelDomain
 // Core owns the normalized runtime graph assembled before transport facades or
 // runtime loops begin.
 type Core struct {
-	cfg           *Config
-	factoryRootDir string
-	baseLogger     *zap.Logger
+	cfg              *Config
+	factoryRootDir   string
+	baseLogger       *zap.Logger
 	sessions         *factorysessions.Registry
 	runtimeBuild     *runtimebuild.Service
 	workersScheduler *workersservice.Service
 	localModels      LocalModelDomain
-	hostedWorkers  hostedworkers.Config
-	clock          factory.Clock
-	startupBundle  *factoryRuntimeBundle
-	logger         *zap.Logger
-	modelAssets    modelAssetPuller
+	hostedWorkers    hostedworkers.Config
+	clock            factory.Clock
+	startupBundle    *factoryRuntimeBundle
+	logger           *zap.Logger
+	modelAssets      modelAssetPuller
+	durableExecution factorysessionexecution.Service
 }
 
 // ServiceConfig returns the normalized service config used to compose the core.
@@ -154,6 +156,15 @@ func (core *Core) ModelAssetPuller() localmodels.AssetPuller {
 	return core.modelAssets
 }
 
+// DurableExecution returns the single durable execution collaborator owned by
+// this composed application graph.
+func (core *Core) DurableExecution() factorysessionexecution.Service {
+	if core == nil {
+		return nil
+	}
+	return core.durableExecution
+}
+
 // ComposeCollaboratorSnapshot reports initialized core collaborators for
 // equivalence tests.
 func (core *Core) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapshot {
@@ -166,9 +177,9 @@ func (core *Core) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapshot {
 		RuntimeBuildInitialized:     core.RuntimeBuild() != nil,
 		WorkersSchedulerInitialized: core.WorkersScheduler() != nil,
 		LocalModelsInitialized:      core.LocalModels().Manager != nil,
-		ModelAssetsInitialized:   core.ModelAssetPuller() != nil,
-		DefinitionsInitialized:   true,
-		HostedWorkersLoggerReady: core.HostedWorkers().Logger != nil,
+		ModelAssetsInitialized:      core.ModelAssetPuller() != nil,
+		DefinitionsInitialized:      true,
+		HostedWorkersLoggerReady:    core.HostedWorkers().Logger != nil,
 	}
 	if bundle != nil {
 		snapshot.BundleModelResources = bundle.ModelResources != nil
@@ -191,19 +202,21 @@ func NewCore(
 	startupBundle *factoryRuntimeBundle,
 	logger *zap.Logger,
 	modelAssets modelAssetPuller,
+	durableExecution factorysessionexecution.Service,
 ) *Core {
 	return &Core{
-		cfg:            cfg,
-		factoryRootDir: factoryRootDir,
-		baseLogger:     baseLogger,
+		cfg:              cfg,
+		factoryRootDir:   factoryRootDir,
+		baseLogger:       baseLogger,
 		sessions:         sessions,
 		runtimeBuild:     runtimeBuild,
 		workersScheduler: workersScheduler,
 		localModels:      localModels,
-		hostedWorkers:  hostedWorkers,
-		clock:          clock,
-		startupBundle:  startupBundle,
-		logger:         logger,
-		modelAssets:    modelAssets,
+		hostedWorkers:    hostedWorkers,
+		clock:            clock,
+		startupBundle:    startupBundle,
+		logger:           logger,
+		modelAssets:      modelAssets,
+		durableExecution: durableExecution,
 	}
 }

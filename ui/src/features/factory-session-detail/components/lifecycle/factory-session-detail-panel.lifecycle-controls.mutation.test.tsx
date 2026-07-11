@@ -29,50 +29,52 @@ describe("factory session detail lifecycle submissions", () => {
   it("submits pause through the shared lifecycle route and prevents duplicate submission while pending", async () => {
     const pauseRequest = createDeferred<Response>();
     let sessionRequestCount = 0;
-    const fetchMock = vi.mocked(globalThis.fetch).mockImplementation((input, init) => {
-      const url = String(input);
+    const fetchMock = vi
+      .mocked(globalThis.fetch)
+      .mockImplementation((input, init) => {
+        const url = String(input);
 
-      if (url.endsWith("/factory-sessions/dur-sess-js-running-001")) {
-        sessionRequestCount += 1;
-        return Promise.resolve(
-          jsonResponse({
-            dialect: "you-workflow-v1",
-            lifecycle: {
-              startedAt: "2026-06-08T14:00:00Z",
-              updatedAt:
-                sessionRequestCount > 1
-                  ? "2026-06-08T14:06:00Z"
-                  : "2026-06-08T14:05:00Z",
-            },
-            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-            phase: "review",
-            progress: {
-              completedDispatches: 1,
-              failedDispatches: 0,
-              inFlightDispatches: sessionRequestCount > 1 ? 0 : 1,
-              totalDispatches: 2,
-            },
-            resolvedSource: {
-              kind: "WORKFLOW_NAME",
-              sourceHash: "sha256:workflow-review",
-              sourceRef: "workflow/review",
-            },
-            sessionId: "dur-sess-js-running-001",
-            status: sessionRequestCount > 1 ? "PAUSED" : "RUNNING",
-            usage: { resources: [] },
-          }),
-        );
-      }
+        if (url.endsWith("/factory-sessions/dur-sess-js-running-001")) {
+          sessionRequestCount += 1;
+          return Promise.resolve(
+            jsonResponse({
+              dialect: "you-workflow-v1",
+              lifecycle: {
+                startedAt: "2026-06-08T14:00:00Z",
+                updatedAt:
+                  sessionRequestCount > 1
+                    ? "2026-06-08T14:06:00Z"
+                    : "2026-06-08T14:05:00Z",
+              },
+              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+              phase: "review",
+              progress: {
+                completedDispatches: 1,
+                failedDispatches: 0,
+                inFlightDispatches: sessionRequestCount > 1 ? 0 : 1,
+                totalDispatches: 2,
+              },
+              resolvedSource: {
+                kind: "WORKFLOW_NAME",
+                sourceHash: "sha256:workflow-review",
+                sourceRef: "workflow/review",
+              },
+              sessionId: "dur-sess-js-running-001",
+              status: sessionRequestCount > 1 ? "PAUSED" : "RUNNING",
+              usage: { resources: [] },
+            }),
+          );
+        }
 
-      if (
-        url.endsWith("/factory-sessions/dur-sess-js-running-001/pause") &&
-        init?.method === "POST"
-      ) {
-        return pauseRequest.promise;
-      }
+        if (
+          url.endsWith("/factory-sessions/dur-sess-js-running-001/pause") &&
+          init?.method === "POST"
+        ) {
+          return pauseRequest.promise;
+        }
 
-      return Promise.resolve(new Response("not found", { status: 404 }));
-    });
+        return Promise.resolve(new Response("not found", { status: 404 }));
+      });
 
     renderWithQueryClient(
       <FactorySessionDetailPanel sessionID="dur-sess-js-running-001" />,
@@ -93,40 +95,43 @@ describe("factory session detail lifecycle submissions", () => {
 
     await user.click(pauseButton);
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
 
     pauseRequest.resolve(
-      jsonResponse({
-        detail: "Pause request was queued.",
-        operation: "PAUSE",
-        outcome: "ACCEPTED",
-        sessionId: "dur-sess-js-running-001",
-        session: {
-          dialect: "you-workflow-v1",
-          lifecycle: {
-            pausedAt: "2026-06-08T14:06:00Z",
-            startedAt: "2026-06-08T14:00:00Z",
-            updatedAt: "2026-06-08T14:06:00Z",
-          },
-          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          phase: "review",
-          progress: {
-            completedDispatches: 1,
-            failedDispatches: 0,
-            inFlightDispatches: 0,
-            totalDispatches: 2,
-          },
-          resolvedSource: {
-            kind: "WORKFLOW_NAME",
-            sourceHash: "sha256:workflow-review",
-            sourceRef: "workflow/review",
-          },
+      jsonResponse(
+        {
+          detail: "Pause request was queued.",
+          operation: "PAUSE",
+          outcome: "ACCEPTED",
           sessionId: "dur-sess-js-running-001",
+          session: {
+            dialect: "you-workflow-v1",
+            lifecycle: {
+              pausedAt: "2026-06-08T14:06:00Z",
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:06:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            phase: "review",
+            progress: {
+              completedDispatches: 1,
+              failedDispatches: 0,
+              inFlightDispatches: 0,
+              totalDispatches: 2,
+            },
+            resolvedSource: {
+              kind: "WORKFLOW_NAME",
+              sourceHash: "sha256:workflow-review",
+              sourceRef: "workflow/review",
+            },
+            sessionId: "dur-sess-js-running-001",
+            status: "PAUSED",
+            usage: { resources: [] },
+          },
           status: "PAUSED",
-          usage: { resources: [] },
         },
-        status: "PAUSED",
-      }, 202),
+        202,
+      ),
     );
 
     await waitFor(() => {
@@ -149,17 +154,23 @@ describe("factory session detail lifecycle submissions", () => {
   });
 
   it("submits retry-dispatch with the currently selected failed dispatch", async () => {
-    const fetchMock = vi.mocked(globalThis.fetch).mockImplementation(
-      async (input, init) => {
+    const fetchMock = vi
+      .mocked(globalThis.fetch)
+      .mockImplementation(async (input, init) => {
         const url = String(input);
 
         if (url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}`)) {
           return jsonResponse(buildFailedPartialDurableSession());
         }
 
-        if (url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}/dispatches`)) {
+        if (
+          url.endsWith(
+            `/factory-sessions/${failedPartialReplaySessionID}/dispatches`,
+          )
+        ) {
           return jsonResponse({
-            dispatches: buildFailedPartialReplayDispatchList().dispatches.slice(1),
+            dispatches:
+              buildFailedPartialReplayDispatchList().dispatches.slice(1),
             sessionId: failedPartialReplaySessionID,
           });
         }
@@ -178,19 +189,21 @@ describe("factory session detail lifecycle submissions", () => {
             }),
           );
 
-          return jsonResponse({
-            dispatchId: "dispatch-failed",
-            operation: "RETRY_DISPATCH",
-            outcome: "ACCEPTED",
-            retryDispatchId: "dispatch-retry-001",
-            sessionId: failedPartialReplaySessionID,
-            status: "RUNNING",
-          }, 202);
+          return jsonResponse(
+            {
+              dispatchId: "dispatch-failed",
+              operation: "RETRY_DISPATCH",
+              outcome: "ACCEPTED",
+              retryDispatchId: "dispatch-retry-001",
+              sessionId: failedPartialReplaySessionID,
+              status: "RUNNING",
+            },
+            202,
+          );
         }
 
         return new Response("not found", { status: 404 });
-      },
-    );
+      });
 
     renderWithQueryClient(
       <FactorySessionDetailPanel sessionID={failedPartialReplaySessionID} />,
@@ -235,8 +248,9 @@ describe("factory session detail lifecycle submissions", () => {
   });
 
   it("renders typed conflict feedback without collapsing the selected dispatch detail", async () => {
-    const fetchMock = vi.mocked(globalThis.fetch).mockImplementation(
-      async (input, init) => {
+    const fetchMock = vi
+      .mocked(globalThis.fetch)
+      .mockImplementation(async (input, init) => {
         const url = String(input);
 
         if (url.endsWith("/factory-sessions/dur-sess-js-failed-002")) {
@@ -245,7 +259,9 @@ describe("factory session detail lifecycle submissions", () => {
           );
         }
 
-        if (url.endsWith("/factory-sessions/dur-sess-js-failed-002/dispatches")) {
+        if (
+          url.endsWith("/factory-sessions/dur-sess-js-failed-002/dispatches")
+        ) {
           return jsonResponse({
             dispatches: buildFailedPartialReplayDispatchList(
               "dur-sess-js-failed-002",
@@ -265,22 +281,26 @@ describe("factory session detail lifecycle submissions", () => {
         }
 
         if (
-          url.endsWith("/factory-sessions/dur-sess-js-failed-002/retry-dispatch") &&
+          url.endsWith(
+            "/factory-sessions/dur-sess-js-failed-002/retry-dispatch",
+          ) &&
           init?.method === "POST"
         ) {
-          return jsonResponse({
-            detail: "Another retry request is still being applied.",
-            dispatchId: "dispatch-failed",
-            operation: "RETRY_DISPATCH",
-            outcome: "CONFLICT",
-            sessionId: "dur-sess-js-failed-002",
-            status: "FAILED",
-          }, 409);
+          return jsonResponse(
+            {
+              detail: "Another retry request is still being applied.",
+              dispatchId: "dispatch-failed",
+              operation: "RETRY_DISPATCH",
+              outcome: "CONFLICT",
+              sessionId: "dur-sess-js-failed-002",
+              status: "FAILED",
+            },
+            409,
+          );
         }
 
         return new Response("not found", { status: 404 });
-      },
-    );
+      });
 
     renderWithQueryClient(
       <FactorySessionDetailPanel sessionID="dur-sess-js-failed-002" />,
@@ -303,7 +323,9 @@ describe("factory session detail lifecycle submissions", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Failure detail")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Retry dispatch" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Retry dispatch" }),
+      ).toBeTruthy();
     });
 
     await user.click(screen.getByRole("button", { name: "Retry dispatch" }));
@@ -325,7 +347,9 @@ describe("factory session detail lifecycle submissions", () => {
     await waitFor(() => {
       expect(screen.getByText("Conflict")).toBeTruthy();
       expect(
-        screen.getByText("Retry dispatch is blocked by another lifecycle change."),
+        screen.getByText(
+          "Retry dispatch is blocked by another lifecycle change.",
+        ),
       ).toBeTruthy();
       expect(
         screen.getByText(
@@ -334,7 +358,9 @@ describe("factory session detail lifecycle submissions", () => {
       ).toBeTruthy();
       expect(screen.getByText("Failure detail")).toBeTruthy();
       expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
-      expect(screen.getByText("session_id · provider-session-verify-1")).toBeTruthy();
+      expect(
+        screen.getByText("session_id · provider-session-verify-1"),
+      ).toBeTruthy();
       expect(
         screen.getByRole("link", { name: "artifact-failure-log" }),
       ).toBeTruthy();

@@ -9,10 +9,10 @@ import (
 )
 
 const (
-	workLogEventCommandRunnerRequested      = "command_runner.requested"
-	workLogEventCommandRunnerCompleted      = "command_runner.completed"
-	workLogEventCommandRunnerRequestDetails = "command_runner.request_details"
-	workLogEventCommandRunnerOutputDetails  = "command_runner.output_details"
+	workLogEventCommandRunnerRequested        = "command_runner.requested"
+	workLogEventCommandRunnerCompleted        = "command_runner.completed"
+	workLogEventCommandRunnerRequestDetails   = "command_runner.request_details"
+	workLogEventCommandRunnerOutputDetails    = "command_runner.output_details"
 	workLogEventCommandRunnerCleanupStarted   = "command_runner.cleanup_started"
 	workLogEventCommandRunnerCleanupGraceful  = "command_runner.cleanup_graceful"
 	workLogEventCommandRunnerCleanupForceKill = "command_runner.cleanup_force_kill"
@@ -50,7 +50,7 @@ func commandRequestLogFields(req CommandRequest) []any {
 		"event_name", workLogEventCommandRunnerRequested,
 		"status", "requested",
 		"command", req.Command,
-		"args", append([]string(nil), req.Args...),
+		"args_count", len(req.Args),
 		"working_dir", req.WorkDir,
 		"stdin_bytes", len(req.Stdin))
 }
@@ -60,17 +60,12 @@ func commandCompletionLogFields(req CommandRequest, result CommandResult, durati
 		"event_name", workLogEventCommandRunnerCompleted,
 		"status", status,
 		"command", req.Command,
-		"args", append([]string(nil), req.Args...),
+		"args_count", len(req.Args),
 		"working_dir", req.WorkDir,
 		"exit_code", result.ExitCode,
 		"duration_ms", duration.Milliseconds())
-	if status != "succeeded" || err != nil {
-		fields = append(fields,
-			"stdout", string(result.Stdout),
-			"stderr", string(result.Stderr))
-	}
 	if err != nil {
-		fields = append(fields, "error", err.Error())
+		fields = append(fields, "has_error", true)
 	}
 	return fields
 }

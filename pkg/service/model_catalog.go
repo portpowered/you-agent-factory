@@ -93,6 +93,7 @@ func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig)
 		ModelHost:        fs.modelHost,
 		ModelAssetPuller: fs.modelAssetPuller,
 		Logger:           func() *zap.Logger { return fs.logger },
+		Clock:            fs.modelServiceClock,
 		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
 			recorder := fs.modelPullMetricsRecorder()
 			if recorder == nil {
@@ -103,6 +104,13 @@ func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig)
 		ModelInvocationExecutor: fs.modelInvocationExecutor,
 		FactoryRunnerID:         fs.factoryRunnerID,
 	})
+}
+
+func (fs *FactoryService) modelServiceClock() time.Time {
+	if fs == nil || fs.clock == nil {
+		return time.Now()
+	}
+	return fs.clock.Now()
 }
 
 // ProvideModelServiceCollaborator constructs the model-domain collaborator for a

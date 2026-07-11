@@ -93,6 +93,7 @@ func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
 		ModelHost:        fs.modelHost,
 		ModelAssetPuller: fs.modelAssetPuller,
 		Logger:           func() *zap.Logger { return fs.logger },
+		Clock:            fs.modelServiceClock,
 		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
 			recorder := fs.modelPullMetricsRecorder()
 			if recorder == nil {
@@ -103,6 +104,13 @@ func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
 		ModelInvocationExecutor: fs.modelInvocationExecutor,
 		FactoryRunnerID:         fs.factoryRunnerID,
 	})
+}
+
+func (fs *Host) modelServiceClock() time.Time {
+	if fs == nil || fs.clock == nil {
+		return time.Now()
+	}
+	return fs.clock.Now()
 }
 
 // ModelService returns the canonical model-domain collaborator used by the

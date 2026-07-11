@@ -1,7 +1,10 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -9,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndClassification(t *testing.T) {
@@ -48,6 +54,197 @@ func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDeci
 	}
 	assertGPT56SolCanonicalFailure(t, providerErr)
 	assertGPT56SolFailureMetadata(t, providerErr, entry, result)
+}
+
+func TestScriptWrapProvider_Infer_LogsCorrelatedNormalizedCodexFailureAfterParsing(t *testing.T) {
+	const prompt = "synthetic prompt must not appear"
+	const credential = "credential-value-must-not-appear"
+	sequence := []string{}
+	logger := &preparedInvocationTestLogger{sequence: &sequence}
+	runner := &preparedInvocationTestRunner{
+		sequence: &sequence,
+		result: CommandResult{
+			ExitCode: 17,
+			Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}` + "\n" + credential),
+		},
+	}
+	provider := NewScriptWrapProvider(WithProviderLogger(logger), WithProviderCommandRunner(runner))
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		Model:         "gpt-5.6-sol",
+		UserMessage:   prompt,
+		EnvVars:       map[string]string{"API_TOKEN": credential},
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID: "dispatch-failure-1",
+			Execution: interfaces.ExecutionMetadata{
+				RequestID: "request-failure-1", TraceID: "trace-failure-1", WorkIDs: []string{"work-failure-1", "work-failure-2"},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("Infer returned nil error")
+	}
+	if logger.failureCount != 1 {
+		t.Fatalf("normalized failure records = %d, want 1", logger.failureCount)
+	}
+	if len(sequence) < 3 || sequence[0] != ProviderInvocationPrepared || sequence[1] != "runner" || sequence[2] != ProviderFailureNormalized {
+		t.Fatalf("record sequence = %#v, want prepared, runner, normalized failure", sequence)
+	}
+	assertNormalizedFailureFields(t, logger.failureFields)
+	if strings.Contains(logger.allValues, prompt) || strings.Contains(logger.allValues, credential) {
+		t.Fatalf("provider logs contain prompt or credential: %s", logger.allValues)
+	}
+}
+
+func assertNormalizedFailureFields(t *testing.T, fields map[string]any) {
+	t.Helper()
+	if fields["provider"] != "codex" || fields["model"] != "gpt-5.6-sol" {
+		t.Fatalf("provider/model = %#v/%#v", fields["provider"], fields["model"])
+	}
+	if fields["failure_reason"] != interfaces.WorkFailureTypePermanentBadRequest || fields["failure_message"] != codexGPT56SolUpgradeMessage {
+		t.Fatalf("canonical failure = %#v", fields)
+	}
+	if fields["retryable"] != false || fields["exit_code"] != 17 {
+		t.Fatalf("retry/exit fields = %#v", fields)
+	}
+	if fields["request_id"] != "request-failure-1" || fields["trace_id"] != "trace-failure-1" || fields["work_id"] != "work-failure-1" || fields["dispatch_id"] != "dispatch-failure-1" {
+		t.Fatalf("correlation fields = %#v", fields)
+	}
+	if _, ok := fields["duration_ms"]; !ok {
+		t.Fatalf("duration_ms absent: %#v", fields)
+	}
+}
+
+func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		err           error
+		wantReason    interfaces.WorkFailureType
+		wantRetryable bool
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantRetryable: true},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sequence := []string{}
+			logger := &preparedInvocationTestLogger{sequence: &sequence}
+			runner := &preparedInvocationTestRunner{sequence: &sequence, err: tc.err}
+			provider := NewScriptWrapProvider(WithProviderLogger(logger), WithProviderCommandRunner(runner))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderClaude),
+				UserMessage:   "private prompt",
+				Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-no-exit"},
+			})
+			if err == nil {
+				t.Fatal("Infer returned nil error")
+			}
+			if logger.failureCount != 1 || logger.failureFields["failure_reason"] != tc.wantReason || logger.failureFields["retryable"] != tc.wantRetryable {
+				t.Fatalf("normalized failure fields = %#v", logger.failureFields)
+			}
+			if _, ok := logger.failureFields["exit_code"]; ok {
+				t.Fatalf("failure record invented exit code: %#v", logger.failureFields)
+			}
+			if logger.failureFields["model"] != ProviderDefaultModel {
+				t.Fatalf("model = %#v, want provider default", logger.failureFields["model"])
+			}
+		})
+	}
+}
+
+func TestScriptWrapProvider_Infer_CodexExecutionFailureJSONLogsExcludeCommandOutput(t *testing.T) {
+	const prompt = "codex execution prompt must not appear"
+	const stdoutSecret = "stdout-secret-must-not-appear"
+	const stderrSecret = "stderr-secret-must-not-appear"
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Provider request timed out."},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured, wantMessage: "Provider command could not be started."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			encoderConfig := zap.NewProductionEncoderConfig()
+			core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&output), zapcore.DebugLevel)
+			provider := NewScriptWrapProvider(
+				WithProviderLogger(logging.NewZapLogger(zap.New(core), false)),
+				WithProviderCommandRunner(&recordingProviderExec{
+					result: CommandResult{Stdout: []byte(stdoutSecret), Stderr: []byte(stderrSecret)},
+					err:    tc.err,
+				}),
+			)
+			_, _ = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderCodex),
+				UserMessage:   prompt,
+			})
+
+			record := normalizedFailureJSONRecord(t, output.String())
+			if record["failure_reason"] != string(tc.wantReason) || record["failure_message"] != tc.wantMessage {
+				t.Fatalf("normalized JSON failure = %#v", record)
+			}
+			encoded, err := json.Marshal(record)
+			if err != nil {
+				t.Fatalf("encode normalized failure: %v", err)
+			}
+			for _, secret := range []string{prompt, stdoutSecret, stderrSecret} {
+				if strings.Contains(string(encoded), secret) {
+					t.Fatalf("normalized JSON failure leaked %q: %s", secret, encoded)
+				}
+			}
+		})
+	}
+}
+
+func normalizedFailureJSONRecord(t *testing.T, logs string) map[string]any {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode JSON log: %v", err)
+		}
+		if record["event_name"] == ProviderFailureNormalized {
+			return record
+		}
+	}
+	t.Fatalf("normalized failure absent from JSON logs: %s", logs)
+	return nil
+}
+
+func TestScriptWrapProvider_Infer_CodexUpgradeFailureIsSearchableInJSONLogs(t *testing.T) {
+	var output bytes.Buffer
+	encoderConfig := zap.NewProductionEncoderConfig()
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&output), zapcore.DebugLevel)
+	provider := NewScriptWrapProvider(
+		WithProviderLogger(logging.NewZapLogger(zap.New(core), false)),
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{
+			ExitCode: 2,
+			Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}`),
+		}}),
+	)
+	_, _ = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		UserMessage:   "json log prompt fixture",
+	})
+
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode JSON log: %v", err)
+		}
+		if record["event_name"] != ProviderFailureNormalized {
+			continue
+		}
+		if record["failure_reason"] != string(interfaces.WorkFailureTypePermanentBadRequest) || record["failure_message"] != codexGPT56SolUpgradeMessage {
+			t.Fatalf("normalized JSON failure = %#v", record)
+		}
+		if strings.Contains(line, "json log prompt fixture") || strings.Contains(line, `\"status\":400`) {
+			t.Fatalf("normalized JSON failure leaked prompt or envelope: %s", line)
+		}
+		return
+	}
+	t.Fatalf("normalized failure absent from JSON logs: %s", output.String())
 }
 
 func assertGPT56SolCanonicalFailure(t *testing.T, providerErr *ProviderError) {
@@ -121,10 +318,12 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 			wantType:    interfaces.WorkFailureTypeUnknown,
 		},
 		{
-			name:        "OpenCodeClassifiesAuthenticationOutput",
-			provider:    string(interfaces.ModelProviderOpenCode),
-			result:      CommandResult{ExitCode: 1, Stdout: []byte("login required before continuing")},
-			wantMessage: "login required before continuing",
+			name:     "OpenCodeUsesStructuredAuthenticationFailure",
+			provider: string(interfaces.ModelProviderOpenCode),
+			result: CommandResult{ExitCode: 1, Stdout: []byte(
+				`{"type":"error","error":{"name":"ProviderAuthError","data":{"message":"Authentication required. Run opencode auth login."}}}`,
+			)},
+			wantMessage: "Authentication required. Run opencode auth login.",
 			wantType:    interfaces.WorkFailureTypeAuthFailure,
 		},
 	}
@@ -421,5 +620,162 @@ func assertCodexBoundedFragment(
 	}
 	if got := fragment.Metadata[codexMetadataTruncatedKey]; got != "true" {
 		t.Fatalf("payload_truncated = %q, want true", got)
+	}
+}
+func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "codex_status_429_too_many_requests"),
+		providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached"),
+		providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model"),
+		providerErrorCorpusEntryForTest(t, "codex_internal_server_status_500"),
+		providerErrorCorpusEntryForTest(t, "codex_high_demand_temporary_errors"),
+		providerErrorCorpusEntryForTest(t, "codex_windows_exit_code_4294967295"),
+		providerErrorCorpusEntryForTest(t, "codex_invalid_request_error"),
+		providerErrorCorpusEntryForTest(t, "codex_timeout_waiting_for_provider"),
+		providerErrorCorpusEntryForTest(t, "codex_authentication_unauthorized"),
+		providerErrorCorpusEntryForTest(t, "cursor_usage_limit_reached"),
+		providerErrorCorpusEntryForTest(t, "cursor_high_demand_temporary_errors"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType {
+				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
+			}
+			if providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
+			}
+
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf(
+					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
+					providerErrorCorpusEntryLabel(entry),
+					decision,
+					entry.Retryable,
+					wantTerminal,
+					entry.TriggersThrottlePause,
+				)
+			}
+		})
+	}
+}
+
+func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecisiveFailure(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "codex_model_capacity_cleanup_noise"),
+		providerErrorCorpusEntryForTest(t, "codex_timeout_cleanup_noise"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			wantMessage := codexTextFailureMessage(entry.ExpectedType)
+			if providerErr.Message != wantMessage {
+				t.Fatalf("%s normalized message = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, wantMessage)
+			}
+			for _, reject := range entry.RejectMessageContains {
+				if strings.Contains(providerErr.Message, reject) {
+					t.Fatalf("%s normalized message = %q, want decisive error line without %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, reject)
+				}
+			}
+			if providerErr.Type != entry.ExpectedType {
+				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
+			}
+			if providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
+			}
+
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf(
+					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
+					providerErrorCorpusEntryLabel(entry),
+					decision,
+					entry.Retryable,
+					wantTerminal,
+					entry.TriggersThrottlePause,
+				)
+			}
+		})
+	}
+}
+
+func TestProviderErrorCorpus_ContainsSupportedCoverageForEachFailureCategory(t *testing.T) {
+	corpus := loadProviderErrorCorpusForTest(t)
+
+	for _, category := range []string{
+		"throttled",
+		"internal_server_error",
+		"auth_failure",
+		"permanent_bad_request",
+		"timeout",
+	} {
+		if got := len(corpus.SupportedEntriesForCategory(category)); got == 0 {
+			t.Fatalf("supported corpus entries for category %q = %d, want at least 1", category, got)
+		}
+	}
+}
+
+func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
+	result := providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached").CommandResult()
+
+	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("expected usage limit to classify as %q, got %q", interfaces.WorkFailureTypeThrottled, providerErr.Type)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("expected usage limit to be in family %q, got %q", interfaces.WorkFailureFamilyThrottle, providerErr.Family)
+	}
+	if providerErr.Message != codexThrottleFailureMessage {
+		t.Fatalf("expected normalized error to use the safe throttle message, got %q", providerErr.Message)
+	}
+}
+
+func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	req := interfaces.ProviderInferenceRequest{
+		ModelProvider:    string(interfaces.ModelProviderCodex),
+		Model:            "gpt-5.3-codex-spark",
+		UserMessage:      "line one\nline two",
+		WorkingDirectory: "workspace",
+	}
+
+	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
+	commandReq := behavior.BuildCommandRequest(req, args)
+
+	if len(args) == 0 || args[len(args)-1] != "-" {
+		t.Fatalf("expected codex args to end with stdin marker, got %#v", args)
+	}
+	if string(commandReq.Stdin) != req.UserMessage {
+		t.Fatalf("expected codex request to stream prompt on stdin, got %q", string(commandReq.Stdin))
+	}
+}
+
+func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
+	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
+	req := interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderClaude),
+		Model:         "claude-sonnet",
+		UserMessage:   "line one\nline two",
+	}
+
+	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
+	commandReq := behavior.BuildCommandRequest(req, args)
+
+	if len(args) == 0 || args[len(args)-1] != req.UserMessage {
+		t.Fatalf("expected claude args to end with user message, got %#v", args)
+	}
+	if len(commandReq.Stdin) != 0 {
+		t.Fatalf("expected claude request not to use stdin, got %q", string(commandReq.Stdin))
 	}
 }

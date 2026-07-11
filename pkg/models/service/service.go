@@ -1,6 +1,8 @@
 package service
 
 import (
+	"time"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
@@ -13,6 +15,7 @@ type Dependencies struct {
 	ModelHost               func() modelhost.Host
 	ModelAssetPuller        func() localmodels.AssetPuller
 	Logger                  func() *zap.Logger
+	Clock                   func() time.Time
 	ModelPullMetrics        func() PullMetricsRecorder
 	ModelInvocationExecutor ModelInvocationExecutor
 	FactoryRunnerID         func() string
@@ -40,4 +43,11 @@ func (s *Service) modelHost() modelhost.Host {
 		return nil
 	}
 	return s.deps.ModelHost()
+}
+
+func (s *Service) now() time.Time {
+	if s == nil || s.deps.Clock == nil {
+		return time.Now()
+	}
+	return s.deps.Clock()
 }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   approveFactorySession,
+  interruptFactorySessionDispatch,
   pauseFactorySession,
   retryFactorySessionDispatch,
 } from "./lifecycle-controls";
@@ -31,7 +32,9 @@ describe("factory session lifecycle controls API", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(pauseFactorySession("dur-sess-js-running-001")).resolves.toEqual(
+    await expect(
+      pauseFactorySession("dur-sess-js-running-001"),
+    ).resolves.toEqual(
       expect.objectContaining({
         operation: "PAUSE",
         outcome: "ACCEPTED",
@@ -144,6 +147,43 @@ describe("factory session lifecycle controls API", () => {
     );
   });
 
+  it("posts interrupt-dispatch requests with the selected dispatch payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          dispatchId: "dispatch-running-001",
+          operation: "INTERRUPT_DISPATCH",
+          outcome: "ACCEPTED",
+          sessionId: "dur-sess-js-running-001",
+          status: "RUNNING",
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 202,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      interruptFactorySessionDispatch("dur-sess-js-running-001", {
+        dispatchId: "dispatch-running-001",
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        dispatchId: "dispatch-running-001",
+        operation: "INTERRUPT_DISPATCH",
+      }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/dur-sess-js-running-001/interrupt-dispatch",
+      expect.objectContaining({
+        body: JSON.stringify({ dispatchId: "dispatch-running-001" }),
+        method: "POST",
+      }),
+    );
+  });
+
   it("returns typed conflict lifecycle outcomes instead of surfacing them as transport errors", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -164,7 +204,9 @@ describe("factory session lifecycle controls API", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(pauseFactorySession("dur-sess-js-running-001")).resolves.toEqual(
+    await expect(
+      pauseFactorySession("dur-sess-js-running-001"),
+    ).resolves.toEqual(
       expect.objectContaining({
         detail: "Conflicting request id.",
         operation: "PAUSE",
