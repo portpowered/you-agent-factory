@@ -93,26 +93,31 @@ func (h *SessionRuntimeHost) runWithDashboard(ctx context.Context, runHost func(
 	hostErr := make(chan error, 1)
 	go func() { dashboardErr <- h.dashboard.Run(runCtx) }()
 	go func() { hostErr <- runHost(runCtx) }()
+	var runtimeErr, sidecarErr error
+	renderFinal := false
 	select {
-	case err := <-hostErr:
+	case runtimeErr = <-hostErr:
+		renderFinal = true
 		cancel()
-		sidecarErr := <-dashboardErr
+		sidecarErr = <-dashboardErr
+	case sidecarErr = <-dashboardErr:
+		// A sidecar exit caused by the owning context is normal process
+		// shutdown. Preserve the final snapshot after both collaborators join,
+		// regardless of which cancellation observer exits first.
+		renderFinal = ctx.Err() != nil
+		cancel()
+		runtimeErr = <-hostErr
+	}
+	if renderFinal {
 		h.dashboard.RenderFinal(ctx)
-		if err != nil {
-			return err
-		}
-		if sidecarErr != nil && !errors.Is(sidecarErr, context.Canceled) {
-			return sidecarErr
-		}
-		return nil
-	case err := <-dashboardErr:
-		cancel()
-		runtimeErr := <-hostErr
-		if err != nil && !errors.Is(err, context.Canceled) {
-			return err
-		}
+	}
+	if runtimeErr != nil {
 		return runtimeErr
 	}
+	if sidecarErr != nil && !errors.Is(sidecarErr, context.Canceled) {
+		return sidecarErr
+	}
+	return nil
 }
 
 // RunWithAPISurface starts lifecycle-owned runtime work while providing the

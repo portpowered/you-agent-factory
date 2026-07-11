@@ -141,6 +141,76 @@ func TestSessionRuntimeHostRendersFinalDashboardAfterJoiningPeriodicLoop(t *test
 	}
 }
 
+func TestSessionRuntimeHostRendersFinalDashboardAfterDashboardExitsFirst(t *testing.T) {
+	t.Parallel()
+
+	ready := make(chan struct{})
+	tickerStopped := make(chan struct{})
+	hostCanceled := make(chan struct{})
+	releaseHost := make(chan struct{})
+	hostExited := make(chan struct{})
+	finalRenderStarted := make(chan struct{})
+	releaseFinalRender := make(chan struct{})
+	timing := &lifecycleDashboardTiming{
+		started: make(chan struct{}),
+		ticker: &lifecycleDashboardTicker{
+			ticks:   make(chan time.Time),
+			stopped: tickerStopped,
+		},
+	}
+	renderer := &countingBlockingDashboardRenderer{
+		started: finalRenderStarted,
+		release: releaseFinalRender,
+	}
+	sidecar, err := initializerdashboard.NewDashboardSidecar(initializerdashboard.DashboardSidecarConfig{
+		Reader:   testDashboardReader{},
+		Renderer: renderer,
+		Timing:   timing,
+		Ready:    func() { close(ready) },
+	})
+	if err != nil {
+		t.Fatalf("NewDashboardSidecar: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runReturned := make(chan error, 1)
+	host := &SessionRuntimeHost{dashboard: sidecar}
+	go func() {
+		runReturned <- host.runWithDashboard(ctx, func(ctx context.Context) error {
+			<-ctx.Done()
+			close(hostCanceled)
+			<-releaseHost
+			close(hostExited)
+			return nil
+		})
+	}()
+
+	<-ready
+	cancel()
+	<-tickerStopped
+	<-hostCanceled
+	select {
+	case <-finalRenderStarted:
+		t.Fatal("final dashboard render started before runtime host joined")
+	default:
+	}
+	close(releaseHost)
+	<-hostExited
+	<-finalRenderStarted
+	if got := renderer.renderCount(); got != 1 {
+		t.Fatalf("dashboard render count = %d, want exactly one final render", got)
+	}
+	select {
+	case err := <-runReturned:
+		t.Fatalf("runWithDashboard returned before final render completed: %v", err)
+	default:
+	}
+	close(releaseFinalRender)
+	if err := <-runReturned; err != nil {
+		t.Fatalf("runWithDashboard: %v", err)
+	}
+}
+
 type testDashboardReader struct{}
 
 func (testDashboardReader) ReadDashboard(context.Context, time.Time) (initializerdashboard.DashboardRenderInput, error) {
@@ -161,6 +231,27 @@ type blockingDashboardRenderer struct {
 	started chan<- struct{}
 	release <-chan struct{}
 	once    sync.Once
+}
+
+type countingBlockingDashboardRenderer struct {
+	mu      sync.Mutex
+	renders int
+	started chan<- struct{}
+	release <-chan struct{}
+}
+
+func (r *countingBlockingDashboardRenderer) RenderDashboard(initializerdashboard.DashboardRenderInput) {
+	r.mu.Lock()
+	r.renders++
+	r.mu.Unlock()
+	close(r.started)
+	<-r.release
+}
+
+func (r *countingBlockingDashboardRenderer) renderCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.renders
 }
 
 func (r *blockingDashboardRenderer) RenderDashboard(initializerdashboard.DashboardRenderInput) {
