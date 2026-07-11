@@ -75,6 +75,7 @@ type sharedDispatchProjection struct {
 	ID              string
 	Status          fse.DispatchStatus
 	Attempt         int
+	Model           string
 	Provider        string
 	ProviderSession fse.ProviderSessionRef
 }
@@ -84,6 +85,7 @@ func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjecti
 		ID:       dispatch.ID,
 		Status:   dispatch.Status,
 		Attempt:  dispatch.Attempt,
+		Model:    dispatch.Model,
 		Provider: dispatch.Provider,
 	}
 	if len(dispatch.ProviderSessionRefs) == 1 {
