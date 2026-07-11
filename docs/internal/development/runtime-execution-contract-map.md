@@ -1,0 +1,75 @@
+# Runtime execution contract map
+
+This map is the maintainer contract for provider-backed execution shared by
+Petri workstation dispatch and JavaScript `agent.run` dispatch. It describes the
+current implementation; it does not authorize package movement or change
+runtime behavior.
+
+## Classification rules
+
+- **Shared** means both execution modes must preserve the same semantic fact at
+  the named canonical boundary. Their orchestration-internal records and control
+  flow may differ.
+- **Intentionally different** means the modes have different orchestration
+  owners or sequencing by design. A later convergence must preserve the stated
+  rationale rather than force identical internals.
+- **Missing** means one or both modes do not yet carry the fact through the
+  canonical boundary. The bounded follow-up names the permitted next step; the
+  absence is not an invitation to create another provider path.
+
+“Public projection” below means the customer-facing Factory Session Dispatch,
+Provider Session, artifact, failure, and replay facts. It does not mean that
+Petri transition data and JavaScript script/checkpoint data must match.
+
+## Contract matrix
+
+| Behavior | Canonical owner | Petri workstation implementation | JavaScript `agent.run` implementation | Classification | Invariant or rationale | Evidence or bounded follow-up |
+| --- | --- | --- | --- | --- | --- | --- |
+| Provider request | `pkg/interfaces.ProviderInferenceRequest` is the provider-bound value; `pkg/workers.Provider` is the execution seam. | `pkg/workers/executor` renders a `WorkstationExecutionRequest`, derives the provider request, and invokes the configured provider without mutating `WorkDispatch`. | Live children use `pkg/factorysessionexecution/livechild.ProviderChildExecutor`, which derives the same `ProviderInferenceRequest` and calls `workers.Provider.Infer`. Fake children remain in-process and do not claim to be provider calls. | **Shared** for the provider seam; request population is partly **missing** in the JavaScript adapter. | A production provider call accepts a detached provider-owned request containing dispatch correlation, rendered input, model/schema/runner data, and session context. It must not accept Petri tokens or JavaScript VM state as its contract. | `pkg/interfaces/work_dispatch.go`; `pkg/workers/provider_compat.go`; `pkg/factorysessionexecution/livechild/provider.go`. Follow-up may fill semantically applicable request fields in that adapter only; it must not introduce a second provider interface. |
+| Provider result | `pkg/interfaces.InferenceResponse` and normalized provider errors in `pkg/workers/provider`; orchestration translates those into its result record. | Provider content, Provider Session metadata, safe diagnostics, and normalized failures become `interfaces.WorkResult`; the factory consumes that result on a later tick. | Live child content becomes a `ChildExecutionResult` plus a terminal `ChildDispatchRecord`; provider errors become a safe `FailureDetail`. | **Shared** at provider response/error semantics; **intentionally different** after translation. | Provider content, stable session metadata, and normalized failure facts survive translation. Petri may route tokens/outcomes; JavaScript returns a script value and child record. Those result containers are not required to match. | `pkg/interfaces/work_execution.go`; `pkg/workers/provider/provider_behavior.go`; `pkg/factorysessionexecution/livechild/provider.go`. |
+| Provider Session identity | `interfaces.ProviderSessionMetadata {provider, kind, id}` and the public `ProviderSessionRef` shape. | `WorkResult.ProviderSession` is recorded with the workstation response and dispatch lifecycle facts. Canonical provider naming is applied at the provider boundary. | A terminal live-child record carries provider plus session id; projection emits `{provider, kind: "session_id", id}`. Fake execution uses explicit fake identity only as deterministic fixture data. | **Shared**. | When present, identity is provider + kind + id. Public readers must not infer identity from raw output, and absence remains absence. Provider-specific transcript or VM fields are not part of the shared shape. | `pkg/interfaces/work_execution.go`; `pkg/factorysessionexecution/projection_consistency.go`; `pkg/factorysessionexecution/service.go`; `pkg/workers/provider/inference_progress.go`. |
+| Cancellation | The caller context is the provider-call cancellation boundary; the active orchestration owner decides when to cancel and what durable lifecycle fact to emit. | Factory pause/stop and worker-pool lifecycle control the workstation context; process/provider adapters propagate cancellation and the event loop observes the resulting completion/interruption. | Factory Session lifecycle and JavaScript runtime budgets control script/child contexts; `ProviderChildExecutor.Execute` checks and passes the context to `Infer`. Checkpoints can support session resume without becoming provider cancellation state. | **Intentionally different** orchestration; **shared** context propagation. | Provider implementations must honor the supplied context. Petri event-loop control and JavaScript script/checkpoint control retain ownership of cancellation timing and follow-up sequencing. Cancellation must not be encoded as provider-global mutable state. | `pkg/workers/interfaces.go`; `pkg/workers/process/doc.go`; `pkg/factorysessionexecution/livechild/provider.go`; `pkg/factorysessionexecution/control.go`. |
+| Retry metadata and sequencing | Provider failure normalization belongs to `pkg/workers/provider`; retry policy belongs to the active orchestration owner; public usage/failure projections own replay-safe facts. | `WorkResult.Metrics.RetryCount` and `FailureMetadata` preserve the attempt outcome; the Petri runtime decides retry/continue/terminal routing on ticks and emits dispatch lifecycle retry facts. | Child summaries currently project `Attempt: 1`; JavaScript runtime/pipeline policy controls whether and when script work is re-executed or resumed. Provider-child multi-attempt metadata is not yet represented. | **Intentionally different** sequencing; JavaScript provider-attempt metadata is **missing**. | Do not centralize retry scheduling in the provider seam. A provider adapter may normalize failures and report attempts, but Petri transitions and JavaScript script/checkpoint policy decide retries independently. | `pkg/interfaces/work_execution.go`; `pkg/workers/provider/provider_behavior.go`; `pkg/factory/events/event_history_dispatch_lifecycle.go`; `pkg/factorysessionexecution/service.go`. Bounded follow-up: carry attempt/retry facts through child records and public usage only when live-child retry policy is defined. |
+| Safe diagnostics | `interfaces.WorkDiagnostics`, `interfaces.FailureDetail`, and canonical Factory event/public projection schemas. | Workstation results carry hashed/redacted prompt and invocation metadata, provider/command metadata, normalized failure detail, and metrics into event history. | Child records expose digests, selected execution metadata, and normalized failure detail; the raw error is retained only as an execution diagnostic, not promoted as Provider Session identity. | **Shared** safety boundary; JavaScript detail coverage is **missing**. | Public/replayable diagnostics contain safe structured facts and stable failure reason/message. They must not expose raw prompts, secrets, environment values, provider wire payloads, stack/VM internals, or unbounded stderr. | `pkg/interfaces/work_execution.go`; `pkg/factory/runtime/factory_event_history_test.go`; `pkg/orchestrators/javascript/runtime/records.go`; `pkg/factorysessionexecution/livechild/provider.go`. Follow-up is limited to mapping already-sanitized provider diagnostics into child/public records. |
+| Artifact references | Factory Session artifact projection and canonical artifact URI/reference format. | Completed workstation results and emitted work/artifact events associate output artifacts and lineage with the dispatch. | A child reserves a Factory Session artifact URI before execution; completed records project its artifact id as a dispatch output and an inspectable `CHILD_RESULT` artifact. | **Shared** association; creation timing is **intentionally different**. | Public artifacts have stable session-scoped identity, retrieval reference, dispatch association, kind/visibility, and safe metadata. A reserved JavaScript artifact is not publicly completed until the child completes. | `pkg/factory/events/event_history_dispatch_lifecycle.go`; `pkg/factorysessionexecution/livechild/provider.go`; `pkg/factorysessionexecution/service.go`; `pkg/orchestrators/javascript/result`. |
+| Event append | Ordered Factory event history is the durable public owner; execution-mode records are inputs to that boundary. | The event loop records dispatch queued/started/completed/failed/interrupted/reconciled and workstation response facts through `FactoryEventHistory`. Worker output re-enters the loop rather than mutating canonical world state. | The runtime appends ordered typed records while running, updates the session execution projection, and Factory Session lifecycle/event surfaces publish canonical session/dispatch facts. Script records include phases, logs, artifacts, checkpoints, budgets, and child dispatches. | **Shared** event-first invariant; record production is **intentionally different**. | Every public state change derives from ordered append-only facts. A worker or child executor must not directly mutate canonical Factory world/session projections. Petri tick ordering and JavaScript record/checkpoint ordering remain distinct. | `pkg/factory/events/event_history.go`; `pkg/factory/events/event_history_dispatch_lifecycle.go`; `pkg/factorysessionexecution/runtime_service.go`; `pkg/orchestrators/javascript/runtime/records.go`. |
+| Dispatch projection | Canonical Factory Session Dispatch schemas and projection reducers; mode-specific extensions remain namespaced. | Factory dispatch lifecycle events project workstation identity, status/attempt, runner/model/provider, usage, failure, Provider Session refs, input/output work and artifact ids. | `ChildDispatchRecord` projects the shared identity/status/attempt, runner/model/provider, failure, Provider Session refs, and output artifact ids, plus the JavaScript-specific task/execution-mode projection. | **Shared** public core; **intentionally different** extensions. | Shared fields retain compatible meaning and optionality. Consumers must not compare Petri phase/transition/work lineage with JavaScript task label, execution mode, checkpoint, or script phase as though they were the same orchestration state. | `pkg/factorysessionexecution/projection_consistency.go`; `pkg/factorysessionexecution/service.go`; `pkg/factory/events/event_history_dispatch_lifecycle.go`. Focused cross-mode contract tests are the next story. |
+| Replay | Canonical ordered Factory events and Factory Session projection reducers. | `pkg/factory/projections` reconstructs world/session/dispatch state from dispatch lifecycle and workstation response events, including safe diagnostics and Provider Session facts. | Durable session events reconstruct lifecycle/result reads, while persisted ordered runtime records reconstruct child Dispatch, Provider Session, artifact, checkpoint, and progress projections for resume/inspection. | **Shared** observable invariant; replay mechanisms are **intentionally different**. | For each mode, replay of the same ordered facts is idempotent and reproduces the live public facts. Replay need not turn JavaScript records into Petri transitions or vice versa. | `pkg/factory/projections/projectiontests/dispatch_lifecycle_event_replay_test.go`; `pkg/factorysessionexecution.ReplaySessionProjection`; `pkg/factorysessionexecution/fixtures/runtime_execution_test.go`; `pkg/factorysessionexecution/runtimepersist`. Cross-mode live-versus-replay field equality is bounded to the next story. |
+
+## Orchestration boundary
+
+Petri workstation execution is driven by transition eligibility and deterministic
+ticks. A worker result re-enters the event loop, where outcome arcs, guards,
+retry policy, and later dispatches are selected. JavaScript execution is driven
+by script order and host primitives such as `agent.run`, parallel/pipeline
+composition, budgets, and checkpoints. Its orchestration owner decides child
+order, concurrency, cancellation, retry/resume, and returned script values.
+
+Those control flows are intentionally different. Convergence applies only below
+them at the provider request/result seam and above them at canonical Factory
+Session events and public projections. It must not make a provider schedule
+Petri transitions, make the Petri loop interpret JavaScript checkpoints, or make
+JavaScript orchestration synthesize Petri markings.
+
+## Next live-provider slice
+
+The only approved provider seam for the next slice is
+`pkg/workers.Provider.Infer(context.Context, interfaces.ProviderInferenceRequest)`
+(the compatibility alias of `pkg/workers/provider.Provider`). The slice may
+improve the JavaScript live-child adapter in
+`pkg/factorysessionexecution/livechild` and shared request/result mapping around
+that seam. It must:
+
+1. preserve injected deterministic fake-child execution for tests, preview, and
+   replay/resume fixtures;
+2. reuse provider selection, normalization, Provider Session canonicalization,
+   cancellation, and safe diagnostics from `pkg/workers`;
+3. keep JavaScript retry and cancellation sequencing in the JavaScript/Factory
+   Session orchestration owner; and
+4. avoid a new provider client, provider interface, subprocess path, or direct
+   SDK integration under `pkg/orchestrators/javascript` or
+   `pkg/factorysessionexecution`.
+
+If the seam lacks a required semantic field, extend the shared request/result
+contract and both adapters deliberately; do not tunnel provider payloads through
+JavaScript output maps or Petri tokens.
