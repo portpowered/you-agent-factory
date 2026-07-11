@@ -4,11 +4,55 @@ import (
 	"context"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
+
+func TestCompatibilityFacadesShareFakeDurableExecution(t *testing.T) {
+	t.Parallel()
+
+	execution, err := factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderFake,
+		factorysessionexecution.ServiceConfig{FakeOptions: []factorysessionexecution.FakeServiceOption{
+			factorysessionexecution.WithFakeScenarios(factorysessionexecution.BuiltinInterruptedRecoverableScenario()),
+		}},
+	)
+	if err != nil {
+		t.Fatalf("compose fake execution: %v", err)
+	}
+	core := runtimehost.NewCore(&runtimehost.Config{}, "", zap.NewNop(), nil, nil, nil,
+		runtimehost.LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, execution)
+	host := runtimehost.NewHostFromCore(core)
+	svc := service.NewFactoryServiceFromRuntimeHostCore(core)
+	if host.DurableExecutionService() != execution || svc.DurableExecutionService() != execution {
+		t.Fatal("compatibility facades did not receive the same core-owned execution collaborator")
+	}
+
+	workflowName := "recoverable-audit"
+	started, err := host.StartDurableFactorySessionAsync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-js-interrupted-001",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: &workflowName,
+		},
+	})
+	if err != nil {
+		t.Fatalf("runtimehost start: %v", err)
+	}
+	read, err := svc.GetDurableFactorySession(context.Background(), started.SessionId)
+	if err != nil {
+		t.Fatalf("FactoryService read of runtimehost start: %v", err)
+	}
+	if read.SessionId != started.SessionId {
+		t.Fatalf("FactoryService session id = %q, want %q", read.SessionId, started.SessionId)
+	}
+}
 
 func TestBuildCore_RejectsRecordAndReplayTogether(t *testing.T) {
 	t.Parallel()

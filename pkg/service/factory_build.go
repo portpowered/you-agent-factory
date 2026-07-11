@@ -1433,15 +1433,22 @@ func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {
 		return nil
 	}
 	return &FactoryCore{
-		cfg:           FactoryServiceConfigFromRuntimeHost(core.ServiceConfig()),
-		root:          FactoryServiceRoot{FactoryRootDir: core.FactoryRootDir(), BaseLogger: core.BaseLogger()},
-		collaborators: factoryServiceCollaboratorsFromRuntimeHost(core),
-		hostedWorkers: core.HostedWorkers(),
-		clock:         core.Clock(),
-		startupBundle: asRuntimeBundle(core.StartupBundle()),
-		logger:        core.Logger(),
-		modelAssets:   core.ModelAssetPuller(),
+		cfg:              FactoryServiceConfigFromRuntimeHost(core.ServiceConfig()),
+		root:             FactoryServiceRoot{FactoryRootDir: core.FactoryRootDir(), BaseLogger: core.BaseLogger()},
+		collaborators:    factoryServiceCollaboratorsFromRuntimeHost(core),
+		hostedWorkers:    core.HostedWorkers(),
+		clock:            core.Clock(),
+		startupBundle:    asRuntimeBundle(core.StartupBundle()),
+		logger:           core.Logger(),
+		modelAssets:      core.ModelAssetPuller(),
+		durableExecution: core.DurableExecution(),
 	}
+}
+
+// NewFactoryServiceFromRuntimeHostCore wraps the shared runtimehost graph in
+// the legacy FactoryService facade without replacing stateful collaborators.
+func NewFactoryServiceFromRuntimeHostCore(core *runtimehost.Core) *FactoryService {
+	return NewFactoryServiceFromCore(adaptRuntimeHostCore(core))
 }
 
 func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryServiceCollaborators {

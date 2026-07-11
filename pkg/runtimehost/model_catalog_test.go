@@ -13,12 +13,38 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestHostDurableOperationsRequireInjectedExecution(t *testing.T) {
+	t.Parallel()
+
+	workflowName := "missing-execution"
+	host := &Host{}
+	_, startErr := host.StartDurableFactorySessionAsync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-missing-durable-execution",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: &workflowName,
+		},
+	})
+	if !errors.Is(startErr, factorysessionexecution.ErrServiceNotConfigured) {
+		t.Fatalf("StartDurableFactorySessionAsync error = %v, want missing execution error", startErr)
+	}
+
+	_, listErr := host.ListDurableExecutionSessions(context.Background(), factorysessionexecution.ListSessionsRequest{})
+	if !errors.Is(listErr, factorysessionexecution.ErrServiceNotConfigured) {
+		t.Fatalf("ListDurableExecutionSessions error = %v, want missing execution error", listErr)
+	}
+	if host.durableExecution != nil {
+		t.Fatal("durable operation lazily created hidden execution state")
+	}
+}
 
 func TestHostModelServiceClockUsesCompositionClock(t *testing.T) {
 	want := time.Date(2026, time.July, 10, 21, 30, 0, 0, time.UTC)
