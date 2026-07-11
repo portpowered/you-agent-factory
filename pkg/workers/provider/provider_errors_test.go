@@ -606,6 +606,12 @@ func TestParseGeminiProviderFailure_KnownTextAndStructuredPrecedenceAreSafe(t *t
 			wantMessage: geminiAuthFailureMessage,
 		},
 		{
+			name:        "BasicAuthorizationMessageUsesSafeFallback",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"status":"UNAUTHENTICATED","message":"Authorization: Basic dXNlcjpwYXNz"}}`)},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
+		},
+		{
 			name: "OrdinaryJSONMessageIsNotAnErrorRecord",
 			result: CommandResult{ExitCode: 7, Stdout: []byte(
 				`{"type":"message","message":"Explain how rate limits work."}`,
@@ -685,6 +691,12 @@ func TestParseGeminiProviderFailure_DeterministicFallbackPrecedence(t *testing.T
 			result: CommandResult{ExitCode: 9, Stderr: []byte(
 				`{"error":{"status":"NEW_PROVIDER_STATUS","message":"token=customer-secret"}}`,
 			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "gemini exited with code 9",
+		},
+		{
+			name:        "UnknownTextBasicAuthorizationUsesExitFallback",
+			result:      CommandResult{ExitCode: 9, Stderr: []byte("Error: request failed with Authorization: Basic dXNlcjpwYXNz")},
 			wantReason:  interfaces.WorkFailureTypeUnknown,
 			wantMessage: "gemini exited with code 9",
 		},

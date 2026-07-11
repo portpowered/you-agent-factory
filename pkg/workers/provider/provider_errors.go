@@ -627,7 +627,7 @@ func isRejectedGeminiMessage(normalized string) bool {
 		return true
 	}
 	return containsAny(normalized,
-		"bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
+		"authorization:", "basic ", "bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
 		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
 		"customer prompt", "user prompt", "prompt:", "model response", "transcript:",
 		"[debug]", "debug:", "[progress]", "progress:", "traceback", "stack trace",
