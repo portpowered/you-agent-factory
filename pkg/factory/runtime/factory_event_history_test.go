@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,10 @@ func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *t
 	f := newSafeBoundaryRuntime(t)
 	submitSafeBoundaryRequests(t, f)
 	tickUntilDispatchResponses(t, tickableFactory(t, f), f, 3)
+	liveSnapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
 
 	events := runtimeGeneratedEvents(t, f)
 	assertDispatchResponseCount(t, events, 3)
@@ -31,9 +36,43 @@ func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *t
 	assertThinDispatchResponsesOmitRetiredProviderAttemptFields(t, loaded.Events)
 
 	worldState := reconstructWorldStateAtFinalTick(t, loaded.Events)
+	assertExecutedPetriDispatchContractSurvivesReplay(t, liveSnapshot.DispatchHistory, worldState)
 	assertSafeBoundaryWorldState(t, worldState)
 	assertSafeBoundaryRequestViews(t, worldState)
 	assertSafeBoundaryDoesNotLeakJSON(t, projections.BuildFactoryWorldView(worldState))
+}
+
+type petriDispatchContract struct {
+	DispatchID   string
+	TransitionID string
+	Outcome      interfaces.WorkOutcome
+}
+
+func assertExecutedPetriDispatchContractSurvivesReplay(
+	t *testing.T,
+	live []interfaces.CompletedDispatch,
+	replayed interfaces.FactoryWorldState,
+) {
+	t.Helper()
+	if len(live) != len(replayed.CompletedDispatches) || len(live) == 0 {
+		t.Fatalf("live/replayed dispatches = %d/%d, want equal non-zero counts", len(live), len(replayed.CompletedDispatches))
+	}
+	for index := range live {
+		completion := replayed.CompletedDispatches[index]
+		liveContract := petriDispatchContract{
+			DispatchID:   live[index].DispatchID,
+			TransitionID: live[index].TransitionID,
+			Outcome:      live[index].Outcome,
+		}
+		replayedContract := petriDispatchContract{
+			DispatchID:   completion.DispatchID,
+			TransitionID: completion.TransitionID,
+			Outcome:      interfaces.WorkOutcome(completion.Result.Outcome),
+		}
+		if !reflect.DeepEqual(replayedContract, liveContract) {
+			t.Fatalf("replayed Petri dispatch[%d] = %#v, want live %#v", index, replayedContract, liveContract)
+		}
+	}
 }
 
 func TestFactoryEventHistory_RecordsOrderedEventsWithStableIDs(t *testing.T) {

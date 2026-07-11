@@ -2,6 +2,7 @@ package fixtures_test
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -22,12 +23,20 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 			Kind:     "session_id",
 			ID:       "live-provider-session-1",
 		},
+		Diagnostics: &interfaces.WorkDiagnostics{Provider: &interfaces.ProviderDiagnostic{
+			Provider: "mock",
+			Model:    "fixture-model",
+			ResponseMetadata: map[string]string{
+				"provider_session_id": "live-provider-session-1",
+			},
+		}},
 	})
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          provider,
+		Persistence:       runtimePersistence(projectRoot),
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
@@ -47,7 +56,40 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 		t.Fatalf("StartSync: %v", err)
 	}
 
+	_, live, _ := loadLiveChildDispatchReads(t, service, completed)
 	assertLiveChildDispatchInspection(t, service, completed, provider.callCount)
+
+	reloaded := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: fse.ChildExecutorModeLive,
+		Provider:          provider,
+		Persistence:       runtimePersistence(projectRoot),
+	})
+	_, replayed, _ := loadLiveChildDispatchReads(t, reloaded, completed)
+	if !reflect.DeepEqual(sharedDispatchContract(live), sharedDispatchContract(replayed)) {
+		t.Fatalf("replayed shared dispatch = %#v, want live %#v", sharedDispatchContract(replayed), sharedDispatchContract(live))
+	}
+}
+
+type sharedDispatchProjection struct {
+	ID              string
+	Status          fse.DispatchStatus
+	Attempt         int
+	Provider        string
+	ProviderSession fse.ProviderSessionRef
+}
+
+func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjection {
+	projection := sharedDispatchProjection{
+		ID:       dispatch.ID,
+		Status:   dispatch.Status,
+		Attempt:  dispatch.Attempt,
+		Provider: dispatch.Provider,
+	}
+	if len(dispatch.ProviderSessionRefs) == 1 {
+		projection.ProviderSession = dispatch.ProviderSessionRefs[0]
+	}
+	return projection
 }
 
 type fixtureMockProvider struct {
@@ -915,4 +957,3 @@ func dispatchExecutionMode(t *testing.T, service fse.Service, sessionID, dispatc
 	}
 	return detail.JavaScript.ExecutionMode
 }
-

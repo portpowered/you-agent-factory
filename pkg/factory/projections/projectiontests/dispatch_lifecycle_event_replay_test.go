@@ -2,132 +2,14 @@ package projections_test
 
 import (
 	"encoding/json"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
-
-type sharedExecutionProjection struct {
-	DispatchID   string
-	Status       string
-	Attempt      int
-	Provider     string
-	ProviderKind string
-	ProviderID   string
-}
-
-func TestExecutionContract_PetriAndJavaScriptPreserveSharedDispatchAndProviderSessionFactsOnReplay(t *testing.T) {
-	t0 := time.Date(2026, 6, 18, 9, 0, 0, 0, time.UTC)
-	petriEvents := canonicalDispatchProviderSessionProjectionEvents(t0)
-	petriLive := petriExecutionContractProjection(t, petriEvents)
-
-	petriPersisted := jsonRoundTrip[[]factoryapi.FactoryEvent](t, petriEvents)
-	petriReplayed := petriExecutionContractProjection(t, petriPersisted)
-	if !reflect.DeepEqual(petriReplayed, petriLive) {
-		t.Fatalf("Petri replay projection = %#v, want live projection %#v", petriReplayed, petriLive)
-	}
-
-	javascriptRecords := javascriptExecutionContractRecords()
-	javascriptLive := javascriptExecutionContractProjection(t, javascriptRecords, t0)
-	javascriptPersisted := jsonRoundTrip[[]workflowruntime.RuntimeRecord](t, javascriptRecords)
-	javascriptReplayed := javascriptExecutionContractProjection(t, javascriptPersisted, t0)
-	if !reflect.DeepEqual(javascriptReplayed, javascriptLive) {
-		t.Fatalf("JavaScript replay projection = %#v, want live projection %#v", javascriptReplayed, javascriptLive)
-	}
-
-	if !reflect.DeepEqual(javascriptLive, petriLive) {
-		t.Fatalf("shared JavaScript projection = %#v, want Petri contract %#v", javascriptLive, petriLive)
-	}
-}
-
-func petriExecutionContractProjection(t *testing.T, events []factoryapi.FactoryEvent) sharedExecutionProjection {
-	t.Helper()
-	state, err := ReconstructFactoryWorldState(events, 3)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	view := BuildFactoryWorldView(state)
-	if len(view.Runtime.Session.DispatchHistory) != 1 || len(view.Runtime.Session.ProviderSessions) != 1 {
-		t.Fatalf("Petri dispatch/provider sessions = %#v/%#v, want one each", view.Runtime.Session.DispatchHistory, view.Runtime.Session.ProviderSessions)
-	}
-	dispatch := view.Runtime.Session.DispatchHistory[0]
-	session := view.Runtime.Session.ProviderSessions[0].ProviderSession
-	return sharedExecutionProjection{
-		DispatchID:   dispatch.DispatchID,
-		Status:       string(fse.DispatchStatusCompleted),
-		Attempt:      1,
-		Provider:     session.Provider,
-		ProviderKind: session.Kind,
-		ProviderID:   session.ID,
-	}
-}
-
-func javascriptExecutionContractRecords() []workflowruntime.RuntimeRecord {
-	statuses := []string{
-		workflowruntime.ChildDispatchStatusQueued,
-		workflowruntime.ChildDispatchStatusRunning,
-		workflowruntime.ChildDispatchStatusCompleted,
-	}
-	records := make([]workflowruntime.RuntimeRecord, 0, len(statuses))
-	for _, status := range statuses {
-		records = append(records, workflowruntime.RuntimeRecord{
-			Kind: workflowruntime.RecordKindChildDispatch,
-			ChildDispatch: &workflowruntime.ChildDispatchRecord{
-				DispatchID:         "dispatch-1",
-				Status:             status,
-				ExecutionMode:      fse.ChildExecutorModeLive,
-				Provider:           "codex",
-				ProviderSessionRef: "sess-1",
-			},
-		})
-	}
-	return records
-}
-
-func javascriptExecutionContractProjection(
-	t *testing.T,
-	records []workflowruntime.RuntimeRecord,
-	observedAt time.Time,
-) sharedExecutionProjection {
-	t.Helper()
-	projection := fse.ProjectRuntimeExecutionRecords("session-contract", records, observedAt)
-	if len(projection.Dispatches) != 1 {
-		t.Fatalf("JavaScript dispatches = %#v, want one", projection.Dispatches)
-	}
-	dispatch := projection.Dispatches[0]
-	if len(dispatch.ProviderSessionRefs) != 1 {
-		t.Fatalf("JavaScript provider session refs = %#v, want one", dispatch.ProviderSessionRefs)
-	}
-	session := dispatch.ProviderSessionRefs[0]
-	return sharedExecutionProjection{
-		DispatchID:   dispatch.ID,
-		Status:       string(dispatch.Status),
-		Attempt:      dispatch.Attempt,
-		Provider:     session.Provider,
-		ProviderKind: session.Kind,
-		ProviderID:   session.ID,
-	}
-}
-
-func jsonRoundTrip[T any](t *testing.T, value T) T {
-	t.Helper()
-	raw, err := json.Marshal(value)
-	if err != nil {
-		t.Fatalf("marshal replay fixture: %v", err)
-	}
-	var decoded T
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		t.Fatalf("unmarshal replay fixture: %v", err)
-	}
-	return decoded
-}
 
 func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleReconstructsQueueInterruptReconcileAndArtifact(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 14, 10, 0, 0, time.UTC)
