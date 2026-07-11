@@ -738,8 +738,9 @@ func TestParseClaudeProviderFailure_CredentialProseNeverPassesThrough(t *testing
 		},
 		{name: "APIKeyWhitespaceProse", stderr: "Invalid request: api key customer-private-value is invalid", wantReason: interfaces.WorkFailureTypeAuthFailure, wantMessage: claudeAuthFailureMessage},
 		{name: "StructuredHyphenatedAPIKeyWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace api-key customer-private-value"}}`, wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: claudeBadRequestFailureMessage},
+		{name: "PrefixedAPIKeyWhitespaceProse", stderr: "Invalid request: x-api-key customer-private-value is invalid", wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: claudeBadRequestFailureMessage},
+		{name: "StructuredPrefixedAPIKeyWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace x-api-key customer-private-value"}}`, wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: claudeBadRequestFailureMessage},
 	}
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}

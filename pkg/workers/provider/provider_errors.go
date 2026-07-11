@@ -274,7 +274,7 @@ func containsClaudeAPIKeyValue(message string) bool {
 	fields := strings.Fields(message)
 	for index, field := range fields {
 		normalized := strings.Trim(field, "\"'{}[](),.;:!?=")
-		if normalized == "api-key" && index+1 < len(fields) {
+		if (normalized == "api-key" || strings.HasSuffix(normalized, "-api-key")) && index+1 < len(fields) {
 			return true
 		}
 		if normalized == "api" && index+2 < len(fields) &&
