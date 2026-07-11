@@ -97,3 +97,61 @@ describe("InferenceAttemptMetadataDetails", () => {
     expect(screen.queryByText("not-a-date")).toBeNull();
   });
 });
+
+describe("InferenceAttemptMetadataDetails failure details", () => {
+  it("renders the canonical Codex failure and clears it for a successful attempt", () => {
+    const { rerender } = render(
+      <CurrentSelectionLocaleProvider locale="en">
+        <InferenceAttemptMetadataDetails
+          attempt={inferenceAttempt("dispatch-codex", {
+            failure_detail: {
+              reason: "provider_version_incompatible",
+              message:
+                "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
+            },
+            outcome: "FAILED",
+          })}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(screen.getByText("Failure reason")).toBeTruthy();
+    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
+      ),
+    ).toBeTruthy();
+
+    rerender(
+      <CurrentSelectionLocaleProvider locale="en">
+        <InferenceAttemptMetadataDetails
+          attempt={inferenceAttempt("dispatch-success", {
+            failure_detail: undefined,
+            outcome: "SUCCEEDED",
+          })}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(screen.queryByText("Failure reason")).toBeNull();
+    expect(screen.queryByText("provider_version_incompatible")).toBeNull();
+  });
+
+  it("localizes a translated historical failure with no message", () => {
+    render(
+      <CurrentSelectionLocaleProvider locale="zh-CN">
+        <InferenceAttemptMetadataDetails
+          attempt={inferenceAttempt("dispatch-history", {
+            failure_detail: { reason: "legacy_provider_failure" },
+            outcome: "FAILED",
+          })}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    expect(screen.getByText("legacy_provider_failure")).toBeTruthy();
+    expect(screen.getByText("失败消息")).toBeTruthy();
+    expect(screen.getByText("此请求没有可用的失败消息。")).toBeTruthy();
+  });
+});

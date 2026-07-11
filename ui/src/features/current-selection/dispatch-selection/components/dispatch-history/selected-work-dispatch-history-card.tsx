@@ -446,8 +446,15 @@ function DispatchFailureSection({
     >
       <DispatchDetailList
         entries={[
-          { label: messages.failureReasonLabel, value: view.failureReason },
-          { label: messages.failureMessageLabel, value: view.failureMessage },
+          {
+            code: true,
+            label: messages.failureReasonLabel,
+            value: view.failureReason ?? messages.failureReasonUnavailable,
+          },
+          {
+            label: messages.failureMessageLabel,
+            value: view.failureMessage ?? messages.failureMessageUnavailable,
+          },
           {
             label: messages.failureTypeLabel,
             code: true,

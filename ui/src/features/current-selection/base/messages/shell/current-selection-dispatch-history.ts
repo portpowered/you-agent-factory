@@ -49,7 +49,9 @@ export interface CurrentSelectionDispatchHistoryMessages {
   expandAction: string;
   failureDetailsTitle: string;
   failureMessageLabel: string;
+  failureMessageUnavailable: string;
   failureReasonLabel: string;
+  failureReasonUnavailable: string;
   failureTypeLabel: string;
   inferenceAttemptsTitle: string;
   inferenceAttemptsEmptyEnded: string;
@@ -181,7 +183,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     expandAction: "Expand",
     failureDetailsTitle: "Failure details",
     failureMessageLabel: "Failure message",
+    failureMessageUnavailable: "Failure message is not available for this dispatch.",
     failureReasonLabel: "Failure reason",
+    failureReasonUnavailable: "Failure reason is not available for this dispatch.",
     failureTypeLabel: "Failure type",
     inferenceAttemptsTitle: "Inference attempts",
     inferenceAttemptsEmptyEnded:
@@ -322,7 +326,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     expandAction: "展開",
     failureDetailsTitle: "失敗の詳細",
     failureMessageLabel: "失敗メッセージ",
+    failureMessageUnavailable: "このディスパッチでは失敗メッセージを利用できません。",
     failureReasonLabel: "失敗理由",
+    failureReasonUnavailable: "このディスパッチでは失敗理由を利用できません。",
     failureTypeLabel: "失敗タイプ",
     inferenceAttemptsTitle: "推論試行",
     inferenceAttemptsEmptyEnded:
@@ -459,7 +465,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     expandAction: "펼치기",
     failureDetailsTitle: "실패 세부 정보",
     failureMessageLabel: "실패 메시지",
+    failureMessageUnavailable: "이 디스패치에서는 실패 메시지를 사용할 수 없습니다.",
     failureReasonLabel: "실패 원인",
+    failureReasonUnavailable: "이 디스패치에서는 실패 원인을 사용할 수 없습니다.",
     failureTypeLabel: "실패 유형",
     inferenceAttemptsTitle: "추론 시도",
     inferenceAttemptsEmptyEnded:
@@ -589,7 +597,9 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     expandAction: "展开",
     failureDetailsTitle: "失败详情",
     failureMessageLabel: "失败消息",
+    failureMessageUnavailable: "此分派没有可用的失败消息。",
     failureReasonLabel: "失败原因",
+    failureReasonUnavailable: "此分派没有可用的失败原因。",
     failureTypeLabel: "失败类型",
     inferenceAttemptsTitle: "推理尝试",
     inferenceAttemptsEmptyEnded: "该分派结束前没有记录任何推理尝试详情。",

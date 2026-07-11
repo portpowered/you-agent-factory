@@ -113,3 +113,49 @@ describe("SelectedWorkDispatchHistorySection", () => {
     expect(within(historyCard).getByText("Request details")).toBeTruthy();
   });
 });
+
+describe("SelectedWorkDispatchHistorySection failure details", () => {
+  it("shows canonical dispatch failures and an explicit unavailable historical message", () => {
+    render(
+      <CurrentSelectionLocaleProvider locale="en">
+        <SelectedWorkDispatchHistorySection
+          fallbackProviderSessions={[]}
+          requests={[
+            workstationRequest("dispatch-codex", {
+              failure_reason: "provider_version_incompatible",
+              failure_message:
+                "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
+              outcome: "FAILED",
+            }),
+            workstationRequest("dispatch-history", {
+              failure_reason: "legacy_provider_failure",
+              failure_message: undefined,
+              outcome: "FAILED",
+            }),
+          ]}
+          selectedWorkID="work-codex"
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const failureSections = screen.getAllByRole("heading", {
+      name: "Failure details",
+    });
+    for (const heading of failureSections) {
+      const section = heading.closest("section");
+      if (!section) throw new Error("expected failure detail section");
+      fireEvent.click(within(section).getByRole("button", { name: "Expand" }));
+    }
+
+    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("legacy_provider_failure")).toBeTruthy();
+    expect(
+      screen.getByText("Failure message is not available for this dispatch."),
+    ).toBeTruthy();
+  });
+});

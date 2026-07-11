@@ -8,6 +8,7 @@ import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../../base/components/presentation/current-selection-locale";
+import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import { CurrentSelectionDescriptionList } from "../../../base/public";
 import { InferenceAttemptDetail } from "./inference-attempt-detail";
 
@@ -33,6 +34,9 @@ export function InferenceAttemptMetadataDetails({
     detailMessages.timestampUnavailable,
     locale,
   );
+  const failureDetail = attempt.failure_detail;
+  const failureReason = normalizeDetailText(failureDetail?.reason);
+  const failureMessage = normalizeDetailText(failureDetail?.message);
 
   return (
     <CurrentSelectionDescriptionList>
@@ -97,6 +101,19 @@ export function InferenceAttemptMetadataDetails({
         label={detailMessages.errorClassLabel}
         value={attempt.error_class}
       />
+      {failureDetail ? (
+        <>
+          <InferenceAttemptDetail
+            code
+            label={detailMessages.failureReasonLabel}
+            value={failureReason ?? detailMessages.failureReasonUnavailable}
+          />
+          <InferenceAttemptDetail
+            label={detailMessages.failureMessageLabel}
+            value={failureMessage ?? detailMessages.failureMessageUnavailable}
+          />
+        </>
+      ) : null}
     </CurrentSelectionDescriptionList>
   );
 }

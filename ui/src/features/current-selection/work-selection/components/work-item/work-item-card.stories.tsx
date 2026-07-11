@@ -95,7 +95,11 @@ function buildReadyRelationshipGraph(
   };
 }
 
-function SelectedWorkDispatchHistoryStory() {
+function SelectedWorkDispatchHistoryStory({
+  request = dashboardWorkstationRequestFixtures.scriptPending,
+}: {
+  request?: (typeof dashboardWorkstationRequestFixtures)[keyof typeof dashboardWorkstationRequestFixtures];
+}) {
   const { dispatchID, execution, selectedNode, workItem } =
     getSelectedWorkItemFixture();
   const logicalMoveRequest = workstationRequest("dispatch-logical-move", {
@@ -104,8 +108,6 @@ function SelectedWorkDispatchHistoryStory() {
     workstation_name: "Logical Move",
     workstation_node_id: "logical-move",
   });
-  const request = dashboardWorkstationRequestFixtures.scriptPending;
-
   return (
     <CurrentSelectionLocaleProvider>
       <div style={{ maxWidth: "720px", padding: "1rem" }}>
@@ -211,4 +213,35 @@ export const DispatchHistoryStandardActions = {
       within(relationshipGraph).queryByText("Relationship key"),
     ).toBeNull();
   },
+};
+
+const codexFailureMessage =
+  "Model gpt-5.6-sol requires a newer version of Codex. Update Codex to a compatible release before retrying this provider request; the installed version cannot run the selected model.";
+
+export const ProviderFailureDetails = {
+  render: () => (
+    <SelectedWorkDispatchHistoryStory
+      request={{
+        ...dashboardWorkstationRequestFixtures.errored,
+        failure_message: codexFailureMessage,
+        failure_reason: "provider_version_incompatible",
+        inference_attempts:
+          dashboardWorkstationRequestFixtures.errored.inference_attempts?.map(
+            (attempt) => ({
+              ...attempt,
+              failure_detail: {
+                errorClass: "provider_version_incompatible",
+                message: codexFailureMessage,
+                reason: "provider_version_incompatible",
+              },
+            }),
+          ),
+        response_view: {
+          ...dashboardWorkstationRequestFixtures.errored.response_view,
+          failure_message: codexFailureMessage,
+          failure_reason: "provider_version_incompatible",
+        },
+      }}
+    />
+  ),
 };
