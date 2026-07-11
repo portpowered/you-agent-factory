@@ -26,6 +26,7 @@ const (
 	claudeThrottleFailureMessage   = "Claude is temporarily unavailable due to rate or capacity limits."
 	claudeTimeoutFailureMessage    = "Claude request timed out."
 )
+
 type claudeStructuredFailure struct {
 	Type    string
 	Status  int
@@ -241,9 +242,12 @@ func containsClaudeCredentialFieldValue(message string) bool {
 }
 
 func isClaudeCredentialField(field string) bool {
-	return field == "authorization" ||
-		field == "api-key" || strings.HasSuffix(field, "-api-key") ||
-		field == "auth-token" || strings.HasSuffix(field, "-auth-token")
+	if field == "authorization" {
+		return true
+	}
+	identifier := strings.ReplaceAll(field, "-", "_")
+	return containsClaudeSensitiveIdentifierPart(identifier) &&
+		ClassifyCommandEnvKey(identifier) == CommandEnvClassificationRedacted
 }
 
 func containsClaudeCredentialWord(message string) bool {

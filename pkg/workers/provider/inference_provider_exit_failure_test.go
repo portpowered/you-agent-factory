@@ -812,6 +812,8 @@ func TestParseClaudeProviderFailure_CredentialFieldValuesNeverPassThrough(t *tes
 		{name: "AuthorizationWhitespaceProse", stderr: "Invalid request: authorization customer-private-value is invalid"},
 		{name: "StructuredAuthorizationWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace authorization customer-private-value"}}`},
 		{name: "PrefixedAuthTokenWhitespaceProse", stderr: "Invalid request: x-auth-token customer-private-value is invalid"},
+		{name: "AccessTokenWhitespaceProse", stderr: "Invalid request: access-token customer-private-value is invalid"},
+		{name: "StructuredClientSecretWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace client-secret customer-private-value"}}`},
 	}
 
 	for _, tc := range testCases {
