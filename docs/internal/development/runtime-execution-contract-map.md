@@ -73,3 +73,74 @@ that seam. It must:
 If the seam lacks a required semantic field, extend the shared request/result
 contract and both adapters deliberately; do not tunnel provider payloads through
 JavaScript output maps or Petri tokens.
+
+## Approved composition destination
+
+The approved future startup flow is:
+
+`cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`
+
+These names describe destination ownership, not the current package topology:
+
+| Destination | Responsibility | Dependency rule |
+| --- | --- | --- |
+| `cmd/factory` | Remain the thin executable entrypoint. Parse process-boundary inputs and hand control to `pkg/root`; do not assemble the application graph or construct transport-specific services. | May import `pkg/root`; domain packages must never import `cmd/factory`. |
+| `pkg/root` | Select the process mode and top-level startup path, such as API hosting, local CLI execution, or sidecar startup. | May request an application graph from `pkg/wire` and pass it to `pkg/initializer`; domain packages must not import `pkg/root`. |
+| `pkg/wire` | Construct one explicit application dependency graph from normalized configuration and injected filesystem, environment, time, process, persistence, runtime, and provider dependencies. It owns construction, not domain policy or process startup. | May import inward domain/platform owners to assemble them. It must not be imported by domain packages or transport packages, and it must not start transports. |
+| `pkg/initializer` | Start API, CLI, MCP, sidecars, and other process adapters from the already-built graph. It owns lifecycle attachment and startup only. | Must receive constructed core collaborators; it must not secretly rebuild Factory Session runtimes, providers, persistence, model hosts, or other core dependencies. |
+
+Current composition remains under `cmd/factory/compose`, `pkg/composebridge`,
+`pkg/runtimehost`, broad `pkg/service` construction paths, and the existing
+`pkg/initializer` adapters. Existing architecture notes call the future graph
+builder `pkg/inject`; for the foundation batch, that provisional name is
+superseded by the approved `pkg/wire` destination above. This story does not
+rename or move any implementation.
+
+## Approved collapsed package families
+
+The following are future ownership families. They are not aliases for every
+similarly named current package, and existing packages remain canonical until a
+separately reviewed migration moves behavior and callers.
+
+| Collapsed target family | Ownership purpose | Current implementations and migration treatment |
+| --- | --- | --- |
+| `pkg/transports` | Process-edge adapters for API, CLI, MCP, and future transports after their public contracts have been normalized. Transport code translates requests and responses and invokes injected application/domain services; it does not own runtime state or policy. | Today this behavior is split across `pkg/api`, `pkg/cli`, `pkg/mcp`, initializer transport adapters, and `cmd/factory/compose`. Those packages remain current owners or migration shims until an explicit move; the target must not become a parallel API, CLI, or MCP implementation. |
+| `pkg/work` | Shared Work-domain contracts and pure behavior: Work and Work Request content, query/selection semantics, graph/lineage concepts, materialization, and invocation-facing work transformations. Provider execution and worker processes are excluded. | Today the relevant behavior is split across `pkg/workcontent`, `pkg/workquery`, `pkg/workgraph`, `pkg/materialize`, and work-facing parts of `pkg/invocations` and `pkg/interfaces`. `pkg/workers` remains the provider/worker execution owner. Migrations must preserve public vocabulary and must not use `pkg/work` as a compatibility grab bag. |
+| `pkg/platform` | Explicit infrastructure adapters and resource owners for configuration/default paths, persistence, logging/metrics, clocks, filesystem/process/environment access, and similar platform concerns. It contains no Factory orchestration policy. | Today these concerns live in narrow owners such as `pkg/config`, `pkg/logging`, `pkg/sessionpersistence`, `pkg/timework`, and package-local infrastructure adapters. Move them only in bounded slices; do not add a second persistence, config, or diagnostics path. |
+
+The dependency direction remains edge-to-domain: `pkg/root`, `pkg/wire`,
+`pkg/initializer`, and `pkg/transports` may depend inward on application,
+domain, and platform contracts. Domain packages must not import `pkg/root`,
+`pkg/wire`, or transport packages. `pkg/platform` may implement domain-owned
+interfaces but must not import orchestration owners merely to choose domain
+policy.
+
+## Foundation batch policy prerequisites
+
+Before any destination family is created, the foundation batch must update the
+package-boundary policy deliberately. `pkg/root`, `pkg/wire`,
+`pkg/transports`, `pkg/work`, and `pkg/platform` each require a product-owned
+package-family allowlist entry naming its owner and rationale. `pkg/initializer`
+is already approved and remains the startup owner. This story changes neither
+the allowlist nor the production package tree.
+
+The required policy surfaces for that later batch are:
+
+1. the normative package-boundary rules in
+   `docs/internal/standards/code/general-backend-standards.md`, including the
+   approved-family list and dependency direction;
+2. `cmd/pkgboundarycheck/main.go`, where
+   `approvedProductPackageFamilies` is the executable allowlist and diagnostics
+   direct unapproved families to an existing owner or a rationale-backed policy
+   update;
+3. `cmd/pkgboundarycheck/main_test.go`, which locks allowlist validation,
+   generated-code exceptions, blocking diagnostics, deterministic reporting,
+   and the `make pkg-boundary`/lint entrypoints; and
+4. `Makefile`'s `pkg-boundary` target and the `lint` target list, which must stay
+   blocking during and after migration.
+
+The foundation batch must update documentation, guard policy, diagnostics, and
+tests together before adding directories. It must not weaken generated-code or
+removed migration-shim checks, and it must prove the five new product-owned
+families are accepted while an unknown root family still fails with actionable
+diagnostics.
