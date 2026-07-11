@@ -82,7 +82,11 @@ and `make typecheck`. Add `make docs-reference-smoke` only when packaged
 
 When changing durable Factory Session execution construction, run
 `make durable-runtime-construction-check`. The guard permits direct
-`NewJavaScriptRuntimeService` calls only in the application composition owners
-and the package-local execution-provider factory; package tests, `testdata`
+`NewJavaScriptRuntimeService` calls only in the package-local execution-provider
+factory and approved deterministic test harness. Project-local persistence path
+resolution and directory-store construction belong at the fallible application
+composition boundary in `pkg/factorysessionexecution/service.go`; production
+runtime code must receive either that injected store or an explicit disabled
+policy and must not use a persistence boolean. Package tests, `testdata`
 fixtures, generated code, dependencies, coverage, and build artifacts are not
 production construction sites.

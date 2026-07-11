@@ -652,8 +652,9 @@ func (c durableFixedClock) Now() time.Time { return c.now }
 
 func TestJavaScriptRuntimeService_StartSync_UsesInjectedClock(t *testing.T) {
 	want := time.Date(2031, time.April, 5, 6, 7, 8, 0, time.FixedZone("offset", -7*60*60))
+	projectRoot := t.TempDir()
 	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
-		ProjectRoot: t.TempDir(),
+		ProjectRoot: projectRoot,
 		Clock:       durableFixedClock{now: want},
 	})
 
@@ -874,6 +875,7 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 
 func TestExecutionServiceAndHelperNormalization(t *testing.T) {
 	t.Run("execution service providers", testExecutionServiceProviders)
+	t.Run("explicit persistence choices", testExecutionServicePersistenceChoices)
 	t.Run("child executor and smoke provider", testExecutionServiceChildExecutorHelpers)
 	t.Run("source request helpers", testExecutionServiceSourceRequestHelpers)
 }
@@ -890,7 +892,11 @@ func testExecutionServiceProviders(t *testing.T) {
 	}
 
 	projectRoot := t.TempDir()
-	runtimeService, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot})
+	persistence, err := ProjectPersistence(projectRoot)
+	if err != nil {
+		t.Fatalf("ProjectPersistence: %v", err)
+	}
+	runtimeService, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence})
 	if err != nil {
 		t.Fatalf("NewExecutionService(runtime): %v", err)
 	}
@@ -898,8 +904,8 @@ func testExecutionServiceProviders(t *testing.T) {
 	if !ok {
 		t.Fatalf("runtime provider type = %T, want *JavaScriptRuntimeService", runtimeService)
 	}
-	if jsService.sessionPersistDir == "" {
-		t.Fatal("expected runtime service to enable persisted session dir when project root is set")
+	if jsService.persistence == nil {
+		t.Fatal("expected runtime service to use the injected persisted session store")
 	}
 
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{}); err == nil {
@@ -907,6 +913,76 @@ func testExecutionServiceProviders(t *testing.T) {
 	}
 	if _, err := NewExecutionService(ExecutionProvider("unknown"), ServiceConfig{}); err == nil {
 		t.Fatal("NewExecutionService(unknown) error = nil, want validation error")
+	}
+}
+
+func testExecutionServicePersistenceChoices(t *testing.T) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	testApplicationPersistencePolicies(t, projectRoot)
+	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot}); err == nil {
+		t.Fatal("NewExecutionService(runtime without persistence choice) error = nil, want validation error")
+	}
+	disabled, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: DisabledPersistence(),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutionService(runtime with disabled persistence): %v", err)
+	}
+	if disabled.(*JavaScriptRuntimeService).persistence != nil {
+		t.Fatal("disabled persistence unexpectedly configured a store")
+	}
+	contradictory := PersistenceChoice{store: runtimepersist.DirectoryStore{Dir: t.TempDir()}, disabled: true}
+	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: contradictory,
+	}); err == nil {
+		t.Fatal("NewExecutionService(runtime with contradictory persistence) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
+		t.Fatalf("contradictory persistence error = %#v, want persistence ValidationError", err)
+	}
+
+	blockedRoot := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blockedRoot, []byte("blocked"), 0o600); err != nil {
+		t.Fatalf("write blocked persistence root: %v", err)
+	}
+	if _, err := ProjectPersistence(blockedRoot); err == nil {
+		t.Fatal("ProjectPersistence(unavailable root) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
+		t.Fatalf("unavailable persistence error = %#v, want persistence ValidationError", err)
+	}
+}
+
+func testApplicationPersistencePolicies(t *testing.T, projectRoot string) {
+	t.Helper()
+	for _, tc := range []struct {
+		name     string
+		policy   PersistencePolicy
+		disabled bool
+	}{
+		{name: "default enabled"},
+		{name: "enabled", policy: PersistencePolicyEnabled},
+		{name: "disabled", policy: PersistencePolicyDisabled, disabled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			choice, err := PersistenceChoiceForPolicy(tc.policy, projectRoot)
+			if err != nil {
+				t.Fatalf("PersistenceChoiceForPolicy: %v", err)
+			}
+			store, err := choice.resolve()
+			if err != nil {
+				t.Fatalf("resolve policy choice: %v", err)
+			}
+			if (store == nil) != tc.disabled {
+				t.Fatalf("store nil = %t, want disabled = %t", store == nil, tc.disabled)
+			}
+		})
+	}
+	if _, err := PersistenceChoiceForPolicy(PersistencePolicy("invalid"), projectRoot); err == nil {
+		t.Fatal("PersistenceChoiceForPolicy(invalid) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence.policy" {
+		t.Fatalf("invalid policy error = %#v, want persistence.policy ValidationError", err)
 	}
 }
 
@@ -1051,8 +1127,8 @@ func testNormalizationIdempotencyHashBranches(t *testing.T) {
 func TestPrepareStartAndPersistenceHelpers(t *testing.T) {
 	projectRoot := writeSimpleFinalWorkflowProject(t)
 	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)},
 	})
 
 	prepared, err := service.prepareStart(StartRequest{
@@ -1100,12 +1176,31 @@ func TestPrepareStartAndPersistenceHelpers(t *testing.T) {
 	}
 }
 
+func TestJavaScriptRuntimeService_ProjectRootAloneDoesNotEnablePersistence(t *testing.T) {
+	projectRoot := writeSimpleFinalWorkflowProject(t)
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{ProjectRoot: projectRoot})
+
+	if _, err := service.StartSync(context.Background(), StartRequest{
+		RequestID: "req-runtime-no-implicit-persistence-001",
+		Source: Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+	}); err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	if _, err := os.Stat(runtimepersist.DirForProjectRoot(projectRoot)); !os.IsNotExist(err) {
+		t.Fatalf("durable persistence path stat error = %v, want not exist", err)
+	}
+}
+
 func newJavaScriptRuntimeService(t *testing.T) *JavaScriptRuntimeService {
 	t.Helper()
 
 	service, err := NewExecutionService(
 		ExecutionProviderJavaScriptRuntime,
-		ServiceConfig{ProjectRoot: t.TempDir()},
+		ServiceConfig{ProjectRoot: t.TempDir(), Persistence: DisabledPersistence()},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)
@@ -1652,9 +1747,10 @@ func TestPersistAndMetadataNoOpBranches(t *testing.T) {
 		t.Fatalf("persistTerminalSessionState(no dir) = %v, want nil", err)
 	}
 
+	projectRoot := t.TempDir()
 	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     t.TempDir(),
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)},
 	})
 	if err := service.persistTerminalSessionState(runtimeSessionState{
 		session: SessionReadResult{SessionID: "dur-sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", Status: LifecycleStatusRunning},
@@ -2528,7 +2624,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: ChildExecutorModeLive,
 		Provider:          provider,
-		PersistSessions:   true,
+		Persistence:       runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)},
 	})
 
 	started, err := initial.StartAsync(context.Background(), StartRequest{
@@ -2564,7 +2660,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: ChildExecutorModeLive,
 		Provider:          provider,
-		PersistSessions:   true,
+		Persistence:       runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)},
 	})
 	resumed, err := resumedService.ResumeInterruptedSession(context.Background(), started.SessionID, ResumeSessionRequest{
 		RequestID: "req-package-resume-resume-001",

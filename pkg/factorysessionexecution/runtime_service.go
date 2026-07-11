@@ -200,7 +200,6 @@ type JavaScriptRuntimeServiceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
 	Provider          workers.Provider
-	PersistSessions   bool
 	Persistence       runtimepersist.Store
 	Clock             factory.Clock
 }
@@ -211,7 +210,6 @@ type JavaScriptRuntimeService struct {
 	projectRoot       string
 	childExecutorMode string
 	provider          workers.Provider
-	sessionPersistDir string
 	persistence       runtimepersist.Store
 	clock             factory.Clock
 
@@ -237,12 +235,6 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 		startReplay:       make(map[string]startReplayRecord),
 		startInflight:     make(map[string]*startInflightFlight),
 		controlReplay:     make(map[string]controlReplayRecord),
-	}
-	if config.PersistSessions && projectRoot != "" {
-		service.sessionPersistDir = runtimepersist.DirForProjectRoot(projectRoot)
-		if service.persistence == nil {
-			service.persistence = runtimepersist.DirectoryStore{Dir: service.sessionPersistDir}
-		}
 	}
 	return service
 }

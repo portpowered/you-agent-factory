@@ -910,6 +910,10 @@ func ComposeFactoryCore(
 		}
 		cfg.Dir = resolvedDir
 	}
+	durableExecution, err := composeDurableExecution(cfg, root, clock)
+	if err != nil {
+		return nil, err
+	}
 
 	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
@@ -952,22 +956,15 @@ func ComposeFactoryCore(
 
 	coreBuilt = true
 	return &FactoryCore{
-		cfg:           cfg,
-		root:          root,
-		collaborators: collaborators,
-		hostedWorkers: hostedWorkers,
-		clock:         clock,
-		startupBundle: runtimeBundle,
-		logger:        runtimeBundle.Logger,
-		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
-		durableExecution: factorysessionexecution.NewJavaScriptRuntimeService(
-			factorysessionexecution.JavaScriptRuntimeServiceConfig{
-				ProjectRoot:     composedDurableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir),
-				Provider:        cfg.ProviderOverride,
-				PersistSessions: true,
-				Clock:           clock,
-			},
-		),
+		cfg:              cfg,
+		root:             root,
+		collaborators:    collaborators,
+		hostedWorkers:    hostedWorkers,
+		clock:            clock,
+		startupBundle:    runtimeBundle,
+		logger:           runtimeBundle.Logger,
+		modelAssets:      wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
+		durableExecution: durableExecution,
 	}, nil
 }
 

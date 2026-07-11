@@ -80,6 +80,10 @@ func ComposeCore(
 		}
 		cfg.Dir = resolvedDir
 	}
+	durableExecution, err := composeDurableExecution(cfg, root, clock)
+	if err != nil {
+		return nil, err
+	}
 
 	replaySideEffects, replayFactoryOpts, err := ReplayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
@@ -135,12 +139,7 @@ func ComposeCore(
 		runtimeBundle,
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
-		factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-			ProjectRoot:     durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir),
-			Provider:        cfg.ProviderOverride,
-			PersistSessions: true,
-			Clock:           clock,
-		}),
+		durableExecution,
 	), nil
 }
 
@@ -151,6 +150,30 @@ func durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) 
 		}
 	}
 	return ""
+}
+
+func composeDurableExecution(
+	cfg *runtimehost.Config,
+	root Root,
+	clock factory.Clock,
+) (factorysessionexecution.Service, error) {
+	projectRoot := durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir)
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
+		cfg.DurableSessionPersistencePolicy,
+		projectRoot,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("compose durable session persistence: %w", err)
+	}
+	return factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{
+			ProjectRoot: projectRoot,
+			Provider:    cfg.ProviderOverride,
+			Persistence: persistence,
+			Clock:       clock,
+		},
+	)
 }
 
 // BuildCore constructs the normalized runtime graph without attaching a transport host.

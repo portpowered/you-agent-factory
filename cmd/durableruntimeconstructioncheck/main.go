@@ -13,13 +13,26 @@ import (
 	"strings"
 )
 
-const constructorName = "NewJavaScriptRuntimeService"
+const (
+	runtimeConstructorName = "NewJavaScriptRuntimeService"
+	storeConstructorName   = "NewDirectoryStore"
+	storeDirectoryName     = "DirForProjectRoot"
+	persistenceBooleanName = "PersistSessions"
+)
 
-var approvedCompositionFiles = map[string]struct{}{
-	"pkg/composebridge/core.go":                          {},
+var approvedRuntimeConstructorFiles = map[string]struct{}{
 	"pkg/factorysessionexecution/service.go":             {},
 	"pkg/factorysessionexecution/testharness/harness.go": {},
-	"pkg/service/factory_editable_definition.go":         {},
+}
+
+var approvedPersistenceCompositionFiles = map[string]struct{}{
+	"pkg/api/servertests/server_durable_session_execution_test.go": {},
+	"pkg/cli/mcp/serve_runtime_resume_smoke_test.go":               {},
+	"pkg/cli/session/smoke/resume_smoke_test.go":                   {},
+	"pkg/factorysessionexecution/service.go":                       {},
+	"pkg/factorysessionexecution/runtimepersist/store.go":          {},
+	"pkg/factorysessionexecution/testharness/harness.go":           {},
+	"pkg/mcp/factorysession/execution_test.go":                     {},
 }
 
 type config struct{ root string }
@@ -76,9 +89,6 @@ func scan(root string) ([]string, error) {
 		if strings.HasSuffix(entry.Name(), "_test.go") && !isTransportTest(relative) {
 			return nil
 		}
-		if _, approved := approvedCompositionFiles[relative]; approved {
-			return nil
-		}
 		fileSet := token.NewFileSet()
 		file, err := parser.ParseFile(fileSet, path, nil, parser.ParseComments)
 		if err != nil {
@@ -88,12 +98,29 @@ func scan(root string) ([]string, error) {
 			return nil
 		}
 		ast.Inspect(file, func(node ast.Node) bool {
-			call, ok := node.(*ast.CallExpr)
-			if !ok || calledName(call.Fun) != constructorName {
-				return true
+			switch value := node.(type) {
+			case *ast.CallExpr:
+				name := calledName(value.Fun)
+				if name == runtimeConstructorName && !approved(relative, approvedRuntimeConstructorFiles) {
+					appendFinding(&findings, fileSet, value.Pos(), relative, name,
+						"construct durable execution in an approved composition owner")
+				}
+				if (name == storeConstructorName || name == storeDirectoryName) &&
+					!approved(relative, approvedPersistenceCompositionFiles) {
+					appendFinding(&findings, fileSet, value.Pos(), relative, name,
+						"resolve and construct durable persistence at the approved application composition boundary")
+				}
+			case *ast.KeyValueExpr:
+				if identifierName(value.Key) == persistenceBooleanName {
+					appendFinding(&findings, fileSet, value.Pos(), relative, persistenceBooleanName,
+						"inject a persistence store or explicit disabled policy instead of a boolean")
+				}
+			case *ast.CompositeLit:
+				if calledName(value.Type) == "DirectoryStore" && !approved(relative, approvedPersistenceCompositionFiles) {
+					appendFinding(&findings, fileSet, value.Pos(), relative, "DirectoryStore literal",
+						"construct durable persistence at the approved application composition boundary")
+				}
 			}
-			position := fileSet.Position(call.Pos())
-			findings = append(findings, fmt.Sprintf("[agent-factory:durable-runtime-construction] %s:%d calls %s; construct durable execution in an approved composition owner", relative, position.Line, constructorName))
 			return true
 		})
 		return nil
@@ -103,6 +130,22 @@ func scan(root string) ([]string, error) {
 	}
 	sort.Strings(findings)
 	return findings, nil
+}
+
+func approved(relative string, files map[string]struct{}) bool {
+	_, ok := files[relative]
+	return ok
+}
+
+func appendFinding(findings *[]string, fileSet *token.FileSet, position token.Pos, relative, name, guidance string) {
+	line := fileSet.Position(position).Line
+	*findings = append(*findings, fmt.Sprintf(
+		"[agent-factory:durable-runtime-construction] %s:%d uses %s; %s",
+		relative,
+		line,
+		name,
+		guidance,
+	))
 }
 
 func isTransportTest(relative string) bool {
@@ -123,6 +166,14 @@ func calledName(expression ast.Expr) string {
 	default:
 		return ""
 	}
+}
+
+func identifierName(expression ast.Expr) string {
+	identifier, ok := expression.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	return identifier.Name
 }
 
 func ignoredDirectory(name string) bool {

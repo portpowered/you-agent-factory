@@ -1,0 +1,6 @@
+package factorysessionexecution
+
+func build(root string) {
+	store := NewDirectoryStore(DirForProjectRoot(root))
+	NewJavaScriptRuntimeService(Config{Persistence: store})
+}

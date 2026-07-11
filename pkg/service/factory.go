@@ -139,6 +139,30 @@ func composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir 
 	return ""
 }
 
+func composeDurableExecution(
+	cfg *FactoryServiceConfig,
+	root FactoryServiceRoot,
+	clock factory.Clock,
+) (factorysessionexecution.Service, error) {
+	projectRoot := composedDurableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir)
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
+		cfg.DurableSessionPersistencePolicy,
+		projectRoot,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("compose durable session persistence: %w", err)
+	}
+	return factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{
+			ProjectRoot: projectRoot,
+			Provider:    cfg.ProviderOverride,
+			Persistence: persistence,
+			Clock:       clock,
+		},
+	)
+}
+
 var _ factory.APIFactory = (*FactoryService)(nil)
 var _ factory.WorkMover = (*FactoryService)(nil)
 var _ apisurface.ModelAPI = (*FactoryService)(nil)
@@ -185,6 +209,10 @@ type FactoryServiceConfig struct {
 	// runtime execution paths such as workstation workingDirectory values.
 	// Empty defaults to the loaded factory directory.
 	ExecutionBaseDir string
+	// DurableSessionPersistencePolicy selects enabled project-local snapshots
+	// or explicitly disabled in-memory-only durable execution. Empty defaults
+	// to enabled for production-facing behavior.
+	DurableSessionPersistencePolicy factorysessionexecution.PersistencePolicy
 	// RuntimeMode controls whether the runtime exits on idle completion or
 	// stays alive until its context is canceled. Empty defaults to batch mode.
 	RuntimeMode interfaces.RuntimeMode
