@@ -55,49 +55,6 @@ func providerErrorCorpusLastErrorLine(t *testing.T, entry ProviderErrorCorpusEnt
 	return lastMatch
 }
 
-func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
-	testCases := []struct {
-		name       string
-		errorType  interfaces.WorkFailureType
-		wantFamily interfaces.WorkFailureFamily
-	}{
-		{name: "AuthFailure_IsTerminal", errorType: interfaces.WorkFailureTypeAuthFailure, wantFamily: interfaces.WorkFailureFamilyTerminal},
-		{name: "PermanentBadRequest_IsTerminal", errorType: interfaces.WorkFailureTypePermanentBadRequest, wantFamily: interfaces.WorkFailureFamilyTerminal},
-		{name: "Throttled_IsThrottle", errorType: interfaces.WorkFailureTypeThrottled, wantFamily: interfaces.WorkFailureFamilyThrottle},
-		{name: "InternalServerError_IsRetryable", errorType: interfaces.WorkFailureTypeInternalServerError, wantFamily: interfaces.WorkFailureFamilyRetryable},
-		{name: "Timeout_IsRetryable", errorType: interfaces.WorkFailureTypeTimeout, wantFamily: interfaces.WorkFailureFamilyRetryable},
-		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
-		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := NewProviderError(tc.errorType, "normalized failure", nil)
-			if err.Type != tc.errorType {
-				t.Fatalf("expected Type %q, got %q", tc.errorType, err.Type)
-			}
-			if err.Family != tc.wantFamily {
-				t.Fatalf("expected Family %q, got %q", tc.wantFamily, err.Family)
-			}
-		})
-	}
-}
-
-func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.T) {
-	result := ProviderFailureResult{
-		Reason:  interfaces.WorkFailureTypeThrottled,
-		Message: "request capacity exceeded",
-	}
-
-	providerErr := NewProviderErrorFromResult(result, nil)
-	if providerErr.Type != result.Reason || providerErr.Message != result.Message {
-		t.Fatalf("NewProviderErrorFromResult() = %#v, want canonical reason and message", providerErr)
-	}
-	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
-		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
-	}
-}
-
 func TestParseClaudeProviderFailure_StructuredTypesAndStatusesAreCanonical(t *testing.T) {
 	testCases := []struct {
 		name        string

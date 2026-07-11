@@ -106,8 +106,7 @@ func newJavaScriptRuntimeServiceWithFixture(t *testing.T, fixtureName, workflowN
 	t.Helper()
 	projectRoot := setupRuntimeWorkflowFixture(t, fixtureName, workflowName)
 	return fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: false,
+		ProjectRoot: projectRoot,
 	})
 }
 

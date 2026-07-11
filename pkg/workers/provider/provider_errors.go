@@ -36,6 +36,8 @@ type ProviderFailureResult struct {
 
 const codexFailureMessageBytes = 1024
 
+const opencodeFailureMessageBytes = 512
+
 const (
 	claudeFailureMessageBytes = 1024
 	claudeFailureScanBytes    = 64 * 1024
@@ -57,6 +59,14 @@ const (
 	codexServerFailureMessage     = "Codex encountered a temporary server error."
 	codexThrottleFailureMessage   = "Codex is temporarily unavailable due to usage or capacity limits."
 	codexTimeoutFailureMessage    = "Codex request timed out."
+)
+
+const (
+	opencodeAuthFailureMessage       = "OpenCode authentication failed."
+	opencodeBadRequestFailureMessage = "OpenCode rejected the request as invalid."
+	opencodeServerFailureMessage     = "OpenCode encountered a temporary server error."
+	opencodeThrottleFailureMessage   = "OpenCode is temporarily unavailable due to usage or capacity limits."
+	opencodeTimeoutFailureMessage    = "OpenCode request timed out."
 )
 
 type codexStructuredFailure struct {
@@ -478,6 +488,7 @@ func boundUTF8Bytes(message string, limit int) string {
 		bounded = bounded[:len(bounded)-1]
 	}
 	return strings.TrimSpace(string(bounded))
+
 }
 
 // ParseCodexProviderFailure deterministically parses bounded subprocess output

@@ -36,12 +36,51 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
+
+// NewWorkersSchedulerService constructs the worker-sidecar owner at the
+// runtime composition boundary. Watcher paths must only use this initialized
+// instance and never reconstruct its dependencies.
+func NewWorkersSchedulerService(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	logger *zap.Logger,
+	hostedWorkers hostedworkers.Config,
+) *workersservice.Service {
+	supervisorClock := clockwork.NewRealClock()
+	if clockworkClock, ok := clock.(clockwork.Clock); ok && clockworkClock != nil {
+		supervisorClock = clockworkClock
+	}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	runner := workers.CommandRunner(workers.ExecCommandRunner{})
+	workflowID := ""
+	defaultFactoryDir := ""
+	if cfg != nil {
+		if cfg.CommandRunnerOverride != nil {
+			runner = cfg.CommandRunnerOverride
+		}
+		workflowID = cfg.WorkflowID
+		defaultFactoryDir = cfg.Dir
+	}
+	return workersservice.New(workersservice.Config{
+		Logger:               logger,
+		Clock:                supervisorClock,
+		CommandRunner:        runner,
+		WorkflowID:           workflowID,
+		DefaultFactoryDir:    defaultFactoryDir,
+		HostedHTTPClient:     hostedWorkers.HTTPClient,
+		HostedSecretResolver: hostedWorkers.SecretResolver,
+		HostedLinearEndpoint: hostedWorkers.LinearEndpoint,
+	})
+}
 
 type runtimeBundleBuildInput struct {
 	dir                           string
@@ -1267,6 +1306,16 @@ func FactoryServiceConfigFromRuntimeHost(cfg *runtimehost.Config) *FactoryServic
 	return (*FactoryServiceConfig)(unsafe.Pointer(cfg))
 }
 
+// RuntimeHostConfigFromFactoryService maps the legacy CLI composition config
+// onto initializer-owned runtime composition while both migration structs are
+// kept layout-compatible.
+func RuntimeHostConfigFromFactoryService(cfg *FactoryServiceConfig) *runtimehost.Config {
+	if cfg == nil {
+		return nil
+	}
+	return (*runtimehost.Config)(unsafe.Pointer(cfg))
+}
+
 // EnsureBackendScopeForCompose resolves backend scope before core composition.
 func EnsureBackendScopeForCompose(cfg *runtimehost.Config, logger *zap.Logger) error {
 	return ensureServiceBackendScope(FactoryServiceConfigFromRuntimeHost(cfg), logger)
@@ -1384,15 +1433,22 @@ func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {
 		return nil
 	}
 	return &FactoryCore{
-		cfg:           FactoryServiceConfigFromRuntimeHost(core.ServiceConfig()),
-		root:          FactoryServiceRoot{FactoryRootDir: core.FactoryRootDir(), BaseLogger: core.BaseLogger()},
-		collaborators: factoryServiceCollaboratorsFromRuntimeHost(core),
-		hostedWorkers: core.HostedWorkers(),
-		clock:         core.Clock(),
-		startupBundle: asRuntimeBundle(core.StartupBundle()),
-		logger:        core.Logger(),
-		modelAssets:   core.ModelAssetPuller(),
+		cfg:              FactoryServiceConfigFromRuntimeHost(core.ServiceConfig()),
+		root:             FactoryServiceRoot{FactoryRootDir: core.FactoryRootDir(), BaseLogger: core.BaseLogger()},
+		collaborators:    factoryServiceCollaboratorsFromRuntimeHost(core),
+		hostedWorkers:    core.HostedWorkers(),
+		clock:            core.Clock(),
+		startupBundle:    asRuntimeBundle(core.StartupBundle()),
+		logger:           core.Logger(),
+		modelAssets:      core.ModelAssetPuller(),
+		durableExecution: core.DurableExecution(),
 	}
+}
+
+// NewFactoryServiceFromRuntimeHostCore wraps the shared runtimehost graph in
+// the legacy FactoryService facade without replacing stateful collaborators.
+func NewFactoryServiceFromRuntimeHostCore(core *runtimehost.Core) *FactoryService {
+	return NewFactoryServiceFromCore(adaptRuntimeHostCore(core))
 }
 
 func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryServiceCollaborators {
@@ -1400,9 +1456,9 @@ func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryS
 		return FactoryServiceCollaborators{}
 	}
 	return FactoryServiceCollaborators{
-		Sessions:       core.Sessions(),
-		LocalModels:    core.LocalModels(),
-		RuntimeBuild:   core.RuntimeBuild(),
+		Sessions:         core.Sessions(),
+		LocalModels:      core.LocalModels(),
+		RuntimeBuild:     core.RuntimeBuild(),
 		WorkersScheduler: core.WorkersScheduler(),
 	}
 }

@@ -4,7 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
-import { jsonResponse, renderWithQueryClient } from "./test-support/factory-session-detail-panel.test-helpers";
+import {
+  jsonResponse,
+  renderWithQueryClient,
+} from "./test-support/factory-session-detail-panel.test-helpers";
 
 const failedDispatchSummaryFixture = {
   dispatchKind: "JAVASCRIPT_VERIFY",
@@ -68,7 +71,6 @@ function installFailedDispatchFetchMock() {
         isDefault: false,
         project: "beta",
         runtime: {
-          dispatches: [failedDispatchSummaryFixture],
           javascript: {
             childDispatchCounts: {
               completed: 0,
@@ -102,7 +104,17 @@ function installFailedDispatchFetchMock() {
     if (url.endsWith("/factory-sessions/session-failed/partial-result")) {
       return new Response(null, { status: 404 });
     }
-    if (url.endsWith("/factory-sessions/session-failed/dispatches/dispatch-failed")) {
+    if (url.endsWith("/factory-sessions/session-failed/dispatches")) {
+      return jsonResponse({
+        dispatches: [failedDispatchSummaryFixture],
+        sessionId: "session-failed",
+      });
+    }
+    if (
+      url.endsWith(
+        "/factory-sessions/session-failed/dispatches/dispatch-failed",
+      )
+    ) {
       return jsonResponse(failedDispatchDetailFixture);
     }
     return new Response("not found", { status: 404 });
@@ -142,10 +154,14 @@ describe("FactorySessionDetailPanel failure drilldown", () => {
 
     expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
     expect(screen.getByText("verification_error")).toBeTruthy();
-    expect(screen.getByText("Expected release manifest checksum.")).toBeTruthy();
+    expect(
+      screen.getByText("Expected release manifest checksum."),
+    ).toBeTruthy();
     expect(screen.getByText("live")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();
-    expect(screen.getByText("session_id · provider-session-verify-1")).toBeTruthy();
+    expect(
+      screen.getByText("session_id · provider-session-verify-1"),
+    ).toBeTruthy();
     expect(
       screen.getAllByText("Provider returned a partial verification trace."),
     ).toHaveLength(2);

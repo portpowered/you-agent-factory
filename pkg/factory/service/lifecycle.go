@@ -173,12 +173,13 @@ func WaitForStart(ctx context.Context, handle *Handle) error {
 	}
 }
 
-// Stop cancels the hosted run loop when needed, waits for completion, finalizes lifecycle
-// metrics, and closes replay, log, and metrics artifacts.
+// Stop cancels and joins session sidecars before stopping the hosted run loop,
+// then finalizes lifecycle metrics and closes replay, log, and metrics artifacts.
 func Stop(handle *Handle, clock factory.Clock) error {
 	if handle == nil {
 		return nil
 	}
+	StopSidecars(handle)
 	handle.CancelRun()
 	runErr := handle.Wait()
 	finalizeRuntimeLifecycleMetrics(handle, runtimeMetricsObservation{})

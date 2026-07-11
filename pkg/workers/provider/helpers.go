@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -29,7 +30,150 @@ const (
 const (
 	RedactedCommandEnvValue     = "<redacted>"
 	MetadataOnlyCommandEnvValue = "<metadata-only>"
+	ProviderDefaultModel        = "provider-default"
+	ProviderInvocationPrepared  = "provider.invocation_prepared"
+	ProviderFailureNormalized   = "provider.failure_normalized"
+	RedactedProviderArgValue    = "<redacted>"
+	RedactedProviderPrompt      = "<redacted:prompt>"
 )
+
+var providerFlagsWithSafeValues = map[string]struct{}{
+	"--approval-mode": {}, "--model": {}, "--output-format": {}, "--sandbox": {},
+}
+
+var providerFlagsWithSensitiveValues = map[string]struct{}{
+	"--agent": {}, "--cd": {}, "--dir": {}, "--image": {}, "--prompt": {},
+	"--resume": {}, "--resume-id": {}, "--session": {}, "--system-prompt": {},
+	"--workspace": {}, "--worktree": {},
+}
+
+func providerModelForLog(model string) string {
+	if normalized := strings.TrimSpace(model); normalized != "" {
+		return normalized
+	}
+	return ProviderDefaultModel
+}
+
+func sanitizeProviderArgs(provider string, args []string) []string {
+	sanitized := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if providerInlineArgIsSensitive(arg) {
+			sanitized = append(sanitized, strings.SplitN(arg, "=", 2)[0]+"="+RedactedProviderArgValue)
+			continue
+		}
+		sanitized = append(sanitized, arg)
+		if _, ok := providerFlagsWithSafeValues[arg]; ok && index+1 < len(args) {
+			index++
+			sanitized = append(sanitized, args[index])
+			continue
+		}
+		if _, ok := providerFlagsWithSensitiveValues[arg]; ok && index+1 < len(args) {
+			index++
+			sanitized = append(sanitized, RedactedProviderArgValue)
+			continue
+		}
+		if providerArgIsSensitivePositional(provider, args, index) {
+			sanitized[len(sanitized)-1] = RedactedProviderPrompt
+		}
+	}
+	return sanitized
+}
+
+func providerInlineArgIsSensitive(arg string) bool {
+	name, _, ok := strings.Cut(arg, "=")
+	if !ok {
+		return false
+	}
+	normalized := strings.ToLower(name)
+	return strings.Contains(normalized, "key") || strings.Contains(normalized, "token") ||
+		strings.Contains(normalized, "secret") || strings.Contains(normalized, "password") ||
+		strings.Contains(normalized, "prompt") || strings.Contains(normalized, "credential")
+}
+
+func providerArgIsSensitivePositional(provider string, args []string, index int) bool {
+	if strings.HasPrefix(args[index], "-") {
+		return false
+	}
+	if index == 0 && (args[index] == "exec" || args[index] == "chat" || args[index] == "run") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case string(interfaces.ModelProviderCodex):
+		return args[index] != "-"
+	default:
+		return true
+	}
+}
+
+func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInferenceRequest, execReq CommandRequest) []any {
+	fields := workLogFields(req.Dispatch.Execution,
+		"event_name", ProviderInvocationPrepared,
+		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
+		"model", providerModelForLog(req.Model),
+		"command", execReq.Command,
+		"args", sanitizeProviderArgs(req.ModelProvider, execReq.Args),
+		"working_dir", execReq.WorkDir,
+		"stdin_bytes", len(execReq.Stdin),
+		"stdin_sha256", sha256Hex(execReq.Stdin),
+		"dispatch_id", req.Dispatch.DispatchID)
+	if deadline, ok := ctx.Deadline(); ok {
+		fields = append(fields, "deadline", deadline.UTC().Format(time.RFC3339Nano))
+	}
+	return fields
+}
+
+func providerFailureLogFields(
+	req interfaces.ProviderInferenceRequest,
+	providerErr *ProviderError,
+	result CommandResult,
+	duration time.Duration,
+) []any {
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	fields := workLogFields(req.Dispatch.Execution,
+		"event_name", ProviderFailureNormalized,
+		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
+		"model", providerModelForLog(req.Model),
+		"failure_reason", providerErr.Type,
+		"failure_message", safeProviderFailureLogMessage(req.ModelProvider, providerErr),
+		"retryable", decision.Retryable,
+		"duration_ms", duration.Milliseconds(),
+		"dispatch_id", req.Dispatch.DispatchID)
+	if result.ExitCode != 0 {
+		fields = append(fields, "exit_code", result.ExitCode)
+	}
+	return fields
+}
+
+func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) string {
+	// Codex exit failures are parsed into bounded, audited messages. Execution
+	// errors retain raw command diagnostics in the returned error, so they must
+	// use the same fixed reason-based messages as the other providers.
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && providerErr.Cause == nil {
+		return providerErr.Message
+	}
+	switch providerErr.Type {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return "Provider authentication failed."
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return "Provider rejected the request as invalid."
+	case interfaces.WorkFailureTypeThrottled:
+		return "Provider is temporarily unavailable due to usage or capacity limits."
+	case interfaces.WorkFailureTypeInternalServerError:
+		return "Provider encountered a temporary server error."
+	case interfaces.WorkFailureTypeTimeout:
+		return "Provider request timed out."
+	case interfaces.WorkFailureTypeMisconfigured:
+		return "Provider command could not be started."
+	default:
+		return "Provider execution failed."
+	}
+}
+
+func sha256Hex(input []byte) string {
+	digest := sha256.Sum256(input)
+	return hex.EncodeToString(digest[:])
+}
 
 type CommandEnvClassification string
 
@@ -457,4 +601,271 @@ func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
 	}
 	exitCodeCopy := exitCode
 	return &exitCodeCopy
+}
+
+type opencodeStructuredFailure struct {
+	Name       string
+	Type       string
+	Code       string
+	StatusCode int
+	Message    string
+}
+
+// ParseOpenCodeProviderFailure deterministically parses bounded OpenCode
+// subprocess output into the canonical provider-failure contract. Recognized
+// structured records take precedence over recognized text diagnostics.
+func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
+	streams := []string{
+		tailForCodexErrorScan(result.Stderr),
+		tailForCodexErrorScan(result.Stdout),
+	}
+	if failure, ok := lastOpenCodeStructuredFailure(streams); ok {
+		return failure
+	}
+	if failure, ok := lastOpenCodeTextFailure(streams, result.ExitCode); ok {
+		return failure
+	}
+	if excerpt, ok := lastSafeOpenCodeUnknownExcerpt(streams); ok {
+		return ProviderFailureResult{
+			Reason:  interfaces.WorkFailureTypeUnknown,
+			Message: excerpt,
+		}
+	}
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: fmt.Sprintf("opencode exited with code %d", result.ExitCode),
+	}
+}
+
+func lastSafeOpenCodeUnknownExcerpt(streams []string) (string, bool) {
+	var last string
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if failure, ok := decodeOpenCodeStructuredFailure(trimmed); ok {
+				if excerpt, safe := safeOpenCodeFailureDetail(failure.Message); safe {
+					last = excerpt
+				}
+				continue
+			}
+			if !openCodeErrorTextLine(trimmed) {
+				continue
+			}
+			if excerpt, safe := safeOpenCodeFailureDetail(trimmed); safe {
+				last = excerpt
+			}
+		}
+	}
+	return last, last != ""
+}
+
+func lastOpenCodeStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			failure, ok := decodeOpenCodeStructuredFailure(strings.TrimSpace(line))
+			if !ok {
+				continue
+			}
+			reason, recognized := classifyOpenCodeStructuredFailure(failure)
+			if !recognized {
+				continue
+			}
+			last = ProviderFailureResult{
+				Reason:  reason,
+				Message: openCodeFailureMessage(reason, failure.Message),
+			}
+			found = true
+		}
+	}
+	return last, found
+}
+
+func decodeOpenCodeStructuredFailure(line string) (opencodeStructuredFailure, bool) {
+	if !strings.HasPrefix(line, "{") {
+		return opencodeStructuredFailure{}, false
+	}
+	var envelope struct {
+		Type       string `json:"type"`
+		Name       string `json:"name"`
+		Code       string `json:"code"`
+		Status     int    `json:"status"`
+		StatusCode int    `json:"statusCode"`
+		Message    string `json:"message"`
+		Error      *struct {
+			Type       string `json:"type"`
+			Name       string `json:"name"`
+			Code       string `json:"code"`
+			Status     int    `json:"status"`
+			StatusCode int    `json:"statusCode"`
+			Message    string `json:"message"`
+			Data       *struct {
+				Code       string `json:"code"`
+				Status     int    `json:"status"`
+				StatusCode int    `json:"statusCode"`
+				Message    string `json:"message"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+		return opencodeStructuredFailure{}, false
+	}
+
+	failure := opencodeStructuredFailure{
+		Name:       envelope.Name,
+		Type:       envelope.Type,
+		Code:       envelope.Code,
+		StatusCode: firstNonZero(envelope.StatusCode, envelope.Status),
+		Message:    envelope.Message,
+	}
+	if envelope.Error != nil {
+		failure.Name = firstNonEmpty(envelope.Error.Name, failure.Name)
+		failure.Type = firstNonEmpty(envelope.Error.Type, failure.Type)
+		failure.Code = firstNonEmpty(envelope.Error.Code, failure.Code)
+		failure.StatusCode = firstNonZero(envelope.Error.StatusCode, envelope.Error.Status, failure.StatusCode)
+		failure.Message = firstNonEmpty(envelope.Error.Message, failure.Message)
+		if envelope.Error.Data != nil {
+			failure.Code = firstNonEmpty(envelope.Error.Data.Code, failure.Code)
+			failure.StatusCode = firstNonZero(envelope.Error.Data.StatusCode, envelope.Error.Data.Status, failure.StatusCode)
+			failure.Message = firstNonEmpty(envelope.Error.Data.Message, failure.Message)
+		}
+	}
+	if envelope.Error == nil && !strings.EqualFold(envelope.Type, "error") {
+		return opencodeStructuredFailure{}, false
+	}
+	return failure, true
+}
+
+func firstNonZero(values ...int) int {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
+}
+
+func classifyOpenCodeStructuredFailure(failure opencodeStructuredFailure) (interfaces.WorkFailureType, bool) {
+	signal := strings.ToLower(strings.Join([]string{failure.Name, failure.Type, failure.Code}, " "))
+	switch {
+	case containsAny(signal, "providerautherror", "authentication_error", "permission_error", "unauthorized", "forbidden"):
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case containsAny(signal, "invalid_request_error", "badrequesterror", "invalidrequesterror"):
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case containsAny(signal, "ratelimiterror", "rate_limit_error", "overloaded_error", "quotaexceeded"):
+		return interfaces.WorkFailureTypeThrottled, true
+	case containsAny(signal, "timeouterror", "timeout_error", "etimedout"):
+		return interfaces.WorkFailureTypeTimeout, true
+	case containsAny(signal, "server_error", "internalservererror"):
+		return interfaces.WorkFailureTypeInternalServerError, true
+	}
+	switch {
+	case failure.StatusCode == 401 || failure.StatusCode == 403:
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case failure.StatusCode == 400 || failure.StatusCode == 422:
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case failure.StatusCode == 408:
+		return interfaces.WorkFailureTypeTimeout, true
+	case failure.StatusCode == 429:
+		return interfaces.WorkFailureTypeThrottled, true
+	case failure.StatusCode >= 500 && failure.StatusCode <= 599:
+		return interfaces.WorkFailureTypeInternalServerError, true
+	default:
+		return interfaces.WorkFailureTypeUnknown, false
+	}
+}
+
+func lastOpenCodeTextFailure(streams []string, exitCode int) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if !openCodeErrorTextLine(trimmed) {
+				continue
+			}
+			if failure, ok := recognizedOpenCodeTextFailure(trimmed, exitCode); ok {
+				last, found = failure, true
+			}
+		}
+	}
+	if found {
+		return last, true
+	}
+	for _, stream := range streams {
+		trimmed := strings.TrimSpace(stream)
+		if trimmed == "" || strings.Contains(trimmed, "\n") {
+			continue
+		}
+		if failure, ok := recognizedOpenCodeTextFailure(trimmed, exitCode); ok {
+			last, found = failure, true
+		}
+	}
+	return last, found
+}
+
+func openCodeErrorTextLine(line string) bool {
+	normalized := strings.ToLower(line)
+	return strings.HasPrefix(normalized, "error:") || strings.HasPrefix(normalized, "api error:")
+}
+
+func recognizedOpenCodeTextFailure(message string, exitCode int) (ProviderFailureResult, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	var reason interfaces.WorkFailureType
+	switch {
+	case exitCode == 124 || containsAny(normalized, "deadline exceeded", "request timed out", "timed out", "timeout"):
+		reason = interfaces.WorkFailureTypeTimeout
+	case containsAny(normalized, "authentication", "login required", "not authenticated", "unauthorized", "forbidden", "api key"):
+		reason = interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalized, "invalid request", "bad request", "invalid argument", "model not found"):
+		reason = interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalized, "rate limit", "too many requests", "usage limit", "at capacity", "status 429"):
+		reason = interfaces.WorkFailureTypeThrottled
+	case containsAny(normalized, "internal server error", "server error", "status 500", "status 502", "status 503", "status 504"):
+		reason = interfaces.WorkFailureTypeInternalServerError
+	default:
+		return ProviderFailureResult{}, false
+	}
+	return ProviderFailureResult{Reason: reason, Message: openCodeFailureMessage(reason, message)}, true
+}
+
+func openCodeFailureMessage(reason interfaces.WorkFailureType, detail string) string {
+	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+		if sanitized, ok := safeOpenCodeFailureDetail(detail); ok {
+			return sanitized
+		}
+	}
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return opencodeAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return opencodeBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return opencodeThrottleFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return opencodeTimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return opencodeServerFailureMessage
+	default:
+		return ""
+	}
+}
+
+func safeOpenCodeFailureDetail(detail string) (string, bool) {
+	detail = strings.ToValidUTF8(strings.Join(strings.Fields(detail), " "), "")
+	normalized := strings.ToLower(detail)
+	if detail == "" || containsAny(normalized,
+		"authorization:", "bearer ", "api_key=", "api-key=", `"token":`, "secret=", "sk-", "prompt:", "transcript:",
+	) {
+		return "", false
+	}
+	if len(detail) <= opencodeFailureMessageBytes {
+		return detail, true
+	}
+	end := opencodeFailureMessageBytes
+	for end > 0 && detail[end]&0xc0 == 0x80 {
+		end--
+	}
+	return detail[:end], true
 }

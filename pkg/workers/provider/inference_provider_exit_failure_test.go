@@ -1,7 +1,10 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -9,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndClassification(t *testing.T) {
@@ -48,6 +54,197 @@ func TestScriptWrapProvider_Infer_CodexGPT56SolFailureUsesCanonicalResultAndDeci
 	}
 	assertGPT56SolCanonicalFailure(t, providerErr)
 	assertGPT56SolFailureMetadata(t, providerErr, entry, result)
+}
+
+func TestScriptWrapProvider_Infer_LogsCorrelatedNormalizedCodexFailureAfterParsing(t *testing.T) {
+	const prompt = "synthetic prompt must not appear"
+	const credential = "credential-value-must-not-appear"
+	sequence := []string{}
+	logger := &preparedInvocationTestLogger{sequence: &sequence}
+	runner := &preparedInvocationTestRunner{
+		sequence: &sequence,
+		result: CommandResult{
+			ExitCode: 17,
+			Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}` + "\n" + credential),
+		},
+	}
+	provider := NewScriptWrapProvider(WithProviderLogger(logger), WithProviderCommandRunner(runner))
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		Model:         "gpt-5.6-sol",
+		UserMessage:   prompt,
+		EnvVars:       map[string]string{"API_TOKEN": credential},
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID: "dispatch-failure-1",
+			Execution: interfaces.ExecutionMetadata{
+				RequestID: "request-failure-1", TraceID: "trace-failure-1", WorkIDs: []string{"work-failure-1", "work-failure-2"},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("Infer returned nil error")
+	}
+	if logger.failureCount != 1 {
+		t.Fatalf("normalized failure records = %d, want 1", logger.failureCount)
+	}
+	if len(sequence) < 3 || sequence[0] != ProviderInvocationPrepared || sequence[1] != "runner" || sequence[2] != ProviderFailureNormalized {
+		t.Fatalf("record sequence = %#v, want prepared, runner, normalized failure", sequence)
+	}
+	assertNormalizedFailureFields(t, logger.failureFields)
+	if strings.Contains(logger.allValues, prompt) || strings.Contains(logger.allValues, credential) {
+		t.Fatalf("provider logs contain prompt or credential: %s", logger.allValues)
+	}
+}
+
+func assertNormalizedFailureFields(t *testing.T, fields map[string]any) {
+	t.Helper()
+	if fields["provider"] != "codex" || fields["model"] != "gpt-5.6-sol" {
+		t.Fatalf("provider/model = %#v/%#v", fields["provider"], fields["model"])
+	}
+	if fields["failure_reason"] != interfaces.WorkFailureTypePermanentBadRequest || fields["failure_message"] != codexGPT56SolUpgradeMessage {
+		t.Fatalf("canonical failure = %#v", fields)
+	}
+	if fields["retryable"] != false || fields["exit_code"] != 17 {
+		t.Fatalf("retry/exit fields = %#v", fields)
+	}
+	if fields["request_id"] != "request-failure-1" || fields["trace_id"] != "trace-failure-1" || fields["work_id"] != "work-failure-1" || fields["dispatch_id"] != "dispatch-failure-1" {
+		t.Fatalf("correlation fields = %#v", fields)
+	}
+	if _, ok := fields["duration_ms"]; !ok {
+		t.Fatalf("duration_ms absent: %#v", fields)
+	}
+}
+
+func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCodes(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		err           error
+		wantReason    interfaces.WorkFailureType
+		wantRetryable bool
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantRetryable: true},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sequence := []string{}
+			logger := &preparedInvocationTestLogger{sequence: &sequence}
+			runner := &preparedInvocationTestRunner{sequence: &sequence, err: tc.err}
+			provider := NewScriptWrapProvider(WithProviderLogger(logger), WithProviderCommandRunner(runner))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderClaude),
+				UserMessage:   "private prompt",
+				Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-no-exit"},
+			})
+			if err == nil {
+				t.Fatal("Infer returned nil error")
+			}
+			if logger.failureCount != 1 || logger.failureFields["failure_reason"] != tc.wantReason || logger.failureFields["retryable"] != tc.wantRetryable {
+				t.Fatalf("normalized failure fields = %#v", logger.failureFields)
+			}
+			if _, ok := logger.failureFields["exit_code"]; ok {
+				t.Fatalf("failure record invented exit code: %#v", logger.failureFields)
+			}
+			if logger.failureFields["model"] != ProviderDefaultModel {
+				t.Fatalf("model = %#v, want provider default", logger.failureFields["model"])
+			}
+		})
+	}
+}
+
+func TestScriptWrapProvider_Infer_CodexExecutionFailureJSONLogsExcludeCommandOutput(t *testing.T) {
+	const prompt = "codex execution prompt must not appear"
+	const stdoutSecret = "stdout-secret-must-not-appear"
+	const stderrSecret = "stderr-secret-must-not-appear"
+	for _, tc := range []struct {
+		name        string
+		err         error
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Provider request timed out."},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured, wantMessage: "Provider command could not be started."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			encoderConfig := zap.NewProductionEncoderConfig()
+			core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&output), zapcore.DebugLevel)
+			provider := NewScriptWrapProvider(
+				WithProviderLogger(logging.NewZapLogger(zap.New(core), false)),
+				WithProviderCommandRunner(&recordingProviderExec{
+					result: CommandResult{Stdout: []byte(stdoutSecret), Stderr: []byte(stderrSecret)},
+					err:    tc.err,
+				}),
+			)
+			_, _ = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderCodex),
+				UserMessage:   prompt,
+			})
+
+			record := normalizedFailureJSONRecord(t, output.String())
+			if record["failure_reason"] != string(tc.wantReason) || record["failure_message"] != tc.wantMessage {
+				t.Fatalf("normalized JSON failure = %#v", record)
+			}
+			encoded, err := json.Marshal(record)
+			if err != nil {
+				t.Fatalf("encode normalized failure: %v", err)
+			}
+			for _, secret := range []string{prompt, stdoutSecret, stderrSecret} {
+				if strings.Contains(string(encoded), secret) {
+					t.Fatalf("normalized JSON failure leaked %q: %s", secret, encoded)
+				}
+			}
+		})
+	}
+}
+
+func normalizedFailureJSONRecord(t *testing.T, logs string) map[string]any {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode JSON log: %v", err)
+		}
+		if record["event_name"] == ProviderFailureNormalized {
+			return record
+		}
+	}
+	t.Fatalf("normalized failure absent from JSON logs: %s", logs)
+	return nil
+}
+
+func TestScriptWrapProvider_Infer_CodexUpgradeFailureIsSearchableInJSONLogs(t *testing.T) {
+	var output bytes.Buffer
+	encoderConfig := zap.NewProductionEncoderConfig()
+	core := zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(&output), zapcore.DebugLevel)
+	provider := NewScriptWrapProvider(
+		WithProviderLogger(logging.NewZapLogger(zap.New(core), false)),
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{
+			ExitCode: 2,
+			Stderr:   []byte(`ERROR: {"type":"invalid_request_error","status":400,"message":"The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."}`),
+		}}),
+	)
+	_, _ = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		UserMessage:   "json log prompt fixture",
+	})
+
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode JSON log: %v", err)
+		}
+		if record["event_name"] != ProviderFailureNormalized {
+			continue
+		}
+		if record["failure_reason"] != string(interfaces.WorkFailureTypePermanentBadRequest) || record["failure_message"] != codexGPT56SolUpgradeMessage {
+			t.Fatalf("normalized JSON failure = %#v", record)
+		}
+		if strings.Contains(line, "json log prompt fixture") || strings.Contains(line, `\"status\":400`) {
+			t.Fatalf("normalized JSON failure leaked prompt or envelope: %s", line)
+		}
+		return
+	}
+	t.Fatalf("normalized failure absent from JSON logs: %s", output.String())
 }
 
 func assertGPT56SolCanonicalFailure(t *testing.T, providerErr *ProviderError) {
@@ -114,10 +311,12 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 			wantType:    interfaces.WorkFailureTypeUnknown,
 		},
 		{
-			name:        "OpenCodeClassifiesAuthenticationOutput",
-			provider:    string(interfaces.ModelProviderOpenCode),
-			result:      CommandResult{ExitCode: 1, Stdout: []byte("login required before continuing")},
-			wantMessage: "login required before continuing",
+			name:     "OpenCodeUsesStructuredAuthenticationFailure",
+			provider: string(interfaces.ModelProviderOpenCode),
+			result: CommandResult{ExitCode: 1, Stdout: []byte(
+				`{"type":"error","error":{"name":"ProviderAuthError","data":{"message":"Authentication required. Run opencode auth login."}}}`,
+			)},
+			wantMessage: "Authentication required. Run opencode auth login.",
 			wantType:    interfaces.WorkFailureTypeAuthFailure,
 		},
 	}
@@ -414,5 +613,193 @@ func assertCodexBoundedFragment(
 	}
 	if got := fragment.Metadata[codexMetadataTruncatedKey]; got != "true" {
 		t.Fatalf("payload_truncated = %q, want true", got)
+	}
+}
+func TestParseOpenCodeProviderFailure_KnownCorpusShapesUseCanonicalContract(t *testing.T) {
+	testCases := []struct {
+		name        string
+		wantMessage string
+	}{
+		{name: "opencode_provider_auth_error", wantMessage: "Authentication required for openai. Run opencode auth login."},
+		{name: "opencode_invalid_request_api_error", wantMessage: "The selected model does not support this request."},
+		{name: "opencode_rate_limit_text", wantMessage: opencodeThrottleFailureMessage},
+		{name: "opencode_timeout_error", wantMessage: opencodeTimeoutFailureMessage},
+		{name: "opencode_server_api_error", wantMessage: opencodeServerFailureMessage},
+	}
+
+	for _, tc := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, tc.name)
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(entry.CommandResult())
+			if got.Reason != entry.ExpectedType || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want reason=%q message=%q", got, entry.ExpectedType, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestParseOpenCodeProviderFailure_StructuredFailurePrecedesText(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("Error: rate limit exceeded"),
+		Stdout:   []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"Choose a supported model."}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a supported model." {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want structured bad request", got)
+	}
+}
+
+func TestParseOpenCodeProviderFailure_SanitizesKnownActionableDetails(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout: []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"prompt: ` +
+			strings.Repeat("private ", 100) + ` Authorization: Bearer secret-token"}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != opencodeBadRequestFailureMessage {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want sanitized fixed bad-request message", got)
+	}
+	if len(got.Message) > opencodeFailureMessageBytes || strings.Contains(got.Message, "secret-token") || strings.Contains(got.Message, "private") {
+		t.Fatalf("message = %q, want bounded message without sensitive detail", got.Message)
+	}
+}
+
+func TestParseOpenCodeProviderFailure_UnknownFailuresUseSafeBoundedExcerptOrExitCode(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantMessage string
+	}{
+		{
+			name:        "safe error line",
+			result:      CommandResult{ExitCode: 17, Stderr: []byte("loading project\nError: plugin initialization failed\nrendering prompt")},
+			wantMessage: "Error: plugin initialization failed",
+		},
+		{
+			name:        "unrecognized structured error",
+			result:      CommandResult{ExitCode: 18, Stdout: []byte(`{"type":"error","error":{"name":"PluginError","data":{"message":"Plugin initialization failed."}}}`)},
+			wantMessage: "Plugin initialization failed.",
+		},
+		{
+			name:        "oversized safe error",
+			result:      CommandResult{ExitCode: 19, Stderr: []byte("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))},
+			wantMessage: ("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))[:opencodeFailureMessageBytes],
+		},
+		{
+			name:        "empty output",
+			result:      CommandResult{ExitCode: 20},
+			wantMessage: "opencode exited with code 20",
+		},
+		{
+			name:        "malformed structured output",
+			result:      CommandResult{ExitCode: 21, Stdout: []byte(`{"type":"error","message":"unfinished"`)},
+			wantMessage: "opencode exited with code 21",
+		},
+		{
+			name:        "transcript noise",
+			result:      CommandResult{ExitCode: 22, Stderr: []byte("user: show credentials\nassistant: working\nprompt: private request")},
+			wantMessage: "opencode exited with code 22",
+		},
+		{
+			name:        "secret bearing error",
+			result:      CommandResult{ExitCode: 23, Stderr: []byte("Error: Authorization: Bearer secret-token")},
+			wantMessage: "opencode exited with code 23",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(tc.result)
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestNormalizeProviderExitFailure_SelectsOpenCodeParserFromNormalizedIdentity(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "opencode_rate_limit_text")
+	providerErr := normalizeProviderExitFailure("  OPENCODE  ", entry.CommandResult(), nil, nil)
+
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Message != opencodeThrottleFailureMessage {
+		t.Fatalf("normalizeProviderExitFailure() = %#v, want OpenCode throttle failure", providerErr)
+	}
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || decision.Terminal || !decision.TriggersThrottlePause {
+		t.Fatalf("decision = %#v, want central throttle policy", decision)
+	}
+}
+
+func TestNormalizeProviderExitFailure_OpenCodeCorpusUsesCentralPolicy(t *testing.T) {
+	for _, name := range []string{
+		"opencode_provider_auth_error",
+		"opencode_invalid_request_api_error",
+		"opencode_rate_limit_text",
+		"opencode_timeout_error",
+		"opencode_server_api_error",
+	} {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(name, func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("normalized failure = %#v, want type=%q family=%q", providerErr, entry.ExpectedType, entry.ExpectedFamily)
+			}
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			if decision.Retryable != entry.Retryable || decision.Terminal == entry.Retryable || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, !entry.Retryable, entry.TriggersThrottlePause)
+			}
+		})
+	}
+}
+
+func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
+	testCases := []struct {
+		name       string
+		errorType  interfaces.WorkFailureType
+		wantFamily interfaces.WorkFailureFamily
+	}{
+		{name: "AuthFailure_IsTerminal", errorType: interfaces.WorkFailureTypeAuthFailure, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "PermanentBadRequest_IsTerminal", errorType: interfaces.WorkFailureTypePermanentBadRequest, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "Throttled_IsThrottle", errorType: interfaces.WorkFailureTypeThrottled, wantFamily: interfaces.WorkFailureFamilyThrottle},
+		{name: "InternalServerError_IsRetryable", errorType: interfaces.WorkFailureTypeInternalServerError, wantFamily: interfaces.WorkFailureFamilyRetryable},
+		{name: "Timeout_IsRetryable", errorType: interfaces.WorkFailureTypeTimeout, wantFamily: interfaces.WorkFailureFamilyRetryable},
+		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewProviderError(tc.errorType, "normalized failure", nil)
+			if err.Type != tc.errorType {
+				t.Fatalf("expected Type %q, got %q", tc.errorType, err.Type)
+			}
+			if err.Family != tc.wantFamily {
+				t.Fatalf("expected Family %q, got %q", tc.wantFamily, err.Family)
+			}
+		})
+	}
+}
+
+func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.T) {
+	result := ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeThrottled,
+		Message: "request capacity exceeded",
+	}
+
+	providerErr := NewProviderErrorFromResult(result, nil)
+	if providerErr.Type != result.Reason || providerErr.Message != result.Message {
+		t.Fatalf("NewProviderErrorFromResult() = %#v, want canonical reason and message", providerErr)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
 	}
 }

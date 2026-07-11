@@ -87,6 +87,38 @@ describe("factory session lifecycle action availability", () => {
     expect(availability.showEmptyState).toBe(true);
   });
 
+  it("shows interrupt dispatch only when a running dispatch is selected", () => {
+    const runningDispatch = {
+      dispatchKind: "JAVASCRIPT_AGENT" as const,
+      id: "dispatch-running",
+      orchestratorKind: "JAVASCRIPT" as const,
+      sessionId: "dur-sess-js-running-001",
+      status: "RUNNING" as const,
+    };
+    const unselected = resolveFactorySessionLifecycleActionAvailability({
+      durableLifecycleStatus: "RUNNING",
+      dispatches: [runningDispatch],
+      isDurableSession: true,
+      selectedDispatchID: null,
+    });
+    const selected = resolveFactorySessionLifecycleActionAvailability({
+      durableLifecycleStatus: "RUNNING",
+      dispatches: [runningDispatch],
+      isDurableSession: true,
+      selectedDispatchID: runningDispatch.id,
+    });
+
+    expectActions(unselected.actions, ["pause", "cancel", "terminate"]);
+    expect(unselected.showDispatchSelectionHint).toBe(true);
+    expectActions(selected.actions, [
+      "pause",
+      "cancel",
+      "terminate",
+      "interrupt-dispatch",
+    ]);
+    expect(selected.showDispatchSelectionHint).toBe(false);
+  });
+
   it("shows no lifecycle actions for a terminal durable session without a failed dispatch selection", () => {
     const availability = resolveFactorySessionLifecycleActionAvailability({
       durableLifecycleStatus: "SUCCEEDED",

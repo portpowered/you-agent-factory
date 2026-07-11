@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
@@ -27,6 +28,23 @@ func TestInitializeCLITransport_RejectsMissingFactoryConfig(t *testing.T) {
 	}
 	if errService.Error() != errInit.Error() {
 		t.Fatalf("InitializeCLITransport error = %q, want %q", errInit, errService)
+	}
+}
+
+func TestInitializeCLITransportComposesConfiguredDashboard(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	transport, err := initializer.InitializeCLITransport(context.Background(), &initializer.Config{
+		Dir:                     dir,
+		SimpleDashboardRenderer: func(runtimehost.SimpleDashboardRenderInput) {},
+	})
+	if err != nil {
+		t.Fatalf("InitializeCLITransport() error = %v", err)
+	}
+	if transport.Runner() == nil {
+		t.Fatal("InitializeCLITransport() returned no runtime runner")
 	}
 }
 
