@@ -14,6 +14,26 @@ const (
 	durableSessionsSubdir  = "durable-sessions"
 )
 
+// Store persists durable runtime snapshots. Tests can inject an isolated store
+// without coupling runtime construction to the host filesystem.
+type Store interface {
+	Save(sessionID string, encoded []byte) error
+	Load(sessionID string) ([]byte, error)
+}
+
+// DirectoryStore persists snapshots beneath one explicit directory.
+type DirectoryStore struct{ Dir string }
+
+// Save writes a snapshot to the configured directory.
+func (s DirectoryStore) Save(sessionID string, encoded []byte) error {
+	return SaveBytes(s.Dir, sessionID, encoded)
+}
+
+// Load reads a snapshot from the configured directory.
+func (s DirectoryStore) Load(sessionID string) ([]byte, error) {
+	return LoadBytes(s.Dir, sessionID)
+}
+
 var durableSessionIDPattern = regexp.MustCompile(`^dur-sess-[a-f0-9]{32}$`)
 
 // DirForProjectRoot returns the project-local durable session persistence directory.

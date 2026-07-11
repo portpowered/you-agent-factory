@@ -15,10 +15,11 @@ import (
 
 const constructorName = "NewJavaScriptRuntimeService"
 
-var approvedProductionFiles = map[string]struct{}{
-	"pkg/composebridge/core.go":                  {},
-	"pkg/factorysessionexecution/service.go":     {},
-	"pkg/service/factory_editable_definition.go": {},
+var approvedCompositionFiles = map[string]struct{}{
+	"pkg/composebridge/core.go":                          {},
+	"pkg/factorysessionexecution/service.go":             {},
+	"pkg/factorysessionexecution/testharness/harness.go": {},
+	"pkg/service/factory_editable_definition.go":         {},
 }
 
 type config struct{ root string }
@@ -72,7 +73,7 @@ func scan(root string) ([]string, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if _, approved := approvedProductionFiles[relative]; approved {
+		if _, approved := approvedCompositionFiles[relative]; approved {
 			return nil
 		}
 		fileSet := token.NewFileSet()

@@ -28,7 +28,7 @@ func build() any { return factorysessionexecution.NewJavaScriptRuntimeService(co
 
 func TestRunAcceptsApprovedOwnersAndTestFixtures(t *testing.T) {
 	root := t.TempDir()
-	for path := range approvedProductionFiles {
+	for path := range approvedCompositionFiles {
 		writeFixture(t, root, path, "package fixture\nfunc build() any { return NewJavaScriptRuntimeService(config) }\n")
 	}
 	writeFixture(t, root, "pkg/runtimehost/runtime_sessions_test.go", "package runtimehost\nfunc buildFixture() any { return NewJavaScriptRuntimeService(config) }\n")
