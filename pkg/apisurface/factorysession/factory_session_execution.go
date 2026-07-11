@@ -39,12 +39,23 @@ func NewDurableAPI(execution factorysessionexecution.Service, lifecycle DurableL
 	return &DurableAPI{execution: execution, lifecycle: lifecycle}
 }
 
+func (api *DurableAPI) executionService() (factorysessionexecution.Service, error) {
+	if api == nil || api.execution == nil {
+		return nil, factorysessionexecution.ErrServiceNotConfigured
+	}
+	return api.execution, nil
+}
+
 func (api *DurableAPI) StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error) {
 	startReq, err := StartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionExecutionResponse{}, err
 	}
-	result, err := api.execution.StartAsync(ctx, startReq)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	result, err := execution.StartAsync(ctx, startReq)
 	if err != nil {
 		return factoryapi.FactorySessionExecutionResponse{}, err
 	}
@@ -56,7 +67,11 @@ func (api *DurableAPI) StartDurableFactorySessionSync(ctx context.Context, reque
 	if err != nil {
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
 	}
-	result, err := api.execution.StartSync(ctx, startReq)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	result, err := execution.StartSync(ctx, startReq)
 	if err != nil {
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
 	}
@@ -68,7 +83,11 @@ func (api *DurableAPI) ListDurableFactorySessions(ctx context.Context, params fa
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
 	}
-	result, err := api.execution.ListSessions(ctx, req)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionsResponse{}, err
+	}
+	result, err := execution.ListSessions(ctx, req)
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
 	}
@@ -76,7 +95,11 @@ func (api *DurableAPI) ListDurableFactorySessions(ctx context.Context, params fa
 }
 
 func (api *DurableAPI) GetDurableFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySessionDurableReadModel, error) {
-	result, err := api.execution.GetSession(ctx, sessionID)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	result, err := execution.GetSession(ctx, sessionID)
 	if err != nil {
 		return factoryapi.FactorySessionDurableReadModel{}, err
 	}
@@ -88,7 +111,11 @@ func (api *DurableAPI) GetDurableFactorySessionResult(ctx context.Context, sessi
 	if err != nil {
 		return factoryapi.FactorySessionResult{}, err
 	}
-	result, err := api.execution.GetResult(ctx, sessionID, req)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	result, err := execution.GetResult(ctx, sessionID, req)
 	if err != nil {
 		return factoryapi.FactorySessionResult{}, err
 	}
@@ -100,7 +127,11 @@ func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sess
 	if err != nil {
 		return nil, err
 	}
-	result, err := api.execution.ReadEvents(ctx, sessionID, reconnect)
+	execution, err := api.executionService()
+	if err != nil {
+		return nil, err
+	}
+	result, err := execution.ReadEvents(ctx, sessionID, reconnect)
 	if err != nil {
 		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
 			return nil, apisurface.ErrFactorySessionNotFound
@@ -114,7 +145,11 @@ func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sess
 }
 
 func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionDispatchesResponse, error) {
-	result, err := api.execution.ListDispatches(ctx, sessionID)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	result, err := execution.ListDispatches(ctx, sessionID)
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
@@ -122,7 +157,11 @@ func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, 
 }
 
 func (api *DurableAPI) GetDurableFactorySessionDispatch(ctx context.Context, sessionID, dispatchID string) (factoryapi.FactoryDispatch, error) {
-	result, err := api.execution.GetDispatch(ctx, sessionID, dispatchID)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	result, err := execution.GetDispatch(ctx, sessionID, dispatchID)
 	if err != nil {
 		return factoryapi.FactoryDispatch{}, err
 	}
@@ -130,7 +169,11 @@ func (api *DurableAPI) GetDurableFactorySessionDispatch(ctx context.Context, ses
 }
 
 func (api *DurableAPI) ListDurableFactorySessionArtifacts(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error) {
-	result, err := api.execution.ListArtifacts(ctx, sessionID)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionArtifactsResponse{}, err
+	}
+	result, err := execution.ListArtifacts(ctx, sessionID)
 	if err != nil {
 		return factoryapi.ListFactorySessionArtifactsResponse{}, err
 	}
@@ -138,7 +181,11 @@ func (api *DurableAPI) ListDurableFactorySessionArtifacts(ctx context.Context, s
 }
 
 func (api *DurableAPI) GetDurableFactorySessionArtifact(ctx context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error) {
-	result, err := api.execution.GetArtifact(ctx, sessionID, artifactID)
+	execution, err := api.executionService()
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	result, err := execution.GetArtifact(ctx, sessionID, artifactID)
 	if err != nil {
 		return factoryapi.FactorySessionArtifactDetail{}, err
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/livechild"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -200,6 +201,7 @@ type JavaScriptRuntimeServiceConfig struct {
 	ChildExecutorMode string
 	Provider          workers.Provider
 	PersistSessions   bool
+	Clock             factory.Clock
 }
 
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
@@ -209,6 +211,7 @@ type JavaScriptRuntimeService struct {
 	childExecutorMode string
 	provider          workers.Provider
 	sessionPersistDir string
+	clock             factory.Clock
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -226,6 +229,7 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 		projectRoot:       projectRoot,
 		childExecutorMode: normalizeChildExecutorMode(config.ChildExecutorMode),
 		provider:          config.Provider,
+		clock:             factory.EnsureClock(config.Clock),
 		sessions:          make(map[string]*runtimeSessionState),
 		startReplay:       make(map[string]startReplayRecord),
 		startInflight:     make(map[string]*startInflightFlight),
@@ -236,6 +240,8 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 	}
 	return service
 }
+
+func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
 
 func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
@@ -277,7 +283,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		return AsyncStartResult{}, err
 	}
 
-	startedAt := time.Now().UTC()
+	startedAt := s.now()
 	running := projectRuntimeRunningSessionState(
 		reserved.state.session.SessionID,
 		normalized,
@@ -346,7 +352,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	}
 
 	if hasSyncWait {
-		startedAt := time.Now().UTC()
+		startedAt := s.now()
 		running := projectRuntimeRunningSessionState(
 			reserved.state.session.SessionID,
 			normalized,
@@ -584,7 +590,7 @@ func (s *JavaScriptRuntimeService) executeImmediateSyncSession(
 	runCtx, cancel := workflowRunContext(ctx, policyResolution.Policy)
 	defer cancel()
 
-	startedAt := time.Now().UTC()
+	startedAt := s.now()
 	outcome, err := s.invokeWorkflowRuntime(runCtx, normalized, resolved, sourceContent, policyResolution, sessionID)
 	if err != nil {
 		return runtimeSessionState{}, err
@@ -691,7 +697,7 @@ func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
 	outcome workflowruntime.Outcome,
 	startedAt time.Time,
 ) {
-	finishedAt := time.Now().UTC()
+	finishedAt := s.now()
 	applyTerminalRuntimeProjection(state, terminal, outcome)
 	if state.session.Lifecycle == nil {
 		state.session.Lifecycle = &LifecycleTimestamps{}
@@ -933,7 +939,7 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 	}
 	preservedInterrupted := snapshotInterruptedDispatches(state)
 	state.runtimeRecords = append(state.runtimeRecords, cloneRuntimeRecord(record))
-	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, time.Now().UTC())
+	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, s.now())
 	if record.Kind == workflowruntime.RecordKindCheckpoint && record.Checkpoint != nil {
 		state.checkpointSummary = jsstore.BuildCheckpointSummary(jsstore.CheckpointSummaryInput{
 			SessionID:       sessionID,
@@ -942,7 +948,7 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 			Phase:           strings.TrimSpace(projection.Phase),
 			SourceHash:      strings.TrimSpace(state.session.SourceHash),
 			PolicyHash:      strings.TrimSpace(state.session.Policy.EffectiveHash),
-			CreatedAt:       time.Now().UTC(),
+			CreatedAt:       s.now(),
 			CheckpointState: record.Checkpoint.State,
 			Records:         state.runtimeRecords,
 		})

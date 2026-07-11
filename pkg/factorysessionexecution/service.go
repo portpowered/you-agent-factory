@@ -2,17 +2,23 @@ package factorysessionexecution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+// ErrServiceNotConfigured reports an application composition graph that did
+// not supply its required durable Factory Session execution collaborator.
+var ErrServiceNotConfigured = errors.New("durable factory session execution service is not configured")
 
 // Service is the shared durable factory-session execution contract consumed by
 // API, CLI, MCP, and UI transports. Live-session open and invocation remain on
@@ -145,6 +151,7 @@ type ServiceConfig struct {
 	Provider          workers.Provider
 	FakeOptions       []FakeServiceOption
 	PersistSessions   bool
+	Clock             factory.Clock
 }
 
 // NewExecutionService constructs one shared Factory Session execution service for
@@ -171,6 +178,7 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 			ChildExecutorMode: childExecutorMode,
 			Provider:          provider,
 			PersistSessions:   config.PersistSessions || projectRoot != "",
+			Clock:             config.Clock,
 		}), nil
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")

@@ -127,8 +127,16 @@ type FactoryService struct {
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
 	modelInitOnce            sync.Once
-	durableExecutionMu       sync.Mutex
 	durableExecution         factorysessionexecution.Service
+}
+
+func composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
+	for _, candidate := range []string{executionBaseDir, configuredDir, factoryRootDir} {
+		if root := strings.TrimSpace(candidate); root != "" {
+			return root
+		}
+	}
+	return ""
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -139,6 +147,15 @@ var _ apisurface.SessionAPI = (*FactoryService)(nil)
 var _ apisurface.WorkAPI = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
 var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
+
+// DurableExecutionService exposes the explicitly injected durable collaborator
+// for compatibility composition and ownership verification.
+func (fs *FactoryService) DurableExecutionService() factorysessionexecution.Service {
+	if fs == nil {
+		return nil
+	}
+	return fs.durableExecution
+}
 
 type RuntimeFileLoggingPolicy string
 

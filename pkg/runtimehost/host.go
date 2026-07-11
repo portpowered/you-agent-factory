@@ -141,7 +141,6 @@ type Host struct {
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
 	modelInitOnce            sync.Once
-	durableExecutionMu       sync.Mutex
 	durableExecution         factorysessionexecution.Service
 }
 
@@ -167,6 +166,15 @@ func (h *Host) DurableExecutionAPI() apisurface.DurableSessionAPI {
 		return h.durableExecutionAPI
 	}
 	return factorysession.NewDurableAPI(h.durableExecutionService(), h.requireSessionGateway())
+}
+
+// DurableExecutionService exposes the explicitly injected durable collaborator
+// for compatibility composition and ownership verification.
+func (h *Host) DurableExecutionService() factorysessionexecution.Service {
+	if h == nil {
+		return nil
+	}
+	return h.durableExecution
 }
 
 type RuntimeFileLoggingPolicy string
