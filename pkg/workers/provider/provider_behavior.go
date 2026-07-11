@@ -76,7 +76,6 @@ type geminiProviderBehavior struct {
 }
 
 type kiroProviderBehavior struct {
-	sharedNonCodexProviderBehavior
 	logger logging.Logger
 }
 
@@ -326,12 +325,20 @@ func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.Provid
 	return args, nil
 }
 
+func (kiroProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
+}
+
 func (b kiroProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
+	return ParseKiroProviderFailure(result).Message
 }
 
 func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
+	return ParseKiroProviderFailure(result).Reason
+}
+
+func (kiroProviderBehavior) FormatTimeoutFailure(CommandResult) string {
+	return kiroTimeoutFailureMessage
 }
 
 func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {

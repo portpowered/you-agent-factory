@@ -406,6 +406,201 @@
       "notes": "Cursor-family failures reuse the shared Codex classifier path until a dedicated Cursor provider exists, so the high-demand case must stay aligned with the same temporary internal-server-error class."
     },
     {
+      "name": "kiro_structured_authentication_error",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "auth_failure",
+      "upstream_source_case": "Kiro structured authentication error on stderr",
+      "exit_code": 1,
+      "stdout": "working on customer prompt",
+      "stderr": "diagnostic startup\n{\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"credential secret must stay private\"}}\ncleanup complete",
+      "expected_type": "auth_failure",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "credential secret",
+        "customer prompt",
+        "cleanup complete"
+      ]
+    },
+    {
+      "name": "kiro_structured_invalid_request_stdout",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "permanent_bad_request",
+      "upstream_source_case": "Kiro structured validation error on stdout",
+      "exit_code": 1,
+      "stdout": "{\"type\":\"error\",\"statusCode\":422,\"error\":{\"code\":\"ValidationException\",\"message\":\"private request content\"}}",
+      "stderr": "progress: preparing request",
+      "expected_type": "permanent_bad_request",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "private request content",
+        "preparing request"
+      ]
+    },
+    {
+      "name": "kiro_text_authentication_stdout",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "auth_failure",
+      "upstream_source_case": "Kiro authentication text on stdout with stderr noise",
+      "exit_code": 1,
+      "stdout": "ERROR: sign in required before using Kiro",
+      "stderr": "progress: loading provider\ncleanup complete",
+      "expected_type": "auth_failure",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "loading provider",
+        "cleanup complete"
+      ]
+    },
+    {
+      "name": "kiro_structured_throttle_precedes_text",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "throttled",
+      "upstream_source_case": "Kiro structured throttling error takes precedence over stderr text",
+      "exit_code": 1,
+      "stdout": "{\"type\":\"error\",\"error\":{\"code\":\"ThrottlingException\",\"message\":\"capacity exhausted\"}}",
+      "stderr": "ERROR: authentication required in unrelated fallback text",
+      "expected_type": "throttled",
+      "expected_family": "throttle",
+      "retryable": true,
+      "triggers_throttle_pause": true,
+      "supported": true,
+      "reject_message_contains": [
+        "authentication required",
+        "capacity exhausted"
+      ]
+    },
+    {
+      "name": "kiro_text_capacity_error",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "throttled",
+      "upstream_source_case": "Kiro capacity text surrounded by progress noise",
+      "exit_code": 1,
+      "stdout": "draft response must stay private",
+      "stderr": "progress: connecting\nERROR: selected Kiro model is at capacity\ncleanup complete",
+      "expected_type": "throttled",
+      "expected_family": "throttle",
+      "retryable": true,
+      "triggers_throttle_pause": true,
+      "supported": true,
+      "reject_message_contains": [
+        "draft response",
+        "connecting",
+        "cleanup complete"
+      ]
+    },
+    {
+      "name": "kiro_text_timeout_malformed_structured",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "timeout",
+      "upstream_source_case": "Malformed Kiro structured record falls through to bounded text timeout",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "ERROR: {\"type\":\"error\", malformed\nERROR: request timed out while waiting for Kiro",
+      "expected_type": "timeout",
+      "expected_family": "retryable",
+      "retryable": true,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "malformed",
+        "while waiting"
+      ]
+    },
+    {
+      "name": "kiro_structured_service_unavailable",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "internal_server_error",
+      "upstream_source_case": "Kiro structured temporary service failure",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "ERROR: {\"type\":\"error\",\"errorType\":\"ServiceUnavailableException\",\"message\":\"internal host details\"}",
+      "expected_type": "internal_server_error",
+      "expected_family": "retryable",
+      "retryable": true,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "internal host details"
+      ]
+    },
+    {
+      "name": "kiro_unknown_stderr_excerpt_precedes_stdout",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "unknown",
+      "upstream_source_case": "Kiro unknown stderr error excerpt takes precedence over stdout",
+      "exit_code": 7,
+      "stdout": "ERROR: stdout fallback should not be selected",
+      "stderr": "progress: starting Kiro\nERROR: model registry handshake failed\ncleanup complete",
+      "expected_type": "unknown",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "stdout fallback",
+        "progress",
+        "cleanup"
+      ]
+    },
+    {
+      "name": "kiro_unknown_stdout_excerpt_after_unsafe_stderr",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "unknown",
+      "upstream_source_case": "Kiro unknown stdout error excerpt follows unsafe stderr rejection",
+      "exit_code": 9,
+      "stdout": "KIRO_ERROR:\tplugin\u0000bridge failed",
+      "stderr": "ERROR: prompt content must stay private",
+      "expected_type": "unknown",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "prompt content",
+        "\u0000",
+        "\t"
+      ]
+    },
+    {
+      "name": "kiro_unknown_noise_only_exit_fallback",
+      "provider": "kiro-cli",
+      "raw_provider_family": "kiro",
+      "category": "unknown",
+      "upstream_source_case": "Kiro unknown transcript and cleanup output uses exit fallback",
+      "exit_code": 11,
+      "stdout": "customer transcript line\nprogress: writing response",
+      "stderr": "ERROR: cleanup failed for prompt transcript",
+      "expected_type": "unknown",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true,
+      "reject_message_contains": [
+        "customer transcript",
+        "writing response",
+        "cleanup",
+        "prompt"
+      ]
+    },
+    {
       "name": "opencode_provider_auth_error",
       "provider": "opencode",
       "raw_provider_family": "opencode",

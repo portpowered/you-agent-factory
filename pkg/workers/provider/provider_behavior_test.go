@@ -261,26 +261,46 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 			want: []string{"chat", "--no-interactive", "summarize the workspace"},
 		},
 		{
-			name: "WithSystemPromptSessionAndTrustedTools",
+			name: "ComposedContextAndUserPrompt",
 			req: interfaces.ProviderInferenceRequest{
 				ModelProvider: string(interfaces.ModelProviderKiro),
 				SystemPrompt:  "You are a careful reviewer.",
 				UserMessage:   "run the tests",
-				SessionID:     "kiro-session-123",
 			},
-			skipPermissions: true,
 			want: []string{
 				"chat",
 				"--no-interactive",
-				"--resume-id",
-				"kiro-session-123",
-				"--trust-all-tools",
 				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
 			},
 		},
+		{
+			name: "EmptyPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+			},
+			want: []string{"chat", "--no-interactive"},
+		},
+		{
+			name: "TrustedTools",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"chat", "--no-interactive", "--trust-all-tools", "run the tests"},
+		},
+		{
+			name: "ResumeSession",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "continue the review",
+				SessionID:     "kiro-session-123",
+			},
+			want: []string{"chat", "--no-interactive", "--resume-id", "kiro-session-123", "continue the review"},
+		},
 	}
 
-	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	behavior := providerBehaviorFor(string(interfaces.ModelProviderKiro), logging.NoopLogger{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
@@ -561,7 +581,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behaviors := map[string]providerBehavior{
 		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
 	}
@@ -606,6 +625,21 @@ func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	}
 }
 
+func TestKiroProviderBehavior_UsesSafeCanonicalFailureMessages(t *testing.T) {
+	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	authResult := providerErrorCorpusEntryForTest(t, "kiro_structured_authentication_error").CommandResult()
+
+	if got := behavior.FormatExitFailure(string(interfaces.ModelProviderKiro), authResult); got != kiroAuthFailureMessage {
+		t.Fatalf("FormatExitFailure() = %q, want %q", got, kiroAuthFailureMessage)
+	}
+	if got := behavior.ClassifyExitFailure(authResult); got != interfaces.WorkFailureTypeAuthFailure {
+		t.Fatalf("ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeAuthFailure)
+	}
+	if got := behavior.FormatTimeoutFailure(CommandResult{Stderr: []byte("private transcript")}); got != kiroTimeoutFailureMessage {
+		t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, kiroTimeoutFailureMessage)
+	}
+}
+
 func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
 
@@ -647,7 +681,6 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 
 func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	for _, providerName := range []string{
-		string(interfaces.ModelProviderKiro),
 		string(interfaces.ModelProviderOpenCode),
 	} {
 		behavior := providerBehaviorForErrorClassification(providerName)
