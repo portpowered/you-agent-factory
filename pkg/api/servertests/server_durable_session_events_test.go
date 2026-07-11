@@ -20,9 +20,7 @@ import (
 
 func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -58,9 +56,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.
 
 func TestGetFactorySessionEvents_RuntimeBackedReconnectCursorReturnsLaterEvents(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -105,9 +101,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReconnectCursorReturnsLaterEvents(
 
 func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -151,9 +145,7 @@ func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *
 
 func TestGetFactorySessionEvents_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -170,9 +162,7 @@ func TestGetFactorySessionEvents_RuntimeBackedMissingSessionReturnsNotFound(t *t
 
 func TestGetFactorySessionEvents_RuntimeBackedAPIShapingMatchesServiceProjection(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -208,9 +198,7 @@ func TestGetFactorySessionEvents_RuntimeBackedAPIShapingMatchesServiceProjection
 
 func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()

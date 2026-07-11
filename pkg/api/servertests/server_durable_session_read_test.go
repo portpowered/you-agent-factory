@@ -24,9 +24,7 @@ import (
 
 func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{
 		DurableExecutionService: service,
 		FactorySessions: factoryapi.ListFactorySessionsResponse{
@@ -63,9 +61,7 @@ func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *test
 
 func TestGetFactorySession_RuntimeBackedReturnsTerminalReadModel(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -113,9 +109,7 @@ func TestGetFactorySession_RuntimeBackedReturnsTerminalReadModel(t *testing.T) {
 
 func TestGetFactorySession_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -273,9 +267,7 @@ func startAPIRunningSessionForControl(t *testing.T, service *factorysessionexecu
 func newAPILifecycleRuntimeService(t *testing.T, fixtureName, workflowName string) factorysessionexecution.Service {
 	t.Helper()
 	projectRoot := setupAPILifecycleWorkflowFixture(t, fixtureName, workflowName)
-	return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	return newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 }
 
 type apiLifecycleFailingChildProvider struct{}
@@ -294,11 +286,8 @@ func (apiLifecycleFailingChildProvider) Infer(
 func newAPILifecycleFailingChildRuntimeService(t *testing.T) factorysessionexecution.Service {
 	t.Helper()
 	projectRoot := setupAPILifecycleWorkflowFixture(t, "agent-run-live-child-failure.workflow.js", "agent-run-live-child-failure")
-	return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
-		Provider:          apiLifecycleFailingChildProvider{},
-	})
+	return newAPIJavaScriptExecutionService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive,
+		apiLifecycleFailingChildProvider{})
 }
 
 func startRuntimeBackedFailedSessionWithDispatch(

@@ -65,7 +65,7 @@ func scan(root string) ([]string, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+		if !strings.HasSuffix(entry.Name(), ".go") {
 			return nil
 		}
 		relative, err := filepath.Rel(repoRoot, path)
@@ -73,6 +73,9 @@ func scan(root string) ([]string, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
+		if strings.HasSuffix(entry.Name(), "_test.go") && !isTransportTest(relative) {
+			return nil
+		}
 		if _, approved := approvedCompositionFiles[relative]; approved {
 			return nil
 		}
@@ -100,6 +103,15 @@ func scan(root string) ([]string, error) {
 	}
 	sort.Strings(findings)
 	return findings, nil
+}
+
+func isTransportTest(relative string) bool {
+	for _, root := range []string{"pkg/api/", "pkg/cli/", "pkg/mcp/"} {
+		if strings.HasPrefix(relative, root) {
+			return true
+		}
+	}
+	return false
 }
 
 func calledName(expression ast.Expr) string {

@@ -11,10 +11,14 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity runtime resume smoke keeps interrupted setup, MCP control, and terminal continuity on one documented stdio path.
@@ -250,12 +254,7 @@ func newMCPRuntimeResumeSmokeHarness(t *testing.T) *mcpRuntimeResumeSmokeHarness
 	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "resumable-two-step-fake-children.workflow.js", workflowName)
 	provider := newMCPRuntimeResumeSmokeBlockingProvider(workflowName)
 
-	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: fse.ChildExecutorModeLive,
-		Provider:          provider,
-		PersistSessions:   true,
-	})
+	service := newMCPRuntimeResumeService(t, projectRoot, fse.ChildExecutorModeLive, provider)
 	t.Cleanup(func() {
 		drainRuntimeMCPResumeSmokeSessions(t, service)
 	})
@@ -275,10 +274,7 @@ func newMCPRuntimeResumeSmokeSucceededHarness(t *testing.T) *mcpRuntimeResumeSmo
 
 	const workflowName = "simple-final"
 	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", workflowName)
-	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
-	})
+	service := newMCPRuntimeResumeService(t, projectRoot, fse.ChildExecutorModeFake, nil)
 	t.Cleanup(func() {
 		drainRuntimeMCPResumeSmokeSessions(t, service)
 	})
@@ -295,15 +291,33 @@ func newMCPRuntimeResumeSmokeRunningHarness(t *testing.T) *mcpRuntimeResumeSmoke
 
 	const workflowName = "busy-loop"
 	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "busy-loop.workflow.js", workflowName)
-	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
-	})
+	service := newMCPRuntimeResumeService(t, projectRoot, fse.ChildExecutorModeFake, nil)
 	t.Cleanup(func() {
 		drainRuntimeMCPResumeSmokeSessions(t, service)
 	})
 
 	return &mcpRuntimeResumeSmokeRunningHarness{service: service}
+}
+
+func newMCPRuntimeResumeService(
+	t *testing.T,
+	projectRoot string,
+	childExecutorMode string,
+	provider workers.Provider,
+) fse.Service {
+	t.Helper()
+	service, err := testharness.New(testharness.Config{
+		Mode:              testharness.ModeJavaScript,
+		ProjectRoot:       projectRoot,
+		Clock:             factory.RealClock{},
+		Provider:          provider,
+		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
+		ChildExecutorMode: childExecutorMode,
+	})
+	if err != nil {
+		t.Fatalf("compose MCP runtime resume service: %v", err)
+	}
+	return service
 }
 
 func startMCPRuntimeResumeSmokeSucceededSession(t *testing.T, client *stdioMCPClient) string {

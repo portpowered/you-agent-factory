@@ -26,11 +26,29 @@ func build() any { return factorysessionexecution.NewJavaScriptRuntimeService(co
 	}
 }
 
-func TestRunAcceptsApprovedOwnersAndTestFixtures(t *testing.T) {
+func TestRunRejectsTransportTestDirectConstruction(t *testing.T) {
+	for _, path := range []string{
+		"pkg/api/servertests/runtime_test.go",
+		"pkg/cli/session/runtime_test.go",
+		"pkg/mcp/factorysession/runtime_test.go",
+	} {
+		t.Run(path, func(t *testing.T) {
+			root := t.TempDir()
+			writeFixture(t, root, path, "package fixture\nfunc build() any { return NewJavaScriptRuntimeService(config) }\n")
+			if err := run(config{root: root}, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+				t.Fatal("run() error = nil, want prohibited transport-test construction error")
+			}
+		})
+	}
+}
+
+func TestRunAcceptsApprovedOwnersAndFocusedExecutionTests(t *testing.T) {
 	root := t.TempDir()
 	for path := range approvedCompositionFiles {
 		writeFixture(t, root, path, "package fixture\nfunc build() any { return NewJavaScriptRuntimeService(config) }\n")
 	}
+	writeFixture(t, root, "pkg/factorysessionexecution/runtime_service_test.go", "package factorysessionexecution\nfunc buildFixture() any { return NewJavaScriptRuntimeService(config) }\n")
+	writeFixture(t, root, "pkg/factorysessionexecution/fixtures/runtime_test.go", "package fixtures\nfunc buildFixture() any { return NewJavaScriptRuntimeService(config) }\n")
 	writeFixture(t, root, "pkg/runtimehost/runtime_sessions_test.go", "package runtimehost\nfunc buildFixture() any { return NewJavaScriptRuntimeService(config) }\n")
 	writeFixture(t, root, "pkg/runtimehost/testdata/deterministic_fixture.go", "package fixture\nfunc build() any { return NewJavaScriptRuntimeService(config) }\n")
 	writeFixture(t, root, "vendor/example/generated.go", "package example\nfunc build() any { return NewJavaScriptRuntimeService(config) }\n")
