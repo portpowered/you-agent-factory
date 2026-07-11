@@ -245,7 +245,7 @@ func containsClaudeCredentialSignal(message string) bool {
 	) {
 		return true
 	}
-	if containsClaudeCredentialWord(message) || containsClaudeAPIKeyValue(message) || containsClaudeSensitiveIdentifier(message) {
+	if containsClaudeCredentialWord(message) || containsClaudeCredentialFieldValue(message) || containsClaudeSensitiveIdentifier(message) {
 		return true
 	}
 
@@ -270,19 +270,29 @@ func containsClaudeCredentialSignal(message string) bool {
 	return false
 }
 
-func containsClaudeAPIKeyValue(message string) bool {
+func containsClaudeCredentialFieldValue(message string) bool {
 	fields := strings.Fields(message)
 	for index, field := range fields {
 		normalized := strings.Trim(field, "\"'{}[](),.;:!?=")
-		if (normalized == "api-key" || strings.HasSuffix(normalized, "-api-key")) && index+1 < len(fields) {
+		if isClaudeCredentialField(normalized) && index+1 < len(fields) {
 			return true
 		}
 		if normalized == "api" && index+2 < len(fields) &&
 			strings.Trim(fields[index+1], "\"'{}[](),.;:!?=") == "key" {
 			return true
 		}
+		if normalized == "auth" && index+2 < len(fields) &&
+			strings.Trim(fields[index+1], "\"'{}[](),.;:!?=") == "token" {
+			return true
+		}
 	}
 	return false
+}
+
+func isClaudeCredentialField(field string) bool {
+	return field == "authorization" ||
+		field == "api-key" || strings.HasSuffix(field, "-api-key") ||
+		field == "auth-token" || strings.HasSuffix(field, "-auth-token")
 }
 
 func containsClaudeCredentialWord(message string) bool {

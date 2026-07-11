@@ -803,3 +803,30 @@ func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.
 		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
 	}
 }
+
+func TestParseClaudeProviderFailure_CredentialFieldValuesNeverPassThrough(t *testing.T) {
+	testCases := []struct {
+		name   string
+		stderr string
+	}{
+		{name: "AuthorizationWhitespaceProse", stderr: "Invalid request: authorization customer-private-value is invalid"},
+		{name: "StructuredAuthorizationWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace authorization customer-private-value"}}`},
+		{name: "PrefixedAuthTokenWhitespaceProse", stderr: "Invalid request: x-auth-token customer-private-value is invalid"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}
+			assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
+				reason:    interfaces.WorkFailureTypePermanentBadRequest,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   claudeBadRequestFailureMessage,
+				terminal:  true,
+				retryable: false,
+			})
+			if parsed := ParseClaudeProviderFailure(result); strings.Contains(parsed.Message, "customer-private-value") {
+				t.Fatalf("message %q must not contain the credential value", parsed.Message)
+			}
+		})
+	}
+}
