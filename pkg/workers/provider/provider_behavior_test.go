@@ -679,15 +679,14 @@ func TestCursorAndCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	cursorBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCursor))
 	codexBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCodex))
 
-	assertCodexDerivedExitFailureFormatting(t, cursorBehavior, string(interfaces.ModelProviderCursor))
 	assertCodexDerivedExitFailureFormatting(t, codexBehavior, string(interfaces.ModelProviderCodex))
 
 	result := CommandResult{
 		ExitCode: 1,
-		Stderr:   []byte("ERROR: unexpected status 500 from codex upstream"),
+		Stderr:   []byte(codexHighDemandTemporaryErrorsNeedle),
 	}
-	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("cursor ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
+	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("cursor ClassifyExitFailure() = %q, want Cursor-owned unknown classification", got)
 	}
 	if got := codexBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("codex ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)

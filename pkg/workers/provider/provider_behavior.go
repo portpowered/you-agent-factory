@@ -362,11 +362,16 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 }
 
 func (b cursorProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return codexProviderBehavior{}.FormatExitFailure(provider, result)
+	_ = provider
+	return cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	}).Message
 }
 
 func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return codexProviderBehavior{}.ClassifyExitFailure(result)
+	return cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	}).Reason
 }
 
 func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
