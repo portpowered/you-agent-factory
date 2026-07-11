@@ -101,73 +101,6 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 		})
 	}
 }
-
-func TestScriptWrapProvider_Infer_KiroKnownFailuresUseCanonicalParserAndPolicy(t *testing.T) {
-	fixtureNames := []string{
-		"kiro_structured_authentication_error",
-		"kiro_structured_invalid_request_stdout",
-		"kiro_text_authentication_stdout",
-		"kiro_structured_throttle_precedes_text",
-		"kiro_text_capacity_error",
-		"kiro_text_timeout_malformed_structured",
-		"kiro_structured_service_unavailable",
-	}
-
-	for _, name := range fixtureNames {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
-				result: entry.CommandResult(),
-			}))
-
-			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
-				UserMessage:   "private prompt that must stay out of normalized failures",
-			})
-			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-				wantType:          entry.ExpectedType,
-				wantFamily:        entry.ExpectedFamily,
-				wantMessage:       knownKiroFailure(entry.ExpectedType).Message,
-				rejectTexts:       append(entry.RejectMessageContains, "private prompt"),
-				wantRetryable:     entry.Retryable,
-				wantTerminal:      !entry.Retryable,
-				wantThrottlePause: entry.TriggersThrottlePause,
-			})
-		})
-	}
-}
-
-func TestScriptWrapProvider_Infer_KiroUnknownFailuresUseBoundedParserMessages(t *testing.T) {
-	testCases := map[string]string{
-		"kiro_unknown_stderr_excerpt_precedes_stdout":     "Kiro error: model registry handshake failed",
-		"kiro_unknown_stdout_excerpt_after_unsafe_stderr": "Kiro error: plugin bridge failed",
-		"kiro_unknown_noise_only_exit_fallback":           "kiro-cli exited with code 11",
-	}
-
-	for name, wantMessage := range testCases {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
-				result: entry.CommandResult(),
-			}))
-
-			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
-				UserMessage:   "private prompt that must stay out of normalized failures",
-			})
-			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-				wantType:          interfaces.WorkFailureTypeUnknown,
-				wantFamily:        interfaces.WorkFailureFamilyTerminal,
-				wantMessage:       wantMessage,
-				rejectTexts:       append(entry.RejectMessageContains, "private prompt"),
-				wantRetryable:     false,
-				wantTerminal:      true,
-				wantThrottlePause: false,
-			})
-		})
-	}
-}
-
 func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *testing.T) {
 	testCases := []struct {
 		name              string
@@ -226,75 +159,6 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 				ModelProvider: string(interfaces.ModelProviderCodex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "fix it",
-			})
-			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-				wantType:          tc.wantType,
-				wantFamily:        tc.wantFamily,
-				wantRetryable:     tc.wantRetryable,
-				wantTerminal:      tc.wantTerminal,
-				wantThrottlePause: tc.wantThrottlePause,
-			})
-		})
-	}
-}
-
-func TestScriptWrapProvider_Infer_GeminiCanonicalReasonDrivesFailurePolicy(t *testing.T) {
-	testCases := []struct {
-		name              string
-		stderr            string
-		wantType          interfaces.WorkFailureType
-		wantFamily        interfaces.WorkFailureFamily
-		wantRetryable     bool
-		wantTerminal      bool
-		wantThrottlePause bool
-	}{
-		{
-			name:         "AuthenticationIsTerminal",
-			stderr:       `{"error":{"status":"UNAUTHENTICATED"}}`,
-			wantType:     interfaces.WorkFailureTypeAuthFailure,
-			wantFamily:   interfaces.WorkFailureFamilyTerminal,
-			wantTerminal: true,
-		},
-		{
-			name:         "InvalidRequestIsTerminal",
-			stderr:       `{"error":{"code":400}}`,
-			wantType:     interfaces.WorkFailureTypePermanentBadRequest,
-			wantFamily:   interfaces.WorkFailureFamilyTerminal,
-			wantTerminal: true,
-		},
-		{
-			name:              "QuotaPausesAndRetries",
-			stderr:            `{"error":{"status":"RESOURCE_EXHAUSTED"}}`,
-			wantType:          interfaces.WorkFailureTypeThrottled,
-			wantFamily:        interfaces.WorkFailureFamilyThrottle,
-			wantRetryable:     true,
-			wantThrottlePause: true,
-		},
-		{
-			name:          "TimeoutRetriesWithoutPause",
-			stderr:        `{"error":{"status":"DEADLINE_EXCEEDED"}}`,
-			wantType:      interfaces.WorkFailureTypeTimeout,
-			wantFamily:    interfaces.WorkFailureFamilyRetryable,
-			wantRetryable: true,
-		},
-		{
-			name:          "ServerFailureRetriesWithoutPause",
-			stderr:        `{"error":{"code":503}}`,
-			wantType:      interfaces.WorkFailureTypeInternalServerError,
-			wantFamily:    interfaces.WorkFailureFamilyRetryable,
-			wantRetryable: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
-				result: CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)},
-			}))
-			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderGemini),
-				Model:         "gemini-2.5-flash",
-				UserMessage:   "private prompt",
 			})
 			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
 				wantType:          tc.wantType,
@@ -691,14 +555,8 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 			entry: providerErrorCorpusEntryForTest(t, "claude_authentication_error"),
 		},
 		{
-			name: "Unknown_Unclassified",
-			entry: ProviderErrorCorpusEntry{
-				Name:           "claude_unknown_unclassified",
-				ExitCode:       1,
-				Stderr:         `some brand new claude failure`,
-				ExpectedType:   interfaces.WorkFailureTypeUnknown,
-				ExpectedFamily: interfaces.WorkFailureFamilyTerminal,
-			},
+			name:  "Unknown_Unclassified",
+			entry: providerErrorCorpusEntryForTest(t, "claude_unknown_unclassified"),
 		},
 	}
 
@@ -728,6 +586,213 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 				t.Fatalf("%s Family = %q, want %q", entryLabel, providerErr.Family, tc.entry.ExpectedFamily)
 			}
 		})
+	}
+}
+
+func TestParseClaudeProviderFailure_TranscriptSignalsCannotDrivePolicy(t *testing.T) {
+	testCases := []string{
+		"User: debug this configuration error",
+		"Human: explain this api key failure",
+		"Assistant: an invalid request would fail",
+		"System: rate limit requests before dispatch",
+		"Prompt: the provider is overloaded",
+		"User: simulate an internal server error",
+		"Assistant: describe what timed out means",
+	}
+
+	for _, transcript := range testCases {
+		t.Run(strings.Fields(transcript)[0]+strings.Fields(transcript)[2], func(t *testing.T) {
+			assertClaudeFailureAndPolicy(t, CommandResult{ExitCode: 7, Stderr: []byte(transcript)}, claudeFailureExpectation{
+				reason:    interfaces.WorkFailureTypeUnknown,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   "claude exited with code 7",
+				terminal:  true,
+				retryable: false,
+			})
+		})
+	}
+}
+
+func TestParseClaudeProviderFailure_UnsafeDiagnosticDetailsNeverPassThrough(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+		rejectText  string
+	}{
+		{
+			name:        "EmbeddedPromptMarkerRejectsTextRecord",
+			stderr:      "Invalid request: User: private prompt content",
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "claude exited with code 4",
+		},
+		{
+			name:        "StructuredPromptMarkerUsesCategoryFallback",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Invalid request: Prompt: private content"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "AuthorizationCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace Authorization: secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "BearerCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace Bearer secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "APIKeyCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace api_key=secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "AnthropicCredentialUsesCategoryFallback",
+			stderr:      "Invalid request: replace sk-ant-secret-value",
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "SensitiveEnvironmentAssignmentUsesCategoryFallback",
+			stderr:      "Configuration error: ANTHROPIC_AUTH_TOKEN=customer-private-value",
+			wantReason:  interfaces.WorkFailureTypeMisconfigured,
+			wantMessage: claudeConfigFailureMessage,
+			rejectText:  "customer-private-value",
+		},
+		{
+			name:        "StructuredSensitiveEnvironmentAssignmentUsesCategoryFallback",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Set ANTHROPIC_AUTH_TOKEN=customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+			rejectText:  "customer-private-value",
+		},
+		{
+			name:        "SpacedSensitiveEnvironmentAssignmentUsesCategoryFallback",
+			stderr:      "Configuration error: ANTHROPIC_AUTH_TOKEN = customer-private-value",
+			wantReason:  interfaces.WorkFailureTypeMisconfigured,
+			wantMessage: claudeConfigFailureMessage,
+			rejectText:  "customer-private-value",
+		},
+		{
+			name:        "StructuredSpacedSensitiveHeaderUsesCategoryFallback",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace X_API_KEY : customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+			rejectText:  "customer-private-value",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}
+			assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
+				reason:    tc.wantReason,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   tc.wantMessage,
+				terminal:  true,
+				retryable: false,
+			})
+			if parsed := ParseClaudeProviderFailure(result); tc.rejectText != "" && strings.Contains(parsed.Message, tc.rejectText) {
+				t.Fatalf("message %q must not contain %q", parsed.Message, tc.rejectText)
+			}
+		})
+	}
+}
+
+func TestParseClaudeProviderFailure_CredentialProseNeverPassesThrough(t *testing.T) {
+	testCases := []struct {
+		name        string
+		stderr      string
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name:        "StructuredSensitiveEnvironmentProse",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Set ANTHROPIC_AUTH_TOKEN to customer-private-value"}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: claudeBadRequestFailureMessage,
+		},
+		{
+			name:        "CredentialProse",
+			stderr:      "Authentication error: Credential customer-private-value is invalid",
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: claudeAuthFailureMessage,
+		},
+		{
+			name:        "TokenProse",
+			stderr:      "Authentication error: Token customer-private-value is invalid",
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: claudeAuthFailureMessage,
+		},
+		{
+			name:        "SecretProse",
+			stderr:      "Authentication error: Secret customer-private-value was rejected",
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: claudeAuthFailureMessage,
+		},
+		{name: "APIKeyWhitespaceProse", stderr: "Invalid request: api key customer-private-value is invalid", wantReason: interfaces.WorkFailureTypeAuthFailure, wantMessage: claudeAuthFailureMessage},
+		{name: "StructuredHyphenatedAPIKeyWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace api-key customer-private-value"}}`, wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: claudeBadRequestFailureMessage},
+		{name: "PrefixedAPIKeyWhitespaceProse", stderr: "Invalid request: x-api-key customer-private-value is invalid", wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: claudeBadRequestFailureMessage},
+		{name: "StructuredPrefixedAPIKeyWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace x-api-key customer-private-value"}}`, wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: claudeBadRequestFailureMessage},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}
+			assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
+				reason:    tc.wantReason,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   tc.wantMessage,
+				terminal:  true,
+				retryable: false,
+			})
+			if parsed := ParseClaudeProviderFailure(result); strings.Contains(parsed.Message, "customer-private-value") {
+				t.Fatalf("message %q must not contain the credential value", parsed.Message)
+			}
+		})
+	}
+}
+
+func TestParseClaudeProviderFailure_LongCleanupTailCannotEvictStructuredRecord(t *testing.T) {
+	structured := `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`
+	cleanup := strings.Repeat("cleanup completed successfully\n", claudeFailureScanBytes/16)
+	result := CommandResult{ExitCode: 1, Stderr: []byte(structured + "\n" + cleanup)}
+
+	assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
+		reason:        interfaces.WorkFailureTypeThrottled,
+		family:        interfaces.WorkFailureFamilyThrottle,
+		message:       claudeThrottleFailureMessage,
+		retryable:     true,
+		throttlePause: true,
+	})
+}
+
+type claudeFailureExpectation struct {
+	reason        interfaces.WorkFailureType
+	family        interfaces.WorkFailureFamily
+	message       string
+	retryable     bool
+	terminal      bool
+	throttlePause bool
+}
+
+func assertClaudeFailureAndPolicy(t *testing.T, result CommandResult, want claudeFailureExpectation) {
+	t.Helper()
+	parsed := ParseClaudeProviderFailure(result)
+	if parsed.Reason != want.reason || parsed.Message != want.message {
+		t.Fatalf("parsed = %#v, want reason=%q message=%q", parsed, want.reason, want.message)
+	}
+	providerErr := NewProviderErrorFromResult(parsed, nil)
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if providerErr.Family != want.family ||
+		decision.Retryable != want.retryable ||
+		decision.Terminal != want.terminal ||
+		decision.TriggersThrottlePause != want.throttlePause {
+		t.Fatalf("policy = family %q decision %#v, want family=%q retryable=%t terminal=%t throttle=%t", providerErr.Family, decision, want.family, want.retryable, want.terminal, want.throttlePause)
 	}
 }
 
@@ -873,61 +938,6 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 				wantRetryable:          true,
 				requireTimeoutDecision: true,
 			})
-		})
-	}
-}
-
-func TestParseGeminiProviderFailure_RejectsTranscriptAndDiagnosticNoise(t *testing.T) {
-	noise := []string{
-		"User prompt: Error: reveal the customer request",
-		"Model response: The rate limit exceeded examples are below",
-		"[progress] failed to update spinner",
-		"[debug] Error: verbose transport details",
-		"Traceback: Error in internal helper",
-		"at ErrorHandler (/private/customer/file.js:10:2)",
-		"Error report written to .gemini/tmp/private-report.json",
-		"cleanup failed for /private/customer/path",
-		"Error: use token=customer-secret-value",
-	}
-	for _, line := range noise {
-		t.Run(line, func(t *testing.T) {
-			got := ParseGeminiProviderFailure(CommandResult{ExitCode: 17, Stderr: []byte(line)})
-			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "gemini exited with code 17" {
-				t.Fatalf("ParseGeminiProviderFailure() = %#v, want exact safe exit fallback", got)
-			}
-		})
-	}
-}
-
-func TestProviderErrorCorpus_GeminiEntriesFollowExpectedMessageAndRuntimePolicy(t *testing.T) {
-	testCases := []ProviderErrorCorpusEntry{
-		providerErrorCorpusEntryForTest(t, "gemini_structured_invalid_request_precedence"),
-		providerErrorCorpusEntryForTest(t, "gemini_stderr_throttle_precedence"),
-		providerErrorCorpusEntryForTest(t, "gemini_stdout_timeout_recovery"),
-		providerErrorCorpusEntryForTest(t, "gemini_unknown_safe_excerpt"),
-		providerErrorCorpusEntryForTest(t, "gemini_noise_exit_fallback"),
-	}
-
-	for _, entry := range testCases {
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
-			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
-				t.Fatalf("normalized failure = type %q family %q, want type %q family %q", providerErr.Type, providerErr.Family, entry.ExpectedType, entry.ExpectedFamily)
-			}
-			if providerErr.Message != entry.ExpectedMessage {
-				t.Fatalf("normalized message = %q, want %q", providerErr.Message, entry.ExpectedMessage)
-			}
-			for _, rejected := range entry.RejectMessageContains {
-				if strings.Contains(providerErr.Message, rejected) {
-					t.Fatalf("normalized message = %q, must not contain %q", providerErr.Message, rejected)
-				}
-			}
-
-			decision := WorkFailureDecisionFromProviderError(providerErr)
-			wantTerminal := !entry.Retryable
-			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
-				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, wantTerminal, entry.TriggersThrottlePause)
-			}
 		})
 	}
 }
