@@ -334,7 +334,11 @@
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["credential secret", "customer prompt", "cleanup complete"]
+      "reject_message_contains": [
+        "credential secret",
+        "customer prompt",
+        "cleanup complete"
+      ]
     },
     {
       "name": "kiro_structured_invalid_request_stdout",
@@ -350,7 +354,10 @@
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["private request content", "preparing request"]
+      "reject_message_contains": [
+        "private request content",
+        "preparing request"
+      ]
     },
     {
       "name": "kiro_text_authentication_stdout",
@@ -366,7 +373,10 @@
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["loading provider", "cleanup complete"]
+      "reject_message_contains": [
+        "loading provider",
+        "cleanup complete"
+      ]
     },
     {
       "name": "kiro_structured_throttle_precedes_text",
@@ -382,7 +392,10 @@
       "retryable": true,
       "triggers_throttle_pause": true,
       "supported": true,
-      "reject_message_contains": ["authentication required", "capacity exhausted"]
+      "reject_message_contains": [
+        "authentication required",
+        "capacity exhausted"
+      ]
     },
     {
       "name": "kiro_text_capacity_error",
@@ -398,7 +411,11 @@
       "retryable": true,
       "triggers_throttle_pause": true,
       "supported": true,
-      "reject_message_contains": ["draft response", "connecting", "cleanup complete"]
+      "reject_message_contains": [
+        "draft response",
+        "connecting",
+        "cleanup complete"
+      ]
     },
     {
       "name": "kiro_text_timeout_malformed_structured",
@@ -414,7 +431,10 @@
       "retryable": true,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["malformed", "while waiting"]
+      "reject_message_contains": [
+        "malformed",
+        "while waiting"
+      ]
     },
     {
       "name": "kiro_structured_service_unavailable",
@@ -430,7 +450,9 @@
       "retryable": true,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["internal host details"]
+      "reject_message_contains": [
+        "internal host details"
+      ]
     },
     {
       "name": "kiro_unknown_stderr_excerpt_precedes_stdout",
@@ -446,7 +468,11 @@
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["stdout fallback", "progress", "cleanup"]
+      "reject_message_contains": [
+        "stdout fallback",
+        "progress",
+        "cleanup"
+      ]
     },
     {
       "name": "kiro_unknown_stdout_excerpt_after_unsafe_stderr",
@@ -462,7 +488,11 @@
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["prompt content", "\u0000", "\t"]
+      "reject_message_contains": [
+        "prompt content",
+        "\u0000",
+        "\t"
+      ]
     },
     {
       "name": "kiro_unknown_noise_only_exit_fallback",
@@ -478,7 +508,87 @@
       "retryable": false,
       "triggers_throttle_pause": false,
       "supported": true,
-      "reject_message_contains": ["customer transcript", "writing response", "cleanup", "prompt"]
+      "reject_message_contains": [
+        "customer transcript",
+        "writing response",
+        "cleanup",
+        "prompt"
+      ]
+    },
+    {
+      "name": "opencode_provider_auth_error",
+      "provider": "opencode",
+      "raw_provider_family": "opencode",
+      "category": "auth_failure",
+      "upstream_source_case": "OpenCode ProviderAuthError event",
+      "exit_code": 1,
+      "stdout": "{\"type\":\"error\",\"error\":{\"name\":\"ProviderAuthError\",\"data\":{\"message\":\"Authentication required for openai. Run opencode auth login.\"}}}",
+      "stderr": "",
+      "expected_type": "auth_failure",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true
+    },
+    {
+      "name": "opencode_invalid_request_api_error",
+      "provider": "opencode",
+      "raw_provider_family": "opencode",
+      "category": "permanent_bad_request",
+      "upstream_source_case": "OpenCode APIError statusCode 400 event",
+      "exit_code": 1,
+      "stdout": "{\"type\":\"error\",\"error\":{\"name\":\"APIError\",\"data\":{\"statusCode\":400,\"message\":\"The selected model does not support this request.\"}}}",
+      "stderr": "",
+      "expected_type": "permanent_bad_request",
+      "expected_family": "terminal",
+      "retryable": false,
+      "triggers_throttle_pause": false,
+      "supported": true
+    },
+    {
+      "name": "opencode_rate_limit_text",
+      "provider": "opencode",
+      "raw_provider_family": "opencode",
+      "category": "throttled",
+      "upstream_source_case": "OpenCode rate-limit text diagnostic",
+      "exit_code": 1,
+      "stdout": "",
+      "stderr": "Error: rate limit exceeded; try again later",
+      "expected_type": "throttled",
+      "expected_family": "throttle",
+      "retryable": true,
+      "triggers_throttle_pause": true,
+      "supported": true
+    },
+    {
+      "name": "opencode_timeout_error",
+      "provider": "opencode",
+      "raw_provider_family": "opencode",
+      "category": "timeout",
+      "upstream_source_case": "OpenCode TimeoutError event",
+      "exit_code": 1,
+      "stdout": "{\"type\":\"error\",\"error\":{\"name\":\"TimeoutError\",\"data\":{\"message\":\"provider request timed out\"}}}",
+      "stderr": "",
+      "expected_type": "timeout",
+      "expected_family": "retryable",
+      "retryable": true,
+      "triggers_throttle_pause": false,
+      "supported": true
+    },
+    {
+      "name": "opencode_server_api_error",
+      "provider": "opencode",
+      "raw_provider_family": "opencode",
+      "category": "internal_server_error",
+      "upstream_source_case": "OpenCode APIError statusCode 503 event",
+      "exit_code": 1,
+      "stdout": "{\"type\":\"error\",\"error\":{\"name\":\"APIError\",\"data\":{\"statusCode\":503,\"message\":\"upstream unavailable\"}}}",
+      "stderr": "",
+      "expected_type": "internal_server_error",
+      "expected_family": "retryable",
+      "retryable": true,
+      "triggers_throttle_pause": false,
+      "supported": true
     }
   ]
 }

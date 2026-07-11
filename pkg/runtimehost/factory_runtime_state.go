@@ -615,16 +615,13 @@ func (fs *Host) clearRunState() {
 
 // SubmitWorkRequest submits a canonical work request batch to the factory.
 func (fs *Host) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	fs.activationMu.RLock()
-	defer fs.activationMu.RUnlock()
-
-	return factoryservice.SubmitWorkRequest(ctx, fs.currentRuntimeBundle(), request)
+	return fs.requireCoordinator().SubmitWorkRequest(ctx, request)
 }
 
 // SubscribeFactoryEvents returns canonical factory event history followed by
 // live events from the current service-owned runtime.
 func (fs *Host) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return factoryservice.SubscribeFactoryEvents(ctx, fs.currentRuntimeBundle(), reconnect, scope)
+	return fs.requireCoordinator().SubscribeFactoryEvents(ctx, reconnect, scope)
 }
 
 // WaitToComplete returns a channel that is closed when all tokens reach
@@ -637,7 +634,7 @@ func (fs *Host) WaitToComplete() <-chan struct{} {
 // GetEngineStateSnapshot returns the factory boundary's aggregate
 // observability snapshot.
 func (fs *Host) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	return factoryservice.GetEngineStateSnapshot(ctx, fs.currentRuntimeBundle())
+	return fs.requireCoordinator().GetEngineStateSnapshot(ctx)
 }
 
 // Pause pauses the current runtime instance.

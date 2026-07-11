@@ -87,8 +87,8 @@ export const DurableReplayDisclosureAwaitingApproval = {
           {
             method: "GET",
             path: `/factory-sessions/${awaitingReplaySessionID}`,
-            response: () => ({
-              body: approved
+            response: () => {
+              const body = approved
                 ? {
                     ...buildAwaitingDurableSession(),
                     lifecycle: {
@@ -107,8 +107,10 @@ export const DurableReplayDisclosureAwaitingApproval = {
                     },
                     status: "RUNNING",
                   }
-                : buildAwaitingDurableSession(),
-            }),
+                : buildAwaitingDurableSession();
+              approved = false;
+              return { body };
+            },
           },
           {
             method: "POST",
@@ -170,7 +172,9 @@ export const DurableReplayDisclosureAwaitingApproval = {
         "Approval request was accepted. Current durable status: Running.",
       ),
     ).resolves.toBeTruthy();
-    await expect(canvas.findByRole("button", { name: "Pause" })).resolves.toBeTruthy();
+    await expect(
+      canvas.findByRole("button", { name: "Pause" }),
+    ).resolves.toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID),
 };
@@ -187,16 +191,21 @@ export const DurableReplayDisclosureAwaitingApprovalMobile = {
     const canvas = within(canvasElement);
     const user = userEvent.setup();
     await expect(canvas.findByText("Lifecycle controls")).resolves.toBeTruthy();
-    await expect(canvas.findByRole("button", { name: "Approve" })).resolves.toBeTruthy();
+    await expect(
+      canvas.findByRole("button", { name: "Approve" }),
+    ).resolves.toBeTruthy();
     await expect(canvas.findByText("Runtime")).resolves.toBeTruthy();
     await user.click(await canvas.findByRole("button", { name: "Approve" }));
     await expect(canvas.findByText("Accepted")).resolves.toBeTruthy();
-    await expect(canvas.findByRole("button", { name: "Pause" })).resolves.toBeTruthy();
+    await expect(
+      canvas.findByRole("button", { name: "Pause" }),
+    ).resolves.toBeTruthy();
     await expect(
       canvas.findByRole("button", { name: "Expand Factory Event replay" }),
     ).resolves.toBeTruthy();
   },
-  render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID, "375px"),
+  render: () =>
+    renderFactorySessionDetailPanel(awaitingReplaySessionID, "375px"),
 };
 
 export const DurableReplayDisclosureWarning = {
@@ -233,7 +242,9 @@ export const DurableReplayDisclosureWarning = {
     });
     await userEvent.click(trigger);
     await canvas.findByText("Checkpoint recorded");
-    expect(canvas.getByText("Provider session timed out · Retry planned")).toBeTruthy();
+    expect(
+      canvas.getByText("Provider session timed out · Retry planned"),
+    ).toBeTruthy();
     expect(canvas.getByText("Release verification failed.")).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(warningReplaySessionID),
@@ -246,7 +257,9 @@ export const DurableReplayDisclosureUnavailable = {
         {
           method: "GET",
           path: `/factory-sessions/${unavailableReplaySessionID}`,
-          response: { body: buildWarningDurableSession(unavailableReplaySessionID) },
+          response: {
+            body: buildWarningDurableSession(unavailableReplaySessionID),
+          },
         },
         {
           method: "GET",
@@ -289,7 +302,9 @@ export const SessionUnavailable = {
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    expect(await canvas.findByText("This factory session is no longer available.")).toBeTruthy();
+    expect(
+      await canvas.findByText("This factory session is no longer available."),
+    ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel("session-missing"),
 };
@@ -316,7 +331,9 @@ export const SessionError = {
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    expect(await canvas.findByText("Factory session fetch failed.")).toBeTruthy();
+    expect(
+      await canvas.findByText("Factory session fetch failed."),
+    ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel("session-error"),
 };

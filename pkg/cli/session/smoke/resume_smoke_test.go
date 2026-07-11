@@ -16,10 +16,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
 
@@ -342,12 +346,7 @@ func newCLIResumeSmokeHarness(t *testing.T) *cliResumeSmokeHarness {
 	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "resumable-two-step-fake-children.workflow.js", workflowName)
 	provider := newCLIResumeSmokeBlockingProvider(workflowName)
 
-	runtimeService := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: fse.ChildExecutorModeLive,
-		Provider:          provider,
-		PersistSessions:   true,
-	})
+	runtimeService := newCLIResumeRuntimeService(t, projectRoot, fse.ChildExecutorModeLive, provider)
 
 	server := httptest.NewServer(api.NewServer(&testutil.MockFactory{
 		DurableExecutionService: runtimeService,
@@ -366,10 +365,7 @@ func newCLIResumeSmokeSucceededHarness(t *testing.T) *cliResumeSmokeHarness {
 
 	const workflowName = "simple-final"
 	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", workflowName)
-	runtimeService := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
-	})
+	runtimeService := newCLIResumeRuntimeService(t, projectRoot, fse.ChildExecutorModeFake, nil)
 
 	server := httptest.NewServer(api.NewServer(&testutil.MockFactory{
 		DurableExecutionService: runtimeService,
@@ -387,10 +383,7 @@ func newCLIResumeSmokeRunningHarness(t *testing.T) *cliResumeSmokeHarness {
 
 	const workflowName = "busy-loop"
 	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "busy-loop.workflow.js", workflowName)
-	runtimeService := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
-	})
+	runtimeService := newCLIResumeRuntimeService(t, projectRoot, fse.ChildExecutorModeFake, nil)
 
 	server := httptest.NewServer(api.NewServer(&testutil.MockFactory{
 		DurableExecutionService: runtimeService,
@@ -401,6 +394,28 @@ func newCLIResumeSmokeRunningHarness(t *testing.T) *cliResumeSmokeHarness {
 		serverURL: server.URL,
 		service:   runtimeService,
 	}
+}
+
+func newCLIResumeRuntimeService(
+	t *testing.T,
+	projectRoot string,
+	childExecutorMode string,
+	provider workers.Provider,
+) fse.Service {
+	t.Helper()
+
+	service, err := testharness.New(testharness.Config{
+		Mode:              testharness.ModeJavaScript,
+		ProjectRoot:       projectRoot,
+		Clock:             factory.RealClock{},
+		Provider:          provider,
+		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
+		ChildExecutorMode: childExecutorMode,
+	})
+	if err != nil {
+		t.Fatalf("compose CLI resume runtime service: %v", err)
+	}
+	return service
 }
 
 func (h *cliResumeSmokeHarness) startSucceededSession(t *testing.T) string {

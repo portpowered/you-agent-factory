@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -51,6 +53,9 @@ func ComposeCore(
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
 ) (*runtimehost.Core, error) {
+	if collaborators.WorkersScheduler == nil {
+		return nil, fmt.Errorf("compose runtime host core: worker sidecar owner is required")
+	}
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -74,6 +79,10 @@ func ComposeCore(
 			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
 		cfg.Dir = resolvedDir
+	}
+	durableExecution, err := composeDurableExecution(cfg, root, clock)
+	if err != nil {
+		return nil, err
 	}
 
 	replaySideEffects, replayFactoryOpts, err := ReplayFactoryModeOptions(load.ReplayArtifact)
@@ -130,7 +139,41 @@ func ComposeCore(
 		runtimeBundle,
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
+		durableExecution,
 	), nil
+}
+
+func durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
+	for _, candidate := range []string{executionBaseDir, configuredDir, factoryRootDir} {
+		if root := strings.TrimSpace(candidate); root != "" {
+			return root
+		}
+	}
+	return ""
+}
+
+func composeDurableExecution(
+	cfg *runtimehost.Config,
+	root Root,
+	clock factory.Clock,
+) (factorysessionexecution.Service, error) {
+	projectRoot := durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir)
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
+		cfg.DurableSessionPersistencePolicy,
+		projectRoot,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("compose durable session persistence: %w", err)
+	}
+	return factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{
+			ProjectRoot: projectRoot,
+			Provider:    cfg.ProviderOverride,
+			Persistence: persistence,
+			Clock:       clock,
+		},
+	)
 }
 
 // BuildCore constructs the normalized runtime graph without attaching a transport host.

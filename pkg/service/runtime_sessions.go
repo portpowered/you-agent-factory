@@ -1422,74 +1422,35 @@ func (fs *FactoryService) StartDurableFactorySessionAsync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionExecutionResponse, error) {
-	startReq, err := factorysession.StartRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionExecutionResponse{}, err
-	}
-	result, err := fs.durableExecutionService().StartAsync(ctx, startReq)
-	if err != nil {
-		return factoryapi.FactorySessionExecutionResponse{}, err
-	}
-	return factorysession.AsyncStartResponseToAPI(result), nil
+	return fs.durableSessionAPI().StartDurableFactorySessionAsync(ctx, request)
 }
 
 func (fs *FactoryService) StartDurableFactorySessionSync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionSyncExecutionResponse, error) {
-	startReq, err := factorysession.StartRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	return fs.durableSessionAPI().StartDurableFactorySessionSync(ctx, request)
+}
+
+func (fs *FactoryService) durableSessionAPI() apisurface.DurableSessionAPI {
+	if fs != nil && fs.durableExecutionAPI != nil {
+		return fs.durableExecutionAPI
 	}
-	result, err := fs.durableExecutionService().StartSync(ctx, startReq)
-	if err != nil {
-		return factoryapi.FactorySessionSyncExecutionResponse{}, err
-	}
-	return factorysession.SyncStartResponseToAPI(result), nil
+	return factorysession.NewDurableAPI(fs.durableExecutionService(), fs.requireSessionGateway())
 }
 
 func (fs *FactoryService) durableExecutionService() factorysessionexecution.Service {
 	if fs == nil {
-		return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{})
-	}
-	fs.durableExecutionMu.Lock()
-	defer fs.durableExecutionMu.Unlock()
-	if fs.durableExecution == nil {
-		fs.durableExecution = factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-			ProjectRoot: fs.durableProjectRoot(),
-		})
+		return nil
 	}
 	return fs.durableExecution
-}
-
-func (fs *FactoryService) durableProjectRoot() string {
-	if fs == nil {
-		return ""
-	}
-	if fs.cfg != nil {
-		if root := strings.TrimSpace(fs.cfg.ExecutionBaseDir); root != "" {
-			return root
-		}
-		if root := strings.TrimSpace(fs.cfg.Dir); root != "" {
-			return root
-		}
-	}
-	return strings.TrimSpace(fs.factoryRootDir)
 }
 
 func (fs *FactoryService) ListDurableFactorySessions(
 	ctx context.Context,
 	params factoryapi.ListFactorySessionsParams,
 ) (factoryapi.ListFactorySessionsResponse, error) {
-	req, err := factorysession.ListSessionsRequestFromAPI(params)
-	if err != nil {
-		return factoryapi.ListFactorySessionsResponse{}, err
-	}
-	result, err := fs.ListDurableExecutionSessions(ctx, req)
-	if err != nil {
-		return factoryapi.ListFactorySessionsResponse{}, err
-	}
-	return factorysession.ListSessionsResponseToAPI(result), nil
+	return fs.durableSessionAPI().ListDurableFactorySessions(ctx, params)
 }
 
 // ListDurableExecutionSessions returns the shared durable session listing projection
@@ -1498,18 +1459,18 @@ func (fs *FactoryService) ListDurableExecutionSessions(
 	ctx context.Context,
 	req factorysessionexecution.ListSessionsRequest,
 ) (factorysessionexecution.ListSessionsResult, error) {
-	return fs.durableExecutionService().ListSessions(ctx, req)
+	execution := fs.durableExecutionService()
+	if execution == nil {
+		return factorysessionexecution.ListSessionsResult{}, factorysessionexecution.ErrServiceNotConfigured
+	}
+	return execution.ListSessions(ctx, req)
 }
 
 func (fs *FactoryService) GetDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
 ) (factoryapi.FactorySessionDurableReadModel, error) {
-	result, err := fs.durableExecutionService().GetSession(ctx, sessionID)
-	if err != nil {
-		return factoryapi.FactorySessionDurableReadModel{}, err
-	}
-	return factorysession.SessionReadResponseToAPI(result), nil
+	return fs.durableSessionAPI().GetDurableFactorySession(ctx, sessionID)
 }
 
 func (fs *FactoryService) GetDurableFactorySessionResult(
@@ -1517,15 +1478,7 @@ func (fs *FactoryService) GetDurableFactorySessionResult(
 	sessionID string,
 	params factoryapi.GetFactorySessionResultsParams,
 ) (factoryapi.FactorySessionResult, error) {
-	req, err := factorysession.ResultRequestFromAPI(params)
-	if err != nil {
-		return factoryapi.FactorySessionResult{}, err
-	}
-	result, err := fs.durableExecutionService().GetResult(ctx, sessionID, req)
-	if err != nil {
-		return factoryapi.FactorySessionResult{}, err
-	}
-	return factorysession.ResultResponseToAPI(result), nil
+	return fs.durableSessionAPI().GetDurableFactorySessionResult(ctx, sessionID, params)
 }
 
 func (fs *FactoryService) ReadDurableFactorySessionEvents(
@@ -1533,65 +1486,35 @@ func (fs *FactoryService) ReadDurableFactorySessionEvents(
 	sessionID string,
 	params factoryapi.GetEventsBySessionIdParams,
 ) (*interfaces.FactoryEventStream, error) {
-	reconnect, err := factorysession.EventReconnectRequestFromAPI(params)
-	if err != nil {
-		return nil, err
-	}
-	result, err := fs.durableExecutionService().ReadEvents(ctx, sessionID, reconnect)
-	if err != nil {
-		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
-			return nil, apisurface.ErrFactorySessionNotFound
-		}
-		if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
-			return nil, fmt.Errorf("%w: %v", apisurface.ErrInvalidEventReconnectCursor, err)
-		}
-		return nil, err
-	}
-	return factorysession.FactoryEventStreamFromReadResult(result), nil
+	return fs.durableSessionAPI().ReadDurableFactorySessionEvents(ctx, sessionID, params)
 }
 
 func (fs *FactoryService) ListDurableFactorySessionDispatches(
 	ctx context.Context,
 	sessionID string,
 ) (factoryapi.ListFactorySessionDispatchesResponse, error) {
-	result, err := fs.durableExecutionService().ListDispatches(ctx, sessionID)
-	if err != nil {
-		return factoryapi.ListFactorySessionDispatchesResponse{}, err
-	}
-	return factorysession.ListDispatchesResponseToAPI(result), nil
+	return fs.durableSessionAPI().ListDurableFactorySessionDispatches(ctx, sessionID)
 }
 
 func (fs *FactoryService) GetDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID, dispatchID string,
 ) (factoryapi.FactoryDispatch, error) {
-	result, err := fs.durableExecutionService().GetDispatch(ctx, sessionID, dispatchID)
-	if err != nil {
-		return factoryapi.FactoryDispatch{}, err
-	}
-	return factorysession.DispatchDetailResponseToAPI(result), nil
+	return fs.durableSessionAPI().GetDurableFactorySessionDispatch(ctx, sessionID, dispatchID)
 }
 
 func (fs *FactoryService) ListDurableFactorySessionArtifacts(
 	ctx context.Context,
 	sessionID string,
 ) (factoryapi.ListFactorySessionArtifactsResponse, error) {
-	result, err := fs.durableExecutionService().ListArtifacts(ctx, sessionID)
-	if err != nil {
-		return factoryapi.ListFactorySessionArtifactsResponse{}, err
-	}
-	return factorysession.ListArtifactsResponseToAPI(result), nil
+	return fs.durableSessionAPI().ListDurableFactorySessionArtifacts(ctx, sessionID)
 }
 
 func (fs *FactoryService) GetDurableFactorySessionArtifact(
 	ctx context.Context,
 	sessionID, artifactID string,
 ) (factoryapi.FactorySessionArtifactDetail, error) {
-	result, err := fs.durableExecutionService().GetArtifact(ctx, sessionID, artifactID)
-	if err != nil {
-		return factoryapi.FactorySessionArtifactDetail{}, err
-	}
-	return factorysession.ArtifactDetailResponseToAPI(result), nil
+	return fs.durableSessionAPI().GetDurableFactorySessionArtifact(ctx, sessionID, artifactID)
 }
 
 func (fs *FactoryService) PauseDurableFactorySession(
@@ -1599,7 +1522,7 @@ func (fs *FactoryService) PauseDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().PauseDurableFactorySession(ctx, sessionID, request)
+	return fs.durableSessionAPI().PauseDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) ResumeDurableFactorySession(
@@ -1607,7 +1530,7 @@ func (fs *FactoryService) ResumeDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().ResumeDurableFactorySession(ctx, sessionID, request)
+	return fs.durableSessionAPI().ResumeDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) CancelDurableFactorySession(
@@ -1615,7 +1538,7 @@ func (fs *FactoryService) CancelDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().CancelDurableFactorySession(ctx, sessionID, request)
+	return fs.durableSessionAPI().CancelDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) TerminateDurableFactorySession(
@@ -1623,7 +1546,7 @@ func (fs *FactoryService) TerminateDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().TerminateDurableFactorySession(ctx, sessionID, request)
+	return fs.durableSessionAPI().TerminateDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) ApproveDurableFactorySession(
@@ -1631,7 +1554,7 @@ func (fs *FactoryService) ApproveDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionApproveRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().ApproveDurableFactorySession(ctx, sessionID, request)
+	return fs.durableSessionAPI().ApproveDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) RetryDurableFactorySessionDispatch(
@@ -1639,7 +1562,7 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	sessionID string,
 	request factoryapi.FactorySessionRetryDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().RetryDurableFactorySessionDispatch(ctx, sessionID, request)
+	return fs.durableSessionAPI().RetryDurableFactorySessionDispatch(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
@@ -1647,7 +1570,7 @@ func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
 	sessionID string,
 	request factoryapi.FactorySessionInterruptDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().InterruptDurableFactorySessionDispatch(ctx, sessionID, request)
+	return fs.durableSessionAPI().InterruptDurableFactorySessionDispatch(ctx, sessionID, request)
 }
 func (fs *FactoryService) PauseLiveFactorySession(
 	ctx context.Context,

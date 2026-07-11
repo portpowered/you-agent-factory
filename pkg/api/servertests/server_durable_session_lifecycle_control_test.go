@@ -728,9 +728,7 @@ func TestRetryFactorySessionDispatch_RuntimeBackedFailedSessionReturnsTypedLifec
 
 func TestRetryFactorySessionDispatch_RuntimeBackedTerminalSessionReturnsTypedConflict(t *testing.T) {
 	projectRoot := setupAPILifecycleWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-lifecycle-retry-terminal-001",
 		Source: factorysessionexecution.Source{
@@ -769,9 +767,7 @@ func TestRetryFactorySessionDispatch_RuntimeBackedTerminalSessionReturnsTypedCon
 
 func TestRealBackendFactorySessionRoutes_LifecycleControlsAreImplemented(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "busy-loop.workflow.js", "busy-loop")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -807,9 +803,7 @@ func TestRealBackendFactorySessionRoutes_LifecycleControlsAreImplemented(t *test
 
 func TestFakeChildDurableSessionReads_APIPreservesShippedTransportSemantics(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-fake-child-transport-regression-001",
 		Source: factorysessionexecution.Source{
@@ -851,9 +845,7 @@ func TestFakeChildDurableSessionReads_APIPreservesShippedTransportSemantics(t *t
 
 func TestSimpleFinalDurableSessionReads_APIPreservesFinalResultWithoutChildDispatches(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-simple-final-transport-regression-001",
 		Source: factorysessionexecution.Source{

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
@@ -21,10 +22,44 @@ type FactoryDefinitionService interface {
 	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
 }
 
+type factoryDefinitionAPI struct {
+	definitions FactoryDefinitionService
+	saver       FactorySaveSaver
+}
+
+var _ apisurface.FactorySaveAPI = factoryDefinitionAPI{}
+
+// FactoryDefinitionAPI returns the bounded canonical definition collaborator
+// used by the composed HTTP surface and the Host compatibility facade.
+func (h *Host) FactoryDefinitionAPI() apisurface.FactorySaveAPI {
+	if h == nil {
+		return factoryDefinitionAPI{}
+	}
+	return factoryDefinitionAPI{definitions: h.requireDefinitions(), saver: h.factorySave}
+}
+
+func (api factoryDefinitionAPI) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+	if api.definitions == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+	}
+	return api.definitions.GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (api factoryDefinitionAPI) SaveFactoryForSession(ctx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+	if api.saver == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+	}
+	return api.saver.Save(ctx, sessionID, mode, request)
+}
+
+func (api factoryDefinitionAPI) SaveCurrentFactoryForSession(ctx context.Context, sessionID string, request factoryapi.Factory) (factoryapi.Factory, error) {
+	return api.SaveFactoryForSession(ctx, sessionID, factoryapi.FactorySaveModeReplaceCurrent, request)
+}
+
 // GetCurrentFactory returns the canonical current factory definition together
 // with durable optimistic-concurrency metadata.
 func (h *Host) GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error) {
-	return h.requireDefinitions().GetCurrentNamedFactory(ctx)
+	return h.requireCoordinator().GetCurrentFactory(ctx)
 }
 
 func (h *Host) buildSessionEditableFactoryReplacement(
@@ -268,10 +303,7 @@ func (h *Host) SaveFactoryForSession(
 	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	if h == nil || h.factorySave == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
-	}
-	return h.factorySave.Save(ctx, sessionID, mode, request)
+	return h.FactoryDefinitionAPI().SaveFactoryForSession(ctx, sessionID, mode, request)
 }
 
 // SaveCurrentFactoryForSession replaces the current factory definition for one
@@ -281,7 +313,7 @@ func (h *Host) SaveCurrentFactoryForSession(
 	sessionID string,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	return h.SaveFactoryForSession(ctx, sessionID, factoryapi.FactorySaveModeReplaceCurrent, request)
+	return h.FactoryDefinitionAPI().SaveCurrentFactoryForSession(ctx, sessionID, request)
 }
 
 func sessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
@@ -469,4 +501,3 @@ func AttachFactorySaveCollaborator(shell HostShell, factorySave FactorySaveSaver
 	}
 	return shell.Host
 }
-

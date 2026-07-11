@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -29,7 +30,150 @@ const (
 const (
 	RedactedCommandEnvValue     = "<redacted>"
 	MetadataOnlyCommandEnvValue = "<metadata-only>"
+	ProviderDefaultModel        = "provider-default"
+	ProviderInvocationPrepared  = "provider.invocation_prepared"
+	ProviderFailureNormalized   = "provider.failure_normalized"
+	RedactedProviderArgValue    = "<redacted>"
+	RedactedProviderPrompt      = "<redacted:prompt>"
 )
+
+var providerFlagsWithSafeValues = map[string]struct{}{
+	"--approval-mode": {}, "--model": {}, "--output-format": {}, "--sandbox": {},
+}
+
+var providerFlagsWithSensitiveValues = map[string]struct{}{
+	"--agent": {}, "--cd": {}, "--dir": {}, "--image": {}, "--prompt": {},
+	"--resume": {}, "--resume-id": {}, "--session": {}, "--system-prompt": {},
+	"--workspace": {}, "--worktree": {},
+}
+
+func providerModelForLog(model string) string {
+	if normalized := strings.TrimSpace(model); normalized != "" {
+		return normalized
+	}
+	return ProviderDefaultModel
+}
+
+func sanitizeProviderArgs(provider string, args []string) []string {
+	sanitized := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if providerInlineArgIsSensitive(arg) {
+			sanitized = append(sanitized, strings.SplitN(arg, "=", 2)[0]+"="+RedactedProviderArgValue)
+			continue
+		}
+		sanitized = append(sanitized, arg)
+		if _, ok := providerFlagsWithSafeValues[arg]; ok && index+1 < len(args) {
+			index++
+			sanitized = append(sanitized, args[index])
+			continue
+		}
+		if _, ok := providerFlagsWithSensitiveValues[arg]; ok && index+1 < len(args) {
+			index++
+			sanitized = append(sanitized, RedactedProviderArgValue)
+			continue
+		}
+		if providerArgIsSensitivePositional(provider, args, index) {
+			sanitized[len(sanitized)-1] = RedactedProviderPrompt
+		}
+	}
+	return sanitized
+}
+
+func providerInlineArgIsSensitive(arg string) bool {
+	name, _, ok := strings.Cut(arg, "=")
+	if !ok {
+		return false
+	}
+	normalized := strings.ToLower(name)
+	return strings.Contains(normalized, "key") || strings.Contains(normalized, "token") ||
+		strings.Contains(normalized, "secret") || strings.Contains(normalized, "password") ||
+		strings.Contains(normalized, "prompt") || strings.Contains(normalized, "credential")
+}
+
+func providerArgIsSensitivePositional(provider string, args []string, index int) bool {
+	if strings.HasPrefix(args[index], "-") {
+		return false
+	}
+	if index == 0 && (args[index] == "exec" || args[index] == "chat" || args[index] == "run") {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case string(interfaces.ModelProviderCodex):
+		return args[index] != "-"
+	default:
+		return true
+	}
+}
+
+func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInferenceRequest, execReq CommandRequest) []any {
+	fields := workLogFields(req.Dispatch.Execution,
+		"event_name", ProviderInvocationPrepared,
+		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
+		"model", providerModelForLog(req.Model),
+		"command", execReq.Command,
+		"args", sanitizeProviderArgs(req.ModelProvider, execReq.Args),
+		"working_dir", execReq.WorkDir,
+		"stdin_bytes", len(execReq.Stdin),
+		"stdin_sha256", sha256Hex(execReq.Stdin),
+		"dispatch_id", req.Dispatch.DispatchID)
+	if deadline, ok := ctx.Deadline(); ok {
+		fields = append(fields, "deadline", deadline.UTC().Format(time.RFC3339Nano))
+	}
+	return fields
+}
+
+func providerFailureLogFields(
+	req interfaces.ProviderInferenceRequest,
+	providerErr *ProviderError,
+	result CommandResult,
+	duration time.Duration,
+) []any {
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	fields := workLogFields(req.Dispatch.Execution,
+		"event_name", ProviderFailureNormalized,
+		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
+		"model", providerModelForLog(req.Model),
+		"failure_reason", providerErr.Type,
+		"failure_message", safeProviderFailureLogMessage(req.ModelProvider, providerErr),
+		"retryable", decision.Retryable,
+		"duration_ms", duration.Milliseconds(),
+		"dispatch_id", req.Dispatch.DispatchID)
+	if result.ExitCode != 0 {
+		fields = append(fields, "exit_code", result.ExitCode)
+	}
+	return fields
+}
+
+func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) string {
+	// Codex exit failures are parsed into bounded, audited messages. Execution
+	// errors retain raw command diagnostics in the returned error, so they must
+	// use the same fixed reason-based messages as the other providers.
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && providerErr.Cause == nil {
+		return providerErr.Message
+	}
+	switch providerErr.Type {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return "Provider authentication failed."
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return "Provider rejected the request as invalid."
+	case interfaces.WorkFailureTypeThrottled:
+		return "Provider is temporarily unavailable due to usage or capacity limits."
+	case interfaces.WorkFailureTypeInternalServerError:
+		return "Provider encountered a temporary server error."
+	case interfaces.WorkFailureTypeTimeout:
+		return "Provider request timed out."
+	case interfaces.WorkFailureTypeMisconfigured:
+		return "Provider command could not be started."
+	default:
+		return "Provider execution failed."
+	}
+}
+
+func sha256Hex(input []byte) string {
+	digest := sha256.Sum256(input)
+	return hex.EncodeToString(digest[:])
+}
 
 type CommandEnvClassification string
 

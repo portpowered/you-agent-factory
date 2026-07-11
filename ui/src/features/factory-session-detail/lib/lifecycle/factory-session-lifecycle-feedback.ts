@@ -33,6 +33,8 @@ export function getFactorySessionLifecycleActionLabel(
       return messages.lifecycleActionApproveLabel;
     case "cancel":
       return messages.lifecycleActionCancelLabel;
+    case "interrupt-dispatch":
+      return messages.lifecycleActionInterruptDispatchLabel;
     case "pause":
       return messages.lifecycleActionPauseLabel;
     case "resume":
@@ -74,7 +76,9 @@ export function resolveFactorySessionLifecycleFeedbackDisplay(
           feedback.response.retryDispatchId,
         )
       : undefined,
-  ].filter((part): part is string => typeof part === "string" && part.length > 0);
+  ].filter(
+    (part): part is string => typeof part === "string" && part.length > 0,
+  );
 
   switch (feedback.response.outcome) {
     case "ACCEPTED":

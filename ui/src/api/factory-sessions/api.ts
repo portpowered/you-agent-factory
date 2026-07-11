@@ -6,6 +6,7 @@ import {
   isAPIRecord,
   readAPIResponseBody,
 } from "../transport";
+import { withoutEmbeddedSessionDispatches } from "./dispatch-free-session";
 import {
   type NormalizedFactorySessionGet,
   normalizeFactorySessionGetResponse,
@@ -164,7 +165,7 @@ export async function listFactorySessions(
     );
   }
 
-  return responseBody.sessions;
+  return responseBody.sessions.map(withoutEmbeddedSessionDispatches);
 }
 
 export async function openFactorySession(
@@ -224,7 +225,12 @@ export async function openFactorySession(
     );
   }
 
-  return responseBody;
+  return responseBody.session
+    ? {
+        ...responseBody,
+        session: withoutEmbeddedSessionDispatches(responseBody.session),
+      }
+    : responseBody;
 }
 
 export async function getFactorySession(

@@ -8,8 +8,11 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -544,11 +547,18 @@ func newFixtureMCPClient(t *testing.T) *mcpfactorysession.Client {
 func fixtureFakeService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
 	path := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(path)
+	service, err := testharness.New(testharness.Config{
+		Mode:            testharness.ModeFake,
+		FakeFixturePath: path,
+	})
 	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+		t.Fatalf("compose fixture-backed MCP execution service: %v", err)
 	}
-	return service
+	fakeService, ok := service.(*factorysessionexecution.FakeService)
+	if !ok {
+		t.Fatalf("fixture-backed MCP execution service = %T, want *factorysessionexecution.FakeService", service)
+	}
+	return fakeService
 }
 
 func strPtr(value string) *string {
@@ -845,9 +855,16 @@ func assertRuntimeTerminalSessionReads(t *testing.T, client *runtimeMCPClient, s
 
 func newRuntimeMCPClient(t *testing.T) *runtimeMCPClient {
 	t.Helper()
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: t.TempDir(),
+	service, err := testharness.New(testharness.Config{
+		Mode:              testharness.ModeJavaScript,
+		ProjectRoot:       t.TempDir(),
+		Clock:             factory.RealClock{},
+		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
+		ChildExecutorMode: factorysessionexecution.ChildExecutorModeFake,
 	})
+	if err != nil {
+		t.Fatalf("compose runtime-backed MCP execution service: %v", err)
+	}
 	t.Cleanup(func() {
 		drainRuntimeMCPClientSessions(t, service)
 	})

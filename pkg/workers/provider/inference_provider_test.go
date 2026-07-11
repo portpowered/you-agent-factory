@@ -2,7 +2,10 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -361,6 +364,139 @@ func TestScriptWrapProvider_Infer_PropagatesExecutionMetadataToProviderCommand(t
 	}
 
 	assertExecutionMetadataEqual(t, want, fakeExec.request.Execution)
+}
+
+func TestScriptWrapProvider_Infer_LogsSafePreparedInvocationBeforeExecution(t *testing.T) {
+	const prompt = "synthetic prompt secret"
+	sequence := []string{}
+	logger := &preparedInvocationTestLogger{sequence: &sequence}
+	runner := &preparedInvocationTestRunner{sequence: &sequence}
+	provider := NewScriptWrapProvider(
+		WithProviderLogger(logger),
+		WithProviderCommandRunner(runner),
+	)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Date(2026, 7, 10, 12, 0, 0, 0, time.FixedZone("test", -7*60*60)))
+	defer cancel()
+	req := interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex),
+		UserMessage:   prompt,
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID: "dispatch-1",
+			Execution: interfaces.ExecutionMetadata{
+				RequestID: "request-1", TraceID: "trace-1", WorkIDs: []string{"work-1", "work-2"},
+			},
+		},
+	}
+
+	if _, err := provider.Infer(ctx, req); err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+	if len(sequence) < 2 || sequence[0] != ProviderInvocationPrepared || sequence[1] != "runner" {
+		t.Fatalf("sequence = %#v, want prepared record before runner", sequence)
+	}
+	if logger.preparedCount != 1 {
+		t.Fatalf("prepared records = %d, want 1", logger.preparedCount)
+	}
+	assertPreparedInvocationFields(t, logger.preparedFields, prompt)
+	if strings.Contains(logger.allValues, prompt) {
+		t.Fatalf("logs contain raw prompt: %s", logger.allValues)
+	}
+}
+
+func assertPreparedInvocationFields(t *testing.T, fields map[string]any, prompt string) {
+	t.Helper()
+	if fields["provider"] != "codex" || fields["model"] != ProviderDefaultModel {
+		t.Fatalf("provider/model = %#v/%#v", fields["provider"], fields["model"])
+	}
+	if fields["request_id"] != "request-1" || fields["trace_id"] != "trace-1" || fields["work_id"] != "work-1" || fields["dispatch_id"] != "dispatch-1" {
+		t.Fatalf("correlation fields = %#v", fields)
+	}
+	digest := sha256.Sum256([]byte(prompt))
+	if fields["stdin_bytes"] != len(prompt) || fields["stdin_sha256"] != hex.EncodeToString(digest[:]) {
+		t.Fatalf("stdin metadata = %#v", fields)
+	}
+	if fields["deadline"] != "2026-07-10T19:00:00Z" {
+		t.Fatalf("deadline = %#v, want UTC deadline", fields["deadline"])
+	}
+}
+
+func TestSanitizeProviderArgs_RedactsPromptCredentialsAndFreeFormValues(t *testing.T) {
+	args := []string{"-p", "--system-prompt", "system secret", "--model", "safe-model", "--resume", "session-secret", "user secret"}
+	want := []string{"-p", "--system-prompt", RedactedProviderArgValue, "--model", "safe-model", "--resume", RedactedProviderArgValue, RedactedProviderPrompt}
+	got := sanitizeProviderArgs(string(interfaces.ModelProviderClaude), args)
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("sanitizeProviderArgs() = %#v, want %#v", got, want)
+	}
+	if sha256Hex([]byte("same")) != sha256Hex([]byte("same")) || sha256Hex([]byte("same")) == sha256Hex([]byte("different")) {
+		t.Fatal("stdin digest is not deterministic and input-sensitive")
+	}
+}
+
+type preparedInvocationTestRunner struct {
+	sequence *[]string
+	result   CommandResult
+	err      error
+}
+
+func (r *preparedInvocationTestRunner) Run(_ context.Context, _ CommandRequest) (CommandResult, error) {
+	*r.sequence = append(*r.sequence, "runner")
+	if r.result.ExitCode == 0 && len(r.result.Stdout) == 0 && len(r.result.Stderr) == 0 {
+		r.result = CommandResult{Stdout: []byte("ok")}
+	}
+	return r.result, r.err
+}
+
+type preparedInvocationTestLogger struct {
+	sequence       *[]string
+	preparedCount  int
+	preparedFields map[string]any
+	failureCount   int
+	failureFields  map[string]any
+	allValues      string
+}
+
+func (l *preparedInvocationTestLogger) capture(keysAndValues ...any) {
+	l.allValues += strings.TrimSpace(strings.Join(anyValues(keysAndValues), " "))
+}
+func (l *preparedInvocationTestLogger) Debug(_ string, fields ...any) { l.capture(fields...) }
+func (l *preparedInvocationTestLogger) Warn(_ string, fields ...any)  { l.capture(fields...) }
+func (l *preparedInvocationTestLogger) Error(_ string, fields ...any) {
+	l.capture(fields...)
+	values := logFieldMap(fields)
+	if values["event_name"] == ProviderFailureNormalized {
+		l.failureCount++
+		l.failureFields = values
+		*l.sequence = append(*l.sequence, ProviderFailureNormalized)
+	}
+}
+func (l *preparedInvocationTestLogger) Verbose(_ string, fields ...any) { l.capture(fields...) }
+func (l *preparedInvocationTestLogger) Info(_ string, fields ...any) {
+	l.capture(fields...)
+	values := logFieldMap(fields)
+	if values["event_name"] == ProviderInvocationPrepared {
+		l.preparedCount++
+		l.preparedFields = values
+		*l.sequence = append(*l.sequence, ProviderInvocationPrepared)
+	}
+}
+
+func logFieldMap(fields []any) map[string]any {
+	values := make(map[string]any, len(fields)/2)
+	for i := 0; i+1 < len(fields); i += 2 {
+		key, ok := fields[i].(string)
+		if ok {
+			values[key] = fields[i+1]
+		}
+	}
+	return values
+}
+
+func anyValues(values []any) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		result = append(result, fmt.Sprint(value))
+	}
+	return result
 }
 
 func TestScriptWrapProvider_Infer_ClaudeWithoutSessionLeavesMetadataNil(t *testing.T) {

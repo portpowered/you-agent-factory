@@ -2,8 +2,10 @@ package initializer
 
 import (
 	"context"
+	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 )
 
@@ -16,7 +18,8 @@ type LocalRuntimeRunner interface {
 // SessionRuntimeHost is the transport-facing session/runtime shell composed from
 // a Core without exposing root FactoryService at transport boundaries.
 type SessionRuntimeHost struct {
-	host *runtimehost.Host
+	host      *runtimehost.Host
+	dashboard *initializerdashboard.DashboardSidecar
 }
 
 // NewSessionRuntimeHostFromCore composes the API/CLI session runtime host from a
@@ -41,12 +44,92 @@ func (h *SessionRuntimeHost) SessionAPISurface() apisurface.SessionAPISurface {
 	return h.host
 }
 
+// SessionAPI returns the session lifecycle and session-scoped work collaborator.
+func (h *SessionRuntimeHost) SessionAPI() apisurface.SessionAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host.SessionAPI()
+}
+
+// FactoryDefinitionAPI returns the factory-definition read/write collaborator.
+func (h *SessionRuntimeHost) FactoryDefinitionAPI() apisurface.FactorySaveAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host.FactoryDefinitionAPI()
+}
+
+// InvocationAPI returns the session invocation collaborator.
+func (h *SessionRuntimeHost) InvocationAPI() apisurface.InvocationAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host.InvocationAPI()
+}
+
+// DurableExecutionAPI returns the durable execution collaborator.
+func (h *SessionRuntimeHost) DurableExecutionAPI() apisurface.DurableSessionAPI {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host.DurableExecutionAPI()
+}
+
 // Run starts service-mode sidecars and the default session runtime loop.
 func (h *SessionRuntimeHost) Run(ctx context.Context) error {
 	if h == nil || h.host == nil {
 		return nil
 	}
-	return h.host.Run(ctx)
+	return h.runWithDashboard(ctx, h.host.Run)
+}
+
+func (h *SessionRuntimeHost) runWithDashboard(ctx context.Context, runHost func(context.Context) error) error {
+	if h.dashboard == nil {
+		return runHost(ctx)
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	dashboardErr := make(chan error, 1)
+	hostErr := make(chan error, 1)
+	go func() { dashboardErr <- h.dashboard.Run(runCtx) }()
+	go func() { hostErr <- runHost(runCtx) }()
+	var runtimeErr, sidecarErr error
+	renderFinal := false
+	select {
+	case runtimeErr = <-hostErr:
+		renderFinal = true
+		cancel()
+		sidecarErr = <-dashboardErr
+	case sidecarErr = <-dashboardErr:
+		// A sidecar exit caused by the owning context is normal process
+		// shutdown. Preserve the final snapshot after both collaborators join,
+		// regardless of which cancellation observer exits first.
+		renderFinal = ctx.Err() != nil
+		cancel()
+		runtimeErr = <-hostErr
+	}
+	if renderFinal {
+		h.dashboard.RenderFinal(ctx)
+	}
+	if runtimeErr != nil {
+		return runtimeErr
+	}
+	if sidecarErr != nil && !errors.Is(sidecarErr, context.Canceled) {
+		return sidecarErr
+	}
+	return nil
+}
+
+// RunWithAPISurface starts lifecycle-owned runtime work while providing the
+// independently composed handler surface to API startup.
+func (h *SessionRuntimeHost) RunWithAPISurface(
+	ctx context.Context,
+	surface apisurface.SessionAPISurface,
+) error {
+	if h == nil || h.host == nil {
+		return nil
+	}
+	return h.host.RunWithAPISurface(ctx, surface)
 }
 
 // LocalRuntimeRunner returns the local in-process CLI runtime seam implemented

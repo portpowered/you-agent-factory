@@ -1,10 +1,10 @@
-import { FactoryOrchestratorKind } from "../generated/openapi";
 import {
   buildFailedBridgedChildDispatchSummary,
   buildSuccessfulLiveProviderDispatchSummary,
   failedBridgedChildSessionID,
   successfulLiveProviderSessionID,
 } from "../../testing/factory-session-live-provider-inspection-fixtures";
+import { FactoryOrchestratorKind } from "../generated/openapi";
 import {
   dispatchSummariesToFactoryDispatches,
   durableSupplementalReadPlan,
@@ -211,7 +211,7 @@ describe("shouldFetchDurablePartialResults", () => {
 });
 
 describe("durable supplemental read plan", () => {
-  it("skips supplemental reads for in-flight durable JavaScript summary sessions", () => {
+  it("loads bounded dispatch summaries for an active interruptible dispatch", () => {
     expect(
       durableSupplementalReadPlan({
         durableLifecycleStatus: "RUNNING",
@@ -224,10 +224,24 @@ describe("durable supplemental read plan", () => {
         resultSummary: undefined,
       }),
     ).toEqual({
-      fetchDispatches: false,
+      fetchDispatches: true,
       fetchFinalResults: false,
       fetchPartialResults: false,
     });
+  });
+
+  it("skips dispatch inspection for queued durable sessions", () => {
+    expect(
+      shouldFetchDurableDispatches({
+        durableLifecycleStatus: "QUEUED",
+        progress: {
+          completedDispatches: 0,
+          failedDispatches: 0,
+          inFlightDispatches: 0,
+          totalDispatches: 1,
+        },
+      }),
+    ).toBe(false);
   });
 
   it("fetches dispatch detail for terminal durable sessions with dispatch activity", () => {

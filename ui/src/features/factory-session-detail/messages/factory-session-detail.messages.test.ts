@@ -54,6 +54,9 @@ describe("factory session detail messages", () => {
       "Collapse dispatch detail for dispatch-9",
     );
     expect(messages.lifecycleActionRetryDispatchLabel).toBe("Retry dispatch");
+    expect(messages.lifecycleActionInterruptDispatchLabel).toBe(
+      "Interrupt dispatch",
+    );
     expect(messages.lifecycleOutcomeAcceptedTitle("Pause")).toBe(
       "Pause accepted",
     );
@@ -109,6 +112,7 @@ describe("factory session detail messages", () => {
       "收起 dispatch-9 的调度详情",
     );
     expect(messages.lifecycleActionRetryDispatchLabel).toBe("重试调度");
+    expect(messages.lifecycleActionInterruptDispatchLabel).toBe("中断调度");
     expect(messages.lifecycleOutcomeAcceptedTitle("暂停")).toBe(
       "已接受“暂停”请求",
     );

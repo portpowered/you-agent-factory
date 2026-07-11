@@ -711,7 +711,9 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 	if got, ok := streamGenerationID["type"].(string); !ok || got != "string" {
 		t.Fatalf("FactorySessionStreamIdentity.streamGenerationID.type = %v, want string", streamGenerationID["type"])
 	}
-	assertArrayItemRef(t, runtimeProperties, "dispatches", "#/components/schemas/FactoryDispatch")
+	if _, ok := runtimeProperties["dispatches"]; ok {
+		t.Fatal("FactorySessionRuntime.dispatches is present, want dispatch-free session reads")
+	}
 	assertArrayItemRef(t, runtimeProperties, "artifacts", "#/components/schemas/FactoryArtifact")
 	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
 	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "dispatchKind", "#/components/schemas/FactoryDispatchKind")
@@ -746,14 +748,16 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 }
 
 func TestGeneratedDispatchArtifactContracts_RuntimeTypesAgreeWithOpenAPI(t *testing.T) {
-	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Dispatches", reflect.TypeOf((*[]factoryapi.FactoryDispatch)(nil)))
+	if _, ok := reflect.TypeOf(factoryapi.FactorySessionRuntime{}).FieldByName("Dispatches"); ok {
+		t.Fatal("generated FactorySessionRuntime.Dispatches is present, want dispatch-free session reads")
+	}
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Artifacts", reflect.TypeOf((*[]factoryapi.FactoryArtifact)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryDispatch{}), "Petri", reflect.TypeOf((*factoryapi.FactoryDispatchPetriProjection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryDispatch{}), "Javascript", reflect.TypeOf((*factoryapi.FactoryDispatchJavaScriptProjection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryArtifact{}), "AuditMode", reflect.TypeOf((*factoryapi.FactoryArtifactAuditMode)(nil)))
 }
 
-func TestOpenAPIAuthoring_FactorySessionRuntimeDispatchesRemainsOptionalArray(t *testing.T) {
+func TestOpenAPIAuthoring_FactorySessionRuntimeOmitsDispatches(t *testing.T) {
 	data, err := os.ReadFile("../../../api/components/schemas/api/FactorySessionRuntime.yaml")
 	if err != nil {
 		t.Fatalf("read authored FactorySessionRuntime schema: %v", err)
@@ -764,45 +768,16 @@ func TestOpenAPIAuthoring_FactorySessionRuntimeDispatchesRemainsOptionalArray(t 
 	}
 
 	properties := schemaProperties(t, schema, "FactorySessionRuntime")
-	assertArrayItemRef(t, properties, "dispatches", "../data-models/FactoryDispatch.yaml")
-	required, ok := schema["required"].([]any)
-	if !ok {
-		t.Fatal("FactorySessionRuntime.required is missing")
-	}
-	if containsString(required, "dispatches") {
-		t.Fatal("FactorySessionRuntime.dispatches is required, want optional")
+	if _, ok := properties["dispatches"]; ok {
+		t.Fatal("authored FactorySessionRuntime.dispatches is present, want dispatch-free session reads")
 	}
 }
 
-func TestGeneratedFactorySessionRuntimeDispatches_RemainsOptionalJSONField(t *testing.T) {
+func TestGeneratedFactorySessionRuntime_OmitsDispatchesField(t *testing.T) {
 	runtimeType := reflect.TypeOf(factoryapi.FactorySessionRuntime{})
-	field, ok := runtimeType.FieldByName("Dispatches")
-	if !ok {
-		t.Fatal("generated FactorySessionRuntime.Dispatches is missing")
+	if _, ok := runtimeType.FieldByName("Dispatches"); ok {
+		t.Fatal("generated FactorySessionRuntime.Dispatches is present, want dispatch-free session reads")
 	}
-	if got := field.Tag.Get("json"); got != "dispatches,omitempty" {
-		t.Fatalf("generated FactorySessionRuntime.Dispatches JSON tag = %q, want dispatches,omitempty", got)
-	}
-
-	assertRuntimeDispatchesJSON := func(t *testing.T, runtime factoryapi.FactorySessionRuntime, wantPresent bool) {
-		t.Helper()
-		encoded, err := json.Marshal(runtime)
-		if err != nil {
-			t.Fatalf("marshal generated FactorySessionRuntime: %v", err)
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(encoded, &payload); err != nil {
-			t.Fatalf("unmarshal generated FactorySessionRuntime JSON: %v", err)
-		}
-		_, present := payload["dispatches"]
-		if present != wantPresent {
-			t.Fatalf("generated FactorySessionRuntime JSON dispatches presence = %t, want %t: %s", present, wantPresent, encoded)
-		}
-	}
-
-	assertRuntimeDispatchesJSON(t, factoryapi.FactorySessionRuntime{}, false)
-	dispatches := []factoryapi.FactoryDispatch{}
-	assertRuntimeDispatchesJSON(t, factoryapi.FactorySessionRuntime{Dispatches: &dispatches}, true)
 }
 
 func TestGeneratedDispatchArtifactContracts_SessionReadListDetailTypesAgreeWithOpenAPI(t *testing.T) {
@@ -857,10 +832,9 @@ func TestGeneratedDispatchArtifactContracts_PetriAndJavaScriptRoundTrip(t *testi
 			InFlightCount: 0,
 			TotalTokens:   0,
 		},
-		Usage:      factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
-		Lifecycle:  factoryapi.FactorySessionLifecycle{StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
-		Dispatches: &dispatches,
-		Artifacts:  &artifacts,
+		Usage:     factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
+		Lifecycle: factoryapi.FactorySessionLifecycle{StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
+		Artifacts: &artifacts,
 	}
 	encoded, err := json.Marshal(runtime)
 	if err != nil {
@@ -870,10 +844,18 @@ func TestGeneratedDispatchArtifactContracts_PetriAndJavaScriptRoundTrip(t *testi
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatalf("unmarshal generated runtime: %v", err)
 	}
-	if decoded.Dispatches == nil || len(*decoded.Dispatches) != 2 {
-		t.Fatalf("decoded dispatches = %#v, want two entries", decoded.Dispatches)
-	}
 	if decoded.Artifacts == nil || len(*decoded.Artifacts) != 1 {
 		t.Fatalf("decoded artifacts = %#v, want one entry", decoded.Artifacts)
+	}
+	dispatchPayload, err := json.Marshal(dispatches)
+	if err != nil {
+		t.Fatalf("marshal generated dispatches: %v", err)
+	}
+	var decodedDispatches []factoryapi.FactoryDispatch
+	if err := json.Unmarshal(dispatchPayload, &decodedDispatches); err != nil {
+		t.Fatalf("unmarshal generated dispatches: %v", err)
+	}
+	if len(decodedDispatches) != 2 {
+		t.Fatalf("decoded dispatches = %#v, want two entries", decodedDispatches)
 	}
 }

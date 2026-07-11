@@ -71,8 +71,9 @@ func TestStartHostedLinearPoller_SubmitsIssuesThroughWorkersService(t *testing.T
 	svc.StartHostedLinearPoller(sidecarCtx, &sidecars, runtimeCfg, poller, worker, submitted.submit)
 
 	waitForPollerSubmission(t, submitted, 1, time.Second)
-	if submitted.calls != 1 {
-		t.Fatalf("submit calls = %d, want 1", submitted.calls)
+	calls, _ := submitted.snapshot()
+	if calls != 1 {
+		t.Fatalf("submit calls = %d, want 1", calls)
 	}
 }
 
@@ -206,8 +207,9 @@ func TestStartPollersForRuntime_StartsScriptAndHostedPollers(t *testing.T) {
 	svc.StartPollersForRuntime(sidecarCtx, &sidecars, factoryCfg, loaded, submitted.submit)
 
 	waitForPollerSubmission(t, submitted, 2, 2*time.Second)
-	if submitted.calls < 2 {
-		t.Fatalf("submit calls = %d, want at least 2 (script + hosted)", submitted.calls)
+	calls, _ := submitted.snapshot()
+	if calls < 2 {
+		t.Fatalf("submit calls = %d, want at least 2 (script + hosted)", calls)
 	}
 }
 
@@ -259,12 +261,14 @@ func waitForPollerSubmission(t *testing.T, submitted *recordingSubmitter, want i
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if submitted.calls >= want {
+		calls, _ := submitted.snapshot()
+		if calls >= want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %d poller submission(s); got %d", want, submitted.calls)
+	calls, _ := submitted.snapshot()
+	t.Fatalf("timed out waiting for %d poller submission(s); got %d", want, calls)
 }
 
 func waitForObservedLogMessage(t *testing.T, observed *observer.ObservedLogs, message string, timeout time.Duration) {
