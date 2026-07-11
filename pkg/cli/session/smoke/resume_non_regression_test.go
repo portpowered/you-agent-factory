@@ -215,10 +215,7 @@ func TestCLIResumeSmokeLane_ResumeInspectionStaysOnSharedSessionHTTPSurface(t *t
 	}
 
 	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	runtimeService := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
-	})
+	runtimeService := newCLIResumeRuntimeService(t, projectRoot, fse.ChildExecutorModeFake, nil)
 	started, err := runtimeService.StartAsync(context.Background(), fse.StartRequest{
 		RequestID: "req-cli-resume-scope-001",
 		Source: fse.Source{

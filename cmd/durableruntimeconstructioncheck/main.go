@@ -15,10 +15,11 @@ import (
 
 const constructorName = "NewJavaScriptRuntimeService"
 
-var approvedProductionFiles = map[string]struct{}{
-	"pkg/composebridge/core.go":                  {},
-	"pkg/factorysessionexecution/service.go":     {},
-	"pkg/service/factory_editable_definition.go": {},
+var approvedCompositionFiles = map[string]struct{}{
+	"pkg/composebridge/core.go":                          {},
+	"pkg/factorysessionexecution/service.go":             {},
+	"pkg/factorysessionexecution/testharness/harness.go": {},
+	"pkg/service/factory_editable_definition.go":         {},
 }
 
 type config struct{ root string }
@@ -64,7 +65,7 @@ func scan(root string) ([]string, error) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+		if !strings.HasSuffix(entry.Name(), ".go") {
 			return nil
 		}
 		relative, err := filepath.Rel(repoRoot, path)
@@ -72,7 +73,10 @@ func scan(root string) ([]string, error) {
 			return err
 		}
 		relative = filepath.ToSlash(relative)
-		if _, approved := approvedProductionFiles[relative]; approved {
+		if strings.HasSuffix(entry.Name(), "_test.go") && !isTransportTest(relative) {
+			return nil
+		}
+		if _, approved := approvedCompositionFiles[relative]; approved {
 			return nil
 		}
 		fileSet := token.NewFileSet()
@@ -99,6 +103,15 @@ func scan(root string) ([]string, error) {
 	}
 	sort.Strings(findings)
 	return findings, nil
+}
+
+func isTransportTest(relative string) bool {
+	for _, root := range []string{"pkg/api/", "pkg/cli/", "pkg/mcp/"} {
+		if strings.HasPrefix(relative, root) {
+			return true
+		}
+	}
+	return false
 }
 
 func calledName(expression ast.Expr) string {

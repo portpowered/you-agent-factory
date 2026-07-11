@@ -201,6 +201,7 @@ type JavaScriptRuntimeServiceConfig struct {
 	ChildExecutorMode string
 	Provider          workers.Provider
 	PersistSessions   bool
+	Persistence       runtimepersist.Store
 	Clock             factory.Clock
 }
 
@@ -211,6 +212,7 @@ type JavaScriptRuntimeService struct {
 	childExecutorMode string
 	provider          workers.Provider
 	sessionPersistDir string
+	persistence       runtimepersist.Store
 	clock             factory.Clock
 
 	mu            sync.RWMutex
@@ -230,6 +232,7 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 		childExecutorMode: normalizeChildExecutorMode(config.ChildExecutorMode),
 		provider:          config.Provider,
 		clock:             factory.EnsureClock(config.Clock),
+		persistence:       config.Persistence,
 		sessions:          make(map[string]*runtimeSessionState),
 		startReplay:       make(map[string]startReplayRecord),
 		startInflight:     make(map[string]*startInflightFlight),
@@ -237,6 +240,9 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 	}
 	if config.PersistSessions && projectRoot != "" {
 		service.sessionPersistDir = runtimepersist.DirForProjectRoot(projectRoot)
+		if service.persistence == nil {
+			service.persistence = runtimepersist.DirectoryStore{Dir: service.sessionPersistDir}
+		}
 	}
 	return service
 }
@@ -751,14 +757,14 @@ func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runti
 		s.mu.RUnlock()
 		return cloned, nil
 	}
-	persistDir := s.sessionPersistDir
+	persistence := s.persistence
 	s.mu.RUnlock()
 
-	if persistDir == "" {
+	if persistence == nil {
 		return runtimeSessionState{}, ErrSessionNotFound
 	}
 
-	snapshot, err := runtimepersist.LoadBytes(persistDir, sessionID)
+	snapshot, err := persistence.Load(sessionID)
 	if err != nil {
 		return runtimeSessionState{}, ErrSessionNotFound
 	}

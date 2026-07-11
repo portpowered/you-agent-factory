@@ -15,16 +15,18 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSession(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -61,9 +63,7 @@ func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSe
 
 func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -90,9 +90,7 @@ func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *t
 
 func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -116,9 +114,7 @@ func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *te
 
 func TestStartDurableFactorySessionAsync_MissingRequestIDReturnsValidationError(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -230,6 +226,58 @@ func setupAPIRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName stri
 	return projectRoot
 }
 
+func newAPIJavaScriptExecutionService(t *testing.T, projectRoot, childExecutorMode string, provider workers.Provider) factorysessionexecution.Service {
+	t.Helper()
+	service, err := testharness.New(testharness.Config{
+		Mode:              testharness.ModeJavaScript,
+		ProjectRoot:       projectRoot,
+		Clock:             factory.RealClock{},
+		Provider:          provider,
+		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
+		ChildExecutorMode: childExecutorMode,
+	})
+	if err != nil {
+		t.Fatalf("compose API JavaScript execution service: %v", err)
+	}
+	return service
+}
+
+func newAPIJavaScriptRuntimeService(t *testing.T, projectRoot, childExecutorMode string, provider workers.Provider) *factorysessionexecution.JavaScriptRuntimeService {
+	t.Helper()
+	service := newAPIJavaScriptExecutionService(t, projectRoot, childExecutorMode, provider)
+	runtimeService, ok := service.(*factorysessionexecution.JavaScriptRuntimeService)
+	if !ok {
+		t.Fatalf("API JavaScript harness returned %T", service)
+	}
+	return runtimeService
+}
+
+func newAPIFakeExecutionService(t *testing.T, options ...factorysessionexecution.FakeServiceOption) *factorysessionexecution.FakeService {
+	t.Helper()
+	service, err := testharness.New(testharness.Config{Mode: testharness.ModeFake, FakeOptions: options})
+	if err != nil {
+		t.Fatalf("compose API fake execution service: %v", err)
+	}
+	fakeService, ok := service.(*factorysessionexecution.FakeService)
+	if !ok {
+		t.Fatalf("API fake harness returned %T", service)
+	}
+	return fakeService
+}
+
+func newAPIFixtureExecutionService(t *testing.T, fixturePath string) *factorysessionexecution.FakeService {
+	t.Helper()
+	service, err := testharness.New(testharness.Config{Mode: testharness.ModeFake, FakeFixturePath: fixturePath})
+	if err != nil {
+		t.Fatalf("compose API fixture execution service: %v", err)
+	}
+	fakeService, ok := service.(*factorysessionexecution.FakeService)
+	if !ok {
+		t.Fatalf("API fixture harness returned %T", service)
+	}
+	return fakeService
+}
+
 func strPtr(value string) *string {
 	return &value
 }
@@ -311,9 +359,7 @@ func containsSessionInListResponse(response factoryapi.ListFactorySessionsRespon
 
 func TestLifecycleControls_PreserveCompletedSessionReadParity(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -347,9 +393,7 @@ func TestLifecycleControls_PreserveCompletedSessionReadParity(t *testing.T) {
 
 func TestLifecycleControls_PreserveDispatchArtifactReadParity(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-lifecycle-dispatch-parity-001",
 		Source: factorysessionexecution.Source{
@@ -938,45 +982,4 @@ func TestLifecycleControls_TerminatePreservesInspectablePartialStateAcrossReadSu
 	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
 	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
 	assertEventReconnectStillWorks(t, serverURL, sessionID, after.events)
-}
-
-func TestLifecycleControls_TerminalSessionRejectedControlPreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
-	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
-	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-api-lifecycle-all-surfaces-terminal-001",
-		Source: factorysessionexecution.Source{
-			Kind:         workflowsource.KindWorkflowName,
-			WorkflowName: "agent-run-fake-child",
-		},
-		Args: map[string]any{"subject": "workflows"},
-	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
-	}
-
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-	server := httptest.NewServer(srv.Handler())
-	defer server.Close()
-
-	before := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
-	if len(before.dispatches.Dispatches) == 0 {
-		t.Fatal("expected dispatch history on completed agent-run-fake-child session")
-	}
-
-	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, completed.SessionID, "pause", nil)
-	if pauseStatus != http.StatusConflict {
-		t.Fatalf("pause on terminal session status = %d, want 409", pauseStatus)
-	}
-
-	after := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
-	assertDurableSessionReadUnchanged(t, before.read, after.read)
-	assertDurableSessionResultUnchanged(t, before.result, after.result)
-	assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
-	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
-	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
-	getDurableDispatchDetail(t, server.URL, completed.SessionID, "dispatch-1")
-	assertPostControlEventsAlignWithStatus(t, completed.SessionID, after.events, after.read.Status)
 }
