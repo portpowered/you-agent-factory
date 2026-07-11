@@ -19,6 +19,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -137,6 +138,12 @@ func composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir 
 		}
 	}
 	return ""
+}
+
+func composedDurablePersistence(executionBaseDir, configuredDir, factoryRootDir string) runtimepersist.Store {
+	return runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(
+		composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir),
+	)}
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)

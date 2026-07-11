@@ -281,8 +281,8 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_MissingCheckpointRetu
 	})
 
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 
 	before, err := service.GetSession(context.Background(), sessionID)
@@ -327,8 +327,8 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_CorruptedPersistenceR
 	}
 
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 	_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{
 		RequestID: "req-runtime-resume-corrupted-persistence-001",
@@ -345,8 +345,8 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_InvalidCheckpointSumm
 	})
 
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 	_, err := service.ResumeInterruptedSession(context.Background(), sessionID, fse.ResumeSessionRequest{
 		RequestID: "req-runtime-resume-invalid-checkpoint-001",
@@ -361,8 +361,8 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_NonInterruptedSession
 		"simple-final",
 	)
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 	started, err := service.StartSync(context.Background(), fse.StartRequest{
 		RequestID: "req-runtime-resume-non-interrupted-001",
@@ -393,7 +393,7 @@ func seedInterruptedCheckpointedSession(t *testing.T) (string, string) {
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          provider,
-		PersistSessions:   true,
+		Persistence:       runtimePersistence(projectRoot),
 	})
 	started, err := initial.StartAsync(context.Background(), fse.StartRequest{
 		RequestID: "req-runtime-resume-failure-seed-001",
@@ -500,8 +500,8 @@ func waitForPersistedInterruptedSnapshot(t *testing.T, projectRoot, sessionID st
 func TestJavaScriptRuntimeService_NonResumedFakeChild_PreservesShippedTransportSemantics(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
@@ -558,8 +558,8 @@ func TestJavaScriptRuntimeService_NonResumedFakeChild_PreservesShippedTransportS
 func TestJavaScriptRuntimeService_NonResumedSimpleFinal_PreservesReplayReconnectAndTerminalResult(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
@@ -622,8 +622,8 @@ func TestJavaScriptRuntimeService_NonResumedSimpleFinal_PreservesReplayReconnect
 func TestJavaScriptRuntimeService_NonResumedTerminalSnapshot_OmitsCheckpointSummaryAndReloadsAcrossFreshServices(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	initial := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 
 	completed, err := initial.StartSync(context.Background(), fse.StartRequest{
@@ -650,8 +650,8 @@ func TestJavaScriptRuntimeService_NonResumedTerminalSnapshot_OmitsCheckpointSumm
 	}
 
 	reloaded := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:     projectRoot,
-		PersistSessions: true,
+		ProjectRoot: projectRoot,
+		Persistence: runtimePersistence(projectRoot),
 	})
 	read, err := reloaded.GetSession(context.Background(), completed.SessionID)
 	if err != nil {

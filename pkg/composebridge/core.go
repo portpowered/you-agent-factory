@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -136,10 +137,10 @@ func ComposeCore(
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
 		factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-			ProjectRoot:     durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir),
-			Provider:        cfg.ProviderOverride,
-			PersistSessions: true,
-			Clock:           clock,
+			ProjectRoot: durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir),
+			Provider:    cfg.ProviderOverride,
+			Persistence: durablePersistence(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir),
+			Clock:       clock,
 		}),
 	), nil
 }
@@ -151,6 +152,12 @@ func durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) 
 		}
 	}
 	return ""
+}
+
+func durablePersistence(executionBaseDir, configuredDir, factoryRootDir string) runtimepersist.Store {
+	return runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(
+		durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir),
+	)}
 }
 
 // BuildCore constructs the normalized runtime graph without attaching a transport host.
