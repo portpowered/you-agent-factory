@@ -5,6 +5,7 @@ import {
   FactorySessionJavaScriptScriptStatus,
   FactorySessionStatus,
 } from "../generated/openapi";
+import { withoutEmbeddedSessionDispatches } from "./dispatch-free-session";
 import { resultSurfacesFromDurableReadModel } from "./normalize-durable-inspection";
 
 export type FactorySession = components["schemas"]["FactorySession"];
@@ -28,7 +29,7 @@ export function normalizeFactorySessionGetResponse(
   responseBody: unknown,
 ): NormalizedFactorySessionGet {
   if (isFactorySession(responseBody)) {
-    return { session: responseBody };
+    return { session: withoutEmbeddedSessionDispatches(responseBody) };
   }
 
   if (isFactorySessionDurableReadModel(responseBody)) {
@@ -43,7 +44,9 @@ export function normalizeFactorySessionGetResponse(
     };
   }
 
-  throw new Error("Factory session GET response is not a recognized session shape.");
+  throw new Error(
+    "Factory session GET response is not a recognized session shape.",
+  );
 }
 
 function factorySessionFromDurableReadModel(
@@ -65,7 +68,8 @@ function factorySessionFromDurableReadModel(
       javascript:
         durable.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT
           ? {
-              childDispatchCounts: childDispatchCountsFromDurableProgress(progress),
+              childDispatchCounts:
+                childDispatchCountsFromDurableProgress(progress),
               phase: durable.phase,
               phases: phaseNamesFromDurable(durable),
               scriptStatus: scriptStatusFromDurableLifecycle(durable.status),
@@ -105,7 +109,8 @@ function durableLifecycleFromDurable(
 
   return {
     finishedAt: timestamps?.finishedAt,
-    startedAt: timestamps?.startedAt ?? timestamps?.queuedAt ?? fallbackTimestamp,
+    startedAt:
+      timestamps?.startedAt ?? timestamps?.queuedAt ?? fallbackTimestamp,
     updatedAt:
       timestamps?.updatedAt ??
       timestamps?.finishedAt ??

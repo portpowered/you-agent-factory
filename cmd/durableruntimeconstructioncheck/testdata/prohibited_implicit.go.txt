@@ -1,0 +1,7 @@
+package runtime
+
+func build(root string) {
+	NewJavaScriptRuntimeService(Config{PersistSessions: true})
+	NewDirectoryStore(DirForProjectRoot(root))
+	_ = DirectoryStore{Dir: root}
+}

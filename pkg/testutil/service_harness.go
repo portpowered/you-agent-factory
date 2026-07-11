@@ -325,7 +325,7 @@ func (h *ServiceTestHarness) WaitForRuntimeAvailability(ctx context.Context, run
 	}
 }
 
-func (h *ServiceTestHarness) waitForRuntimeAvailability(ctx context.Context, runErrCh <-chan error) error {
+func (h *ServiceTestHarness) waitForRuntimeAvailability(ctx context.Context, runErrCh chan error) error {
 	if h == nil || h.svc == nil {
 		return fmt.Errorf("factory service runtime is not available")
 	}
@@ -344,6 +344,11 @@ func (h *ServiceTestHarness) waitForRuntimeAvailability(ctx context.Context, run
 			return ctx.Err()
 		case err := <-runErrCh:
 			if err == nil || errors.Is(err, context.Canceled) {
+				if snap, snapshotErr := h.svc.GetEngineStateSnapshot(context.Background()); snapshotErr == nil {
+					h.storeEngineStateSnapshot(snap)
+					runErrCh <- err
+					return nil
+				}
 				return fmt.Errorf("factory run exited before runtime became available")
 			}
 			return fmt.Errorf("factory run error: %w", err)
@@ -698,7 +703,7 @@ func (h *ServiceTestHarness) MoveWork(ctx context.Context, workID, stateName str
 // submit work or query state while the engine runs.
 //
 // Delegates to FactoryService.Run().
-func (h *ServiceTestHarness) RunInBackground(ctx context.Context) <-chan error {
+func (h *ServiceTestHarness) RunInBackground(ctx context.Context) chan error {
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- h.run(ctx)

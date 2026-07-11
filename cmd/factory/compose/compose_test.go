@@ -9,12 +9,45 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
+
+func TestInjectCLIRunner_ComposesDashboardEnabledRunsOutsideFactoryService(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	runner, err := compose.InjectCLIRunner(context.Background(), &service.FactoryServiceConfig{
+		Dir:                     dir,
+		SimpleDashboardRenderer: func(service.SimpleDashboardRenderInput) {},
+	})
+	if err != nil {
+		t.Fatalf("InjectCLIRunner: %v", err)
+	}
+	if _, legacy := runner.(*service.FactoryService); legacy {
+		t.Fatal("dashboard-enabled runner used legacy FactoryService composition")
+	}
+}
+
+func TestInjectCLIRunner_KeepsDashboardSuppressedRunsInactive(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	runner, err := compose.InjectCLIRunner(context.Background(), &service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("InjectCLIRunner: %v", err)
+	}
+	if _, legacy := runner.(*service.FactoryService); !legacy {
+		t.Fatalf("dashboard-suppressed runner type = %T, want compatibility service runner", runner)
+	}
+}
 
 func TestInjectFactoryService_RejectsMissingFactoryDir(t *testing.T) {
 	t.Parallel()
@@ -49,6 +82,51 @@ func TestInjectFactoryService_MatchesBuildFactoryServiceCollaborators(t *testing
 
 	if directBuilt.ComposeCollaboratorSnapshot() != wireBuilt.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: direct=%+v wire=%+v", directBuilt.ComposeCollaboratorSnapshot(), wireBuilt.ComposeCollaboratorSnapshot())
+	}
+	if wireBuilt.DurableExecutionService() == nil {
+		t.Fatal("wire composition did not inject durable execution")
+	}
+	firstDurable := wireBuilt.DurableExecutionService()
+	secondDurable := wireBuilt.DurableExecutionService()
+	if firstDurable != secondDurable {
+		t.Fatal("wire composition returned more than one durable execution collaborator")
+	}
+}
+
+func TestInjectFactoryService_DurableExecutionUsesExecutionBaseDir(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, factoryfixtures.MinimalFactoryConfig())
+	projectRoot := t.TempDir()
+	workflowDir := filepath.Join(projectRoot, ".claude", "workflows")
+	if err := os.MkdirAll(workflowDir, 0o700); err != nil {
+		t.Fatalf("create workflow dir: %v", err)
+	}
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "..", "pkg", "orchestrators", "javascript", "runtime", "testdata", "simple-final.workflow.js"))
+	if err != nil {
+		t.Fatalf("read workflow fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "simple-final.js"), fixture, 0o600); err != nil {
+		t.Fatalf("write workflow fixture: %v", err)
+	}
+
+	svc, err := compose.InjectFactoryService(context.Background(), &service.FactoryServiceConfig{
+		Dir:              factoryDir,
+		ExecutionBaseDir: projectRoot,
+	})
+	if err != nil {
+		t.Fatalf("InjectFactoryService: %v", err)
+	}
+	workflowName := "simple-final"
+	if _, err := svc.StartDurableFactorySessionSync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-compose-execution-root",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: &workflowName,
+		},
+	}); err != nil {
+		t.Fatalf("start workflow from execution base dir: %v", err)
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
@@ -107,14 +106,14 @@ func (s *JavaScriptRuntimeService) loadResumeSessionState(sessionID string) (run
 		s.mu.RUnlock()
 		return cloned, nil
 	}
-	persistDir := s.sessionPersistDir
+	persistence := s.persistence
 	s.mu.RUnlock()
 
-	if persistDir == "" {
+	if persistence == nil {
 		return runtimeSessionState{}, ErrSessionNotFound
 	}
 
-	snapshot, err := runtimepersist.LoadBytes(persistDir, sessionID)
+	snapshot, err := persistence.Load(sessionID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return runtimeSessionState{}, ErrSessionNotFound
@@ -728,6 +727,7 @@ func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.Facto
 	}
 	return states
 }
+
 // PersistedRuntimeSessionState is a JSON-serializable durable runtime session snapshot
 // used to reload terminal or recoverable JavaScript runtime sessions across CLI invocations.
 type PersistedRuntimeSessionState struct {
@@ -804,7 +804,7 @@ func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSess
 }
 
 func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionState) error {
-	if s.sessionPersistDir == "" {
+	if s.persistence == nil {
 		return nil
 	}
 	sessionID := strings.TrimSpace(state.session.SessionID)
@@ -819,7 +819,7 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 	if err != nil {
 		return fmt.Errorf("marshal durable session snapshot: %w", err)
 	}
-	if err := runtimepersist.SaveBytes(s.sessionPersistDir, sessionID, encoded); err != nil {
+	if err := s.persistence.Save(sessionID, encoded); err != nil {
 		return fmt.Errorf("persist durable session snapshot: %w", err)
 	}
 	return nil
@@ -934,10 +934,10 @@ func (s *JavaScriptRuntimeService) peekSessionStatusForResume(sessionID string) 
 		s.mu.RUnlock()
 		return status, nil
 	}
-	persistDir := s.sessionPersistDir
+	persistence := s.persistence
 	s.mu.RUnlock()
 
-	if persistDir == "" {
+	if persistence == nil {
 		return "", ErrSessionNotFound
 	}
 	state, err := s.loadResumeSessionState(sessionID)

@@ -15,9 +15,7 @@ import {
   Text,
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
 import {
   FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
@@ -93,6 +91,7 @@ function FactorySessionRuntimeSections({
   locale,
 }: {
   data: {
+    dispatches?: FactoryDispatch[];
     durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
     partialResult?: components["schemas"]["FactorySessionPartialResult"];
     result?: components["schemas"]["FactorySessionLiveResult"];
@@ -134,7 +133,7 @@ function FactorySessionRuntimeSections({
         <JavaScriptSessionProjection
           artifacts={runtime.artifacts}
           durableLifecycleStatus={data.durableLifecycleStatus}
-          dispatches={runtime.dispatches}
+          dispatches={data.dispatches}
           javascript={runtime.javascript}
           locale={locale}
           partialResult={data.partialResult}
@@ -184,12 +183,17 @@ function JavaScriptSessionProjection({
       selectedDispatchID,
     });
   const lifecycleControl = useFactorySessionLifecycleControl({
-    selectedDispatchID: lifecycleActionAvailability.selectedDispatch?.id ?? null,
+    selectedDispatchID:
+      lifecycleActionAvailability.selectedDispatch?.id ?? null,
     sessionID,
   });
 
   if (!javascript) {
-    return <WidgetDetailCopy>{messages.javascriptProjectionMissingState}</WidgetDetailCopy>;
+    return (
+      <WidgetDetailCopy>
+        {messages.javascriptProjectionMissingState}
+      </WidgetDetailCopy>
+    );
   }
 
   const warnings = (dispatches ?? []).flatMap(

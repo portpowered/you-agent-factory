@@ -23,7 +23,7 @@ delegation to the target owner or part of an active removal lane.
 | Invocation and work input | `pkg/invocations` and `pkg/workcontent` | Put argument normalization, text/stdin resolution, interpolation, primary-result policy, inference envelopes, return-policy resolution, and payload conversion in shared invocation/work-content owners. CLI and API code should adapt requests into those shared contracts. |
 | Work query behavior | `pkg/workquery` | Put shared filtering, state-type validation, query semantics, and reusable work-selection policy in the work-query owner before adapting to CLI, API, or UI callers. |
 | Platform infrastructure | Narrow platform owners such as `pkg/config`, `pkg/config/defaultpaths`, `pkg/logging`, `pkg/sessionpersistence`, and targeted diagnostics packages | Put default paths, config loading, persistence, metrics, logging, runtime artifact roots, and diagnostics in the package that owns that platform resource. Do not add platform catch-all behavior to `FactoryService`. |
-| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/inject`, and `pkg/initializer` | Keep `cmd/factory` thin, put process-mode selection in `pkg/root`, build explicit dependency graphs in `pkg/inject`, and start transports or sidecars from already-built services in `pkg/initializer`. |
+| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/inject`, and `pkg/initializer` | Keep `cmd/factory` thin, put process-mode selection in `pkg/root`, build explicit dependency graphs in `pkg/inject`, and start transports or sidecars from already-built services in `pkg/initializer`. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. |
 
 When a change spans rows, place the durable state or policy in its owner and
 adapt outward. For example, a new session read that exposes JavaScript
@@ -79,3 +79,14 @@ Session, Work, Work Request, Provider Session, event, or target-owner wording.
 Documentation-only runtime-cleanup changes should also run `git diff --check`
 and `make typecheck`. Add `make docs-reference-smoke` only when packaged
 `docs/reference/` content or `you docs` routing changes.
+
+When changing durable Factory Session execution construction, run
+`make durable-runtime-construction-check`. The guard permits direct
+`NewJavaScriptRuntimeService` calls only in the package-local execution-provider
+factory and approved deterministic test harness. Project-local persistence path
+resolution and directory-store construction belong at the fallible application
+composition boundary in `pkg/factorysessionexecution/service.go`; production
+runtime code must receive either that injected store or an explicit disabled
+policy and must not use a persistence boolean. Package tests, `testdata`
+fixtures, generated code, dependencies, coverage, and build artifacts are not
+production construction sites.

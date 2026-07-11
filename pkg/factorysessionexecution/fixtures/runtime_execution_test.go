@@ -40,7 +40,7 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 	projectRoot := writeSimpleFinalWorkflowProject(t)
 	service, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot},
+		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)
@@ -408,7 +408,7 @@ func TestNewExecutionService_SelectsFakeAndJavaScriptRuntimeProviders(t *testing
 	projectRoot := t.TempDir()
 	runtimeService, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot},
+		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService(runtime): %v", err)
@@ -462,7 +462,7 @@ func newJavaScriptRuntimeService(t *testing.T) fse.Service {
 	}
 	service, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot},
+		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)

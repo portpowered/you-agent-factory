@@ -34,7 +34,7 @@ const (
 
 // PullModel starts or reports managed-runtime pull materialization for one model.
 func (s *Service) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	started := time.Now()
+	started := s.now()
 	host := s.modelHost()
 	if host == nil {
 		puller := s.modelAssetPuller()
@@ -43,11 +43,11 @@ func (s *Service) PullModel(ctx context.Context, modelName string) (apisurface.M
 			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
 		}
 		result, err := localmodels.PullModelWithOptions(puller, ctx, s.runtimeConfig(), modelName, opts)
-		s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
+		s.recordManagedRuntimePull(modelName, result, err, s.now().Sub(started))
 		return result, err
 	}
 	result, err := s.pullWithModelHost(ctx, host, modelName)
-	s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
+	s.recordManagedRuntimePull(modelName, result, err, s.now().Sub(started))
 	return result, err
 }
 

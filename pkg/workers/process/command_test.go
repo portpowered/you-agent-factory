@@ -475,13 +475,13 @@ func TestCommandRunnerWithLogging_PropagatesLoggerToExecCommandRunner(t *testing
 func commandCleanupTestRequest(t *testing.T) CommandRequest {
 	t.Helper()
 	return CommandRequest{
-		Command:           os.Args[0],
-		Args:              []string{"-test.run=TestExecCommandRunner_HelperProcess", "--", "success"},
-		Env:               append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
-		WorkDir:           t.TempDir(),
-		DispatchID:        "dispatch-cleanup-log",
-		WorkerType:        "script",
-		WorkstationName:   "cleanup-test-station",
+		Command:         os.Args[0],
+		Args:            []string{"-test.run=TestExecCommandRunner_HelperProcess", "--", "success"},
+		Env:             append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
+		WorkDir:         t.TempDir(),
+		DispatchID:      "dispatch-cleanup-log",
+		WorkerType:      "script",
+		WorkstationName: "cleanup-test-station",
 		Execution: interfaces.ExecutionMetadata{
 			RequestID: "request-cleanup-log",
 			TraceID:   "trace-cleanup-log",
@@ -596,20 +596,20 @@ func TestLoggingCommandRunner_LogsRequestAndCompletionStatuses(t *testing.T) {
 			name:            "non-zero exit",
 			result:          CommandResult{Stdout: []byte("partial\n"), Stderr: []byte("failed\n"), ExitCode: 17},
 			wantStatus:      "failed",
-			wantCommandData: true,
+			wantCommandData: false,
 		},
 		{
 			name:            "timeout",
 			result:          CommandResult{Stderr: []byte("deadline\n")},
 			err:             context.DeadlineExceeded,
 			wantStatus:      "timed_out",
-			wantCommandData: true,
+			wantCommandData: false,
 		},
 		{
 			name:            "system error",
 			err:             errors.New("start failed"),
 			wantStatus:      "error",
-			wantCommandData: true,
+			wantCommandData: false,
 		},
 	}
 

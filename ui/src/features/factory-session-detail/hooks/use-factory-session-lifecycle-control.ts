@@ -5,20 +5,19 @@ import {
   approveFactorySession,
   cancelFactorySession,
   type FactorySessionDurableReadModel,
+  type FactorySessionLifecycleControlResponse,
+  interruptFactorySessionDispatch,
   pauseFactorySession,
   resumeFactorySession,
   retryFactorySessionDispatch,
   terminateFactorySession,
-  type FactorySessionLifecycleControlResponse,
 } from "../../../api/factory-sessions";
 import { normalizeFactorySessionGetResponse } from "../../../api/factory-sessions/normalize-session-get";
 import { useDashboardStreamStore } from "../../dashboard/public/runtime-cache-scope";
-import type { FactorySessionDetailData } from "./use-factory-session-detail";
-import type { LifecycleControlFeedbackState } from "../lib/lifecycle/factory-session-lifecycle-feedback";
 import type { FactorySessionLifecycleActionID } from "../lib/factory-session-lifecycle-controls";
-import {
-  factorySessionDetailQueryKey,
-} from "./use-factory-session-detail";
+import type { LifecycleControlFeedbackState } from "../lib/lifecycle/factory-session-lifecycle-feedback";
+import type { FactorySessionDetailData } from "./use-factory-session-detail";
+import { factorySessionDetailQueryKey } from "./use-factory-session-detail";
 
 interface LifecycleControlMutationInput {
   actionID: FactorySessionLifecycleActionID;
@@ -43,9 +42,8 @@ export function useFactorySessionLifecycleControl({
   const backendRuntimeCacheScope = useDashboardStreamStore(
     (state) => state.backendRuntimeCacheScope,
   );
-  const [feedback, setFeedback] = useState<LifecycleControlFeedbackState | null>(
-    null,
-  );
+  const [feedback, setFeedback] =
+    useState<LifecycleControlFeedbackState | null>(null);
   const detailQueryKey = factorySessionDetailQueryKey(
     sessionID,
     backendRuntimeCacheScope,
@@ -65,6 +63,16 @@ export function useFactorySessionLifecycleControl({
           return resumeFactorySession(sessionID);
         case "terminate":
           return terminateFactorySession(sessionID);
+        case "interrupt-dispatch":
+          if (selectedDispatchID === null || selectedDispatchID.trim() === "") {
+            throw new Error(
+              "Interrupt dispatch requires a selected active dispatch.",
+            );
+          }
+
+          return interruptFactorySessionDispatch(sessionID, {
+            dispatchId: selectedDispatchID,
+          });
         case "retry-dispatch":
           if (selectedDispatchID === null || selectedDispatchID.trim() === "") {
             throw new Error(
@@ -157,7 +165,9 @@ function reconcileLifecycleControlDetailState(
   }
 
   return {
-    durableLifecycleStatus: normalized.durableLifecycleStatus ?? response.status,
+    dispatches: current.dispatches,
+    durableLifecycleStatus:
+      normalized.durableLifecycleStatus ?? response.status,
     partialResult: normalized.partialResult ?? current.partialResult,
     result: normalized.result ?? current.result,
     session: {
@@ -167,12 +177,13 @@ function reconcileLifecycleControlDetailState(
         ...current.session.runtime,
         ...normalized.session.runtime,
         artifacts:
-          normalized.session.runtime.artifacts ?? current.session.runtime.artifacts,
-        dispatches:
-          current.session.runtime.dispatches ?? normalized.session.runtime.dispatches,
+          normalized.session.runtime.artifacts ??
+          current.session.runtime.artifacts,
         javascript:
-          normalized.session.runtime.javascript ?? current.session.runtime.javascript,
-        petri: normalized.session.runtime.petri ?? current.session.runtime.petri,
+          normalized.session.runtime.javascript ??
+          current.session.runtime.javascript,
+        petri:
+          normalized.session.runtime.petri ?? current.session.runtime.petri,
       },
     },
   };

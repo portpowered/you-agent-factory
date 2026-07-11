@@ -165,18 +165,18 @@ func (b claudeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 		args = append(args, "--dangerously-skip-permissions")
 	}
 	if req.Worktree != "" {
-		logger.Info("inferencer: adding work directory to arguments", "worktree", req.Worktree)
+		logger.Info("inferencer: adding work directory to arguments")
 		args = append(args, "--worktree", req.Worktree)
 	}
 	if req.SystemPrompt != "" {
-		logger.Info("inferencer: adding system prompt to arguments", "system-prompt", req.SystemPrompt)
+		logger.Info("inferencer: adding system prompt to arguments")
 		args = append(args, "--system-prompt", req.SystemPrompt)
 	}
 	if req.Model != "" {
 		args = append(args, "--model", req.Model)
 	}
 	if req.SessionID != "" {
-		logger.Info("inferencer: resuming claude session", "session_id", req.SessionID)
+		logger.Info("inferencer: resuming claude session")
 		args = append(args, "--resume", req.SessionID)
 	}
 	args = append(args, req.UserMessage)
@@ -218,7 +218,7 @@ func (b codexProviderBehavior) BuildArgs(ctx context.Context, req interfaces.Pro
 
 	if req.WorkingDirectory != "" {
 		// TODO: we should check and validate the working directory target for an inference dispatch at runtime and handle the request as failing if the working directory is invalid.
-		logger.Debug("inferencer: codex passed a working directory argument", "working_directory", req.WorkingDirectory)
+		logger.Debug("inferencer: codex passed a working directory argument")
 		// args = append(args, "--cd", req.WorkingDirectory)
 	}
 

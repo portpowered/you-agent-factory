@@ -2728,10 +2728,7 @@ type FactorySessionRuntime struct {
 	Budgets *FactorySessionBudgets `json:"budgets,omitempty"`
 
 	// Dialect JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
-	Dialect *string `json:"dialect,omitempty"`
-
-	// Dispatches Shared dispatch projections for the session runtime.
-	Dispatches *[]FactoryDispatch                  `json:"dispatches,omitempty"`
+	Dialect    *string                             `json:"dialect,omitempty"`
 	Javascript *FactorySessionJavaScriptProjection `json:"javascript,omitempty"`
 	Lifecycle  FactorySessionLifecycle             `json:"lifecycle"`
 

@@ -41,65 +41,6 @@ export const DispatchDrilldownStates = {
               isDefault: false,
               project: "beta",
               runtime: {
-                dispatches: [
-                  {
-                    dispatchKind: "JAVASCRIPT_AGENT",
-                    id: "dispatch-success",
-                    javascript: {
-                      executionMode: "live",
-                      taskKind: "AGENT",
-                      taskLabel: "Review child task",
-                    },
-                    label: "Review child task",
-                    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                    providerSessionRefs: [
-                      {
-                        id: "provider-session-1",
-                        kind: "session_id",
-                        provider: "codex",
-                      },
-                    ],
-                    sessionId: storySessionID,
-                    status: "COMPLETED",
-                  },
-                  {
-                    dispatchKind: "JAVASCRIPT_VERIFY",
-                    id: "dispatch-failed",
-                    label: "Verify release manifest",
-                    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                    providerSessionRefs: [
-                      {
-                        id: "provider-session-verify-1",
-                        kind: "session_id",
-                        provider: "codex",
-                      },
-                    ],
-                    sessionId: storySessionID,
-                    status: "FAILED",
-                    warnings: [
-                      {
-                        code: "DISPATCH_WARNING",
-                        message: "Provider returned a partial verification trace.",
-                      },
-                    ],
-                  },
-                  {
-                    dispatchKind: "JAVASCRIPT_AGENT",
-                    id: "dispatch-missing",
-                    label: "Missing durable detail",
-                    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                    sessionId: storySessionID,
-                    status: "FAILED",
-                  },
-                  {
-                    dispatchKind: "JAVASCRIPT_AGENT",
-                    id: "dispatch-error",
-                    label: "Errored durable detail",
-                    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                    sessionId: storySessionID,
-                    status: "FAILED",
-                  },
-                ],
                 javascript: {
                   childDispatchCounts: {
                     completed: 1,
@@ -140,6 +81,67 @@ export const DispatchDrilldownStates = {
           path: `/factory-sessions/${storySessionID}/partial-result`,
           response: {
             status: 404,
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${storySessionID}/dispatches`,
+          response: {
+            body: {
+              dispatches: [
+                {
+                  dispatchKind: "JAVASCRIPT_AGENT",
+                  id: "dispatch-success",
+                  javascript: {
+                    executionMode: "live",
+                    taskKind: "AGENT",
+                    taskLabel: "Review child task",
+                  },
+                  label: "Review child task",
+                  providerSessionRefs: [
+                    {
+                      id: "provider-session-1",
+                      kind: "session_id",
+                      provider: "codex",
+                    },
+                  ],
+                  status: "COMPLETED",
+                },
+                {
+                  dispatchKind: "JAVASCRIPT_VERIFY",
+                  id: "dispatch-failed",
+                  label: "Verify release manifest",
+                  providerSessionRefs: [
+                    {
+                      id: "provider-session-verify-1",
+                      kind: "session_id",
+                      provider: "codex",
+                    },
+                  ],
+                  status: "FAILED",
+                  warnings: [
+                    {
+                      code: "DISPATCH_WARNING",
+                      message:
+                        "Provider returned a partial verification trace.",
+                    },
+                  ],
+                },
+                {
+                  dispatchKind: "JAVASCRIPT_AGENT",
+                  id: "dispatch-missing",
+                  label: "Missing durable detail",
+                  status: "FAILED",
+                },
+                {
+                  dispatchKind: "JAVASCRIPT_AGENT",
+                  id: "dispatch-error",
+                  label: "Errored durable detail",
+                  status: "FAILED",
+                },
+              ],
+              sessionId: storySessionID,
+            },
           },
         },
         {
@@ -269,8 +271,12 @@ export const DispatchDrilldownStates = {
     expect(await canvas.findByText("Failure detail")).toBeTruthy();
     expect(await canvas.findByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
     expect(await canvas.findByText("verification_error")).toBeTruthy();
-    expect(await canvas.findByText("Expected release manifest checksum.")).toBeTruthy();
-    expect(await canvas.findByText("session_id · provider-session-verify-1")).toBeTruthy();
+    expect(
+      await canvas.findByText("Expected release manifest checksum."),
+    ).toBeTruthy();
+    expect(
+      await canvas.findByText("session_id · provider-session-verify-1"),
+    ).toBeTruthy();
 
     await userEvent.click(
       await canvas.findByRole("button", {
@@ -301,4 +307,109 @@ export const DispatchDrilldownStates = {
     ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(storySessionID),
+};
+
+const activeDispatchSessionID = "dur-sess-js-running-interrupt-001";
+
+export const ActiveDispatchInterrupt = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${activeDispatchSessionID}`,
+          response: {
+            body: {
+              dialect: "you-workflow-v1",
+              lifecycle: {
+                startedAt: "2026-07-10T18:00:00Z",
+                updatedAt: "2026-07-10T18:01:00Z",
+              },
+              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+              phase: "execute",
+              progress: {
+                completedDispatches: 0,
+                failedDispatches: 0,
+                inFlightDispatches: 1,
+                totalDispatches: 1,
+              },
+              resolvedSource: {
+                kind: "WORKFLOW_NAME",
+                sourceHash: "sha256:active-dispatch",
+                sourceRef: "workflow/active-dispatch",
+              },
+              sessionId: activeDispatchSessionID,
+              status: "RUNNING",
+              usage: { resources: [] },
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${activeDispatchSessionID}/dispatches`,
+          response: {
+            body: {
+              dispatches: [
+                {
+                  dispatchKind: "JAVASCRIPT_AGENT",
+                  id: "dispatch-running",
+                  label: "Run active child task",
+                  status: "RUNNING",
+                },
+              ],
+              sessionId: activeDispatchSessionID,
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${activeDispatchSessionID}/dispatches/dispatch-running`,
+          response: {
+            body: {
+              dispatchKind: "JAVASCRIPT_AGENT",
+              id: "dispatch-running",
+              label: "Run active child task",
+              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+              sessionId: activeDispatchSessionID,
+              status: "RUNNING",
+              statusTransitions: ["QUEUED", "RUNNING"],
+            },
+          },
+        },
+        {
+          method: "POST",
+          path: `/factory-sessions/${activeDispatchSessionID}/interrupt-dispatch`,
+          response: {
+            body: {
+              detail: "Interrupt request was accepted.",
+              dispatchId: "dispatch-running",
+              operation: "INTERRUPT_DISPATCH",
+              outcome: "ACCEPTED",
+              sessionId: activeDispatchSessionID,
+              status: "RUNNING",
+            },
+            status: 202,
+          },
+        },
+      ],
+      sessionID: activeDispatchSessionID,
+    },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Expand dispatch detail for dispatch-running",
+      }),
+    );
+    await userEvent.click(
+      await canvas.findByRole("button", { name: "Interrupt dispatch" }),
+    );
+    expect(await canvas.findByText("Interrupt dispatch accepted")).toBeTruthy();
+    expect(
+      await canvas.findByText("Selected dispatch: dispatch-running"),
+    ).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(activeDispatchSessionID),
 };

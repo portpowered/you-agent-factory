@@ -219,9 +219,6 @@ func renderShowResult(
 	if err := writeSessionStopSummary(output, session.Runtime.StopSummary); err != nil {
 		return err
 	}
-	if err := writeSessionDispatchLines(output, session.Runtime.Dispatches); err != nil {
-		return err
-	}
 	if err := writeSessionArtifactLines(output, session.Runtime.Artifacts); err != nil {
 		return err
 	}
@@ -249,31 +246,6 @@ func writeSessionLifecycleFields(
 	}
 	if lifecycle.FinishedAt != nil {
 		if _, err := fmt.Fprintf(output, "Session finished:\t%s\n", lifecycle.FinishedAt.Format(time.RFC3339)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func writeSessionDispatchLines(
-	output io.Writer,
-	dispatches *[]factoryapi.FactoryDispatch,
-) error {
-	if dispatches == nil {
-		return nil
-	}
-	for _, dispatch := range *dispatches {
-		label := dispatch.Id
-		if dispatch.Label != nil && strings.TrimSpace(*dispatch.Label) != "" {
-			label = fmt.Sprintf("%s (%s)", dispatch.Id, strings.TrimSpace(*dispatch.Label))
-		}
-		if _, err := fmt.Fprintf(
-			output,
-			"Dispatch:\t%s status=%s kind=%s\n",
-			label,
-			dispatch.Status,
-			dispatch.DispatchKind,
-		); err != nil {
 			return err
 		}
 	}

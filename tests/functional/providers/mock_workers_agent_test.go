@@ -38,7 +38,7 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 	}
 }
 
-func TestMockWorkers_AgentRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
+func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "rejection_with_arcs"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock reject payload"))
 	logDir := t.TempDir()
@@ -86,8 +86,11 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureAndLogsCommandOutput(t *testi
 	if record["exit_code"] != float64(7) {
 		t.Fatalf("logged exit_code = %#v, want 7", record["exit_code"])
 	}
-	if record["stdout"] != "configured stdout" || record["stderr"] != "configured stderr" {
-		t.Fatalf("logged stdout/stderr = %#v/%#v, want configured output", record["stdout"], record["stderr"])
+	if _, ok := record["stdout"]; ok {
+		t.Fatalf("failure record unexpectedly included stdout: %#v", record)
+	}
+	if _, ok := record["stderr"]; ok {
+		t.Fatalf("failure record unexpectedly included stderr: %#v", record)
 	}
 }
 

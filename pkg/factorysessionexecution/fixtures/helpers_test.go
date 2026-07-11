@@ -11,11 +11,16 @@ import (
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 const runtimeEventSource = "runtime-service"
+
+func runtimePersistence(projectRoot string) runtimepersist.Store {
+	return runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)}
+}
 
 func contractFixtureCatalogPath(t *testing.T) string {
 	t.Helper()
@@ -463,6 +468,7 @@ func assertReplayProjectionStable(
 		t.Fatalf("resultStatus drift = %q vs %q", firstResult.ResultStatus, secondResult.ResultStatus)
 	}
 }
+
 type interruptedResumableHarness struct {
 	projectRoot string
 	provider    *sequentialBlockingProvider
@@ -505,7 +511,7 @@ func startInterruptedResumableSessionForWorkflow(
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          provider,
-		PersistSessions:   true,
+		Persistence:       runtimePersistence(projectRoot),
 	})
 
 	started, err := initial.StartAsync(context.Background(), fse.StartRequest{
@@ -559,7 +565,7 @@ func newResumedRuntimeService(harness interruptedResumableHarness) *fse.JavaScri
 		ProjectRoot:       harness.projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          harness.provider,
-		PersistSessions:   true,
+		Persistence:       runtimePersistence(harness.projectRoot),
 	})
 }
 
