@@ -127,8 +127,40 @@ type FactoryService struct {
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
 	modelInitOnce            sync.Once
-	durableExecutionMu       sync.Mutex
 	durableExecution         factorysessionexecution.Service
+}
+
+func composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
+	for _, candidate := range []string{executionBaseDir, configuredDir, factoryRootDir} {
+		if root := strings.TrimSpace(candidate); root != "" {
+			return root
+		}
+	}
+	return ""
+}
+
+func composeDurableExecution(
+	cfg *FactoryServiceConfig,
+	root FactoryServiceRoot,
+	clock factory.Clock,
+) (factorysessionexecution.Service, error) {
+	projectRoot := composedDurableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir)
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
+		cfg.DurableSessionPersistencePolicy,
+		projectRoot,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("compose durable session persistence: %w", err)
+	}
+	return factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{
+			ProjectRoot: projectRoot,
+			Provider:    cfg.ProviderOverride,
+			Persistence: persistence,
+			Clock:       clock,
+		},
+	)
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -139,6 +171,15 @@ var _ apisurface.SessionAPI = (*FactoryService)(nil)
 var _ apisurface.WorkAPI = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
 var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
+
+// DurableExecutionService exposes the explicitly injected durable collaborator
+// for compatibility composition and ownership verification.
+func (fs *FactoryService) DurableExecutionService() factorysessionexecution.Service {
+	if fs == nil {
+		return nil
+	}
+	return fs.durableExecution
+}
 
 type RuntimeFileLoggingPolicy string
 
@@ -168,6 +209,10 @@ type FactoryServiceConfig struct {
 	// runtime execution paths such as workstation workingDirectory values.
 	// Empty defaults to the loaded factory directory.
 	ExecutionBaseDir string
+	// DurableSessionPersistencePolicy selects enabled project-local snapshots
+	// or explicitly disabled in-memory-only durable execution. Empty defaults
+	// to enabled for production-facing behavior.
+	DurableSessionPersistencePolicy factorysessionexecution.PersistencePolicy
 	// RuntimeMode controls whether the runtime exits on idle completion or
 	// stays alive until its context is canceled. Empty defaults to batch mode.
 	RuntimeMode interfaces.RuntimeMode
@@ -786,14 +831,19 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 		}()
 	}
 
-	fs.startSchedulerSidecarsForRuntime(
+	if err := fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
 		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryDir(),
 		handle.Bundle.RuntimeCfg.FactoryConfig(),
 		handle.Bundle.RuntimeCfg,
 		submitWorkRequestWithFactory(handle.Bundle.Factory),
-	)
+	); err != nil {
+		sidecarCancel()
+		handle.Sidecars.Wait()
+		handle.SidecarCancel = nil
+		return fmt.Errorf("attach worker sidecars: %w", err)
+	}
 	if handle.Bundle.Listener != nil {
 		if err := handle.Bundle.Listener.PreseedInputs(sidecarCtx); err != nil {
 			sidecarCancel()
@@ -822,9 +872,7 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 	if handle == nil {
 		return nil
 	}
-	err := factoryservice.Stop(handle, fs.clock)
-	fs.stopLiveRuntimeSidecars(handle)
-	return err
+	return factoryservice.Stop(handle, fs.clock)
 }
 
 func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {

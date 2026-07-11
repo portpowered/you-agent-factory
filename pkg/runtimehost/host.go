@@ -41,7 +41,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
@@ -123,7 +122,7 @@ type Host struct {
 	factorySave      FactorySaveSaver
 	sessionGateway   SessionGateway
 	runtimeBuild     *runtimebuild.Service
-	workersScheduler *workersservice.Service
+	workersScheduler workerSidecarOwner
 	hostedWorkers    hostedworkers.Config
 	factoryRootDir   string
 	policy           hostCoordinatorPolicy
@@ -142,7 +141,6 @@ type Host struct {
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
 	modelInitOnce            sync.Once
-	durableExecutionMu       sync.Mutex
 	durableExecution         factorysessionexecution.Service
 }
 
@@ -168,6 +166,15 @@ func (h *Host) DurableExecutionAPI() apisurface.DurableSessionAPI {
 		return h.durableExecutionAPI
 	}
 	return factorysession.NewDurableAPI(h.durableExecutionService(), h.requireSessionGateway())
+}
+
+// DurableExecutionService exposes the explicitly injected durable collaborator
+// for compatibility composition and ownership verification.
+func (h *Host) DurableExecutionService() factorysessionexecution.Service {
+	if h == nil {
+		return nil
+	}
+	return h.durableExecution
 }
 
 type RuntimeFileLoggingPolicy string
@@ -198,6 +205,10 @@ type Config struct {
 	// runtime execution paths such as workstation workingDirectory values.
 	// Empty defaults to the loaded factory directory.
 	ExecutionBaseDir string
+	// DurableSessionPersistencePolicy selects enabled project-local snapshots
+	// or explicitly disabled in-memory-only durable execution. Empty defaults
+	// to enabled for production-facing behavior.
+	DurableSessionPersistencePolicy factorysessionexecution.PersistencePolicy
 	// RuntimeMode controls whether the runtime exits on idle completion or
 	// stays alive until its context is canceled. Empty defaults to batch mode.
 	RuntimeMode interfaces.RuntimeMode
@@ -459,7 +470,8 @@ func (fs *Host) replacementExecutionBaseDir(folderPath string, factoryDir string
 	return ""
 }
 
-// Run starts the file watcher, dashboard, API server, and factory engine.
+// Run starts runtime-owned sidecars and the factory engine. Process-level
+// presentation sidecars are composed and owned outside Host.
 // It blocks until ctx is cancelled or the factory reaches a terminal state.
 // portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
 func (fs *Host) Run(ctx context.Context) error {
@@ -473,6 +485,7 @@ func (fs *Host) RunWithAPISurface(ctx context.Context, surface apisurface.APISur
 }
 
 func (fs *Host) run(ctx context.Context, surface apisurface.APISurface) error {
+	fs.startTime = fs.clock.Now()
 	runCtx, cancelRunSidecars := context.WithCancel(ctx)
 	var sidecars sync.WaitGroup
 	var currentRuntime *liveRuntimeHandle
@@ -513,11 +526,6 @@ func (fs *Host) run(ctx context.Context, surface apisurface.APISurface) error {
 	fs.clearRunState()
 	cancelRunSidecars()
 	sidecars.Wait()
-	// Print final dashboard.
-	if fs.cfg.SimpleDashboardRenderer != nil {
-		fs.renderDashboard(ctx)
-	}
-
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run: %w", err)
 	}
@@ -554,7 +562,6 @@ func (fs *Host) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGrou
 		}
 		fs.startListenerSidecar(runCtx, sidecars, listener, fs.logger)
 	}
-	fs.startDashboardSidecar(runCtx, sidecars)
 }
 
 func (fs *Host) startListenerSidecar(
@@ -572,18 +579,6 @@ func (fs *Host) startListenerSidecar(
 		if err := listener.Watch(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("file watcher error", zap.Error(err))
 		}
-	}()
-}
-
-func (fs *Host) startDashboardSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
-	fs.startTime = fs.clock.Now()
-	if fs.cfg.SimpleDashboardRenderer == nil {
-		return
-	}
-	sidecars.Add(1)
-	go func() {
-		defer sidecars.Done()
-		fs.dashboardLoop(runCtx)
 	}()
 }
 
@@ -819,14 +814,19 @@ func (c *runtimeCoordinator) StartLiveRuntimeSidecars(ctx context.Context, handl
 		}()
 	}
 
-	fs.startSchedulerSidecarsForRuntime(
+	if err := fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
 		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg.FactoryDir(),
 		handle.Bundle.RuntimeCfg.FactoryConfig(),
 		handle.Bundle.RuntimeCfg,
 		submitWorkRequestWithFactory(handle.Bundle.Factory),
-	)
+	); err != nil {
+		sidecarCancel()
+		handle.Sidecars.Wait()
+		handle.SidecarCancel = nil
+		return fmt.Errorf("attach worker sidecars: %w", err)
+	}
 	if handle.Bundle.Listener != nil {
 		if err := handle.Bundle.Listener.PreseedInputs(sidecarCtx); err != nil {
 			sidecarCancel()
@@ -855,9 +855,7 @@ func (c *runtimeCoordinator) StopLiveRuntime(handle *liveRuntimeHandle) error {
 	if handle == nil {
 		return nil
 	}
-	err := factoryservice.Stop(handle, fs.clock)
-	fs.StopLiveRuntimeSidecars(handle)
-	return err
+	return factoryservice.Stop(handle, fs.clock)
 }
 
 func (fs *Host) ShutdownOtherLiveSessions(except *liveRuntimeHandle) error {

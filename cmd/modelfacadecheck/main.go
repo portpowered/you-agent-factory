@@ -70,7 +70,7 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 		return err
 	}
 	if len(findings) == 0 {
-		fmt.Fprintln(stdout, "[agent-factory:model-facade] model facade methods are thin delegates")
+		fmt.Fprintln(stdout, "[agent-factory:model-facade] model facade methods are thin delegates with explicit construction dependencies")
 		return nil
 	}
 	for _, finding := range findings {
@@ -97,8 +97,147 @@ func scanFacades(root string) ([]string, error) {
 				findings = append(findings, finding)
 			}
 		}
+		constructionFindings, err := scanModelServiceConstruction(repoRoot, target)
+		if err != nil {
+			return nil, err
+		}
+		findings = append(findings, constructionFindings...)
 	}
 	return findings, nil
+}
+
+func scanModelServiceConstruction(repoRoot string, target facadeTarget) ([]string, error) {
+	packageDir := filepath.Join(repoRoot, filepath.FromSlash(target.packagePath))
+	entries, err := os.ReadDir(packageDir)
+	if err != nil {
+		return nil, fmt.Errorf("read facade package %s: %w", target.packagePath, err)
+	}
+
+	broadAdapters := map[string]struct{}{}
+	for _, entry := range entries {
+		if entry.IsDir() || !isProductionGoFile(entry.Name()) {
+			continue
+		}
+		filePath := filepath.Join(packageDir, entry.Name())
+		file, err := parser.ParseFile(token.NewFileSet(), filePath, nil, 0)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", filepath.ToSlash(filePath), err)
+		}
+		for typeName := range broadAdapterTypes(file, target.receiver) {
+			broadAdapters[typeName] = struct{}{}
+		}
+	}
+
+	var findings []string
+	for _, entry := range entries {
+		if entry.IsDir() || !isProductionGoFile(entry.Name()) {
+			continue
+		}
+		filePath := filepath.Join(packageDir, entry.Name())
+		file, err := parser.ParseFile(token.NewFileSet(), filePath, nil, 0)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", filepath.ToSlash(filePath), err)
+		}
+		aliases := modelServiceImportAliases(file)
+		if len(aliases) == 0 {
+			continue
+		}
+		ast.Inspect(file, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			constructor := modelServiceConstructor(call.Fun, aliases)
+			if constructor == "NewFromHost" {
+				findings = append(findings, fmt.Sprintf("%s | %s calls retired models service NewFromHost; use New(Dependencies)", filepath.ToSlash(filePath), target.packagePath))
+				return true
+			}
+			if constructor == "New" && callCarriesBroadAdapter(call, broadAdapters) {
+				findings = append(findings, fmt.Sprintf("%s | %s passes a broad %s carrier into models service construction; use explicit Dependencies", filepath.ToSlash(filePath), target.packagePath, target.receiver))
+			}
+			return true
+		})
+	}
+	return findings, nil
+}
+
+func modelServiceImportAliases(file *ast.File) map[string]struct{} {
+	aliases := map[string]struct{}{}
+	for _, imported := range file.Imports {
+		if strings.Trim(imported.Path.Value, `"`) != "github.com/portpowered/infinite-you/pkg/models/service" {
+			continue
+		}
+		alias := "service"
+		if imported.Name != nil {
+			alias = imported.Name.Name
+		}
+		if alias != "." && alias != "_" {
+			aliases[alias] = struct{}{}
+		}
+	}
+	return aliases
+}
+
+func broadAdapterTypes(file *ast.File, receiverType string) map[string]struct{} {
+	types := map[string]struct{}{}
+	for _, declaration := range file.Decls {
+		general, ok := declaration.(*ast.GenDecl)
+		if !ok || general.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range general.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			structure, ok := typeSpec.Type.(*ast.StructType)
+			if !ok {
+				continue
+			}
+			for _, field := range structure.Fields.List {
+				if receiverBaseType(field.Type) == receiverType {
+					types[typeSpec.Name.Name] = struct{}{}
+					break
+				}
+			}
+		}
+	}
+	return types
+}
+
+func modelServiceConstructor(expression ast.Expr, aliases map[string]struct{}) string {
+	selector, ok := expression.(*ast.SelectorExpr)
+	if !ok {
+		return ""
+	}
+	identifier, ok := selector.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	if _, ok := aliases[identifier.Name]; !ok {
+		return ""
+	}
+	return selector.Sel.Name
+}
+
+func callCarriesBroadAdapter(call *ast.CallExpr, broadAdapters map[string]struct{}) bool {
+	for _, argument := range call.Args {
+		if unary, ok := argument.(*ast.UnaryExpr); ok && unary.Op == token.AND {
+			argument = unary.X
+		}
+		literal, ok := argument.(*ast.CompositeLit)
+		if !ok {
+			continue
+		}
+		identifier, ok := literal.Type.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		if _, ok := broadAdapters[identifier.Name]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func findTargetMethods(repoRoot string, target facadeTarget) (map[string][]locatedMethod, error) {

@@ -22,7 +22,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -304,6 +303,11 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 		return result, f.submitFunc(ctx, request)
 	}
 	return result, nil
+}
+func (f *aggregateSnapshotFactory) submissionSnapshot() (int, []interfaces.WorkRequest) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.submitCalls, append([]interfaces.WorkRequest(nil), f.submissions...)
 }
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	streamGenerationID := strings.TrimSpace(f.streamGenerationID)
@@ -719,6 +723,7 @@ type runningSessionServiceOptions struct {
 	runtimeLogDir  string
 	recordPath     string
 	extraOptions   []factory.FactoryOption
+	logger         *zap.Logger
 }
 
 type runningSessionService struct {
@@ -763,11 +768,15 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		}
 	}
 
+	logger := options.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:                 rootDir,
 		RuntimeMode:         interfaces.RuntimeModeService,
 		MockWorkersConfig:   config.NewEmptyMockWorkersConfig(),
-		Logger:              zap.NewNop(),
+		Logger:              logger,
 		RuntimeLogDir:       runtimeLogDir,
 		RuntimeMetricsDir:   runtimeMetricsDir,
 		RecordPath:          options.recordPath,
@@ -4042,6 +4051,7 @@ func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testi
 
 func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T) {
 	recorder := &capturingModelPullMetricsRecorder{}
+	logCore, observedLogs := observer.New(zap.InfoLevel)
 	runtimeCfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "factory",
 		Workers: []interfaces.WorkerConfig{{
@@ -4062,28 +4072,24 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &managedPullMetricsAssetPuller{
-				result: apisurface.ModelPullResult{
-					ModelName: "OMNIVOICE_Q4_K_M",
-					Outcome:   "ALREADY_PRESENT",
-					CachePath: "/tmp/cache",
-					Revision:  "rev1",
-				},
-				inspection: localmodels.RuntimeCacheInspection{
-					Supported: true,
-					Installed: true,
-					CachePath: "/tmp/cache",
-					Revision:  "rev1",
-				},
-			}
+	svc := newModelCatalogServiceForTest(runtimeCfg, &managedPullMetricsAssetPuller{
+		result: apisurface.ModelPullResult{
+			ModelName: "OMNIVOICE_Q4_K_M",
+			Outcome:   "ALREADY_PRESENT",
+			CachePath: "/tmp/cache",
+			Revision:  "rev1",
 		},
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
-			return modelPullMetricsTestAdapter{inner: recorder}
+		inspection: localmodels.RuntimeCacheInspection{
+			Supported: true,
+			Installed: true,
+			CachePath: "/tmp/cache",
+			Revision:  "rev1",
 		},
 	})
+	svc.logger = zap.New(logCore)
+	svc.cfg = &FactoryServiceConfig{
+		ModelPullMetricsRecorder: recorder,
+	}
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
 		t.Fatalf("PullModel: %v", err)
@@ -4094,10 +4100,17 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 		"pull_outcome":    "ALREADY_READY",
 		"readiness_state": "READY",
 	})
+	if got := recorder.count(); got != 2 {
+		t.Fatalf("model pull metric count = %d, want one attempt and one success", got)
+	}
+	if got := observedLogs.FilterMessage("managed runtime pull completed").Len(); got != 1 {
+		t.Fatalf("managed runtime pull completion log count = %d, want 1", got)
+	}
 }
 
 func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) {
 	recorder := &capturingModelPullMetricsRecorder{}
+	logCore, observedLogs := observer.New(zap.WarnLevel)
 	runtimeCfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "factory",
 		Workers: []interfaces.WorkerConfig{{
@@ -4118,17 +4131,13 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &managedPullMetricsAssetPuller{
-				err: apisurface.ErrManagedRuntimeSourceFetchFailed,
-			}
-		},
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
-			return modelPullMetricsTestAdapter{inner: recorder}
-		},
+	svc := newModelCatalogServiceForTest(runtimeCfg, &managedPullMetricsAssetPuller{
+		err: apisurface.ErrManagedRuntimeSourceFetchFailed,
 	})
+	svc.logger = zap.New(logCore)
+	svc.cfg = &FactoryServiceConfig{
+		ModelPullMetricsRecorder: recorder,
+	}
 
 	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	pullErr, ok := apisurface.AsManagedRuntimePullError(err)
@@ -4149,6 +4158,12 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 	recorder.assertContainsMetric(t, modelPullMetricSourceFailure, map[string]string{
 		"model_name": "OMNIVOICE_Q4_K_M",
 	})
+	if got := recorder.count(); got != 3 {
+		t.Fatalf("model pull metric count = %d, want one attempt, failure, and source failure", got)
+	}
+	if got := observedLogs.FilterMessage("managed runtime pull failed").Len(); got != 1 {
+		t.Fatalf("managed runtime pull failure log count = %d, want 1", got)
+	}
 }
 
 type capturingModelPullMetricsRecorder struct {
@@ -4160,14 +4175,6 @@ func (r *capturingModelPullMetricsRecorder) RecordModelPullMetric(metric Invocat
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics = append(r.metrics, metric)
-}
-
-type modelPullMetricsTestAdapter struct {
-	inner *capturingModelPullMetricsRecorder
-}
-
-func (a modelPullMetricsTestAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
-	a.inner.RecordModelPullMetric(InvocationMetric{Name: metric.Name, Labels: metric.Labels})
 }
 
 func (r *capturingModelPullMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
@@ -4190,6 +4197,12 @@ func (r *capturingModelPullMetricsRecorder) assertContainsMetric(t *testing.T, n
 		}
 	}
 	t.Fatalf("metrics %#v do not contain %q with labels %#v", r.metrics, name, labels)
+}
+
+func (r *capturingModelPullMetricsRecorder) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.metrics)
 }
 
 type managedPullMetricsAssetPuller struct {

@@ -1344,31 +1344,9 @@ func (fs *Host) StartDurableFactorySessionSync(
 
 func (fs *Host) durableExecutionService() factorysessionexecution.Service {
 	if fs == nil {
-		return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{})
-	}
-	fs.durableExecutionMu.Lock()
-	defer fs.durableExecutionMu.Unlock()
-	if fs.durableExecution == nil {
-		fs.durableExecution = factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-			ProjectRoot: fs.durableProjectRoot(),
-		})
+		return nil
 	}
 	return fs.durableExecution
-}
-
-func (fs *Host) durableProjectRoot() string {
-	if fs == nil {
-		return ""
-	}
-	if fs.cfg != nil {
-		if root := strings.TrimSpace(fs.cfg.ExecutionBaseDir); root != "" {
-			return root
-		}
-		if root := strings.TrimSpace(fs.cfg.Dir); root != "" {
-			return root
-		}
-	}
-	return strings.TrimSpace(fs.factoryRootDir)
 }
 
 func (fs *Host) ListDurableFactorySessions(
@@ -1384,7 +1362,11 @@ func (fs *Host) ListDurableExecutionSessions(
 	ctx context.Context,
 	req factorysessionexecution.ListSessionsRequest,
 ) (factorysessionexecution.ListSessionsResult, error) {
-	return fs.durableExecutionService().ListSessions(ctx, req)
+	execution := fs.durableExecutionService()
+	if execution == nil {
+		return factorysessionexecution.ListSessionsResult{}, factorysessionexecution.ErrServiceNotConfigured
+	}
+	return execution.ListSessions(ctx, req)
 }
 
 func (fs *Host) GetDurableFactorySession(

@@ -12,9 +12,9 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
@@ -76,6 +76,45 @@ func TestInterruptFactorySessionDispatch_FixtureBackedRunningSessionReturnsTyped
 	}
 }
 
+func TestLifecycleControls_TerminalSessionRejectedControlPreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
+	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-lifecycle-all-surfaces-terminal-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{"subject": "workflows"},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	before := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
+	if len(before.dispatches.Dispatches) == 0 {
+		t.Fatal("expected dispatch history on completed agent-run-fake-child session")
+	}
+
+	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, completed.SessionID, "pause", nil)
+	if pauseStatus != http.StatusConflict {
+		t.Fatalf("pause on terminal session status = %d, want 409", pauseStatus)
+	}
+
+	after := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
+	assertDurableSessionReadUnchanged(t, before.read, after.read)
+	assertDurableSessionResultUnchanged(t, before.result, after.result)
+	assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
+	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
+	getDurableDispatchDetail(t, server.URL, completed.SessionID, "dispatch-1")
+	assertPostControlEventsAlignWithStatus(t, completed.SessionID, after.events, after.read.Status)
+}
+
 func TestInterruptFactorySessionDispatch_AlreadyInterruptedReturnsNoOp(t *testing.T) {
 	service := newAPILifecycleFakeService(t)
 	row := startAPIRunningSessionForControl(t, service)
@@ -116,7 +155,7 @@ func TestInterruptFactorySessionDispatch_CompletedDispatchReturnsTypedConflict(t
 }
 
 func TestInterruptFactorySessionDispatch_QueuedDispatchReturnsTypedConflict(t *testing.T) {
-	service := factorysessionexecution.NewFakeService(factorysessionexecution.WithFakeScenarios(factorysessionexecution.FakeScenario{
+	service := newAPIFakeExecutionService(t, factorysessionexecution.WithFakeScenarios(factorysessionexecution.FakeScenario{
 		ID:        "queued-interrupt-invalid-state",
 		RequestID: "req-js-queued-interrupt-001",
 		Session: factorysessionexecution.SessionReadResult{
@@ -247,9 +286,7 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 func newInterruptedLateResultTransportHarness(t *testing.T) (*factorysessionexecution.JavaScriptRuntimeService, string, string) {
 	t.Helper()
 	projectRoot := setupAPILifecycleWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	sessionID := "dur-sess-interrupt-transport-late-001"
 	if err := factorysessionexecution.SeedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "summarize-findings"); err != nil {
 		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
@@ -548,9 +585,7 @@ func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsQueuedRunningComplete
 func TestLiveProviderAndFakeChildSessions_APIPreserveDistinctProviderAndArtifactProjections(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 
-	fakeService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	fakeService := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	fakeCompleted, err := fakeService.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-live-provider-fake-child-coexist-001",
 		Source: factorysessionexecution.Source{
@@ -565,11 +600,8 @@ func TestLiveProviderAndFakeChildSessions_APIPreserveDistinctProviderAndArtifact
 		t.Fatalf("fake StartSync: %v", err)
 	}
 
-	liveService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
-		Provider:          factorysessionexecution.SmokeLiveChildProvider(),
-	})
+	liveService := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive,
+		factorysessionexecution.SmokeLiveChildProvider())
 	liveCompleted, err := liveService.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-live-provider-live-child-coexist-001",
 		Source: factorysessionexecution.Source{

@@ -34,6 +34,39 @@ const (
 	canonicalScriptPollerCommand         = "factory/scripts/poller.sh"
 )
 
+func initializeWorkersSchedulerForTest(svc *FactoryService) {
+	cfg := &FactoryServiceConfig{
+		Dir:                   svc.policy.dir,
+		WorkflowID:            svc.policy.workflowID,
+		CommandRunnerOverride: svc.policy.commandRunnerOverride,
+	}
+	svc.workersScheduler = NewWorkersSchedulerService(cfg, svc.clock, svc.logger, svc.hostedWorkers)
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_RequiresInitializedWorkerSidecarOwner(t *testing.T) {
+	svc := &FactoryService{
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		logger: zap.NewNop(),
+	}
+	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
+		t,
+		t.TempDir(),
+		scriptPollerRuntimeConfigOptions{poller: newCanonicalScriptPollerWorkstation()},
+	)
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
+		Factory:    &aggregateSnapshotFactory{},
+		RuntimeCfg: runtimeCfg,
+	}}
+
+	err := svc.startLiveRuntimeSidecars(context.Background(), handle)
+	if err == nil || !strings.Contains(err.Error(), "worker sidecar owner is not initialized") {
+		t.Fatalf("startLiveRuntimeSidecars error = %v, want missing worker sidecar owner", err)
+	}
+	if handle.SidecarCancel != nil {
+		t.Fatal("failed sidecar attachment retained a cancellation function")
+	}
+}
+
 func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunWorkstationType(t *testing.T) {
 	start := time.Date(2026, time.June, 16, 9, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
@@ -47,6 +80,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunW
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           canonicalScriptPollerWorkstationName,
 		Type:           interfaces.WorkstationTypePoller,
@@ -66,9 +100,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunW
 		},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory:    &aggregateSnapshotFactory{},
-			RuntimeCfg: runtimeCfg,
-		},
+		Factory:    &aggregateSnapshotFactory{},
+		RuntimeCfg: runtimeCfg,
+	},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -97,6 +131,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := newCanonicalScriptPollerWorkstation()
 	standard := interfaces.FactoryWorkstationConfig{
 		Name:           "processor",
@@ -120,9 +155,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory:    &aggregateSnapshotFactory{},
-			RuntimeCfg: runtimeCfg,
-		},
+		Factory:    &aggregateSnapshotFactory{},
+		RuntimeCfg: runtimeCfg,
+	},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -167,6 +202,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch, CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := newCanonicalScriptPollerWorkstation()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
@@ -176,9 +212,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory:    &aggregateSnapshotFactory{},
-			RuntimeCfg: runtimeCfg,
-		},
+		Factory:    &aggregateSnapshotFactory{},
+		RuntimeCfg: runtimeCfg,
+	},
 	}
 
 	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
@@ -237,6 +273,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		logger:        zap.NewNop(),
 		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -267,9 +304,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			RuntimeCfg: runtimeCfg,
-			Factory:    submitted,
-		},
+		RuntimeCfg: runtimeCfg,
+		Factory:    submitted,
+	},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -280,10 +317,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 	defer svc.stopLiveRuntimeSidecars(handle)
 
 	waitForHostedPollerSubmission(t, submitted, 1, time.Second)
-	if submitted.submitCalls != 1 {
-		t.Fatalf("submit calls = %d, want 1", submitted.submitCalls)
+	calls, submissions := submitted.submissionSnapshot()
+	if calls != 1 {
+		t.Fatalf("submit calls = %d, want 1", calls)
 	}
-	if got := submitted.submissions[0].Works[0].WorkID; got != "linear:issue-new" {
+	if got := submissions[0].Works[0].WorkID; got != "linear:issue-new" {
 		t.Fatalf("submitted work id = %q, want linear:issue-new", got)
 	}
 }
@@ -360,6 +398,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		logger:        zap.New(logCore),
 		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -390,9 +429,9 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			RuntimeCfg: runtimeCfg,
-			Factory:    &aggregateSnapshotFactory{},
-		},
+		RuntimeCfg: runtimeCfg,
+		Factory:    &aggregateSnapshotFactory{},
+	},
 	}
 
 	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
@@ -419,6 +458,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		logger:        zap.New(logCore),
 		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "custom-ingress",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -441,9 +481,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			RuntimeCfg: runtimeCfg,
-			Factory:    &aggregateSnapshotFactory{},
-		},
+		RuntimeCfg: runtimeCfg,
+		Factory:    &aggregateSnapshotFactory{},
+	},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -484,6 +524,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := newCanonicalScriptPollerWorkstation()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
@@ -493,9 +534,9 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 		},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory:    &aggregateSnapshotFactory{},
-			RuntimeCfg: runtimeCfg,
-		},
+		Factory:    &aggregateSnapshotFactory{},
+		RuntimeCfg: runtimeCfg,
+	},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -528,6 +569,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.New(logCore),
 	}
+	initializeWorkersSchedulerForTest(svc)
 	poller := newCanonicalScriptPollerWorkstation()
 	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
 		t,
@@ -537,9 +579,9 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 		},
 	)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory:    &aggregateSnapshotFactory{},
-			RuntimeCfg: runtimeCfg,
-		},
+		Factory:    &aggregateSnapshotFactory{},
+		RuntimeCfg: runtimeCfg,
+	},
 	}
 
 	if err := svc.startLiveRuntimeSidecars(context.Background(), handle); err != nil {
@@ -575,6 +617,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
+	initializeWorkersSchedulerForTest(svc)
 	oldPoller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress-old",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -639,6 +682,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
+	initializeWorkersSchedulerForTest(svc)
 	oldHandle := newScriptPollerRuntimeHandle(t, "linear-ingress-old", oldFactory)
 	newHandle := newScriptPollerRuntimeHandle(t, "linear-ingress-new", newFactory)
 
@@ -709,15 +753,15 @@ func newScriptPollerRuntimeHandleForWorkstation(
 	t.Helper()
 
 	return &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory: activeFactory,
-			RuntimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
-				t,
-				t.TempDir(),
-				scriptPollerRuntimeConfigOptions{
-					poller: poller,
-				},
-			),
-		},
+		Factory: activeFactory,
+		RuntimeCfg: newScriptPollerLoadedRuntimeConfigForServiceTest(
+			t,
+			t.TempDir(),
+			scriptPollerRuntimeConfigOptions{
+				poller: poller,
+			},
+		),
+	},
 	}
 }
 
@@ -969,12 +1013,14 @@ func newHostedLinearPollerServiceFixture(
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	)
+	svc := &FactoryService{
+		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+		logger:        zap.NewNop(),
+		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+	}
+	initializeWorkersSchedulerForTest(svc)
 	return hostedLinearPollerServiceFixture{
-		svc: &FactoryService{
-			policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
-			logger:        zap.NewNop(),
-			hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
-		},
+		svc:        svc,
 		submitted:  submitted,
 		runtimeCfg: runtimeCfg,
 	}
@@ -1041,13 +1087,15 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 			scriptPoller.Name: &scriptPoller,
 		},
 	)
+	svc := &FactoryService{
+		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+		logger:        zap.NewNop(),
+		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+	}
+	initializeWorkersSchedulerForTest(svc)
 	return concurrentHostedAndScriptPollerFixture{
 		hostedLinearPollerServiceFixture: hostedLinearPollerServiceFixture{
-			svc: &FactoryService{
-				policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
-				logger:        zap.NewNop(),
-				hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
-			},
+			svc:        svc,
 			submitted:  submitted,
 			runtimeCfg: runtimeCfg,
 		},
@@ -1057,9 +1105,9 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 func startHostedLinearPollerSidecars(t *testing.T, fixture hostedLinearPollerServiceFixture) func() {
 	t.Helper()
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			RuntimeCfg: fixture.runtimeCfg,
-			Factory:    fixture.submitted,
-		},
+		RuntimeCfg: fixture.runtimeCfg,
+		Factory:    fixture.submitted,
+	},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	if err := fixture.svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
@@ -1074,13 +1122,14 @@ func startHostedLinearPollerSidecars(t *testing.T, fixture hostedLinearPollerSer
 
 func assertHostedLinearBatchWorks(t *testing.T, submitted *aggregateSnapshotFactory, wantWorkIDs ...string) {
 	t.Helper()
-	if submitted.submitCalls != 1 {
-		t.Fatalf("submit calls = %d, want 1 batch submit for the poll cycle", submitted.submitCalls)
+	calls, submissions := submitted.submissionSnapshot()
+	if calls != 1 {
+		t.Fatalf("submit calls = %d, want 1 batch submit for the poll cycle", calls)
 	}
-	if len(submitted.submissions) != 1 {
-		t.Fatalf("submitted requests = %d, want 1", len(submitted.submissions))
+	if len(submissions) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submissions))
 	}
-	works := submitted.submissions[0].Works
+	works := submissions[0].Works
 	if len(works) != len(wantWorkIDs) {
 		t.Fatalf("submitted works = %d, want %d canonical outputs from one poll cycle", len(works), len(wantWorkIDs))
 	}
@@ -1089,20 +1138,19 @@ func assertHostedLinearBatchWorks(t *testing.T, submitted *aggregateSnapshotFact
 			t.Fatalf("submitted work ID[%d] = %q, want %q", i, works[i].WorkID, wantWorkID)
 		}
 	}
-	if submitted.submissions[0].RequestID == "" || works[0].RequestID != works[1].RequestID {
+	if submissions[0].RequestID == "" || works[0].RequestID != works[1].RequestID {
 		t.Fatalf("batch request IDs = [%q %q], want shared non-empty requestId", works[0].RequestID, works[1].RequestID)
 	}
 }
 
 func assertConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *aggregateSnapshotFactory) {
 	t.Helper()
-	submitted.mu.Lock()
-	defer submitted.mu.Unlock()
-	if submitted.submitCalls < 2 {
-		t.Fatalf("submit calls = %d, want at least 2 from concurrent pollers", submitted.submitCalls)
+	calls, submissions := submitted.submissionSnapshot()
+	if calls < 2 {
+		t.Fatalf("submit calls = %d, want at least 2 from concurrent pollers", calls)
 	}
 	var hostedSubmitted, scriptSubmitted bool
-	for _, request := range submitted.submissions {
+	for _, request := range submissions {
 		for _, work := range request.Works {
 			if work.WorkID == "linear:issue-hosted" {
 				hostedSubmitted = true
@@ -1113,7 +1161,7 @@ func assertConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *a
 		}
 	}
 	if !hostedSubmitted || !scriptSubmitted {
-		t.Fatalf("submitted works = %#v, want both hosted linear:issue-hosted and script-issue outputs", submitted.submissions)
+		t.Fatalf("submitted works = %#v, want both hosted linear:issue-hosted and script-issue outputs", submissions)
 	}
 }
 
@@ -1121,18 +1169,14 @@ func waitForHostedPollerSubmission(t *testing.T, submitted *aggregateSnapshotFac
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		submitted.mu.Lock()
-		submitCalls := submitted.submitCalls
-		submitted.mu.Unlock()
-		if submitCalls >= want {
+		calls, _ := submitted.submissionSnapshot()
+		if calls >= want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	submitted.mu.Lock()
-	submitCalls := submitted.submitCalls
-	submitted.mu.Unlock()
-	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, submitCalls)
+	calls, _ := submitted.submissionSnapshot()
+	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, calls)
 }
 
 func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {
@@ -1458,10 +1502,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
+	initializeWorkersSchedulerForTest(svc)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory:    replacementFactory,
-			RuntimeCfg: runtimeCfg,
-		},
+		Factory:    replacementFactory,
+		RuntimeCfg: runtimeCfg,
+	},
 	}
 	sidecarCtx, cancelSidecars := context.WithCancel(context.Background())
 	defer cancelSidecars()
@@ -1620,10 +1665,11 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 		logger: zap.NewNop(),
 		clock:  fakeClock,
 	}
+	initializeWorkersSchedulerForTest(svc)
 	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{
-			Factory:    replacementFactory,
-			RuntimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
-		},
+		Factory:    replacementFactory,
+		RuntimeCfg: cronLoadedFactoryConfigForServiceTest(t, "beta", true),
+	},
 	}
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()

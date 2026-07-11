@@ -2,19 +2,21 @@ package runtimehost
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
-	"go.uber.org/zap"
 )
 
 type workRequestSubmitter func(context.Context, interfaces.WorkRequest) error
+
+type workerSidecarOwner interface {
+	StartSchedulerSidecarsForRuntime(context.Context, *sync.WaitGroup, workersservice.RuntimeSidecarsInput)
+	WorkflowIdentityForFactoryDir(string) string
+	SubmitCronTick(context.Context, interfaces.RuntimeWorkstationLookup, string, workersservice.WorkRequestSubmitter, interfaces.FactoryWorkstationConfig, time.Time) error
+}
 
 func (fs *Host) startSchedulerSidecarsForRuntime(
 	ctx context.Context,
@@ -23,12 +25,16 @@ func (fs *Host) startSchedulerSidecarsForRuntime(
 	factoryCfg *interfaces.FactoryConfig,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	submitter workRequestSubmitter,
-) {
+) error {
 	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || sidecars == nil || submitter == nil {
-		return
+		return nil
 	}
 
-	fs.requireWorkersScheduler().StartSchedulerSidecarsForRuntime(
+	workersScheduler, err := fs.requireWorkersScheduler()
+	if err != nil {
+		return err
+	}
+	workersScheduler.StartSchedulerSidecarsForRuntime(
 		ctx,
 		sidecars,
 		workersservice.RuntimeSidecarsInput{
@@ -38,41 +44,14 @@ func (fs *Host) startSchedulerSidecarsForRuntime(
 			Submitter:  workersservice.WorkRequestSubmitter(submitter),
 		},
 	)
+	return nil
 }
 
-func (fs *Host) requireWorkersScheduler() *workersservice.Service {
-	if fs == nil {
-		return workersservice.New(workersservice.Config{})
+func (fs *Host) requireWorkersScheduler() (workerSidecarOwner, error) {
+	if fs == nil || fs.workersScheduler == nil {
+		return nil, fmt.Errorf("worker sidecar owner is not initialized: construct Host through the runtime initializer")
 	}
-	if fs.workersScheduler != nil {
-		return fs.workersScheduler
-	}
-	if fs.cfg != nil {
-		return NewWorkersSchedulerService(fs.cfg, fs.clock, fs.logger, fs.hostedWorkers)
-	}
-	clock := clockwork.NewRealClock()
-	if supervisorClock, ok := fs.clock.(clockwork.Clock); ok && supervisorClock != nil {
-		clock = supervisorClock
-	}
-	runner := workers.CommandRunner(workers.ExecCommandRunner{})
-	if fs.coordinatorPolicy().commandRunnerOverride != nil {
-		runner = fs.coordinatorPolicy().commandRunnerOverride
-	}
-	logger := zap.NewNop()
-	if fs.logger != nil {
-		logger = fs.logger
-	}
-	hosted := fs.hostedWorkers
-	return workersservice.New(workersservice.Config{
-		Logger:               logger,
-		Clock:                clock,
-		CommandRunner:        runner,
-		WorkflowID:           fs.coordinatorPolicy().workflowID,
-		DefaultFactoryDir:    fs.coordinatorPolicy().dir,
-		HostedHTTPClient:     hosted.HTTPClient,
-		HostedSecretResolver: hosted.SecretResolver,
-		HostedLinearEndpoint: hosted.LinearEndpoint,
-	})
+	return fs.workersScheduler, nil
 }
 
 func (fs *Host) submitCronTick(
@@ -80,14 +59,18 @@ func (fs *Host) submitCronTick(
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
 ) error {
+	workersScheduler, err := fs.requireWorkersScheduler()
+	if err != nil {
+		return err
+	}
 	runtimeCfg := fs.currentRuntimeConfig()
 	workflowIdentity := ""
 	runtimeLookup := interfaces.FirstRuntimeWorkstationLookup(runtimeCfg)
 	submitter := fs.currentRuntimeSubmitter()
 	if runtimeCfg != nil {
-		workflowIdentity = fs.cronWorkflowIdentity(runtimeCfg.FactoryDir())
+		workflowIdentity = workersScheduler.WorkflowIdentityForFactoryDir(runtimeCfg.FactoryDir())
 	}
-	return fs.requireWorkersScheduler().SubmitCronTick(
+	return workersScheduler.SubmitCronTick(
 		ctx,
 		runtimeLookup,
 		workflowIdentity,
@@ -95,47 +78,4 @@ func (fs *Host) submitCronTick(
 		ws,
 		firedAt,
 	)
-}
-
-func (fs *Host) cronWorkflowIdentity(factoryDir string) string {
-	return fs.requireWorkersScheduler().WorkflowIdentityForFactoryDir(factoryDir)
-}
-
-// NewWorkersSchedulerService constructs the workers scheduling collaborator for
-// runtime-host poller and cron supervision.
-func NewWorkersSchedulerService(
-	cfg *Config,
-	clock factory.Clock,
-	logger *zap.Logger,
-	hostedWorkers hostedworkers.Config,
-) *workersservice.Service {
-	supervisorClock := clockwork.NewRealClock()
-	if clock != nil {
-		if clockworkClock, ok := clock.(clockwork.Clock); ok && clockworkClock != nil {
-			supervisorClock = clockworkClock
-		}
-	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-	runner := workers.CommandRunner(workers.ExecCommandRunner{})
-	workflowID := ""
-	defaultFactoryDir := ""
-	if cfg != nil {
-		if cfg.CommandRunnerOverride != nil {
-			runner = cfg.CommandRunnerOverride
-		}
-		workflowID = cfg.WorkflowID
-		defaultFactoryDir = cfg.Dir
-	}
-	return workersservice.New(workersservice.Config{
-		Logger:               logger,
-		Clock:                supervisorClock,
-		CommandRunner:        runner,
-		WorkflowID:           workflowID,
-		DefaultFactoryDir:    defaultFactoryDir,
-		HostedHTTPClient:     hostedWorkers.HTTPClient,
-		HostedSecretResolver: hostedWorkers.SecretResolver,
-		HostedLinearEndpoint: hostedWorkers.LinearEndpoint,
-	})
 }

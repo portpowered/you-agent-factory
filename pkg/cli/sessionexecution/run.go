@@ -99,9 +99,14 @@ func resolveExecutionService(cfg RunConfig) (factorysessionexecution.Service, er
 		if err != nil {
 			return nil, err
 		}
+		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
+		if err != nil {
+			return nil, err
+		}
 		return factorysessionexecution.NewExecutionService(provider, factorysessionexecution.ServiceConfig{
 			ProjectRoot:       projectRoot,
 			ChildExecutorMode: cfg.StartConfig.ChildExecutorMode,
+			Persistence:       persistence,
 		})
 	}
 	catalogPath, err := resolveFixtureCatalogPath(cfg.FixtureCatalogPath)

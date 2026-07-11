@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
-	"time"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
@@ -20,9 +20,7 @@ import (
 
 func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -58,9 +56,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.
 
 func TestGetFactorySessionEvents_RuntimeBackedReconnectCursorReturnsLaterEvents(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -105,9 +101,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReconnectCursorReturnsLaterEvents(
 
 func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -151,9 +145,7 @@ func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *
 
 func TestGetFactorySessionEvents_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -170,9 +162,7 @@ func TestGetFactorySessionEvents_RuntimeBackedMissingSessionReturnsNotFound(t *t
 
 func TestGetFactorySessionEvents_RuntimeBackedAPIShapingMatchesServiceProjection(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -208,9 +198,7 @@ func TestGetFactorySessionEvents_RuntimeBackedAPIShapingMatchesServiceProjection
 
 func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
 	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -385,11 +373,8 @@ func assertFactoryEventsJSONEqual(t *testing.T, want, got []factoryapi.FactoryEv
 func newAPILiveProviderRuntimeService(t *testing.T) factorysessionexecution.Service {
 	t.Helper()
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
-		Provider:          factorysessionexecution.SmokeLiveChildProvider(),
-	})
+	return newAPIJavaScriptExecutionService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive,
+		factorysessionexecution.SmokeLiveChildProvider())
 }
 
 func newAPILiveProviderBlockingRuntimeService(t *testing.T) (
@@ -399,11 +384,7 @@ func newAPILiveProviderBlockingRuntimeService(t *testing.T) (
 	t.Helper()
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	provider := &apiLiveProviderBlockingFixtureProvider{}
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
-		Provider:          provider,
-	})
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeLive, provider)
 	return service, provider
 }
 
@@ -641,7 +622,7 @@ func assertAPIDispatchReconciledLifecycleEvent(
 		ReconciledStatus     factoryapi.FactoryDispatchStatus         `json:"reconciledStatus"`
 		ReconciliationSource factoryapi.DispatchReconciliationSource `json:"reconciliationSource"`
 		ArtifactIds          *[]string                               `json:"artifactIds"`
-		FailureDetail        *factoryapi.FailureDetail                    `json:"failureDetail"`
+		FailureDetail        *factoryapi.FailureDetail                `json:"failureDetail"`
 	}
 	if err := json.Unmarshal(reconciledPayload, &reconciledBody); err != nil {
 		t.Fatalf("unmarshal DISPATCH_RECONCILED payload: %v", err)
