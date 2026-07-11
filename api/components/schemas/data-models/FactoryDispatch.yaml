@@ -72,7 +72,7 @@ properties:
     items:
       $ref: './FactoryDispatchWarning.yaml'
   failureDetail:
-    $ref: './FactoryDispatchFailureDetail.yaml'
+    $ref: './FailureDetail.yaml'
   petri:
     $ref: './FactoryDispatchPetriProjection.yaml'
     description: Petri-specific dispatch projection. Present for Petri transition dispatches.

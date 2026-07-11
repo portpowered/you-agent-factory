@@ -393,7 +393,7 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     500,
-			ErrorClass:         stringPtrForProjectionTest("throttled"),
+			FailureDetail:      &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."},
 			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"}),
 			Diagnostics: generatedWorkDiagnosticsForProjectionTest(&interfaces.SafeWorkDiagnostics{
 				Provider: &interfaces.SafeProviderDiagnostic{
@@ -409,7 +409,7 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			DispatchID:      "dispatch-failed",
 			TransitionID:    "t-review",
 			Workstation:     interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:          interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureReason: "throttled", FailureMessage: "Provider rate limit exceeded."},
+			Result:          interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
 			DurationMillis:  500,
 			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
 			Outputs: []interfaces.WorkstationOutput{{
@@ -438,11 +438,11 @@ func assertFailedTerminalWorkProjection(t *testing.T, failedView interfaces.Fact
 		t.Fatalf("failed occupancy = %#v, want Blocked story in task:failed", failedItems)
 	}
 	if len(failedView.Runtime.Session.DispatchHistory) != 1 ||
-		failedView.Runtime.Session.DispatchHistory[0].Result.FailureReason != "throttled" {
+		failedView.Runtime.Session.DispatchHistory[0].Result.FailureDetail == nil || failedView.Runtime.Session.DispatchHistory[0].Result.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled {
 		t.Fatalf("dispatch history = %#v, want retained failure reason", failedView.Runtime.Session.DispatchHistory)
 	}
 	if len(failedView.Runtime.Session.ProviderSessions) != 1 ||
-		failedView.Runtime.Session.ProviderSessions[0].FailureMessage != "Provider rate limit exceeded." {
+		failedView.Runtime.Session.ProviderSessions[0].FailureDetail == nil || failedView.Runtime.Session.ProviderSessions[0].FailureDetail.Message != "Provider rate limit exceeded." {
 		t.Fatalf("provider sessions = %#v, want retained failure message", failedView.Runtime.Session.ProviderSessions)
 	}
 }

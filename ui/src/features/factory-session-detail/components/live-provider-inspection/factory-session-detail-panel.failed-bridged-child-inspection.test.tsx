@@ -95,7 +95,6 @@ describe("FactorySessionDetailPanel failed bridged-child inspection", () => {
     });
 
     expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
-    expect(screen.getByText("verification_error")).toBeTruthy();
     expect(
       screen.getByText("Expected release manifest checksum."),
     ).toBeTruthy();

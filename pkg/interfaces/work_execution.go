@@ -171,6 +171,14 @@ const (
 	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
 )
 
+// FailureDetail is the canonical customer-safe explanation of a failed
+// operation. Runtime projections copy this value without reclassifying or
+// reparsing provider output.
+type FailureDetail struct {
+	Reason  WorkFailureType `json:"reason"`
+	Message string          `json:"message"`
+}
+
 // WorkFailureDecision is the normalized behavior contract consumed by
 // downstream retry, termination, and throttle-pause logic.
 type WorkFailureDecision struct {

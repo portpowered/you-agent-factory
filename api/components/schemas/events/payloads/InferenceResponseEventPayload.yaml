@@ -37,6 +37,5 @@ properties:
   exitCode:
     type: integer
     description: Process exit code when the provider failure exposes one.
-  errorClass:
-    type: string
-    description: Stable failure classification when available.
+  failureDetail:
+    $ref: '../../data-models/FailureDetail.yaml'

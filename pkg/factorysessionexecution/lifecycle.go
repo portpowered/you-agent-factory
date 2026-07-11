@@ -729,7 +729,6 @@ type ResultSummary struct {
 type FailureSummary struct {
 	Reason                 string
 	Message                string
-	ErrorClass             string
 	PartialResultAvailable bool
 }
 

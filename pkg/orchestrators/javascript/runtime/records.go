@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (
@@ -40,14 +42,14 @@ const ChildExecutionFailureReason = "CHILD_EXECUTION_FAILED"
 // Records are typed so they can later map into factory session events, dispatches,
 // and artifacts without changing workflow source syntax.
 type RuntimeRecord struct {
-	Sequence       int                  `json:"sequence"`
-	Kind           string               `json:"kind"`
-	Phase          *PhaseRecord         `json:"phase,omitempty"`
-	Log            *LogRecord           `json:"log,omitempty"`
-	Artifact       *ArtifactRecord      `json:"artifact,omitempty"`
-	Checkpoint     *CheckpointRecord    `json:"checkpoint,omitempty"`
-	Budget         *BudgetRecord        `json:"budget,omitempty"`
-	ChildDispatch  *ChildDispatchRecord `json:"childDispatch,omitempty"`
+	Sequence      int                  `json:"sequence"`
+	Kind          string               `json:"kind"`
+	Phase         *PhaseRecord         `json:"phase,omitempty"`
+	Log           *LogRecord           `json:"log,omitempty"`
+	Artifact      *ArtifactRecord      `json:"artifact,omitempty"`
+	Checkpoint    *CheckpointRecord    `json:"checkpoint,omitempty"`
+	Budget        *BudgetRecord        `json:"budget,omitempty"`
+	ChildDispatch *ChildDispatchRecord `json:"childDispatch,omitempty"`
 }
 
 // PhaseRecord captures one workflow phase transition.
@@ -84,25 +86,23 @@ type CheckpointRecord struct {
 // status transition. Multiple records per child prove queued/running/completed
 // ordering without starting real provider sessions.
 type ChildDispatchRecord struct {
-	DispatchID         string `json:"dispatchId"`
-	ChildIndex         int    `json:"childIndex"`
-	Status             string `json:"status"`
-	Label              string `json:"label,omitempty"`
-	PromptDigest       string `json:"promptDigest,omitempty"`
-	Model              string `json:"model,omitempty"`
-	ReasoningEffort    string `json:"reasoningEffort,omitempty"`
-	Command            string `json:"command,omitempty"`
-	Sandbox            string `json:"sandbox,omitempty"`
-	SchemaDigest       string `json:"schemaDigest,omitempty"`
-	RunnerID           string `json:"runnerId,omitempty"`
-	ExecutionMode      string `json:"executionMode,omitempty"`
-	Provider           string `json:"provider,omitempty"`
-	ProviderSessionRef string `json:"providerSessionRef,omitempty"`
-	ArtifactRef        string         `json:"artifactRef,omitempty"`
-	Output             map[string]any `json:"output,omitempty"`
-	FailureReason      string         `json:"failureReason,omitempty"`
-	FailureMessage     string         `json:"failureMessage,omitempty"`
-	FailureErrorClass  string         `json:"failureErrorClass,omitempty"`
+	DispatchID         string                    `json:"dispatchId"`
+	ChildIndex         int                       `json:"childIndex"`
+	Status             string                    `json:"status"`
+	Label              string                    `json:"label,omitempty"`
+	PromptDigest       string                    `json:"promptDigest,omitempty"`
+	Model              string                    `json:"model,omitempty"`
+	ReasoningEffort    string                    `json:"reasoningEffort,omitempty"`
+	Command            string                    `json:"command,omitempty"`
+	Sandbox            string                    `json:"sandbox,omitempty"`
+	SchemaDigest       string                    `json:"schemaDigest,omitempty"`
+	RunnerID           string                    `json:"runnerId,omitempty"`
+	ExecutionMode      string                    `json:"executionMode,omitempty"`
+	Provider           string                    `json:"provider,omitempty"`
+	ProviderSessionRef string                    `json:"providerSessionRef,omitempty"`
+	ArtifactRef        string                    `json:"artifactRef,omitempty"`
+	Output             map[string]any            `json:"output,omitempty"`
+	FailureDetail      *interfaces.FailureDetail `json:"failureDetail,omitempty"`
 }
 
 // BudgetRecord captures effective policy budget values observed by the runtime.

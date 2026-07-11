@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -147,11 +148,104 @@ func readReplayArtifactFile(path string) ([]byte, error) {
 }
 
 func unmarshalReplayArtifact(data []byte) (*interfaces.ReplayArtifact, error) {
+	normalized, err := normalizeHistoricalFailureDetails(data)
+	if err != nil {
+		return nil, err
+	}
 	var artifact interfaces.ReplayArtifact
-	if err := json.Unmarshal(data, &artifact); err != nil {
+	if err := json.Unmarshal(normalized, &artifact); err != nil {
 		return nil, err
 	}
 	return &artifact, nil
+}
+
+const unavailableHistoricalFailureMessage = "Failure details were not recorded in this historical event."
+
+var canonicalFailureReasons = map[string]struct{}{
+	"auth_failure": {}, "misconfigured": {}, "permanent_bad_request": {},
+	"internal_server_error": {}, "throttled": {}, "timeout": {}, "unknown": {},
+}
+
+// normalizeHistoricalFailureDetails translates compatibility fields before
+// generated canonical event types decode the replay input and discard them.
+func normalizeHistoricalFailureDetails(data []byte) ([]byte, error) {
+	var root map[string]any
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, err
+	}
+	if payload, ok := root["payload"].(map[string]any); ok {
+		normalizeHistoricalFailureObject(payload)
+	}
+	if events, ok := root["events"].([]any); ok {
+		for _, value := range events {
+			event, ok := value.(map[string]any)
+			if !ok {
+				continue
+			}
+			if payload, ok := event["payload"].(map[string]any); ok {
+				normalizeHistoricalFailureObject(payload)
+			}
+		}
+	}
+	return json.Marshal(root)
+}
+
+func normalizeHistoricalFailureObject(object map[string]any) {
+	detail, validCanonical := validHistoricalFailureDetail(object["failureDetail"])
+	legacyReason, hasLegacyReason := trimmedString(object["failureReason"])
+	legacyMessage, hasLegacyMessage := trimmedString(object["failureMessage"])
+	errorClass, hasErrorClass := trimmedString(object["errorClass"])
+	delete(object, "failureReason")
+	delete(object, "failureMessage")
+	delete(object, "errorClass")
+	if validCanonical {
+		object["failureDetail"] = detail
+		return
+	}
+	if !hasLegacyReason && !hasLegacyMessage && !hasErrorClass {
+		return
+	}
+	reason := "unknown"
+	if hasLegacyReason {
+		reason = normalizedHistoricalFailureReason(legacyReason)
+	} else if hasErrorClass {
+		reason = normalizedHistoricalFailureReason(errorClass)
+	}
+	if !hasLegacyMessage {
+		legacyMessage = unavailableHistoricalFailureMessage
+	}
+	object["failureDetail"] = map[string]any{"reason": reason, "message": legacyMessage}
+}
+
+func validHistoricalFailureDetail(value any) (map[string]any, bool) {
+	detail, ok := value.(map[string]any)
+	if !ok || len(detail) != 2 {
+		return nil, false
+	}
+	reason, hasReason := trimmedString(detail["reason"])
+	message, hasMessage := trimmedString(detail["message"])
+	if !hasReason || !hasMessage {
+		return nil, false
+	}
+	if _, ok := canonicalFailureReasons[reason]; !ok {
+		return nil, false
+	}
+	return map[string]any{"reason": reason, "message": message}, true
+}
+
+func normalizedHistoricalFailureReason(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.NewReplacer("-", "_", " ", "_").Replace(normalized)
+	if _, ok := canonicalFailureReasons[normalized]; ok {
+		return normalized
+	}
+	return "unknown"
+}
+
+func trimmedString(value any) (string, bool) {
+	text, ok := value.(string)
+	text = strings.TrimSpace(text)
+	return text, ok && text != ""
 }
 
 // Validate rejects artifacts that cannot be safely used as replay input.

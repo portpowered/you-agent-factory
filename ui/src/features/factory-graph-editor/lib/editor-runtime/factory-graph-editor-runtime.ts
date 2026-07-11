@@ -94,10 +94,7 @@ function workstationRequestHasError(
   >[string],
 ) {
   return Boolean(
-    request.response?.failure_reason ||
-      request.response?.failureReason ||
-      request.response?.failure_message ||
-      request.response?.failureMessage ||
+    request.response?.failureDetail ||
       request.counts.errored_count ||
       request.counts.erroredCount ||
       (request.response?.outcome ?? "").toLowerCase() === "failed",

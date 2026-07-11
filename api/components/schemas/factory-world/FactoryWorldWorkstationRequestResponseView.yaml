@@ -9,10 +9,8 @@ properties:
     type: string
   selectedClassificationLabel:
     type: string
-  failureReason:
-    type: string
-  failureMessage:
-    type: string
+  failureDetail:
+    $ref: '../data-models/FailureDetail.yaml'
   scriptResponse:
     $ref: './FactoryWorldScriptResponseView.yaml'
   agentRunInspection:

@@ -40,7 +40,6 @@ const failedDispatchDetailFixture = {
   artifactIds: ["artifact-failure-log"],
   dispatchKind: "JAVASCRIPT_VERIFY",
   failureDetail: {
-    errorClass: "verification_error",
     message: "Expected release manifest checksum.",
     reason: "VERIFY_ASSERTION_FAILED",
   },
@@ -153,7 +152,6 @@ describe("FactorySessionDetailPanel failure drilldown", () => {
     });
 
     expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
-    expect(screen.getByText("verification_error")).toBeTruthy();
     expect(
       screen.getByText("Expected release manifest checksum."),
     ).toBeTruthy();

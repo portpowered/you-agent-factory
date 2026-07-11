@@ -9,7 +9,6 @@ export interface FactorySessionDispatchArtifactLink {
 }
 
 export interface FactorySessionDispatchFailureDetailModel {
-  errorClass?: string;
   message?: string;
   reason?: string;
 }
@@ -67,7 +66,6 @@ export function normalizeFactorySessionDispatchDetail(
     dispatchKind: dispatch.dispatchKind,
     failureDetail: dispatch.failureDetail
       ? {
-          errorClass: normalizeOptionalText(dispatch.failureDetail.errorClass),
           message: normalizeOptionalText(dispatch.failureDetail.message),
           reason: normalizeOptionalText(dispatch.failureDetail.reason),
         }

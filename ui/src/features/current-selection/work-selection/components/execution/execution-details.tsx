@@ -200,12 +200,12 @@ function WorkstationRequestProjectionSection({
         <InferenceAttemptDetail
           code
           label="failureReason"
-          value={response?.failureReason ?? response?.failure_reason}
+          value={response?.failureDetail?.reason}
         />
         <InferenceAttemptDetail
           code
           label="failureMessage"
-          value={response?.failureMessage ?? response?.failure_message}
+          value={response?.failureDetail?.message}
         />
       </CurrentSelectionDescriptionList>
     </CurrentSelectionContentSection>

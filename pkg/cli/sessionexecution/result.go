@@ -134,7 +134,7 @@ func renderResultHuman(output io.Writer, result factoryapi.FactorySessionResult)
 	if err := writeResultAvailabilityHuman(output, result.Availability); err != nil {
 		return err
 	}
-	return writeResultFailureHuman(output, result.Failure)
+	return writeResultFailureHuman(output, result.FailureDetail)
 }
 
 func resultDisplaySummary(result *factoryapi.FactorySessionResult) string {

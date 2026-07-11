@@ -450,20 +450,15 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 }
 
 func dispatchFailureDetailFromChildRecord(child workflowruntime.ChildDispatchRecord) *DispatchFailureDetail {
-	message := strings.TrimSpace(child.FailureMessage)
-	if message == "" {
+	if child.FailureDetail == nil {
 		return nil
 	}
-	detail := &DispatchFailureDetail{Message: message}
-	if reason := strings.TrimSpace(child.FailureReason); reason != "" {
-		detail.Reason = reason
-	} else {
-		detail.Reason = workflowruntime.ChildExecutionFailureReason
+	reason := strings.TrimSpace(string(child.FailureDetail.Reason))
+	message := strings.TrimSpace(child.FailureDetail.Message)
+	if reason == "" || message == "" {
+		return nil
 	}
-	if errorClass := strings.TrimSpace(child.FailureErrorClass); errorClass != "" {
-		detail.ErrorClass = errorClass
-	}
-	return detail
+	return &DispatchFailureDetail{Reason: reason, Message: message}
 }
 
 func dispatchJavaScriptFromChildRecord(child workflowruntime.ChildDispatchRecord) DispatchJavaScriptProjection {

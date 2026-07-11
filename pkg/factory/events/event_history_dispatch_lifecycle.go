@@ -75,7 +75,7 @@ type DispatchReconciledInput struct {
 	Usage                  *factoryapi.FactoryDispatchUsage
 	ResultArtifactRef      *factoryapi.FactoryArtifactRef
 	ArtifactIDs            []string
-	FailureDetail          *factoryapi.FactoryDispatchFailureDetail
+	FailureDetail          *factoryapi.FailureDetail
 }
 
 // ArtifactCreatedInput carries replay-safe facts for ARTIFACT_CREATED.
@@ -548,11 +548,7 @@ func syntheticDispatchReconciledEvent(
 		payload.Usage = &usage
 	}
 	if dispatch.FailureDetail != nil {
-		payload.FailureDetail = &factoryapi.FactoryDispatchFailureDetail{
-			Reason:     stringPtrIfNotEmpty(dispatch.FailureDetail.Reason),
-			Message:    stringPtrIfNotEmpty(dispatch.FailureDetail.Message),
-			ErrorClass: stringPtrIfNotEmpty(dispatch.FailureDetail.ErrorClass),
-		}
+		payload.FailureDetail = failureDetail(dispatch.FailureDetail.Reason, dispatch.FailureDetail.Message)
 	}
 	source := "stream-reconnect"
 	context := factoryapi.FactoryEventContext{

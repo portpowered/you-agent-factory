@@ -2,6 +2,7 @@ package livechild
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
@@ -193,9 +194,10 @@ func (s *testChildRecordSink) failedDispatchRecords(dispatchID string) []workflo
 }
 
 func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *testing.T) {
+	const failureMessage = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
 	provider := newFailingUnitMockProvider(provider.NewProviderError(
 		interfaces.WorkFailureTypePermanentBadRequest,
-		"simulated provider child error",
+		failureMessage,
 		nil,
 	))
 	collectorSink := newTestChildRecordSink()
@@ -221,14 +223,20 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 	if failed.Status != workflowruntime.ChildDispatchStatusFailed {
 		t.Fatalf("dispatch status = %q, want FAILED", failed.Status)
 	}
-	if failed.FailureReason != string(interfaces.WorkFailureTypePermanentBadRequest) {
-		t.Fatalf("failureReason = %q, want %q", failed.FailureReason, interfaces.WorkFailureTypePermanentBadRequest)
+	if failed.FailureDetail == nil || failed.FailureDetail.Reason != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("failureDetail = %#v, want %q", failed.FailureDetail, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if failed.FailureMessage != "simulated provider child error" {
-		t.Fatalf("failureMessage = %q", failed.FailureMessage)
+	if failed.FailureDetail.Message != failureMessage {
+		t.Fatalf("failure message = %q", failed.FailureDetail.Message)
 	}
-	if failed.FailureErrorClass != string(interfaces.WorkFailureFamilyTerminal) {
-		t.Fatalf("failureErrorClass = %q, want %q", failed.FailureErrorClass, interfaces.WorkFailureFamilyTerminal)
+	encoded, marshalErr := json.Marshal(failed)
+	if marshalErr != nil {
+		t.Fatalf("marshal failed record: %v", marshalErr)
+	}
+	for _, legacy := range []string{"failureReason", "failureMessage", "failureErrorClass", "errorClass"} {
+		if strings.Contains(string(encoded), legacy) {
+			t.Fatalf("serialized failed record contains legacy field %q: %s", legacy, encoded)
+		}
 	}
 }
 

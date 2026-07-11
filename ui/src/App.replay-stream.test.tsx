@@ -359,7 +359,7 @@ describe("App streamed replay rendering flows", () => {
           name: "Select work item Blocked Analysis Story",
         }),
       ).toBeNull();
-      expect(screen.queryByText("provider_rate_limit")).toBeNull();
+      expect(screen.queryByText("throttled")).toBeNull();
       expect(screen.queryByText("sess-blocked-analysis")).toBeNull();
       expect(screen.getByText("Queued Analysis Story")).toBeTruthy();
     });
@@ -539,7 +539,7 @@ describe("App streamed replay rendering flows", () => {
         1,
       );
       expect(
-        within(failedDetail).getByText("provider_rate_limit"),
+        within(failedDetail).getByText("throttled"),
       ).toBeTruthy();
       expect(
         within(failedDetail).queryByText(

@@ -266,7 +266,6 @@ func TestDispatchAndArtifactMapperRoundTrip_MapsUsageWarningsAndRedactionCounts(
 	retryCount := int32(2)
 	failureReason := "TEMPORARY"
 	failureMessage := "provider unavailable"
-	failureClass := "transient"
 	dispatch := factoryapi.FactoryDispatch{
 		SessionId:        "dur-sess-1",
 		Id:               "disp-1",
@@ -284,10 +283,9 @@ func TestDispatchAndArtifactMapperRoundTrip_MapsUsageWarningsAndRedactionCounts(
 		Warnings: &[]factoryapi.FactoryDispatchWarning{
 			{Code: "RATE_LIMIT", Message: " retried once "},
 		},
-		FailureDetail: &factoryapi.FactoryDispatchFailureDetail{
-			Reason:     &failureReason,
-			Message:    &failureMessage,
-			ErrorClass: &failureClass,
+		FailureDetail: &factoryapi.FailureDetail{
+			Reason:  factoryapi.WorkFailureType(failureReason),
+			Message: failureMessage,
 		},
 	}
 

@@ -125,22 +125,21 @@ type FactoryWorldWorkStateChangeRecord struct {
 // FactoryWorldProviderSessionRecord records one provider session attached to a
 // workstation response in the canonical event-first world state.
 type FactoryWorldProviderSessionRecord struct {
-	DispatchID               string                  `json:"dispatch_id"`
-	TransitionID             string                  `json:"transition_id"`
-	WorkstationName          string                  `json:"workstation_name,omitempty"`
-	RunnerID                 string                  `json:"runner_id,omitempty"`
-	RunnerSelectionSource    RunnerSelectionSource   `json:"runner_selection_source,omitempty"`
-	Outcome                  string                  `json:"outcome"`
-	ProviderSession          ProviderSessionMetadata `json:"provider_session"`
-	Diagnostics              *SafeWorkDiagnostics    `json:"diagnostics,omitempty"`
+	DispatchID               string                    `json:"dispatch_id"`
+	TransitionID             string                    `json:"transition_id"`
+	WorkstationName          string                    `json:"workstation_name,omitempty"`
+	RunnerID                 string                    `json:"runner_id,omitempty"`
+	RunnerSelectionSource    RunnerSelectionSource     `json:"runner_selection_source,omitempty"`
+	Outcome                  string                    `json:"outcome"`
+	ProviderSession          ProviderSessionMetadata   `json:"provider_session"`
+	Diagnostics              *SafeWorkDiagnostics      `json:"diagnostics,omitempty"`
 	WorkItemIDs              []string                  `json:"work_item_ids,omitempty"`
 	WorkItems                []FactoryWorldWorkItemRef `json:"work_items,omitempty"`
 	ConsumedInputs           []WorkstationInput        `json:"consumed_inputs,omitempty"`
-	CurrentChainingTraceID   string                  `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string                `json:"previous_chaining_trace_ids,omitempty"`
-	TraceIDs                 []string                `json:"trace_ids,omitempty"`
-	FailureReason            string                  `json:"failure_reason,omitempty"`
-	FailureMessage           string                  `json:"failure_message,omitempty"`
+	CurrentChainingTraceID   string                    `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string                  `json:"previous_chaining_trace_ids,omitempty"`
+	TraceIDs                 []string                  `json:"trace_ids,omitempty"`
+	FailureDetail            *FailureDetail            `json:"failureDetail,omitempty"`
 }
 
 // FactoryWorldInferenceAttempt records one provider-boundary inference attempt
@@ -158,7 +157,7 @@ type FactoryWorldInferenceAttempt struct {
 	Response           string                   `json:"response,omitempty"`
 	DurationMillis     int64                    `json:"duration_millis,omitempty"`
 	ExitCode           *int                     `json:"exit_code,omitempty"`
-	ErrorClass         string                   `json:"error_class,omitempty"`
+	FailureDetail      *FailureDetail           `json:"failureDetail,omitempty"`
 	ProviderSession    *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics        *SafeWorkDiagnostics     `json:"diagnostics,omitempty"`
 	ResponseTime       time.Time                `json:"response_time,omitempty"`
@@ -210,8 +209,7 @@ type FactoryWorldFailureDetail struct {
 	TransitionID    string          `json:"transition_id"`
 	WorkstationName string          `json:"workstation_name,omitempty"`
 	WorkItem        FactoryWorkItem `json:"work_item"`
-	FailureReason   string          `json:"failure_reason,omitempty"`
-	FailureMessage  string          `json:"failure_message,omitempty"`
+	FailureDetail   *FailureDetail  `json:"failureDetail,omitempty"`
 }
 
 const (
@@ -243,55 +241,51 @@ type JavaScriptCheckpointArtifactRef struct {
 	SizeBytes   int64  `json:"sizeBytes,omitempty"`
 }
 
-
 // FactoryWorldSessionBracketState reconstructs one durable factory session
 // execution bracket from SESSION_STARTED, SESSION_RESULT_UPDATED, and
 // SESSION_COMPLETED canonical events.
 type FactoryWorldSessionBracketState struct {
-	SessionID           string                              `json:"session_id,omitempty"`
-	OrchestratorKind    string                              `json:"orchestrator_kind,omitempty"`
-	OrchestratorDialect string                              `json:"orchestrator_dialect,omitempty"`
-	FactoryID           string                              `json:"factory_id,omitempty"`
-	SourceRef           string                              `json:"source_ref,omitempty"`
-	SourceHash          string                              `json:"source_hash,omitempty"`
-	PolicyHash          string                              `json:"policy_hash,omitempty"`
-	ArgsDigest          string                              `json:"args_digest,omitempty"`
-	StartedAt           time.Time                           `json:"started_at,omitempty"`
-	LifecycleControlStatus string                           `json:"lifecycle_control_status,omitempty"`
-	PausedAt            time.Time                           `json:"paused_at,omitempty"`
-	ResumedAt           time.Time                           `json:"resumed_at,omitempty"`
-	ResultStatus        string                              `json:"result_status,omitempty"`
-	ResultSummary       []WorkContentPart                   `json:"result_summary,omitempty"`
-	ArtifactIDs         []string                            `json:"artifact_ids,omitempty"`
-	Terminal            bool                                `json:"terminal"`
-	FinalStatus         string                              `json:"final_status,omitempty"`
-	CompletedAt         time.Time                           `json:"completed_at,omitempty"`
-	DurationMillis      int64                               `json:"duration_millis,omitempty"`
-	DispatchCounts      *FactoryWorldJavaScriptChildDispatchCounts `json:"dispatch_counts,omitempty"`
-	FailureReason       string                              `json:"failure_reason,omitempty"`
-	FailureMessage      string                              `json:"failure_message,omitempty"`
-	FailureErrorClass   string                              `json:"failure_error_class,omitempty"`
+	SessionID              string                                     `json:"session_id,omitempty"`
+	OrchestratorKind       string                                     `json:"orchestrator_kind,omitempty"`
+	OrchestratorDialect    string                                     `json:"orchestrator_dialect,omitempty"`
+	FactoryID              string                                     `json:"factory_id,omitempty"`
+	SourceRef              string                                     `json:"source_ref,omitempty"`
+	SourceHash             string                                     `json:"source_hash,omitempty"`
+	PolicyHash             string                                     `json:"policy_hash,omitempty"`
+	ArgsDigest             string                                     `json:"args_digest,omitempty"`
+	StartedAt              time.Time                                  `json:"started_at,omitempty"`
+	LifecycleControlStatus string                                     `json:"lifecycle_control_status,omitempty"`
+	PausedAt               time.Time                                  `json:"paused_at,omitempty"`
+	ResumedAt              time.Time                                  `json:"resumed_at,omitempty"`
+	ResultStatus           string                                     `json:"result_status,omitempty"`
+	ResultSummary          []WorkContentPart                          `json:"result_summary,omitempty"`
+	ArtifactIDs            []string                                   `json:"artifact_ids,omitempty"`
+	Terminal               bool                                       `json:"terminal"`
+	FinalStatus            string                                     `json:"final_status,omitempty"`
+	CompletedAt            time.Time                                  `json:"completed_at,omitempty"`
+	DurationMillis         int64                                      `json:"duration_millis,omitempty"`
+	DispatchCounts         *FactoryWorldJavaScriptChildDispatchCounts `json:"dispatch_counts,omitempty"`
+	FailureDetail          *FailureDetail                             `json:"failureDetail,omitempty"`
 }
 
 // FactoryWorldSessionBracketProjection is the customer-visible session bracket
 // projection derived from reconstructed world state.
 type FactoryWorldSessionBracketProjection struct {
-	SessionID           string            `json:"session_id,omitempty"`
-	OrchestratorKind    string            `json:"orchestrator_kind,omitempty"`
-	OrchestratorDialect string            `json:"orchestrator_dialect,omitempty"`
-	FactoryID           string            `json:"factory_id,omitempty"`
-	SourceRef           string            `json:"source_ref,omitempty"`
-	StartedAt           time.Time         `json:"started_at,omitempty"`
-	LifecycleControlStatus string         `json:"lifecycle_control_status,omitempty"`
-	PausedAt            time.Time         `json:"paused_at,omitempty"`
-	ResumedAt           time.Time         `json:"resumed_at,omitempty"`
-	ResultStatus        string            `json:"result_status,omitempty"`
-	ResultSummary       []WorkContentPart `json:"result_summary,omitempty"`
-	ArtifactIDs         []string          `json:"artifact_ids,omitempty"`
-	Terminal            bool              `json:"terminal"`
-	FinalStatus         string            `json:"final_status,omitempty"`
-	CompletedAt         time.Time         `json:"completed_at,omitempty"`
-	DurationMillis      int64             `json:"duration_millis,omitempty"`
-	FailureReason       string            `json:"failure_reason,omitempty"`
-	FailureMessage      string            `json:"failure_message,omitempty"`
+	SessionID              string            `json:"session_id,omitempty"`
+	OrchestratorKind       string            `json:"orchestrator_kind,omitempty"`
+	OrchestratorDialect    string            `json:"orchestrator_dialect,omitempty"`
+	FactoryID              string            `json:"factory_id,omitempty"`
+	SourceRef              string            `json:"source_ref,omitempty"`
+	StartedAt              time.Time         `json:"started_at,omitempty"`
+	LifecycleControlStatus string            `json:"lifecycle_control_status,omitempty"`
+	PausedAt               time.Time         `json:"paused_at,omitempty"`
+	ResumedAt              time.Time         `json:"resumed_at,omitempty"`
+	ResultStatus           string            `json:"result_status,omitempty"`
+	ResultSummary          []WorkContentPart `json:"result_summary,omitempty"`
+	ArtifactIDs            []string          `json:"artifact_ids,omitempty"`
+	Terminal               bool              `json:"terminal"`
+	FinalStatus            string            `json:"final_status,omitempty"`
+	CompletedAt            time.Time         `json:"completed_at,omitempty"`
+	DurationMillis         int64             `json:"duration_millis,omitempty"`
+	FailureDetail          *FailureDetail    `json:"failureDetail,omitempty"`
 }

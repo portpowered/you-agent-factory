@@ -111,6 +111,15 @@ func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata
 	return &clone
 }
 
+// CloneFailureDetail returns a detached copy of a canonical failure detail.
+func CloneFailureDetail(detail *FailureDetail) *FailureDetail {
+	if detail == nil {
+		return nil
+	}
+	cloned := *detail
+	return &cloned
+}
+
 // CloneSafeWorkDiagnostics returns a detached copy of the canonical safe
 // diagnostics boundary.
 func CloneSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *SafeWorkDiagnostics {

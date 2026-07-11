@@ -236,7 +236,6 @@ export function mockDispatchReplacementFetch() {
         artifactIds: ["artifact-beta"],
         dispatchKind: "JAVASCRIPT_VERIFY",
         failureDetail: {
-          errorClass: "verify_error",
           message: "Checksum mismatch on beta verify.",
           reason: "VERIFY_ASSERTION_FAILED",
         },

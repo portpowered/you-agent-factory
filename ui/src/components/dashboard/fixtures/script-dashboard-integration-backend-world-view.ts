@@ -78,10 +78,10 @@ export const scriptDashboardIntegrationBackendWorkstationRequestsByDispatchID =
       response: {
         duration_millis: 500,
         end_time: "2026-04-19T12:00:10Z",
-        failure_message:
-          scriptDashboardIntegrationFixtureIDs.failedFailureMessage,
-        failure_reason:
-          scriptDashboardIntegrationFixtureIDs.failedFailureReason,
+        failureDetail: {
+          message: scriptDashboardIntegrationFixtureIDs.failedFailureMessage,
+          reason: "timeout",
+        },
         outcome: "FAILED",
         script_response: {
           duration_millis: 500,

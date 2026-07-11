@@ -56,7 +56,6 @@ describe("normalize durable inspection helpers", () => {
     ).toEqual([
       expect.objectContaining({
         failureDetail: {
-          errorClass: "verification_error",
           message: "Expected release manifest checksum.",
           reason: "VERIFY_ASSERTION_FAILED",
         },

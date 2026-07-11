@@ -153,11 +153,10 @@ func testDispatchUsageWarningsAndFailureProjection(t *testing.T) {
 		t.Fatal("empty failure should be omitted")
 	}
 	failure := dispatchFailureToAPI(&factorysessionexecution.DispatchFailureDetail{
-		Reason:     " TEMP ",
-		Message:    " msg ",
-		ErrorClass: " class ",
+		Reason:  " TEMP ",
+		Message: " msg ",
 	})
-	if failure == nil || failure.Reason == nil || *failure.Reason != "TEMP" {
+	if failure == nil || failure.Reason != factoryapi.WorkFailureTypeUnknown {
 		t.Fatalf("failure = %#v", failure)
 	}
 }
@@ -304,7 +303,7 @@ func testResultResponseOptionalBranches(t *testing.T) {
 			Retryable: true,
 		},
 	})
-	if result.PrimaryResult == nil || result.ArtifactRefs == nil || result.Failure == nil || result.Availability == nil {
+	if result.PrimaryResult == nil || result.ArtifactRefs == nil || result.FailureDetail == nil || result.Availability == nil {
 		t.Fatalf("result response = %#v", result)
 	}
 }
@@ -339,7 +338,7 @@ func testDispatchResponseOptionalBranches(t *testing.T) {
 				RetryCount:     1,
 			},
 			Warnings:      []factorysessionexecution.DispatchWarning{{Code: "WARN", Message: " note "}},
-			FailureDetail: &factorysessionexecution.DispatchFailureDetail{Reason: "FAIL", Message: "msg", ErrorClass: "class"},
+			FailureDetail: &factorysessionexecution.DispatchFailureDetail{Reason: "FAIL", Message: "msg"},
 		}},
 	})
 	if len(dispatchList.Dispatches) != 1 || dispatchList.Dispatches[0].Usage == nil || dispatchList.Dispatches[0].FailureDetail == nil {
