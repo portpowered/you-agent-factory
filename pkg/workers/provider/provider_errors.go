@@ -245,7 +245,7 @@ func containsClaudeCredentialSignal(message string) bool {
 	) {
 		return true
 	}
-	if containsClaudeCredentialWord(message) || containsClaudeSensitiveIdentifier(message) {
+	if containsClaudeCredentialWord(message) || containsClaudeAPIKeyValue(message) || containsClaudeSensitiveIdentifier(message) {
 		return true
 	}
 
@@ -266,6 +266,21 @@ func containsClaudeCredentialSignal(message string) bool {
 			return true
 		}
 		remainder = remainder[separator+1:]
+	}
+	return false
+}
+
+func containsClaudeAPIKeyValue(message string) bool {
+	fields := strings.Fields(message)
+	for index, field := range fields {
+		normalized := strings.Trim(field, "\"'{}[](),.;:!?=")
+		if normalized == "api-key" && index+1 < len(fields) {
+			return true
+		}
+		if normalized == "api" && index+2 < len(fields) &&
+			strings.Trim(fields[index+1], "\"'{}[](),.;:!?=") == "key" {
+			return true
+		}
 	}
 	return false
 }
