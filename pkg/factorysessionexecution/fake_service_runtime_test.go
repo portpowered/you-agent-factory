@@ -874,6 +874,7 @@ func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSession
 
 func TestExecutionServiceAndHelperNormalization(t *testing.T) {
 	t.Run("execution service providers", testExecutionServiceProviders)
+	t.Run("explicit persistence choices", testExecutionServicePersistenceChoices)
 	t.Run("child executor and smoke provider", testExecutionServiceChildExecutorHelpers)
 	t.Run("source request helpers", testExecutionServiceSourceRequestHelpers)
 }
@@ -890,7 +891,11 @@ func testExecutionServiceProviders(t *testing.T) {
 	}
 
 	projectRoot := t.TempDir()
-	runtimeService, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot})
+	persistence, err := ProjectPersistence(projectRoot)
+	if err != nil {
+		t.Fatalf("ProjectPersistence: %v", err)
+	}
+	runtimeService, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence})
 	if err != nil {
 		t.Fatalf("NewExecutionService(runtime): %v", err)
 	}
@@ -898,8 +903,8 @@ func testExecutionServiceProviders(t *testing.T) {
 	if !ok {
 		t.Fatalf("runtime provider type = %T, want *JavaScriptRuntimeService", runtimeService)
 	}
-	if jsService.sessionPersistDir == "" {
-		t.Fatal("expected runtime service to enable persisted session dir when project root is set")
+	if jsService.persistence == nil {
+		t.Fatal("expected runtime service to use the injected persisted session store")
 	}
 
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{}); err == nil {
@@ -907,6 +912,43 @@ func testExecutionServiceProviders(t *testing.T) {
 	}
 	if _, err := NewExecutionService(ExecutionProvider("unknown"), ServiceConfig{}); err == nil {
 		t.Fatal("NewExecutionService(unknown) error = nil, want validation error")
+	}
+}
+
+func testExecutionServicePersistenceChoices(t *testing.T) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot}); err == nil {
+		t.Fatal("NewExecutionService(runtime without persistence choice) error = nil, want validation error")
+	}
+	disabled, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: DisabledPersistence(),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutionService(runtime with disabled persistence): %v", err)
+	}
+	if disabled.(*JavaScriptRuntimeService).persistence != nil {
+		t.Fatal("disabled persistence unexpectedly configured a store")
+	}
+	contradictory := PersistenceChoice{store: runtimepersist.DirectoryStore{Dir: t.TempDir()}, disabled: true}
+	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: contradictory,
+	}); err == nil {
+		t.Fatal("NewExecutionService(runtime with contradictory persistence) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
+		t.Fatalf("contradictory persistence error = %#v, want persistence ValidationError", err)
+	}
+
+	blockedRoot := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blockedRoot, []byte("blocked"), 0o600); err != nil {
+		t.Fatalf("write blocked persistence root: %v", err)
+	}
+	if _, err := ProjectPersistence(blockedRoot); err == nil {
+		t.Fatal("ProjectPersistence(unavailable root) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
+		t.Fatalf("unavailable persistence error = %#v, want persistence ValidationError", err)
 	}
 }
 
@@ -1105,7 +1147,7 @@ func newJavaScriptRuntimeService(t *testing.T) *JavaScriptRuntimeService {
 
 	service, err := NewExecutionService(
 		ExecutionProviderJavaScriptRuntime,
-		ServiceConfig{ProjectRoot: t.TempDir()},
+		ServiceConfig{ProjectRoot: t.TempDir(), Persistence: DisabledPersistence()},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)

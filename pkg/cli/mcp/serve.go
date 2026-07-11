@@ -62,9 +62,13 @@ func resolveServeService(cfg ServeConfig) (factorysessionexecution.Service, erro
 		if err != nil {
 			return nil, err
 		}
+		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("initialize runtime-backed persistence: %w", err)
+		}
 		service, err := factorysessionexecution.NewExecutionService(
 			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot},
+			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence},
 		)
 		if err != nil {
 			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)

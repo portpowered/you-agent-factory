@@ -2148,7 +2148,7 @@ func newFactoryServiceForDurableLifecycleTest(t *testing.T, fixtureName, workflo
 	projectRoot := setupDurableLifecycleWorkflowFixture(t, fixtureName, workflowName)
 	execution, err := factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-		factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot},
+		factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: factorysessionexecution.DisabledPersistence()},
 	)
 	if err != nil {
 		t.Fatalf("compose durable execution: %v", err)

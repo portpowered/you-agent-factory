@@ -170,7 +170,7 @@ func TestRunSync_JavaScriptRuntimeFakeChildCLIInspectionRegression(t *testing.T)
 	projectRoot := setupCLIAgentRunWorkflowFixture(t)
 	service, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot},
+		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)
@@ -436,6 +436,7 @@ func newLiveChildCLIJavaScriptRuntimeService(t *testing.T) (fse.Service, string)
 			ProjectRoot:       projectRoot,
 			ChildExecutorMode: fse.ChildExecutorModeLive,
 			Provider:          fse.SmokeLiveChildProvider(),
+			Persistence:       fse.DisabledPersistence(),
 		},
 	)
 	if err != nil {

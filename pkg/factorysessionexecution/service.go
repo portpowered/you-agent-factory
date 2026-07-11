@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
@@ -150,8 +151,51 @@ type ServiceConfig struct {
 	ChildExecutorMode string
 	Provider          workers.Provider
 	FakeOptions       []FakeServiceOption
-	PersistSessions   bool
+	Persistence       PersistenceChoice
 	Clock             factory.Clock
+}
+
+// PersistenceChoice makes durable snapshot ownership explicit at composition.
+// Construct it with EnabledPersistence or DisabledPersistence.
+type PersistenceChoice struct {
+	store    runtimepersist.Store
+	disabled bool
+}
+
+// EnabledPersistence selects durable snapshots through the injected store.
+func EnabledPersistence(store runtimepersist.Store) PersistenceChoice {
+	return PersistenceChoice{store: store}
+}
+
+// DisabledPersistence explicitly selects in-memory-only session execution.
+func DisabledPersistence() PersistenceChoice {
+	return PersistenceChoice{disabled: true}
+}
+
+// ProjectPersistence initializes the established project-local snapshot store.
+func ProjectPersistence(projectRoot string) (PersistenceChoice, error) {
+	root := strings.TrimSpace(projectRoot)
+	if root == "" {
+		return PersistenceChoice{}, NewValidationError("persistence.projectRoot", "project root is required for persistence")
+	}
+	store, err := runtimepersist.NewDirectoryStore(runtimepersist.DirForProjectRoot(root))
+	if err != nil {
+		return PersistenceChoice{}, NewValidationError("persistence", "initialize durable session persistence: "+err.Error())
+	}
+	return EnabledPersistence(store), nil
+}
+
+func (choice PersistenceChoice) resolve() (runtimepersist.Store, error) {
+	switch {
+	case choice.disabled && choice.store != nil:
+		return nil, NewValidationError("persistence", "persistence cannot be both enabled and disabled")
+	case choice.disabled:
+		return nil, nil
+	case choice.store == nil:
+		return nil, NewValidationError("persistence", "persistence must be explicitly enabled with a store or disabled")
+	default:
+		return choice.store, nil
+	}
 }
 
 // NewExecutionService constructs one shared Factory Session execution service for
@@ -173,11 +217,15 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		if err := validateLiveChildExecutorConfig(childExecutorMode, provider); err != nil {
 			return nil, err
 		}
+		persistence, err := config.Persistence.resolve()
+		if err != nil {
+			return nil, err
+		}
 		return NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
 			ProjectRoot:       projectRoot,
 			ChildExecutorMode: childExecutorMode,
 			Provider:          provider,
-			PersistSessions:   config.PersistSessions || projectRoot != "",
+			Persistence:       persistence,
 			Clock:             config.Clock,
 		}), nil
 	default:

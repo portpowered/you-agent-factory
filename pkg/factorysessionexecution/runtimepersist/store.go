@@ -24,6 +24,18 @@ type Store interface {
 // DirectoryStore persists snapshots beneath one explicit directory.
 type DirectoryStore struct{ Dir string }
 
+// NewDirectoryStore validates and initializes an explicit snapshot directory.
+func NewDirectoryStore(dir string) (DirectoryStore, error) {
+	trimmed := strings.TrimSpace(dir)
+	if trimmed == "" {
+		return DirectoryStore{}, errors.New("durable session persistence directory is required")
+	}
+	if err := os.MkdirAll(trimmed, 0o700); err != nil {
+		return DirectoryStore{}, fmt.Errorf("initialize durable session persistence directory: %w", err)
+	}
+	return DirectoryStore{Dir: trimmed}, nil
+}
+
 // Save writes a snapshot to the configured directory.
 func (s DirectoryStore) Save(sessionID string, encoded []byte) error {
 	return SaveBytes(s.Dir, sessionID, encoded)
