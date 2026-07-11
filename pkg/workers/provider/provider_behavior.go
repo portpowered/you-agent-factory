@@ -298,11 +298,15 @@ func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 }
 
 func (b geminiProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
+	return ParseGeminiProviderFailure(result).Message
 }
 
 func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
+	return ParseGeminiProviderFailure(result).Reason
+}
+
+func (b geminiProviderBehavior) FormatTimeoutFailure(_ CommandResult) string {
+	return geminiTimeoutFailureMessage
 }
 
 func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -358,11 +362,16 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 }
 
 func (b cursorProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return codexProviderBehavior{}.FormatExitFailure(provider, result)
+	_ = provider
+	return cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	}).Message
 }
 
 func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return codexProviderBehavior{}.ClassifyExitFailure(result)
+	return cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	}).Reason
 }
 
 func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -609,3 +618,79 @@ func formatProviderOutputOrDefault(result CommandResult, fallback string) string
 	}
 	return fallback
 }
+
+// WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
+// provider error using the same FailureMetadata projection as WorkResult.
+func WorkFailureDecisionFromProviderError(err *ProviderError) interfaces.WorkFailureDecision {
+	return WorkFailureDecisionFromMetadata(WorkFailureMetadataFromError(err))
+}
+
+// WorkFailureDecisionFromMetadata resolves retry behavior from durable
+// generalized failure metadata carried across runtime boundaries.
+// The normalized type is canonical when present; family remains a fallback for
+// older or partial metadata that omitted type.
+func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) interfaces.WorkFailureDecision {
+	if metadata == nil {
+		return interfaces.WorkFailureDecision{}
+	}
+	if metadata.Type != "" {
+		return providerFailurePolicyForReason(metadata.Type).Decision
+	}
+	return providerFailureDecisionForFamily(metadata.Family)
+}
+
+type providerFailurePolicy struct {
+	Family   interfaces.WorkFailureFamily
+	Decision interfaces.WorkFailureDecision
+}
+
+func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerFailurePolicy {
+	switch reason {
+	case interfaces.WorkFailureTypeThrottled:
+		return providerFailurePolicy{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Decision: interfaces.WorkFailureDecision{
+				Retryable:             true,
+				TriggersThrottlePause: true,
+			},
+		}
+	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyRetryable,
+			Decision: interfaces.WorkFailureDecision{Retryable: true},
+		}
+	case interfaces.WorkFailureTypeAuthFailure,
+		interfaces.WorkFailureTypePermanentBadRequest,
+		interfaces.WorkFailureTypeUnknown,
+		interfaces.WorkFailureTypeMisconfigured:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	default:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	}
+}
+
+func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
+	switch family {
+	case interfaces.WorkFailureFamilyRetryable:
+		return interfaces.WorkFailureDecision{Retryable: true}
+	case interfaces.WorkFailureFamilyThrottle:
+		return interfaces.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
+	case interfaces.WorkFailureFamilyTerminal:
+		return interfaces.WorkFailureDecision{Terminal: true}
+	default:
+		return interfaces.WorkFailureDecision{Terminal: true}
+	}
+}
+
+func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
+	return providerFailurePolicyForReason(errorType).Family
+}
+
+// WorkFailureMetadataFromError projects a provider-shaped execution error onto
+// the in-process failure contract carried on WorkResult.FailureMetadata.

@@ -1,14 +1,12 @@
 package provider
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
-	"unicode/utf8"
+	"unicode"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -39,17 +37,8 @@ const codexFailureMessageBytes = 1024
 const opencodeFailureMessageBytes = 512
 
 const (
-	claudeFailureMessageBytes = 1024
-	claudeFailureScanBytes    = 64 * 1024
-)
-
-const (
-	claudeAuthFailureMessage       = "Claude authentication failed."
-	claudeBadRequestFailureMessage = "Claude rejected the request as invalid."
-	claudeConfigFailureMessage     = "Claude is not configured correctly."
-	claudeServerFailureMessage     = "Claude encountered a temporary server error."
-	claudeThrottleFailureMessage   = "Claude is temporarily unavailable due to rate or capacity limits."
-	claudeTimeoutFailureMessage    = "Claude request timed out."
+	geminiFailureScanBytes    = 64 * 1024
+	geminiFailureMessageRunes = 1024
 )
 
 const (
@@ -62,6 +51,11 @@ const (
 )
 
 const (
+	geminiAuthFailureMessage         = "Gemini authentication failed."
+	geminiBadRequestMessage          = "Gemini rejected the request."
+	geminiThrottleFailureMessage     = "The provider is rate limited; retry after capacity becomes available."
+	geminiTimeoutFailureMessage      = "Gemini request timed out."
+	geminiServerFailureMessage       = "Gemini encountered a temporary server error."
 	opencodeAuthFailureMessage       = "OpenCode authentication failed."
 	opencodeBadRequestFailureMessage = "OpenCode rejected the request as invalid."
 	opencodeServerFailureMessage     = "OpenCode encountered a temporary server error."
@@ -75,274 +69,355 @@ type codexStructuredFailure struct {
 	Message string
 }
 
-type claudeStructuredFailure struct {
+type geminiStructuredFailure struct {
 	Type    string
-	Status  int
+	Status  string
+	Code    string
 	Message string
 }
 
-// ParseClaudeProviderFailure parses Claude CLI API Error records before any
-// text fallback and returns the reason and customer-visible message together.
-// Structured scanning covers the complete captured streams while bounding each
-// candidate record; text fallback and actionable messages are separately
-// bounded so a failed command cannot publish its transcript.
-func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
-	structuredStreams := [][]byte{result.Stderr, result.Stdout}
-	if failure, ok := lastClaudeStructuredFailure(structuredStreams); ok {
-		return failure
-	}
-
+// ParseGeminiProviderFailure converts Gemini-owned structured and text failure
+// shapes into one canonical reason/message pair. The final valid structured
+// record wins (stderr is the deterministic cross-stream tie-breaker), followed
+// by recognized stderr text, recognized stdout text, then safe unknown excerpts
+// in that same stderr/stdout order. Both inspected streams and published text
+// are bounded by the Gemini-specific limits above.
+func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
 	streams := []string{
-		tailForClaudeFailureScan(result.Stderr),
-		tailForClaudeFailureScan(result.Stdout),
+		tailForGeminiFailureScan(result.Stdout),
+		tailForGeminiFailureScan(result.Stderr),
 	}
-	if failure, ok := lastClaudeTextFailure(streams); ok {
+	if failure, ok := lastGeminiStructuredFailure(streams); ok {
+		if failure.Message == "" {
+			failure.Message = fmt.Sprintf("gemini exited with code %d", result.ExitCode)
+		}
 		return failure
 	}
 	if result.ExitCode == 124 {
-		return ProviderFailureResult{
-			Reason:  interfaces.WorkFailureTypeTimeout,
-			Message: claudeTimeoutFailureMessage,
-		}
+		return geminiFailureResult(interfaces.WorkFailureTypeTimeout, "")
+	}
+	stderr := tailForGeminiFailureScan(result.Stderr)
+	if failure, ok := lastGeminiTextFailure(stderr); ok {
+		return failure
+	}
+	stdout := tailForGeminiFailureScan(result.Stdout)
+	if failure, ok := lastGeminiTextFailure(stdout); ok {
+		return failure
+	}
+	if message := lastGeminiUnknownMessage(stderr); message != "" {
+		return ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: message}
+	}
+	if message := lastGeminiUnknownMessage(stdout); message != "" {
+		return ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: message}
 	}
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeUnknown,
-		Message: claudeUnknownFailureMessage(streams, result.ExitCode),
+		Message: fmt.Sprintf("gemini exited with code %d", result.ExitCode),
 	}
 }
 
-// Streams are ordered stderr then stdout, and lines retain their stream order.
-// The final recognized record wins; malformed and unrelated later lines do not
-// displace it. This matches structured-record selection above.
-func lastClaudeStructuredFailure(streams [][]byte) (ProviderFailureResult, bool) {
-	var last ProviderFailureResult
+func lastGeminiStructuredFailure(streams []string) (ProviderFailureResult, bool) {
+	var last geminiStructuredFailure
 	var found bool
 	for _, stream := range streams {
-		for len(stream) > 0 {
-			line := stream
-			if newline := bytes.IndexByte(stream, '\n'); newline >= 0 {
-				line = stream[:newline]
-				stream = stream[newline+1:]
-			} else {
-				stream = nil
-			}
-			if len(line) > claudeFailureScanBytes {
-				continue
-			}
-			failure, ok := decodeClaudeAPIError(string(line))
+		for _, line := range strings.Split(stream, "\n") {
+			failure, ok := decodeGeminiStructuredFailure(strings.TrimSpace(line))
 			if !ok {
 				continue
 			}
-			reason, recognized := classifyClaudeStructuredFailure(failure.Type, failure.Status)
-			if !recognized {
-				continue
-			}
-			last = ProviderFailureResult{
-				Reason:  reason,
-				Message: claudeStructuredFailureMessage(failure.Message, reason),
-			}
+			last = failure
 			found = true
 		}
 	}
-	return last, found
+	if !found {
+		return ProviderFailureResult{}, false
+	}
+	reason := classifyGeminiFailureSignal(last.Type, last.Status, last.Code, last.Message)
+	if reason != interfaces.WorkFailureTypeUnknown {
+		return geminiFailureResult(reason, last.Message), true
+	}
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: safeGeminiStructuredMessage(last.Message),
+	}, true
 }
 
-func decodeClaudeAPIError(line string) (claudeStructuredFailure, bool) {
-	const prefix = "API Error:"
-	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, prefix) {
-		return claudeStructuredFailure{}, false
+func decodeGeminiStructuredFailure(payload string) (geminiStructuredFailure, bool) {
+	if !strings.HasPrefix(payload, "{") {
+		return geminiStructuredFailure{}, false
 	}
-	remainder := strings.TrimSpace(strings.TrimPrefix(trimmed, prefix))
-	statusText, payload, ok := strings.Cut(remainder, " ")
-	if !ok {
-		return claudeStructuredFailure{}, false
-	}
-	status, err := strconv.Atoi(statusText)
-	if err != nil || !strings.HasPrefix(strings.TrimSpace(payload), "{") {
-		return claudeStructuredFailure{}, false
-	}
-
 	var envelope struct {
-		Type    string `json:"type"`
-		Message string `json:"message"`
+		Type    string          `json:"type"`
+		Status  json.RawMessage `json:"status"`
+		Code    json.RawMessage `json:"code"`
+		Message string          `json:"message"`
 		Error   *struct {
-			Type    string `json:"type"`
-			Message string `json:"message"`
+			Type    string          `json:"type"`
+			Status  json.RawMessage `json:"status"`
+			Code    json.RawMessage `json:"code"`
+			Message string          `json:"message"`
 		} `json:"error"`
 	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(payload)), &envelope); err != nil {
-		return claudeStructuredFailure{}, false
+	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
+		return geminiStructuredFailure{}, false
 	}
-
-	failure := claudeStructuredFailure{Type: envelope.Type, Status: status, Message: envelope.Message}
+	if envelope.Error == nil && !isGeminiErrorRecordType(envelope.Type) {
+		return geminiStructuredFailure{}, false
+	}
+	failure := geminiStructuredFailure{
+		Type:    envelope.Type,
+		Status:  geminiJSONScalar(envelope.Status),
+		Code:    geminiJSONScalar(envelope.Code),
+		Message: envelope.Message,
+	}
 	if envelope.Error != nil {
 		if envelope.Error.Type != "" {
 			failure.Type = envelope.Error.Type
+		}
+		if status := geminiJSONScalar(envelope.Error.Status); status != "" {
+			failure.Status = status
+		}
+		if code := geminiJSONScalar(envelope.Error.Code); code != "" {
+			failure.Code = code
 		}
 		if envelope.Error.Message != "" {
 			failure.Message = envelope.Error.Message
 		}
 	}
+	if failure.Type == "" && failure.Status == "" && failure.Code == "" && failure.Message == "" {
+		return geminiStructuredFailure{}, false
+	}
 	return failure, true
 }
 
-func classifyClaudeStructuredFailure(errorType string, status int) (interfaces.WorkFailureType, bool) {
-	switch strings.ToLower(strings.TrimSpace(errorType)) {
-	case "authentication_error", "permission_error":
-		return interfaces.WorkFailureTypeAuthFailure, true
-	case "invalid_request_error":
-		return interfaces.WorkFailureTypePermanentBadRequest, true
-	case "rate_limit_error", "overloaded_error":
-		return interfaces.WorkFailureTypeThrottled, true
-	case "api_error", "server_error":
-		return interfaces.WorkFailureTypeInternalServerError, true
-	}
-
-	switch {
-	case status == 401 || status == 403:
-		return interfaces.WorkFailureTypeAuthFailure, true
-	case status == 400 || status == 413 || status == 422:
-		return interfaces.WorkFailureTypePermanentBadRequest, true
-	case status == 429 || status == 529:
-		return interfaces.WorkFailureTypeThrottled, true
-	case status >= 500 && status <= 599:
-		return interfaces.WorkFailureTypeInternalServerError, true
+func isGeminiErrorRecordType(recordType string) bool {
+	switch strings.ToLower(strings.TrimSpace(recordType)) {
+	case "error", "fatalauthenticationerror", "authenticationerror", "badrequesterror":
+		return true
 	default:
-		return interfaces.WorkFailureTypeUnknown, false
+		return false
 	}
 }
 
-func claudeStructuredFailureMessage(message string, reason interfaces.WorkFailureType) string {
+func geminiJSONScalar(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+func lastGeminiTextFailure(stream string) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
+	for _, line := range strings.Split(stream, "\n") {
+		message := safeGeminiTextCandidate(line)
+		if message == "" {
+			continue
+		}
+		reason := classifyGeminiFailureSignal("", "", "", message)
+		if reason == interfaces.WorkFailureTypeUnknown {
+			continue
+		}
+		last = geminiFailureResult(reason, "")
+		found = true
+	}
+	return last, found
+}
+
+func lastGeminiUnknownMessage(stream string) string {
+	var last string
+	for _, line := range strings.Split(stream, "\n") {
+		if candidate := safeGeminiTextCandidate(line); candidate != "" {
+			last = candidate
+		}
+	}
+	return last
+}
+
+func safeGeminiTextCandidate(line string) string {
+	message := sanitizeGeminiMessage(line)
+	if message == "" || strings.HasPrefix(message, "{") {
+		return ""
+	}
+	normalized := strings.ToLower(message)
+	if isRejectedGeminiMessage(normalized) || !isGeminiErrorSignal(normalized) {
+		return ""
+	}
+	return message
+}
+
+func isGeminiErrorSignal(normalized string) bool {
+	if strings.HasPrefix(normalized, "error:") ||
+		strings.HasPrefix(normalized, "gemini error:") ||
+		strings.HasPrefix(normalized, "fatal") ||
+		strings.HasPrefix(normalized, "failed") ||
+		strings.HasPrefix(normalized, "failure:") ||
+		strings.HasPrefix(normalized, "cannot ") ||
+		strings.HasPrefix(normalized, "could not ") {
+		return true
+	}
+	return containsAny(normalized,
+		"http 4", "http 5", "status 4", "status 5",
+		"unauthenticated", "permission_denied", "resource_exhausted", "resource exhausted",
+		"deadline_exceeded", "timed out", "timeout", "permission denied",
+		"rate limit exceeded", "quota exceeded", "too many requests",
+		"invalid request", "bad request", "service unavailable", "upstream unavailable")
+}
+
+func classifyGeminiFailureSignal(errorType, status, code, message string) interfaces.WorkFailureType {
+	structuredSignals := []string{
+		strings.ToLower(strings.TrimSpace(errorType)),
+		strings.ToLower(strings.TrimSpace(status)),
+		strings.ToLower(strings.TrimSpace(code)),
+	}
+	for _, signal := range structuredSignals {
+		switch signal {
+		case "fatalauthenticationerror", "authenticationerror", "unauthenticated", "permission_denied", "401", "403":
+			return interfaces.WorkFailureTypeAuthFailure
+		case "badrequesterror", "invalid_argument", "400":
+			return interfaces.WorkFailureTypePermanentBadRequest
+		case "resource_exhausted", "ratelimitexceeded", "429":
+			return interfaces.WorkFailureTypeThrottled
+		case "deadline_exceeded", "124", "408":
+			return interfaces.WorkFailureTypeTimeout
+		case "internal", "unavailable", "500", "502", "503", "504":
+			return interfaces.WorkFailureTypeInternalServerError
+		}
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case containsAny(normalized,
+		"fatalauthenticationerror", "unauthenticated", "permission_denied",
+		"permission denied", "http 401", "status 401", "code 401",
+		"http 403", "status 403", "code 403", "authentication failed",
+		"unauthorized", "forbidden"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalized,
+		"badrequesterror", "invalid_argument", "invalid argument", "invalid request",
+		"bad request", "http 400", "status 400", "code 400"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalized,
+		"resource_exhausted", "resource exhausted", "ratelimitexceeded", "rate limit",
+		"quota exceeded", "too many requests", "http 429", "status 429", "code 429"):
+		return interfaces.WorkFailureTypeThrottled
+	case containsAny(normalized,
+		"deadline_exceeded", "deadline exceeded", "request timed out", "request timeout",
+		"command timed out", "provider timed out"):
+		return interfaces.WorkFailureTypeTimeout
+	case containsAny(normalized,
+		"internal server error", "service unavailable", "upstream unavailable",
+		"http 500", "status 500", "code 500", "http 502", "status 502", "code 502",
+		"http 503", "status 503", "code 503", "http 504", "status 504", "code 504"):
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
+	}
+}
+
+func geminiFailureResult(reason interfaces.WorkFailureType, upstreamMessage string) ProviderFailureResult {
+	message := geminiFixedFailureMessage(reason)
 	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
-		if normalized, ok := safeClaudeActionableMessage(message); ok {
-			return normalized
+		if safe := safeGeminiStructuredMessage(upstreamMessage); safe != "" {
+			message = safe
 		}
 	}
-	return claudeFallbackFailureMessage(reason, 0)
+	return ProviderFailureResult{Reason: reason, Message: message}
 }
 
-func safeClaudeActionableMessage(message string) (string, bool) {
-	normalized := normalizeClaudeMessage(message)
-	lower := strings.ToLower(normalized)
-	if normalized == "" ||
-		strings.HasPrefix(lower, "api error:") ||
-		containsClaudeCredentialSignal(lower) ||
-		containsClaudeTranscriptMarker(lower) {
-		return "", false
+func geminiFixedFailureMessage(reason interfaces.WorkFailureType) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return geminiAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return geminiBadRequestMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return geminiThrottleFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return geminiTimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return geminiServerFailureMessage
+	default:
+		return ""
 	}
-	return boundUTF8Bytes(normalized, claudeFailureMessageBytes), true
 }
 
-func containsClaudeCredentialSignal(message string) bool {
-	if containsAny(message,
-		"authorization:",
-		"bearer ",
-		"api_key=",
-		"api-key:",
-		"api key:",
-		"sk-ant-",
-	) {
-		return true
-	}
-	if containsClaudeCredentialWord(message) || containsClaudeCredentialFieldValue(message) || containsClaudeSensitiveIdentifier(message) {
-		return true
-	}
-
-	// Keep assignment and header detection aligned with the environment
-	// diagnostic policy so supported sensitive names cannot be published just
-	// because their exact spelling was absent from the literals above.
-	for remainder := message; ; {
-		separator := strings.IndexAny(remainder, "=:")
-		if separator < 0 {
-			break
-		}
-		prefix := strings.TrimSpace(remainder[:separator])
-		if boundary := strings.LastIndexAny(prefix, " \t\r\n"); boundary >= 0 {
-			prefix = prefix[boundary+1:]
-		}
-		name := strings.Trim(prefix, "\"'{}[](),")
-		if ClassifyCommandEnvKey(name) == CommandEnvClassificationRedacted {
-			return true
-		}
-		remainder = remainder[separator+1:]
-	}
-	return false
+type opencodeStructuredFailure struct {
+	Name       string
+	Type       string
+	Code       string
+	StatusCode int
+	Message    string
 }
 
-func containsClaudeCredentialFieldValue(message string) bool {
-	fields := strings.Fields(message)
-	for index, field := range fields {
-		normalized := strings.Trim(field, "\"'{}[](),.;:!?=")
-		if isClaudeCredentialField(normalized) && index+1 < len(fields) {
-			return true
-		}
-		if normalized == "api" && index+2 < len(fields) &&
-			strings.Trim(fields[index+1], "\"'{}[](),.;:!?=") == "key" {
-			return true
-		}
-		if normalized == "auth" && index+2 < len(fields) &&
-			strings.Trim(fields[index+1], "\"'{}[](),.;:!?=") == "token" {
-			return true
+// ParseOpenCodeProviderFailure deterministically parses bounded OpenCode
+// subprocess output into the canonical provider-failure contract. Recognized
+// structured records take precedence over recognized text diagnostics.
+func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
+	streams := []string{
+		tailForCodexErrorScan(result.Stderr),
+		tailForCodexErrorScan(result.Stdout),
+	}
+	if failure, ok := lastOpenCodeStructuredFailure(streams); ok {
+		return failure
+	}
+	if failure, ok := lastOpenCodeTextFailure(streams, result.ExitCode); ok {
+		return failure
+	}
+	if excerpt, ok := lastSafeOpenCodeUnknownExcerpt(streams); ok {
+		return ProviderFailureResult{
+			Reason:  interfaces.WorkFailureTypeUnknown,
+			Message: excerpt,
 		}
 	}
-	return false
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: fmt.Sprintf("opencode exited with code %d", result.ExitCode),
+	}
 }
 
-func isClaudeCredentialField(field string) bool {
-	return field == "authorization" ||
-		field == "api-key" || strings.HasSuffix(field, "-api-key") ||
-		field == "auth-token" || strings.HasSuffix(field, "-auth-token")
-}
-
-func containsClaudeCredentialWord(message string) bool {
-	for _, field := range strings.Fields(message) {
-		switch strings.Trim(field, "\"'{}[](),.;:!?=") {
-		case "credential", "credentials", "password", "secret", "token":
-			return true
+func lastSafeOpenCodeUnknownExcerpt(streams []string) (string, bool) {
+	var last string
+	for _, stream := range streams {
+		for _, line := range strings.Split(stream, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if failure, ok := decodeOpenCodeStructuredFailure(trimmed); ok {
+				if excerpt, safe := safeOpenCodeFailureDetail(failure.Message); safe {
+					last = excerpt
+				}
+				continue
+			}
+			if !openCodeErrorTextLine(trimmed) {
+				continue
+			}
+			if excerpt, safe := safeOpenCodeFailureDetail(trimmed); safe {
+				last = excerpt
+			}
 		}
 	}
-	return false
+	return last, last != ""
 }
 
-func containsClaudeSensitiveIdentifier(message string) bool {
-	for _, field := range strings.Fields(message) {
-		identifier := strings.Trim(field, "\"'{}[](),.;:!?=")
-		if strings.Contains(identifier, "_") &&
-			containsClaudeSensitiveIdentifierPart(identifier) &&
-			ClassifyCommandEnvKey(identifier) == CommandEnvClassificationRedacted {
-			return true
-		}
-	}
-	return false
-}
-
-func containsClaudeSensitiveIdentifierPart(identifier string) bool {
-	for _, part := range strings.Split(identifier, "_") {
-		switch part {
-		case "auth", "credential", "credentials", "key", "pass", "password", "secret", "token":
-			return true
-		}
-	}
-	return false
-}
-
-func lastClaudeTextFailure(streams []string) (ProviderFailureResult, bool) {
+func lastOpenCodeStructuredFailure(streams []string) (ProviderFailureResult, bool) {
 	var last ProviderFailureResult
 	var found bool
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
-			normalized := normalizeClaudeMessage(line)
-			if !isClaudeTextDiagnosticRecord(normalized) {
+			failure, ok := decodeOpenCodeStructuredFailure(strings.TrimSpace(line))
+			if !ok {
 				continue
 			}
-			reason, ok := claudeTextFailureReason(strings.ToLower(normalized))
-			if !ok {
+			reason, recognized := classifyOpenCodeStructuredFailure(failure)
+			if !recognized {
 				continue
 			}
 			last = ProviderFailureResult{
 				Reason:  reason,
-				Message: claudeTextFailureMessage(normalized, reason),
+				Message: openCodeFailureMessage(reason, failure.Message),
 			}
 			found = true
 		}
@@ -350,170 +425,238 @@ func lastClaudeTextFailure(streams []string) (ProviderFailureResult, bool) {
 	return last, found
 }
 
-// Text fallback accepts only known Claude diagnostic shapes. Transcript and
-// prompt markers are rejected wherever they appear so their content cannot
-// influence failure policy or become a customer-visible message.
-func isClaudeTextDiagnosticRecord(message string) bool {
-	lower := strings.ToLower(message)
-	if lower == "" || containsClaudeTranscriptMarker(lower) {
-		return false
+func decodeOpenCodeStructuredFailure(line string) (opencodeStructuredFailure, bool) {
+	if !strings.HasPrefix(line, "{") {
+		return opencodeStructuredFailure{}, false
 	}
-	return hasAnyPrefix(lower,
-		"api error:",
-		"error:",
-		"claude error:",
-		"request failed:",
-		"configuration error",
-		"configuration is invalid",
-		"invalid configuration",
-		"config file not found",
-		"anthropic_api_key is not set",
-		"model is not configured",
-		"api key",
-		"authentication error",
-		"permission error",
-		"not logged in",
-		"login required",
-		"unauthorized",
-		"forbidden",
-		"invalid_request_error",
-		"bad request",
-		"invalid request",
-		"request_too_large",
-		"rate limit",
-		"too many requests",
-		"overloaded",
-		"529",
-		"internal server error",
-		"unexpected status 500",
-		"unexpected status 502",
-		"unexpected status 503",
-		"unexpected status 504",
-		"request deadline exceeded",
-		"request timed out",
-		"request timeout",
-		"deadline exceeded",
-		"timed out",
-		"timeout",
-	)
+	var envelope struct {
+		Type       string `json:"type"`
+		Name       string `json:"name"`
+		Code       string `json:"code"`
+		Status     int    `json:"status"`
+		StatusCode int    `json:"statusCode"`
+		Message    string `json:"message"`
+		Error      *struct {
+			Type       string `json:"type"`
+			Name       string `json:"name"`
+			Code       string `json:"code"`
+			Status     int    `json:"status"`
+			StatusCode int    `json:"statusCode"`
+			Message    string `json:"message"`
+			Data       *struct {
+				Code       string `json:"code"`
+				Status     int    `json:"status"`
+				StatusCode int    `json:"statusCode"`
+				Message    string `json:"message"`
+			} `json:"data"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(line), &envelope); err != nil {
+		return opencodeStructuredFailure{}, false
+	}
+
+	failure := opencodeStructuredFailure{
+		Name:       envelope.Name,
+		Type:       envelope.Type,
+		Code:       envelope.Code,
+		StatusCode: firstNonZero(envelope.StatusCode, envelope.Status),
+		Message:    envelope.Message,
+	}
+	if envelope.Error != nil {
+		failure.Name = firstNonEmpty(envelope.Error.Name, failure.Name)
+		failure.Type = firstNonEmpty(envelope.Error.Type, failure.Type)
+		failure.Code = firstNonEmpty(envelope.Error.Code, failure.Code)
+		failure.StatusCode = firstNonZero(envelope.Error.StatusCode, envelope.Error.Status, failure.StatusCode)
+		failure.Message = firstNonEmpty(envelope.Error.Message, failure.Message)
+		if envelope.Error.Data != nil {
+			failure.Code = firstNonEmpty(envelope.Error.Data.Code, failure.Code)
+			failure.StatusCode = firstNonZero(envelope.Error.Data.StatusCode, envelope.Error.Data.Status, failure.StatusCode)
+			failure.Message = firstNonEmpty(envelope.Error.Data.Message, failure.Message)
+		}
+	}
+	if envelope.Error == nil && !strings.EqualFold(envelope.Type, "error") {
+		return opencodeStructuredFailure{}, false
+	}
+	return failure, true
 }
 
-func containsClaudeTranscriptMarker(message string) bool {
-	return containsAny(message, "user:", "human:", "assistant:", "system:", "prompt:")
+func firstNonZero(values ...int) int {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
-func claudeTextFailureReason(message string) (interfaces.WorkFailureType, bool) {
-	if strings.HasPrefix(message, "cleanup ") ||
-		strings.HasPrefix(message, "cleaning up ") ||
-		strings.HasPrefix(message, "teardown ") {
-		return interfaces.WorkFailureTypeUnknown, false
+func classifyOpenCodeStructuredFailure(failure opencodeStructuredFailure) (interfaces.WorkFailureType, bool) {
+	signal := strings.ToLower(strings.Join([]string{failure.Name, failure.Type, failure.Code}, " "))
+	switch {
+	case containsAny(signal, "providerautherror", "authentication_error", "permission_error", "unauthorized", "forbidden"):
+		return interfaces.WorkFailureTypeAuthFailure, true
+	case containsAny(signal, "invalid_request_error", "badrequesterror", "invalidrequesterror"):
+		return interfaces.WorkFailureTypePermanentBadRequest, true
+	case containsAny(signal, "ratelimiterror", "rate_limit_error", "overloaded_error", "quotaexceeded"):
+		return interfaces.WorkFailureTypeThrottled, true
+	case containsAny(signal, "timeouterror", "timeout_error", "etimedout"):
+		return interfaces.WorkFailureTypeTimeout, true
+	case containsAny(signal, "server_error", "internalservererror"):
+		return interfaces.WorkFailureTypeInternalServerError, true
 	}
 	switch {
-	case containsAny(message, "configuration error", "configuration is invalid", "invalid configuration", "config file not found", "anthropic_api_key is not set", "model is not configured"):
-		return interfaces.WorkFailureTypeMisconfigured, true
-	case containsAny(message, `"type":"authentication_error"`, `"type":"permission_error"`, "api key", "authentication error", "permission error", "not logged in", "login required", "unauthorized", "forbidden"):
+	case failure.StatusCode == 401 || failure.StatusCode == 403:
 		return interfaces.WorkFailureTypeAuthFailure, true
-	case containsAny(message, `"type":"invalid_request_error"`, "invalid_request_error", "bad request", "invalid request", "request_too_large"):
+	case failure.StatusCode == 400 || failure.StatusCode == 422:
 		return interfaces.WorkFailureTypePermanentBadRequest, true
-	case containsAny(message, `"type":"rate_limit_error"`, `"type":"overloaded_error"`, "rate limit", "too many requests", "overloaded", "529"):
-		return interfaces.WorkFailureTypeThrottled, true
-	case containsAny(message, `"type":"api_error"`, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.WorkFailureTypeInternalServerError, true
-	case containsAny(message, "deadline exceeded", "timed out", "timeout"):
+	case failure.StatusCode == 408:
 		return interfaces.WorkFailureTypeTimeout, true
+	case failure.StatusCode == 429:
+		return interfaces.WorkFailureTypeThrottled, true
+	case failure.StatusCode >= 500 && failure.StatusCode <= 599:
+		return interfaces.WorkFailureTypeInternalServerError, true
 	default:
 		return interfaces.WorkFailureTypeUnknown, false
 	}
 }
 
-func claudeTextFailureMessage(message string, reason interfaces.WorkFailureType) string {
-	if reason == interfaces.WorkFailureTypeAuthFailure ||
-		reason == interfaces.WorkFailureTypePermanentBadRequest ||
-		reason == interfaces.WorkFailureTypeMisconfigured {
-		if actionable, ok := safeClaudeActionableMessage(message); ok {
-			return actionable
-		}
-	}
-	return claudeFallbackFailureMessage(reason, 0)
-}
-
-func claudeFallbackFailureMessage(reason interfaces.WorkFailureType, exitCode int) string {
-	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
-		return claudeAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		return claudeBadRequestFailureMessage
-	case interfaces.WorkFailureTypeMisconfigured:
-		return claudeConfigFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
-		return claudeThrottleFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
-		return claudeServerFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
-		return claudeTimeoutFailureMessage
-	default:
-		return fmt.Sprintf("claude exited with code %d", exitCode)
-	}
-}
-
-func claudeUnknownFailureMessage(streams []string, exitCode int) string {
-	var candidate string
-	lineCount := 0
+func lastOpenCodeTextFailure(streams []string, exitCode int) (ProviderFailureResult, bool) {
+	var last ProviderFailureResult
+	var found bool
 	for _, stream := range streams {
 		for _, line := range strings.Split(stream, "\n") {
-			normalized := normalizeClaudeMessage(line)
-			if normalized == "" {
+			trimmed := strings.TrimSpace(line)
+			if !openCodeErrorTextLine(trimmed) {
 				continue
 			}
-			lineCount++
-			candidate = normalized
+			if failure, ok := recognizedOpenCodeTextFailure(trimmed, exitCode); ok {
+				last, found = failure, true
+			}
 		}
 	}
-	if lineCount == 1 && safeClaudeUnknownExcerpt(candidate) {
-		return boundUTF8Bytes("Claude failed: "+candidate, claudeFailureMessageBytes)
+	if found {
+		return last, true
 	}
-	return fmt.Sprintf("claude exited with code %d", exitCode)
-}
-
-func safeClaudeUnknownExcerpt(message string) bool {
-	lower := strings.ToLower(message)
-	return containsAny(lower, "error", "fail") &&
-		!containsClaudeCredentialSignal(lower) &&
-		!containsClaudeTranscriptMarker(lower) &&
-		!strings.HasPrefix(lower, "api error:") &&
-		!strings.ContainsAny(message, "{}")
-}
-
-func hasAnyPrefix(value string, prefixes ...string) bool {
-	for _, prefix := range prefixes {
-		if strings.HasPrefix(value, prefix) {
-			return true
+	for _, stream := range streams {
+		trimmed := strings.TrimSpace(stream)
+		if trimmed == "" || strings.Contains(trimmed, "\n") {
+			continue
+		}
+		if failure, ok := recognizedOpenCodeTextFailure(trimmed, exitCode); ok {
+			last, found = failure, true
 		}
 	}
-	return false
+	return last, found
 }
 
-func normalizeClaudeMessage(message string) string {
-	return strings.Join(strings.Fields(strings.ToValidUTF8(message, "")), " ")
+func openCodeErrorTextLine(line string) bool {
+	normalized := strings.ToLower(line)
+	return strings.HasPrefix(normalized, "error:") || strings.HasPrefix(normalized, "api error:")
 }
 
-func tailForClaudeFailureScan(output []byte) string {
-	if len(output) <= claudeFailureScanBytes {
+func recognizedOpenCodeTextFailure(message string, exitCode int) (ProviderFailureResult, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	var reason interfaces.WorkFailureType
+	switch {
+	case exitCode == 124 || containsAny(normalized, "deadline exceeded", "request timed out", "timed out", "timeout"):
+		reason = interfaces.WorkFailureTypeTimeout
+	case containsAny(normalized, "authentication", "login required", "not authenticated", "unauthorized", "forbidden", "api key"):
+		reason = interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalized, "invalid request", "bad request", "invalid argument", "model not found"):
+		reason = interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalized, "rate limit", "too many requests", "usage limit", "at capacity", "status 429"):
+		reason = interfaces.WorkFailureTypeThrottled
+	case containsAny(normalized, "internal server error", "server error", "status 500", "status 502", "status 503", "status 504"):
+		reason = interfaces.WorkFailureTypeInternalServerError
+	default:
+		return ProviderFailureResult{}, false
+	}
+	return ProviderFailureResult{Reason: reason, Message: openCodeFailureMessage(reason, message)}, true
+}
+
+func openCodeFailureMessage(reason interfaces.WorkFailureType, detail string) string {
+	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+		if sanitized, ok := safeOpenCodeFailureDetail(detail); ok {
+			return sanitized
+		}
+	}
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return opencodeAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return opencodeBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return opencodeThrottleFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return opencodeTimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return opencodeServerFailureMessage
+	default:
+		return ""
+	}
+}
+
+func safeGeminiStructuredMessage(message string) string {
+	message = sanitizeGeminiMessage(message)
+	if message == "" {
+		return ""
+	}
+	normalized := strings.ToLower(message)
+	if isRejectedGeminiMessage(normalized) {
+		return ""
+	}
+	return message
+}
+
+func sanitizeGeminiMessage(message string) string {
+	message = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, message)
+	message = strings.Join(strings.Fields(message), " ")
+	runes := []rune(message)
+	if len(runes) > geminiFailureMessageRunes {
+		message = string(runes[:geminiFailureMessageRunes])
+	}
+	return message
+}
+
+func isRejectedGeminiMessage(normalized string) bool {
+	if strings.HasPrefix(normalized, "at ") || strings.HasPrefix(normalized, "goroutine ") {
+		return true
+	}
+	return containsAny(normalized,
+		"authorization:", "basic ", "bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
+		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
+		"customer prompt", "user prompt", "prompt:", "model response", "transcript:",
+		"[debug]", "debug:", "[progress]", "progress:", "traceback", "stack trace",
+		"error report", "report written", "cleanup", "cleaning up", "/tmp/", "/var/tmp/", ".gemini/tmp/")
+}
+
+func tailForGeminiFailureScan(output []byte) string {
+	if len(output) <= geminiFailureScanBytes {
 		return string(output)
 	}
-	return string(output[len(output)-claudeFailureScanBytes:])
+	return string(output[len(output)-geminiFailureScanBytes:])
 }
 
-func boundUTF8Bytes(message string, limit int) string {
-	if limit <= 0 || len(message) <= limit {
-		return message
+func safeOpenCodeFailureDetail(detail string) (string, bool) {
+	detail = strings.ToValidUTF8(strings.Join(strings.Fields(detail), " "), "")
+	normalized := strings.ToLower(detail)
+	if detail == "" || containsAny(normalized,
+		"authorization:", "bearer ", "api_key=", "api-key=", `"token":`, "secret=", "sk-", "prompt:", "transcript:",
+	) {
+		return "", false
 	}
-	bounded := []byte(message)[:limit]
-	for !utf8.Valid(bounded) {
-		bounded = bounded[:len(bounded)-1]
+	if len(detail) <= opencodeFailureMessageBytes {
+		return detail, true
 	}
-	return strings.TrimSpace(string(bounded))
-
+	end := opencodeFailureMessageBytes
+	for end > 0 && detail[end]&0xc0 == 0x80 {
+		end--
+	}
+	return detail[:end], true
 }
 
 // ParseCodexProviderFailure deterministically parses bounded subprocess output
@@ -817,79 +960,6 @@ func ClassifyProviderFailure(err *ProviderError) interfaces.WorkFailureDecision 
 		return interfaces.WorkFailureDecision{}
 	}
 	return providerFailurePolicyForReason(err.Type).Decision
-}
-
-// WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
-// provider error using the same FailureMetadata projection as WorkResult.
-func WorkFailureDecisionFromProviderError(err *ProviderError) interfaces.WorkFailureDecision {
-	return WorkFailureDecisionFromMetadata(WorkFailureMetadataFromError(err))
-}
-
-// WorkFailureDecisionFromMetadata resolves retry behavior from durable
-// generalized failure metadata carried across runtime boundaries.
-// The normalized type is canonical when present; family remains a fallback for
-// older or partial metadata that omitted type.
-func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) interfaces.WorkFailureDecision {
-	if metadata == nil {
-		return interfaces.WorkFailureDecision{}
-	}
-	if metadata.Type != "" {
-		return providerFailurePolicyForReason(metadata.Type).Decision
-	}
-	return providerFailureDecisionForFamily(metadata.Family)
-}
-
-type providerFailurePolicy struct {
-	Family   interfaces.WorkFailureFamily
-	Decision interfaces.WorkFailureDecision
-}
-
-func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerFailurePolicy {
-	switch reason {
-	case interfaces.WorkFailureTypeThrottled:
-		return providerFailurePolicy{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Decision: interfaces.WorkFailureDecision{
-				Retryable:             true,
-				TriggersThrottlePause: true,
-			},
-		}
-	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
-		return providerFailurePolicy{
-			Family:   interfaces.WorkFailureFamilyRetryable,
-			Decision: interfaces.WorkFailureDecision{Retryable: true},
-		}
-	case interfaces.WorkFailureTypeAuthFailure,
-		interfaces.WorkFailureTypePermanentBadRequest,
-		interfaces.WorkFailureTypeUnknown,
-		interfaces.WorkFailureTypeMisconfigured:
-		return providerFailurePolicy{
-			Family:   interfaces.WorkFailureFamilyTerminal,
-			Decision: interfaces.WorkFailureDecision{Terminal: true},
-		}
-	default:
-		return providerFailurePolicy{
-			Family:   interfaces.WorkFailureFamilyTerminal,
-			Decision: interfaces.WorkFailureDecision{Terminal: true},
-		}
-	}
-}
-
-func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
-	switch family {
-	case interfaces.WorkFailureFamilyRetryable:
-		return interfaces.WorkFailureDecision{Retryable: true}
-	case interfaces.WorkFailureFamilyThrottle:
-		return interfaces.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
-	case interfaces.WorkFailureFamilyTerminal:
-		return interfaces.WorkFailureDecision{Terminal: true}
-	default:
-		return interfaces.WorkFailureDecision{Terminal: true}
-	}
-}
-
-func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
-	return providerFailurePolicyForReason(errorType).Family
 }
 
 // WorkFailureMetadataFromError projects a provider-shaped execution error onto

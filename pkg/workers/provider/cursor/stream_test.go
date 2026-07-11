@@ -143,6 +143,23 @@ func TestStreamParser_EmitsResultSubtypeDiagnosticsForFailureAndCancel(t *testin
 	assertStreamFragment(t, fragments[1], StreamFragmentKindProgress, "Cursor result canceled: user canceled request", "cursor-session-654")
 }
 
+func TestStreamParser_DoesNotEmitErrorFlaggedSuccessResultAsResponse(t *testing.T) {
+	var fragments []StreamFragment
+	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	parser.Consume([]byte(
+		"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Request timed out\",\"session_id\":\"cursor-session-error\"}\n",
+	))
+	parser.Flush()
+
+	if len(fragments) != 1 {
+		t.Fatalf("fragments = %#v, want one failure diagnostic", fragments)
+	}
+	assertStreamFragment(t, fragments[0], StreamFragmentKindProgress, "Cursor result success: Request timed out", "cursor-session-error")
+}
+
 func TestStreamParser_EmitsCompletionDiagnosticWhenResultDoesNotExtendEarlierDelta(t *testing.T) {
 	var fragments []StreamFragment
 	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {

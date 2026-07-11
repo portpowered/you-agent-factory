@@ -561,7 +561,6 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behaviors := map[string]providerBehavior{
 		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderGemini):   geminiProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
@@ -648,7 +647,6 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 
 func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	for _, providerName := range []string{
-		string(interfaces.ModelProviderGemini),
 		string(interfaces.ModelProviderKiro),
 		string(interfaces.ModelProviderOpenCode),
 	} {
@@ -660,19 +658,35 @@ func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	}
 }
 
+func TestGeminiProviderBehavior_UsesCanonicalFailureParser(t *testing.T) {
+	behavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderGemini))
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"private quota details"}}`),
+	}
+	if got := behavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeThrottled)
+	}
+	if got := behavior.FormatExitFailure("ignored", result); got != geminiThrottleFailureMessage {
+		t.Fatalf("FormatExitFailure() = %q, want %q", got, geminiThrottleFailureMessage)
+	}
+	if got := behavior.FormatTimeoutFailure(CommandResult{Stderr: []byte("private transcript")}); got != geminiTimeoutFailureMessage {
+		t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, geminiTimeoutFailureMessage)
+	}
+}
+
 func TestCursorAndCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	cursorBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCursor))
 	codexBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCodex))
 
-	assertCodexDerivedExitFailureFormatting(t, cursorBehavior, string(interfaces.ModelProviderCursor))
 	assertCodexDerivedExitFailureFormatting(t, codexBehavior, string(interfaces.ModelProviderCodex))
 
 	result := CommandResult{
 		ExitCode: 1,
-		Stderr:   []byte("ERROR: unexpected status 500 from codex upstream"),
+		Stderr:   []byte(codexHighDemandTemporaryErrorsNeedle),
 	}
-	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("cursor ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
+	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("cursor ClassifyExitFailure() = %q, want Cursor-owned unknown classification", got)
 	}
 	if got := codexBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("codex ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)

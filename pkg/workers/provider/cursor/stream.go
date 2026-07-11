@@ -62,15 +62,22 @@ func ParseInferenceStreamResult(provider string, stdout []byte) (*InferenceResul
 	parser.Flush()
 
 	var result *InferenceResult
+	var terminalFailure *ParseFailure
 	lines := splitNonEmptyLines(stdout)
 	for _, line := range lines {
 		parsed, ok, failure := parseStreamResultLine(provider, line)
 		if failure != nil {
-			return nil, failure
+			result = nil
+			terminalFailure = failure
+			continue
 		}
 		if ok {
 			result = parsed
+			terminalFailure = nil
 		}
+	}
+	if terminalFailure != nil {
+		return nil, terminalFailure
 	}
 	if result == nil {
 		return nil, resultParseFailure(provider, "cursor stream-json output missing terminal result event", nil)
@@ -146,7 +153,8 @@ func (p *StreamParser) consumeResultEvent(event map[string]any) {
 
 	session := streamProviderSession(p.provider, event)
 	resultText := boundedText(rawStringField(event, "result"), PublishedTextLimit)
-	if subtype == ResultSubtypeSuccess {
+	isError, _ := event["is_error"].(bool)
+	if subtype == ResultSubtypeSuccess && !isError {
 		p.emitResultResponse(resultText, session)
 		return
 	}
@@ -214,10 +222,7 @@ func parseStreamResultLine(provider string, line string) (*InferenceResult, bool
 		return nil, false, resultErrorSubtype(provider, payload)
 	}
 	if payload.IsError {
-		return nil, false, &ParseFailure{
-			Type:    interfaces.WorkFailureTypeInternalServerError,
-			Message: "cursor stream-json result reported is_error=true",
-		}
+		return nil, false, resultErrorSubtype(provider, payload)
 	}
 
 	session := canonicalProviderSession(provider, payload.SessionID)

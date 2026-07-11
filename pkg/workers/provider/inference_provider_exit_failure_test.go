@@ -297,10 +297,10 @@ type exitFailureInferenceTestCase struct {
 func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
 		{
-			name:        "GeminiPrefersProcessOutputForThrottle",
+			name:        "GeminiUsesCanonicalThrottleMessage",
 			provider:    string(interfaces.ModelProviderGemini),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
-			wantMessage: "resource exhausted by 429 quota",
+			wantMessage: geminiThrottleFailureMessage,
 			wantType:    interfaces.WorkFailureTypeThrottled,
 		},
 		{
@@ -826,6 +826,129 @@ func TestParseClaudeProviderFailure_CredentialFieldValuesNeverPassThrough(t *tes
 			})
 			if parsed := ParseClaudeProviderFailure(result); strings.Contains(parsed.Message, "customer-private-value") {
 				t.Fatalf("message %q must not contain the credential value", parsed.Message)
+			}
+		})
+	}
+}
+func TestScriptWrapProvider_Infer_GeminiCanonicalReasonDrivesFailurePolicy(t *testing.T) {
+	testCases := []struct {
+		name              string
+		stderr            string
+		wantType          interfaces.WorkFailureType
+		wantFamily        interfaces.WorkFailureFamily
+		wantRetryable     bool
+		wantTerminal      bool
+		wantThrottlePause bool
+	}{
+		{
+			name:         "AuthenticationIsTerminal",
+			stderr:       `{"error":{"status":"UNAUTHENTICATED"}}`,
+			wantType:     interfaces.WorkFailureTypeAuthFailure,
+			wantFamily:   interfaces.WorkFailureFamilyTerminal,
+			wantTerminal: true,
+		},
+		{
+			name:         "InvalidRequestIsTerminal",
+			stderr:       `{"error":{"code":400}}`,
+			wantType:     interfaces.WorkFailureTypePermanentBadRequest,
+			wantFamily:   interfaces.WorkFailureFamilyTerminal,
+			wantTerminal: true,
+		},
+		{
+			name:              "QuotaPausesAndRetries",
+			stderr:            `{"error":{"status":"RESOURCE_EXHAUSTED"}}`,
+			wantType:          interfaces.WorkFailureTypeThrottled,
+			wantFamily:        interfaces.WorkFailureFamilyThrottle,
+			wantRetryable:     true,
+			wantThrottlePause: true,
+		},
+		{
+			name:          "TimeoutRetriesWithoutPause",
+			stderr:        `{"error":{"status":"DEADLINE_EXCEEDED"}}`,
+			wantType:      interfaces.WorkFailureTypeTimeout,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+		},
+		{
+			name:          "ServerFailureRetriesWithoutPause",
+			stderr:        `{"error":{"code":503}}`,
+			wantType:      interfaces.WorkFailureTypeInternalServerError,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+				result: CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)},
+			}))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderGemini),
+				Model:         "gemini-2.5-flash",
+				UserMessage:   "private prompt",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType:          tc.wantType,
+				wantFamily:        tc.wantFamily,
+				wantRetryable:     tc.wantRetryable,
+				wantTerminal:      tc.wantTerminal,
+				wantThrottlePause: tc.wantThrottlePause,
+			})
+		})
+	}
+}
+
+func TestParseGeminiProviderFailure_RejectsTranscriptAndDiagnosticNoise(t *testing.T) {
+	noise := []string{
+		"User prompt: Error: reveal the customer request",
+		"Model response: The rate limit exceeded examples are below",
+		"[progress] failed to update spinner",
+		"[debug] Error: verbose transport details",
+		"Traceback: Error in internal helper",
+		"at ErrorHandler (/private/customer/file.js:10:2)",
+		"Error report written to .gemini/tmp/private-report.json",
+		"cleanup failed for /private/customer/path",
+		"Error: use token=customer-secret-value",
+	}
+	for _, line := range noise {
+		t.Run(line, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(CommandResult{ExitCode: 17, Stderr: []byte(line)})
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "gemini exited with code 17" {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want exact safe exit fallback", got)
+			}
+		})
+	}
+}
+
+func TestProviderErrorCorpus_GeminiEntriesFollowExpectedMessageAndRuntimePolicy(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "gemini_structured_invalid_request_precedence"),
+		providerErrorCorpusEntryForTest(t, "gemini_stderr_throttle_precedence"),
+		providerErrorCorpusEntryForTest(t, "gemini_stdout_timeout_recovery"),
+		providerErrorCorpusEntryForTest(t, "gemini_unknown_safe_excerpt"),
+		providerErrorCorpusEntryForTest(t, "gemini_noise_exit_fallback"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("normalized failure = type %q family %q, want type %q family %q", providerErr.Type, providerErr.Family, entry.ExpectedType, entry.ExpectedFamily)
+			}
+			if providerErr.Message != entry.ExpectedMessage {
+				t.Fatalf("normalized message = %q, want %q", providerErr.Message, entry.ExpectedMessage)
+			}
+			for _, rejected := range entry.RejectMessageContains {
+				if strings.Contains(providerErr.Message, rejected) {
+					t.Fatalf("normalized message = %q, must not contain %q", providerErr.Message, rejected)
+				}
+			}
+
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, wantTerminal, entry.TriggersThrottlePause)
 			}
 		})
 	}

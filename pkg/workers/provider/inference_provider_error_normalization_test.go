@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
-
 func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t *testing.T) {
 	testCases := []struct {
 		name  string
@@ -101,7 +100,6 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 		})
 	}
 }
-
 func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *testing.T) {
 	testCases := []struct {
 		name              string
@@ -942,6 +940,8 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 		})
 	}
 }
+
+
 
 type normalizedProviderFailureExpectation struct {
 	wantType               interfaces.WorkFailureType
