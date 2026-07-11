@@ -2117,14 +2117,46 @@ func newFactoryServiceForDurableRetryDispatchTest(t *testing.T) (*FactoryService
 	return fs, completed.SessionId, dispatchID
 }
 
+func TestFactoryService_DurableOperationsRequireInjectedExecution(t *testing.T) {
+	t.Parallel()
+
+	fs := &FactoryService{}
+	_, startErr := fs.StartDurableFactorySessionAsync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-missing-durable-execution",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: strPtr("missing-execution"),
+		},
+	})
+	if !errors.Is(startErr, factorysessionexecution.ErrServiceNotConfigured) {
+		t.Fatalf("StartDurableFactorySessionAsync error = %v, want missing execution error", startErr)
+	}
+
+	_, listErr := fs.ListDurableExecutionSessions(context.Background(), factorysessionexecution.ListSessionsRequest{})
+	if !errors.Is(listErr, factorysessionexecution.ErrServiceNotConfigured) {
+		t.Fatalf("ListDurableExecutionSessions error = %v, want missing execution error", listErr)
+	}
+	if fs.durableExecution != nil {
+		t.Fatal("durable operation lazily created hidden execution state")
+	}
+}
+
 func newFactoryServiceForDurableLifecycleTest(t *testing.T, fixtureName, workflowName string) *FactoryService {
 	t.Helper()
 	projectRoot := setupDurableLifecycleWorkflowFixture(t, fixtureName, workflowName)
+	execution, err := factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("compose durable execution: %v", err)
+	}
 	return &FactoryService{
 		cfg: &FactoryServiceConfig{
 			Dir: projectRoot,
 		},
-		factoryRootDir: projectRoot,
+		factoryRootDir:   projectRoot,
+		durableExecution: execution,
 	}
 }
 

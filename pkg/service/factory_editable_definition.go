@@ -737,8 +737,7 @@ func (core *FactoryCore) ModelAssetPuller() modelAssetPuller {
 	return core.modelAssets
 }
 
-// DurableExecution returns the single durable execution collaborator owned by
-// this composed application graph.
+// DurableExecution returns the durable execution collaborator owned by this graph.
 func (core *FactoryCore) DurableExecution() factorysessionexecution.Service {
 	if core == nil {
 		return nil

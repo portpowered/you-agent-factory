@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,6 +15,10 @@ import (
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+// ErrServiceNotConfigured reports an application composition graph that did
+// not supply its required durable Factory Session execution collaborator.
+var ErrServiceNotConfigured = errors.New("durable factory session execution service is not configured")
 
 // Service is the shared durable factory-session execution contract consumed by
 // API, CLI, MCP, and UI transports. Live-session open and invocation remain on

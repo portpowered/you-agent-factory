@@ -127,7 +127,6 @@ type FactoryService struct {
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
 	modelInitOnce            sync.Once
-	durableExecutionMu       sync.Mutex
 	durableExecution         factorysessionexecution.Service
 }
 
