@@ -71,6 +71,13 @@ func TestBuildCore_ComposesCoreForValidFactoryConfig(t *testing.T) {
 	if core.Sessions() == nil || core.RuntimeBuild() == nil || core.WorkersScheduler() == nil {
 		t.Fatal("expected session, runtime build, and workers scheduler collaborators on composed core")
 	}
+	if core.DurableExecution() == nil {
+		t.Fatal("expected durable execution collaborator on composed core")
+	}
+	host := runtimehost.NewHostFromCore(core)
+	if host.DurableExecutionService() != core.DurableExecution() {
+		t.Fatal("runtime host did not receive the core-owned durable execution collaborator")
+	}
 	if composebridge.NewModelServiceFromCore(core) == nil {
 		t.Fatal("expected model service from composed core")
 	}

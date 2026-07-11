@@ -169,6 +169,15 @@ func (h *Host) DurableExecutionAPI() apisurface.DurableSessionAPI {
 	return factorysession.NewDurableAPI(h.durableExecutionService(), h.requireSessionGateway())
 }
 
+// DurableExecutionService exposes the explicitly injected durable collaborator
+// for compatibility composition and ownership verification.
+func (h *Host) DurableExecutionService() factorysessionexecution.Service {
+	if h == nil {
+		return nil
+	}
+	return h.durableExecution
+}
+
 type RuntimeFileLoggingPolicy string
 
 const (

@@ -82,6 +82,14 @@ func TestInjectFactoryService_MatchesBuildFactoryServiceCollaborators(t *testing
 	if directBuilt.ComposeCollaboratorSnapshot() != wireBuilt.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: direct=%+v wire=%+v", directBuilt.ComposeCollaboratorSnapshot(), wireBuilt.ComposeCollaboratorSnapshot())
 	}
+	if wireBuilt.DurableExecutionService() == nil {
+		t.Fatal("wire composition did not inject durable execution")
+	}
+	firstDurable := wireBuilt.DurableExecutionService()
+	secondDurable := wireBuilt.DurableExecutionService()
+	if firstDurable != secondDurable {
+		t.Fatal("wire composition returned more than one durable execution collaborator")
+	}
 }
 
 func TestInjectFactoryService_BuildsMinimalFactory(t *testing.T) {

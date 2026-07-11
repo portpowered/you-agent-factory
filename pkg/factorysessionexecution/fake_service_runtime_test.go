@@ -646,6 +646,39 @@ const busyLoopWorkflowSource = `while (true) {}`
 
 const throwErrorWorkflowSource = `throw new Error("workflow execution failed: " + args.subject);`
 
+type durableFixedClock struct{ now time.Time }
+
+func (c durableFixedClock) Now() time.Time { return c.now }
+
+func TestJavaScriptRuntimeService_StartSync_UsesInjectedClock(t *testing.T) {
+	want := time.Date(2031, time.April, 5, 6, 7, 8, 0, time.FixedZone("offset", -7*60*60))
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Clock:       durableFixedClock{now: want},
+	})
+
+	started, err := service.StartSync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-clock-001",
+		simpleFinalWorkflowSource,
+		map[string]any{"subject": "clock", "count": 1, "prefix": "fixed"},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	read, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	wantUTC := want.UTC()
+	if read.Lifecycle == nil || read.Lifecycle.StartedAt == nil || !read.Lifecycle.StartedAt.Equal(wantUTC) {
+		t.Fatalf("startedAt = %#v, want %s", read.Lifecycle, wantUTC)
+	}
+	if read.Lifecycle.FinishedAt == nil || !read.Lifecycle.FinishedAt.Equal(wantUTC) {
+		t.Fatalf("finishedAt = %#v, want %s", read.Lifecycle, wantUTC)
+	}
+}
+
 func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryResult(t *testing.T) {
 	service := newJavaScriptRuntimeService(t)
 
@@ -2184,10 +2217,10 @@ func TestJavaScriptRuntimeService_InterruptRunningDispatch_PreservesObservedCanc
 func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T) {
 	sessionID := "dur-sess-checkpoint-validation-001"
 	valid := &jsstore.CheckpointSummary{
-		Kind:         jsstore.CheckpointSummaryKind,
+		Kind:          jsstore.CheckpointSummaryKind,
 		SchemaVersion: jsstore.CheckpointSummarySchemaVersion,
-		CheckpointID: "checkpoint-1",
-		SessionID:    sessionID,
+		CheckpointID:  "checkpoint-1",
+		SessionID:     sessionID,
 	}
 	if err := validateCheckpointSummaryForResume(valid, sessionID); err != nil {
 		t.Fatalf("validateCheckpointSummaryForResume(valid): %v", err)
@@ -2504,7 +2537,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 			Kind:         workflowsource.KindWorkflowName,
 			WorkflowName: "resumable-two-step-fake-children",
 		},
-		Args: map[string]any{"subject": "workflows"},
+		Args:    map[string]any{"subject": "workflows"},
 		Runtime: &RuntimeOptions{ChildExecutorMode: ChildExecutorModeLive},
 	})
 	if err != nil {

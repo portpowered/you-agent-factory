@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
@@ -145,6 +146,7 @@ type ServiceConfig struct {
 	Provider          workers.Provider
 	FakeOptions       []FakeServiceOption
 	PersistSessions   bool
+	Clock             factory.Clock
 }
 
 // NewExecutionService constructs one shared Factory Session execution service for
@@ -171,6 +173,7 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 			ChildExecutorMode: childExecutorMode,
 			Provider:          provider,
 			PersistSessions:   config.PersistSessions || projectRoot != "",
+			Clock:             config.Clock,
 		}), nil
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")

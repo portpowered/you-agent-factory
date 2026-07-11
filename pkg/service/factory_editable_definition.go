@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -628,14 +629,15 @@ type ComposeCollaboratorSnapshot struct {
 // FactoryCore owns the normalized runtime graph assembled before transport
 // facades or runtime loops begin.
 type FactoryCore struct {
-	cfg           *FactoryServiceConfig
-	root          FactoryServiceRoot
-	collaborators FactoryServiceCollaborators
-	hostedWorkers hostedworkers.Config
-	clock         factory.Clock
-	startupBundle *factoryRuntimeBundle
-	logger        *zap.Logger
-	modelAssets   modelAssetPuller
+	cfg              *FactoryServiceConfig
+	root             FactoryServiceRoot
+	collaborators    FactoryServiceCollaborators
+	hostedWorkers    hostedworkers.Config
+	clock            factory.Clock
+	startupBundle    *factoryRuntimeBundle
+	logger           *zap.Logger
+	modelAssets      modelAssetPuller
+	durableExecution factorysessionexecution.Service
 }
 
 // FactoryRootDir returns the canonical factory root selected at build time.
@@ -733,6 +735,15 @@ func (core *FactoryCore) ModelAssetPuller() modelAssetPuller {
 		return nil
 	}
 	return core.modelAssets
+}
+
+// DurableExecution returns the single durable execution collaborator owned by
+// this composed application graph.
+func (core *FactoryCore) DurableExecution() factorysessionexecution.Service {
+	if core == nil {
+		return nil
+	}
+	return core.durableExecution
 }
 
 // ComposeCollaboratorSnapshot reports initialized core collaborators for
@@ -950,6 +961,14 @@ func ComposeFactoryCore(
 		startupBundle: runtimeBundle,
 		logger:        runtimeBundle.Logger,
 		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
+		durableExecution: factorysessionexecution.NewJavaScriptRuntimeService(
+			factorysessionexecution.JavaScriptRuntimeServiceConfig{
+				ProjectRoot:     root.FactoryRootDir,
+				Provider:        cfg.ProviderOverride,
+				PersistSessions: true,
+				Clock:           clock,
+			},
+		),
 	}, nil
 }
 
@@ -973,6 +992,7 @@ func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
 		clock:            core.Clock(),
 		runtimeBuild:     core.RuntimeBuild(),
 		workersScheduler: core.WorkersScheduler(),
+		durableExecution: core.DurableExecution(),
 	}
 	svc.coordinator = newFactoryCoordinator(svc)
 	svc.definitions = newFactoryDefinitionService(svc)

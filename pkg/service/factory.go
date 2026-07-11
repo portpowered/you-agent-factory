@@ -140,6 +140,15 @@ var _ apisurface.WorkAPI = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
 var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
 
+// DurableExecutionService exposes the explicitly injected durable collaborator
+// for compatibility composition and ownership verification.
+func (fs *FactoryService) DurableExecutionService() factorysessionexecution.Service {
+	if fs == nil {
+		return nil
+	}
+	return fs.durableExecution
+}
+
 type RuntimeFileLoggingPolicy string
 
 const (

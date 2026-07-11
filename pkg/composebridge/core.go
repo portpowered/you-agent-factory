@@ -8,6 +8,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -133,6 +134,12 @@ func ComposeCore(
 		runtimeBundle,
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
+		factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+			ProjectRoot:     root.FactoryRootDir,
+			Provider:        cfg.ProviderOverride,
+			PersistSessions: true,
+			Clock:           clock,
+		}),
 	), nil
 }
 

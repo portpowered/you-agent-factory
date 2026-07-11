@@ -25,6 +25,7 @@ func NewHostFromCore(core *Core) *Host {
 		clock:            core.Clock(),
 		runtimeBuild:     core.RuntimeBuild(),
 		workersScheduler: core.WorkersScheduler(),
+		durableExecution: core.DurableExecution(),
 	}
 	host.coordinator = newCoordinator(host)
 	host.definitions = newFactoryDefinitionService(host)
