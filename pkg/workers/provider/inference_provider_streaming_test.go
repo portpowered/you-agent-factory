@@ -2,12 +2,136 @@ package provider
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
+
+func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonicalFailure(t *testing.T) {
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
+	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Request timed out\",\"session_id\":\"cursor-session-error\"}'\n")
+	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var publishedMu sync.Mutex
+	var published []InferenceProgressFragment
+	publish := func(fragment InferenceProgressFragment) {
+		publishedMu.Lock()
+		published = append(published, fragment)
+		publishedMu.Unlock()
+	}
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(NewInferenceProgressPublishingCommandRunner(publish, nil)),
+		WithInferenceProgressPublisher(publish),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-error-flagged-success"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeTimeout || providerErr.Message != "Request timed out" {
+		t.Fatalf("provider error = %#v, want canonical timeout", providerErr)
+	}
+
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
+	var failed *InferenceProgressFragment
+	for i := range published {
+		if published[i].Kind == ResponseFragmentKind {
+			t.Fatalf("published fragments = %#v, error result must not emit a response", published)
+		}
+		if published[i].Kind == FailedFragmentKind {
+			failed = &published[i]
+		}
+	}
+	if failed == nil || failed.Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want canonical failed marker", published)
+	}
+	if failed.ProviderSessionRef == nil || failed.ProviderSessionRef.ID != "cursor-session-error" {
+		t.Fatalf("failed provider session = %#v, want cursor-session-error", failed.ProviderSessionRef)
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorZeroExitTerminalFailureCarriesCanonicalResultOnce(t *testing.T) {
+	stdout := []byte(
+		"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-initial-session\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"timeout\",\"is_error\":true,\"result\":\"Cursor terminal request timed out\",\"session_id\":\"cursor-final-session\"}\n",
+	)
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{
+			Stdout: stdout,
+			Stderr: []byte("unrelated authentication failed"),
+		}}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-zero-exit-failure"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeTimeout || providerErr.Message != "Cursor terminal request timed out" {
+		t.Fatalf("provider error = %#v, want canonical terminal timeout", providerErr)
+	}
+	if providerErr.ProviderSession == nil || providerErr.ProviderSession.ID != "cursor-final-session" {
+		t.Fatalf("provider session = %#v, want cursor-final-session", providerErr.ProviderSession)
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind || published[0].Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want one canonical failed marker", published)
+	}
+	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != providerErr.ProviderSession.ID {
+		t.Fatalf("published provider session = %#v, want final provider error session %#v", published[0].ProviderSessionRef, providerErr.ProviderSession)
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorMalformedStructuredOutputDoesNotPublishPromptText(t *testing.T) {
+	privatePrompt := "deploy production using the customer launch phrase"
+	stdout := []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"` + privatePrompt + `"}]}`)
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{result: CommandResult{Stdout: stdout, ExitCode: 1}}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-malformed-structured"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   privatePrompt,
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if strings.Contains(providerErr.Message, privatePrompt) {
+		t.Fatalf("provider message = %q, must not surface malformed assistant content", providerErr.Message)
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind || published[0].Payload != providerErr.Message {
+		t.Fatalf("published fragments = %#v, want one canonical failure marker", published)
+	}
+	if strings.Contains(published[0].Payload, privatePrompt) {
+		t.Fatalf("failure fragment = %q, must not surface malformed assistant content", published[0].Payload)
+	}
+}
 
 func TestScriptWrapProvider_Infer_CursorParsesStreamJSONResult(t *testing.T) {
 	stdout := []byte(
@@ -128,14 +252,22 @@ func TestScriptWrapProvider_Infer_CursorCompletionPublisherPreservesFinalRespons
 }
 
 func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *testing.T) {
-	stdout := []byte(`{"type":"result"`)
+	privateMalformedContent := "private malformed Cursor content"
+	stdout := []byte(`{"type":"assistant","message":"` + privateMalformedContent)
 	stderr := []byte("cursor stderr detail")
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: stdout, Stderr: stderr},
 	}
-	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-malformed-json"},
 		ModelProvider: string(interfaces.ModelProviderCursor),
 		UserMessage:   "run the tests",
 	})
@@ -146,8 +278,20 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("error type = %q, want permanent_bad_request", providerErr.Type)
+	if providerErr.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("error type = %q, want unknown", providerErr.Type)
+	}
+	if providerErr.Message != string(stderr) || strings.Contains(providerErr.Message, privateMalformedContent) {
+		t.Fatalf("provider message = %q, want safe unknown stderr result", providerErr.Message)
+	}
+	if providerErr.Cause == nil {
+		t.Fatal("parse failure cause = nil, want original JSON parse cause")
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind {
+		t.Fatalf("published fragments = %#v, want one failed marker", published)
+	}
+	if published[0].Payload != providerErr.Message || strings.Contains(published[0].Payload, privateMalformedContent) {
+		t.Fatalf("failure fragment = %#v, want canonical safe unknown result", published[0])
 	}
 	if providerErr.Diagnostics == nil || providerErr.Diagnostics.Command == nil {
 		t.Fatal("expected command diagnostics on parse failure")
@@ -160,6 +304,29 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 	}
 	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
 	assertSafeCursorFailureExcerpts(t, providerErr.Diagnostics)
+}
+
+func TestScriptWrapProvider_Infer_CursorParseFailureUsesStderrParserResult(t *testing.T) {
+	stdout := []byte(`{"type":"result"`)
+	stderr := []byte("Cursor authentication failed; sign in again")
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+		result: CommandResult{Stdout: stdout, Stderr: stderr},
+	}))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeAuthFailure || providerErr.Message != string(stderr) {
+		t.Fatalf("provider error = %#v, want canonical stderr authentication result", providerErr)
+	}
+	if providerErr.Cause == nil {
+		t.Fatal("parse failure cause = nil, want original JSON parse cause")
+	}
 }
 
 func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsExcerpts(t *testing.T) {
