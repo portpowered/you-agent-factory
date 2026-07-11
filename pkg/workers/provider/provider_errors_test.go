@@ -1,13 +1,12 @@
 package provider
 
 import (
-	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
 func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
@@ -69,7 +68,6 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
 		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
 	}
-
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := NewProviderError(tc.errorType, "normalized failure", nil)
@@ -370,161 +368,256 @@ func TestParseCodexProviderFailure_StructuredFallbackIsSafeByConstruction(t *tes
 	}
 }
 
-func TestParseKiroProviderFailure_KnownCorpusFixtures(t *testing.T) {
-	fixtureNames := []string{
-		"kiro_structured_authentication_error",
-		"kiro_structured_invalid_request_stdout",
-		"kiro_text_authentication_stdout",
-		"kiro_structured_throttle_precedes_text",
-		"kiro_text_capacity_error",
-		"kiro_text_timeout_malformed_structured",
-		"kiro_structured_service_unavailable",
-	}
-
-	for _, name := range fixtureNames {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			got := ParseKiroProviderFailure(entry.CommandResult())
-			if got.Reason != entry.ExpectedType {
-				t.Fatalf("Reason = %q, want %q", got.Reason, entry.ExpectedType)
-			}
-			if got.Message != knownKiroFailure(entry.ExpectedType).Message {
-				t.Fatalf("Message = %q, want stable Kiro message %q", got.Message, knownKiroFailure(entry.ExpectedType).Message)
-			}
-			if len(got.Message) > kiroFailureMessageBytes {
-				t.Fatalf("message length = %d, want at most %d bytes", len(got.Message), kiroFailureMessageBytes)
-			}
-			for _, rejected := range entry.RejectMessageContains {
-				if strings.Contains(got.Message, rejected) {
-					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
-				}
-			}
-		})
-	}
-}
-
-func TestParseKiroProviderFailure_KnownTextMessagesNormalizeControlCharactersByReplacement(t *testing.T) {
-	got := ParseKiroProviderFailure(CommandResult{
-		ExitCode: 1,
-		Stderr:   []byte("ERROR:\tauthentication\x00 required\r for Kiro"),
-	})
-	if got.Reason != interfaces.WorkFailureTypeAuthFailure || got.Message != kiroAuthFailureMessage {
-		t.Fatalf("ParseKiroProviderFailure() = %#v, want fixed auth failure", got)
-	}
-	if strings.ContainsAny(got.Message, "\x00\r\n\t") {
-		t.Fatalf("Message = %q, want control-character-normalized text", got.Message)
-	}
-}
-
-func TestParseKiroProviderFailure_IgnoresKnownTextOutsideBoundedTail(t *testing.T) {
-	got := ParseKiroProviderFailure(CommandResult{
-		ExitCode: 7,
-		Stderr: []byte(
-			"ERROR: authentication required\n" + strings.Repeat("cleanup padding\n", kiroErrorLineScanBytes),
-		),
-	})
-	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "kiro-cli exited with code 7" {
-		t.Fatalf("ParseKiroProviderFailure() = %#v, want bounded-scan exit fallback", got)
-	}
-}
-
-func TestParseKiroProviderFailure_ExitTimeoutPrecedesOutput(t *testing.T) {
-	got := ParseKiroProviderFailure(CommandResult{
-		ExitCode: 124,
-		Stderr:   []byte(`{"type":"error","error":{"type":"authentication_error"}}`),
-	})
-	if got.Reason != interfaces.WorkFailureTypeTimeout || got.Message != kiroTimeoutFailureMessage {
-		t.Fatalf("ParseKiroProviderFailure() = %#v, want explicit process timeout", got)
-	}
-}
-
-func TestParseKiroProviderFailure_UnknownCorpusFixturesUseSafeDeterministicMessages(t *testing.T) {
-	testCases := map[string]string{
-		"kiro_unknown_stderr_excerpt_precedes_stdout":     "Kiro error: model registry handshake failed",
-		"kiro_unknown_stdout_excerpt_after_unsafe_stderr": "Kiro error: plugin bridge failed",
-		"kiro_unknown_noise_only_exit_fallback":           "kiro-cli exited with code 11",
-	}
-
-	for name, wantMessage := range testCases {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			got := ParseKiroProviderFailure(entry.CommandResult())
-			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != wantMessage {
-				t.Fatalf("ParseKiroProviderFailure() = %#v, want unknown message %q", got, wantMessage)
-			}
-			if len(got.Message) > kiroFailureMessageBytes {
-				t.Fatalf("message length = %d, want at most %d bytes", len(got.Message), kiroFailureMessageBytes)
-			}
-			for _, rejected := range entry.RejectMessageContains {
-				if strings.Contains(got.Message, rejected) {
-					t.Fatalf("Message = %q, must not contain %q", got.Message, rejected)
-				}
-			}
-		})
-	}
-}
-
-func TestParseKiroProviderFailure_UnknownExcerptBoundsAndFallbacks(t *testing.T) {
+func TestParseGeminiProviderFailure_NormalizesKnownStructuredFailures(t *testing.T) {
 	testCases := []struct {
 		name        string
-		result      CommandResult
+		output      string
+		wantReason  interfaces.WorkFailureType
 		wantMessage string
 	}{
 		{
-			name:        "EmptyOutput",
-			result:      CommandResult{ExitCode: 2},
-			wantMessage: "kiro-cli exited with code 2",
+			name:        "AuthenticationTypePreservesActionableMessage",
+			output:      `{"type":"error","error":{"type":"FatalAuthenticationError","message":"Run gemini auth login to continue."}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Run gemini auth login to continue.",
 		},
 		{
-			name:        "EmptyAfterSanitization",
-			result:      CommandResult{ExitCode: 3, Stderr: []byte("ERROR:\x00\t\r")},
-			wantMessage: "kiro-cli exited with code 3",
+			name:        "PermissionStatusUsesAuthenticationFallback",
+			output:      `{"type":"error","error":{"status":"PERMISSION_DENIED"}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
 		},
 		{
-			name:        "StructuredUnknownRecord",
-			result:      CommandResult{ExitCode: 4, Stderr: []byte(`ERROR: {"type":"mystery","message":"private value"}`)},
-			wantMessage: "kiro-cli exited with code 4",
+			name:        "InvalidArgumentPreservesActionableMessage",
+			output:      `{"error":{"status":"INVALID_ARGUMENT","message":"The selected model name is invalid."}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "The selected model name is invalid.",
 		},
 		{
-			name:        "EnvironmentAssignment",
-			result:      CommandResult{ExitCode: 5, Stderr: []byte("ERROR: REGION=private-region is unsupported")},
-			wantMessage: "kiro-cli exited with code 5",
+			name:        "NumericQuotaCodeUsesFixedMessage",
+			output:      `{"error":{"code":429,"message":"quota exhausted for project private-project"}}`,
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: geminiThrottleFailureMessage,
 		},
 		{
-			name:        "CredentialBearingError",
-			result:      CommandResult{ExitCode: 8, Stderr: []byte("ERROR: request failed with Bearer customer-token")},
-			wantMessage: "kiro-cli exited with code 8",
+			name:        "DeadlineStatusUsesFixedMessage",
+			output:      `{"error":{"status":"DEADLINE_EXCEEDED","message":"request exceeded 60 seconds"}}`,
+			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantMessage: geminiTimeoutFailureMessage,
+		},
+		{
+			name:        "UnavailableStatusUsesFixedMessage",
+			output:      `{"error":{"status":"UNAVAILABLE","message":"backend unavailable"}}`,
+			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantMessage: geminiServerFailureMessage,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ParseKiroProviderFailure(tc.result)
-			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
-				t.Fatalf("ParseKiroProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
+			got := ParseGeminiProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.output)})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
 			}
 		})
 	}
 }
 
-func TestParseKiroProviderFailure_UnknownExcerptIsUTF8SafeAndBounded(t *testing.T) {
-	detail := strings.Repeat("é", kiroFailureMessageBytes)
-	got := ParseKiroProviderFailure(CommandResult{ExitCode: 6, Stderr: []byte("ERROR: " + detail)})
+func TestParseGeminiProviderFailure_KnownTextAndStructuredPrecedenceAreSafe(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name: "StructuredErrorOutranksConflictingText",
+			result: CommandResult{
+				ExitCode: 1,
+				Stderr:   []byte("HTTP 429 too many requests"),
+				Stdout:   []byte(`{"error":{"status":"INVALID_ARGUMENT","message":"Unsupported generation config."}}`),
+			},
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "Unsupported generation config.",
+		},
+		{
+			name:        "AuthenticationTextUsesFixedMessage",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("FatalAuthenticationError: login required")},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
+		},
+		{
+			name:        "ExitCode124IsTimeout",
+			result:      CommandResult{ExitCode: 124},
+			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantMessage: geminiTimeoutFailureMessage,
+		},
+		{
+			name: "CredentialMessageUsesSafeFallback",
+			result: CommandResult{ExitCode: 1, Stderr: []byte(
+				`{"error":{"status":"UNAUTHENTICATED","message":"token=customer-secret-value"}}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
+		},
+		{
+			name:        "BasicAuthorizationMessageUsesSafeFallback",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"status":"UNAUTHENTICATED","message":"Authorization: Basic dXNlcjpwYXNz"}}`)},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: geminiAuthFailureMessage,
+		},
+		{
+			name: "OrdinaryJSONMessageIsNotAnErrorRecord",
+			result: CommandResult{ExitCode: 7, Stdout: []byte(
+				`{"type":"message","message":"Explain how rate limits work."}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "gemini exited with code 7",
+		},
+	}
 
-	if got.Reason != interfaces.WorkFailureTypeUnknown {
-		t.Fatalf("Reason = %q, want unknown", got.Reason)
-	}
-	if len(got.Message) > kiroFailureMessageBytes {
-		t.Fatalf("message length = %d, want at most %d bytes", len(got.Message), kiroFailureMessageBytes)
-	}
-	if !utf8.ValidString(got.Message) {
-		t.Fatalf("Message is not valid UTF-8: %q", got.Message)
-	}
-	if !strings.HasPrefix(got.Message, "Kiro error: é") {
-		t.Fatalf("Message = %q, want normalized Kiro excerpt", got.Message)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(tc.result)
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+		})
 	}
 }
 
+func TestParseGeminiProviderFailure_BoundsAndNormalizesActionableMessage(t *testing.T) {
+	upstream := "Invalid generation config:\n\t" + strings.Repeat("é", geminiFailureMessageRunes+20)
+	payload, err := json.Marshal(map[string]any{
+		"error": map[string]any{
+			"status":  "INVALID_ARGUMENT",
+			"message": upstream,
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	got := ParseGeminiProviderFailure(CommandResult{ExitCode: 1, Stderr: payload})
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("Reason = %q, want %q", got.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	}
+	if strings.ContainsAny(got.Message, "\n\t") {
+		t.Fatalf("Message = %q, want normalized controls", got.Message)
+	}
+	if length := len([]rune(got.Message)); length != geminiFailureMessageRunes {
+		t.Fatalf("Message rune length = %d, want %d", length, geminiFailureMessageRunes)
+	}
+}
+
+func TestParseGeminiProviderFailure_DeterministicFallbackPrecedence(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantReason  interfaces.WorkFailureType
+		wantMessage string
+	}{
+		{
+			name: "FinalStructuredErrorWinsAcrossStreams",
+			result: CommandResult{
+				ExitCode: 1,
+				Stdout: []byte(
+					"{malformed\n" +
+						`{"error":{"status":"INVALID_ARGUMENT","message":"Earlier structured error."}}`,
+				),
+				Stderr: []byte(
+					`{"error":{"status":"UNAUTHENTICATED","message":"Run gemini auth login."}}`,
+				),
+			},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Run gemini auth login.",
+		},
+		{
+			name: "FinalUnknownStructuredErrorUsesKnownFieldOnly",
+			result: CommandResult{ExitCode: 9, Stderr: []byte(
+				"{\"error\":{\"status\":\"UNAVAILABLE\"}}\n" +
+					`{"error":{"status":"NEW_PROVIDER_STATUS","message":"Error: selected region is unsupported."}}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: selected region is unsupported.",
+		},
+		{
+			name: "UnknownStructuredCredentialUsesExitFallback",
+			result: CommandResult{ExitCode: 9, Stderr: []byte(
+				`{"error":{"status":"NEW_PROVIDER_STATUS","message":"token=customer-secret"}}`,
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "gemini exited with code 9",
+		},
+		{
+			name:        "UnknownTextBasicAuthorizationUsesExitFallback",
+			result:      CommandResult{ExitCode: 9, Stderr: []byte("Error: request failed with Authorization: Basic dXNlcjpwYXNz")},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "gemini exited with code 9",
+		},
+		{
+			name: "MalformedStructuredRecordAllowsTextFallback",
+			result: CommandResult{ExitCode: 1, Stderr: []byte(
+				"{\"error\":\nError: unsupported response mode",
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: unsupported response mode",
+		},
+		{
+			name: "MeaningfulStderrOutranksConflictingStdout",
+			result: CommandResult{
+				ExitCode: 1,
+				Stdout:   []byte("Error: internal server error"),
+				Stderr:   []byte("Error: invalid request payload"),
+			},
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: geminiBadRequestMessage,
+		},
+		{
+			name: "StdoutErrorRecoversFromNoisyStderr",
+			result: CommandResult{
+				ExitCode: 6,
+				Stdout:   []byte("Error: unsupported response mode"),
+				Stderr:   []byte("[debug] Error report written to /tmp/gemini-report.txt\ncleanup complete"),
+			},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: unsupported response mode",
+		},
+		{
+			name: "FinalSafeErrorCandidateWins",
+			result: CommandResult{ExitCode: 6, Stderr: []byte(
+				"Error: earlier provider failure\ncleanup failed for /tmp/private\nError: final provider failure",
+			)},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Error: final provider failure",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(tc.result)
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+		})
+	}
+}
+
+func TestParseGeminiProviderFailure_BoundsInspectedOutputAndUnknownMessage(t *testing.T) {
+	outsideScan := "Error: must not survive bounded scan\n" + strings.Repeat("padding without a signal\n", geminiFailureScanBytes)
+	got := ParseGeminiProviderFailure(CommandResult{ExitCode: 5, Stderr: []byte(outsideScan)})
+	if got.Message != "gemini exited with code 5" {
+		t.Fatalf("Message = %q, want bounded-scan exit fallback", got.Message)
+	}
+	unknown := "Error:\x00\t" + strings.Repeat("é", geminiFailureMessageRunes+20)
+	got = ParseGeminiProviderFailure(CommandResult{ExitCode: 5, Stderr: []byte(unknown)})
+	if strings.ContainsAny(got.Message, "\x00\t\n") {
+		t.Fatalf("Message = %q, want normalized controls", got.Message)
+	}
+	if length := len([]rune(got.Message)); length != geminiFailureMessageRunes {
+		t.Fatalf("Message rune length = %d, want %d", length, geminiFailureMessageRunes)
+	}
+}
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
 	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {
@@ -754,172 +847,5 @@ func TestWorkFailureDecisionFromProviderError_UsesFailureMetadataProjection(t *t
 	decision := WorkFailureDecisionFromProviderError(providerErr)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
 		t.Fatalf("WorkFailureDecisionFromProviderError() = %#v, want retryable non-terminal non-throttle", decision)
-	}
-}
-
-func TestClassifyProviderFailure_SharedCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
-	testCases := []ProviderErrorCorpusEntry{
-		providerErrorCorpusEntryForTest(t, "codex_status_429_too_many_requests"),
-		providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached"),
-		providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model"),
-		providerErrorCorpusEntryForTest(t, "codex_internal_server_status_500"),
-		providerErrorCorpusEntryForTest(t, "codex_high_demand_temporary_errors"),
-		providerErrorCorpusEntryForTest(t, "codex_windows_exit_code_4294967295"),
-		providerErrorCorpusEntryForTest(t, "codex_invalid_request_error"),
-		providerErrorCorpusEntryForTest(t, "codex_timeout_waiting_for_provider"),
-		providerErrorCorpusEntryForTest(t, "codex_authentication_unauthorized"),
-		providerErrorCorpusEntryForTest(t, "cursor_usage_limit_reached"),
-		providerErrorCorpusEntryForTest(t, "cursor_high_demand_temporary_errors"),
-		providerErrorCorpusEntryForTest(t, "kiro_structured_authentication_error"),
-		providerErrorCorpusEntryForTest(t, "kiro_structured_invalid_request_stdout"),
-		providerErrorCorpusEntryForTest(t, "kiro_text_authentication_stdout"),
-		providerErrorCorpusEntryForTest(t, "kiro_structured_throttle_precedes_text"),
-		providerErrorCorpusEntryForTest(t, "kiro_text_timeout_malformed_structured"),
-		providerErrorCorpusEntryForTest(t, "kiro_structured_service_unavailable"),
-		providerErrorCorpusEntryForTest(t, "kiro_unknown_stderr_excerpt_precedes_stdout"),
-		providerErrorCorpusEntryForTest(t, "kiro_unknown_stdout_excerpt_after_unsafe_stderr"),
-		providerErrorCorpusEntryForTest(t, "kiro_unknown_noise_only_exit_fallback"),
-	}
-
-	for _, entry := range testCases {
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
-			if providerErr.Type != entry.ExpectedType {
-				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
-			}
-			if providerErr.Family != entry.ExpectedFamily {
-				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
-			}
-
-			decision := WorkFailureDecisionFromProviderError(providerErr)
-			wantTerminal := !entry.Retryable
-			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
-				t.Fatalf(
-					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
-					providerErrorCorpusEntryLabel(entry),
-					decision,
-					entry.Retryable,
-					wantTerminal,
-					entry.TriggersThrottlePause,
-				)
-			}
-		})
-	}
-}
-
-func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecisiveFailure(t *testing.T) {
-	testCases := []ProviderErrorCorpusEntry{
-		providerErrorCorpusEntryForTest(t, "codex_model_capacity_cleanup_noise"),
-		providerErrorCorpusEntryForTest(t, "codex_timeout_cleanup_noise"),
-	}
-
-	for _, entry := range testCases {
-		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
-			wantMessage := codexTextFailureMessage(entry.ExpectedType)
-			if providerErr.Message != wantMessage {
-				t.Fatalf("%s normalized message = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, wantMessage)
-			}
-			for _, reject := range entry.RejectMessageContains {
-				if strings.Contains(providerErr.Message, reject) {
-					t.Fatalf("%s normalized message = %q, want decisive error line without %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, reject)
-				}
-			}
-			if providerErr.Type != entry.ExpectedType {
-				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
-			}
-			if providerErr.Family != entry.ExpectedFamily {
-				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
-			}
-
-			decision := WorkFailureDecisionFromProviderError(providerErr)
-			wantTerminal := !entry.Retryable
-			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
-				t.Fatalf(
-					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
-					providerErrorCorpusEntryLabel(entry),
-					decision,
-					entry.Retryable,
-					wantTerminal,
-					entry.TriggersThrottlePause,
-				)
-			}
-		})
-	}
-}
-
-func TestProviderErrorCorpus_ContainsSupportedCoverageForEachFailureCategory(t *testing.T) {
-	corpus := loadProviderErrorCorpusForTest(t)
-
-	for _, category := range []string{
-		"throttled",
-		"internal_server_error",
-		"auth_failure",
-		"permanent_bad_request",
-		"timeout",
-	} {
-		if got := len(corpus.SupportedEntriesForCategory(category)); got == 0 {
-			t.Fatalf("supported corpus entries for category %q = %d, want at least 1", category, got)
-		}
-	}
-}
-
-func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
-	result := providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached").CommandResult()
-
-	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
-	if providerErr.Type != interfaces.WorkFailureTypeThrottled {
-		t.Fatalf("expected usage limit to classify as %q, got %q", interfaces.WorkFailureTypeThrottled, providerErr.Type)
-	}
-	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
-		t.Fatalf("expected usage limit to be in family %q, got %q", interfaces.WorkFailureFamilyThrottle, providerErr.Family)
-	}
-	if providerErr.Message != codexThrottleFailureMessage {
-		t.Fatalf("expected normalized error to use the safe throttle message, got %q", providerErr.Message)
-	}
-}
-
-func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
-	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
-	req := interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(interfaces.ModelProviderCodex),
-		Model:            "gpt-5.3-codex-spark",
-		UserMessage:      "line one\nline two",
-		WorkingDirectory: "workspace",
-	}
-
-	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
-	if err != nil {
-		t.Fatalf("BuildArgs returned error: %v", err)
-	}
-	commandReq := behavior.BuildCommandRequest(req, args)
-
-	if len(args) == 0 || args[len(args)-1] != "-" {
-		t.Fatalf("expected codex args to end with stdin marker, got %#v", args)
-	}
-	if string(commandReq.Stdin) != req.UserMessage {
-		t.Fatalf("expected codex request to stream prompt on stdin, got %q", string(commandReq.Stdin))
-	}
-}
-
-func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
-	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
-	req := interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderClaude),
-		Model:         "claude-sonnet",
-		UserMessage:   "line one\nline two",
-	}
-
-	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
-	if err != nil {
-		t.Fatalf("BuildArgs returned error: %v", err)
-	}
-	commandReq := behavior.BuildCommandRequest(req, args)
-
-	if len(args) == 0 || args[len(args)-1] != req.UserMessage {
-		t.Fatalf("expected claude args to end with user message, got %#v", args)
-	}
-	if len(commandReq.Stdin) != 0 {
-		t.Fatalf("expected claude request not to use stdin, got %q", string(commandReq.Stdin))
 	}
 }

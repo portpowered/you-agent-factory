@@ -581,7 +581,7 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 	behaviors := map[string]providerBehavior{
 		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderGemini):   geminiProviderBehavior{logger: logging.NoopLogger{}},
+		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
 		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
 	}
@@ -682,7 +682,7 @@ func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
 
 func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 	for _, providerName := range []string{
-		string(interfaces.ModelProviderGemini),
+		string(interfaces.ModelProviderKiro),
 		string(interfaces.ModelProviderOpenCode),
 	} {
 		behavior := providerBehaviorForErrorClassification(providerName)
@@ -690,6 +690,23 @@ func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 			assertProviderExitFailureFormatting(t, behavior, providerName)
 			assertProviderExitFailureClassification(t, behavior)
 		})
+	}
+}
+
+func TestGeminiProviderBehavior_UsesCanonicalFailureParser(t *testing.T) {
+	behavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderGemini))
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"private quota details"}}`),
+	}
+	if got := behavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeThrottled)
+	}
+	if got := behavior.FormatExitFailure("ignored", result); got != geminiThrottleFailureMessage {
+		t.Fatalf("FormatExitFailure() = %q, want %q", got, geminiThrottleFailureMessage)
+	}
+	if got := behavior.FormatTimeoutFailure(CommandResult{Stderr: []byte("private transcript")}); got != geminiTimeoutFailureMessage {
+		t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, geminiTimeoutFailureMessage)
 	}
 }
 
