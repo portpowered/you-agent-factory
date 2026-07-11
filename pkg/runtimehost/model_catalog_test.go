@@ -5,12 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestHostModelServiceClockUsesCompositionClock(t *testing.T) {
@@ -20,6 +27,221 @@ func TestHostModelServiceClockUsesCompositionClock(t *testing.T) {
 	if got := host.modelServiceClock(); !got.Equal(want) {
 		t.Fatalf("modelServiceClock() = %s, want %s", got, want)
 	}
+}
+
+func TestWireModelServiceCollaboratorPreservesOverrideAndNilHostBehavior(t *testing.T) {
+	override := &catalogModelServiceStub{}
+	if got := wireModelServiceCollaborator(&Host{}, &Config{ModelAPI: override}); got != override {
+		t.Fatalf("wireModelServiceCollaborator override = %T, want configured ModelAPI", got)
+	}
+
+	var host *Host
+	_, err := host.ListModels(context.Background())
+	if err == nil || err.Error() != "factory service runtime is not available" {
+		t.Fatalf("nil Host ListModels error = %v, want unavailable runtime", err)
+	}
+}
+
+func TestRuntimeHostModelServicePreservesCatalogPullObservabilityAndErrors(t *testing.T) {
+	runtimeCfg := runtimeHostModelConfig(t)
+	modelHost := &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
+		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+	}, pull: modelhost.PullSnapshot{
+		ReadinessSnapshot: modelhost.ReadinessSnapshot{
+			Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
+			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+		},
+		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeALREADYREADY,
+		LegacyOutcome: "ALREADY_PRESENT",
+		CachePath:     "/tmp/model",
+		Revision:      "rev-1",
+	}}
+	puller := &runtimeHostModelPuller{result: apisurface.ModelPullResult{
+		ModelName: "voice-model", Outcome: "ALREADY_PRESENT", CachePath: "/tmp/model", Revision: "rev-1",
+	}, inspection: localmodels.RuntimeCacheInspection{
+		Supported: true, Installed: true, CachePath: "/tmp/model", Revision: "rev-1",
+	}}
+	recorder := &runtimeHostPullMetricsRecorder{}
+	logCore, logs := observer.New(zap.InfoLevel)
+	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{ModelPullMetricsRecorder: recorder})
+	host.logger = zap.New(logCore)
+
+	listed, err := host.ListModels(context.Background())
+	if err != nil || len(listed.Results) != 1 || listed.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("ListModels = (%#v, %v), want one ready model", listed, err)
+	}
+	pulled, err := host.PullModel(context.Background(), "voice-model")
+	if err != nil || pulled.ReadinessState != "READY" {
+		t.Fatalf("PullModel = (%#v, %v), want ready result", pulled, err)
+	}
+	if got := recorder.names(); !reflect.DeepEqual(got, []string{modelPullMetricAttempts, modelPullMetricSuccess}) {
+		t.Fatalf("pull metrics = %#v, want one attempt and one success", got)
+	}
+	if got := logs.FilterMessage("managed runtime pull completed").Len(); got != 1 {
+		t.Fatalf("pull completion log count = %d, want 1", got)
+	}
+
+	sentinel := errors.New("readiness failed")
+	modelHost.readinessErr = sentinel
+	_, err = host.GetModel(context.Background(), "voice-model")
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("GetModel error = %v, want readiness sentinel", err)
+	}
+}
+
+func TestRuntimeHostModelServicePreservesPullFailureSignals(t *testing.T) {
+	runtimeCfg := runtimeHostModelConfig(t)
+	recorder := &runtimeHostPullMetricsRecorder{}
+	logCore, logs := observer.New(zap.WarnLevel)
+	puller := &runtimeHostModelPuller{}
+	modelHost := &runtimeHostModelHost{pullErr: apisurface.ErrManagedRuntimeSourceFetchFailed}
+	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{ModelPullMetricsRecorder: recorder})
+	host.logger = zap.New(logCore)
+
+	_, err := host.PullModel(context.Background(), "voice-model")
+	if !errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed) {
+		t.Fatalf("PullModel error = %v, want source fetch failure", err)
+	}
+	if got := recorder.names(); !reflect.DeepEqual(got, []string{modelPullMetricAttempts, modelPullMetricFailure, modelPullMetricSourceFailure}) {
+		t.Fatalf("pull metrics = %#v, want attempt, failure, and source failure", got)
+	}
+	if got := logs.FilterMessage("managed runtime pull failed").Len(); got != 1 {
+		t.Fatalf("pull failure log count = %d, want 1", got)
+	}
+}
+
+func TestRuntimeHostModelServicePreservesFactoryRunnerIdentityForInvocation(t *testing.T) {
+	runtimeCfg := runtimeHostModelConfig(t)
+	provider := &runtimeHostInvocationProvider{}
+	cfg := &Config{RunnerID: "factory-runner", ProviderOverride: provider}
+	host := runtimeHostModelFacade(runtimeCfg, &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
+		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+	}}, &runtimeHostModelPuller{}, cfg)
+
+	result, err := host.InvokeModel(context.Background(), "voice-model", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	if err != nil {
+		t.Fatalf("InvokeModel: %v", err)
+	}
+	if result.ModelName != "voice-model" || result.Worker != "voice-worker" {
+		t.Fatalf("InvokeModel result = %#v, want voice-model/voice-worker", result)
+	}
+	if got := provider.runnerIDs(); !reflect.DeepEqual(got, []string{"factory-runner"}) {
+		t.Fatalf("provider runner IDs = %#v, want factory-runner", got)
+	}
+}
+
+func runtimeHostModelConfig(t *testing.T) *factoryconfig.LoadedFactoryConfig {
+	t.Helper()
+	cfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
+		Name: "runtime-host-models",
+		Workers: []interfaces.WorkerConfig{{
+			Name: "voice-worker", Type: interfaces.WorkerTypeModel, Model: "voice-model",
+			ModelLocality: interfaces.ModelLocalityLocal,
+			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+	return cfg
+}
+
+func runtimeHostModelFacade(runtimeCfg *factoryconfig.LoadedFactoryConfig, host modelhost.Host, puller modelAssetPuller, cfg *Config) *Host {
+	facade := &Host{
+		cfg: cfg, policy: CoordinatorPolicyFromConfig(cfg), modelAssets: puller,
+		startupBundle: &factoryRuntimeBundle{RuntimeCfg: runtimeCfg, ModelHost: host, ModelAssets: puller},
+	}
+	facade.modelService = wireModelServiceCollaborator(facade, cfg)
+	return facade
+}
+
+type runtimeHostModelPuller struct {
+	result     apisurface.ModelPullResult
+	inspection localmodels.RuntimeCacheInspection
+	err        error
+}
+
+func (p *runtimeHostModelPuller) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (apisurface.ModelPullResult, error) {
+	return p.result, p.err
+}
+func (p *runtimeHostModelPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+	return nil
+}
+func (p *runtimeHostModelPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+	return localmodels.CacheLayout{}, nil
+}
+func (p *runtimeHostModelPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
+	return p.inspection, nil
+}
+
+type runtimeHostModelHost struct {
+	readiness    modelhost.ReadinessSnapshot
+	readinessErr error
+	pull         modelhost.PullSnapshot
+	pullErr      error
+}
+
+func (h *runtimeHostModelHost) ResolveIdentity(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.Identity, error) {
+	return h.readiness.Identity, nil
+}
+func (h *runtimeHostModelHost) InspectReadiness(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.ReadinessSnapshot, error) {
+	return h.readiness, h.readinessErr
+}
+func (h *runtimeHostModelHost) Pull(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.PullSnapshot, error) {
+	return h.pull, h.pullErr
+}
+func (*runtimeHostModelHost) AcquireLease(context.Context, *factoryconfig.LoadedFactoryConfig, string, modelhost.LeaseOptions) (modelhost.Lease, error) {
+	return modelhost.Lease{}, nil
+}
+func (*runtimeHostModelHost) ReleaseLease(context.Context, string) error { return nil }
+func (*runtimeHostModelHost) Unload(context.Context, *factoryconfig.LoadedFactoryConfig, string) error {
+	return nil
+}
+
+type runtimeHostPullMetricsRecorder struct {
+	mu      sync.Mutex
+	metrics []InvocationMetric
+}
+
+func (r *runtimeHostPullMetricsRecorder) RecordModelPullMetric(metric InvocationMetric) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.metrics = append(r.metrics, metric)
+}
+func (r *runtimeHostPullMetricsRecorder) names() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	names := make([]string, len(r.metrics))
+	for i := range r.metrics {
+		names[i] = r.metrics[i].Name
+	}
+	return names
+}
+
+type runtimeHostInvocationProvider struct {
+	mu       sync.Mutex
+	requests []interfaces.ProviderInferenceRequest
+}
+
+func (p *runtimeHostInvocationProvider) Infer(_ context.Context, request interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.requests = append(p.requests, request)
+	return interfaces.InferenceResponse{Content: "spoken response"}, nil
+}
+func (p *runtimeHostInvocationProvider) runnerIDs() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	ids := make([]string, len(p.requests))
+	for i := range p.requests {
+		ids[i] = p.requests[i].RunnerID
+	}
+	return ids
 }
 
 func TestHostModelMethodsForwardContextResultsAndErrorsUnchanged(t *testing.T) {
