@@ -1096,6 +1096,8 @@ func assertHostedLinearBatchWorks(t *testing.T, submitted *aggregateSnapshotFact
 
 func assertConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *aggregateSnapshotFactory) {
 	t.Helper()
+	submitted.mu.Lock()
+	defer submitted.mu.Unlock()
 	if submitted.submitCalls < 2 {
 		t.Fatalf("submit calls = %d, want at least 2 from concurrent pollers", submitted.submitCalls)
 	}
@@ -1119,12 +1121,18 @@ func waitForHostedPollerSubmission(t *testing.T, submitted *aggregateSnapshotFac
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if submitted.submitCalls >= want {
+		submitted.mu.Lock()
+		submitCalls := submitted.submitCalls
+		submitted.mu.Unlock()
+		if submitCalls >= want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, submitted.submitCalls)
+	submitted.mu.Lock()
+	submitCalls := submitted.submitCalls
+	submitted.mu.Unlock()
+	t.Fatalf("timed out waiting for %d hosted poller submission(s); got %d", want, submitCalls)
 }
 
 func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {

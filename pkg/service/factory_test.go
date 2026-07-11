@@ -271,6 +271,7 @@ func stopServiceModeRun(t *testing.T, cancel context.CancelFunc, errCh <-chan er
 }
 
 type aggregateSnapshotFactory struct {
+	mu                       sync.Mutex
 	engineState              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	engineStateErr           error
 	engineStateSnapshotCalls int
@@ -295,8 +296,10 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	if len(normalized) > 0 {
 		result.TraceID = normalized[0].TraceID
 	}
+	f.mu.Lock()
 	f.submitCalls++
 	f.submissions = append(f.submissions, request)
+	f.mu.Unlock()
 	if f.submitFunc != nil {
 		return result, f.submitFunc(ctx, request)
 	}

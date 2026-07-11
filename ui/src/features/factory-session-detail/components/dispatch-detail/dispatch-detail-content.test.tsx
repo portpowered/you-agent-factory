@@ -153,6 +153,7 @@ describe("DispatchDetailContent", () => {
     expect(
       screen.getByText("Expected release manifest checksum."),
     ).toBeTruthy();
+    expect(screen.queryByText("Error class")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

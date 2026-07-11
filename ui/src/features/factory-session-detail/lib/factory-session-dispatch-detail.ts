@@ -9,7 +9,6 @@ export interface FactorySessionDispatchArtifactLink {
 }
 
 export interface FactorySessionDispatchFailureDetailModel {
-  errorClass?: string;
   message?: string;
   reason?: string;
 }
