@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -135,12 +136,21 @@ func ComposeCore(
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
 		factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-			ProjectRoot:     root.FactoryRootDir,
+			ProjectRoot:     durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir),
 			Provider:        cfg.ProviderOverride,
 			PersistSessions: true,
 			Clock:           clock,
 		}),
 	), nil
+}
+
+func durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
+	for _, candidate := range []string{executionBaseDir, configuredDir, factoryRootDir} {
+		if root := strings.TrimSpace(candidate); root != "" {
+			return root
+		}
+	}
+	return ""
 }
 
 // BuildCore constructs the normalized runtime graph without attaching a transport host.

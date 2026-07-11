@@ -962,7 +962,7 @@ func ComposeFactoryCore(
 		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
 		durableExecution: factorysessionexecution.NewJavaScriptRuntimeService(
 			factorysessionexecution.JavaScriptRuntimeServiceConfig{
-				ProjectRoot:     root.FactoryRootDir,
+				ProjectRoot:     composedDurableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir),
 				Provider:        cfg.ProviderOverride,
 				PersistSessions: true,
 				Clock:           clock,

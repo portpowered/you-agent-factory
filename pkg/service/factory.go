@@ -130,6 +130,15 @@ type FactoryService struct {
 	durableExecution         factorysessionexecution.Service
 }
 
+func composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
+	for _, candidate := range []string{executionBaseDir, configuredDir, factoryRootDir} {
+		if root := strings.TrimSpace(candidate); root != "" {
+			return root
+		}
+	}
+	return ""
+}
+
 var _ factory.APIFactory = (*FactoryService)(nil)
 var _ factory.WorkMover = (*FactoryService)(nil)
 var _ apisurface.ModelAPI = (*FactoryService)(nil)
