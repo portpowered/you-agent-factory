@@ -410,11 +410,18 @@ type exitFailureInferenceTestCase struct {
 func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
 		{
-			name:        "GeminiPrefersProcessOutputForThrottle",
+			name:        "GeminiUsesCanonicalThrottleMessage",
 			provider:    string(interfaces.ModelProviderGemini),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
-			wantMessage: "resource exhausted by 429 quota",
+			wantMessage: geminiThrottleFailureMessage,
 			wantType:    interfaces.WorkFailureTypeThrottled,
+		},
+		{
+			name:        "GeminiEmptyOutputUsesExactExitFallback",
+			provider:    string(interfaces.ModelProviderGemini),
+			result:      CommandResult{ExitCode: 19},
+			wantMessage: "gemini exited with code 19",
+			wantType:    interfaces.WorkFailureTypeUnknown,
 		},
 		{
 			name:        "KiroFallsBackToProviderExitCodeWhenOutputMissing",
@@ -719,5 +726,162 @@ func assertCodexBoundedFragment(
 	}
 	if got := fragment.Metadata[codexMetadataTruncatedKey]; got != "true" {
 		t.Fatalf("payload_truncated = %q, want true", got)
+	}
+}
+func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "codex_status_429_too_many_requests"),
+		providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached"),
+		providerErrorCorpusEntryForTest(t, "codex_model_capacity_selected_model"),
+		providerErrorCorpusEntryForTest(t, "codex_internal_server_status_500"),
+		providerErrorCorpusEntryForTest(t, "codex_high_demand_temporary_errors"),
+		providerErrorCorpusEntryForTest(t, "codex_windows_exit_code_4294967295"),
+		providerErrorCorpusEntryForTest(t, "codex_invalid_request_error"),
+		providerErrorCorpusEntryForTest(t, "codex_timeout_waiting_for_provider"),
+		providerErrorCorpusEntryForTest(t, "codex_authentication_unauthorized"),
+		providerErrorCorpusEntryForTest(t, "cursor_usage_limit_reached"),
+		providerErrorCorpusEntryForTest(t, "cursor_high_demand_temporary_errors"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType {
+				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
+			}
+			if providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
+			}
+
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf(
+					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
+					providerErrorCorpusEntryLabel(entry),
+					decision,
+					entry.Retryable,
+					wantTerminal,
+					entry.TriggersThrottlePause,
+				)
+			}
+		})
+	}
+}
+
+func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecisiveFailure(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "codex_model_capacity_cleanup_noise"),
+		providerErrorCorpusEntryForTest(t, "codex_timeout_cleanup_noise"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			wantMessage := codexTextFailureMessage(entry.ExpectedType)
+			if providerErr.Message != wantMessage {
+				t.Fatalf("%s normalized message = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, wantMessage)
+			}
+			for _, reject := range entry.RejectMessageContains {
+				if strings.Contains(providerErr.Message, reject) {
+					t.Fatalf("%s normalized message = %q, want decisive error line without %q", providerErrorCorpusEntryLabel(entry), providerErr.Message, reject)
+				}
+			}
+			if providerErr.Type != entry.ExpectedType {
+				t.Fatalf("%s normalized type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, entry.ExpectedType)
+			}
+			if providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
+			}
+
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf(
+					"%s decision = %#v, want retryable=%t terminal=%t throttlePause=%t",
+					providerErrorCorpusEntryLabel(entry),
+					decision,
+					entry.Retryable,
+					wantTerminal,
+					entry.TriggersThrottlePause,
+				)
+			}
+		})
+	}
+}
+
+func TestProviderErrorCorpus_ContainsSupportedCoverageForEachFailureCategory(t *testing.T) {
+	corpus := loadProviderErrorCorpusForTest(t)
+
+	for _, category := range []string{
+		"throttled",
+		"internal_server_error",
+		"auth_failure",
+		"permanent_bad_request",
+		"timeout",
+	} {
+		if got := len(corpus.SupportedEntriesForCategory(category)); got == 0 {
+			t.Fatalf("supported corpus entries for category %q = %d, want at least 1", category, got)
+		}
+	}
+}
+
+func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
+	result := providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached").CommandResult()
+
+	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("expected usage limit to classify as %q, got %q", interfaces.WorkFailureTypeThrottled, providerErr.Type)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("expected usage limit to be in family %q, got %q", interfaces.WorkFailureFamilyThrottle, providerErr.Family)
+	}
+	if providerErr.Message != codexThrottleFailureMessage {
+		t.Fatalf("expected normalized error to use the safe throttle message, got %q", providerErr.Message)
+	}
+}
+
+func TestCodexProviderBehavior_StreamsUserMessageOnStdin(t *testing.T) {
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	req := interfaces.ProviderInferenceRequest{
+		ModelProvider:    string(interfaces.ModelProviderCodex),
+		Model:            "gpt-5.3-codex-spark",
+		UserMessage:      "line one\nline two",
+		WorkingDirectory: "workspace",
+	}
+
+	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
+	commandReq := behavior.BuildCommandRequest(req, args)
+
+	if len(args) == 0 || args[len(args)-1] != "-" {
+		t.Fatalf("expected codex args to end with stdin marker, got %#v", args)
+	}
+	if string(commandReq.Stdin) != req.UserMessage {
+		t.Fatalf("expected codex request to stream prompt on stdin, got %q", string(commandReq.Stdin))
+	}
+}
+
+func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
+	behavior := claudeProviderBehavior{logger: logging.NoopLogger{}}
+	req := interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderClaude),
+		Model:         "claude-sonnet",
+		UserMessage:   "line one\nline two",
+	}
+
+	args, err := behavior.BuildArgs(context.Background(), req, false, nil)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
+	commandReq := behavior.BuildCommandRequest(req, args)
+
+	if len(args) == 0 || args[len(args)-1] != req.UserMessage {
+		t.Fatalf("expected claude args to end with user message, got %#v", args)
+	}
+	if len(commandReq.Stdin) != 0 {
+		t.Fatalf("expected claude request not to use stdin, got %q", string(commandReq.Stdin))
 	}
 }

@@ -321,6 +321,14 @@ func normalizeProviderExitFailure(provider string, result CommandResult, session
 			diagnostics,
 		)
 	}
+	if provider == string(interfaces.ModelProviderGemini) {
+		return newProviderErrorFromResultWithDiagnostics(
+			ParseGeminiProviderFailure(result),
+			nil,
+			session,
+			diagnostics,
+		)
+	}
 	if provider == string(interfaces.ModelProviderCursor) {
 		return cursorProviderError(result, "", "", nil, session, diagnostics)
 	}

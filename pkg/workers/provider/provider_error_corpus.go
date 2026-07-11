@@ -12,21 +12,22 @@ import (
 // ProviderErrorCorpusEntry is one shared raw provider-failure fixture used by
 // worker unit tests and functional smoke coverage.
 type ProviderErrorCorpusEntry struct {
-	Name                  string                         `json:"name"`
-	Provider              interfaces.ModelProvider       `json:"provider"`
-	RawProviderFamily     string                         `json:"raw_provider_family"`
-	Category              string                         `json:"category"`
-	UpstreamSourceCase    string                         `json:"upstream_source_case"`
-	ExitCode              int                            `json:"exit_code"`
-	Stdout                string                         `json:"stdout"`
-	Stderr                string                         `json:"stderr"`
+	Name                  string                       `json:"name"`
+	Provider              interfaces.ModelProvider     `json:"provider"`
+	RawProviderFamily     string                       `json:"raw_provider_family"`
+	Category              string                       `json:"category"`
+	UpstreamSourceCase    string                       `json:"upstream_source_case"`
+	ExitCode              int                          `json:"exit_code"`
+	Stdout                string                       `json:"stdout"`
+	Stderr                string                       `json:"stderr"`
 	ExpectedType          interfaces.WorkFailureType   `json:"expected_type"`
 	ExpectedFamily        interfaces.WorkFailureFamily `json:"expected_family"`
-	Retryable             bool                           `json:"retryable"`
-	TriggersThrottlePause bool                           `json:"triggers_throttle_pause"`
-	Supported             bool                           `json:"supported"`
-	RejectMessageContains []string                       `json:"reject_message_contains,omitempty"`
-	Notes                 string                         `json:"notes,omitempty"`
+	ExpectedMessage       string                       `json:"expected_message,omitempty"`
+	Retryable             bool                         `json:"retryable"`
+	TriggersThrottlePause bool                         `json:"triggers_throttle_pause"`
+	Supported             bool                         `json:"supported"`
+	RejectMessageContains []string                     `json:"reject_message_contains,omitempty"`
+	Notes                 string                       `json:"notes,omitempty"`
 }
 
 // CommandResult renders the raw shared fixture into the provider subprocess
