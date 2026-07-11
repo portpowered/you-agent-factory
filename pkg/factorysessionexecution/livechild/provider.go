@@ -79,6 +79,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 	completed.ProviderSessionRef = providerSessionRef
 	completed.ArtifactRef = artifactRef
 	completed.Output = workflowruntime.CloneOutputMap(output)
+	completed.Diagnostics = interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(resp.Diagnostics)
 	e.records.Append(workflowruntime.RuntimeRecord{
 		Kind:          workflowruntime.RecordKindChildDispatch,
 		ChildDispatch: &completed,

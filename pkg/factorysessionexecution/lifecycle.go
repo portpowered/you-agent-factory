@@ -7,6 +7,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // ProjectedLifecycleControlStatus returns the lifecycle-control status that live
@@ -707,6 +708,7 @@ func cloneDispatchSummary(dispatch DispatchSummary) DispatchSummary {
 		detail := *dispatch.FailureDetail
 		cloned.FailureDetail = &detail
 	}
+	cloned.Diagnostics = interfaces.CloneSafeWorkDiagnostics(dispatch.Diagnostics)
 	return cloned
 }
 

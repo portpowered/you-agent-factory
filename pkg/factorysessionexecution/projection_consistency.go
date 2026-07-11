@@ -231,6 +231,7 @@ type DispatchSummary struct {
 	Usage               *DispatchUsage
 	Warnings            []DispatchWarning
 	FailureDetail       *DispatchFailureDetail
+	Diagnostics         *interfaces.SafeWorkDiagnostics
 	JavaScript          *DispatchJavaScriptProjection
 }
 

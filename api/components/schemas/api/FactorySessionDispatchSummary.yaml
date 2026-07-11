@@ -54,5 +54,7 @@ properties:
     description: Artifact identifiers produced by the dispatch.
   failureDetail:
     $ref: '../data-models/FailureDetail.yaml'
+  diagnostics:
+    $ref: '../events/SafeWorkDiagnostics.yaml'
   javascript:
     $ref: '../data-models/FactoryDispatchJavaScriptProjection.yaml'

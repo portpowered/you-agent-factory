@@ -1967,6 +1967,9 @@ type FactorySessionDispatchSummary struct {
 	// Attempt One-based attempt number for retried dispatches.
 	Attempt *int32 `json:"attempt,omitempty"`
 
+	// Diagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
+	Diagnostics *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
 	DispatchKind  FactoryDispatchKind `json:"dispatchKind"`
 	FailureDetail *FailureDetail      `json:"failureDetail,omitempty"`

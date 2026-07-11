@@ -57,6 +57,14 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 	}
 
 	_, live, _ := loadLiveChildDispatchReads(t, service, completed)
+	if live.Status != fse.DispatchStatusCompleted || live.Attempt != 1 ||
+		live.Provider != "mock" || live.Model != "gpt-test" {
+		t.Fatalf("live shared dispatch fields = %#v, want COMPLETED attempt 1 mock/gpt-test", sharedDispatchContract(live))
+	}
+	if live.Diagnostics == nil || live.Diagnostics.Provider == nil ||
+		live.Diagnostics.Provider.ResponseMetadata["provider_session_id"] != "live-provider-session-1" {
+		t.Fatalf("live public provider diagnostics = %#v, want safe response metadata", live.Diagnostics)
+	}
 	assertLiveChildDispatchInspection(t, service, completed, provider.callCount)
 
 	reloaded := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
@@ -72,12 +80,13 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 }
 
 type sharedDispatchProjection struct {
-	ID              string
-	Status          fse.DispatchStatus
-	Attempt         int
-	Model           string
-	Provider        string
-	ProviderSession fse.ProviderSessionRef
+	ID               string
+	Status           fse.DispatchStatus
+	Attempt          int
+	Model            string
+	Provider         string
+	ProviderSession  fse.ProviderSessionRef
+	ResponseMetadata map[string]string
 }
 
 func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjection {
@@ -90,6 +99,9 @@ func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjecti
 	}
 	if len(dispatch.ProviderSessionRefs) == 1 {
 		projection.ProviderSession = dispatch.ProviderSessionRefs[0]
+	}
+	if dispatch.Diagnostics != nil && dispatch.Diagnostics.Provider != nil {
+		projection.ResponseMetadata = dispatch.Diagnostics.Provider.ResponseMetadata
 	}
 	return projection
 }

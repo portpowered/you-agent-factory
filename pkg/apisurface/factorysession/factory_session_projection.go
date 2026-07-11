@@ -290,6 +290,7 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 	if failure := dispatchFailureToAPI(dispatch.FailureDetail); failure != nil {
 		response.FailureDetail = failure
 	}
+	response.Diagnostics = interfaces.GeneratedSafeWorkDiagnostics(dispatch.Diagnostics)
 	if javascript := dispatchJavaScriptToAPI(dispatch.JavaScript); javascript != nil {
 		response.Javascript = javascript
 	}

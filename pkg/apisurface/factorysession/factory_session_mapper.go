@@ -8,6 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -197,6 +198,7 @@ func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) f
 	if response.FailureDetail != nil {
 		summary.FailureDetail = dispatchFailureFromAPI(*response.FailureDetail)
 	}
+	summary.Diagnostics = interfaces.SafeWorkDiagnosticsFromGenerated(response.Diagnostics)
 	if response.Javascript != nil {
 		summary.JavaScript = dispatchJavaScriptFromAPI(*response.Javascript)
 	}

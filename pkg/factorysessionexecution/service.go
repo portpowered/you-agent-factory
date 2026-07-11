@@ -423,6 +423,7 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		Attempt:      1,
 		RunnerID:     strings.TrimSpace(child.RunnerID),
 		Model:        strings.TrimSpace(child.Model),
+		Diagnostics:  interfaces.CloneSafeWorkDiagnostics(child.Diagnostics),
 	}
 	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
 		summary.JavaScript = &javascript
