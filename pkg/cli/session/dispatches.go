@@ -120,19 +120,47 @@ func renderDispatchesHuman(output io.Writer, result factoryapi.ListFactorySessio
 		return err
 	}
 	for _, dispatch := range result.Dispatches {
-		line := fmt.Sprintf(
-			"- %s %s %s",
-			dispatch.Id,
-			dispatch.Status,
-			dispatch.DispatchKind,
-		)
-		if dispatch.Label != nil && strings.TrimSpace(*dispatch.Label) != "" {
-			line += " label=" + strings.TrimSpace(*dispatch.Label)
+		if err := renderDispatchHuman(output, dispatch); err != nil {
+			return err
 		}
-		if dispatch.OutputArtifactIds != nil && len(*dispatch.OutputArtifactIds) > 0 {
-			line += " artifacts=" + strings.Join(*dispatch.OutputArtifactIds, ",")
+	}
+	return nil
+}
+
+func renderDispatchHuman(output io.Writer, dispatch factoryapi.FactorySessionDispatchSummary) error {
+	if _, err := fmt.Fprintf(output, "- %s %s %s\n", dispatch.Id, dispatch.Status, dispatch.DispatchKind); err != nil {
+		return err
+	}
+	providerSessions := "none"
+	if dispatch.ProviderSessionRefs != nil && len(*dispatch.ProviderSessionRefs) > 0 {
+		refs := make([]string, 0, len(*dispatch.ProviderSessionRefs))
+		for _, ref := range *dispatch.ProviderSessionRefs {
+			refs = append(refs, ref.Id)
 		}
-		if _, err := fmt.Fprintf(output, "%s\n", line); err != nil {
+		providerSessions = strings.Join(refs, ", ")
+	}
+	attempt, duration := "unavailable", "unavailable"
+	if dispatch.Attempt != nil {
+		attempt = fmt.Sprint(*dispatch.Attempt)
+	}
+	if dispatch.Usage != nil && dispatch.Usage.DurationMillis != nil {
+		duration = fmt.Sprintf("%dms", *dispatch.Usage.DurationMillis)
+	}
+	artifacts, failure := "none", "none"
+	if dispatch.OutputArtifactIds != nil && len(*dispatch.OutputArtifactIds) > 0 {
+		artifacts = strings.Join(*dispatch.OutputArtifactIds, ", ")
+	}
+	if dispatch.FailureDetail != nil {
+		failure = strings.TrimSpace(dispatch.FailureDetail.Message)
+	}
+	rows := [][2]string{
+		{"Phase", formatOptionalString(dispatch.Phase)}, {"Label", formatOptionalString(dispatch.Label)},
+		{"Runner", formatOptionalString(dispatch.RunnerId)}, {"Model", formatOptionalString(dispatch.Model)},
+		{"Provider sessions", providerSessions}, {"Attempt", attempt}, {"Duration", duration},
+		{"Artifacts", artifacts}, {"Failure", failure},
+	}
+	for _, row := range rows {
+		if _, err := fmt.Fprintf(output, "  %s:\t%s\n", row[0], row[1]); err != nil {
 			return err
 		}
 	}
