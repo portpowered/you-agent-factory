@@ -110,12 +110,46 @@ func TestDefaultAgentStorageRoot_DarwinPrefersExistingCursorRoot(t *testing.T) {
 	}
 }
 
+func TestDefaultAgentStorageRoot_WindowsPrefersExistingCursorRoot(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	cursorRoot := filepath.Join(home, ".cursor", "chats")
+	configRoot := filepath.Join(home, ".config", "cursor", "chats")
+	mustMkdirAll(t, configRoot)
+	mustMkdirAll(t, cursorRoot)
+
+	root, err := defaultAgentStorageRoot("windows", home, os.Stat)
+	if err != nil {
+		t.Fatalf("defaultAgentStorageRoot() = %v", err)
+	}
+	if got, want := string(root), cursorRoot; got != want {
+		t.Fatalf("defaultAgentStorageRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultAgentStorageRoot_WindowsFallsBackToConfigRoot(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	configRoot := filepath.Join(home, ".config", "cursor", "chats")
+	mustMkdirAll(t, configRoot)
+
+	root, err := defaultAgentStorageRoot("windows", home, os.Stat)
+	if err != nil {
+		t.Fatalf("defaultAgentStorageRoot() = %v", err)
+	}
+	if got, want := string(root), configRoot; got != want {
+		t.Fatalf("defaultAgentStorageRoot() = %q, want %q", got, want)
+	}
+}
+
 func TestDefaultAgentStorageRoot_ReturnsEmptyWhenNoSupportedDirectoryExists(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
 
-	for _, goos := range []string{"linux", "darwin"} {
+	for _, goos := range []string{"linux", "darwin", "windows"} {
 		root, err := defaultAgentStorageRoot(goos, home, os.Stat)
 		if err != nil {
 			t.Fatalf("defaultAgentStorageRoot(%q) = %v", goos, err)

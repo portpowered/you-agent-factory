@@ -60,6 +60,11 @@ func defaultAgentStorageRootCandidates(goos string, home string) ([]string, erro
 			filepath.Join(home, ".cursor", "chats"),
 			filepath.Join(home, ".config", "cursor", "chats"),
 		}, nil
+	case "windows":
+		return []string{
+			filepath.Join(home, ".cursor", "chats"),
+			filepath.Join(home, ".config", "cursor", "chats"),
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported OS for cursor-agent storage: %s", goos)
 	}
