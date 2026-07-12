@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"runtime"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -205,13 +207,49 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	if req.WorkingDirectory != "" {
 		args = append(args, "--workspace", req.WorkingDirectory)
 	}
+
+	if req.Worktree != "" {
+		args = append(args, "--worktree", req.Worktree)
+	}
+
+	// Use to get a JSON stream response
 	args = append(args, "--output-format", cursorpkg.CursorOutputFormatStreamJSON, "--stream-partial-output")
-	prompt := strings.TrimSpace(req.UserMessage)
-	if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
-		prompt = buildKiroPrompt(req)
+
+	// if OS is windows, the prompt might be too long so we ask to pass it in via telling the agent to read a prompt from a temporary file.
+
+	prompt := ""
+	if runtime.GOOS == "windows" {
+
+		tempFile, err := b.writeTempFile(req.UserMessage, req.SystemPrompt)
+		if err != nil {
+			b.logger.Error("failed to write temporary prompt file", "error", err)
+			return nil, fmt.Errorf("failed to write temporary prompt file: %w", err)
+		}
+		defer tempFile.Close()
+		prompt = strings.Join([]string{"@", tempFile.Name()}, "")
+	} else {
+		prompt = strings.TrimSpace(req.UserMessage)
+		if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
+			prompt = buildKiroPrompt(req)
+		}
 	}
 	args = append(args, prompt)
 	return args, nil
+}
+
+func (b cursorProviderBehavior) writeTempFile(userPrompt string, systemPrompt string) (*os.File, error) {
+	f, err := os.CreateTemp("", "cursor_prompt_*.md")
+	if err != nil {
+		b.logger.Error("failed to create temporary prompt file", "error", err)
+		return nil, err
+	}
+	_, err = f.Write([]byte(strings.Join([]string{systemPrompt, userPrompt}, " ")))
+	if err != nil {
+		b.logger.Error("failed to write to temporary prompt file", "error", err)
+		f.Close()
+		return nil, err
+	}
+	return f, nil
 }
 
 func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {

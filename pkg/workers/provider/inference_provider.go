@@ -198,6 +198,9 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	providerSession := effectiveProviderSession(req, result)
 	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
 	if err != nil {
+		logger.Error("inference dispatch failed with error",
+			"raw_error", err.Error(),
+		)
 		providerErr := normalizeProviderExecutionError(
 			req.ModelProvider, result, err, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
@@ -209,6 +212,11 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	if result.ExitCode != 0 {
+		logger.Error("inference dispatch failed with non-zero exit code",
+			"exit_code", result.ExitCode,
+			"stderr", result.Stderr,
+			"stdout", result.Stdout,
+		)
 		providerErr := normalizeProviderExitFailure(
 			req.ModelProvider, result, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
@@ -293,7 +301,7 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 		)
 	case errors.Is(err, exec.ErrNotFound):
 		message := formatProviderCommandFailure(provider, result, err)
-		return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeMisconfigured, message, err, session, diagnostics)
+		return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeMissingExecutable, message, err, session, diagnostics)
 	default:
 		message := formatProviderCommandFailure(provider, result, err)
 		var execErr *exec.Error

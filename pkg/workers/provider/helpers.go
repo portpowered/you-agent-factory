@@ -24,8 +24,7 @@ type ExecCommandRunner = workerprocess.ExecCommandRunner
 type LoggingCommandRunner = workerprocess.LoggingCommandRunner
 
 const (
-	omitZeroWorkerEventExitCode    = false
-	includeZeroWorkerEventExitCode = true
+	omitZeroWorkerEventExitCode = false
 )
 
 const (
