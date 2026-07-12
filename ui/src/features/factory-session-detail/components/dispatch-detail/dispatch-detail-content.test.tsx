@@ -57,7 +57,9 @@ const minimalDispatchFixture = {
 
 describe("DispatchDetailContent", () => {
   it("renders successful dispatch status, execution metadata, provider sessions, and artifact links", () => {
-    const data = normalizeFactorySessionDispatchDetail(successfulDispatchFixture);
+    const data = normalizeFactorySessionDispatchDetail(
+      successfulDispatchFixture,
+    );
 
     render(<DispatchDetailContent data={data} />);
 
@@ -68,12 +70,8 @@ describe("DispatchDetailContent", () => {
     expect(screen.getByText("Provider sessions")).toBeTruthy();
     expect(screen.getByText("session_id · sess_codex_1")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "artifact-final-1" }),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "artifact-log-2" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "artifact-final-1" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "artifact-log-2" })).toBeTruthy();
     expect(screen.getByText("QUEUED")).toBeTruthy();
     expect(screen.getByText("RUNNING")).toBeTruthy();
     expect(screen.getByText("work-alpha")).toBeTruthy();
@@ -156,6 +154,49 @@ describe("DispatchDetailContent", () => {
       screen.getByText("Expected release manifest checksum."),
     ).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("renders the canonical Codex failure and an explicit historical-message fallback", () => {
+    const canonicalData = normalizeFactorySessionDispatchDetail({
+      dispatchKind: "PETRI_WORKSTATION",
+      failureDetail: {
+        message:
+          "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+        reason: "provider_version_incompatible",
+      },
+      id: "dispatch-codex-version",
+      orchestratorKind: FactoryOrchestratorKind.PETRI,
+      sessionId: "session-codex-version",
+      status: "FAILED",
+    } satisfies FactoryDispatch);
+
+    const { rerender } = render(<DispatchDetailContent data={canonicalData} />);
+
+    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+      ),
+    ).toBeTruthy();
+
+    const historicalData = normalizeFactorySessionDispatchDetail({
+      dispatchKind: "PETRI_WORKSTATION",
+      failureDetail: { reason: "provider_version_incompatible" },
+      id: "dispatch-translated-history",
+      orchestratorKind: FactoryOrchestratorKind.PETRI,
+      sessionId: "session-translated-history",
+      status: "FAILED",
+    } satisfies FactoryDispatch);
+
+    rerender(<DispatchDetailContent data={historicalData} />);
+
+    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Failure message is not available for this historical dispatch.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/gpt-5\.6-sol/)).toBeNull();
   });
 
   it("renders warning dispatch status treatment and typed warning detail", () => {

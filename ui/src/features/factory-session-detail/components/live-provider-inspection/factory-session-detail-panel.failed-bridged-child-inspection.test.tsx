@@ -94,10 +94,12 @@ describe("FactorySessionDetailPanel failed bridged-child inspection", () => {
       expect(screen.getByText("Failure detail")).toBeTruthy();
     });
 
-    expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
-    expect(screen.getByText("verification_error")).toBeTruthy();
+    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("provider_error")).toBeTruthy();
     expect(
-      screen.getByText("Expected release manifest checksum."),
+      screen.getByText(
+        "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+      ),
     ).toBeTruthy();
     expect(screen.getAllByText("live").length).toBeGreaterThan(0);
     expect(screen.getByText("Provider sessions")).toBeTruthy();

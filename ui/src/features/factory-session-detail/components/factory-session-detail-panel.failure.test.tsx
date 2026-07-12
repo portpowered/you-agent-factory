@@ -40,9 +40,10 @@ const failedDispatchDetailFixture = {
   artifactIds: ["artifact-failure-log"],
   dispatchKind: "JAVASCRIPT_VERIFY",
   failureDetail: {
-    errorClass: "verification_error",
-    message: "Expected release manifest checksum.",
-    reason: "VERIFY_ASSERTION_FAILED",
+    errorClass: "provider_error",
+    message:
+      "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+    reason: "provider_version_incompatible",
   },
   id: "dispatch-failed",
   javascript: {
@@ -152,10 +153,12 @@ describe("FactorySessionDetailPanel failure drilldown", () => {
       expect(screen.getByText("Failure detail")).toBeTruthy();
     });
 
-    expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
-    expect(screen.getByText("verification_error")).toBeTruthy();
+    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("provider_error")).toBeTruthy();
     expect(
-      screen.getByText("Expected release manifest checksum."),
+      screen.getByText(
+        "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+      ),
     ).toBeTruthy();
     expect(screen.getByText("live")).toBeTruthy();
     expect(screen.getByText("codex")).toBeTruthy();

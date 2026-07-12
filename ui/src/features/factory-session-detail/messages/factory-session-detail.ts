@@ -72,6 +72,7 @@ export interface FactorySessionDetailMessages
   failureDetailHeading: string;
   failureErrorClassLabel: string;
   failureMessageLabel: string;
+  failureMessageUnavailable: string;
   failureReasonLabel: string;
   finalResultRefLabel: string;
   lifecycleControlStatusLabel: string;
@@ -285,6 +286,8 @@ const factorySessionDetailMessagesByLocale = {
     failureDetailHeading: "Failure detail",
     failureErrorClassLabel: "Error class",
     failureMessageLabel: "Failure message",
+    failureMessageUnavailable:
+      "Failure message is not available for this historical dispatch.",
     failureReasonLabel: "Failure reason",
     finalResultRefLabel: "Final result ref",
     lifecycleControlStatusLabel: "Factory Session lifecycle",
@@ -381,6 +384,7 @@ const factorySessionDetailMessagesByLocale = {
     failureDetailHeading: "失败详情",
     failureErrorClassLabel: "错误类别",
     failureMessageLabel: "失败消息",
+    failureMessageUnavailable: "此历史调度没有可用的失败消息。",
     failureReasonLabel: "失败原因",
     finalResultRefLabel: "最终结果引用",
     lifecycleControlStatusLabel: "工厂会话生命周期",

@@ -101,9 +101,10 @@ export function buildFailedBridgedChildDispatchSummary() {
     attempt: 1,
     dispatchKind: "JAVASCRIPT_VERIFY",
     failureDetail: {
-      errorClass: "verification_error",
-      message: "Expected release manifest checksum.",
-      reason: "VERIFY_ASSERTION_FAILED",
+      errorClass: "provider_error",
+      message:
+        "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+      reason: "provider_version_incompatible",
     },
     id: failedBridgedChildDispatchID,
     javascript: {
@@ -141,9 +142,10 @@ export function buildFailedBridgedChildDispatchDetail() {
     attempt: 1,
     dispatchKind: "JAVASCRIPT_VERIFY",
     failureDetail: {
-      errorClass: "verification_error",
-      message: "Expected release manifest checksum.",
-      reason: "VERIFY_ASSERTION_FAILED",
+      errorClass: "provider_error",
+      message:
+        "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+      reason: "provider_version_incompatible",
     },
     id: failedBridgedChildDispatchID,
     javascript: {

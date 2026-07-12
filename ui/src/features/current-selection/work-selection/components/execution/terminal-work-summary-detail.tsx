@@ -5,6 +5,10 @@ import {
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import { SelectionDetailLayout } from "../../../base/components/layout/current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "../../../base/components/presentation/current-selection-locale";
+import {
+  CurrentSelectionDescriptionList,
+  CurrentSelectionDetailItem,
+} from "../../../base/public";
 import type { TerminalWorkSummaryCardProps } from "../../lib/detail-card-types";
 import { ExecutionDetailsSection } from "./execution-details";
 
@@ -24,40 +28,43 @@ export function TerminalWorkSummaryCard({
   return (
     <SelectionDetailLayout widgetId={widgetId}>
       <WidgetSubtitle>{label}</WidgetSubtitle>
-      <dl>
-        <div>
-          <dt>{messages.statusLabel}</dt>
-          <dd>
-            {status === "completed"
+      <CurrentSelectionDescriptionList>
+        <CurrentSelectionDetailItem
+          label={messages.statusLabel}
+          value={
+            status === "completed"
               ? messages.completedStatus
-              : messages.failedStatus}
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.sourceLabel}</dt>
-          <dd>{messages.sourceSummary}</dd>
-        </div>
+              : messages.failedStatus
+          }
+        />
+        <CurrentSelectionDetailItem
+          label={messages.sourceLabel}
+          value={messages.sourceSummary}
+        />
         {status === "failed" ? (
           <>
-            <div>
-              <dt>{messages.failureReasonLabel}</dt>
-              <dd>
-                {normalizedFailureReason ?? messages.failureReasonUnavailable}
-              </dd>
-            </div>
-            <div>
-              <dt>{messages.failureMessageLabel}</dt>
-              <dd>
-                {normalizedFailureMessage ?? messages.failureMessageUnavailable}
-              </dd>
-            </div>
+            <CurrentSelectionDetailItem
+              code
+              label={messages.failureReasonLabel}
+              value={
+                normalizedFailureReason ?? messages.failureReasonUnavailable
+              }
+            />
+            <CurrentSelectionDetailItem
+              label={messages.failureMessageLabel}
+              value={
+                normalizedFailureMessage ?? messages.failureMessageUnavailable
+              }
+            />
           </>
         ) : null}
-      </dl>
+      </CurrentSelectionDescriptionList>
       {status === "failed" &&
       normalizedFailureReason === undefined &&
       normalizedFailureMessage === undefined ? (
-        <WidgetDetailCopy>{messages.failureDetailsUnavailable}</WidgetDetailCopy>
+        <WidgetDetailCopy>
+          {messages.failureDetailsUnavailable}
+        </WidgetDetailCopy>
       ) : null}
       {executionDetails ? (
         <ExecutionDetailsSection details={executionDetails} now={now} />

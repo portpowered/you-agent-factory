@@ -172,10 +172,14 @@ export const FailedBridgedChildInspection = {
     );
 
     expect(await canvas.findByText("Failure detail")).toBeTruthy();
-    expect(await canvas.findByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
-    expect(await canvas.findByText("verification_error")).toBeTruthy();
     expect(
-      await canvas.findByText("Expected release manifest checksum."),
+      await canvas.findByText("provider_version_incompatible"),
+    ).toBeTruthy();
+    expect(await canvas.findByText("provider_error")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+      ),
     ).toBeTruthy();
     expect(await canvas.findByText("JavaScript task")).toBeTruthy();
     expect(await canvas.findByText("Provider sessions")).toBeTruthy();
