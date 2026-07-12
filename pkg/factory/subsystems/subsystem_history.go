@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/subagent"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -204,6 +205,38 @@ func applyPackagedGoalInvocationSummary(
 	}
 
 	token.Color.Content = summaryContent
+	token.Color.Payload = nil
+	return nil
+}
+
+func applyPackagedSubagentInvocationResponse(
+	token *interfaces.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+	workerOutput string,
+	runtimeConfig interfaces.RuntimeWorkstationLookup,
+) error {
+	if token == nil || !subagent.ShouldFormatInvocationResponse(workstation) {
+		return nil
+	}
+	if strings.TrimSpace(workerOutput) == "" {
+		return nil
+	}
+
+	stopToken := ""
+	if workstation != nil && runtimeConfig != nil {
+		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
+			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
+				stopToken = strings.TrimSpace(worker.StopToken)
+			}
+		}
+	}
+
+	responseContent, err := subagent.ResponseContentFromWorkerOutput(workerOutput, stopToken)
+	if err != nil {
+		return fmt.Errorf("shape packaged subagent invocation response: %w", err)
+	}
+
+	token.Color.Content = responseContent
 	token.Color.Payload = nil
 	return nil
 }

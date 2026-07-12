@@ -2,8 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import type { ScopedFactoryDocumentSaveRequest } from "../features/current-selection/base/hooks/useScopedFactoryDocumentSave";
-import { DashboardSessionProvider } from "../features/dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
+import { DashboardSessionStoreTestProvider } from "./dashboard-session-test-provider";
 
 export const defaultScopedFactoryDocumentSaveRequest: ScopedFactoryDocumentSaveRequest =
   {
@@ -40,7 +40,9 @@ export function createScopedFactoryDocumentSaveQueryClientWrapper() {
   }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };

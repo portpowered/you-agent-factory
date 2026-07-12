@@ -4,15 +4,15 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import { createReplayHarness } from "../../../../testing/replay-harness";
 import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { factorySessionDetailQueryKey } from "../../lib/dashboard-session-lifecycle";
 import * as timelinePublic from "../../../timeline/public";
 import { useFactoryTimelineStore } from "../../../timeline/state/factoryTimelineStore";
-import { DashboardSessionProvider } from "../../session/dashboard-session-provider";
+import { factorySessionDetailQueryKey } from "../../lib/dashboard-session-lifecycle";
 import { useDashboardSessionStore } from "../../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -20,8 +20,8 @@ import {
 } from "../../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./useFactoryEventStream";
 import {
-  SEEDED_SNAPSHOT,
   createFactoryEventStreamQueryClient,
+  SEEDED_SNAPSHOT,
   timelineSnapshot,
 } from "./useFactoryEventStream.fixtures";
 
@@ -76,7 +76,10 @@ function seedStreamScopedQueryCaches(
   streamIdentity: ReturnType<typeof resolvedDefaultStreamIdentity>,
 ) {
   queryClient.setQueryData(
-    currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+    currentFactoryDefinitionQueryKey(
+      DEFAULT_FACTORY_SESSION_ID,
+      streamIdentity,
+    ),
     { workers: [], workstations: [], workTypes: [] },
   );
   queryClient.setQueryData(
@@ -107,12 +110,18 @@ function expectClearedStreamScopedQueries(
 ) {
   expect(
     queryClient.getQueryData(
-      currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+      currentFactoryDefinitionQueryKey(
+        DEFAULT_FACTORY_SESSION_ID,
+        streamIdentity,
+      ),
     ),
   ).toBeUndefined();
   expect(
     queryClient.getQueryData(
-      currentFactoryDocumentQueryKey(DEFAULT_FACTORY_SESSION_ID, streamIdentity),
+      currentFactoryDocumentQueryKey(
+        DEFAULT_FACTORY_SESSION_ID,
+        streamIdentity,
+      ),
     ),
   ).toBeUndefined();
   expect(
@@ -283,8 +292,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
 
     await waitFor(() => {
       expect(useDashboardStreamStore.getState().streamState).toMatchObject({
-        message:
-          "The dashboard could not restore this session automatically.",
+        message: "The dashboard could not restore this session automatically.",
         status: "recovery_failed",
       });
     });
@@ -296,7 +304,9 @@ function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };
