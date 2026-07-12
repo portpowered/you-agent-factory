@@ -206,7 +206,7 @@ func flattenAutomatFixture(t *testing.T) (string, *interfaces.FactoryConfig, []b
 	flattenCmd := cli.NewRootCommand()
 	flattenCmd.SetOut(&flattenOut)
 	flattenCmd.SetErr(&bytes.Buffer{})
-	flattenCmd.SetArgs([]string{"config", "flatten", authoredFactoryDir})
+	flattenCmd.SetArgs([]string{"factory", "config", "flatten", authoredFactoryDir})
 	if err := flattenCmd.Execute(); err != nil {
 		t.Fatalf("execute config flatten: %v", err)
 	}
@@ -234,7 +234,7 @@ func flattenAndExpandAutomatFixture(t *testing.T) (string, *interfaces.FactoryCo
 	expandCmd := cli.NewRootCommand()
 	expandCmd.SetOut(&bytes.Buffer{})
 	expandCmd.SetErr(&bytes.Buffer{})
-	expandCmd.SetArgs([]string{"config", "expand", expandedFactoryPath})
+	expandCmd.SetArgs([]string{"factory", "config", "expand", expandedFactoryPath})
 	if err := expandCmd.Execute(); err != nil {
 		t.Fatalf("execute config expand: %v", err)
 	}

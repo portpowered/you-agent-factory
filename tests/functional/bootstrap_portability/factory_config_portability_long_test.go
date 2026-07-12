@@ -95,7 +95,7 @@ Complete {{ (index .Inputs 0).WorkID }} from split config.`)
 	flattenCmd := cli.NewRootCommand()
 	flattenCmd.SetOut(&flattenOut)
 	flattenCmd.SetErr(&bytes.Buffer{})
-	flattenCmd.SetArgs([]string{"config", "flatten", splitDir})
+	flattenCmd.SetArgs([]string{"factory", "config", "flatten", splitDir})
 	if err := flattenCmd.Execute(); err != nil {
 		t.Fatalf("execute config flatten: %v", err)
 	}
@@ -340,7 +340,7 @@ func flattenFactoryDir(t *testing.T, dir string) []byte {
 	flattenCmd := cli.NewRootCommand()
 	flattenCmd.SetOut(&flattenOut)
 	flattenCmd.SetErr(&bytes.Buffer{})
-	flattenCmd.SetArgs([]string{"config", "flatten", dir})
+	flattenCmd.SetArgs([]string{"factory", "config", "flatten", dir})
 	if err := flattenCmd.Execute(); err != nil {
 		t.Fatalf("execute config flatten: %v", err)
 	}

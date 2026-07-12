@@ -79,8 +79,9 @@ func TestRootCommand_SharedDiagnosticsFlagsAvailableOnCoveredCommands(t *testing
 		{"models", "inspect"},
 		{"models", "invoke"},
 		{"models", "pull"},
-		{"config", "flatten"},
-		{"config", "expand"},
+		{"factory", "config", "flatten"},
+		{"factory", "config", "expand"},
+		{"factory", "config", "validate"},
 		{"init"},
 		{"docs", "config"},
 	}

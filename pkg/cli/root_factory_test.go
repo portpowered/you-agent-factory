@@ -19,6 +19,10 @@ func TestFactoryCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"factory", "query"},
 		{"factory", "list"},
+		{"factory", "config"},
+		{"factory", "config", "validate"},
+		{"factory", "config", "flatten"},
+		{"factory", "config", "expand"},
 		{"factory", "save"},
 		{"factory", "update"},
 		{"factory", "delete"},
@@ -44,11 +48,13 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	for _, want := range []string{
 		"query",
 		"list",
+		"config",
 		"save",
 		"update",
 		"delete",
 		"global --server",
 		"you factory query",
+		"you factory config validate",
 		"you factory list",
 		"you factory save staging --from ./factory.json",
 		"you factory update staging --from ./factory.json",
@@ -61,6 +67,35 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	}
 	if strings.Contains(help, "--port") {
 		t.Fatalf("factory help must not advertise --port:\n%s", help)
+	}
+	if strings.Contains(help, "you factory validate") {
+		t.Fatalf("factory help must not advertise direct you factory validate:\n%s", help)
+	}
+}
+
+func TestFactoryConfigCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "config", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory config --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"validate",
+		"flatten",
+		"expand",
+		"you factory config validate ./factory.json",
+		"you factory config flatten ./factory",
+		"you factory config expand ./factory.json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("factory config help missing %q:\n%s", want, help)
+		}
 	}
 }
 
