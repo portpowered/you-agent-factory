@@ -2,14 +2,10 @@ package providerexecution
 
 import (
 	"context"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
-
-const maxExecutionDiagnosticBytes = 1024
 
 // ExecutionInput is one canonical, single-attempt provider invocation.
 // Retry policy remains with the caller so every call to Execute maps to exactly
@@ -47,6 +43,16 @@ func NewProviderExecutor(provider workerprovider.Provider) *ProviderExecutor {
 	return &ProviderExecutor{provider: provider}
 }
 
+// NewExecutor constructs the shared boundary when a provider is available.
+// A nil provider remains an absent dependency so composition can reject live
+// execution before starting a Factory Session.
+func NewExecutor(provider workerprovider.Provider) Executor {
+	if provider == nil {
+		return nil
+	}
+	return NewProviderExecutor(provider)
+}
+
 // Execute invokes the provider exactly once and canonicalizes its result.
 func (e *ProviderExecutor) Execute(ctx context.Context, input ExecutionInput) (ExecutionResult, error) {
 	attempt := input.Attempt
@@ -67,7 +73,6 @@ func (e *ProviderExecutor) Execute(ctx context.Context, input ExecutionInput) (E
 	}
 	response.ProviderSession = canonicalProviderSession(response.ProviderSession)
 	diagnostics := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics)
-	response.Diagnostics = interfaces.WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics)
 	return ExecutionResult{
 		Response:        response,
 		Attempt:         attempt,
@@ -82,16 +87,7 @@ func failedExecutionResult(attempt int, err error) ExecutionResult {
 		providerErr = workerprovider.NewProviderError(interfaces.WorkFailureTypeUnknown, "Provider execution failed.", err)
 	}
 	providerErr.ProviderSession = canonicalProviderSession(providerErr.ProviderSession)
-	message := safeExecutionFailureMessage(providerErr)
-	failureDetail := &interfaces.FailureDetail{Reason: providerErr.Type, Message: message}
-	switch providerErr.Type {
-	case interfaces.WorkFailureTypePermanentBadRequest, interfaces.WorkFailureTypeInternalServerError:
-		if !containsSensitiveMarker(providerErr.Message) {
-			if safeDetail := workerprovider.SafeProviderFailureDetail(providerErr); safeDetail != nil {
-				failureDetail = safeDetail
-			}
-		}
-	}
+	failureDetail := workerprovider.SafeProviderFailureDetail(providerErr)
 	return ExecutionResult{
 		Attempt:         attempt,
 		ProviderSession: interfaces.CloneProviderSessionMetadata(providerErr.ProviderSession),
@@ -111,33 +107,4 @@ func canonicalProviderSession(session *interfaces.ProviderSessionMetadata) *inte
 		clone.Provider = interfaces.CanonicalProviderSessionProvider(clone.Provider)
 	}
 	return clone
-}
-
-func safeExecutionFailureMessage(err *workerprovider.ProviderError) string {
-	message := strings.TrimSpace(err.Message)
-	if message == "" || containsSensitiveMarker(message) {
-		message = "Provider execution failed."
-	}
-	return truncateUTF8(message, maxExecutionDiagnosticBytes)
-}
-
-func containsSensitiveMarker(message string) bool {
-	lower := strings.ToLower(message)
-	for _, marker := range []string{"api_key", "api-key", "authorization:", "bearer ", "password=", "token="} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func truncateUTF8(value string, limit int) string {
-	if len(value) <= limit {
-		return value
-	}
-	value = value[:limit]
-	for !utf8.ValidString(value) {
-		value = value[:len(value)-1]
-	}
-	return value
 }

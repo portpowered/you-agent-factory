@@ -392,7 +392,7 @@ func TestProviderChildExecutor_Execute_TimedOutContext_InterruptsProviderInfer(t
 	if err == nil {
 		t.Fatal("Execute: error = nil, want context deadline exceeded")
 	}
-	if err.Error() != "execution timeout" {
+	if err.Error() != "Provider request timed out." {
 		t.Fatalf("Execute error = %v, want canonical timeout diagnostic", err)
 	}
 	if provider.inferContextsHonored() == 0 {

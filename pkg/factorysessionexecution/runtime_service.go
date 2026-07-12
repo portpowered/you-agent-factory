@@ -201,6 +201,7 @@ type JavaScriptRuntimeServiceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
 	Provider          workers.Provider
+	ProviderExecutor  providerexecution.Executor
 	Persistence       runtimepersist.Store
 	Clock             factory.Clock
 }
@@ -210,7 +211,7 @@ type JavaScriptRuntimeServiceConfig struct {
 type JavaScriptRuntimeService struct {
 	projectRoot       string
 	childExecutorMode string
-	provider          workers.Provider
+	providerExecutor  providerexecution.Executor
 	persistence       runtimepersist.Store
 	clock             factory.Clock
 
@@ -226,10 +227,14 @@ var _ Service = (*JavaScriptRuntimeService)(nil)
 // NewJavaScriptRuntimeService constructs one JavaScript runtime-backed durable session service.
 func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScriptRuntimeService {
 	projectRoot := strings.TrimSpace(config.ProjectRoot)
+	executor := config.ProviderExecutor
+	if executor == nil {
+		executor = providerexecution.NewExecutor(config.Provider)
+	}
 	service := &JavaScriptRuntimeService{
 		projectRoot:       projectRoot,
 		childExecutorMode: normalizeChildExecutorMode(config.ChildExecutorMode),
-		provider:          config.Provider,
+		providerExecutor:  executor,
 		clock:             factory.EnsureClock(config.Clock),
 		persistence:       config.Persistence,
 		sessions:          make(map[string]*runtimeSessionState),
@@ -261,7 +266,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
-	if err := validateLiveChildExecutorConfig(resolveChildExecutorMode(s.childExecutorMode, normalized), s.provider); err != nil {
+	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor); err != nil {
 		return AsyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -328,7 +333,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	if err != nil {
 		return SyncStartResult{}, err
 	}
-	if err := validateLiveChildExecutorConfig(resolveChildExecutorMode(s.childExecutorMode, normalized), s.provider); err != nil {
+	if err := validateLiveChildProviderExecutor(resolveChildExecutorMode(s.childExecutorMode, normalized), s.providerExecutor); err != nil {
 		return SyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -882,12 +887,12 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowrunti
 	if mode != ChildExecutorModeLive {
 		return workflowruntime.Hooks{}
 	}
-	provider := s.provider
+	executor := s.providerExecutor
 	return workflowruntime.Hooks{
 		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink, policy workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
 			return livechild.NewRetryingProviderChildExecutor(
 				sessionID,
-				providerexecution.NewProviderExecutor(provider),
+				executor,
 				runtimeSessionChildRecordSink{
 					base: records,
 					appendRecord: func(record workflowruntime.RuntimeRecord) {
@@ -973,6 +978,13 @@ func validateLiveChildExecutorConfig(mode string, provider workers.Provider) err
 		return nil
 	}
 	if provider == nil {
+		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
+	}
+	return nil
+}
+
+func validateLiveChildProviderExecutor(mode string, executor providerexecution.Executor) error {
+	if mode == ChildExecutorModeLive && executor == nil {
 		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
 	}
 	return nil

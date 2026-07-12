@@ -38,8 +38,8 @@ func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["content_bytes"] != "4" {
 		t.Fatalf("safe diagnostics = %#v", result.Diagnostics)
 	}
-	if result.Response.Diagnostics == nil || result.Response.Diagnostics.Command != nil {
-		t.Fatalf("response diagnostics retained unsafe command payload: %#v", result.Response.Diagnostics)
+	if result.Response.Diagnostics == nil || result.Response.Diagnostics.Command == nil {
+		t.Fatalf("provider response diagnostics were unexpectedly rewritten: %#v", result.Response.Diagnostics)
 	}
 }
 
@@ -59,7 +59,7 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 	if result.Attempt != 1 || result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeThrottled {
 		t.Fatalf("failure result = %#v", result)
 	}
-	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider capacity is temporarily unavailable." {
+	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider is temporarily unavailable due to usage or capacity limits." {
 		t.Fatalf("failure detail = %#v", result.FailureDetail)
 	}
 	if result.ProviderSession == nil || result.ProviderSession.Provider != "cursor" {
@@ -98,13 +98,13 @@ func TestProviderExecutorExecuteClassifiesDeadline(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
 	}
-	if result.FailureDetail == nil || result.FailureDetail.Reason != interfaces.WorkFailureTypeTimeout || result.FailureDetail.Message != "execution timeout" {
+	if result.FailureDetail == nil || result.FailureDetail.Reason != interfaces.WorkFailureTypeTimeout || result.FailureDetail.Message != "Provider request timed out." {
 		t.Fatalf("failure detail = %#v", result.FailureDetail)
 	}
 }
 
 func TestProviderExecutorExecuteBoundsAndRedactsFailureDiagnostics(t *testing.T) {
-	secret := "token=super-secret " + strings.Repeat("x", maxExecutionDiagnosticBytes*2)
+	secret := "token=super-secret " + strings.Repeat("x", 2048)
 	providerErr := workerprovider.NewProviderErrorWithSession(
 		interfaces.WorkFailureTypePermanentBadRequest,
 		secret,
@@ -116,11 +116,39 @@ func TestProviderExecutorExecuteBoundsAndRedactsFailureDiagnostics(t *testing.T)
 		Command:  &interfaces.CommandDiagnostic{Stdout: secret, Stderr: secret},
 	}
 	result, _ := NewProviderExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), ExecutionInput{})
-	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider execution failed." {
+	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("failure detail = %#v", result.FailureDetail)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Provider == nil || result.Diagnostics.Provider.ResponseMetadata["content_bytes"] != "20" {
 		t.Fatalf("safe diagnostics = %#v", result.Diagnostics)
+	}
+}
+
+func TestProviderExecutorExecuteUsesReasonAllowlistForAllPersistedFailures(t *testing.T) {
+	sensitive := "API key sk-secret secret=hidden raw prompt and provider output"
+	tests := []struct {
+		reason  interfaces.WorkFailureType
+		message string
+	}{
+		{interfaces.WorkFailureTypeAuthFailure, "Provider authentication failed."},
+		{interfaces.WorkFailureTypePermanentBadRequest, "Provider rejected the request as invalid."},
+		{interfaces.WorkFailureTypeThrottled, "Provider is temporarily unavailable due to usage or capacity limits."},
+		{interfaces.WorkFailureTypeInternalServerError, "Provider encountered a temporary server error."},
+		{interfaces.WorkFailureTypeTimeout, "Provider request timed out."},
+		{interfaces.WorkFailureTypeMisconfigured, "Provider command could not be started."},
+		{interfaces.WorkFailureTypeUnknown, "Provider execution failed."},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			providerErr := workerprovider.NewProviderError(tc.reason, sensitive, errors.New(sensitive))
+			result, _ := NewProviderExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), ExecutionInput{})
+			if result.FailureDetail == nil || result.FailureDetail.Message != tc.message {
+				t.Fatalf("failure detail = %#v, want message %q", result.FailureDetail, tc.message)
+			}
+			if strings.Contains(result.FailureDetail.Message, "sk-secret") || strings.Contains(result.FailureDetail.Message, "raw prompt") {
+				t.Fatalf("failure detail exposed provider text: %#v", result.FailureDetail)
+			}
+		})
 	}
 }
 
