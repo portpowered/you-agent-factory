@@ -189,14 +189,28 @@ describe("FactorySessionDetailPanel durable summary", () => {
       const url = String(input);
       if (url.endsWith("/factory-sessions/dur-sess-js-error-001")) {
         return jsonResponse({
+          dialect: "you-workflow-v1",
+          lifecycle: { startedAt: "2026-06-08T14:00:00Z" },
           orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          progress: { queuedDispatches: 1, totalDispatches: 1 },
+          phase: "plan",
+          phaseSummaries: [{ dispatchCount: 1, phase: "plan" }],
+          partialResultAvailable: true,
+          progress: { inFlightDispatches: 1, queuedDispatches: 1, totalDispatches: 1 },
+          resultSummary: { resultStatus: "PARTIAL" },
+          resolvedSource: {
+            kind: "WORKFLOW_NAME",
+            sourceRef: "workflow/error-fixture",
+          },
           sessionId: "dur-sess-js-error-001",
           status: "RUNNING",
+          usage: { resources: [] },
         });
       }
-      if (url.endsWith("/dispatches")) {
-        return jsonResponse({ message: "dispatch transport failed" }, 503);
+      if (url.includes("/dispatches")) {
+        return jsonResponse(
+          { code: "INTERNAL_ERROR", message: "dispatch transport failed" },
+          503,
+        );
       }
       return new Response("not found", { status: 404 });
     });
