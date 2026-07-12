@@ -215,6 +215,59 @@ func TestProjectToolInventory_HandlerRegisteredForCanonicalTools(t *testing.T) {
 	}
 }
 
+func TestVerifyProjectedToolInventory_PassesForLiveRegistry(t *testing.T) {
+	if err := mcpfactorysession.VerifyProjectedToolInventory(); err != nil {
+		t.Fatalf("VerifyProjectedToolInventory() error = %v", err)
+	}
+}
+
+func TestVerifyToolInventory_FailsWhenDiscoveredToolMissingHandler(t *testing.T) {
+	const unregisteredTool = "you.factory_session.unregistered_probe"
+	discovered := []mcpfactorysession.ToolDefinition{{
+		Name:        unregisteredTool,
+		Description: "probe tool without handler registration",
+		InputSchema: map[string]any{"type": "object"},
+	}}
+	inventory, err := mcpfactorysession.ProjectToolInventoryFromDiscovered(discovered)
+	if err != nil {
+		t.Fatalf("ProjectToolInventoryFromDiscovered() error = %v", err)
+	}
+	if inventory.Tools[0].HandlerRegistered {
+		t.Fatalf("tool %q handlerRegistered = true, want false", unregisteredTool)
+	}
+	err = mcpfactorysession.VerifyToolInventory(inventory)
+	if err == nil {
+		t.Fatal("VerifyToolInventory() error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), unregisteredTool) {
+		t.Fatalf("VerifyToolInventory() error = %v, want offending tool %q", err, unregisteredTool)
+	}
+}
+
+func TestVerifyToolInventory_RejectsCompatibilityAliasEntry(t *testing.T) {
+	inventory := mcpfactorysession.ToolInventory{
+		FormatVersion:   mcpfactorysession.ToolInventoryFormatVersion,
+		ProtocolVersion: mcpfactorysession.ToolInventoryProtocolVersion,
+		Tools: []mcpfactorysession.ToolInventoryEntry{{
+			IDCandidate:       "workflow.validate",
+			Name:              mcpfactorysession.ToolWorkflowValidate,
+			Description:       "compatibility alias that resolves to a handler",
+			InputSchema:       map[string]any{"type": "object"},
+			HandlerRegistered: true,
+		}},
+	}
+	err := mcpfactorysession.VerifyToolInventory(inventory)
+	if err == nil {
+		t.Fatal("VerifyToolInventory() error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), mcpfactorysession.ToolWorkflowValidate) {
+		t.Fatalf("VerifyToolInventory() error = %v, want alias name", err)
+	}
+	if !strings.Contains(err.Error(), "compatibility alias") {
+		t.Fatalf("VerifyToolInventory() error = %v, want compatibility alias rejection", err)
+	}
+}
+
 func mustProjectToolInventory(t *testing.T) mcpfactorysession.ToolInventory {
 	t.Helper()
 	inventory, err := mcpfactorysession.ProjectToolInventory()
