@@ -134,6 +134,7 @@ async function listIndexedCheckpoints(
 export async function peekPersistedTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   sessionID: string | null,
+  options: { signal?: AbortSignal } = {},
 ): Promise<PersistedTimelineCheckpointPeek | null> {
   const normalizedSessionID = sessionID?.trim();
   if (!indexedDB || !normalizedSessionID) {
@@ -141,7 +142,10 @@ export async function peekPersistedTimelineCheckpoint(
   }
 
   try {
-    const envelopes = await listIndexedCheckpoints(indexedDB);
+    const envelopes = await listIndexedCheckpoints(indexedDB, options.signal);
+    if (options.signal?.aborted) {
+      return null;
+    }
     const envelope = envelopes.find((candidate) =>
       matchesStoredCheckpointFactorySessionID(candidate, normalizedSessionID),
     );
