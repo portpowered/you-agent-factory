@@ -379,11 +379,17 @@ func resolvedSourceFromFixture(source map[string]any) factorysessionexecution.Re
 
 func progressCountsFromFixture(progress map[string]any) *factorysessionexecution.ProgressCounts {
 	return &factorysessionexecution.ProgressCounts{
-		TotalDispatches:     intValue(progress, "totalDispatches"),
-		CompletedDispatches: intValue(progress, "completedDispatches"),
-		FailedDispatches:    intValue(progress, "failedDispatches"),
-		InFlightDispatches:  intValue(progress, "inFlightDispatches"),
-		PhaseCount:          intValue(progress, "phaseCount"),
+		TotalDispatches:       intValue(progress, "totalDispatches"),
+		CompletedDispatches:   intValue(progress, "completedDispatches"),
+		FailedDispatches:      intValue(progress, "failedDispatches"),
+		InFlightDispatches:    intValue(progress, "inFlightDispatches"),
+		QueuedDispatches:      intValue(progress, "queuedDispatches"),
+		RunningDispatches:     intValue(progress, "runningDispatches"),
+		CanceledDispatches:    intValue(progress, "canceledDispatches"),
+		TimedOutDispatches:    intValue(progress, "timedOutDispatches"),
+		SkippedDispatches:     intValue(progress, "skippedDispatches"),
+		InterruptedDispatches: intValue(progress, "interruptedDispatches"),
+		PhaseCount:            intValue(progress, "phaseCount"),
 	}
 }
 

@@ -441,6 +441,8 @@ func newSessionDispatchesCommand(globals *cliGlobalOptions, diagnostics *cliDiag
 	}
 
 	registerDeprecatedPortFlag(cmd)
+	cmd.Flags().StringVar(&cfg.Phase, "phase", "", "filter by exact Dispatch phase")
+	cmd.Flags().StringVar(&cfg.Status, "status", "", "filter by canonical Dispatch status")
 	return cmd
 }
 
@@ -847,6 +849,8 @@ func newWorkflowDispatchesCommand(globals *cliGlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&dispatchesCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed dispatch reads")
+	cmd.Flags().StringVar(&dispatchesCfg.Phase, "phase", "", "filter by exact Dispatch phase")
+	cmd.Flags().StringVar(&dispatchesCfg.Status, "status", "", "filter by canonical Dispatch status")
 	addWorkflowExecutionBackendFlags(cmd, &dispatchesCfg.ExecutionBackendConfig, nil)
 	return cmd
 }

@@ -312,20 +312,48 @@ func TestShow_DurableSessionJSONUsesDurableReadModel(t *testing.T) {
 }
 
 func TestShow_DurableSessionHumanOutputRendersLifecycleContinuity(t *testing.T) {
+	startedAt := time.Date(2026, 6, 30, 11, 55, 0, 0, time.UTC)
+	finishedAt := time.Date(2026, 6, 30, 12, 10, 0, 0, time.UTC)
 	interruptedAt := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
 	resumedAt := time.Date(2026, 6, 30, 12, 5, 0, 0, time.UTC)
+	sourceRef, sourceHash, phase := "workflows/review.js", "sha256:source", "review"
+	checkpointLabel := "review saved"
+	policyHash := "sha256:policy"
+	maxAgents := 4
+	total, completed, inFlight, failed := 5, 3, 1, 1
+	phaseTotal, phaseCompleted, phaseFailed := 3, 2, 1
+	resultSummary := "Review output is ready"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionDurableReadModel{
 			SessionId:        "dur-sess-js-interrupted-001",
 			Status:           factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
 			OrchestratorKind: factoryapi.JAVASCRIPT,
+			ResolvedSource: factoryapi.FactorySessionResolvedSourceIdentity{
+				Kind: factoryapi.FactorySessionExecutionSourceKindWorkflowFile, SourceRef: &sourceRef,
+			},
+			SourceHash: &sourceHash,
+			Phase:      &phase,
 			Lifecycle: &factoryapi.FactorySessionDurableLifecycleTimestamps{
+				StartedAt:     &startedAt,
+				FinishedAt:    &finishedAt,
 				InterruptedAt: &interruptedAt,
 				ResumedAt:     &resumedAt,
 			},
+			Progress: &factoryapi.FactorySessionDurableProgressCounts{
+				TotalDispatches: &total, CompletedDispatches: &completed,
+				InFlightDispatches: &inFlight, FailedDispatches: &failed,
+			},
+			PhaseSummaries: &[]factoryapi.FactorySessionDurablePhaseSummary{{
+				Phase: "plan", DispatchCount: &phaseTotal, CompletedDispatchCount: &phaseCompleted, FailedDispatchCount: &phaseFailed,
+			}},
+			LatestCheckpoint:    &factoryapi.FactorySessionCheckpointRef{Id: "checkpoint-1", Label: &checkpointLabel, Phase: &phase},
+			EffectivePolicyHash: &policyHash,
+			Budgets:             &factoryapi.FactorySessionBudgets{MaxAgents: &maxAgents},
+			Usage:               &factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{{Name: "agents", Total: 4, Available: 1}}},
+			ArtifactRefs:        &[]factoryapi.FactoryArtifactRef{{Id: "artifact-1", Kind: factoryapi.FactoryArtifactKindFINALRESULT}},
 			ResultSummary: &factoryapi.FactorySessionDurableResultSummary{
-				ResultStatus: factoryapi.FactorySessionResultStatusFinal,
+				ResultStatus: factoryapi.FactorySessionResultStatusFinal, Summary: &resultSummary,
 			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
@@ -346,6 +374,17 @@ func TestShow_DurableSessionHumanOutputRendersLifecycleContinuity(t *testing.T) 
 	for _, want := range []string{
 		"Factory session:\tdur-sess-js-interrupted-001",
 		"Lifecycle status:\tSUCCEEDED",
+		"Source:\tWORKFLOW_FILE ref=workflows/review.js hash=sha256:source",
+		"Duration:\t15m0s",
+		"Current phase:\treview",
+		"Dispatch counts:\ttotal=5, completed=3, in flight=1, failed=1",
+		"Latest checkpoint:\tcheckpoint-1 label=review saved phase=review",
+		"Effective policy:\thash=sha256:policy",
+		"Budget:\tmax agents=4",
+		"Usage:\tagents=3/4",
+		"Artifacts:\tartifact-1 (FINAL_RESULT)",
+		"Result availability:\tFINAL — Review output is ready",
+		"Phase summaries:\n- plan total=3, completed=2, failed=1",
 		"Interrupted at:\t2026-06-30T12:00:00Z",
 		"Resumed at:\t2026-06-30T12:05:00Z",
 		"Result status:\tFINAL",
@@ -402,6 +441,11 @@ func TestDispatches_DurableSessionJSONUsesListFactorySessionDispatchesResponse(t
 }
 
 func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing.T) {
+	phase, label, runner, model := "review", "Review child", "runner-1", "model-1"
+	attempt := int32(2)
+	duration := int64(1250)
+	artifacts := []string{"artifact-1"}
+	providerRefs := []factoryapi.LoadableProviderSessionRef{{Id: "provider-session-1", Kind: factoryapi.LoadableProviderSessionKind("SESSION_ID"), Provider: factoryapi.LoadableProviderSessionProvider("CLAUDE")}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionDispatchesResponse{
@@ -416,6 +460,10 @@ func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing
 					Id:           "dispatch-2",
 					Status:       factoryapi.FactoryDispatchStatusINTERRUPTED,
 					DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+					Phase:        &phase, Label: &label, RunnerId: &runner, Model: &model,
+					ProviderSessionRefs: &providerRefs, Attempt: &attempt,
+					Usage: &factoryapi.FactoryDispatchUsage{DurationMillis: &duration}, OutputArtifactIds: &artifacts,
+					FailureDetail: &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType("PROVIDER_ERROR"), Message: "provider unavailable"},
 				},
 			},
 		}); err != nil {
@@ -438,6 +486,15 @@ func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing
 		"Factory session dur-sess-js-interrupted-001 dispatches (2):",
 		"- dispatch-1 COMPLETED JAVASCRIPT_AGENT",
 		"- dispatch-2 INTERRUPTED JAVASCRIPT_AGENT",
+		"  Phase:\treview",
+		"  Label:\tReview child",
+		"  Runner:\trunner-1",
+		"  Model:\tmodel-1",
+		"  Provider sessions:\tprovider-session-1",
+		"  Attempt:\t2",
+		"  Duration:\t1250ms",
+		"  Artifacts:\tartifact-1",
+		"  Failure:\tprovider unavailable",
 	} {
 		if !strings.Contains(output, want) {
 			t.Fatalf("output missing %q:\n%s", want, output)
@@ -456,6 +513,19 @@ func TestDispatches_RejectsNonDurableSessionID(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "dur-sess-*") {
 		t.Fatalf("error = %q, want durable session requirement", err.Error())
+	}
+}
+
+func TestDispatchesEndpoint_ForwardsCanonicalFilters(t *testing.T) {
+	endpoint, err := dispatchesEndpoint(DispatchesConfig{
+		Server: "http://127.0.0.1:3456", SessionID: "dur-sess-filter-001",
+		Phase: "build", Status: "FAILED",
+	})
+	if err != nil {
+		t.Fatalf("dispatchesEndpoint: %v", err)
+	}
+	if endpoint.Query().Get("phase") != "build" || endpoint.Query().Get("status") != "FAILED" {
+		t.Fatalf("query = %q, want phase=build and status=FAILED", endpoint.RawQuery)
 	}
 }
 

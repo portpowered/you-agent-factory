@@ -524,11 +524,17 @@ func resolvedSourceFromFixtureMap(source map[string]any) ResolvedSource {
 
 func progressCountsFromFixtureMap(progress map[string]any) *ProgressCounts {
 	return &ProgressCounts{
-		TotalDispatches:     fixtureIntValue(progress, "totalDispatches"),
-		CompletedDispatches: fixtureIntValue(progress, "completedDispatches"),
-		FailedDispatches:    fixtureIntValue(progress, "failedDispatches"),
-		InFlightDispatches:  fixtureIntValue(progress, "inFlightDispatches"),
-		PhaseCount:          fixtureIntValue(progress, "phaseCount"),
+		TotalDispatches:       fixtureIntValue(progress, "totalDispatches"),
+		CompletedDispatches:   fixtureIntValue(progress, "completedDispatches"),
+		FailedDispatches:      fixtureIntValue(progress, "failedDispatches"),
+		InFlightDispatches:    fixtureIntValue(progress, "inFlightDispatches"),
+		QueuedDispatches:      fixtureIntValue(progress, "queuedDispatches"),
+		RunningDispatches:     fixtureIntValue(progress, "runningDispatches"),
+		CanceledDispatches:    fixtureIntValue(progress, "canceledDispatches"),
+		TimedOutDispatches:    fixtureIntValue(progress, "timedOutDispatches"),
+		SkippedDispatches:     fixtureIntValue(progress, "skippedDispatches"),
+		InterruptedDispatches: fixtureIntValue(progress, "interruptedDispatches"),
+		PhaseCount:            fixtureIntValue(progress, "phaseCount"),
 	}
 }
 
@@ -791,6 +797,10 @@ func cloneSessionRead(session SessionReadResult) SessionReadResult {
 	}
 	cloned.Usage = cloneSessionUsage(session.Usage)
 	cloned.PhaseSummaries = append([]PhaseSummary(nil), session.PhaseSummaries...)
+	if session.LatestCheckpoint != nil {
+		checkpoint := *session.LatestCheckpoint
+		cloned.LatestCheckpoint = &checkpoint
+	}
 	cloned.ArtifactRefs = append([]ArtifactRefSummary(nil), session.ArtifactRefs...)
 	cloned.Links = session.Links
 	return cloned

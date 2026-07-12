@@ -12,6 +12,8 @@ import (
 // ListDispatchesInput is the MCP request shape for you.factory_session.list_dispatches.
 type ListDispatchesInput struct {
 	SessionID string `json:"sessionId"`
+	Phase     string `json:"phase,omitempty"`
+	Status    string `json:"status,omitempty"`
 }
 
 // ListDispatches returns deterministic dispatch summaries for one Factory Session
@@ -26,12 +28,13 @@ func ListDispatches(
 	}
 
 	sessionID := input.SessionID
-	result, err := service.ListDispatches(context.Background(), sessionID)
+	result, err := factorysessionexecution.QueryDispatches(context.Background(), service, sessionID, factorysessionexecution.DispatchFilters{
+		Phase: input.Phase, Status: factorysessionexecution.DispatchStatus(input.Status),
+	})
 	if err != nil {
 		envelope := readErrorEnvelope(sessionID, err)
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
 	}
-
 	mapped := apifactorysession.ListDispatchesResponseToAPI(result)
 	return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Result: &mapped}
 }

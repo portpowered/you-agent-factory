@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - id
+properties:
+  id:
+    type: string
+    description: Stable checkpoint identifier used for later inspection or resume.
+  label:
+    type: string
+    description: Customer-visible checkpoint label when supplied by the orchestrator.
+  phase:
+    type: string
+    description: Phase active when the checkpoint was written.

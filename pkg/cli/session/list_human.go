@@ -131,6 +131,12 @@ func durableProgressSummary(progress *factoryapi.FactorySessionDurableProgressCo
 	if progress.InFlightDispatches != nil {
 		parts = append(parts, fmt.Sprintf("inFlight=%d", *progress.InFlightDispatches))
 	}
+	parts = appendProgressPart(parts, "queued", progress.QueuedDispatches)
+	parts = appendProgressPart(parts, "running", progress.RunningDispatches)
+	parts = appendProgressPart(parts, "canceled", progress.CanceledDispatches)
+	parts = appendProgressPart(parts, "timedOut", progress.TimedOutDispatches)
+	parts = appendProgressPart(parts, "skipped", progress.SkippedDispatches)
+	parts = appendProgressPart(parts, "interrupted", progress.InterruptedDispatches)
 	if progress.FailedDispatches != nil {
 		parts = append(parts, fmt.Sprintf("failed=%d", *progress.FailedDispatches))
 	}
@@ -141,6 +147,13 @@ func durableProgressSummary(progress *factoryapi.FactorySessionDurableProgressCo
 		parts = append(parts, fmt.Sprintf("phases=%d", *progress.PhaseCount))
 	}
 	return strings.Join(parts, " ")
+}
+
+func appendProgressPart(parts []string, label string, value *int) []string {
+	if value == nil {
+		return parts
+	}
+	return append(parts, fmt.Sprintf("%s=%d", label, *value))
 }
 
 func durableActionSummary(actions *factoryapi.FactorySessionDurableActionAvailability) string {

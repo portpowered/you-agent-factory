@@ -358,12 +358,24 @@ func (m *MockFactory) StartDurableFactorySessionSync(
 func (m *MockFactory) ListDurableFactorySessionDispatches(
 	ctx context.Context,
 	sessionID string,
+	params factoryapi.ListFactorySessionDispatchesParams,
 ) (factoryapi.ListFactorySessionDispatchesResponse, error) {
 	service, err := m.requireDurableExecutionService()
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
 	result, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	filters := factorysessionexecution.DispatchFilters{}
+	if params.Phase != nil {
+		filters.Phase = string(*params.Phase)
+	}
+	if params.Status != nil {
+		filters.Status = factorysessionexecution.DispatchStatus(*params.Status)
+	}
+	result, err = factorysessionexecution.FilterDispatches(result, filters)
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
