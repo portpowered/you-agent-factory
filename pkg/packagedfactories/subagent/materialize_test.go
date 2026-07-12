@@ -54,7 +54,7 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInSubagentIntoGlobalRoo
 		t.Fatalf("resolution source = %q, want builtin materialization", resolution.Source)
 	}
 
-	wantDir := filepath.Join(globalRoot, "@you%2Fsubagent")
+	wantDir := filepath.Join(globalRoot, "@you", "subagent")
 	if resolution.FactoryDir != wantDir {
 		t.Fatalf("factory dir = %q, want %q", resolution.FactoryDir, wantDir)
 	}

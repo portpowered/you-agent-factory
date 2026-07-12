@@ -5,7 +5,7 @@ This artifact records what API and CLI response-stream surfaces prove on merged
 branch head, which upstream stream-responses residuals remain explicitly excluded,
 and where narrow integration corrections were not required in this lane.
 
-**Status:** gate evidence complete with documented upstream exclusions
+**Status:** gate evidence recorded; gate remains incomplete pending R1/R2 upstream exclusions
 
 **Last updated:** 2026-07-12 UTC
 
@@ -22,7 +22,7 @@ and where narrow integration corrections were not required in this lane.
 | CLI NDJSON and API session response-event SSE decode to equivalent canonical `FactoryResponseEvent` values | **Excluded — upstream residual** | R1/R2 from stream-responses final audit: no public `FactoryResponseEvent` schema and no session-scoped response-event SSE route in merged OpenAPI |
 | Provider parity shows truthful fidelity and equivalent terminal `InvocationResponse` across primary-only and stream modes | **Merged (terminal scope)** | Mock-worker fixtures are final-only; API `POST /factory-sessions/{session_id}/invocations` and CLI JSON `primary_result` agree on terminal outcome (goal + subagent parity smokes below) |
 | Narrow integration corrections only; no parallel stream reimplementation | **Merged** | No code changes required beyond focused parity proofs; internal stream vocabulary stays isolated from public artifacts |
-| Final gate evidence package cites audit + focused integration tests | **Merged** | This document plus stories 001–003 artifacts and smoke suites listed below |
+| Final gate evidence package cites audit + focused integration tests | **Merged (partial — R1/R2 block gate completion)** | This document plus stories 001–003 artifacts and smoke suites listed below |
 
 ## Proven API/CLI parity (merged scope)
 

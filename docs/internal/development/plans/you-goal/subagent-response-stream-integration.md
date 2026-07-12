@@ -5,7 +5,7 @@ This artifact proves named `@you/subagent` one-shot `--output response-stream` h
 JSON modes consume the same merged internal response-stream renderer contract as
 `@you/goal` and end with the shared authoritative `InvocationResponse` terminal outcome.
 
-**Status:** integration proofs recorded against merged branch head
+**Status:** CLI-private stream proofs recorded; gate remains incomplete pending R1/R2 (no public `FactoryResponseEvent`)
 
 **Last updated:** 2026-07-12 UTC
 
@@ -21,8 +21,8 @@ Story 003 therefore proves the **merged CLI stream contract** (shared
 
 | Acceptance criterion | Verdict | Evidence |
 |----------------------|---------|----------|
-| Human and JSON response-stream modes use the same canonical CLI stream vocabulary as `@you/goal` | **Merged** | Shared renderers in `run_clean_invocation.go`; smoke `TestNamedSubagentResponseStream_HumanModeUsesCanonicalProgressPrefixNotLegacyDialect`, `TestNamedSubagentResponseStream_JSONModeUsesCanonicalCLIStreamRecordVocabulary` |
-| JSON response-stream emits NDJSON canonical records and exactly one terminal `primary_result` | **Merged** | smoke `TestNamedSubagentResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord`, `TestNamedSubagentResponseStream_JSONModeEmitsPrimaryResultRecord` |
+| Human and JSON response-stream modes use the same shared CLI stream vocabulary as `@you/goal` | **Merged (CLI scope)** | Shared renderers in `run_clean_invocation.go`; smoke `TestNamedSubagentResponseStream_HumanModeUsesCanonicalProgressPrefixNotLegacyDialect`, `TestNamedSubagentResponseStream_JSONModeUsesCanonicalCLIStreamRecordVocabulary` |
+| JSON response-stream emits NDJSON shared CLI `recordType` records and exactly one terminal `primary_result` | **Merged (CLI scope)** | smoke `TestNamedSubagentResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord`, `TestNamedSubagentResponseStream_JSONModeEmitsPrimaryResultRecord` |
 | Successful subagent stream runs return exactly one authoritative primary response | **Merged** | smoke `TestNamedSubagentResponseStream_RealCLICompletesWithPrimaryResult` |
 | Primary-only and response-stream modes agree on terminal invocation outcome | **Merged** | smoke `TestNamedSubagentResponseStream_PrimaryOnlyAndResponseStreamAgreeOnTerminalOutcome` |
 | No subagent-only alternate response-stream renderer or record types | **Merged** | No `subagent` references under response-stream renderer code; subagent reuses shared `InvocationOutputResponseStream` path from `pkg/cli/run/invocation_observability.go` |

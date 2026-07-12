@@ -5,7 +5,7 @@ This artifact proves named `@you/goal` one-shot `--output response-stream` human
 JSON modes consume the merged internal response-stream renderer contract and end with
 the shared authoritative `InvocationResponse` terminal outcome.
 
-**Status:** integration proofs recorded against merged branch head
+**Status:** CLI-private stream proofs recorded; gate remains incomplete pending R1/R2 (no public `FactoryResponseEvent`)
 
 **Last updated:** 2026-07-12 UTC
 
@@ -19,12 +19,12 @@ without soft-passing public canonical parity.
 
 | Acceptance criterion | Verdict | Evidence |
 |----------------------|---------|----------|
-| Human response-stream emits canonical progress/observation lines and shared terminal primary result | **Merged** | `run_clean_invocation.go` human renderer; smoke `TestNamedGoalResponseStream_HumanModeUsesCanonicalProgressPrefixNotLegacyDialect` |
-| JSON response-stream emits NDJSON canonical CLI stream records and exactly one terminal `primary_result` | **Merged** | `run_clean_invocation.go` JSON renderer; smoke `TestNamedGoalResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord`, `TestNamedGoalResponseStream_JSONModeUsesCanonicalCLIStreamRecordVocabulary` |
+| Human response-stream emits shared CLI progress/observation lines and terminal primary result | **Merged (CLI scope)** | `run_clean_invocation.go` human renderer; smoke `TestNamedGoalResponseStream_HumanModeUsesCanonicalProgressPrefixNotLegacyDialect` |
+| JSON response-stream emits NDJSON shared CLI `recordType` stream records and exactly one terminal `primary_result` | **Merged (CLI scope)** | `run_clean_invocation.go` JSON renderer; smoke `TestNamedGoalResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord`, `TestNamedGoalResponseStream_JSONModeUsesCanonicalCLIStreamRecordVocabulary` |
 | Primary-only and response-stream modes agree on terminal invocation outcome | **Merged** | smoke `TestNamedGoalResponseStream_PrimaryOnlyAndResponseStreamAgreeOnTerminalOutcome` |
 | Focused goal stream integration/smoke tests | **Merged** | `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go` |
 
-## Canonical CLI stream vocabulary (merged)
+## Shared CLI stream vocabulary (merged — not public `FactoryResponseEvent`)
 
 Human mode:
 
