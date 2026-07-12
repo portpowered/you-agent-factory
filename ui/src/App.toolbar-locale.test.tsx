@@ -10,6 +10,7 @@ import { DASHBOARD_PAGE_HEADING_CLASS } from "./components/ui/dashboard-typograp
 import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
 import { currentSessionFactoryExportAPIResponse } from "./testing/app-shell-export-test-utils";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   chainRenderAppFetchMock,
   createFactoryImportValue,
@@ -38,7 +39,8 @@ describe("App shell locale and toolbar flows", () => {
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
         method === "GET" &&
-        path === "/factory-sessions/~default/factory"
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`
       ) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }

@@ -17,12 +17,12 @@ import {
   exportTimelineEvents,
   fromBase64,
 } from "./testing/app-shell-export-test-utils";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   baselineSnapshot,
   chainRenderAppFetchMock,
   createFactoryImportValue,
   createFileDropTransfer,
-  DEFAULT_FACTORY_SESSION_ID,
   importedFactorySnapshot,
   jsonResponse,
   MockEventSource,
@@ -44,7 +44,7 @@ function buildFactorySessionGetResponse() {
   return {
     factoryDir: "/workspace/default",
     folderPath: "/workspace",
-    id: DEFAULT_FACTORY_SESSION_ID,
+    id: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
     isDefault: true,
     project: "default",
     runtime: {
@@ -67,7 +67,7 @@ function buildFactorySessionGetResponse() {
       status: "IDLE",
       streamIdentity: {
         backendScopeID: "/workspace::test-backend",
-        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        factorySessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
         logicalSessionKeyID: "lsk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         streamGenerationID: "2026-06-26T00:00:00Z",
       },
@@ -116,7 +116,10 @@ function expectNoPostFactoriesActivation(
 }
 
 function handlesDefaultSessionGet(path: string, method: string): boolean {
-  return path === `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}` && method === "GET";
+  return (
+    path === `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}` &&
+    method === "GET"
+  );
 }
 
 describe("App shell import flows", () => {
@@ -152,7 +155,7 @@ describe("App shell import flows", () => {
     ).toBeNull();
   });
 
-  it("activates the dropped factory import through PUT /factory-sessions/~default/factory", async () => {
+  it("activates the dropped factory import through the resolved default session UUID", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const currentSessionFactory = {
@@ -176,11 +179,19 @@ describe("App shell import flows", () => {
         return jsonResponse(buildFactorySessionGetResponse());
       }
 
-      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+      if (
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
+        method === "GET"
+      ) {
         return jsonResponse(currentSessionFactory);
       }
 
-      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+      if (
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
+        method === "PUT"
+      ) {
         return activationDeferred.promise;
       }
 
@@ -225,7 +236,7 @@ describe("App shell import flows", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/factory-sessions/~default/factory",
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`,
         {
           method: "GET",
         },
@@ -233,7 +244,7 @@ describe("App shell import flows", () => {
     });
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/factory-sessions/~default/factory",
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`,
         expect.objectContaining({
           body: JSON.stringify({
             mode: "REPLACE_CURRENT",
@@ -278,11 +289,19 @@ describe("App shell import flows", () => {
         return jsonResponse(buildFactorySessionGetResponse());
       }
 
-      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+      if (
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
+        method === "GET"
+      ) {
         return jsonResponse(currentSessionFactory);
       }
 
-      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+      if (
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
+        method === "PUT"
+      ) {
         return jsonResponse({
           name: "Dropped Factory",
           ...importValue.factory,
@@ -320,7 +339,8 @@ describe("App shell import flows", () => {
     await waitFor(() => {
       const putActivationCall = fetchMock.mock.calls.find(([url, init]) => {
         return (
-          resolveFetchPath(url) === "/factory-sessions/~default/factory" &&
+          resolveFetchPath(url) ===
+            `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
           resolveFetchMethod(url, init) === "PUT"
         );
       });
@@ -374,14 +394,22 @@ describe("App shell import flows", () => {
         return jsonResponse(buildFactorySessionGetResponse());
       }
 
-      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+      if (
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
+        method === "GET"
+      ) {
         return jsonResponse({
           ...currentNamedFactoryExportResponse,
           version: defaultSessionFactoryVersion,
         });
       }
 
-      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+      if (
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
+        method === "PUT"
+      ) {
         const parsed = JSON.parse(String(init?.body)) as {
           factory?: typeof currentNamedFactoryExportResponse;
         };
@@ -413,7 +441,8 @@ describe("App shell import flows", () => {
     await waitFor(() => {
       const putActivationCall = fetchMock.mock.calls.find(([url, init]) => {
         return (
-          resolveFetchPath(url) === "/factory-sessions/~default/factory" &&
+          resolveFetchPath(url) ===
+            `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory` &&
           resolveFetchMethod(url, init) === "PUT"
         );
       });
