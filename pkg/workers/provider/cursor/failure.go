@@ -13,12 +13,13 @@ import (
 const FailureMessageLimit = 1024
 
 const (
-	cursorAuthFailureMessage       = "Cursor authentication failed. Sign in again or check the configured credentials."
-	cursorBadRequestFailureMessage = "Cursor rejected the request as invalid. Check the model and Cursor configuration."
-	cursorThrottleFailureMessage   = "Cursor is temporarily unavailable due to usage or capacity limits."
-	cursorTimeoutFailureMessage    = "Cursor request timed out."
-	cursorServerFailureMessage     = "Cursor encountered a temporary server error."
-	cursorUnknownFailureMessage    = "Cursor reported an unsuccessful result."
+	cursorAuthFailureMessage        = "Cursor authentication failed. Sign in again or check the configured credentials."
+	cursorBadRequestFailureMessage  = "Cursor rejected the request as invalid. Check the model and Cursor configuration."
+	cursorThrottleFailureMessage    = "Cursor is temporarily unavailable due to usage or capacity limits."
+	cursorTimeoutFailureMessage     = "Cursor request timed out."
+	cursorServerFailureMessage      = "Cursor encountered a temporary server error."
+	cursorCommandLineTooLongMessage = "Cursor could not start because the rendered command exceeded the operating system command-line limit."
+	cursorUnknownFailureMessage     = "Cursor reported an unsuccessful result."
 )
 
 var unsafeCursorFailureTextPattern = regexp.MustCompile(`(?i)(authorization\s*:|bearer\s+\S+|api[_ -]?key\s*[:=]\s*\S+|password\s*[:=]|secret\s*[:=]|token\s*[:=]|private prompt|user prompt|complete transcript|full transcript|cleanup noise|could not be terminated|failed to terminate process)`)
@@ -72,6 +73,7 @@ func failureResultFromText(output []byte, fallbackReason interfaces.WorkFailureT
 	}
 
 	for _, reason := range []interfaces.WorkFailureType{
+		interfaces.WorkFailureTypeCommandLineTooLong,
 		interfaces.WorkFailureTypeAuthFailure,
 		interfaces.WorkFailureTypePermanentBadRequest,
 		interfaces.WorkFailureTypeThrottled,
@@ -200,6 +202,8 @@ func classifyTerminalFailure(subtype, result string) interfaces.WorkFailureType 
 func classifyCursorFailureSignal(signal string) interfaces.WorkFailureType {
 	signal = strings.ToLower(signal)
 	switch {
+	case containsCursorSignal(signal, "the command line is too long", "command line too long", "command-line limit"):
+		return interfaces.WorkFailureTypeCommandLineTooLong
 	case containsCursorSignal(signal, "authentication_error", "authentication failed", "authorization", "login required", "sign in", "unauthorized", "forbidden", "invalid api key", "401", "403"):
 		return interfaces.WorkFailureTypeAuthFailure
 	case containsCursorSignal(signal, "invalid_request", "bad request", "invalid argument", "invalid configuration", "configuration error", "config error", "model not found", "unsupported model"):
@@ -259,6 +263,8 @@ func cursorFailureGuidance(reason interfaces.WorkFailureType) string {
 		return cursorTimeoutFailureMessage
 	case interfaces.WorkFailureTypeInternalServerError:
 		return cursorServerFailureMessage
+	case interfaces.WorkFailureTypeCommandLineTooLong:
+		return cursorCommandLineTooLongMessage
 	default:
 		return cursorUnknownFailureMessage
 	}

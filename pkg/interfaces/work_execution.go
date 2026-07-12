@@ -169,8 +169,8 @@ const (
 	WorkFailureTypeTimeout             WorkFailureType = "timeout"
 	WorkFailureTypeUnknown             WorkFailureType = "unknown"
 	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
-	// This is when the file that is supposed to run does not exist.
-	WorkFailureTypeMissingExecutable WorkFailureType = "missing_executable"
+	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
+	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
 )
 
 // FailureDetail is the canonical customer-safe explanation of a failed

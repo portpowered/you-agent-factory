@@ -174,7 +174,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		ContentCache:    materialize.NewDispatchCache(),
 		MaterializeOpts: p.MaterializeOptions,
 	}
-	defer buildCtx.ContentCache.Release()
+	defer buildCtx.release()
 	args, err := behavior.BuildArgs(ctx, req, p.SkipPermissions, buildCtx)
 	if err != nil {
 		logger.Error("inferencer: request argument validation failed",

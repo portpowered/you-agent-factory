@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -23,10 +24,36 @@ const (
 
 const codexHighDemandTemporaryErrorsNeedle = "we're currently experiencing high demand, which may cause temporary errors."
 
+// Cursor is commonly installed through a Windows command shim whose practical
+// command-line limit is lower than CreateProcess' documented maximum. Keep the
+// prompt below the observed 8 KiB boundary and materialize larger prompts.
+const cursorWindowsPromptArgumentLimit = 7 * 1024
+
 // ProviderBuildContext carries dispatch-scoped resources for provider argument building.
 type ProviderBuildContext struct {
 	ContentCache    *materialize.DispatchCache
 	MaterializeOpts *materialize.Options
+	operatingSystem string
+	tempDir         string
+	cleanup         []func()
+}
+
+func (c *ProviderBuildContext) release() {
+	if c == nil {
+		return
+	}
+	for index := len(c.cleanup) - 1; index >= 0; index-- {
+		c.cleanup[index]()
+	}
+	if c.ContentCache != nil {
+		c.ContentCache.Release()
+	}
+}
+
+func (c *ProviderBuildContext) registerCleanup(cleanup func()) {
+	if c != nil && cleanup != nil {
+		c.cleanup = append(c.cleanup, cleanup)
+	}
 }
 
 type providerBehavior interface {
@@ -189,7 +216,7 @@ func (kiroProviderBehavior) BuildCommandRequest(req interfaces.ProviderInference
 	return buildBaseProviderCommandRequest(req, args)
 }
 
-func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
+func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
 	if err := validateCursorOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -212,44 +239,58 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 		args = append(args, "--worktree", req.Worktree)
 	}
 
-	// Use to get a JSON stream response
 	args = append(args, "--output-format", cursorpkg.CursorOutputFormatStreamJSON, "--stream-partial-output")
 
-	// if OS is windows, the prompt might be too long so we ask to pass it in via telling the agent to read a prompt from a temporary file.
-
-	prompt := ""
-	if runtime.GOOS == "windows" {
-
-		tempFile, err := b.writeTempFile(req.UserMessage, req.SystemPrompt)
+	prompt := buildCursorPrompt(req)
+	operatingSystem := runtime.GOOS
+	if buildCtx != nil && buildCtx.operatingSystem != "" {
+		operatingSystem = buildCtx.operatingSystem
+	}
+	if operatingSystem == "windows" && len(utf16.Encode([]rune(prompt))) > cursorWindowsPromptArgumentLimit {
+		tempDir := req.WorkingDirectory
+		if tempDir == "" {
+			tempDir = "."
+		}
+		if buildCtx != nil && buildCtx.tempDir != "" {
+			tempDir = buildCtx.tempDir
+		}
+		promptFile, err := b.writeTempFile(tempDir, prompt)
 		if err != nil {
-			b.logger.Error("failed to write temporary prompt file", "error", err)
 			return nil, fmt.Errorf("failed to write temporary prompt file: %w", err)
 		}
-		defer tempFile.Close()
-		prompt = strings.Join([]string{"@", tempFile.Name()}, "")
-	} else {
-		prompt = strings.TrimSpace(req.UserMessage)
-		if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
-			prompt = buildKiroPrompt(req)
-		}
+		buildCtx.registerCleanup(func() { _ = os.Remove(promptFile) })
+		prompt = "@" + promptFile
 	}
 	args = append(args, prompt)
 	return args, nil
 }
 
-func (b cursorProviderBehavior) writeTempFile(userPrompt string, systemPrompt string) (*os.File, error) {
-	f, err := os.CreateTemp("", "cursor_prompt_*.md")
+func buildCursorPrompt(req interfaces.ProviderInferenceRequest) string {
+	prompt := strings.TrimSpace(req.UserMessage)
+	if strings.TrimSpace(req.SystemPrompt) != "" {
+		prompt = buildKiroPrompt(req)
+	}
+	return prompt
+}
+
+func (b cursorProviderBehavior) writeTempFile(tempDir, prompt string) (string, error) {
+	f, err := os.CreateTemp(tempDir, "cursor_prompt_*.md")
 	if err != nil {
 		b.logger.Error("failed to create temporary prompt file", "error", err)
-		return nil, err
+		return "", err
 	}
-	_, err = f.Write([]byte(strings.Join([]string{systemPrompt, userPrompt}, " ")))
-	if err != nil {
+	path := f.Name()
+	if _, err = f.WriteString(prompt); err != nil {
 		b.logger.Error("failed to write to temporary prompt file", "error", err)
-		f.Close()
-		return nil, err
+		_ = f.Close()
+		_ = os.Remove(path)
+		return "", err
 	}
-	return f, nil
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	return path, nil
 }
 
 func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -525,7 +566,9 @@ func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerF
 	case interfaces.WorkFailureTypeAuthFailure,
 		interfaces.WorkFailureTypePermanentBadRequest,
 		interfaces.WorkFailureTypeUnknown,
-		interfaces.WorkFailureTypeMisconfigured:
+		interfaces.WorkFailureTypeMisconfigured,
+		interfaces.WorkFailureTypeMissingExecutable,
+		interfaces.WorkFailureTypeCommandLineTooLong:
 		return providerFailurePolicy{
 			Family:   interfaces.WorkFailureFamilyTerminal,
 			Decision: interfaces.WorkFailureDecision{Terminal: true},

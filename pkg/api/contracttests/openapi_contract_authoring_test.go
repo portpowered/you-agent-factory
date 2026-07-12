@@ -431,6 +431,8 @@ func assertPublishedWorkFailureSchemas(t *testing.T, schemas map[string]any, pro
 		"timeout",
 		"unknown",
 		"misconfigured",
+		"missing_executable",
+		"command_line_too_long",
 	})
 }
 

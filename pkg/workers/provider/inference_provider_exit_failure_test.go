@@ -163,7 +163,7 @@ func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCode
 		wantRetryable bool
 	}{
 		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantRetryable: true},
-		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMissingExecutable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sequence := []string{}
@@ -202,7 +202,7 @@ func TestScriptWrapProvider_Infer_CodexExecutionFailureJSONLogsExcludeCommandOut
 		wantMessage string
 	}{
 		{name: "timeout", err: context.DeadlineExceeded, wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Provider request timed out."},
-		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMisconfigured, wantMessage: "Provider command could not be started."},
+		{name: "command start", err: exec.ErrNotFound, wantReason: interfaces.WorkFailureTypeMissingExecutable, wantMessage: "Provider executable could not be found."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var output bytes.Buffer
@@ -795,6 +795,8 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 		{name: "Timeout_IsRetryable", errorType: interfaces.WorkFailureTypeTimeout, wantFamily: interfaces.WorkFailureFamilyRetryable},
 		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
 		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "MissingExecutable_IsTerminal", errorType: interfaces.WorkFailureTypeMissingExecutable, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "CommandLineTooLong_IsTerminal", errorType: interfaces.WorkFailureTypeCommandLineTooLong, wantFamily: interfaces.WorkFailureFamilyTerminal},
 	}
 
 	for _, tc := range testCases {
@@ -807,6 +809,22 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 				t.Fatalf("expected Family %q, got %q", tc.wantFamily, err.Family)
 			}
 		})
+	}
+}
+
+func TestNormalizeProviderExitFailure_CursorCommandLineTooLongHasExplicitType(t *testing.T) {
+	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCursor), CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("The command line is too long.\r\n"),
+	}, nil, nil)
+	if providerErr.Type != interfaces.WorkFailureTypeCommandLineTooLong {
+		t.Fatalf("Type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypeCommandLineTooLong)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyTerminal {
+		t.Fatalf("Family = %q, want terminal", providerErr.Family)
+	}
+	if providerErr.Message != "The command line is too long." {
+		t.Fatalf("Message = %q, want bounded Cursor diagnostic", providerErr.Message)
 	}
 }
 
