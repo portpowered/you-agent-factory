@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -58,6 +59,49 @@ func assertGoalQuietLeakContractForbidden(t *testing.T, output string) {
 		if strings.Contains(output, forbidden) {
 			t.Fatalf("output = %q, want no quiet-leak marker %q", output, forbidden)
 		}
+	}
+}
+
+func TestFailureBaseline_NoServer_RunNamedGoalCommandReportsSessionStoppedBeforeReady(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+	restore := withNamedPackagedFactoryRunRoot(t)
+	defer restore()
+
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		if cfg.NamedFactoryName != goal.PackagedFactoryName {
+			t.Fatalf("named factory = %q, want %q", cfg.NamedFactoryName, goal.PackagedFactoryName)
+		}
+		if cfg.InvocationPositionalText == nil || *cfg.InvocationPositionalText != "no-server baseline probe" {
+			t.Fatalf("invocation text = %#v, want no-server baseline probe", cfg.InvocationPositionalText)
+		}
+		return errors.New("factory invocation session stopped before it became ready")
+	}
+
+	var output bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"no-server baseline probe",
+	})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected named goal run to fail when factory session never becomes ready")
+	}
+	want := "factory invocation session stopped before it became ready"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty before invocation starts", output.String())
 	}
 }
 
