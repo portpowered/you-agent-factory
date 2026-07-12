@@ -487,29 +487,12 @@ func validateCanonicalRuntimeFacts(
 	result ResultReadResult,
 	input RuntimeDispatchEventInput,
 ) error {
-	if strings.TrimSpace(session.SessionID) == "" {
-		return fmt.Errorf("map canonical runtime facts: session ID is required")
-	}
-	if strings.TrimSpace(session.OrchestratorKind) == "" {
-		return fmt.Errorf("map canonical runtime facts for session %q: orchestrator kind is required", session.SessionID)
-	}
-	if result.SessionID != "" && result.SessionID != session.SessionID {
-		return fmt.Errorf("map canonical runtime facts for session %q: result session ID %q does not match", session.SessionID, result.SessionID)
+	if err := validateCanonicalSessionFact(session, result); err != nil {
+		return err
 	}
 	for index, dispatch := range input.Dispatches {
-		if strings.TrimSpace(dispatch.ID) == "" {
-			return fmt.Errorf("map canonical runtime facts for session %q: dispatch %d ID is required", session.SessionID, index)
-		}
-		if strings.TrimSpace(string(dispatch.Status)) == "" {
-			return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: status is required", session.SessionID, dispatch.ID)
-		}
-		if strings.TrimSpace(dispatch.DispatchKind) == "" {
-			return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: dispatch kind is required", session.SessionID, dispatch.ID)
-		}
-		for refIndex, ref := range dispatch.ProviderSessionRefs {
-			if strings.TrimSpace(ref.Provider) == "" || strings.TrimSpace(ref.Kind) == "" || strings.TrimSpace(ref.ID) == "" {
-				return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: provider session ref %d requires provider, kind, and ID", session.SessionID, dispatch.ID, refIndex)
-			}
+		if err := validateCanonicalDispatchFact(session.SessionID, index, dispatch); err != nil {
+			return err
 		}
 	}
 	for index, artifact := range input.Artifacts {
@@ -520,6 +503,37 @@ func validateCanonicalRuntimeFacts(
 	for index, checkpoint := range input.CheckpointEvents {
 		if strings.TrimSpace(checkpoint.CheckpointID) == "" {
 			return fmt.Errorf("map canonical runtime facts for session %q: checkpoint %d ID is required", session.SessionID, index)
+		}
+	}
+	return nil
+}
+
+func validateCanonicalSessionFact(session SessionReadResult, result ResultReadResult) error {
+	if strings.TrimSpace(session.SessionID) == "" {
+		return fmt.Errorf("map canonical runtime facts: session ID is required")
+	}
+	if strings.TrimSpace(session.OrchestratorKind) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q: orchestrator kind is required", session.SessionID)
+	}
+	if result.SessionID != "" && result.SessionID != session.SessionID {
+		return fmt.Errorf("map canonical runtime facts for session %q: result session ID %q does not match", session.SessionID, result.SessionID)
+	}
+	return nil
+}
+
+func validateCanonicalDispatchFact(sessionID string, index int, dispatch DispatchSummary) error {
+	if strings.TrimSpace(dispatch.ID) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q: dispatch %d ID is required", sessionID, index)
+	}
+	if strings.TrimSpace(string(dispatch.Status)) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: status is required", sessionID, dispatch.ID)
+	}
+	if strings.TrimSpace(dispatch.DispatchKind) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: dispatch kind is required", sessionID, dispatch.ID)
+	}
+	for refIndex, ref := range dispatch.ProviderSessionRefs {
+		if strings.TrimSpace(ref.Provider) == "" || strings.TrimSpace(ref.Kind) == "" || strings.TrimSpace(ref.ID) == "" {
+			return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: provider session ref %d requires provider, kind, and ID", sessionID, dispatch.ID, refIndex)
 		}
 	}
 	return nil
