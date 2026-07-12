@@ -165,6 +165,19 @@ func composeDurableExecution(
 	)
 }
 
+func composePetriRecordingRuntimeBuild(
+	build *runtimebuild.Service,
+	execution factorysessionexecution.Service,
+) (*runtimebuild.Service, error) {
+	recorder, ok := execution.(interface {
+		RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("compose factory core: durable execution owner does not record Petri mutations")
+	}
+	return build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations), nil
+}
+
 var _ factory.APIFactory = (*FactoryService)(nil)
 var _ factory.WorkMover = (*FactoryService)(nil)
 var _ apisurface.ModelAPI = (*FactoryService)(nil)

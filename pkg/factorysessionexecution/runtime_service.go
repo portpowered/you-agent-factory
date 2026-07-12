@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -764,7 +765,7 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 	if len(mutations) == 0 {
 		return nil
 	}
-	if _, err := s.snapshotSessionState(id); err != nil {
+	if _, err := s.snapshotSessionState(id); err != nil && !errors.Is(err, ErrSessionNotFound) {
 		return err
 	}
 
@@ -772,14 +773,19 @@ func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
 	defer s.mu.Unlock()
 	state, ok := s.sessions[id]
 	if !ok {
-		return ErrSessionNotFound
+		initial := projectPetriRunningSessionState(id, s.now())
+		state = &initial
 	}
 	candidate := cloneRuntimeSessionState(state)
 	candidate.petriMutations = append(candidate.petriMutations, clonePetriMutations(mutations)...)
 	if err := s.persistSessionSnapshot(candidate); err != nil {
 		return err
 	}
-	*state = candidate
+	if ok {
+		*state = candidate
+	} else {
+		s.sessions[id] = &candidate
+	}
 	return nil
 }
 

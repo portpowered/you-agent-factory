@@ -46,7 +46,7 @@ func (s DirectoryStore) Load(sessionID string) ([]byte, error) {
 	return LoadBytes(s.Dir, sessionID)
 }
 
-var durableSessionIDPattern = regexp.MustCompile(`^dur-sess-[a-f0-9]{32}$`)
+var durableSessionIDPattern = regexp.MustCompile(`^(dur-sess-[a-f0-9]{32}|~default|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$`)
 
 // DirForProjectRoot returns the project-local durable session persistence directory.
 func DirForProjectRoot(projectRoot string) string {

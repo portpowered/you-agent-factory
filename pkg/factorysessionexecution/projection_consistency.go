@@ -9,6 +9,25 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+// projectPetriRunningSessionState initializes the canonical read model owned by
+// Factory Session execution before the first typed Petri mutation is recorded.
+func projectPetriRunningSessionState(sessionID string, startedAt time.Time) runtimeSessionState {
+	session := SessionReadResult{
+		SessionID: sessionID, Status: LifecycleStatusRunning,
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
+		Usage:            EmptySessionUsage(), ResultSummary: &ResultSummary{ResultStatus: string(ResultStatusNotReady)},
+		Lifecycle: &LifecycleTimestamps{StartedAt: &startedAt}, Links: InspectionLinksForSession(sessionID, true),
+	}
+	result := ResultReadResult{
+		SessionID: sessionID, Mode: ResultModeFinal, ResultStatus: ResultStatusNotReady,
+		SessionStatus: LifecycleStatusRunning,
+		Availability:  &ResultAvailabilityDetail{Reason: "RESULT_NOT_READY", Message: "Session is still running.", Retryable: true},
+	}
+	state := runtimeSessionState{session: session, result: result}
+	state.events = BuildCanonicalRuntimeSessionEvents(session, result, RuntimeDispatchEventInput{})
+	return state
+}
+
 // SessionProjectionEventKinds lists canonical event types that project durable
 // session lifecycle, result, dispatch, artifact, phase, checkpoint, and budget state.
 var SessionProjectionEventKinds = []string{

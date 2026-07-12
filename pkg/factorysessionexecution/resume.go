@@ -832,6 +832,9 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 }
 
 func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
+	if len(state.petriMutations) > 0 {
+		return true
+	}
 	if IsTerminalLifecycleStatus(state.session.Status) {
 		return true
 	}

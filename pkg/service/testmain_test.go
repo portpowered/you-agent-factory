@@ -15,6 +15,8 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -786,6 +788,48 @@ func TestBuildFactoryService_RecordModeRecordsSubmittedWorkAtEngineTick(t *testi
 	}
 	if completion.Event.Context.Tick < dispatch.Event.Context.Tick {
 		t.Fatalf("completion observed tick = %d, want no earlier than dispatch tick %d", completion.Event.Context.Tick, dispatch.Event.Context.Tick)
+	}
+}
+
+func TestBuildFactoryService_PetriMutationsReloadThroughComposedDurableOwner(t *testing.T) {
+	dir := t.TempDir()
+	executionDir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	workFile := filepath.Join(dir, "petri-owner-work.json")
+	writeWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+		WorkTypeID: "task", Name: "petri-owner", TraceID: "trace-petri-owner",
+	})
+	cfg := &FactoryServiceConfig{
+		Dir: dir, ExecutionBaseDir: executionDir, WorkFile: workFile,
+		MockWorkersConfig: factoryconfig.NewEmptyMockWorkersConfig(), Logger: zap.NewNop(),
+	}
+	svc, err := BuildFactoryService(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := svc.Run(ctx); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, err := svc.durableExecution.GetSession(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("live durable GetSession: %v", err)
+	}
+	if entries, err := os.ReadDir(runtimepersist.DirForProjectRoot(executionDir)); err != nil || len(entries) == 0 {
+		t.Fatalf("persisted Factory Session entries = %v, err = %v", entries, err)
+	}
+
+	reloaded, err := composeDurableExecution(cfg, FactoryServiceRoot{FactoryRootDir: dir}, svc.clock)
+	if err != nil {
+		t.Fatalf("compose reloaded durable execution: %v", err)
+	}
+	session, err := reloaded.GetSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetSession after production restart: %v", err)
+	}
+	if session.OrchestratorKind != interfaces.OrchestratorKindPetri || session.Status != factorysessionexecution.LifecycleStatusRunning {
+		t.Fatalf("reloaded Petri session = %#v", session)
 	}
 }
 

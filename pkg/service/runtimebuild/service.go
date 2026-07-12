@@ -31,10 +31,11 @@ type BundleBuilder func(ctx context.Context, spec SessionBuildSpec) (any, error)
 
 // Service owns the single runtime build path for session open and post-save activation.
 type Service struct {
-	cfg        Config
-	clock      factory.Clock
-	baseLogger *zap.Logger
-	build      BundleBuilder
+	cfg                   Config
+	clock                 factory.Clock
+	baseLogger            *zap.Logger
+	build                 BundleBuilder
+	petriMutationRecorder factory.PetriMutationRecorder
 }
 
 // New constructs a runtime-build collaborator with explicit dependencies.
@@ -47,10 +48,27 @@ func New(cfg Config, clock factory.Clock, baseLogger *zap.Logger, build BundleBu
 	}
 }
 
+// WithPetriMutationRecorder returns a runtime-build service that installs the
+// canonical Factory Session recorder on every factory it constructs.
+func (s *Service) WithPetriMutationRecorder(recorder factory.PetriMutationRecorder) *Service {
+	if s == nil {
+		return nil
+	}
+	configured := *s
+	configured.petriMutationRecorder = recorder
+	return &configured
+}
+
 // Build builds a runtime bundle from an immutable session build spec.
 func (s *Service) Build(ctx context.Context, spec SessionBuildSpec) (any, error) {
 	if s == nil || s.build == nil {
 		return nil, fmt.Errorf("runtime build service is required")
+	}
+	if s.petriMutationRecorder != nil {
+		spec.AdditionalFactoryOpts = append(
+			append([]factory.FactoryOption(nil), spec.AdditionalFactoryOpts...),
+			factory.WithPetriMutationRecorder(s.petriMutationRecorder),
+		)
 	}
 	return s.build(ctx, spec)
 }

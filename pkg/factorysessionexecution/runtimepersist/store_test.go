@@ -32,3 +32,28 @@ func TestSaveLoadBytes_RoundTripsSnapshotPayload(t *testing.T) {
 		t.Fatalf("stat persisted snapshot: %v", err)
 	}
 }
+
+func TestSaveLoadBytes_AcceptsCanonicalFactorySessionIdentifiers(t *testing.T) {
+	for _, sessionID := range []string{
+		"~default",
+		"12345678-1234-1234-1234-1234567890ab",
+	} {
+		t.Run(sessionID, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := runtimepersist.SaveBytes(dir, sessionID, []byte(`{"status":"RUNNING"}`)); err != nil {
+				t.Fatalf("SaveBytes: %v", err)
+			}
+			if _, err := runtimepersist.LoadBytes(dir, sessionID); err != nil {
+				t.Fatalf("LoadBytes: %v", err)
+			}
+		})
+	}
+}
+
+func TestSaveBytes_RejectsUnsafeSessionIdentifiers(t *testing.T) {
+	for _, sessionID := range []string{"../escape", "session/child", "arbitrary"} {
+		if err := runtimepersist.SaveBytes(t.TempDir(), sessionID, []byte(`{}`)); err == nil {
+			t.Fatalf("SaveBytes(%q) succeeded", sessionID)
+		}
+	}
+}
