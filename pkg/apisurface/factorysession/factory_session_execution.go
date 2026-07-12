@@ -149,10 +149,6 @@ func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, 
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
-	result, err := execution.ListDispatches(ctx, sessionID)
-	if err != nil {
-		return factoryapi.ListFactorySessionDispatchesResponse{}, err
-	}
 	filters := factorysessionexecution.DispatchFilters{}
 	if params.Phase != nil {
 		filters.Phase = string(*params.Phase)
@@ -160,7 +156,7 @@ func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, 
 	if params.Status != nil {
 		filters.Status = factorysessionexecution.DispatchStatus(*params.Status)
 	}
-	result, err = factorysessionexecution.FilterDispatches(result, filters)
+	result, err := factorysessionexecution.QueryDispatches(ctx, execution, sessionID, filters)
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}

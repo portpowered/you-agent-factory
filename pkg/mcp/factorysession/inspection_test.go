@@ -68,7 +68,11 @@ func TestMockClient_ListDispatches_FiltersAndRejectsInvalidStatus(t *testing.T) 
 		t.Fatalf("StartSync: %v", err)
 	}
 
-	empty, err := client.ListDispatches(mcpfactorysession.ListDispatchesInput{SessionID: row.SessionID, Phase: "unknown"})
+	empty, err := client.ListDispatches(mcpfactorysession.ListDispatchesInput{
+		SessionID: row.SessionID,
+		Phase:     "unknown",
+		Status:    "COMPLETED",
+	})
 	if err != nil || empty.Error != nil || empty.Result == nil || len(empty.Result.Dispatches) != 0 {
 		t.Fatalf("unknown phase response = %#v, %v", empty, err)
 	}

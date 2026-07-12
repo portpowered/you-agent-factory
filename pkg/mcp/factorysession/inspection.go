@@ -28,13 +28,7 @@ func ListDispatches(
 	}
 
 	sessionID := input.SessionID
-	result, err := service.ListDispatches(context.Background(), sessionID)
-	if err != nil {
-		envelope := readErrorEnvelope(sessionID, err)
-		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
-	}
-
-	result, err = factorysessionexecution.FilterDispatches(result, factorysessionexecution.DispatchFilters{
+	result, err := factorysessionexecution.QueryDispatches(context.Background(), service, sessionID, factorysessionexecution.DispatchFilters{
 		Phase: input.Phase, Status: factorysessionexecution.DispatchStatus(input.Status),
 	})
 	if err != nil {

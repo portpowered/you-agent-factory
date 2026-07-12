@@ -1,6 +1,7 @@
 package factorysessionexecution
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -346,6 +347,22 @@ func FilterDispatches(result ListDispatchesResult, filters DispatchFilters) (Lis
 	}
 	result.Dispatches = filtered
 	return result, nil
+}
+
+// QueryDispatches is the canonical filtered Dispatch read used by every
+// transport. Keeping the read and filter request together prevents callers
+// from independently interpreting an unfiltered session response.
+func QueryDispatches(
+	ctx context.Context,
+	service Service,
+	sessionID string,
+	filters DispatchFilters,
+) (ListDispatchesResult, error) {
+	result, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		return ListDispatchesResult{}, err
+	}
+	return FilterDispatches(result, filters)
 }
 
 func isCanonicalDispatchStatus(status DispatchStatus) bool {

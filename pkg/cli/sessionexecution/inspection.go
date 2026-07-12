@@ -45,12 +45,7 @@ func RunDispatches(ctx context.Context, cfg DispatchesConfig) error {
 		return err
 	}
 
-	listed, err := service.ListDispatches(ctx, sessionID)
-	if err != nil {
-		return writeRunError(cfg.Output, cfg.JSON, err)
-	}
-
-	listed, err = factorysessionexecution.FilterDispatches(listed, factorysessionexecution.DispatchFilters{
+	listed, err := factorysessionexecution.QueryDispatches(ctx, service, sessionID, factorysessionexecution.DispatchFilters{
 		Phase: cfg.Phase, Status: factorysessionexecution.DispatchStatus(cfg.Status),
 	})
 	if err != nil {
