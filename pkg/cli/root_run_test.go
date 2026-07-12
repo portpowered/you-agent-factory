@@ -1511,6 +1511,16 @@ func materializedGoalDir(homeDir string) string {
 	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
 }
 
+func assertFreshGoalMaterializationHasNoEncodedLeaf(t *testing.T, homeDir string) {
+	t.Helper()
+
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	encodedDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	if _, err := os.Stat(encodedDir); !os.IsNotExist(err) {
+		t.Fatalf("fresh init must not create encoded goal leaf at %s: stat %v", encodedDir, err)
+	}
+}
+
 func executeNamedGoalRun(t *testing.T, root *cobra.Command) {
 	t.Helper()
 
@@ -1547,6 +1557,7 @@ func assertBuiltInGoalFirstUseResolution(t *testing.T, got runcli.RunConfig, hom
 		t.Fatalf("materialized factory dir = %q, want %q", got.NamedFactoryResolution.FactoryDir, wantMaterializedDir)
 	}
 	assertMaterializedGoalSplitLayout(t, wantMaterializedDir)
+	assertFreshGoalMaterializationHasNoEncodedLeaf(t, homeDir)
 }
 
 func assertMaterializedGoalSplitLayout(t *testing.T, materializedDir string) {

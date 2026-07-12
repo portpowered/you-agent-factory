@@ -235,6 +235,11 @@ func TestNamedGoalRun_RealCLIMaterializesFreshFactoryAndPreservesCustomerEditsOn
 		t.Fatalf("first stdout = %q, want only primary result %q", stdout, packagedGoalMockWorkerAcceptedSummary)
 	}
 	assertNamedGoalMaterializedSplitLayout(t, materializedDir)
+	globalFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	encodedGoalDir := filepath.Join(globalFactoriesRoot, "@you%2Fgoal")
+	if _, err := os.Stat(encodedGoalDir); !os.IsNotExist(err) {
+		t.Fatalf("fresh materialization must not create encoded goal leaf at %s: stat %v", encodedGoalDir, err)
+	}
 
 	workerPath := filepath.Join(materializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
 	editedWorkerBody := "customer edited goal executor after first materialization\n"
