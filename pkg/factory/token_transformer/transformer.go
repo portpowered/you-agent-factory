@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // Transformer centralizes token conversions for factory submit, routing, and spawn flows.
@@ -53,6 +54,7 @@ type OutputTokenInput struct {
 	Output              string
 	WorkPropagationMode interfaces.WorkPropagationMode
 	WorkstationName     string
+	WorkstationType     string
 	Outcome             interfaces.WorkOutcome
 	TransitionID        string
 	Error               string
@@ -219,8 +221,27 @@ func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenI
 		if in.Output != "" {
 			color.Payload = []byte(in.Output)
 		}
+		if in.Outcome == interfaces.OutcomeAccepted && in.WorkstationType != interfaces.WorkstationTypeClassify {
+			if err := applyAcceptedResponseContent(color, in.Output); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
+}
+
+func applyAcceptedResponseContent(color *interfaces.TokenColor, output string) error {
+	if color == nil {
+		return nil
+	}
+	content, err := workcontent.ContentFromWorkerOutput(output)
+	if err != nil {
+		return fmt.Errorf("shape accepted workstation response content: %w", err)
+	}
+	if len(content) > 0 {
+		color.Content = interfaces.CloneWorkContentParts(content)
+	}
+	return nil
 }
 
 func applyOutputInvocationArguments(color *interfaces.TokenColor, inputColors []interfaces.TokenColor) {

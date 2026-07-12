@@ -115,6 +115,10 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
@@ -131,6 +135,9 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 	}
 	if string(token.Color.Payload) != "worker-output" {
 		t.Fatalf("payload = %q, want worker-output", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "worker-output" {
+		t.Fatalf("content = %#v, want response content not submitted request", token.Color.Content)
 	}
 }
 
@@ -469,5 +476,8 @@ func TestOutputToken_OutputAsPayloadExplicit_UsesWorkerOutput(t *testing.T) {
 	}
 	if string(token.Color.Payload) != "worker-output" {
 		t.Fatalf("payload = %q, want worker-output", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "worker-output" {
+		t.Fatalf("content = %#v, want response content not submitted request", token.Color.Content)
 	}
 }

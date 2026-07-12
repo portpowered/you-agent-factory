@@ -26,6 +26,39 @@ func TestResolvePrimaryResult_SubmittedWorkTerminalFallbackReturnsSubmittedTermi
 	assertPrimaryResultSelection(t, got, invocationReturnPolicySubmittedWorkTerminal, rootTerminal)
 }
 
+func TestResolvePrimaryResult_SubmittedWorkTerminalReturnsAcceptedResponseContent(t *testing.T) {
+	state := invocationWorldStateFixture()
+	requestContent := []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "submitted request text",
+	}}
+	responseContent := []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "accepted workstation response",
+	}}
+	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
+	rootInitial.Content = requestContent
+	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
+	rootTerminal.Content = responseContent
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal)
+	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
+
+	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+	if len(got.PrimaryResult) != 1 || got.PrimaryResult[0].Text != "accepted workstation response" {
+		t.Fatalf("primary result = %#v, want accepted response content", got.PrimaryResult)
+	}
+	if got.PrimaryResult[0].Text == requestContent[0].Text {
+		t.Fatalf("primary result echoed submitted request text")
+	}
+}
+
 func TestResolvePrimaryResult_ExplicitPolicyReturnsConfiguredTerminalContentInInvocationScope(t *testing.T) {
 	state := invocationWorldStateFixture()
 	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")

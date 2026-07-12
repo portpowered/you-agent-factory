@@ -474,6 +474,10 @@ func (f calculateMutationsFixture) calculateWithWorkstation(
 func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
 
 	mutations, err := fixture.calculateWithWorkstation(
@@ -495,6 +499,9 @@ func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *t
 	}
 	if string(mutations[0].NewToken.Color.Payload) != "worker-output" {
 		t.Fatalf("payload = %q, want worker-output", mutations[0].NewToken.Color.Payload)
+	}
+	if len(mutations[0].NewToken.Color.Content) != 1 || mutations[0].NewToken.Color.Content[0].Text != "worker-output" {
+		t.Fatalf("content = %#v, want worker response content", mutations[0].NewToken.Color.Content)
 	}
 }
 
