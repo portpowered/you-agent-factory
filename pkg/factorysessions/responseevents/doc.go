@@ -3,6 +3,7 @@
 //
 // These records are intentionally separate from factoryapi.FactoryEvent and must
 // not be projected into canonical factory replay. Later transports, adapters,
-// and consumers share this envelope, kind, phase, provenance, and payload
-// contract without depending on provider-native schemas.
+// and consumers share this envelope, kind, phase, provenance, typed payload,
+// capability, and validation contract without depending on provider-native
+// schemas. Use ValidateEvent to reject invalid kind/phase/payload combinations.
 package responseevents
