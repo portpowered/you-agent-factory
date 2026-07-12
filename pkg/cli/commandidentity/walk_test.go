@@ -135,19 +135,21 @@ func TestWalk_DuplicatePathFails(t *testing.T) {
 }
 
 func TestWalk_DoesNotMutateCommandTree(t *testing.T) {
-	root := newSyntheticCommandTree()
-	before, err := commandidentity.Walk(root)
+	oldSorting := cobra.EnableCommandSorting
+	cobra.EnableCommandSorting = false
+	t.Cleanup(func() { cobra.EnableCommandSorting = oldSorting })
+
+	root := newUnsortedChildOrderTree()
+	beforeOrder := childRegistrationOrder(root)
+
+	_, err := commandidentity.Walk(root)
 	if err != nil {
-		t.Fatalf("first Walk() error = %v", err)
+		t.Fatalf("Walk() error = %v", err)
 	}
 
-	after, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("second Walk() error = %v", err)
-	}
-
-	if !reflect.DeepEqual(before.Commands, after.Commands) {
-		t.Fatal("repeated walks changed emitted command records; walker mutated the tree or inventory shape")
+	afterOrder := childRegistrationOrder(root)
+	if !reflect.DeepEqual(beforeOrder, afterOrder) {
+		t.Fatalf("walker mutated child registration order:\nbefore=%#v\nafter=%#v", beforeOrder, afterOrder)
 	}
 }
 
@@ -174,6 +176,34 @@ func TestWalk_ProducesIdenticalJSONOnRepeat(t *testing.T) {
 
 	if !bytes.Equal(firstJSON, secondJSON) {
 		t.Fatalf("repeated walks produced different JSON:\nfirst=%s\nsecond=%s", firstJSON, secondJSON)
+	}
+}
+
+func newUnsortedChildOrderTree() *cobra.Command {
+	root := &cobra.Command{Use: "order"}
+	root.AddCommand(
+		&cobra.Command{Use: "z"},
+		&cobra.Command{Use: "a"},
+		&cobra.Command{Use: "m"},
+	)
+	return root
+}
+
+func childRegistrationOrder(root *cobra.Command) map[string][]string {
+	order := make(map[string][]string)
+	captureChildRegistrationOrder(root, order)
+	return order
+}
+
+func captureChildRegistrationOrder(cmd *cobra.Command, order map[string][]string) {
+	children := cmd.Commands()
+	names := make([]string, len(children))
+	for i, child := range children {
+		names[i] = child.Name()
+	}
+	order[cmd.CommandPath()] = names
+	for _, child := range children {
+		captureChildRegistrationOrder(child, order)
 	}
 }
 

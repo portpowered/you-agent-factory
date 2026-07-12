@@ -37,7 +37,7 @@ func Walk(root *cobra.Command) (Inventory, error) {
 func collectCommandRecords(cmd *cobra.Command) []CommandRecord {
 	records := []CommandRecord{recordCommand(cmd)}
 
-	children := cmd.Commands()
+	children := append([]*cobra.Command(nil), cmd.Commands()...)
 	sort.Slice(children, func(i, j int) bool {
 		return children[i].CommandPath() < children[j].CommandPath()
 	})

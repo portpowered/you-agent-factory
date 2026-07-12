@@ -9,12 +9,13 @@ import (
 )
 
 type commandTreeNode struct {
-	Name    string
-	Aliases []string
-	Hidden  bool
-	Short   string
-	Long    string
-	Example string
+	Name       string
+	Aliases    []string
+	ChildNames []string
+	Hidden     bool
+	Short      string
+	Long       string
+	Example    string
 }
 
 type commandTreeState struct {
@@ -38,19 +39,22 @@ func captureCommandTreeNode(cmd *cobra.Command, state commandTreeState) {
 	}
 	sort.Strings(aliases)
 
-	state.Commands[path] = commandTreeNode{
-		Name:    cmd.Name(),
-		Aliases: aliases,
-		Hidden:  cmd.Hidden,
-		Short:   cmd.Short,
-		Long:    cmd.Long,
-		Example: cmd.Example,
+	children := cmd.Commands()
+	childNames := make([]string, len(children))
+	for i, child := range children {
+		childNames[i] = child.Name()
 	}
 
-	children := cmd.Commands()
-	sort.Slice(children, func(i, j int) bool {
-		return children[i].CommandPath() < children[j].CommandPath()
-	})
+	state.Commands[path] = commandTreeNode{
+		Name:       cmd.Name(),
+		Aliases:    aliases,
+		ChildNames: childNames,
+		Hidden:     cmd.Hidden,
+		Short:      cmd.Short,
+		Long:       cmd.Long,
+		Example:    cmd.Example,
+	}
+
 	for _, child := range children {
 		captureCommandTreeNode(child, state)
 	}
@@ -85,6 +89,14 @@ func commandTreeStatesEqual(before, after commandTreeState) error {
 		}
 		if !reflect.DeepEqual(beforeNode.Aliases, afterNode.Aliases) {
 			return fmt.Errorf("command %q aliases changed from %#v to %#v", path, beforeNode.Aliases, afterNode.Aliases)
+		}
+		if !reflect.DeepEqual(beforeNode.ChildNames, afterNode.ChildNames) {
+			return fmt.Errorf(
+				"command %q child registration order changed from %#v to %#v",
+				path,
+				beforeNode.ChildNames,
+				afterNode.ChildNames,
+			)
 		}
 		if beforeNode.Hidden != afterNode.Hidden {
 			return fmt.Errorf("command %q visibility changed from hidden=%t to hidden=%t", path, beforeNode.Hidden, afterNode.Hidden)
