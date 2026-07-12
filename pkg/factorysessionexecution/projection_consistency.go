@@ -499,6 +499,9 @@ func (r *sessionProjectionReducer) applySessionResultUpdated(envelope canonicalF
 	}
 	r.mergeSessionIdentity(envelope.Context)
 	r.applyResultStatus(payload.ResultStatus, summaryTextFromWorkContent(payload.ResultSummary))
+	if len(payload.ResultSummary) > 0 {
+		r.result.PrimaryResult = append(json.RawMessage(nil), payload.ResultSummary...)
+	}
 	r.replaceArtifactStubs(payload.ArtifactIDs)
 	if payload.Availability != nil {
 		r.resultAvailability = &ResultAvailabilityDetail{
@@ -697,6 +700,7 @@ func (r *sessionProjectionReducer) finalize() {
 	r.result = ResultReadResult{
 		SessionID:     r.session.SessionID,
 		SessionStatus: r.session.Status,
+		PrimaryResult: append(json.RawMessage(nil), r.result.PrimaryResult...),
 		ArtifactIDs:   artifactIDsFromRefSummaries(r.session.ArtifactRefs),
 	}
 	if r.session.ResultSummary != nil {

@@ -1531,6 +1531,100 @@ func TestReplaySessionProjection_EquivalentOrchestratorsRestoreArtifactsAndLates
 	}
 }
 
+func TestReplaySessionProjection_EquivalentOrchestratorsPreserveResultAvailability(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 22, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name             string
+		sessionStatus    LifecycleStatus
+		resultStatus     ResultStatus
+		primaryResult    json.RawMessage
+		precedingPartial bool
+	}{
+		{
+			name:          "partial result without terminal result",
+			sessionStatus: LifecycleStatusRunning,
+			resultStatus:  ResultStatusPartial,
+			primaryResult: json.RawMessage(`[{"type":"text","text":"partial output"}]`),
+		},
+		{
+			name:          "terminal result",
+			sessionStatus: LifecycleStatusSucceeded,
+			resultStatus:  ResultStatusFinal,
+			primaryResult: json.RawMessage(`[{"type":"text","text":"final output"}]`),
+		},
+		{
+			name:             "terminal result supersedes partial result",
+			sessionStatus:    LifecycleStatusSucceeded,
+			resultStatus:     ResultStatusFinal,
+			primaryResult:    json.RawMessage(`[{"type":"text","text":"final output after partial"}]`),
+			precedingPartial: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var sharedResult *ResultReadResult
+			for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+				sessionID := "result-parity-" + strings.ToLower(orchestratorKind)
+				session := SessionReadResult{
+					SessionID:        sessionID,
+					Status:           test.sessionStatus,
+					OrchestratorKind: orchestratorKind,
+					Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+				}
+				if IsTerminalLifecycleStatus(test.sessionStatus) {
+					finishedAt := startedAt.Add(time.Minute)
+					session.Lifecycle.FinishedAt = &finishedAt
+				}
+				live := ResultReadResult{
+					SessionID:     sessionID,
+					SessionStatus: test.sessionStatus,
+					ResultStatus:  test.resultStatus,
+					PrimaryResult: test.primaryResult,
+				}
+				events := BuildCanonicalRuntimeSessionEvents(session, live)
+				if test.precedingPartial {
+					partialEvent := canonicalTypedInternalEvent(t, "SESSION_RESULT_UPDATED", sessionID, map[string]any{
+						"resultStatus":  "PARTIAL",
+						"resultSummary": []map[string]any{{"type": "text", "text": "earlier partial output"}},
+					})
+					events = append(events[:1], append([]json.RawMessage{partialEvent}, events[1:]...)...)
+				}
+
+				replayedSession, replayedResult, err := ReplaySessionProjection(events)
+				if err != nil {
+					t.Fatalf("ReplaySessionProjection(%s): %v", orchestratorKind, err)
+				}
+				if replayedResult.ResultStatus != test.resultStatus || replayedResult.SessionStatus != test.sessionStatus {
+					t.Fatalf("%s result availability = (%q, %q), want (%q, %q)", orchestratorKind, replayedResult.ResultStatus, replayedResult.SessionStatus, test.resultStatus, test.sessionStatus)
+				}
+				if !jsonEqual(replayedResult.PrimaryResult, test.primaryResult) {
+					t.Fatalf("%s primary result = %s, want %s", orchestratorKind, replayedResult.PrimaryResult, test.primaryResult)
+				}
+				if replayedSession.ResultSummary == nil || replayedSession.ResultSummary.ResultStatus != string(test.resultStatus) {
+					t.Fatalf("%s session result summary = %#v, want %q", orchestratorKind, replayedSession.ResultSummary, test.resultStatus)
+				}
+
+				comparable := replayedResult
+				comparable.SessionID = ""
+				if sharedResult == nil {
+					sharedResult = &comparable
+				} else if !reflect.DeepEqual(*sharedResult, comparable) {
+					t.Fatalf("shared result projection differs by orchestrator:\nfirst: %#v\n%s: %#v", *sharedResult, orchestratorKind, comparable)
+				}
+			}
+		})
+	}
+}
+
+func jsonEqual(left, right json.RawMessage) bool {
+	var leftValue any
+	var rightValue any
+	return json.Unmarshal(left, &leftValue) == nil &&
+		json.Unmarshal(right, &rightValue) == nil &&
+		reflect.DeepEqual(leftValue, rightValue)
+}
+
 func canonicalTypedInternalEvent(t *testing.T, eventType, sessionID string, payload any) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
