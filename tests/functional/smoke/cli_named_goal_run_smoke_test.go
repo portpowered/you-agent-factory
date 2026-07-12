@@ -192,7 +192,7 @@ func TestNamedGoalRun_RealCLIMaterializesFreshFactoryAndPreservesCustomerEditsOn
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	materializedDir := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you%2Fgoal")
+	materializedDir := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
 	if _, err := os.Stat(materializedDir); !os.IsNotExist(err) {
 		t.Fatalf("fresh home should not already contain materialized @you/goal factory: stat %v", err)
 	}

@@ -130,7 +130,7 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInGoalIntoGlobalRoot(t 
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(builtin goal): %v", err)
 	}
 
-	wantDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	wantDir := filepath.Join(globalRoot, "@you", "goal")
 	assertNamedFactoryResolution(t, resolution, "@you/goal", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
 	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionNone {
 		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionNone)
@@ -155,7 +155,7 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInIntoGlobalRoot(t *tes
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(builtin): %v", err)
 	}
 
-	wantDir := filepath.Join(globalRoot, "@you%2Ftts")
+	wantDir := filepath.Join(globalRoot, "@you", "tts")
 	assertNamedFactoryResolution(t, resolution, "@you/tts", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
 	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionNone {
 		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionNone)
@@ -328,7 +328,7 @@ func TestResolveNamedFactoryAcrossRoots_UsesEditedMaterializedBuiltInOnNextLoad(
 func TestResolveNamedFactoryAcrossRoots_ReportsCorruptMaterializedBuiltInTarget(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
-	corruptDir := filepath.Join(globalRoot, "@you%2Ftts")
+	corruptDir := filepath.Join(globalRoot, "@you", "tts")
 	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(corrupt builtin dir): %v", err)
 	}
@@ -345,7 +345,7 @@ func TestResolveNamedFactoryAcrossRoots_ReportsCorruptMaterializedBuiltInTarget(
 func TestResolveNamedFactoryAcrossRoots_ReportsCorruptProjectEditableGoalTarget(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
-	corruptDir := filepath.Join(projectRoot, "@you%2Fgoal")
+	corruptDir := filepath.Join(projectRoot, "@you", "goal")
 	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(corrupt project goal dir): %v", err)
 	}
@@ -366,7 +366,7 @@ func TestResolveNamedFactoryAcrossRoots_ReportsCorruptProjectEditableGoalTarget(
 func TestResolveNamedFactoryAcrossRoots_ReportsCorruptGlobalEditableGoalTarget(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
-	corruptDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	corruptDir := filepath.Join(globalRoot, "@you", "goal")
 	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(corrupt global goal dir): %v", err)
 	}

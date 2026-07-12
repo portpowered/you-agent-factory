@@ -81,7 +81,7 @@ func TestFailureBaseline_NamedPath_GoalLayoutSegmentEncodesSlash(t *testing.T) {
 	}
 }
 
-func TestFailureBaseline_NamedPath_GoalMaterializationUsesPercentEncodedLayoutSegment(t *testing.T) {
+func TestFailureBaseline_NamedPath_GoalMaterializationUsesHierarchicalLayout(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
 
@@ -93,12 +93,12 @@ func TestFailureBaseline_NamedPath_GoalMaterializationUsesPercentEncodedLayoutSe
 		t.Fatalf("resolution name = %q, want @you/goal", resolution.Name)
 	}
 
-	wantDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	wantDir := filepath.Join(globalRoot, "@you", "goal")
 	if resolution.FactoryDir != wantDir {
-		t.Fatalf("factory dir = %q, want percent-encoded layout %q", resolution.FactoryDir, wantDir)
+		t.Fatalf("factory dir = %q, want hierarchical layout %q", resolution.FactoryDir, wantDir)
 	}
-	if !strings.Contains(resolution.FactoryDir, "@you%2Fgoal") {
-		t.Fatalf("factory dir = %q, want customer-visible @you%%2Fgoal segment", resolution.FactoryDir)
+	if strings.Contains(resolution.FactoryDir, "%2F") {
+		t.Fatalf("factory dir = %q, must not use percent-encoded scoped leaf names", resolution.FactoryDir)
 	}
 	if _, statErr := os.Stat(wantDir); statErr != nil {
 		t.Fatalf("materialized factory dir %q: %v", wantDir, statErr)

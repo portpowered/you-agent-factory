@@ -145,18 +145,39 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 			continue
 		}
 		name := child.Name()
-		if isReservedNamedFactoryListDir(name) {
+		if isReservedNamedFactoryListDir(name) || isNamedFactoryStagingDir(name) {
 			continue
 		}
 		factoryDir := filepath.Join(rootDir, name)
-		if err := requireFactoryConfig(factoryDir); err != nil {
+		if err := requireFactoryConfig(factoryDir); err == nil {
+			displayName, err := NamedFactoryLayoutSegmentToName(name)
+			if err != nil {
+				continue
+			}
+			collector.append(displayName, factoryDir)
 			continue
 		}
-		displayName, err := NamedFactoryLayoutSegmentToName(name)
+		if !strings.HasPrefix(name, scopedNamedFactoryPrefix) {
+			continue
+		}
+		scopeChildren, err := os.ReadDir(factoryDir)
 		if err != nil {
 			continue
 		}
-		collector.append(displayName, factoryDir)
+		for _, scopeChild := range scopeChildren {
+			if !scopeChild.IsDir() || isNamedFactoryStagingDir(scopeChild.Name()) {
+				continue
+			}
+			scopedFactoryDir := filepath.Join(factoryDir, scopeChild.Name())
+			if err := requireFactoryConfig(scopedFactoryDir); err != nil {
+				continue
+			}
+			displayName, err := NamedFactoryNameFromPathSegments([]string{name, scopeChild.Name()})
+			if err != nil {
+				continue
+			}
+			collector.append(displayName, scopedFactoryDir)
+		}
 	}
 
 	entries := collector.entries()
@@ -185,6 +206,10 @@ func validateNamedFactoryListRoot(rootDir string) error {
 
 func isReservedNamedFactoryListDir(name string) bool {
 	return name == interfaces.InputsDir || name == interfaces.WorkersDir || name == interfaces.WorkstationsDir
+}
+
+func isNamedFactoryStagingDir(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.Contains(name, ".staging-")
 }
 
 type namedFactoryListCollector struct {
@@ -242,11 +267,7 @@ func DeleteNamedFactory(rootDir, name string) error {
 		return fmt.Errorf("factory root is required")
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(name)
-	if err != nil {
-		return err
-	}
-	canonicalName, err := NamedFactoryLayoutSegmentToName(segment)
+	canonicalName, err := canonicalNamedFactoryName(name)
 	if err != nil {
 		return err
 	}
@@ -263,13 +284,13 @@ func DeleteNamedFactory(rootDir, name string) error {
 	if current == canonicalName {
 		return fmt.Errorf(
 			"delete factory %q: %w: switch .current-factory to another factory first",
-			segment,
+			canonicalName,
 			ErrNamedFactoryIsCurrent,
 		)
 	}
 
 	if err := os.RemoveAll(factoryDir); err != nil {
-		return fmt.Errorf("delete factory %q: %w", segment, err)
+		return fmt.Errorf("delete factory %q: %w", canonicalName, err)
 	}
 	return nil
 }
