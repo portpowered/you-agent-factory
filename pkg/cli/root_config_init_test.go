@@ -141,3 +141,52 @@ func TestSystemConfigCommand_HelpDistinguishesFactoryConfigTooling(t *testing.T)
 		t.Fatalf("config help missing factory config distinction:\n%s", got)
 	}
 }
+
+func TestConfigInitCommand_DoubleRunIsSuccessfulNoOp(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"config", "init"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("first execute config init: %v", err)
+	}
+
+	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	configBefore, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(config before rerun): %v", err)
+	}
+
+	var stdout bytes.Buffer
+	root = NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"config", "init"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("second execute config init: %v", err)
+	}
+
+	configAfter, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(config after rerun): %v", err)
+	}
+	if string(configAfter) != string(configBefore) {
+		t.Fatalf("config changed on rerun:\nbefore:\n%s\nafter:\n%s", configBefore, configAfter)
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "System config already present at") {
+		t.Fatalf("stdout = %q, want already-present system config message", got)
+	}
+	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+		if !strings.Contains(got, "Packaged factory "+name+" already present at") {
+			t.Fatalf("stdout = %q, want already-present packaged factory message for %q", got, name)
+		}
+	}
+}

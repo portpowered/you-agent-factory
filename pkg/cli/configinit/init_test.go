@@ -111,3 +111,57 @@ func TestInit_UsesProvidedHomeDirWithoutReadingProcessHome(t *testing.T) {
 		t.Fatalf("expected config under provided home: %v", err)
 	}
 }
+
+func TestInit_DoubleRunReportsSkippedOutcomes(t *testing.T) {
+	homeDir := t.TempDir()
+	var stdout bytes.Buffer
+
+	if err := Init(InitConfig{HomeDir: homeDir, Output: &stdout}); err != nil {
+		t.Fatalf("first Init() error = %v", err)
+	}
+	firstOut := stdout.String()
+	if !strings.Contains(firstOut, "Created system config at") {
+		t.Fatalf("first stdout = %q, want created system config message", firstOut)
+	}
+
+	stdout.Reset()
+	if err := Init(InitConfig{HomeDir: homeDir, Output: &stdout}); err != nil {
+		t.Fatalf("second Init() error = %v", err)
+	}
+	secondOut := stdout.String()
+	if !strings.Contains(secondOut, "System config already present at") {
+		t.Fatalf("second stdout = %q, want already-present system config message", secondOut)
+	}
+	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+		if !strings.Contains(secondOut, "Packaged factory "+name+" already present at") {
+			t.Fatalf("second stdout = %q, want already-present packaged factory message for %q", secondOut, name)
+		}
+	}
+}
+
+func TestInit_DoubleRunJSONReportsSkippedOutcomes(t *testing.T) {
+	homeDir := t.TempDir()
+	var stdout bytes.Buffer
+
+	if err := Init(InitConfig{HomeDir: homeDir, JSON: true, Output: &stdout}); err != nil {
+		t.Fatalf("first Init() error = %v", err)
+	}
+
+	stdout.Reset()
+	if err := Init(InitConfig{HomeDir: homeDir, JSON: true, Output: &stdout}); err != nil {
+		t.Fatalf("second Init() error = %v", err)
+	}
+
+	var payload InitResult
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("Unmarshal stdout: %v\n%s", err, stdout.String())
+	}
+	if payload.SystemConfigOutcome != "skipped" {
+		t.Fatalf("systemConfigOutcome = %q, want skipped", payload.SystemConfigOutcome)
+	}
+	for i, factory := range payload.PackagedFactories {
+		if factory.Outcome != "skipped" {
+			t.Fatalf("packagedFactories[%d].Outcome = %q, want skipped", i, factory.Outcome)
+		}
+	}
+}

@@ -105,8 +105,16 @@ primary-result behavior.
   Fresh homes create `~/.you-agent-factory/config.json` through
   `pkg/config/systemconfig.EnsureLocalBackendScope`; existing config files are
   validated with `operatorconfig.LoadFileConfig` and left byte-identical on
-  re-run. Keep `you factory config` factory.json tooling separate from this
-  top-level operator/system initializer.
+  re-run. Packaged defaults materialize through
+  `factoryconfig.EnsureBuiltInNamedFactories`, which skips existing factory
+  directories without rewriting user-edited files and can still create missing
+  catalog entries on later runs. Isolated-home rerun coverage lives in
+  `pkg/config/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
+  `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
+  `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
+  `pkg/cli/configinit/init_test.go` / `pkg/cli/root_config_init_test.go`. Keep
+  `you factory config` factory.json tooling separate from this top-level
+  operator/system initializer.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
