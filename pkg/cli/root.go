@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
@@ -29,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -36,6 +38,7 @@ var runCLI = runcli.Run
 var flattenFactoryConfig = configcli.FlattenFactoryConfig
 var expandFactoryConfig = configcli.ExpandFactoryConfig
 var initFactory = initcmd.Init
+var configInit = configinitcmd.Init
 var submitWork = submitcli.Submit
 var submitBatch = submitcli.SubmitBatch
 var listWork = workcli.List
@@ -126,6 +129,7 @@ func NewRootCommand() *cobra.Command {
 
 	root.AddCommand(
 		newDocsCommand(diagnostics),
+		newSystemConfigCommand(globals, diagnostics),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newMCPCommand(),
@@ -174,6 +178,48 @@ func (opts *cliDiagnosticsOptions) verboseEnabled() bool {
 
 func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
+}
+
+func newSystemConfigCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Initialize operator and system configuration",
+		Long: "Initialize operator and system configuration under the shared home directory.\n\n" +
+			"Subcommands:\n" +
+			"  init  create operator/system config on a fresh home without overwriting existing files\n\n" +
+			"Use `you factory config` to inspect or transform factory.json configuration.",
+		Example: "  # Bootstrap operator/system config on a fresh home.\n" +
+			"  " + cliBinaryName + " config init",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
+			}
+			return cmd.Help()
+		},
+	}
+	configCmd.AddCommand(newSystemConfigInitCommand(globals, diagnostics))
+	return configCmd
+}
+
+func newSystemConfigInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := configinitcmd.InitConfig{}
+
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Create operator/system config on a fresh home",
+		Long: "Create operator/system config at ~/.you-agent-factory/config.json on a fresh home.\n\n" +
+			"Re-running against an existing config file succeeds without rewriting user-edited contents.",
+		Example: "  # Bootstrap operator/system config on a fresh home.\n" +
+			"  " + cliBinaryName + " config init",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			return configInit(cfg)
+		},
+	}
+	return cmd
 }
 
 func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {

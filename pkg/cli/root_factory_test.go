@@ -18,7 +18,6 @@ import (
 )
 
 var removedFactoryConfigCommandPaths = []string{
-	"you config",
 	"you config flatten",
 	"you config expand",
 	"you factory validate",
@@ -26,13 +25,19 @@ var removedFactoryConfigCommandPaths = []string{
 
 func TestFactoryConfigCommand_OldPathsNotRegistered(t *testing.T) {
 	root := NewRootCommand()
-	for _, path := range [][]string{
-		{"config"},
-		{"config", "flatten"},
-		{"config", "expand"},
-	} {
-		if _, _, err := root.Find(path); err == nil {
-			t.Fatalf("find %v: expected lookup failure for removed path", path)
+	if _, _, err := root.Find([]string{"config", "init"}); err != nil {
+		t.Fatalf("find config init: %v", err)
+	}
+
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("walk command tree: %v", err)
+	}
+	for _, path := range []string{"you config flatten", "you config expand"} {
+		for _, record := range inventory.Commands {
+			if record.Path == path {
+				t.Fatalf("removed path %q is still registered", path)
+			}
 		}
 	}
 
@@ -52,7 +57,6 @@ func TestFactoryConfigCommand_OldPathsRejectAtRuntime(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "top-level config", args: []string{"config", "--help"}},
 		{name: "config flatten", args: []string{"config", "flatten", "./factory"}},
 		{name: "config expand", args: []string{"config", "expand", "./factory.json"}},
 	}

@@ -98,6 +98,15 @@ primary-result behavior.
   it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
   restarts; values starting with `local-` that are not valid `local-<uuid>` fail
   startup with a config error instead of being silently replaced.
+- Canonical `you config init` system bootstrap belongs in
+  `pkg/config/configinit` (`Init`, `SystemConfigOutcome`) and
+  `pkg/cli/configinit` (`Init`, `InitConfig`) with command wiring in
+  `pkg/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
+  Fresh homes create `~/.you-agent-factory/config.json` through
+  `pkg/config/systemconfig.EnsureLocalBackendScope`; existing config files are
+  validated with `operatorconfig.LoadFileConfig` and left byte-identical on
+  re-run. Keep `you factory config` factory.json tooling separate from this
+  top-level operator/system initializer.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
