@@ -128,10 +128,12 @@ const (
 )
 
 type parallelItem struct {
-	index int
-	kind  parallelItemKind
-	spec  map[string]any
-	value goja.Value
+	index             int
+	kind              parallelItemKind
+	spec              map[string]any
+	request           ChildExecutionRequest
+	requestValidation error
+	value             goja.Value
 }
 
 func (g *runtimeGlobals) bindParallelAPI() error {
@@ -224,11 +226,31 @@ func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) 
 		return results, nil
 	}
 
+	// Normalize every object spec before functions can launch child work or the
+	// runtime can reserve dispatch identities. Dynamically constructed objects
+	// cannot be proven safe by source validation, so this is the common
+	// pre-dispatch contract boundary for parallel object specs.
+	for index := range items {
+		if items[index].kind != parallelItemAgentSpec {
+			continue
+		}
+		items[index].request, items[index].requestValidation = childExecutionRequestFromSpec(
+			items[index].spec,
+			g.workflowName(),
+			g.argsSubject(),
+			g.agents,
+		)
+	}
+
 	specItems := make([]parallelItem, 0, len(items))
 	functionItems := make([]parallelItem, 0)
 	for _, item := range items {
 		switch item.kind {
 		case parallelItemAgentSpec:
+			if item.requestValidation != nil {
+				results[item.index] = failedChildResultValue("", "", item.requestValidation)
+				continue
+			}
 			specItems = append(specItems, item)
 		case parallelItemFunction:
 			functionItems = append(functionItems, item)
@@ -281,12 +303,7 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 				return
 			}
 
-			req, err := childExecutionRequestFromSpec(item.spec, g.workflowName(), g.argsSubject(), g.agents)
-			if err != nil {
-				results[item.index] = failedChildResultValue("", "", err)
-				return
-			}
-			req, err = ResolveChildWorkerSettings(req, g.agents, g.workerSettings)
+			req, err := ResolveChildWorkerSettings(item.request, g.agents, g.workerSettings)
 			if err != nil {
 				results[item.index] = failedChildResultValue(req.Label, "", err)
 				return

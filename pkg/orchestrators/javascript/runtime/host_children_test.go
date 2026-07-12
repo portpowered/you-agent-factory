@@ -661,6 +661,51 @@ func TestRun_ParallelObjectChildren_ResolveWorkerSettings(t *testing.T) {
 	assertWorkerSelection(t, captured["scalar-defaults"], "", "GEMINI", "default-model", "")
 }
 
+func TestRun_ParallelDynamicUnsupportedFieldDoesNotConsumeDispatchIdentity(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+		Source: `
+			const rejected = {prompt: "prompt-secret"};
+			rejected["writable" + "Roots"] = ["value-secret"];
+			return (async () => ({results: await parallel([rejected, {label: "valid", prompt: "review"}])}))();
+		`,
+		SessionID: "session-parallel-dynamic-unsupported-field",
+	}, workflowruntime.Hooks{
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return stub
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+
+	results, ok := projectPrimaryJSON(t, "session-parallel-dynamic-unsupported-field", outcome.Value)["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("results = %#v, want two entries", results)
+	}
+	rejected, ok := results[0].(map[string]any)
+	if !ok || rejected["status"] != workflowruntime.ChildDispatchStatusFailed {
+		t.Fatalf("rejected result = %#v, want failed child", results[0])
+	}
+	diagnostic, _ := rejected["diagnostic"].(string)
+	if !strings.Contains(diagnostic, `agent.run() does not support field "writableRoots"`) ||
+		strings.Contains(diagnostic, "value-secret") || strings.Contains(diagnostic, "prompt-secret") {
+		t.Fatalf("diagnostic = %q, want field-specific redacted error", diagnostic)
+	}
+	assertStubChildResult(t, results[1], "valid", "stub-dispatch-1")
+
+	requests := stub.executionRequests()
+	if len(requests) != 1 || requests[0].Label != "valid" {
+		t.Fatalf("executor requests = %#v, want only valid child", requests)
+	}
+	if requests[0].ReservedIdentity == nil || requests[0].ReservedIdentity.DispatchID != "dispatch-1" {
+		t.Fatalf("reserved identity = %#v, want dispatch-1", requests[0].ReservedIdentity)
+	}
+	if len(outcome.Records) != 0 {
+		t.Fatalf("records = %#v, want no lifecycle records from rejected item or stub executor", outcome.Records)
+	}
+}
+
 func TestRun_ParallelObjectChild_GatesResolvedPresetBeforeExecutor(t *testing.T) {
 	calls := 0
 	policy := policyWithWorkerAllowlists([]string{"allowed-model"}, []string{"high"})
