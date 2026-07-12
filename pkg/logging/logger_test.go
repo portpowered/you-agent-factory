@@ -158,3 +158,16 @@ func TestBuildLogger_DebugOverridesVerbose(t *testing.T) {
 		t.Error("debug logger should enable debug level even when verbose is also set")
 	}
 }
+
+func TestBuildTerminalMutedLogger_EnablesWarnAndDiscardsOutput(t *testing.T) {
+	logger, err := BuildTerminalMutedLogger()
+	if err != nil {
+		t.Fatalf("BuildTerminalMutedLogger: %v", err)
+	}
+	if logger.Core().Enabled(zapcore.InfoLevel) {
+		t.Fatal("expected terminal-muted logger to disable info level")
+	}
+	if !logger.Core().Enabled(zapcore.WarnLevel) {
+		t.Fatal("expected terminal-muted logger to enable warn level")
+	}
+}
