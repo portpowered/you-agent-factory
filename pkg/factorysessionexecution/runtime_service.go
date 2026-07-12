@@ -670,42 +670,14 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 			},
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
-		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
-		state.runtimeRecords = mergeRuntimeRecords(state.runtimeRecords, failureOutcome.Records)
-		if state.session.Status == LifecycleStatusInterrupted {
-			state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
-		}
-		s.unlockRuntimeSessionAfterPersistence(state)
+		candidate := s.buildTerminalRuntimeCandidate(state, terminal, failureOutcome, startedAt)
+		s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 		return
 	}
 
 	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
-	s.applyTerminalRuntimeState(state, terminal, outcome, startedAt)
-	state.runtimeRecords = mergeRuntimeRecords(state.runtimeRecords, outcome.Records)
-	if state.session.Status == LifecycleStatusInterrupted {
-		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
-	}
-	s.unlockRuntimeSessionAfterPersistence(state)
-}
-
-func (s *JavaScriptRuntimeService) unlockRuntimeSessionAfterPersistence(state *runtimeSessionState) {
-	persistState := cloneRuntimeSessionState(state)
-	if err := s.recordCanonicalTerminalState(state, persistState); err != nil {
-		failureOutcome := workflowruntime.Outcome{Failure: workflowruntime.Failure{
-			Code:    workflowruntime.CodeScriptError,
-			Message: err.Error(),
-		}}
-		failed := projectRuntimeSessionState(
-			state.session.SessionID,
-			StartRequest{},
-			state.resolvedSource,
-			workflowpolicy.Resolution{Hash: state.session.Policy.EffectiveHash},
-			failureOutcome,
-			*safelyStartedAt(state.session.Lifecycle, s.now()),
-		)
-		applyRuntimeSessionFields(state, failed)
-	}
-	s.mu.Unlock()
+	candidate := s.buildTerminalRuntimeCandidate(state, terminal, outcome, startedAt)
+	s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 }
 
 func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(

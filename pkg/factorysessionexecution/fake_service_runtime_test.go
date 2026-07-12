@@ -3,6 +3,7 @@
 package factorysessionexecution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -647,6 +648,20 @@ const busyLoopWorkflowSource = `while (true) {}`
 
 const throwErrorWorkflowSource = `throw new Error("workflow execution failed: " + args.subject);`
 
+const progressThenFinalWorkflowSource = `
+phase("execute");
+const artifactRef = workflow.artifact({
+  kind: "log",
+  label: "unpersisted-output",
+  content: { message: "must roll back" },
+});
+workflow.checkpoint({
+  label: "before-final",
+  state: { artifactRef: artifactRef },
+});
+return { artifactRef: artifactRef };
+`
+
 type durableFixedClock struct{ now time.Time }
 
 func (c durableFixedClock) Now() time.Time { return c.now }
@@ -756,7 +771,7 @@ func TestJavaScriptRuntimeService_StartAsync_PersistenceFailurePublishesFailureN
 
 	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
 		"req-runtime-async-persist-failure-001",
-		simpleFinalWorkflowSource,
+		progressThenFinalWorkflowSource,
 		nil,
 		nil,
 	))
@@ -767,19 +782,67 @@ func TestJavaScriptRuntimeService_StartAsync_PersistenceFailurePublishesFailureN
 	if failed.Failure == nil || !strings.Contains(failed.Failure.Message, "append unavailable") {
 		t.Fatalf("failure = %#v, want explicit persistence failure", failed.Failure)
 	}
-	result, err := service.GetResult(context.Background(), started.SessionID, ResultRequest{Mode: ResultModeFinal})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
-	}
-	if result.ResultStatus == ResultStatusFinal {
-		t.Fatalf("unpersisted terminal result status = %q, want unavailable", result.ResultStatus)
-	}
+	assertPersistenceFailureRolledBackLiveProjections(t, service, started.SessionID)
 
 	store.mu.Lock()
 	saveCalls := store.saveCalls
 	store.mu.Unlock()
 	if saveCalls != 1 {
 		t.Fatalf("persistence save calls = %d, want exactly one", saveCalls)
+	}
+}
+
+func assertPersistenceFailureRolledBackLiveProjections(
+	t *testing.T,
+	service *JavaScriptRuntimeService,
+	sessionID string,
+) {
+	t.Helper()
+	result, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus == ResultStatusFinal {
+		t.Fatalf("unpersisted terminal result status = %q, want unavailable", result.ResultStatus)
+	}
+	dispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if len(dispatches.Dispatches) != 0 {
+		t.Fatalf("unpersisted dispatches = %#v, want none", dispatches.Dispatches)
+	}
+	artifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if len(artifacts.Artifacts) != 0 {
+		t.Fatalf("unpersisted artifacts = %#v, want none", artifacts.Artifacts)
+	}
+	events, err := service.ReadEvents(context.Background(), sessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	encodedEvents, err := json.Marshal(events.Events)
+	if err != nil {
+		t.Fatalf("marshal events: %v", err)
+	}
+	if bytes.Contains(encodedEvents, []byte("unpersisted-output")) || bytes.Contains(encodedEvents, []byte("checkpoint")) {
+		t.Fatalf("event history retained unpersisted terminal records: %s", encodedEvents)
+	}
+	assertPersistenceFailureClearedInternalRuntimeState(t, service, sessionID)
+}
+
+func assertPersistenceFailureClearedInternalRuntimeState(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	service.mu.RLock()
+	live := cloneRuntimeSessionState(service.sessions[sessionID])
+	service.mu.RUnlock()
+	if live.session.Phase != "" || live.session.Progress != nil || len(live.session.ArtifactRefs) != 0 {
+		t.Fatalf("session retained unpersisted projection: %#v", live.session)
+	}
+	if len(live.runtimeRecords) != 0 || live.checkpointSummary != nil {
+		t.Fatalf("runtime state retained unpersisted records: records=%#v checkpoint=%#v", live.runtimeRecords, live.checkpointSummary)
 	}
 }
 

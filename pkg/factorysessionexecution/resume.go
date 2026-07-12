@@ -263,10 +263,6 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 	}
 	mergedRecords := mergeRuntimeRecords(priorRecords, outcome.Records)
 	outcome.Records = mergedRecords
-	state.runtimeRecords = mergedRecords
-	if checkpointSummary != nil {
-		state.checkpointSummary = cloneCheckpointSummary(checkpointSummary)
-	}
 
 	if err != nil {
 		failureOutcome := workflowruntime.Outcome{
@@ -278,17 +274,21 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 			Records: outcome.Records,
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
-		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
-		s.unlockRuntimeSessionAfterPersistence(state)
+		candidate := s.buildTerminalRuntimeCandidate(state, terminal, failureOutcome, startedAt)
+		candidate.runtimeRecords = cloneRuntimeRecords(mergedRecords)
+		candidate.checkpointSummary = cloneCheckpointSummary(checkpointSummary)
+		s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 		return
 	}
 
 	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
-	s.applyTerminalRuntimeState(state, terminal, outcome, startedAt)
-	if state.checkpointSummary == nil {
-		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
+	candidate := s.buildTerminalRuntimeCandidate(state, terminal, outcome, startedAt)
+	candidate.runtimeRecords = cloneRuntimeRecords(mergedRecords)
+	candidate.checkpointSummary = cloneCheckpointSummary(checkpointSummary)
+	if candidate.checkpointSummary == nil {
+		candidate.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, &candidate, candidate.runtimeRecords)
 	}
-	s.unlockRuntimeSessionAfterPersistence(state)
+	s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 }
 
 func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(

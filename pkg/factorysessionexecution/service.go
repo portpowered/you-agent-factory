@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -75,6 +76,51 @@ func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeS
 	target.sourceContent = candidate.sourceContent
 	target.runCancel = candidate.runCancel
 	return nil
+}
+
+func (s *JavaScriptRuntimeService) buildTerminalRuntimeCandidate(
+	state *runtimeSessionState,
+	terminal runtimeSessionState,
+	outcome workflowruntime.Outcome,
+	startedAt time.Time,
+) runtimeSessionState {
+	candidate := cloneRuntimeSessionState(state)
+	s.applyTerminalRuntimeState(&candidate, terminal, outcome, startedAt)
+	candidate.runtimeRecords = mergeRuntimeRecords(state.runtimeRecords, outcome.Records)
+	if candidate.session.Status == LifecycleStatusInterrupted {
+		candidate.checkpointSummary = latestCheckpointSummaryFromRuntime(candidate.session.SessionID, &candidate, candidate.runtimeRecords)
+	}
+	return candidate
+}
+
+func (s *JavaScriptRuntimeService) publishAsyncTerminalCandidate(
+	state *runtimeSessionState,
+	candidate runtimeSessionState,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	policyResolution workflowpolicy.Resolution,
+	startedAt time.Time,
+) {
+	if err := s.recordCanonicalTerminalState(state, candidate); err != nil {
+		failureOutcome := workflowruntime.Outcome{Failure: workflowruntime.Failure{
+			Code:    workflowruntime.CodeScriptError,
+			Message: err.Error(),
+		}}
+		failed := projectRuntimeSessionState(
+			state.session.SessionID,
+			normalized,
+			resolved,
+			policyResolution,
+			failureOutcome,
+			startedAt,
+		)
+		failed.startRequest = cloneStartRequestPtr(state.startRequest)
+		failed.resolvedSource = state.resolvedSource
+		failed.sourceContent = state.sourceContent
+		failed.runCancel = state.runCancel
+		*state = failed
+	}
+	s.mu.Unlock()
 }
 
 func safelyStartedAt(lifecycle *LifecycleTimestamps, fallback time.Time) *time.Time {
