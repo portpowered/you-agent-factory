@@ -986,20 +986,3 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 	restoreInterruptedDispatchResultSuppression(state, preservedInterrupted)
 	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 }
-
-func validateLiveChildExecutorConfig(mode string, provider workers.Provider) error {
-	if mode != ChildExecutorModeLive {
-		return nil
-	}
-	if provider == nil {
-		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
-	}
-	return nil
-}
-
-func validateLiveChildProviderExecutor(mode string, executor providerexecution.Executor) error {
-	if mode == ChildExecutorModeLive && executor == nil {
-		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
-	}
-	return nil
-}

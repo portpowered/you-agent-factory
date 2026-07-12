@@ -10,7 +10,26 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
+
+func validateLiveChildExecutorConfig(mode string, provider workers.Provider) error {
+	if mode != ChildExecutorModeLive {
+		return nil
+	}
+	if provider == nil {
+		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
+	}
+	return nil
+}
+
+func validateLiveChildProviderExecutor(mode string, executor providerexecution.Executor) error {
+	if mode == ChildExecutorModeLive && executor == nil {
+		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
+	}
+	return nil
+}
 
 // StartPrepareContext supplies filesystem and deployment inputs for durable start
 // preparation before runtime execution begins.

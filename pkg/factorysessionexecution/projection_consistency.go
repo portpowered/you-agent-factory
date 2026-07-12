@@ -7,7 +7,46 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
+
+func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
+	content := workcontent.GeneratedPtrFromParts(parts)
+	if content == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(content)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
+func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
+	for _, part := range parts {
+		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
+			if text := strings.TrimSpace(part.Text); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.FactorySessionArtifactState {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	states := make([]interfaces.FactorySessionArtifactState, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		states = append(states, interfaces.FactorySessionArtifactState{
+			ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility,
+			Label: artifact.Label, ContentHash: artifact.ContentHash,
+			SizeBytes: artifact.SizeBytes, AuditMode: artifact.AuditMode,
+		})
+	}
+	return states
+}
 
 // projectPetriRunningSessionState initializes the canonical read model owned by
 // Factory Session execution before the first typed Petri mutation is recorded.
