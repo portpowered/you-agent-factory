@@ -32,4 +32,10 @@ fi
 
 "$BINARY_PATH" --help >/dev/null
 
+config_path="$TEMP_HOME/.you-agent-factory/config.json"
+if [ ! -f "$config_path" ]; then
+  echo "post-install config init did not create operator config at $config_path" >&2
+  exit 1
+fi
+
 printf 'hosted install smoke passed for %s via %s\n' "$BINARY_PATH" "$INSTALL_SCRIPT_URL"
