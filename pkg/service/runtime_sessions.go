@@ -1350,7 +1350,6 @@ func (fs *FactoryService) observeResponseStreamCompaction(
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
 	if handle := liveSessionHandle(session); handle != nil && handle.Bundle != nil && handle.Bundle.Logger != nil {
 		handle.Bundle.Logger.Warn("session response stream compacted internal provider progress",
-			zap.String("session_id", sessionID),
 			zap.String("dispatch_id", dispatchID),
 			zap.String("compaction_reason", string(summary.Reason)),
 			zap.Int("dropped_sequence_count", summary.DroppedSequenceCount),
