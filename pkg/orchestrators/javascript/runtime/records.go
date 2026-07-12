@@ -52,6 +52,46 @@ type RuntimeRecord struct {
 	ChildDispatch *ChildDispatchRecord `json:"childDispatch,omitempty"`
 }
 
+// UnmarshalJSON rejects unknown or structurally inconsistent durable records.
+// Runtime records are an orchestrator-owned stream: accepting a new kind as an
+// empty record would silently discard replay data on older binaries.
+func (r *RuntimeRecord) UnmarshalJSON(data []byte) error {
+	type runtimeRecordJSON RuntimeRecord
+	var decoded runtimeRecordJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("decode JavaScript runtime record: %w", err)
+	}
+	if err := validateRuntimeRecordPayload(RuntimeRecord(decoded)); err != nil {
+		return err
+	}
+	*r = RuntimeRecord(decoded)
+	return nil
+}
+
+func validateRuntimeRecordPayload(record RuntimeRecord) error {
+	payloadPresent := map[string]bool{
+		RecordKindPhase:         record.Phase != nil,
+		RecordKindLog:           record.Log != nil,
+		RecordKindArtifact:      record.Artifact != nil,
+		RecordKindCheckpoint:    record.Checkpoint != nil,
+		RecordKindBudget:        record.Budget != nil,
+		RecordKindChildDispatch: record.ChildDispatch != nil,
+	}
+	present, known := payloadPresent[record.Kind]
+	if !known {
+		return fmt.Errorf("decode JavaScript runtime record: unsupported kind %q", record.Kind)
+	}
+	if !present {
+		return fmt.Errorf("decode JavaScript runtime record kind %q: matching payload is required", record.Kind)
+	}
+	for kind, hasPayload := range payloadPresent {
+		if hasPayload && kind != record.Kind {
+			return fmt.Errorf("decode JavaScript runtime record kind %q: unexpected %s payload", record.Kind, kind)
+		}
+	}
+	return nil
+}
+
 // PhaseRecord captures one workflow phase transition.
 type PhaseRecord struct {
 	Name string `json:"name"`

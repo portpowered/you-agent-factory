@@ -526,8 +526,31 @@ func cloneRuntimeRecord(record workflowruntime.RuntimeRecord) workflowruntime.Ru
 		artifact := *record.Artifact
 		cloned.Artifact = &artifact
 	}
+	if record.Log != nil {
+		logRecord := *record.Log
+		logRecord.Fields = cloneArgs(record.Log.Fields)
+		cloned.Log = &logRecord
+	}
+	if record.Checkpoint != nil {
+		checkpoint := *record.Checkpoint
+		checkpoint.State = cloneArgs(record.Checkpoint.State)
+		cloned.Checkpoint = &checkpoint
+	}
+	if record.Budget != nil {
+		budget := *record.Budget
+		cloned.Budget = &budget
+	}
 	if record.ChildDispatch != nil {
 		child := *record.ChildDispatch
+		child.Output = cloneArgs(record.ChildDispatch.Output)
+		if record.ChildDispatch.FailureDetail != nil {
+			failure := *record.ChildDispatch.FailureDetail
+			child.FailureDetail = &failure
+		}
+		if record.ChildDispatch.Retryable != nil {
+			retryable := *record.ChildDispatch.Retryable
+			child.Retryable = &retryable
+		}
 		cloned.ChildDispatch = &child
 	}
 	return cloned
