@@ -15,6 +15,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/config/builtinsubagent"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -1091,6 +1092,9 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 }
 
 var BuiltInGoalFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
+
+// BuiltInSubagentFactoryJSON is the canonical runnable @you/subagent packaged factory payload.
+var BuiltInSubagentFactoryJSON = builtinsubagent.BuiltInSubagentFactoryJSON
 
 // BuiltInFusionFactoryJSON is the canonical runnable @you/fusion packaged factory payload.
 var BuiltInFusionFactoryJSON = []byte(`{
