@@ -343,10 +343,17 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 		t.Fatalf("Run: %v", err)
 	}
 	got := output.String()
-	if !strings.Contains(got, "[you:progress] planning") {
+	if !strings.Contains(got, "planning") {
 		t.Fatalf("output missing progress rendering:\n%s", got)
 	}
-	if strings.Contains(got, "[you:progress] goal completed") {
+	if strings.Contains(got, "[you:progress]") {
+		t.Fatalf("output must not include [you:progress] prefix:\n%s", got)
+	}
+	beforePrimary := got
+	if idx := strings.Index(got, responseStreamPrimaryResultHeader); idx >= 0 {
+		beforePrimary = got[:idx]
+	}
+	if strings.Contains(beforePrimary, "goal completed") {
 		t.Fatalf("response fragment leaked into progress output:\n%s", got)
 	}
 	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
@@ -457,8 +464,11 @@ func runFactoryInvocationShortLivedDispatchCase(
 		t.Fatalf("Run: %v", err)
 	}
 	got := output.String()
-	if !strings.Contains(got, "[you:progress] planning") {
+	if !strings.Contains(got, "planning") {
 		t.Fatalf("output missing retained short-lived dispatch progress:\n%s", got)
+	}
+	if strings.Contains(got, "[you:progress]") {
+		t.Fatalf("output must not include [you:progress] prefix:\n%s", got)
 	}
 	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
 		t.Fatalf("output missing primary-result header:\n%s", got)
@@ -598,7 +608,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		},
 		wantErrCode: "INVOCATION_BLOCKED",
 		wantContains: []string{
-			"[you:progress] planning",
+			"planning",
 			responseStreamInvocationOutcomeHeader,
 			"status: FAILED",
 			"error: INVOCATION_BLOCKED",
@@ -851,8 +861,8 @@ func waitForResponseStreamRunCompletion(t *testing.T, done <-chan error, timeout
 func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStreamWriter, text string) {
 	t.Helper()
 	got := output.String()
-	if !strings.Contains(got, "[you:progress] terminal output backlog") {
-		t.Fatalf("output missing terminal backlog notice:\n%s", got)
+	if strings.Contains(got, "terminal output backlog") {
+		t.Fatalf("human output must not include terminal backlog notice:\n%s", got)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(got), text) {
 		t.Fatalf("output missing final primary result:\n%s", got)
@@ -944,7 +954,7 @@ func TestResponseStreamRenderer_FinalResultDoesNotInterleavePastDrainTimeout(t *
 			name:           "human",
 			newRenderer:    func(output io.Writer) responseStreamRenderer { return newHumanResponseStreamRenderer(output) },
 			finalMarker:    responseStreamPrimaryResultHeader,
-			progressMarker: "[you:progress]",
+			progressMarker: "working",
 		},
 		{
 			name:           "json",

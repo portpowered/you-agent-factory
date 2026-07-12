@@ -98,6 +98,27 @@ primary-result behavior.
   it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
   restarts; values starting with `local-` that are not valid `local-<uuid>` fail
   startup with a config error instead of being silently replaced.
+- Canonical `you config init` system bootstrap belongs in
+  `pkg/config/configinit` (`Init`, `SystemConfigOutcome`) and
+  `pkg/cli/configinit` (`Init`, `InitConfig`) with command wiring in
+  `pkg/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
+  Fresh homes create `~/.you-agent-factory/config.json` through
+  `pkg/config/systemconfig.EnsureLocalBackendScope`; existing config files are
+  validated with `operatorconfig.LoadFileConfig` and left byte-identical on
+  re-run. Packaged defaults materialize through
+  `factoryconfig.EnsureBuiltInNamedFactories`, which skips existing factory
+  directories without rewriting user-edited files and can still create missing
+  catalog entries on later runs. Isolated-home rerun coverage lives in
+  `pkg/config/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
+  `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
+  `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
+  `pkg/cli/configinit/init_test.go` / `pkg/cli/root_config_init_test.go`. Keep
+  `you factory config` factory.json tooling separate from this top-level
+  operator/system initializer. Post-install bootstrap is invoked from
+  `scripts/install.sh` and `scripts/install.ps1` via the installed binary's
+  `config init` subcommand; installer smoke coverage lives in
+  `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
+  / `scripts/release/smoke-install.ps1`.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
@@ -144,8 +165,11 @@ primary-result behavior.
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
-  `primary_result` NDJSON record. Internal stream listing for
-  CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
+  `primary_result` NDJSON record. Human-only suppression helpers:
+  `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
+  `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop
+  compaction/backlog/stream-gap text and token-usage chatter while JSON mode
+  keeps `compaction` / `stream_gap` records. Internal stream listing for
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
   late CLI pollers can still subscribe and drain retained progress until the
@@ -160,6 +184,13 @@ primary-result behavior.
   through `outputMu`; after a drain timeout it abandons further progress writes
   and `writeFinalInvocationResult` acquires the same lock so final
   primary-result/outcome output cannot interleave with an in-flight progress write.
+- `you run --replay` format detection belongs at service composition before legacy
+  `ReplayArtifact` config loading. Privacy-bounded JavaScript Factory Session
+  recordings compose `recordingreplay.Service` as an inspection-only durable read
+  owner and skip Petri/runtime/provider construction; legacy artifacts continue
+  through `pkg/replay`. Production-path tests must exercise `FactoryService.Run`
+  plus public session, event, artifact, and result reads with fail-on-use live
+  dependencies.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with

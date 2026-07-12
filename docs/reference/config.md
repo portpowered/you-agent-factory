@@ -964,13 +964,14 @@ other non-invocation `you run` shapes with `INVOCATION_OUTPUT_UNSUPPORTED`.
 When the CLI can safely attach to the live internal stream, it subscribes to
 session-owned response-stream events instead of provider stdout.
 
-Human-readable mode prefixes progress with `[you:progress]` and keeps the final
+Human-readable mode prints progress as plain typed lines without internal markers
+(no `[you:progress]` prefixes, stream coalescing/compaction notices, terminal
+render-queue backlog notices, or token-usage chatter) and keeps the final
 `primaryResult` separate under a `--- primary result ---` header after progress
 completes. Response fragments that mirror the final answer are not replayed as
 ordinary progress. When terminal stdout is slower than internal stream delivery,
-the CLI keeps provider dispatch non-blocking by queueing progress locally and
-prints a `[you:progress] terminal output backlog (...)` notice if render-queue
-pressure drops progress lines.
+the CLI keeps provider dispatch non-blocking by queueing progress locally and may
+drop queued progress lines without printing backlog notices to human stdout.
 
 JSON mode (`--json` with `--output response-stream`) emits newline-delimited
 JSON records to stdout:

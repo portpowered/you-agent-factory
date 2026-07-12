@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -565,37 +564,6 @@ func NewRuntimeBuildService(
 	return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil, nil)
 }
 
-// FactoryConfigLoadResult carries factory config load outputs needed before
-// runtime bundle construction.
-type FactoryConfigLoadResult struct {
-	LoadedFactoryCfg *factoryconfig.LoadedFactoryConfig
-	ReplayArtifact   *interfaces.ReplayArtifact
-	SessionLogger    *zap.Logger
-}
-
-// LoadFactoryConfigForCompose loads factory.json and replay metadata for wire
-// composition after FactoryServiceRoot resolution.
-func LoadFactoryConfigForCompose(
-	cfg *FactoryServiceConfig,
-	root FactoryServiceRoot,
-) (FactoryConfigLoadResult, error) {
-	logger := runtimebuild.NewSessionLogger(
-		root.BaseLogger,
-		defaultFactorySessionID,
-		root.FactoryRootDir,
-		cfg.Dir,
-	)
-	loadedFactoryCfg, replayArtifact, err := loadFactoryConfigForService(cfg, logger)
-	if err != nil {
-		return FactoryConfigLoadResult{}, err
-	}
-	return FactoryConfigLoadResult{
-		LoadedFactoryCfg: loadedFactoryCfg,
-		ReplayArtifact:   replayArtifact,
-		SessionLogger:    logger,
-	}, nil
-}
-
 // ServiceClockForCompose selects the factory clock for the loaded replay artifact.
 func ServiceClockForCompose(cfg *FactoryServiceConfig, load FactoryConfigLoadResult) factory.Clock {
 	return serviceClockForMode(cfg.Clock, load.ReplayArtifact)
@@ -883,11 +851,11 @@ func ComposeFactoryCore(
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
 ) (*FactoryCore, error) {
-	if collaborators.WorkersScheduler == nil {
-		return nil, fmt.Errorf("compose factory core: worker sidecar owner is required")
-	}
-	if err := validateReplayModeConfig(cfg); err != nil {
+	if err := validateFactoryCoreComposition(cfg, collaborators); err != nil {
 		return nil, err
+	}
+	if core, portable := composePortableReplayCore(cfg, root, collaborators, load, clock, hostedWorkers); portable {
+		return core, nil
 	}
 	if err := ensureServiceBackendScope(cfg, root.BaseLogger); err != nil {
 		return nil, err
@@ -969,6 +937,13 @@ func ComposeFactoryCore(
 		modelAssets:      wireModelAssetPuller(cfg, collaborators.LocalModels.Assets),
 		durableExecution: durableExecution,
 	}, nil
+}
+
+func validateFactoryCoreComposition(cfg *FactoryServiceConfig, collaborators FactoryServiceCollaborators) error {
+	if collaborators.WorkersScheduler == nil {
+		return fmt.Errorf("compose factory core: worker sidecar owner is required")
+	}
+	return validateReplayModeConfig(cfg)
 }
 
 // NewFactoryServiceFromCore wraps a built core in the phase-one compatibility

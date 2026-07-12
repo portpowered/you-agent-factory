@@ -368,7 +368,6 @@ func cleanInvocationCompletionMatchesTarget(
 }
 
 const (
-	responseStreamProgressPrefix          = "[you:progress] "
 	responseStreamPrimaryResultHeader     = "--- primary result ---"
 	responseStreamInvocationOutcomeHeader = "--- invocation outcome ---"
 	maxHumanProgressLineBytes             = 1024
@@ -380,6 +379,16 @@ const (
 
 	responseStreamTerminalBacklogReason = "terminal_output_backlog"
 )
+
+var humanTokenUsageMetadataKeys = []string{
+	"input_tokens",
+	"output_tokens",
+	"total_tokens",
+	"cache_read_tokens",
+	"cache_write_tokens",
+	"cached_input_tokens",
+	"reasoning_output_tokens",
+}
 
 // responseStreamRenderer consumes internal SessionResponseStream segments and
 // writes ordered progress output followed by the final invocation result.
@@ -434,12 +443,6 @@ func (r *humanResponseStreamRenderer) onStreamSegment(result factorysessions.Ses
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if result.BehindRetainedWindow {
-		r.writeProgressLineLocked("earlier progress unavailable (stream resumed behind retained window)")
-	}
-	if result.Compaction != nil {
-		r.writeProgressLineLocked(formatCompactionNotice(*result.Compaction))
-	}
 	for _, event := range result.Events {
 		r.renderEventLocked(event)
 	}
@@ -548,16 +551,13 @@ func (r *humanResponseStreamRenderer) renderEventLocked(event responsestream.Eve
 
 	switch event.Kind {
 	case responsestream.EventKindCompactionSignal:
-		if event.Compaction != nil {
-			r.writeProgressLineLocked(formatCompactionNotice(*event.Compaction))
-		}
 		return
 	case responsestream.EventKindStreamCompleted, responsestream.EventKindStreamFailed:
 		return
 	case responsestream.EventKindResponseFragment:
 		return
 	case responsestream.EventKindProgressFragment:
-		if !humanProgressRenderableType(event.Type) {
+		if !humanProgressRenderableEvent(event) {
 			return
 		}
 		payload := boundedHumanProgressPayload(event.Payload)
@@ -575,6 +575,74 @@ func humanProgressRenderableType(eventType responsestream.EventType) bool {
 		responsestream.EventTypeFailed,
 		responsestream.EventTypeCanceled,
 		responsestream.EventTypeUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+func humanProgressRenderableEvent(event responsestream.Event) bool {
+	if !humanProgressRenderableType(event.Type) {
+		return false
+	}
+	if humanTokenUsageProgressEvent(event) {
+		return false
+	}
+	return !humanInternalProgressPayload(event.Payload)
+}
+
+func humanTokenUsageProgressEvent(event responsestream.Event) bool {
+	external := strings.ToLower(strings.TrimSpace(event.ExternalEventType))
+	if external == "token_count" || strings.Contains(external, "token_count") {
+		return true
+	}
+	for _, key := range humanTokenUsageMetadataKeys {
+		if _, ok := event.Metadata[key]; ok {
+			return true
+		}
+	}
+	return humanTokenUsageProgressPayload(event.Payload)
+}
+
+func humanTokenUsageProgressPayload(payload string) bool {
+	lower := strings.ToLower(strings.TrimSpace(payload))
+	if lower == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"input_tokens",
+		"output_tokens",
+		"total_tokens",
+		"cache_read_tokens",
+		"cache_write_tokens",
+		"cached_input_tokens",
+		"reasoning_output_tokens",
+		"token usage",
+		"tokens used",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func humanInternalProgressPayload(payload string) bool {
+	lower := strings.ToLower(strings.TrimSpace(payload))
+	if lower == "" {
+		return false
+	}
+	switch {
+	case strings.HasPrefix(lower, "stream ") &&
+		(strings.Contains(lower, "omitted") ||
+			strings.Contains(lower, "compacted") ||
+			strings.Contains(lower, "truncated") ||
+			strings.Contains(lower, "coalesced") ||
+			strings.Contains(lower, "evicted")):
+		return true
+	case strings.HasPrefix(lower, "terminal output backlog"):
+		return true
+	case strings.HasPrefix(lower, "earlier progress unavailable"):
 		return true
 	default:
 		return false
@@ -612,8 +680,7 @@ func (r *humanResponseStreamRenderer) writeProgressLineLocked(payload string) {
 	if strings.TrimSpace(payload) == "" {
 		return
 	}
-	line := responseStreamProgressPrefix + payload
-	if !r.progress.enqueue([]byte(line)) {
+	if !r.progress.enqueue([]byte(payload)) {
 		r.emitTerminalBacklogNoticeLocked()
 		return
 	}
@@ -626,18 +693,6 @@ func (r *humanResponseStreamRenderer) emitTerminalBacklogNoticeLocked() {
 		return
 	}
 	r.backlogNotified = true
-	dropped := r.progress.droppedProgressLines()
-	if dropped <= 0 {
-		dropped = 1
-	}
-	notice := fmt.Sprintf(
-		"%s%s (%d progress lines dropped)",
-		responseStreamProgressPrefix,
-		"terminal output backlog",
-		dropped,
-	)
-	r.progress.enqueueNotice([]byte(notice))
-	r.progressSeen = true
 }
 
 // jsonResponseStreamRenderer emits newline-delimited JSON records for internal

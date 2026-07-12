@@ -1066,7 +1066,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		checkpointStore = fs.requireSessionGateway().JavaScriptCheckpointStore(session)
 		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
 	}
-	projectionCtx.JavaScript, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
+	projectionCtx.JavaScript, projectionCtx.JavaScriptSession, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
@@ -1080,17 +1080,19 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 	session *factorysessions.LiveSession,
 	checkpointStore *factorysessions.JavaScriptCheckpointStore,
 	selectedTick int,
-) (*interfaces.FactorySessionJavaScriptRuntimeState, error) {
+) (*interfaces.FactorySessionJavaScriptRuntimeState, *interfaces.FactoryWorldSessionBracketState, error) {
 	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
+	bracket := (*interfaces.FactoryWorldSessionBracketState)(nil)
 	handle := liveSessionHandle(session)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
 		worldState, err := projections.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		state = worldState.JavaScriptRuntime
+		bracket = worldState.SessionBracket
 	}
-	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), nil
+	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), bracket, nil
 }
 
 func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
@@ -1350,7 +1352,6 @@ func (fs *FactoryService) observeResponseStreamCompaction(
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
 	if handle := liveSessionHandle(session); handle != nil && handle.Bundle != nil && handle.Bundle.Logger != nil {
 		handle.Bundle.Logger.Warn("session response stream compacted internal provider progress",
-			zap.String("session_id", sessionID),
 			zap.String("dispatch_id", dispatchID),
 			zap.String("compaction_reason", string(summary.Reason)),
 			zap.Int("dropped_sequence_count", summary.DroppedSequenceCount),

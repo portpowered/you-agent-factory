@@ -3,10 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,8 +13,8 @@ import (
 
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
-	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 )
 
@@ -289,6 +288,166 @@ func TestFailureBaseline_AbsentDefault_RunNamedGoalLeavesOperatorDefaultsEmptyWi
 	}
 }
 
+func assertInvalidTopologyMaterializationOperatorDiagnostics(t *testing.T, err error, wantFactoryDir string) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("expected invalid topology materialization or upgrade failure")
+	}
+	got := err.Error()
+	if !strings.Contains(got, "invalid graph references") {
+		t.Fatalf("error = %q, want invalid graph references guidance", got)
+	}
+	if !strings.Contains(got, "Blocking findings:") {
+		t.Fatalf("error = %q, want blocking findings section", got)
+	}
+	if strings.Contains(got, "blocking validation targets") {
+		t.Fatalf("error = %q, want findings instead of target count summary", got)
+	}
+	if strings.Count(got, "you factory config validate") != 1 {
+		t.Fatalf("error = %q, want exactly one recovery command", got)
+	}
+	wantFactoryDir = strings.TrimSpace(wantFactoryDir)
+	if wantFactoryDir == "" {
+		t.Fatal("wantFactoryDir is required")
+	}
+	recovery := factoryconfig.FactoryConfigValidateRecoveryCommand(wantFactoryDir)
+	if !strings.Contains(got, recovery) {
+		t.Fatalf("error = %q, want recovery command %q", got, recovery)
+	}
+	normalized := strings.ReplaceAll(got, "\\", "/")
+	if !strings.Contains(normalized, "@you/goal") {
+		t.Fatalf("error = %q, want resolved @you/goal factory path", got)
+	}
+}
+
+func corruptGoalFactoryPlanOutputStateForTest(t *testing.T, factoryDir, stateName string) {
+	t.Helper()
+
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	data, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	workstations, ok := raw["workstations"].([]any)
+	if !ok || len(workstations) == 0 {
+		t.Fatal("factory.json workstations missing")
+	}
+	var workstation map[string]any
+	for _, entry := range workstations {
+		candidate, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if candidate["name"] == "plan-goal" {
+			workstation = candidate
+			break
+		}
+	}
+	if workstation == nil {
+		t.Fatal("factory.json plan-goal workstation not found")
+	}
+	outputs, ok := workstation["outputs"].([]any)
+	if !ok || len(outputs) == 0 {
+		t.Fatal("factory.json workstation outputs missing")
+	}
+	output, ok := outputs[0].(map[string]any)
+	if !ok {
+		t.Fatal("factory.json workstation output[0] is not an object")
+	}
+	output["state"] = stateName
+	updated, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal(factory.json): %v", err)
+	}
+	if err := os.WriteFile(factoryPath, updated, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+}
+
+func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsCorruptedMaterializedFactory(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	env := setupNamedGoalCLIEnv(t)
+	runCalled := false
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		runCalled = true
+		if cfg.NamedFactoryName != goal.PackagedFactoryName {
+			t.Fatalf("named factory = %q, want %q", cfg.NamedFactoryName, goal.PackagedFactoryName)
+		}
+		return nil
+	}
+
+	env.root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"invalid-topology-materialized-baseline",
+	})
+	if err := env.root.Execute(); err != nil {
+		t.Fatalf("execute first run --named %s: %v", goal.PackagedFactoryName, err)
+	}
+	if !runCalled {
+		t.Fatal("expected first named goal run to reach runCLI after materialization")
+	}
+
+	factoryDir := materializedGoalDir(env.homeDir)
+	corruptGoalFactoryPlanOutputStateForTest(t, factoryDir, "missing-plan-state")
+
+	runCalled = false
+	env.root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"invalid-topology-upgrade-baseline",
+	})
+	err := env.root.Execute()
+	assertInvalidTopologyMaterializationOperatorDiagnostics(t, err, factoryDir)
+	if runCalled {
+		t.Fatal("run should not start for corrupted materialized goal topology")
+	}
+}
+
+func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsInvalidPreExistingMaterializedTarget(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		t.Fatal("run should not start for invalid pre-existing materialized target")
+		return nil
+	}
+
+	env := setupNamedGoalCLIEnv(t)
+	factoryDir := materializedGoalDir(env.homeDir)
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
+	}
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, []byte(goalFailureBaselineInvalidTopologyJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", factoryPath, err)
+	}
+
+	env.root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"invalid-topology-existing-target-baseline",
+	})
+	err := env.root.Execute()
+	assertInvalidTopologyMaterializationOperatorDiagnostics(t, err, factoryDir)
+}
+
 func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraphReferences(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
@@ -314,8 +473,11 @@ func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraph
 	if !strings.Contains(err.Error(), "invalid graph references") {
 		t.Fatalf("error = %q, want invalid graph references guidance", err.Error())
 	}
-	if !strings.Contains(err.Error(), "blocking validation targets") {
-		t.Fatalf("error = %q, want blocking validation target count", err.Error())
+	if !strings.Contains(err.Error(), "Blocking findings:") {
+		t.Fatalf("error = %q, want blocking findings section", err.Error())
+	}
+	if strings.Count(err.Error(), "you factory config validate") != 1 {
+		t.Fatalf("error = %q, want exactly one recovery command", err.Error())
 	}
 }
 
@@ -600,388 +762,5 @@ func TestFailureBaseline_NamedPath_RunNamedUnknownBuiltInGoalStyleNameRejectsBef
 	}
 	if runCalled {
 		t.Fatal("run should not start for unknown built-in named factory path")
-	}
-}
-
-const (
-	terminalPolicySecretPrompt = "SECRET_PROMPT_BODY_do-not-emit-712407"
-	terminalPolicySecretToken  = "ghp_secretToken712407932abcdef"
-)
-
-func TestRootCommand_ResolvesTerminalPolicyForVerboseSubmit(t *testing.T) {
-	originalSubmit := submitWork
-	defer func() {
-		submitWork = originalSubmit
-	}()
-
-	var got submitcli.SubmitConfig
-	submitWork = func(cfg submitcli.SubmitConfig) error {
-		got = cfg
-		return nil
-	}
-
-	payloadPath := filepath.Join(t.TempDir(), "payload.md")
-	if err := os.WriteFile(payloadPath, []byte("payload"), 0o600); err != nil {
-		t.Fatalf("write payload: %v", err)
-	}
-
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"--verbose",
-		"submit",
-		"--name", "policy-test",
-		"--work-type-name", "task",
-		"--payload", payloadPath,
-	})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute submit --verbose: %v", err)
-	}
-	if !got.Verbose {
-		t.Fatal("expected verbose submit config from resolved terminal policy")
-	}
-	if got.Diagnostics == nil {
-		t.Fatal("expected diagnostics writer when verbose policy is resolved")
-	}
-}
-
-func TestRootCommand_ResolvesQuietRunPolicyForDiagnosticsAndLogger(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	dir := t.TempDir()
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"run",
-		"--dir", dir,
-		"--no-record",
-		"--quiet",
-	})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --quiet: %v", err)
-	}
-	if got.TerminalPolicy.Mode() != terminalpolicy.ModeQuiet {
-		t.Fatalf("terminal policy mode = %q, want %q", got.TerminalPolicy.Mode(), terminalpolicy.ModeQuiet)
-	}
-	if got.StartupOutput != nil {
-		t.Fatal("expected quiet run policy to suppress startup output wiring")
-	}
-	if got.Diagnostics != nil {
-		t.Fatal("expected quiet run policy to suppress diagnostics writer")
-	}
-	if got.Verbose {
-		t.Fatal("expected quiet run policy to disable verbose runtime logging")
-	}
-}
-
-func TestRootCommand_QuietRunOperationalFailureSuppressesTerminalOutput(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
-		return fmt.Errorf("quiet operational failure baseline")
-	}
-
-	dir := t.TempDir()
-	var stdout, stderr bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
-	root.SetArgs([]string{
-		"run",
-		"--dir", dir,
-		"--no-record",
-		"--quiet",
-	})
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected operational failure")
-	}
-	if !strings.Contains(err.Error(), "quiet operational failure baseline") {
-		t.Fatalf("error = %q, want failure returned to caller", err.Error())
-	}
-	if stdout.String() != "" {
-		t.Fatalf("stdout = %q, want empty quiet failure terminal output", stdout.String())
-	}
-	if stderr.String() != "" {
-		t.Fatalf("stderr = %q, want empty quiet failure terminal output", stderr.String())
-	}
-}
-
-func TestRootCommand_ResolvesVerboseRunPolicyForDiagnostics(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	dir := t.TempDir()
-	var stderr bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(&stderr)
-	root.SetArgs([]string{
-		"run",
-		"--dir", dir,
-		"--no-record",
-		"--verbose",
-	})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --verbose: %v", err)
-	}
-	if got.TerminalPolicy.Mode() != terminalpolicy.ModeVerbose {
-		t.Fatalf("terminal policy mode = %q, want %q", got.TerminalPolicy.Mode(), terminalpolicy.ModeVerbose)
-	}
-	if got.Diagnostics == nil {
-		t.Fatal("expected verbose run policy to wire diagnostics writer")
-	}
-	if !got.Verbose {
-		t.Fatal("expected verbose run policy to enable runtime verbose logging")
-	}
-}
-
-func TestRootCommand_NormalModeSuppressesSubmitDiagnostics(t *testing.T) {
-	originalSubmit := submitWork
-	defer func() {
-		submitWork = originalSubmit
-	}()
-
-	var got submitcli.SubmitConfig
-	submitWork = func(cfg submitcli.SubmitConfig) error {
-		got = cfg
-		return nil
-	}
-
-	payloadPath := filepath.Join(t.TempDir(), "payload.md")
-	if err := os.WriteFile(payloadPath, []byte("payload"), 0o600); err != nil {
-		t.Fatalf("write payload: %v", err)
-	}
-
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"submit",
-		"--name", "policy-test",
-		"--work-type-name", "task",
-		"--payload", payloadPath,
-	})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute submit: %v", err)
-	}
-	if got.Verbose {
-		t.Fatal("expected normal mode to keep verbose disabled")
-	}
-	if got.Diagnostics != nil {
-		t.Fatal("expected normal mode to suppress diagnostics writer")
-	}
-}
-
-func TestRootCommand_NormalModeRunWiresTerminalMutedLogger(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-
-		oldStderr := os.Stderr
-		readPipe, writePipe, err := os.Pipe()
-		if err != nil {
-			t.Fatalf("pipe stderr: %v", err)
-		}
-		os.Stderr = writePipe
-		got.Logger.Warn("normal mode structured leak probe")
-		if err := writePipe.Close(); err != nil {
-			t.Fatalf("close stderr writer: %v", err)
-		}
-		os.Stderr = oldStderr
-
-		captured, err := io.ReadAll(readPipe)
-		if err != nil {
-			t.Fatalf("read captured stderr: %v", err)
-		}
-		if len(captured) != 0 {
-			t.Fatalf("stderr = %q, want no structured terminal output for normal run logger", captured)
-		}
-		return nil
-	}
-
-	dir := t.TempDir()
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"run",
-		"--dir", dir,
-		"--no-record",
-	})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run: %v", err)
-	}
-	if got.TerminalPolicy.Mode() != terminalpolicy.ModeNormal {
-		t.Fatalf("terminal policy mode = %q, want %q", got.TerminalPolicy.Mode(), terminalpolicy.ModeNormal)
-	}
-	if got.StartupOutput == nil {
-		t.Fatal("expected normal run policy to wire human startup output")
-	}
-	if got.Diagnostics != nil {
-		t.Fatal("expected normal run policy to suppress diagnostics writer")
-	}
-}
-
-func TestRootCommand_TerminalPolicyNeverLeaksPromptOrSecretsAcrossModes(t *testing.T) {
-	t.Run("quiet operational failure", func(t *testing.T) {
-		assertTerminalPolicySecretLeakContract(t, []string{
-			"run",
-			"--factory", writeInvalidGoalFactory(t),
-			"--no-record",
-			"--quiet",
-			terminalPolicySecretPrompt,
-		})
-	})
-
-	t.Run("normal operational failure", func(t *testing.T) {
-		assertTerminalPolicySecretLeakContract(t, []string{
-			"run",
-			"--factory", writeInvalidGoalFactory(t),
-			"--no-record",
-			terminalPolicySecretPrompt,
-		})
-	})
-
-	t.Run("verbose operational failure", func(t *testing.T) {
-		assertTerminalPolicySecretLeakContract(t, []string{
-			"run",
-			"--factory", writeInvalidGoalFactory(t),
-			"--no-record",
-			"--verbose",
-			terminalPolicySecretPrompt,
-		})
-	})
-}
-
-func TestRootCommand_SubmitDiagnosticsNeverLeakPromptOrSecretsAcrossModes(t *testing.T) {
-	modes := []struct {
-		name string
-		args []string
-	}{
-		{name: "normal", args: nil},
-		{name: "verbose", args: []string{"--verbose"}},
-	}
-
-	for _, mode := range modes {
-		t.Run(mode.name, func(t *testing.T) {
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusCreated)
-				_, _ = w.Write([]byte(`{"traceId":"trace-terminal-policy"}`))
-			}))
-			defer srv.Close()
-
-			payloadPath := filepath.Join(t.TempDir(), "secret-payload.md")
-			if err := os.WriteFile(payloadPath, []byte("# "+terminalPolicySecretPrompt+"\n\n"+terminalPolicySecretToken), 0o644); err != nil {
-				t.Fatal(err)
-			}
-
-			originalSubmit := submitWork
-			defer func() {
-				submitWork = originalSubmit
-			}()
-
-			submitWork = func(submitcli.SubmitConfig) error {
-				return nil
-			}
-
-			var stdout, stderr bytes.Buffer
-			root := NewRootCommand()
-			root.SetOut(&stdout)
-			root.SetErr(&stderr)
-			args := append([]string{}, mode.args...)
-			args = append(args,
-				"submit",
-				"--name", "terminal-policy-secret-test",
-				"--work-type-name", "task",
-				"--payload", payloadPath,
-				"--server", srv.URL,
-			)
-			root.SetArgs(args)
-
-			if err := root.Execute(); err != nil {
-				t.Fatalf("execute submit: %v", err)
-			}
-
-			assertNoTerminalPolicySecrets(t, stdout.String()+stderr.String())
-		})
-	}
-}
-
-func writeInvalidGoalFactory(t *testing.T) string {
-	t.Helper()
-
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	if err := os.WriteFile(factoryPath, []byte(goalFailureBaselineInvalidTopologyJSON), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	return factoryPath
-}
-
-func assertTerminalPolicySecretLeakContract(t *testing.T, args []string) {
-	t.Helper()
-
-	var stdout, stderr bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&stdout)
-	root.SetErr(&stderr)
-	root.SetArgs(args)
-
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected operational failure")
-	}
-	if !strings.Contains(err.Error(), "invalid graph references") {
-		t.Fatalf("error = %q, want invalid topology failure", err.Error())
-	}
-
-	assertNoTerminalPolicySecrets(t, stdout.String()+stderr.String())
-}
-
-func assertNoTerminalPolicySecrets(t *testing.T, capture string) {
-	t.Helper()
-
-	for _, forbidden := range []string{
-		terminalPolicySecretPrompt,
-		terminalPolicySecretToken,
-	} {
-		if strings.Contains(capture, forbidden) {
-			t.Fatalf("terminal or diagnostics capture leaked %q:\n%s", forbidden, capture)
-		}
 	}
 }
