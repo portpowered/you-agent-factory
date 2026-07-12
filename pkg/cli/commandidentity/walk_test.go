@@ -27,106 +27,7 @@ func TestWalk_SyntheticTreeRecordsCommandIdentityFields(t *testing.T) {
 	}
 
 	byPath := indexCommandsByPath(t, inventory.Commands)
-
-	cases := []struct {
-		path              string
-		idCandidate       string
-		name              string
-		aliases           []string
-		groupID           string
-		short             string
-		long              string
-		example           string
-		visibility        string
-		lifecycle         string
-		deprecatedMessage string
-		runnable          bool
-		docIDCandidate    string
-		handlerPresent    bool
-	}{
-		{
-			path:           "synth",
-			idCandidate:    "synth",
-			name:           "synth",
-			aliases:        []string{},
-			short:          "root short",
-			long:           "root long",
-			example:        "",
-			visibility:     "visible",
-			lifecycle:      "active",
-			runnable:       true,
-			handlerPresent: true,
-		},
-		{
-			path:           "synth nested",
-			idCandidate:    "synth.nested",
-			name:           "nested",
-			aliases:        []string{},
-			short:          "nested short",
-			visibility:     "visible",
-			lifecycle:      "active",
-			runnable:       false,
-			handlerPresent: false,
-		},
-		{
-			path:           "synth nested hidden-leaf",
-			idCandidate:    "synth.nested.hidden-leaf",
-			name:           "hidden-leaf",
-			aliases:        []string{},
-			short:          "hidden short",
-			visibility:     "hidden",
-			lifecycle:      "active",
-			runnable:       true,
-			handlerPresent: true,
-		},
-		{
-			path:           "synth aliased",
-			idCandidate:    "synth.aliased",
-			name:           "aliased",
-			aliases:        []string{"alias-one", "alias-two"},
-			groupID:        "operations",
-			short:          "aliased short",
-			visibility:     "visible",
-			lifecycle:      "active",
-			runnable:       true,
-			handlerPresent: true,
-		},
-		{
-			path:              "synth deprecated",
-			idCandidate:       "synth.deprecated",
-			name:              "deprecated",
-			aliases:           []string{},
-			short:             "deprecated short",
-			visibility:        "visible",
-			lifecycle:         "deprecated",
-			deprecatedMessage: "use synth nested instead",
-			runnable:          false,
-			handlerPresent:    false,
-		},
-		{
-			path:           "synth docs",
-			idCandidate:    "synth.docs",
-			name:           "docs",
-			aliases:        []string{},
-			short:          "docs short",
-			visibility:     "visible",
-			lifecycle:      "active",
-			runnable:       false,
-			handlerPresent: false,
-		},
-		{
-			path:           "synth docs agents",
-			idCandidate:    "synth.docs.agents",
-			name:           "agents",
-			aliases:        []string{},
-			short:          "agents short",
-			visibility:     "visible",
-			lifecycle:      "active",
-			docIDCandidate: "agents",
-			runnable:       true,
-			handlerPresent: true,
-		},
-	}
+	cases := syntheticCommandCases()
 
 	if len(inventory.Commands) != len(cases) {
 		t.Fatalf("Commands len = %d, want %d", len(inventory.Commands), len(cases))
@@ -137,45 +38,51 @@ func TestWalk_SyntheticTreeRecordsCommandIdentityFields(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing command record for path %q", tc.path)
 		}
-		if record.IDCandidate != tc.idCandidate {
-			t.Fatalf("%s idCandidate = %q, want %q", tc.path, record.IDCandidate, tc.idCandidate)
-		}
-		if record.Name != tc.name {
-			t.Fatalf("%s name = %q, want %q", tc.path, record.Name, tc.name)
-		}
-		if !reflect.DeepEqual(record.Aliases, tc.aliases) {
-			t.Fatalf("%s aliases = %#v, want %#v", tc.path, record.Aliases, tc.aliases)
-		}
-		if record.GroupID != tc.groupID {
-			t.Fatalf("%s groupId = %q, want %q", tc.path, record.GroupID, tc.groupID)
-		}
-		if record.Short != tc.short {
-			t.Fatalf("%s short = %q, want %q", tc.path, record.Short, tc.short)
-		}
-		if record.Long != tc.long {
-			t.Fatalf("%s long = %q, want %q", tc.path, record.Long, tc.long)
-		}
-		if record.Example != tc.example {
-			t.Fatalf("%s example = %q, want %q", tc.path, record.Example, tc.example)
-		}
-		if record.Visibility != tc.visibility {
-			t.Fatalf("%s visibility = %q, want %q", tc.path, record.Visibility, tc.visibility)
-		}
-		if record.Lifecycle != tc.lifecycle {
-			t.Fatalf("%s lifecycle = %q, want %q", tc.path, record.Lifecycle, tc.lifecycle)
-		}
-		if record.DeprecatedMessage != tc.deprecatedMessage {
-			t.Fatalf("%s deprecatedMessage = %q, want %q", tc.path, record.DeprecatedMessage, tc.deprecatedMessage)
-		}
-		if record.Runnable != tc.runnable {
-			t.Fatalf("%s runnable = %t, want %t", tc.path, record.Runnable, tc.runnable)
-		}
-		if record.DocIDCandidate != tc.docIDCandidate {
-			t.Fatalf("%s docIdCandidate = %q, want %q", tc.path, record.DocIDCandidate, tc.docIDCandidate)
-		}
-		if record.HandlerPresent != tc.handlerPresent {
-			t.Fatalf("%s handlerPresent = %t, want %t", tc.path, record.HandlerPresent, tc.handlerPresent)
-		}
+		assertSyntheticCommandRecord(t, tc, record)
+	}
+}
+
+func assertSyntheticCommandRecord(t *testing.T, tc syntheticCommandCase, record commandidentity.CommandRecord) {
+	t.Helper()
+
+	if record.IDCandidate != tc.idCandidate {
+		t.Fatalf("%s idCandidate = %q, want %q", tc.path, record.IDCandidate, tc.idCandidate)
+	}
+	if record.Name != tc.name {
+		t.Fatalf("%s name = %q, want %q", tc.path, record.Name, tc.name)
+	}
+	if !reflect.DeepEqual(record.Aliases, tc.aliases) {
+		t.Fatalf("%s aliases = %#v, want %#v", tc.path, record.Aliases, tc.aliases)
+	}
+	if record.GroupID != tc.groupID {
+		t.Fatalf("%s groupId = %q, want %q", tc.path, record.GroupID, tc.groupID)
+	}
+	if record.Short != tc.short {
+		t.Fatalf("%s short = %q, want %q", tc.path, record.Short, tc.short)
+	}
+	if record.Long != tc.long {
+		t.Fatalf("%s long = %q, want %q", tc.path, record.Long, tc.long)
+	}
+	if record.Example != tc.example {
+		t.Fatalf("%s example = %q, want %q", tc.path, record.Example, tc.example)
+	}
+	if record.Visibility != tc.visibility {
+		t.Fatalf("%s visibility = %q, want %q", tc.path, record.Visibility, tc.visibility)
+	}
+	if record.Lifecycle != tc.lifecycle {
+		t.Fatalf("%s lifecycle = %q, want %q", tc.path, record.Lifecycle, tc.lifecycle)
+	}
+	if record.DeprecatedMessage != tc.deprecatedMessage {
+		t.Fatalf("%s deprecatedMessage = %q, want %q", tc.path, record.DeprecatedMessage, tc.deprecatedMessage)
+	}
+	if record.Runnable != tc.runnable {
+		t.Fatalf("%s runnable = %t, want %t", tc.path, record.Runnable, tc.runnable)
+	}
+	if record.DocIDCandidate != tc.docIDCandidate {
+		t.Fatalf("%s docIdCandidate = %q, want %q", tc.path, record.DocIDCandidate, tc.docIDCandidate)
+	}
+	if record.HandlerPresent != tc.handlerPresent {
+		t.Fatalf("%s handlerPresent = %t, want %t", tc.path, record.HandlerPresent, tc.handlerPresent)
 	}
 }
 
