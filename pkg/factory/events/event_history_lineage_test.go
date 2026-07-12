@@ -701,11 +701,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 	}
 }
 
-func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestContentOnOutputWork(t *testing.T) {
-	eventTime := time.Date(2026, time.July, 12, 20, 0, 0, 0, time.UTC)
-	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
-
-	consumed := []interfaces.Token{{
+func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []interfaces.Token, outputToken interfaces.Token) {
+	consumed = []interfaces.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
 		Color: interfaces.TokenColor{
@@ -721,7 +718,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 			}},
 		},
 	}}
-	outputToken := interfaces.Token{
+	outputToken = interfaces.Token{
 		ID:      "work-input",
 		PlaceID: "task:failed",
 		Color: interfaces.TokenColor{
@@ -745,6 +742,47 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 			}},
 		},
 	}
+	return consumed, outputToken
+}
+
+func assertFailedPreservesRequestContentResponse(t *testing.T, events []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(events) != 2 {
+		t.Fatalf("event count = %d, want 2", len(events))
+	}
+	response, err := events[1].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if response.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("response outcome = %s, want FAILED", response.Outcome)
+	}
+	if response.OutputWork == nil || len(*response.OutputWork) != 1 {
+		t.Fatalf("output work = %#v, want one failed output work item", response.OutputWork)
+	}
+	work := (*response.OutputWork)[0]
+	if work.Content == nil || len(*work.Content) != 1 {
+		t.Fatalf("output work content = %#v, want preserved request content", work.Content)
+	}
+	textPart, err := (*work.Content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode text content: %v", err)
+	}
+	if textPart.Text != "input-content" {
+		t.Fatalf("output work text = %q, want input-content", textPart.Text)
+	}
+	if textPart.Text == "worker-output" {
+		t.Fatalf("output work projected worker response as success-shaped content")
+	}
+	if stringValueForEventHistoryTest(response.Output) != "worker-output" {
+		t.Fatalf("response output = %#v, want worker output retained separately from downstream payload", response.Output)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestContentOnOutputWork(t *testing.T) {
+	eventTime := time.Date(2026, time.July, 12, 20, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	consumed, outputToken := failedPreservesRequestContentFixture(eventTime)
 
 	history.RecordWorkstationRequest(1, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-failed",
@@ -777,35 +815,5 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 		}},
 	})
 
-	events := history.Events()
-	if len(events) != 2 {
-		t.Fatalf("event count = %d, want 2", len(events))
-	}
-	response, err := events[1].Payload.AsDispatchResponseEventPayload()
-	if err != nil {
-		t.Fatalf("dispatch response payload: %v", err)
-	}
-	if response.Outcome != factoryapi.WorkOutcomeFailed {
-		t.Fatalf("response outcome = %s, want FAILED", response.Outcome)
-	}
-	if response.OutputWork == nil || len(*response.OutputWork) != 1 {
-		t.Fatalf("output work = %#v, want one failed output work item", response.OutputWork)
-	}
-	work := (*response.OutputWork)[0]
-	if work.Content == nil || len(*work.Content) != 1 {
-		t.Fatalf("output work content = %#v, want preserved request content", work.Content)
-	}
-	textPart, err := (*work.Content)[0].AsWorkTextContentPart()
-	if err != nil {
-		t.Fatalf("decode text content: %v", err)
-	}
-	if textPart.Text != "input-content" {
-		t.Fatalf("output work text = %q, want input-content", textPart.Text)
-	}
-	if textPart.Text == "worker-output" {
-		t.Fatalf("output work projected worker response as success-shaped content")
-	}
-	if stringValueForEventHistoryTest(response.Output) != "worker-output" {
-		t.Fatalf("response output = %#v, want worker output retained separately from downstream payload", response.Output)
-	}
+	assertFailedPreservesRequestContentResponse(t, history.Events())
 }
