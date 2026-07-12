@@ -796,15 +796,7 @@ func validateBlockingFactoryLoad(cfg *interfaces.FactoryConfig) error {
 	if cfg == nil {
 		return nil
 	}
-	result := validation.ValidateBlockingLoad(cfg)
-	if len(result.Targets) == 0 {
-		return nil
-	}
-	return fmt.Errorf(
-		"%w: factory topology contains invalid graph references (%d blocking validation targets)",
-		ErrInvalidNamedFactory,
-		len(result.Targets),
-	)
+	return newBlockingFactoryLoadError(validation.ValidateBlockingLoad(cfg))
 }
 
 func ruleAgentWorkerTools(cfg *interfaces.FactoryConfig) []Finding {

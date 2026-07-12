@@ -164,6 +164,18 @@ func DefaultProjectNamedFactoryRoot(cwd string) (string, error) {
 	return config.DefaultProjectNamedFactoryRoot(cwd)
 }
 
+// AsBlockingFactoryLoadError returns structured blocking findings when err wraps
+// a BlockingFactoryLoadError from materialization, upgrade, or factory load.
+func AsBlockingFactoryLoadError(err error) (*config.BlockingFactoryLoadError, bool) {
+	return config.AsBlockingFactoryLoadError(err)
+}
+
+// BlockingFactoryLoadFindings returns config findings derived from structured
+// blocking-load validation errors.
+func BlockingFactoryLoadFindings(err error) []config.Finding {
+	return config.BlockingFactoryLoadFindings(err)
+}
+
 // IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.
 func IsInvalidNamedFactory(err error) bool {
 	return errors.Is(err, ErrInvalidNamedFactory)
