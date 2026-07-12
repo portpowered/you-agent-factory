@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestBuildRetainsCanonicalSummariesAndOmitsRuntimeDetails(t *testing.T) {
@@ -60,6 +62,54 @@ func TestBuildRetainsCanonicalPrecomputedArgumentsDigest(t *testing.T) {
 	}
 	if value.ArgumentsDigest != digest('9') {
 		t.Fatalf("argumentsDigest = %q, want canonical projection digest", value.ArgumentsDigest)
+	}
+}
+
+func TestApplyJavaScriptProjectionFactsRetainsPublicCheckpointAndPartialResult(t *testing.T) {
+	t.Parallel()
+	timestamp := time.Date(2026, 7, 12, 20, 30, 0, 0, time.UTC)
+	facts := minimalCanonicalFacts()
+	ApplyJavaScriptProjectionFacts(&facts, &interfaces.FactorySessionJavaScriptRuntimeState{
+		ArgsDigest: digest('8'),
+		Checkpoints: []interfaces.FactorySessionJavaScriptCheckpointRef{{
+			ID: "checkpoint-1", Label: "Review", Summary: "Ready for review", Timestamp: timestamp,
+			ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{ID: "artifact-checkpoint"},
+		}},
+		ResultStatus: "FAILED_WITH_PARTIAL",
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "partial"},
+			{Type: interfaces.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
+		},
+	})
+
+	if facts.ArgumentsDigest != digest('8') {
+		t.Fatalf("arguments digest = %q", facts.ArgumentsDigest)
+	}
+	if facts.Checkpoint == nil || facts.Checkpoint.ID != "checkpoint-1" || facts.Checkpoint.ArtifactID != "artifact-checkpoint" || !facts.Checkpoint.Timestamp.Equal(timestamp) {
+		t.Fatalf("checkpoint = %#v", facts.Checkpoint)
+	}
+	if facts.Result == nil || facts.Result.Status != "FAILED_WITH_PARTIAL" || facts.Result.Mode != "partial" || len(facts.Result.PrimaryResult) == 0 {
+		t.Fatalf("result = %#v", facts.Result)
+	}
+	if len(facts.Result.ArtifactIDs) != 1 || facts.Result.ArtifactIDs[0] != "artifact-result" {
+		t.Fatalf("result artifact IDs = %#v", facts.Result.ArtifactIDs)
+	}
+}
+
+func TestApplyJavaScriptProjectionFactsHandlesAbsentAndStatusOnlyProjections(t *testing.T) {
+	t.Parallel()
+	ApplyJavaScriptProjectionFacts(nil, &interfaces.FactorySessionJavaScriptRuntimeState{})
+	facts := minimalCanonicalFacts()
+	ApplyJavaScriptProjectionFacts(&facts, nil)
+	ApplyJavaScriptProjectionFacts(&facts, &interfaces.FactorySessionJavaScriptRuntimeState{ResultStatus: "FINAL"})
+	if facts.Result == nil || facts.Result.Status != "FINAL" || facts.Result.Mode != "final" {
+		t.Fatalf("status-only result = %#v", facts.Result)
+	}
+
+	facts.Result = nil
+	ApplyJavaScriptProjectionFacts(&facts, &interfaces.FactorySessionJavaScriptRuntimeState{})
+	if facts.Result != nil {
+		t.Fatalf("empty projection manufactured result = %#v", facts.Result)
 	}
 }
 
