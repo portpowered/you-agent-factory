@@ -14,9 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// Hermetic S02 failure-baseline fixtures for one-shot run paths with quiet or
-// CI-oriented suppression enabled. These lock the customer-visible contract
-// that dashboard and operator startup chatter must not leak on stdout.
+// Hermetic S02 failure-baseline fixtures for one-shot run paths: quiet/CI
+// suppression contracts and named @you/goal invocation when the factory session
+// never becomes ready (no listening Factory Session server).
 
 var quietLeakForbiddenMarkers = []string{
 	"Factory initiated",
@@ -24,6 +24,13 @@ var quietLeakForbiddenMarkers = []string{
 	"Runtime log",
 	"Opening dashboard",
 	"Factory:",
+	"Recording saved",
+}
+
+var quietLeakExpectedMarkers = []string{
+	"Factory initiated",
+	"Dashboard URL",
+	"Runtime log",
 	"Recording saved",
 }
 
@@ -35,6 +42,42 @@ func assertQuietLeakContractForbidden(t *testing.T, output string) {
 			t.Fatalf("output = %q, want no quiet-leak marker %q", output, forbidden)
 		}
 	}
+}
+
+func assertQuietLeakContractPresent(t *testing.T, output string) {
+	t.Helper()
+
+	if strings.TrimSpace(output) == "" {
+		t.Fatal("output is empty, want non-empty quiet-leak terminal chatter documenting today's contract")
+	}
+	for _, marker := range quietLeakExpectedMarkers {
+		if strings.Contains(output, marker) {
+			return
+		}
+	}
+	t.Fatalf("output = %q, want at least one quiet-leak marker among %v", output, quietLeakExpectedMarkers)
+}
+
+func TestFailureBaseline_QuietLeak_OneShotBatchQuietStillEmitsStartupChatter(t *testing.T) {
+	dir, workFile := writeDashboardRunFixture(t)
+	port := unusedTCPPort(t)
+
+	var startupOut bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		Dir:                        dir,
+		Port:                       port,
+		WorkFile:                   workFile,
+		MockWorkersEnabled:         true,
+		SuppressDashboardRendering: true,
+		StartupOutput:              &startupOut,
+		OpenDashboard:              false,
+		DisableDefaultRecording:    true,
+		Logger:                     zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	assertQuietLeakContractPresent(t, startupOut.String())
 }
 
 func TestFailureBaseline_QuietLeak_OneShotBatchRunSuppressesDashboardMarkers(t *testing.T) {
@@ -122,4 +165,54 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 		t.Fatalf("stdout = %q, want primary invocation result only", got)
 	}
 	assertQuietLeakContractForbidden(t, output.String())
+}
+
+type failureBaselineNoServerInvocationService struct {
+	run func(context.Context) error
+}
+
+func (s failureBaselineNoServerInvocationService) Run(ctx context.Context) error {
+	return s.run(ctx)
+}
+
+func (s failureBaselineNoServerInvocationService) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return factoryapi.Factory{}, apisurface.ErrFactorySessionNotFound
+}
+
+func (s failureBaselineNoServerInvocationService) InvokeFactorySession(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	return apisurface.FactoryInvocationResult{}, apisurface.ErrFactorySessionNotFound
+}
+
+func TestFailureBaseline_NoServer_RunNamedGoalInvocationReportsSessionStoppedBeforeReady(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "no-server baseline goal prompt"
+	var output bytes.Buffer
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return failureBaselineNoServerInvocationService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-goal",
+		NamedFactoryName:         goal.PackagedFactoryName,
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+		Logger:                   zap.NewNop(),
+	})
+	if err == nil {
+		t.Fatal("expected named goal invocation to fail before session became ready")
+	}
+	want := "factory invocation session stopped before it became ready"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty before invocation starts", output.String())
+	}
 }

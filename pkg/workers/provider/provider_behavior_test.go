@@ -558,6 +558,16 @@ func TestNonCodexProviderBehavior_BuildCommandRequest(t *testing.T) {
 	}
 }
 
+func TestFailureBaseline_AbsentDefault_BuildCommandRequestUsesEmptyProviderCommandWhenModelProviderUnset(t *testing.T) {
+	req := interfaces.ProviderInferenceRequest{
+		UserMessage: "plan the goal",
+	}
+	request := providerBehaviorFor("", logging.NoopLogger{}).BuildCommandRequest(req, []string{"-p", "plan the goal"})
+	if request.Command != "" {
+		t.Fatalf("command = %q, want empty provider command when modelProvider is unset", request.Command)
+	}
+}
+
 type nonCodexCommandRequestTestCase struct {
 	name    string
 	req     interfaces.ProviderInferenceRequest

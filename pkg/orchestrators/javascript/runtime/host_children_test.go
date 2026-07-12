@@ -61,6 +61,31 @@ func TestResolveChildWorkerSettings_UnknownPresetNamesSource(t *testing.T) {
 	}
 }
 
+func TestFailureBaseline_AbsentDefault_GoalAgentRunLeavesEmptyModelProviderWithoutOperatorDefaults(t *testing.T) {
+	got, err := workflowruntime.ResolveChildWorkerSettings(
+		workflowruntime.ChildExecutionRequest{
+			AgentID: "goal-planner",
+			Prompt:  "plan the goal",
+		},
+		map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+			"goal-planner": {},
+		},
+		workflowruntime.WorkerSettingsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
+	}
+	if got.ModelProvider != "" {
+		t.Fatalf("modelProvider = %q, want empty when operator defaults are absent", got.ModelProvider)
+	}
+	if got.Model != "" {
+		t.Fatalf("model = %q, want empty when operator defaults are absent", got.Model)
+	}
+	if got.Command != "" {
+		t.Fatalf("command = %q, want empty provider command when operator defaults are absent", got.Command)
+	}
+}
+
 func TestAgentRun_InheritsFactoryNamedAgentPreset(t *testing.T) {
 	req := workflowruntime.Request{
 		Source:    `return (async function () { return agent.run({agentId: "reviewer", prompt: "review"}); })();`,
