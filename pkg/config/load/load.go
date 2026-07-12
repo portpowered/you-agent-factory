@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 )
 
 // Re-export stable load error values for callers that import pkg/config/load only.
@@ -48,8 +49,8 @@ func LoadRuntimeConfigFromFactoryDir(factoryDir string, workstationLoader config
 
 // AsBlockingFactoryLoadError returns structured blocking findings when err wraps
 // a BlockingFactoryLoadError from materialization, upgrade, or factory load.
-func AsBlockingFactoryLoadError(err error) (*config.BlockingFactoryLoadError, bool) {
-	return config.AsBlockingFactoryLoadError(err)
+func AsBlockingFactoryLoadError(err error) (*blockingload.BlockingFactoryLoadError, bool) {
+	return blockingload.AsBlockingFactoryLoadError(err)
 }
 
 // BlockingFactoryLoadFindings returns config findings derived from structured

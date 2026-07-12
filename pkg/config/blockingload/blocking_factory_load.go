@@ -1,13 +1,66 @@
-package config
+package blockingload
 
 import (
 	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
+	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 const defaultCLIBinaryName = "you"
+
+// BlockingFactoryLoadError reports blocking factory-load validation failures with
+// structured canonical targets preserved for callers.
+type BlockingFactoryLoadError struct {
+	Targets []factoryvalidation.Target
+}
+
+func (e *BlockingFactoryLoadError) Error() string {
+	if e == nil {
+		return factoryerrors.ErrInvalidNamedFactory.Error()
+	}
+	if len(e.Targets) == 0 {
+		return fmt.Sprintf("%v: factory topology contains invalid graph references", factoryerrors.ErrInvalidNamedFactory)
+	}
+	return fmt.Sprintf(
+		"%v: factory topology contains invalid graph references (%d blocking validation targets)",
+		factoryerrors.ErrInvalidNamedFactory,
+		len(e.Targets),
+	)
+}
+
+func (e *BlockingFactoryLoadError) Is(target error) bool {
+	return target == factoryerrors.ErrInvalidNamedFactory
+}
+
+// NewBlockingFactoryLoadError wraps non-empty blocking validation targets.
+func NewBlockingFactoryLoadError(result factoryvalidation.Result) error {
+	if len(result.Targets) == 0 {
+		return nil
+	}
+	return &BlockingFactoryLoadError{
+		Targets: append([]factoryvalidation.Target(nil), result.Targets...),
+	}
+}
+
+// IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.
+func IsInvalidNamedFactory(err error) bool {
+	return errors.Is(err, factoryerrors.ErrInvalidNamedFactory)
+}
+
+// AsBlockingFactoryLoadError returns structured blocking findings when err wraps
+// a BlockingFactoryLoadError from materialization, upgrade, or factory load.
+func AsBlockingFactoryLoadError(err error) (*BlockingFactoryLoadError, bool) {
+	var loadErr *BlockingFactoryLoadError
+	if !errors.As(err, &loadErr) {
+		return nil, false
+	}
+	return loadErr, true
+}
 
 // BlockingFactoryLoadOperatorError carries operator-facing diagnostics for a
 // blocking factory-load validation failure at a resolved factory path.
@@ -20,7 +73,7 @@ func (e *BlockingFactoryLoadOperatorError) Error() string {
 	if e == nil {
 		return ""
 	}
-	return FormatBlockingFactoryLoadOperatorDiagnostic(e.FactoryPath, BlockingFactoryLoadFindings(e.Err))
+	return FormatBlockingFactoryLoadOperatorDiagnostic(e.FactoryPath, e.Err)
 }
 
 func (e *BlockingFactoryLoadOperatorError) Unwrap() error {
@@ -74,15 +127,15 @@ func FactoryConfigValidateRecoveryCommandForCLI(cliName, factoryPath string) str
 
 // FormatBlockingFactoryLoadOperatorDiagnostic renders blocking findings and the
 // single validate recovery command for operator-visible CLI output.
-func FormatBlockingFactoryLoadOperatorDiagnostic(factoryPath string, findings []Finding) string {
+func FormatBlockingFactoryLoadOperatorDiagnostic(factoryPath string, err error) string {
 	var builder strings.Builder
-	builder.WriteString(ErrInvalidNamedFactory.Error())
+	builder.WriteString(factoryerrors.ErrInvalidNamedFactory.Error())
 	builder.WriteString(": factory topology contains invalid graph references")
-	if len(findings) > 0 {
+	if findings := blockingFactoryLoadFindings(err); len(findings) > 0 {
 		builder.WriteString("\nBlocking findings:")
 		for _, finding := range findings {
 			builder.WriteString("\n")
-			builder.WriteString(FormatBlockingFactoryLoadFinding(finding))
+			builder.WriteString(formatBlockingFactoryLoadFinding(finding))
 		}
 	}
 	builder.WriteString("\nRecovery:\n  ")
@@ -90,11 +143,36 @@ func FormatBlockingFactoryLoadOperatorDiagnostic(factoryPath string, findings []
 	return builder.String()
 }
 
-// FormatBlockingFactoryLoadFinding renders one blocking factory-load finding.
-func FormatBlockingFactoryLoadFinding(finding Finding) string {
-	rule := strings.TrimSpace(finding.Rule)
-	path := strings.TrimSpace(finding.Path)
-	message := strings.TrimSpace(finding.Message)
+type blockingFinding struct {
+	rule    string
+	path    string
+	message string
+}
+
+func blockingFactoryLoadFindings(err error) []blockingFinding {
+	loadErr, ok := AsBlockingFactoryLoadError(err)
+	if !ok {
+		return nil
+	}
+	findings := make([]blockingFinding, 0, len(loadErr.Targets))
+	for _, target := range loadErr.Targets {
+		path := target.Path
+		if path == "" {
+			path = target.Subject.ID
+		}
+		findings = append(findings, blockingFinding{
+			rule:    target.Code,
+			path:    path,
+			message: target.Message,
+		})
+	}
+	return findings
+}
+
+func formatBlockingFactoryLoadFinding(finding blockingFinding) string {
+	rule := strings.TrimSpace(finding.rule)
+	path := strings.TrimSpace(finding.path)
+	message := strings.TrimSpace(finding.message)
 	switch {
 	case rule != "" && path != "":
 		return fmt.Sprintf("- [%s] %s: %s", rule, path, message)
@@ -141,15 +219,19 @@ func MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(
 	if _, ok := AsBlockingFactoryLoadOperatorError(err); ok {
 		return err
 	}
-	if projectPath, projectErr := NamedFactoryDirPath(projectRoot, name); projectErr == nil {
+	if projectPath, projectErr := namedFactoryDirPath(projectRoot, name); projectErr == nil {
 		if wrapped := WrapBlockingFactoryLoadOperatorError(projectPath, err); wrapped != err {
 			return wrapped
 		}
 	}
-	if globalPath, globalErr := NamedFactoryDirPath(globalRoot, name); globalErr == nil {
+	if globalPath, globalErr := namedFactoryDirPath(globalRoot, name); globalErr == nil {
 		return WrapBlockingFactoryLoadOperatorError(globalPath, err)
 	}
 	return err
+}
+
+func namedFactoryDirPath(rootDir, name string) (string, error) {
+	return namedfactorypath.MapDir(strings.TrimSpace(rootDir), name)
 }
 
 func quoteFactoryPathForCLI(path string) string {
@@ -161,16 +243,4 @@ func quoteFactoryPathForCLI(path string) string {
 		return path
 	}
 	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
-}
-
-// NamedFactoryDirPath returns the on-disk directory for a persisted named factory.
-func NamedFactoryDirPath(rootDir, name string) (string, error) {
-	if strings.TrimSpace(rootDir) == "" {
-		return "", fmt.Errorf("factory root is required")
-	}
-	segment, err := NamedFactoryNameToLayoutSegment(name)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(rootDir, segment), nil
 }

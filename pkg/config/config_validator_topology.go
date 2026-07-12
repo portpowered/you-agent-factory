@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 	"github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/timework"
@@ -796,7 +797,7 @@ func validateBlockingFactoryLoad(cfg *interfaces.FactoryConfig) error {
 	if cfg == nil {
 		return nil
 	}
-	return newBlockingFactoryLoadError(validation.ValidateBlockingLoad(cfg))
+	return blockingload.NewBlockingFactoryLoadError(validation.ValidateBlockingLoad(cfg))
 }
 
 func ruleAgentWorkerTools(cfg *interfaces.FactoryConfig) []Finding {

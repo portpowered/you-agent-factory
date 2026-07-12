@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 )
 
 // Re-export stable persist error values for callers that import pkg/config/persist only.
@@ -166,8 +167,8 @@ func DefaultProjectNamedFactoryRoot(cwd string) (string, error) {
 
 // AsBlockingFactoryLoadError returns structured blocking findings when err wraps
 // a BlockingFactoryLoadError from materialization, upgrade, or factory load.
-func AsBlockingFactoryLoadError(err error) (*config.BlockingFactoryLoadError, bool) {
-	return config.AsBlockingFactoryLoadError(err)
+func AsBlockingFactoryLoadError(err error) (*blockingload.BlockingFactoryLoadError, bool) {
+	return blockingload.AsBlockingFactoryLoadError(err)
 }
 
 // BlockingFactoryLoadFindings returns config findings derived from structured

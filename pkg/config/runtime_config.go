@@ -9,6 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/blockingload"
+	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
+	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -693,7 +696,7 @@ var ErrNamedFactoryAlreadyExists = errors.New("named factory already exists")
 
 // ErrInvalidNamedFactory reports that the submitted named-factory payload could
 // not be normalized into a runnable named-factory layout.
-var ErrInvalidNamedFactory = errors.New("invalid named factory")
+var ErrInvalidNamedFactory = factoryerrors.ErrInvalidNamedFactory
 
 // ValidateNamedFactoryName applies the canonical safe directory-segment rules
 // used by the named-factory on-disk layout.
@@ -939,4 +942,57 @@ func replaceNamedFactoryDir(rootDir, canonicalName, stagingDir, targetDir string
 	}
 	committed = true
 	return nil
+}
+
+// AsBlockingFactoryLoadError returns structured blocking findings when err wraps
+// a BlockingFactoryLoadError from materialization, upgrade, or factory load.
+func AsBlockingFactoryLoadError(err error) (*blockingload.BlockingFactoryLoadError, bool) {
+	return blockingload.AsBlockingFactoryLoadError(err)
+}
+
+// BlockingFactoryLoadFindings returns config findings derived from structured
+// blocking-load validation errors.
+func BlockingFactoryLoadFindings(err error) []Finding {
+	loadErr, ok := blockingload.AsBlockingFactoryLoadError(err)
+	if !ok {
+		return nil
+	}
+	return canonicalTargetsToFindings(loadErr.Targets)
+}
+
+// IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.
+func IsInvalidNamedFactory(err error) bool {
+	return blockingload.IsInvalidNamedFactory(err)
+}
+
+// FactoryConfigValidateRecoveryCommand returns the single recovery command
+// operators should run after a materialization or upgrade validation failure.
+func FactoryConfigValidateRecoveryCommand(factoryPath string) string {
+	return blockingload.FactoryConfigValidateRecoveryCommand(factoryPath)
+}
+
+// WrapBlockingFactoryLoadOperatorError formats err for operators when it wraps
+// structured blocking factory-load validation findings.
+func WrapBlockingFactoryLoadOperatorError(factoryPath string, err error) error {
+	return blockingload.WrapBlockingFactoryLoadOperatorError(factoryPath, err)
+}
+
+// MaybeFormatBlockingFactoryLoadOperatorError wraps err with operator diagnostics
+// when it carries structured blocking findings and is not already wrapped.
+func MaybeFormatBlockingFactoryLoadOperatorError(err error, factoryPath string) error {
+	return blockingload.MaybeFormatBlockingFactoryLoadOperatorError(err, factoryPath)
+}
+
+// MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory applies operator
+// diagnostics for named-factory resolution failures.
+func MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(
+	err error,
+	projectRoot, globalRoot, name string,
+) error {
+	return blockingload.MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(err, projectRoot, globalRoot, name)
+}
+
+// NamedFactoryDirPath returns the on-disk directory for a persisted named factory.
+func NamedFactoryDirPath(rootDir, name string) (string, error) {
+	return namedfactorypath.MapDir(strings.TrimSpace(rootDir), name)
 }
