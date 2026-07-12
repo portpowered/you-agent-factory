@@ -71,6 +71,8 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 		Attempt:         1,
 		Label:           req.Label,
 		PromptDigest:    workflowruntime.TextDigest(req.Prompt),
+		Preset:          req.Preset,
+		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
 		Command:         req.Command,

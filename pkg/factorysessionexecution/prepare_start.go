@@ -404,12 +404,15 @@ func rebuildRuntimeSessionCanonicalEvents(state *runtimeSessionState) []json.Raw
 }
 
 type dispatchQueuedEventPayload struct {
-	DispatchKind  string `json:"dispatchKind"`
-	Label         string `json:"label,omitempty"`
-	RunnerID      string `json:"runnerId,omitempty"`
-	Model         string `json:"model,omitempty"`
-	Provider      string `json:"provider,omitempty"`
-	QueuePosition *int   `json:"queuePosition,omitempty"`
+	DispatchKind    string `json:"dispatchKind"`
+	Label           string `json:"label,omitempty"`
+	RunnerID        string `json:"runnerId,omitempty"`
+	PresetID        string `json:"presetId,omitempty"`
+	ModelProvider   string `json:"modelProvider,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	Provider        string `json:"provider,omitempty"`
+	QueuePosition   *int   `json:"queuePosition,omitempty"`
 }
 
 type dispatchReconciledEventPayload struct {
@@ -473,8 +476,17 @@ func buildDispatchQueuedEvent(
 	if runnerID := strings.TrimSpace(dispatch.RunnerID); runnerID != "" {
 		payload.RunnerID = runnerID
 	}
+	if presetID := strings.TrimSpace(dispatch.PresetID); presetID != "" {
+		payload.PresetID = presetID
+	}
+	if modelProvider := strings.TrimSpace(dispatch.ModelProvider); modelProvider != "" {
+		payload.ModelProvider = modelProvider
+	}
 	if model := strings.TrimSpace(dispatch.Model); model != "" {
 		payload.Model = model
+	}
+	if reasoningEffort := strings.TrimSpace(dispatch.ReasoningEffort); reasoningEffort != "" {
+		payload.ReasoningEffort = reasoningEffort
 	}
 	if provider := strings.TrimSpace(dispatch.Provider); provider != "" {
 		payload.Provider = provider

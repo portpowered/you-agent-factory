@@ -1627,8 +1627,14 @@ export interface components {
       failureClassification?: components["schemas"]["WorkFailureType"];
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
+      /** @description Resolved operator worker preset identifier when one was selected. */
+      presetId?: string;
+      /** @description Resolved canonical model-provider identifier when applicable. */
+      modelProvider?: string;
       /** @description Selected model identifier when applicable. */
       model?: string;
+      /** @description Resolved canonical reasoning effort when applicable. */
+      reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
       /** @description Provider-session correlation refs for model-backed dispatches. */
@@ -1756,8 +1762,14 @@ export interface components {
       failureClassification?: components["schemas"]["WorkFailureType"];
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
+      /** @description Resolved operator worker preset identifier when one was selected. */
+      presetId?: string;
+      /** @description Resolved canonical model-provider identifier when applicable. */
+      modelProvider?: string;
       /** @description Selected model identifier when applicable. */
       model?: string;
+      /** @description Resolved canonical reasoning effort when applicable. */
+      reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
       /** @description Provider-session correlation refs for model-backed dispatches. */
@@ -2051,8 +2063,14 @@ export interface components {
       coordinationRef?: string;
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
+      /** @description Resolved operator worker preset identifier when one was selected. */
+      presetId?: string;
+      /** @description Resolved canonical model-provider identifier when applicable. */
+      modelProvider?: string;
       /** @description Selected model identifier when applicable. */
       model?: string;
+      /** @description Resolved canonical reasoning effort when applicable. */
+      reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
       /** @description Parent dispatch identifier when this dispatch was spawned from another dispatch. */

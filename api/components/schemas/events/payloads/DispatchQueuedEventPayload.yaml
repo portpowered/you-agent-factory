@@ -18,9 +18,18 @@ properties:
   runnerId:
     type: string
     description: Selected runner identifier when applicable.
+  presetId:
+    type: string
+    description: Resolved operator worker preset identifier when one was selected.
+  modelProvider:
+    type: string
+    description: Resolved canonical model-provider identifier when applicable.
   model:
     type: string
     description: Selected model identifier when applicable.
+  reasoningEffort:
+    type: string
+    description: Resolved canonical reasoning effort when applicable.
   provider:
     type: string
     description: Selected provider identifier when applicable.

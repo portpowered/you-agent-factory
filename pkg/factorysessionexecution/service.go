@@ -528,7 +528,10 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		Retryable:             cloneBoolPtr(child.Retryable),
 		FailureClassification: strings.TrimSpace(string(child.FailureClassification)),
 		RunnerID:              strings.TrimSpace(child.RunnerID),
+		PresetID:              strings.TrimSpace(child.Preset),
+		ModelProvider:         strings.TrimSpace(child.ModelProvider),
 		Model:                 strings.TrimSpace(child.Model),
+		ReasoningEffort:       strings.TrimSpace(child.ReasoningEffort),
 	}
 	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
 		summary.JavaScript = &javascript
