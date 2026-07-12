@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-stream-gap-001",
+  "sequence": 48,
+  "recordedAt": "2026-07-13T12:00:06Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "STREAM_GAP",
+  "phase": "UPDATED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "stream.gap",
+    "delivery": "SYNTHESIZED",
+    "representation": "NOTIFICATION",
+    "fidelity": "LOSSY"
+  },
+  "payload": {
+    "fromSequence": 100,
+    "toSequence": 150,
+    "reason": "retention_window"
+  }
+}

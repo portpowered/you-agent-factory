@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-tool-lifecycle-001",
+  "sequence": 44,
+  "recordedAt": "2026-07-13T12:00:02Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "TOOL",
+  "phase": "STARTED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "tool.started",
+    "delivery": "NATIVE_STREAM",
+    "representation": "NOTIFICATION",
+    "fidelity": "LIFECYCLE_ONLY"
+  },
+  "payload": {
+    "toolCallId": "call-read-001",
+    "toolName": "read_file",
+    "status": "started",
+    "argumentsSummary": {
+      "path": "README.md"
+    }
+  },
+  "dispatchId": "dispatch-001",
+  "turnId": "turn-001",
+  "itemId": "item-tool-001"
+}
