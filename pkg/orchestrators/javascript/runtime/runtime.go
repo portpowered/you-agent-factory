@@ -39,7 +39,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	vm := goja.New()
 	records := newRecordCollector()
 	sessionID := strings.TrimSpace(req.SessionID)
-	childExecutor := childExecutorForRequest(sessionID, records, hooks, req.Resume)
+	childExecutor := childExecutorForRequest(sessionID, records, hooks, req.Resume, policy)
 	globals := &runtimeGlobals{
 		vm:            vm,
 		policy:        policy,
@@ -133,15 +133,15 @@ func wrapWorkflowSource(source string) string {
 	return "(function(){\n" + source + "\n})()"
 }
 
-func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks) ChildExecutor {
+func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks, policy workflowpolicy.EffectivePolicy) ChildExecutor {
 	if hooks.NewChildExecutor != nil {
-		return hooks.NewChildExecutor(sessionID, childRecordSinkFromCollector(records))
+		return hooks.NewChildExecutor(sessionID, childRecordSinkFromCollector(records), policy)
 	}
 	return NewFakeChildExecutor(sessionID, childRecordSinkFromCollector(records))
 }
 
-func childExecutorForRequest(sessionID string, records *recordCollector, hooks Hooks, resume *ResumeContext) ChildExecutor {
-	childExecutor := childExecutorForRun(sessionID, records, hooks)
+func childExecutorForRequest(sessionID string, records *recordCollector, hooks Hooks, resume *ResumeContext, policy workflowpolicy.EffectivePolicy) ChildExecutor {
+	childExecutor := childExecutorForRun(sessionID, records, hooks, policy)
 	if resume != nil {
 		childExecutor = NewResumingChildExecutor(childExecutor, *resume)
 	}
