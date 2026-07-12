@@ -234,7 +234,7 @@ func TestRun_ChildExecutionBoundary_RoutesAgentRunParallelAndPipelineThroughHook
 		Policy: workflowpolicy.DefaultEffectivePolicy(),
 	}
 	hooks := workflowruntime.Hooks{
-		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
 			return stub
 		},
 	}

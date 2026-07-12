@@ -88,6 +88,7 @@ type CheckpointRecord struct {
 type ChildDispatchRecord struct {
 	DispatchID         string                    `json:"dispatchId"`
 	ChildIndex         int                       `json:"childIndex"`
+	Attempt            int                       `json:"attempt,omitempty"`
 	Status             string                    `json:"status"`
 	Label              string                    `json:"label,omitempty"`
 	PromptDigest       string                    `json:"promptDigest,omitempty"`
