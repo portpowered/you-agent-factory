@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 )
@@ -63,7 +64,11 @@ func persistFromFile(cfg persistFromFileConfig) (persistFromFileResult, error) {
 
 	factoryDir, err := persistFromFileNamedFactory(cfg, name, payload)
 	if err != nil {
-		return persistFromFileResult{}, err
+		factoryPath, pathErr := factoryconfig.NamedFactoryDirPath(cfg.Dir, name)
+		if pathErr != nil {
+			return persistFromFileResult{}, pathErr
+		}
+		return persistFromFileResult{}, factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, factoryPath)
 	}
 
 	if cfg.Mode == persistFromFileModeSave && cfg.SetCurrent {

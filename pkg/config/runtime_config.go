@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -693,7 +694,7 @@ var ErrNamedFactoryAlreadyExists = errors.New("named factory already exists")
 
 // ErrInvalidNamedFactory reports that the submitted named-factory payload could
 // not be normalized into a runnable named-factory layout.
-var ErrInvalidNamedFactory = errors.New("invalid named factory")
+var ErrInvalidNamedFactory = factoryerrors.ErrInvalidNamedFactory
 
 // ValidateNamedFactoryName applies the canonical safe directory-segment rules
 // used by the named-factory on-disk layout.

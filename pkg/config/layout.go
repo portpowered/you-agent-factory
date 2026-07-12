@@ -972,7 +972,7 @@ func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	if err == nil {
 		upgradedDir, upgradeErr := upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, name, factoryDir)
 		if upgradeErr != nil {
-			return "", false, upgradeErr
+			return "", false, MaybeFormatBlockingFactoryLoadOperatorError(upgradeErr, factoryDir)
 		}
 		return upgradedDir, true, nil
 	}
@@ -989,7 +989,10 @@ func upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, canonicalName, fact
 	}
 	upgradePaths, err := materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir)
 	if err != nil {
-		return "", fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err)
+		return "", MaybeFormatBlockingFactoryLoadOperatorError(
+			fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err),
+			factoryDir,
+		)
 	}
 	if len(upgradePaths) == 0 {
 		return factoryDir, nil
@@ -1077,7 +1080,7 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		}
 		upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, targetDir)
 		if err != nil {
-			return "", false, err
+			return "", false, MaybeFormatBlockingFactoryLoadOperatorError(err, targetDir)
 		}
 		return upgradedDir, true, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -1086,7 +1089,14 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 
 	factoryDir, err := PersistNamedFactory(globalRoot, canonicalName, payload)
 	if err != nil {
-		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err)
+		factoryPath := factoryDir
+		if strings.TrimSpace(factoryPath) == "" {
+			factoryPath = targetDir
+		}
+		return "", false, MaybeFormatBlockingFactoryLoadOperatorError(
+			fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err),
+			factoryPath,
+		)
 	}
 	return factoryDir, true, nil
 }
