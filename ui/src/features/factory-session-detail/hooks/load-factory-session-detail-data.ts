@@ -1,7 +1,7 @@
 import {
+  durableResultSurfacesFromResultsResponse,
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
-  durableResultSurfacesFromResultsResponse,
   getFactorySession,
   getFactorySessionDurableResults,
   getFactorySessionPartialResult,
@@ -20,12 +20,17 @@ export async function loadFactorySessionDetailData(
   sessionID: string,
 ): Promise<FactorySessionDetailData> {
   const normalized = await getFactorySession(sessionID);
-  const { durableLifecycleStatus, durableProgress, resultSummary, session } =
-    normalized;
+  const {
+    durableLifecycleStatus,
+    durableProgress,
+    durableReadModel,
+    resultSummary,
+    session,
+  } = normalized;
   let { partialResult, result } = normalized;
 
   if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
-    return { durableLifecycleStatus, session };
+    return { durableLifecycleStatus, durableReadModel, session };
   }
 
   const durableJavaScript = isDurableJavaScriptSession(
@@ -105,6 +110,7 @@ export async function loadFactorySessionDetailData(
   return {
     dispatches,
     durableLifecycleStatus,
+    durableReadModel,
     partialResult,
     result,
     session,

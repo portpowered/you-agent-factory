@@ -1,27 +1,26 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: factory session detail panel composes runtime, drilldown, lifecycle, and replay sections.
-import type { ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
 
+import { useQueryClient } from "@tanstack/react-query";
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
+import type { ReactNode } from "react";
+import { useId, useState } from "react";
 import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
   AlertPanel,
   Button,
+  DashboardStatusPill,
   Heading,
   Label,
-  DashboardStatusPill,
   Text,
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
-import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
-import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
+import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import {
   FACTORY_SESSION_DISPATCH_DETAIL_QUERY_KEY,
   useFactorySessionDispatchDetail,
 } from "../hooks/use-factory-session-dispatch-detail";
-import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
 import { resolveFactorySessionLifecycleActionAvailability } from "../lib/factory-session-lifecycle-controls";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
@@ -31,6 +30,7 @@ import {
   formatFactorySessionScriptStatus,
   resolveFactoryDispatchStatusTone,
 } from "../messages/factory-session-runtime-display";
+import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
 import { DispatchDetailContent } from "./dispatch-detail/dispatch-detail-content";
 import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
 import { LifecycleActionSection } from "./lifecycle/lifecycle-action-section";
@@ -93,6 +93,7 @@ function FactorySessionRuntimeSections({
   data: {
     dispatches?: FactoryDispatch[];
     durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+    durableReadModel?: components["schemas"]["FactorySessionDurableReadModel"];
     partialResult?: components["schemas"]["FactorySessionPartialResult"];
     result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
@@ -129,6 +130,13 @@ function FactorySessionRuntimeSections({
         ) : null}
       </div>
 
+      {data.durableReadModel ? (
+        <DurableIntrospectionSummary
+          durable={data.durableReadModel}
+          locale={locale}
+        />
+      ) : null}
+
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (
         <JavaScriptSessionProjection
           artifacts={runtime.artifacts}
@@ -142,6 +150,112 @@ function FactorySessionRuntimeSections({
         />
       ) : (
         <PetriSessionProjection locale={locale} petri={runtime.petri} />
+      )}
+    </div>
+  );
+}
+
+function DurableIntrospectionSummary({
+  durable,
+  locale,
+}: {
+  durable: components["schemas"]["FactorySessionDurableReadModel"];
+  locale?: string;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const resultAvailability = durable.resultSummary?.resultStatus
+    ? messages.resultAvailabilityValue(durable.resultSummary.resultStatus)
+    : messages.unavailableValue;
+
+  return (
+    <section aria-label={messages.introspectionHeading} className="grid gap-3">
+      <Label>{messages.introspectionHeading}</Label>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Metric
+          label={messages.sourceLabel}
+          value={durable.resolvedSource.sourceRef ?? messages.unavailableValue}
+        />
+        <Metric
+          label={messages.sourceHashLabel}
+          value={
+            durable.sourceHash ??
+            durable.resolvedSource.sourceHash ??
+            messages.unavailableValue
+          }
+        />
+        <Metric
+          label={messages.latestCheckpointLabel}
+          value={formatCheckpoint(
+            durable.latestCheckpoint,
+            messages.unavailableValue,
+          )}
+        />
+        <Metric
+          label={messages.effectivePolicyLabel}
+          value={formatRecordSummary(
+            durable.effectivePolicy,
+            messages.unavailableValue,
+          )}
+        />
+        <Metric
+          label={messages.budgetLabel}
+          value={formatRecordSummary(
+            durable.budgets,
+            messages.unavailableValue,
+          )}
+        />
+        <Metric
+          label={messages.usageHeading}
+          value={formatRecordSummary(durable.usage, messages.unavailableValue)}
+        />
+        <Metric
+          label={messages.resultAvailabilityLabel}
+          value={resultAvailability}
+        />
+      </div>
+      <PhaseSummaryList durable={durable} locale={locale} />
+    </section>
+  );
+}
+
+function PhaseSummaryList({
+  durable,
+  locale,
+}: {
+  durable: components["schemas"]["FactorySessionDurableReadModel"];
+  locale?: string;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const phases = durable.phaseSummaries ?? [];
+
+  return (
+    <div className="grid gap-2">
+      <Label>{messages.phaseSummariesHeading}</Label>
+      {phases.length === 0 ? (
+        <Text>{messages.noneValue}</Text>
+      ) : (
+        <ol className="grid gap-2">
+          {phases.map((phase) => (
+            <li
+              className="rounded-lg border border-outline p-3"
+              key={phase.phase}
+            >
+              <Text>
+                {phase.label ? `${phase.label} (${phase.phase})` : phase.phase}
+                {durable.phase === phase.phase
+                  ? ` — ${messages.currentPhaseValue}`
+                  : ""}
+              </Text>
+              <Text variant="supporting">
+                {messages.phaseDispatchSummary({
+                  completed: phase.completedDispatchCount ?? 0,
+                  failed: phase.failedDispatchCount ?? 0,
+                  total: phase.dispatchCount ?? 0,
+                })}
+              </Text>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
   );
@@ -593,6 +707,31 @@ function formatArtifactRef(
   artifactRef: components["schemas"]["FactoryArtifactRef"],
 ): string {
   return `${artifactRef.id} · ${artifactRef.kind}`;
+}
+
+function formatCheckpoint(
+  checkpoint: components["schemas"]["FactorySessionCheckpointRef"] | undefined,
+  unavailable: string,
+): string {
+  if (!checkpoint) return unavailable;
+  const label = checkpoint.label ? ` (${checkpoint.label})` : "";
+  const phase = checkpoint.phase ? ` · ${checkpoint.phase}` : "";
+  return `${checkpoint.id}${label}${phase}`;
+}
+
+function formatRecordSummary(value: unknown, unavailable: string): string {
+  if (!value || typeof value !== "object") return unavailable;
+  const entries = Object.entries(value).filter(
+    ([, item]) => item !== undefined,
+  );
+  if (entries.length === 0) return unavailable;
+  return entries
+    .map(([key, item]) =>
+      Array.isArray(item)
+        ? `${key}: ${item.length === 0 ? "none" : item.length}`
+        : `${key}: ${String(item)}`,
+    )
+    .join(" · ");
 }
 
 function getDispatchSummaryDetails(

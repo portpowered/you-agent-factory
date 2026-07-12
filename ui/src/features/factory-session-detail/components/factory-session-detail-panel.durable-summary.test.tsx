@@ -8,6 +8,7 @@ import {
   renderWithQueryClient,
 } from "./test-support/factory-session-detail-panel.test-helpers";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: shared fetch setup keeps canonical running and terminal fixtures comparable.
 describe("FactorySessionDetailPanel durable summary", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
@@ -28,8 +29,26 @@ describe("FactorySessionDetailPanel durable summary", () => {
             updatedAt: "2026-06-08T14:05:00Z",
           },
           orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          budgets: { maxAgents: 4 },
+          effectivePolicy: {
+            approvalMode: "AUTO",
+            policyHash: "sha256:policy-running",
+          },
+          latestCheckpoint: {
+            id: "checkpoint-verify-1",
+            label: "Verification ready",
+            phase: "verify",
+          },
           phase: "verify",
-          phaseSummaries: [{ dispatchCount: 1, phase: "plan" }],
+          phaseSummaries: [
+            {
+              completedDispatchCount: 1,
+              dispatchCount: 1,
+              label: "Plan release",
+              phase: "plan",
+            },
+            { dispatchCount: 2, phase: "verify" },
+          ],
           progress: {
             completedDispatches: 1,
             failedDispatches: 0,
@@ -41,9 +60,14 @@ describe("FactorySessionDetailPanel durable summary", () => {
             sourceRef: "workflow/release-train",
             sourceHash: "sha256:js-workflow-release-train",
           },
+          partialResultAvailable: true,
+          resultSummary: {
+            resultStatus: "PARTIAL",
+            summary: "Verification output is available.",
+          },
           sessionId: "dur-sess-js-run-n-001",
           status: "RUNNING",
-          usage: { resources: [] },
+          usage: { inputTokens: 120, outputTokens: 45, resources: [] },
         });
       }
       if (url.endsWith("/factory-sessions/dur-sess-js-run-n-001/dispatches")) {
@@ -65,19 +89,27 @@ describe("FactorySessionDetailPanel durable summary", () => {
 
     expect(screen.getAllByText("Running").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("verify")).toBeTruthy();
+    expect(screen.getByText("Plan release (plan)")).toBeTruthy();
+    expect(screen.getByText("verify — current")).toBeTruthy();
+    expect(
+      screen.getByText("checkpoint-verify-1 (Verification ready) · verify"),
+    ).toBeTruthy();
+    expect(screen.getByText(/maxAgents: 4/)).toBeTruthy();
+    expect(screen.getByText(/inputTokens: 120/)).toBeTruthy();
+    expect(screen.getByText("partial")).toBeTruthy();
     expect(screen.queryAllByText("Idle")).toHaveLength(0);
 
     const fetchUrls = vi
       .mocked(globalThis.fetch)
       .mock.calls.map(([input]) => String(input));
-    expect(fetchUrls).toHaveLength(2);
+    expect(fetchUrls).toHaveLength(3);
     expect(fetchUrls[0]).toContain("/factory-sessions/dur-sess-js-run-n-001");
     expect(fetchUrls.some((url) => url.includes("/dispatches"))).toBe(true);
     expect(fetchUrls.some((url) => url.includes("/results?mode=final"))).toBe(
       false,
     );
     expect(fetchUrls.some((url) => url.includes("/results?mode=partial"))).toBe(
-      false,
+      true,
     );
   });
 
@@ -132,6 +164,8 @@ describe("FactorySessionDetailPanel durable summary", () => {
     });
 
     expect(screen.getAllByText("Succeeded").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("final")).toBeTruthy();
+    expect(screen.getAllByText("Unavailable").length).toBeGreaterThanOrEqual(1);
 
     const fetchUrls = vi
       .mocked(globalThis.fetch)

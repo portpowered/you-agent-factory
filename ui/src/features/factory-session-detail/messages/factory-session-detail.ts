@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: localized session inspection copy is kept in one typed catalog.
 import type { components } from "../../../api/generated/openapi";
 import {
   FactoryOrchestratorKind,
@@ -29,6 +30,7 @@ export interface FactorySessionDetailMessages
   extends FactorySessionArtifactDetailMessages,
     FactorySessionEventReplayMessages,
     FactorySessionLifecycleOutcomeMessages {
+  budgetLabel: string;
   lifecycleActionApproveLabel: string;
   lifecycleActionCancelLabel: string;
   lifecycleActionInterruptDispatchLabel: string;
@@ -74,6 +76,9 @@ export interface FactorySessionDetailMessages
   failureMessageLabel: string;
   failureReasonLabel: string;
   finalResultRefLabel: string;
+  effectivePolicyLabel: string;
+  introspectionHeading: string;
+  latestCheckpointLabel: string;
   lifecycleControlStatusLabel: string;
   javascriptProjectionMissingState: string;
   javascriptTaskHeading: string;
@@ -90,6 +95,19 @@ export interface FactorySessionDetailMessages
     string
   >;
   partialResultRefLabel: string;
+  phaseDispatchSummary: (counts: {
+    completed: number;
+    failed: number;
+    total: number;
+  }) => string;
+  phaseSummariesHeading: string;
+  currentPhaseValue: string;
+  noneValue: string;
+  resultAvailabilityLabel: string;
+  resultAvailabilityValue: (status: string) => string;
+  sourceHashLabel: string;
+  sourceLabel: string;
+  unavailableValue: string;
   phaseLabel: string;
   phasesLabel: string;
   petriDetailHeading: string;
@@ -237,6 +255,7 @@ const chineseDurableLifecycleStatusLabels = {
 const factorySessionDetailMessagesByLocale = {
   en: {
     ...englishFactorySessionArtifactDetailMessages,
+    budgetLabel: "Effective budget",
     lifecycleActionApproveLabel: "Approve",
     lifecycleActionCancelLabel: "Cancel",
     lifecycleActionInterruptDispatchLabel: "Interrupt dispatch",
@@ -287,6 +306,9 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "Failure message",
     failureReasonLabel: "Failure reason",
     finalResultRefLabel: "Final result ref",
+    effectivePolicyLabel: "Effective policy",
+    introspectionHeading: "Session introspection",
+    latestCheckpointLabel: "Latest checkpoint",
     lifecycleControlStatusLabel: "Factory Session lifecycle",
     javascriptProjectionMissingState:
       "JavaScript workflow runtime details are not available for this session.",
@@ -301,6 +323,16 @@ const factorySessionDetailMessagesByLocale = {
     orchestratorKindLabel: "Orchestrator kind",
     orchestratorKindLabels: englishOrchestratorKindLabels,
     partialResultRefLabel: "Partial result ref",
+    phaseDispatchSummary: ({ completed, failed, total }) =>
+      `${total} dispatches · ${completed} completed · ${failed} failed`,
+    phaseSummariesHeading: "Phase progress",
+    currentPhaseValue: "current",
+    noneValue: "None",
+    resultAvailabilityLabel: "Result availability",
+    resultAvailabilityValue: (status) => status.toLowerCase(),
+    sourceHashLabel: "Source hash",
+    sourceLabel: "Source",
+    unavailableValue: "Unavailable",
     phaseLabel: "Phase",
     phasesLabel: "Phases",
     petriDetailHeading: "Petri dispatch",
@@ -336,6 +368,7 @@ const factorySessionDetailMessagesByLocale = {
   },
   "zh-CN": {
     ...chineseFactorySessionArtifactDetailMessages,
+    budgetLabel: "有效预算",
     lifecycleActionApproveLabel: "批准",
     lifecycleActionCancelLabel: "取消",
     lifecycleActionInterruptDispatchLabel: "中断调度",
@@ -383,6 +416,9 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "失败消息",
     failureReasonLabel: "失败原因",
     finalResultRefLabel: "最终结果引用",
+    effectivePolicyLabel: "有效策略",
+    introspectionHeading: "会话检查",
+    latestCheckpointLabel: "最新检查点",
     lifecycleControlStatusLabel: "工厂会话生命周期",
     javascriptProjectionMissingState:
       "此会话的 JavaScript 工作流运行时详情不可用。",
@@ -397,6 +433,16 @@ const factorySessionDetailMessagesByLocale = {
     orchestratorKindLabel: "编排器类型",
     orchestratorKindLabels: chineseOrchestratorKindLabels,
     partialResultRefLabel: "部分结果引用",
+    phaseDispatchSummary: ({ completed, failed, total }) =>
+      `${total} 个调度 · ${completed} 个已完成 · ${failed} 个失败`,
+    phaseSummariesHeading: "阶段进度",
+    currentPhaseValue: "当前",
+    noneValue: "无",
+    resultAvailabilityLabel: "结果可用性",
+    resultAvailabilityValue: (status) => status.toLowerCase(),
+    sourceHashLabel: "源哈希",
+    sourceLabel: "来源",
+    unavailableValue: "不可用",
     phaseLabel: "阶段",
     phasesLabel: "阶段列表",
     petriDetailHeading: "Petri 调度",
