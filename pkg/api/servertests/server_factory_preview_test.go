@@ -185,6 +185,7 @@ func TestPreviewWorkflowCompatibilityOnly_ReturnsSamePreviewBodyAsCanonicalFacto
 	if canonicalRec.Body.String() != aliasRec.Body.String() {
 		t.Fatalf("compatibility alias body = %s, want identical canonical body %s", aliasRec.Body.String(), canonicalRec.Body.String())
 	}
+	assertWorkflowPreviewSuccessorHeaders(t, aliasRec)
 }
 
 func TestPreviewWorkflowCompatibilityOnly_ReturnsSameInvalidRequestAsCanonicalFactoryPreview(t *testing.T) {
@@ -207,10 +208,15 @@ func TestPreviewWorkflowCompatibilityOnly_ReturnsSameInvalidRequestAsCanonicalFa
 	if aliasRec.Body.String() != canonicalRec.Body.String() {
 		t.Fatalf("compatibility alias body = %s, want identical canonical body %s", aliasRec.Body.String(), canonicalRec.Body.String())
 	}
-	if aliasRec.Header().Get("Deprecation") != "true" {
-		t.Fatalf("Deprecation = %q, want true for compatibility alias", aliasRec.Header().Get("Deprecation"))
+	assertWorkflowPreviewSuccessorHeaders(t, aliasRec)
+}
+
+func assertWorkflowPreviewSuccessorHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Header().Get("Deprecation") != "true" {
+		t.Fatalf("Deprecation = %q, want true for compatibility alias", rec.Header().Get("Deprecation"))
 	}
-	if got := aliasRec.Header().Get("Link"); got != `</factories/preview>; rel="successor-version"` {
+	if got := rec.Header().Get("Link"); got != `</factories/preview>; rel="successor-version"` {
 		t.Fatalf("Link = %q, want successor-version link to /factories/preview", got)
 	}
 }
