@@ -1,3 +1,5 @@
+//go:build !windows
+
 package smoke
 
 import (
@@ -74,13 +76,13 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
-		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
-		"verify":                             "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
-		"test-backend-functional":            "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
-		"ui-test":                            "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
+		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify":                               "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
+		"test-backend-functional":              "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
+		"ui-test":                              "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
@@ -127,10 +129,10 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n\t@exit 23\n",
-		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
@@ -220,10 +222,10 @@ func TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript(t *test
 func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
-		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify")
@@ -653,15 +655,15 @@ func TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand(t *testin
 func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
-		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
-		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
-		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
-		"verify-pr":                 "@printf '%s\\n' 'stub:verify-pr'\n",
+		"verify-build-contracts":        "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":         "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"test-ui-coverage":              "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"ui-integration-test":           "@printf '%s\\n' 'stub:ui-integration-test'\n",
+		"test-backend-verification":     "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",
 		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
 		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n",
-		"pr-inference-approval":     "@printf '%s\\n' 'unexpected:pr-inference-approval'\n\t@exit 99\n",
+		"pr-inference-approval":         "@printf '%s\\n' 'unexpected:pr-inference-approval'\n\t@exit 99\n",
 	})
 
 	for _, target := range []string{"verify-pr", "verify-extended", "long-tests"} {
