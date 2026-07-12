@@ -911,6 +911,9 @@ func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
 	if len(state.petriMutations) > 0 {
 		return true
 	}
+	if state.session.Status == LifecycleStatusPaused {
+		return true
+	}
 	if IsTerminalLifecycleStatus(state.session.Status) {
 		return true
 	}

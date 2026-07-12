@@ -9,6 +9,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -2650,6 +2651,134 @@ func TestFinalizeInterruptedTerminalSession_PreservesPartialAndUnavailableResult
 			t.Fatalf("availability = %#v, want SESSION_INTERRUPTED", state.result.Availability)
 		}
 	})
+}
+
+func TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState(t *testing.T) {
+	store := &runtimeRecordingStore{}
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+	})
+	sessionID := "dur-sess-paused-restart-001"
+	dispatchID := "dispatch-completed-1"
+	if err := SeedRuntimeSessionWithRunningDispatch(service, sessionID, dispatchID, "completed child"); err != nil {
+		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
+	}
+
+	service.mu.Lock()
+	state := service.sessions[sessionID]
+	state.dispatches[0].Status = DispatchStatusCompleted
+	state.dispatches[0].OutputArtifactIDs = []string{"artifact-1"}
+	state.dispatchStatusTransitions[dispatchID] = []DispatchStatus{
+		DispatchStatusQueued,
+		DispatchStatusRunning,
+		DispatchStatusCompleted,
+	}
+	state.artifacts = []ArtifactSummary{{
+		ID:         "artifact-1",
+		Kind:       "CHILD_RESULT",
+		Visibility: "session",
+		DispatchID: dispatchID,
+	}}
+	state.session.ArtifactCount = 1
+	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
+	service.mu.Unlock()
+
+	paused, err := service.Pause(context.Background(), sessionID, ControlRequest{RequestID: "pause-restart-001"})
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if paused.Status != LifecycleStatusPaused {
+		t.Fatalf("pause status = %q, want PAUSED", paused.Status)
+	}
+
+	wantSession, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession before restart: %v", err)
+	}
+	wantResult, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModePartial, IncludeArtifacts: true})
+	if err != nil {
+		t.Fatalf("GetResult before restart: %v", err)
+	}
+	wantDispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches before restart: %v", err)
+	}
+	wantEvents, err := service.ReadEvents(context.Background(), sessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents before restart: %v", err)
+	}
+
+	restarted := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+	})
+	gotSession, err := restarted.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession after restart: %v", err)
+	}
+	gotResult, err := restarted.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModePartial, IncludeArtifacts: true})
+	if err != nil {
+		t.Fatalf("GetResult after restart: %v", err)
+	}
+	gotDispatches, err := restarted.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches after restart: %v", err)
+	}
+	gotEvents, err := restarted.ReadEvents(context.Background(), sessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after restart: %v", err)
+	}
+
+	if !reflect.DeepEqual(gotSession, wantSession) {
+		t.Fatalf("session changed across restart:\ngot  %#v\nwant %#v", gotSession, wantSession)
+	}
+	if !reflect.DeepEqual(gotResult, wantResult) || gotResult.ResultStatus != ResultStatusNotReady || gotResult.Availability == nil {
+		t.Fatalf("result changed across restart: got %#v want %#v", gotResult, wantResult)
+	}
+	if !reflect.DeepEqual(gotDispatches, wantDispatches) {
+		t.Fatalf("dispatches changed across restart: got %#v want %#v", gotDispatches, wantDispatches)
+	}
+	if len(gotEvents.Events) != len(wantEvents.Events) {
+		t.Fatalf("event count changed across restart: got %d want %d", len(gotEvents.Events), len(wantEvents.Events))
+	}
+	for index := range wantEvents.Events {
+		var gotEvent, wantEvent any
+		if err := json.Unmarshal(gotEvents.Events[index], &gotEvent); err != nil {
+			t.Fatalf("decode restarted event %d: %v", index, err)
+		}
+		if err := json.Unmarshal(wantEvents.Events[index], &wantEvent); err != nil {
+			t.Fatalf("decode live event %d: %v", index, err)
+		}
+		if !reflect.DeepEqual(gotEvent, wantEvent) {
+			t.Fatalf("event %d changed across restart: got %#v want %#v", index, gotEvent, wantEvent)
+		}
+	}
+}
+
+func TestJavaScriptRuntimeService_PausePersistenceFailureKeepsRunningProjection(t *testing.T) {
+	store := &runtimeRecordingStore{saveErr: errors.New("pause persistence unavailable")}
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+	})
+	sessionID := "dur-sess-pause-persist-failure-001"
+	if err := SeedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "running child"); err != nil {
+		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
+	}
+
+	_, err := service.Pause(context.Background(), sessionID, ControlRequest{})
+	if err == nil || !strings.Contains(err.Error(), "persist durable session snapshot") {
+		t.Fatalf("Pause error = %v, want persistence failure", err)
+	}
+	read, readErr := service.GetSession(context.Background(), sessionID)
+	if readErr != nil {
+		t.Fatalf("GetSession: %v", readErr)
+	}
+	if read.Status != LifecycleStatusRunning || read.Lifecycle == nil || read.Lifecycle.PausedAt != nil {
+		t.Fatalf("session after rejected pause = %#v, want unchanged RUNNING projection", read)
+	}
 }
 
 func TestInterruptedTerminalTimestamp_PrefersSessionLifecycle(t *testing.T) {

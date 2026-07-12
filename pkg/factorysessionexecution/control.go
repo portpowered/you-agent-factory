@@ -476,6 +476,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
+		priorState := cloneRuntimeSessionState(state)
 		previousStatus := state.session.Status
 		if operation == LifecycleControlInterruptDispatch {
 			s.recordAcceptedRuntimeInterrupt(state, dispatchSummary, interrupt)
@@ -496,6 +497,12 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 				)
 			} else {
 				state.events = rebuildRuntimeSessionCanonicalEvents(state)
+			}
+		}
+		if operation == LifecycleControlPause {
+			if err := s.persistSessionSnapshot(cloneRuntimeSessionState(state)); err != nil {
+				*state = cloneRuntimeSessionState(&priorState)
+				return LifecycleControlResult{}, err
 			}
 		}
 	}
@@ -615,6 +622,7 @@ func runtimeExtendedLifecycleControlResultFromState(
 	}
 	return result
 }
+
 // AppendSessionLifecycleControlEvent records one accepted pause or resume control on
 // the canonical session event stream without rebuilding earlier lifecycle events.
 func AppendSessionLifecycleControlEvent(
