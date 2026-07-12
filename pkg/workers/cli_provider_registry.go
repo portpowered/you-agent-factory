@@ -7,6 +7,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+// CLIProviderAvailability reports whether one registered CLI provider command is
+// resolvable on PATH without executing the provider or customer work.
+type CLIProviderAvailability struct {
+	Registration      CLIProviderRegistration
+	Available         bool
+	UnavailableReason string
+}
+
 // CLIProviderIdentity is the stable registry identity for one supported agent CLI
 // provider. Values align with systemconfig provider-scope segments.
 type CLIProviderIdentity string
@@ -119,4 +127,31 @@ func NormalizeCLIProviderIdentity(id string) CLIProviderIdentity {
 // provider backend scope derivation for one registry identity.
 func CLIProviderScopeSegment(id CLIProviderIdentity) string {
 	return string(NormalizeCLIProviderIdentity(string(id)))
+}
+
+// ProbeCLIProviderAvailability checks whether one registered provider command
+// is resolvable on PATH. Probes perform only command-resolution checks.
+func ProbeCLIProviderAvailability(registration CLIProviderRegistration) CLIProviderAvailability {
+	if _, err := lookPath(registration.Command); err != nil {
+		return CLIProviderAvailability{
+			Registration:      registration,
+			Available:         false,
+			UnavailableReason: string(interfaces.WorkFailureTypeMissingExecutable),
+		}
+	}
+	return CLIProviderAvailability{
+		Registration: registration,
+		Available:    true,
+	}
+}
+
+// ProbeRegisteredCLIProviderAvailability probes every registered CLI provider in
+// deterministic preference-rank order.
+func ProbeRegisteredCLIProviderAvailability() []CLIProviderAvailability {
+	registrations := RegisteredCLIProviders()
+	results := make([]CLIProviderAvailability, 0, len(registrations))
+	for _, registration := range registrations {
+		results = append(results, ProbeCLIProviderAvailability(registration))
+	}
+	return results
 }

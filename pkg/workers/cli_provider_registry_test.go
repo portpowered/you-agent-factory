@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -109,6 +111,163 @@ func TestCLIProviderIdentity_CompatibleWithProviderBackendScopeNaming(t *testing
 		}
 		if !strings.Contains(scope, string(registration.Identity)) {
 			t.Fatalf("identity %q scope = %q, want identity segment preserved", registration.Identity, scope)
+		}
+	}
+}
+
+func TestProbeCLIProviderAvailability_FakePATHPresentAndAbsentPerCommand(t *testing.T) {
+	originalLookPath := lookPath
+	defer func() {
+		lookPath = originalLookPath
+	}()
+
+	cases := []struct {
+		name            string
+		command         string
+		presentCommands map[string]bool
+		wantAvailable   bool
+		wantReason      string
+	}{
+		{
+			name:            "claude present",
+			command:         string(interfaces.ModelProviderClaude),
+			presentCommands: map[string]bool{string(interfaces.ModelProviderClaude): true},
+			wantAvailable:   true,
+		},
+		{
+			name:            "claude absent",
+			command:         string(interfaces.ModelProviderClaude),
+			presentCommands: map[string]bool{},
+			wantAvailable:   false,
+			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+		},
+		{
+			name:            "codex present",
+			command:         string(interfaces.ModelProviderCodex),
+			presentCommands: map[string]bool{string(interfaces.ModelProviderCodex): true},
+			wantAvailable:   true,
+		},
+		{
+			name:            "codex absent",
+			command:         string(interfaces.ModelProviderCodex),
+			presentCommands: map[string]bool{},
+			wantAvailable:   false,
+			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+		},
+		{
+			name:            "cursor present",
+			command:         string(interfaces.ModelProviderCursor),
+			presentCommands: map[string]bool{string(interfaces.ModelProviderCursor): true},
+			wantAvailable:   true,
+		},
+		{
+			name:            "cursor absent",
+			command:         string(interfaces.ModelProviderCursor),
+			presentCommands: map[string]bool{},
+			wantAvailable:   false,
+			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+		},
+		{
+			name:            "opencode present",
+			command:         string(interfaces.ModelProviderOpenCode),
+			presentCommands: map[string]bool{string(interfaces.ModelProviderOpenCode): true},
+			wantAvailable:   true,
+		},
+		{
+			name:            "opencode absent",
+			command:         string(interfaces.ModelProviderOpenCode),
+			presentCommands: map[string]bool{},
+			wantAvailable:   false,
+			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+		},
+		{
+			name:            "gemini present",
+			command:         string(interfaces.ModelProviderGemini),
+			presentCommands: map[string]bool{string(interfaces.ModelProviderGemini): true},
+			wantAvailable:   true,
+		},
+		{
+			name:            "gemini absent",
+			command:         string(interfaces.ModelProviderGemini),
+			presentCommands: map[string]bool{},
+			wantAvailable:   false,
+			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+		},
+		{
+			name:            "kiro present",
+			command:         string(interfaces.ModelProviderKiro),
+			presentCommands: map[string]bool{string(interfaces.ModelProviderKiro): true},
+			wantAvailable:   true,
+		},
+		{
+			name:            "kiro absent",
+			command:         string(interfaces.ModelProviderKiro),
+			presentCommands: map[string]bool{},
+			wantAvailable:   false,
+			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var probedCommands []string
+			lookPath = func(file string) (string, error) {
+				probedCommands = append(probedCommands, file)
+				if tc.presentCommands[file] {
+					return "/fake/bin/" + file, nil
+				}
+				return "", exec.ErrNotFound
+			}
+
+			registration, ok := CLIProviderRegistrationByCommand(tc.command)
+			if !ok {
+				t.Fatalf("CLIProviderRegistrationByCommand(%q) miss", tc.command)
+			}
+
+			got := ProbeCLIProviderAvailability(registration)
+			if got.Available != tc.wantAvailable {
+				t.Fatalf("available = %v, want %v", got.Available, tc.wantAvailable)
+			}
+			if got.UnavailableReason != tc.wantReason {
+				t.Fatalf("unavailable reason = %q, want %q", got.UnavailableReason, tc.wantReason)
+			}
+			if len(probedCommands) != 1 || probedCommands[0] != tc.command {
+				t.Fatalf("lookPath commands = %#v, want [%q]", probedCommands, tc.command)
+			}
+		})
+	}
+}
+
+func TestProbeCLIProviderAvailability_IsDeterministicForFixedFakePATH(t *testing.T) {
+	originalLookPath := lookPath
+	defer func() {
+		lookPath = originalLookPath
+	}()
+
+	presentCommands := map[string]bool{
+		string(interfaces.ModelProviderCodex):    true,
+		string(interfaces.ModelProviderClaude):   false,
+		string(interfaces.ModelProviderCursor):   true,
+		string(interfaces.ModelProviderOpenCode): false,
+		string(interfaces.ModelProviderGemini):   true,
+		string(interfaces.ModelProviderKiro):     false,
+	}
+
+	lookPath = func(file string) (string, error) {
+		if presentCommands[file] {
+			return "/fake/bin/" + file, nil
+		}
+		return "", errors.New("executable file not found in $PATH")
+	}
+
+	first := ProbeRegisteredCLIProviderAvailability()
+	second := ProbeRegisteredCLIProviderAvailability()
+	if len(first) != len(second) {
+		t.Fatalf("probe length drift: first=%d second=%d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Fatalf("probe[%d] drift: first=%#v second=%#v", i, first[i], second[i])
 		}
 	}
 }
