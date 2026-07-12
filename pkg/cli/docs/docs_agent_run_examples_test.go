@@ -41,6 +41,20 @@ func TestMarkdown_AgentRunExamplesMatchExecutableValidation(t *testing.T) {
 	}
 }
 
+func TestDocumentedJavaScriptExample_AcceptsCRLF(t *testing.T) {
+	t.Parallel()
+
+	doc, err := Markdown("orchestrators")
+	if err != nil {
+		t.Fatalf("Markdown(orchestrators) error = %v", err)
+	}
+	doc = strings.ReplaceAll(doc, "\r\n", "\n")
+	doc = strings.ReplaceAll(doc, "\n", "\r\n")
+	if got := documentedJavaScriptExample(t, doc, "agent-run-valid"); !strings.Contains(got, "agent.run") {
+		t.Fatalf("documented valid agent.run example = %q, want agent.run call", got)
+	}
+}
+
 func documentedAgentRunFields(doc string) []string {
 	section := doc[strings.Index(doc, "### Beta JavaScript child-agent contract"):]
 	section = section[:strings.Index(section, "This complete example")]
@@ -56,6 +70,7 @@ func documentedAgentRunFields(doc string) []string {
 func documentedJavaScriptExample(t *testing.T, doc, name string) string {
 	t.Helper()
 
+	doc = strings.ReplaceAll(doc, "\r\n", "\n")
 	startMarker := "```javascript " + name + "\n"
 	start := strings.Index(doc, startMarker)
 	if start < 0 {
