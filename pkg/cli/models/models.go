@@ -19,6 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"go.uber.org/zap"
 )
 
 const (
@@ -48,16 +50,19 @@ type InspectConfig struct {
 }
 
 type InvokeConfig struct {
-	ModelName   string
-	Operation   string
-	Text        string
-	OutputPath  string
-	Server      string
-	JSON        bool
-	Verbose     bool
-	Debug       bool
-	Output      io.Writer
-	Diagnostics io.Writer
+	ModelName        string
+	Operation        string
+	Text             string
+	OutputPath       string
+	Server           string
+	FactoryDir       string
+	OperatorDefaults operatorconfig.ResolvedDefaults
+	Logger           *zap.Logger
+	JSON             bool
+	Verbose          bool
+	Debug            bool
+	Output           io.Writer
+	Diagnostics      io.Writer
 }
 
 type PullConfig struct {
@@ -111,6 +116,13 @@ func Invoke(cfg InvokeConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
+	if strings.TrimSpace(cfg.FactoryDir) == "" {
+		factoryDir, err := resolveModelsInvokeFactoryDir("")
+		if err != nil {
+			return err
+		}
+		cfg.FactoryDir = factoryDir
+	}
 	modelName := strings.TrimSpace(cfg.ModelName)
 	if modelName == "" {
 		return fmt.Errorf("model name is required")
@@ -126,12 +138,15 @@ func Invoke(cfg InvokeConfig) error {
 
 	if cfg.JSON {
 		response, err := invokeModelMetadata(invokeOptions{
-			Server:      cfg.Server,
-			ModelName:   modelName,
-			Operation:   operation,
-			Text:        text,
-			Verbose:     cfg.Verbose,
-			Diagnostics: cfg.Diagnostics,
+			Server:           cfg.Server,
+			ModelName:        modelName,
+			Operation:        operation,
+			Text:             text,
+			FactoryDir:       cfg.FactoryDir,
+			OperatorDefaults: cfg.OperatorDefaults,
+			Logger:           cfg.Logger,
+			Verbose:          cfg.Verbose,
+			Diagnostics:      cfg.Diagnostics,
 		})
 		if err != nil {
 			return err
@@ -144,13 +159,16 @@ func Invoke(cfg InvokeConfig) error {
 		return fmt.Errorf("--output is required unless --json is set")
 	}
 	if err := invokeModelAudio(invokeOptions{
-		Server:      cfg.Server,
-		ModelName:   modelName,
-		Operation:   operation,
-		Text:        text,
-		OutputPath:  outputPath,
-		Verbose:     cfg.Verbose,
-		Diagnostics: cfg.Diagnostics,
+		Server:           cfg.Server,
+		ModelName:        modelName,
+		Operation:        operation,
+		Text:             text,
+		OutputPath:       outputPath,
+		FactoryDir:       cfg.FactoryDir,
+		OperatorDefaults: cfg.OperatorDefaults,
+		Logger:           cfg.Logger,
+		Verbose:          cfg.Verbose,
+		Diagnostics:      cfg.Diagnostics,
 	}); err != nil {
 		return err
 	}
@@ -243,102 +261,43 @@ func queryModel(cfg queryOptions) (factoryapi.ModelDetail, error) {
 }
 
 type invokeOptions struct {
-	Server      string
-	ModelName   string
-	Operation   string
-	Text        string
-	OutputPath  string
-	Verbose     bool
-	Diagnostics io.Writer
+	Server           string
+	ModelName        string
+	Operation        string
+	Text             string
+	OutputPath       string
+	FactoryDir       string
+	OperatorDefaults operatorconfig.ResolvedDefaults
+	Logger           *zap.Logger
+	Verbose          bool
+	Diagnostics      io.Writer
 }
 
 func invokeModelMetadata(cfg invokeOptions) (factoryapi.ModelInvocationResponse, error) {
-	request := factoryapi.ModelInvocationRequest{
-		Operation: cfg.Operation,
-		Content: &factoryapi.WorkContent{
-			mustGeneratedTextContentPart(cfg.Text),
-		},
-	}
-	var response factoryapi.ModelInvocationResponse
-	path := "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/invocations"
-	if err := doModelsPOST(cfg.Server, path, request, &response, requestDiagnostics{
-		Enabled:      cfg.Verbose,
-		Output:       cfg.Diagnostics,
-		Command:      "models invoke",
-		Server:       cfg.Server,
-		ModelName:    strings.TrimSpace(cfg.ModelName),
-		Operation:    cfg.Operation,
-		RequestBytes: len(cfg.Text),
-		SummaryFunc:  func() string { return fmt.Sprintf("worker=%s contentParts=%d", response.Worker, len(response.Content)) },
-	}); err != nil {
+	result, err := invokeModelThroughBootstrap(cfg, nil)
+	if err != nil {
 		return factoryapi.ModelInvocationResponse{}, err
 	}
+	response := modelInvocationResponseFromResult(result)
+	logBootstrapInvokeResponse(cfg, fmt.Sprintf("worker=%s contentParts=%d", response.Worker, len(response.Content)))
 	return response, nil
 }
 
-// invokeModelAudio streams non-JSON audio on HTTP 200. It intentionally avoids
-// clihttp.PostJSON because success bodies are raw bytes, not JSON payloads.
+// invokeModelAudio copies streamed audio from the bootstrap-owned invocation
+// result instead of requiring a listening factory API HTTP server.
 func invokeModelAudio(cfg invokeOptions) error {
 	mode := factoryapi.ModelInvocationResponseMode("AUDIO_STREAM")
-	request := factoryapi.ModelInvocationRequest{
-		Operation: cfg.Operation,
-		Content: &factoryapi.WorkContent{
-			mustGeneratedTextContentPart(cfg.Text),
-		},
-		Options: &factoryapi.ModelInvocationOptions{
-			ResponseMode: &mode,
-		},
-	}
-	body, err := json.Marshal(request)
-	if err != nil {
-		return fmt.Errorf("marshal invocation request: %w", err)
-	}
-	path := "/models/" + url.PathEscape(strings.TrimSpace(cfg.ModelName)) + "/invocations"
-	endpoint, err := modelsEndpoint(cfg.Server, path)
+	result, err := invokeModelThroughBootstrap(cfg, &mode)
 	if err != nil {
 		return err
 	}
-	logModelsRequest(requestDiagnostics{
-		Enabled:      cfg.Verbose,
-		Output:       cfg.Diagnostics,
-		Command:      "models invoke",
-		Server:       cfg.Server,
-		ModelName:    strings.TrimSpace(cfg.ModelName),
-		Operation:    cfg.Operation,
-		OutputPath:   cfg.OutputPath,
-		RequestBytes: len(body),
-	}, endpoint)
-	httpReq, err := http.NewRequest(http.MethodPost, endpoint.String(), bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("build invoke request: %w", err)
+	if strings.TrimSpace(result.StreamFile) == "" {
+		return fmt.Errorf("models invoke bootstrap returned no streamed audio output")
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: modelsRequestTimeout}
-	started := time.Now()
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		logModelsResponse(requestDiagnostics{Enabled: cfg.Verbose, Output: cfg.Diagnostics, Command: "models invoke"}, endpoint, 0, time.Since(started), "error=unreachable")
-		return fmt.Errorf("models endpoint not reachable at %s: %w", endpoint.String(), err)
+	if err := copyModelInvocationStreamFile(result.StreamFile, cfg.OutputPath); err != nil {
+		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		responseBody, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return fmt.Errorf("read invocation error response: %w", readErr)
-		}
-		logModelsResponse(requestDiagnostics{Enabled: cfg.Verbose, Output: cfg.Diagnostics, Command: "models invoke"}, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(responseBody)))
-		return modelsRequestError(resp.StatusCode, responseBody)
-	}
-	output, err := os.Create(cfg.OutputPath)
-	if err != nil {
-		return fmt.Errorf("create output file: %w", err)
-	}
-	defer output.Close()
-	if _, err := io.Copy(output, resp.Body); err != nil {
-		return fmt.Errorf("write output file: %w", err)
-	}
-	logModelsResponse(requestDiagnostics{Enabled: cfg.Verbose, Output: cfg.Diagnostics, Command: "models invoke"}, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("outputPath=%s", cfg.OutputPath))
+	logBootstrapInvokeResponse(cfg, fmt.Sprintf("outputPath=%s", cfg.OutputPath))
 	return nil
 }
 
