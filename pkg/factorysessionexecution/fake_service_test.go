@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1306,6 +1308,339 @@ func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
 	if session.SessionID != sessionID {
 		t.Fatalf("sessionId = %q, want %q", session.SessionID, sessionID)
 	}
+}
+
+func TestReplaySessionProjection_EquivalentOrchestratorsSharePublicSessionProjection(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 18, 30, 0, 0, time.UTC)
+	sessionID := "dur-sess-orchestrator-parity-001"
+	baseSession := SessionReadResult{
+		SessionID:      sessionID,
+		Status:         LifecycleStatusRunning,
+		SourceHash:     "sha256:equivalent-source",
+		Policy:         PolicyProjection{EffectiveHash: "sha256:equivalent-policy"},
+		ResolvedSource: ResolvedSource{SourceHash: "sha256:equivalent-source"},
+		Lifecycle:      &LifecycleTimestamps{StartedAt: &startedAt},
+		Phase:          "execute",
+	}
+	result := ResultReadResult{SessionID: sessionID, ResultStatus: ResultStatusNotReady}
+
+	petriSession := baseSession
+	petriSession.OrchestratorKind = "PETRI"
+	petriEvents := BuildCanonicalRuntimeSessionEvents(petriSession, result)
+	petriPayload := factoryapi.DispatchRequestEventPayload{
+		Inputs:       []factoryapi.DispatchConsumedWorkRef{},
+		TransitionId: "transition-review",
+	}
+	petriEvents = append(petriEvents, canonicalTypedInternalEvent(t, "DISPATCH_REQUEST", sessionID, petriPayload))
+
+	javascriptSession := baseSession
+	javascriptSession.OrchestratorKind = "JAVASCRIPT"
+	javascriptSession.Dialect = "you-workflow-v1"
+	javascriptEvents := BuildCanonicalRuntimeSessionEvents(javascriptSession, result)
+	javascriptPayload := factoryapi.OrchestratorCheckpointWrittenEventPayload{
+		Label:              "after-review",
+		ResumabilityStatus: factoryapi.RESUMABLE,
+		Timestamp:          &startedAt,
+	}
+	javascriptEvents = append(javascriptEvents, canonicalTypedInternalEvent(t, "ORCHESTRATOR_CHECKPOINT_WRITTEN", sessionID, javascriptPayload))
+
+	petriProjection, _, err := ReplaySessionProjection(petriEvents)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection(PETRI): %v", err)
+	}
+	javascriptProjection, _, err := ReplaySessionProjection(javascriptEvents)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection(JAVASCRIPT): %v", err)
+	}
+
+	type sharedPublicSession struct {
+		SessionID     string
+		Status        LifecycleStatus
+		SourceHash    string
+		PolicyHash    string
+		Phase         string
+		StartedAt     time.Time
+		ResultStatus  string
+		ArtifactCount int
+		Links         InspectionLinks
+	}
+	sharedProjection := func(session SessionReadResult) sharedPublicSession {
+		t.Helper()
+		if session.Lifecycle == nil || session.Lifecycle.StartedAt == nil {
+			t.Fatalf("lifecycle = %#v, want startedAt", session.Lifecycle)
+		}
+		if session.ResultSummary == nil {
+			t.Fatal("resultSummary missing")
+		}
+		return sharedPublicSession{
+			SessionID:     session.SessionID,
+			Status:        session.Status,
+			SourceHash:    session.SourceHash,
+			PolicyHash:    session.Policy.EffectiveHash,
+			Phase:         session.Phase,
+			StartedAt:     session.Lifecycle.StartedAt.UTC(),
+			ResultStatus:  session.ResultSummary.ResultStatus,
+			ArtifactCount: session.ArtifactCount,
+			Links:         session.Links,
+		}
+	}
+	petriPublic := sharedProjection(petriProjection)
+	javascriptPublic := sharedProjection(javascriptProjection)
+	if petriPublic != javascriptPublic {
+		t.Fatalf("shared public session projection differs by orchestrator:\nPETRI: %#v\nJAVASCRIPT: %#v", petriPublic, javascriptPublic)
+	}
+	if petriProjection.OrchestratorKind != "PETRI" || javascriptProjection.OrchestratorKind != "JAVASCRIPT" {
+		t.Fatalf("orchestrator identity lost: PETRI=%q JAVASCRIPT=%q", petriProjection.OrchestratorKind, javascriptProjection.OrchestratorKind)
+	}
+	if petriPayload.TransitionId == "" || javascriptPayload.Label == "" {
+		t.Fatal("typed orchestrator-specific facts missing")
+	}
+}
+
+func TestReplayDispatchProjection_EquivalentOrchestratorsMatchLiveDispatchSummary(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 20, 0, 0, 0, time.UTC)
+	providerRef := ProviderSessionRef{Provider: "mock", Kind: "session_id", ID: "provider-session-parity-1"}
+
+	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+		t.Run(orchestratorKind, func(t *testing.T) {
+			session := SessionReadResult{
+				SessionID:        "dispatch-parity-" + strings.ToLower(orchestratorKind),
+				Status:           LifecycleStatusSucceeded,
+				OrchestratorKind: orchestratorKind,
+				Phase:            "execute",
+				Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+			}
+			live := DispatchSummary{
+				ID:                  "dispatch-equivalent-1",
+				Status:              DispatchStatusCompleted,
+				DispatchKind:        "AGENT",
+				Phase:               "execute",
+				Label:               "summarize findings",
+				RunnerID:            "worker-summary",
+				Model:               "mock-model",
+				Provider:            "mock",
+				ProviderSessionRefs: []ProviderSessionRef{providerRef},
+				OutputArtifactIDs:   []string{"artifact-equivalent-1"},
+			}
+			events := BuildCanonicalRuntimeSessionEvents(
+				session,
+				ResultReadResult{SessionID: session.SessionID, ResultStatus: ResultStatusFinal},
+				RuntimeDispatchEventInput{Dispatches: []DispatchSummary{live}},
+			)
+
+			replayed, err := ReplayDispatchProjection(events)
+			if err != nil {
+				t.Fatalf("ReplayDispatchProjection: %v", err)
+			}
+			if len(replayed) != 1 || !reflect.DeepEqual(replayed[0], live) {
+				t.Fatalf("replayed dispatch = %#v, want live projection %#v", replayed, live)
+			}
+		})
+	}
+}
+
+func TestReplayDispatchProjection_EquivalentOrchestratorsPreserveAbsentProviderSession(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 20, 5, 0, 0, time.UTC)
+	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+		t.Run(orchestratorKind, func(t *testing.T) {
+			session := SessionReadResult{
+				SessionID:        "dispatch-no-provider-" + strings.ToLower(orchestratorKind),
+				Status:           LifecycleStatusFailed,
+				OrchestratorKind: orchestratorKind,
+				Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+			}
+			live := DispatchSummary{ID: "dispatch-no-provider", Status: DispatchStatusFailed, DispatchKind: "AGENT"}
+			events := BuildCanonicalRuntimeSessionEvents(
+				session,
+				ResultReadResult{SessionID: session.SessionID, ResultStatus: ResultStatusUnavailable},
+				RuntimeDispatchEventInput{Dispatches: []DispatchSummary{live}},
+			)
+			replayed, err := ReplayDispatchProjection(events)
+			if err != nil {
+				t.Fatalf("ReplayDispatchProjection: %v", err)
+			}
+			if len(replayed) != 1 || len(replayed[0].ProviderSessionRefs) != 0 {
+				t.Fatalf("replayed dispatch = %#v, want absent provider session refs", replayed)
+			}
+		})
+	}
+}
+
+func TestReplaySessionProjection_EquivalentOrchestratorsRestoreArtifactsAndLatestLifecycle(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 21, 0, 0, 0, time.UTC)
+	pausedAt := startedAt.Add(time.Minute)
+	resumedAt := pausedAt.Add(time.Minute)
+	artifact := map[string]any{
+		"id":          "artifact-parity-1",
+		"kind":        "FINAL_RESULT",
+		"visibility":  "PUBLIC",
+		"contentHash": "sha256:artifact-parity",
+		"sizeBytes":   128,
+	}
+
+	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+		t.Run(orchestratorKind, func(t *testing.T) {
+			sessionID := "artifact-parity-" + strings.ToLower(orchestratorKind)
+			session := SessionReadResult{
+				SessionID:        sessionID,
+				Status:           LifecycleStatusRunning,
+				OrchestratorKind: orchestratorKind,
+				Lifecycle: &LifecycleTimestamps{
+					StartedAt: &startedAt,
+					PausedAt:  &pausedAt,
+					ResumedAt: &resumedAt,
+				},
+			}
+			events := BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{
+				SessionID:    sessionID,
+				ResultStatus: ResultStatusPartial,
+				ArtifactIDs:  []string{"artifact-parity-1"},
+			})
+			artifactEvent := canonicalTypedInternalEvent(t, "ARTIFACT_CREATED", sessionID, map[string]any{
+				"artifact":   artifact,
+				"capturedAt": resumedAt.Format(time.RFC3339),
+			})
+			var artifactEnvelope map[string]any
+			if err := json.Unmarshal(artifactEvent, &artifactEnvelope); err != nil {
+				t.Fatalf("unmarshal artifact envelope: %v", err)
+			}
+			context := artifactEnvelope["context"].(map[string]any)
+			context["orchestratorKind"] = orchestratorKind
+			artifactEvent, _ = json.Marshal(artifactEnvelope)
+
+			internalType := "DISPATCH_REQUESTED"
+			internalPayload := map[string]any{"transitionId": "transition-1"}
+			if orchestratorKind == "JAVASCRIPT" {
+				internalType = "ORCHESTRATOR_CHECKPOINT_WRITTEN"
+				internalPayload = map[string]any{"checkpointId": "checkpoint-1"}
+			}
+			events = append(events, artifactEvent, canonicalTypedInternalEvent(t, internalType, sessionID, internalPayload))
+
+			replayed, _, err := ReplaySessionProjection(events)
+			if err != nil {
+				t.Fatalf("ReplaySessionProjection: %v", err)
+			}
+			wantRef := ArtifactRefSummary{ID: "artifact-parity-1", Kind: "FINAL_RESULT", Visibility: "PUBLIC", ContentHash: "sha256:artifact-parity", SizeBytes: 128}
+			if replayed.ArtifactCount != 1 || !reflect.DeepEqual(replayed.ArtifactRefs, []ArtifactRefSummary{wantRef}) {
+				t.Fatalf("artifact projection = count %d refs %#v, want %#v", replayed.ArtifactCount, replayed.ArtifactRefs, wantRef)
+			}
+			if replayed.Status != LifecycleStatusRunning || replayed.Lifecycle == nil || !replayed.Lifecycle.ResumedAt.Equal(resumedAt) {
+				t.Fatalf("lifecycle = status %q timestamps %#v, want latest RUNNING at %s", replayed.Status, replayed.Lifecycle, resumedAt)
+			}
+		})
+	}
+}
+
+func TestReplaySessionProjection_EquivalentOrchestratorsPreserveResultAvailability(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 22, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name             string
+		sessionStatus    LifecycleStatus
+		resultStatus     ResultStatus
+		primaryResult    json.RawMessage
+		precedingPartial bool
+	}{
+		{
+			name:          "partial result without terminal result",
+			sessionStatus: LifecycleStatusRunning,
+			resultStatus:  ResultStatusPartial,
+			primaryResult: json.RawMessage(`[{"type":"text","text":"partial output"}]`),
+		},
+		{
+			name:          "terminal result",
+			sessionStatus: LifecycleStatusSucceeded,
+			resultStatus:  ResultStatusFinal,
+			primaryResult: json.RawMessage(`[{"type":"text","text":"final output"}]`),
+		},
+		{
+			name:             "terminal result supersedes partial result",
+			sessionStatus:    LifecycleStatusSucceeded,
+			resultStatus:     ResultStatusFinal,
+			primaryResult:    json.RawMessage(`[{"type":"text","text":"final output after partial"}]`),
+			precedingPartial: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var sharedResult *ResultReadResult
+			for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+				sessionID := "result-parity-" + strings.ToLower(orchestratorKind)
+				session := SessionReadResult{
+					SessionID:        sessionID,
+					Status:           test.sessionStatus,
+					OrchestratorKind: orchestratorKind,
+					Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+				}
+				if IsTerminalLifecycleStatus(test.sessionStatus) {
+					finishedAt := startedAt.Add(time.Minute)
+					session.Lifecycle.FinishedAt = &finishedAt
+				}
+				live := ResultReadResult{
+					SessionID:     sessionID,
+					SessionStatus: test.sessionStatus,
+					ResultStatus:  test.resultStatus,
+					PrimaryResult: test.primaryResult,
+				}
+				events := BuildCanonicalRuntimeSessionEvents(session, live)
+				if test.precedingPartial {
+					partialEvent := canonicalTypedInternalEvent(t, "SESSION_RESULT_UPDATED", sessionID, map[string]any{
+						"resultStatus":  "PARTIAL",
+						"resultSummary": []map[string]any{{"type": "text", "text": "earlier partial output"}},
+					})
+					events = append(events[:1], append([]json.RawMessage{partialEvent}, events[1:]...)...)
+				}
+
+				replayedSession, replayedResult, err := ReplaySessionProjection(events)
+				if err != nil {
+					t.Fatalf("ReplaySessionProjection(%s): %v", orchestratorKind, err)
+				}
+				if replayedResult.ResultStatus != test.resultStatus || replayedResult.SessionStatus != test.sessionStatus {
+					t.Fatalf("%s result availability = (%q, %q), want (%q, %q)", orchestratorKind, replayedResult.ResultStatus, replayedResult.SessionStatus, test.resultStatus, test.sessionStatus)
+				}
+				if !jsonEqual(replayedResult.PrimaryResult, test.primaryResult) {
+					t.Fatalf("%s primary result = %s, want %s", orchestratorKind, replayedResult.PrimaryResult, test.primaryResult)
+				}
+				if replayedSession.ResultSummary == nil || replayedSession.ResultSummary.ResultStatus != string(test.resultStatus) {
+					t.Fatalf("%s session result summary = %#v, want %q", orchestratorKind, replayedSession.ResultSummary, test.resultStatus)
+				}
+
+				comparable := replayedResult
+				comparable.SessionID = ""
+				if sharedResult == nil {
+					sharedResult = &comparable
+				} else if !reflect.DeepEqual(*sharedResult, comparable) {
+					t.Fatalf("shared result projection differs by orchestrator:\nfirst: %#v\n%s: %#v", *sharedResult, orchestratorKind, comparable)
+				}
+			}
+		})
+	}
+}
+
+func jsonEqual(left, right json.RawMessage) bool {
+	var leftValue any
+	var rightValue any
+	return json.Unmarshal(left, &leftValue) == nil &&
+		json.Unmarshal(right, &rightValue) == nil &&
+		reflect.DeepEqual(leftValue, rightValue)
+}
+
+func canonicalTypedInternalEvent(t *testing.T, eventType, sessionID string, payload any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"schemaVersion": canonicalFactoryEventSchemaVersion,
+		"id":            "internal/" + eventType,
+		"type":          eventType,
+		"context": map[string]any{
+			"sequence":  99,
+			"sessionId": sessionID,
+		},
+		"payload": payload,
+	})
+	if err != nil {
+		t.Fatalf("marshal %s event: %v", eventType, err)
+	}
+	return raw
 }
 
 func TestAppendDispatchInterruptedEvent_RecordsCanonicalMetadata(t *testing.T) {

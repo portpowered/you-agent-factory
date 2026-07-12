@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -594,7 +595,9 @@ func canonicalSessionResultUpdatedPayload(session SessionReadResult, result Resu
 	payload := map[string]any{
 		"resultStatus": string(result.ResultStatus),
 	}
-	if session.ResultSummary != nil {
+	if primaryResult := canonicalPrimaryResultPayload(result.PrimaryResult); primaryResult != nil {
+		payload["resultSummary"] = primaryResult
+	} else if session.ResultSummary != nil {
 		if summary := strings.TrimSpace(session.ResultSummary.Summary); summary != "" {
 			payload["resultSummary"] = []map[string]any{
 				{"type": "text", "text": summary},
@@ -608,6 +611,17 @@ func canonicalSessionResultUpdatedPayload(session SessionReadResult, result Resu
 		payload["availability"] = availability
 	}
 	return payload
+}
+
+func canonicalPrimaryResultPayload(primaryResult json.RawMessage) any {
+	if len(primaryResult) == 0 {
+		return nil
+	}
+	var payload []interfaces.WorkContentPart
+	if err := json.Unmarshal(primaryResult, &payload); err != nil || payload == nil {
+		return nil
+	}
+	return append(json.RawMessage(nil), primaryResult...)
 }
 
 func canonicalResultAvailabilityPayload(availability *ResultAvailabilityDetail) map[string]any {
