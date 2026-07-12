@@ -610,7 +610,7 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 func requireRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
 	t.Helper()
 
-	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*-"+runtimeInstanceID+"-*.log"))
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*", "*-"+runtimeInstanceID+"-*.log"))
 	if err != nil {
 		t.Fatalf("glob runtime log path: %v", err)
 	}
