@@ -9,14 +9,70 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 const runtimeEventSource = "runtime-service"
+
+type acceptedPetriExecutor struct{}
+
+func (*acceptedPetriExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	return interfaces.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: interfaces.OutcomeAccepted, Output: "done"}, nil
+}
+
+func petriRecordingNet() *state.Net {
+	workType := &state.WorkType{ID: "task", Name: "Task", States: []state.StateDefinition{
+		{Value: "init", Category: state.StateCategoryInitial}, {Value: "done", Category: state.StateCategoryTerminal},
+	}}
+	places := make(map[string]*petri.Place)
+	for _, place := range workType.GeneratePlaces() {
+		places[place.ID] = place
+	}
+	transition := &petri.Transition{
+		ID: "process", Name: "Process", Type: petri.TransitionNormal, WorkerType: "mock",
+		InputArcs:  []petri.Arc{{ID: "input", PlaceID: "task:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+		OutputArcs: []petri.Arc{{ID: "output", PlaceID: "task:done", Direction: petri.ArcOutput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}}},
+	}
+	return &state.Net{ID: "petri-recording", Places: places, Transitions: map[string]*petri.Transition{transition.ID: transition}, WorkTypes: map[string]*state.WorkType{workType.ID: workType}, Resources: map[string]*state.ResourceDef{}}
+}
+
+func assertPersistedPetriMutationAndCanonicalProjection(t *testing.T, store runtimepersist.Store, sessionID string) {
+	t.Helper()
+	encoded, err := store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("Load persisted owner snapshot: %v", err)
+	}
+	var snapshot fse.PersistedRuntimeSessionState
+	if err := json.Unmarshal(encoded, &snapshot); err != nil {
+		t.Fatalf("decode persisted owner snapshot: %v", err)
+	}
+	var mutation *interfaces.TokenMutationRecord
+	var canonicalCount int
+	for i := range snapshot.Records {
+		record := snapshot.Records[i]
+		if record.Kind == fse.DurableRecordKindCanonicalFactoryEvent {
+			canonicalCount++
+		}
+		if record.Kind == fse.DurableRecordKindPetriTokenMutation {
+			mutation = record.PetriMutation
+		}
+	}
+	if canonicalCount == 0 {
+		t.Fatal("reloaded owner snapshot lost canonical Factory Events")
+	}
+	if mutation == nil || mutation.Type != interfaces.MutationCreate || mutation.TransitionID != "process" || mutation.ToPlace != "task:done" {
+		t.Fatalf("reloaded Petri mutation = %#v, want typed process mutation into task:done", mutation)
+	}
+}
+
+var _ workers.WorkerExecutor = (*acceptedPetriExecutor)(nil)
 
 func runtimePersistence(projectRoot string) runtimepersist.Store {
 	return runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)}

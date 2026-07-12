@@ -259,7 +259,10 @@ models share one source of truth.
 
 JavaScript checkpoints remain tagged JavaScript runtime records with their
 checkpoint and resume semantics. Petri marking and transition records remain
-internal Petri records. Either record may cause a separate canonical event when
+internal Petri records. The Petri runtime reports final output mutations through
+`factory.WithPetriMutationRecorder` only after transition routing has determined
+their marking semantics; `pkg/factorysessionexecution` persists those records
+before the runtime accepts the completed tick. Either record may cause a separate canonical event when
 it independently represents a public Factory Session fact, but neither is
 retyped merely to make orchestration histories look alike.
 

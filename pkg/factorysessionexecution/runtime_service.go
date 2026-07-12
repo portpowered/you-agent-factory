@@ -750,6 +750,39 @@ func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runti
 	return cloneRuntimeSessionState(&cached), nil
 }
 
+// RecordPetriTokenMutations appends applied Petri transition records through
+// the canonical Factory Session persistence owner. Persistence succeeds before
+// the updated history becomes visible to live readers.
+func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
+	sessionID string,
+	mutations []interfaces.TokenMutationRecord,
+) error {
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return err
+	}
+	if len(mutations) == 0 {
+		return nil
+	}
+	if _, err := s.snapshotSessionState(id); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[id]
+	if !ok {
+		return ErrSessionNotFound
+	}
+	candidate := cloneRuntimeSessionState(state)
+	candidate.petriMutations = append(candidate.petriMutations, clonePetriMutations(mutations)...)
+	if err := s.persistSessionSnapshot(candidate); err != nil {
+		return err
+	}
+	*state = candidate
+	return nil
+}
+
 func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 	if state == nil {
 		return runtimeSessionState{}

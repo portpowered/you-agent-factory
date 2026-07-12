@@ -35,6 +35,7 @@ type FactoryConfig struct {
 	SubmissionHooks           []SubmissionHook
 	DispatchRecorder          DispatchRecorder
 	CompletionRecorder        CompletionRecorder
+	PetriMutationRecorder     PetriMutationRecorder
 	CompletionDeliveryPlanner CompletionDeliveryPlanner
 	// inlineDispatch enables synchronous dispatch mode through registered
 	// worker executors. When true, dispatches are executed inline during
@@ -59,6 +60,10 @@ type DispatchRecorder func(interfaces.FactoryDispatchRecord)
 // CompletionRecorder receives completed worker results after dispatch/result
 // hooks make them visible to the engine at a logical tick boundary.
 type CompletionRecorder func(interfaces.FactoryCompletionRecord)
+
+// PetriMutationRecorder sends applied Petri transition records to the
+// canonical Factory Session persistence owner after transition routing.
+type PetriMutationRecorder func(sessionID string, mutations []interfaces.TokenMutationRecord) error
 
 // FactoryEventRecorder receives canonical generated FactoryEvent messages in
 // append order as runtime history records them.
@@ -228,6 +233,14 @@ func WithDispatchRecorder(recorder DispatchRecorder) FactoryOption {
 func WithCompletionRecorder(recorder CompletionRecorder) FactoryOption {
 	return func(c *FactoryConfig) {
 		c.CompletionRecorder = recorder
+	}
+}
+
+// WithPetriMutationRecorder records applied Petri transition mutations at the
+// post-routing boundary where their final marking semantics are available.
+func WithPetriMutationRecorder(recorder PetriMutationRecorder) FactoryOption {
+	return func(c *FactoryConfig) {
+		c.PetriMutationRecorder = recorder
 	}
 }
 

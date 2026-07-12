@@ -11,13 +11,61 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
+	factorycontext "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
+
+func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *testing.T) {
+	store, err := runtimepersist.NewDirectoryStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewDirectoryStore: %v", err)
+	}
+	owner := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(), Persistence: store,
+	})
+	started, err := owner.StartSync(context.Background(), simpleFinalSyncStartRequest())
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	runtime, err := factoryruntime.New(
+		factory.WithNet(petriRecordingNet()),
+		factory.WithInlineDispatch(),
+		factory.WithWorkerExecutor("mock", &acceptedPetriExecutor{}),
+		factory.WithLogger(logging.NoopLogger{}),
+		factory.WithWorkflowContext(&factorycontext.FactoryContext{SessionID: started.SessionID}),
+		factory.WithPetriMutationRecorder(owner.RecordPetriTokenMutations),
+	)
+	if err != nil {
+		t.Fatalf("New Petri runtime: %v", err)
+	}
+	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+		WorkTypeID: "task", WorkID: "work-petri-recording", TraceID: "trace-petri-recording",
+	}})
+	if _, err := runtime.SubmitWorkRequest(context.Background(), request); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	if err := runtime.Run(context.Background()); err != nil {
+		t.Fatalf("Run Petri runtime: %v", err)
+	}
+
+	reloaded := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(), Persistence: store,
+	})
+	if _, err := reloaded.GetSession(context.Background(), started.SessionID); err != nil {
+		t.Fatalf("GetSession after owner restart: %v", err)
+	}
+	assertPersistedPetriMutationAndCanonicalProjection(t, store, started.SessionID)
+}
 
 func TestPersistedRuntimeSessionState_MixedTypedHistoryRoundTripsAndReplays(t *testing.T) {
 	const sessionID = "dur-sess-1234567890abcdef1234567890abcdef"
