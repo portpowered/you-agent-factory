@@ -355,6 +355,17 @@ primary-result behavior.
   `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`.
   Story-002 goal stream integration evidence is recorded in
   `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`.
+- Named `@you/subagent` response-stream boundary smoke coverage lives in
+  `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go`,
+  proving real CLI `--output response-stream` on the one-pass subagent factory
+  reuses the shared response-stream renderer contract proven for `@you/goal`:
+  human stdout avoids legacy fragment dialect, JSON NDJSON uses the canonical
+  `recordType` vocabulary, exactly one terminal `primary_result` wraps the
+  shared `InvocationResponse`, and primary-only versus response-stream terminal
+  outcomes match for the same successful fixture. Reuse
+  `writePackagedSubagentMockWorkers` when extending subagent stream verification.
+  Story-003 subagent stream integration evidence is recorded in
+  `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
