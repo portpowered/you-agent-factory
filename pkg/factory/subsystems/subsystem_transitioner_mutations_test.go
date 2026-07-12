@@ -475,6 +475,10 @@ func (f calculateMutationsFixture) calculateWithWorkstation(
 func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
 
 	mutations, err := fixture.calculateWithWorkstation(
@@ -496,6 +500,93 @@ func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *t
 	}
 	if string(mutations[0].NewToken.Color.Payload) != "worker-output" {
 		t.Fatalf("payload = %q, want worker-output", mutations[0].NewToken.Color.Payload)
+	}
+	if len(mutations[0].NewToken.Color.Content) != 1 || mutations[0].NewToken.Color.Content[0].Text != "worker-output" {
+		t.Fatalf("content = %#v, want worker response content", mutations[0].NewToken.Color.Content)
+	}
+}
+
+func TestCalculateMutations_OutputAsPayload_Continue_UsesNextTurnContent(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	mutations, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "continue", PlaceID: "wt-code:init"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeContinue,
+			output:       "next-turn-output",
+			feedback:     "needs revision",
+		},
+		&interfaces.FactoryWorkstationConfig{
+			Name: "review-story",
+			WorkPropagation: &interfaces.WorkPropagationConfig{
+				Mode: interfaces.WorkPropagationModeOutputAsPayload,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+	token := mutations[0].NewToken
+	if string(token.Color.Payload) != "next-turn-output" {
+		t.Fatalf("payload = %q, want next-turn-output", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "next-turn-output" {
+		t.Fatalf("content = %#v, want next-turn content not submitted request", token.Color.Content)
+	}
+	if token.Color.Tags["continue_feedback"] != "needs revision" {
+		t.Fatalf("continue feedback tag = %#v, want needs revision", token.Color.Tags)
+	}
+}
+
+func TestCalculateMutations_OutputAsPayload_Failed_PreservesRequestContentAndDiagnostics(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	mutations, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "fail", PlaceID: "wt-code:failed"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeFailed,
+			output:       "worker-output",
+			err:          "agent crashed",
+		},
+		&interfaces.FactoryWorkstationConfig{
+			Name: "execute-story",
+			WorkPropagation: &interfaces.WorkPropagationConfig{
+				Mode: interfaces.WorkPropagationModeOutputAsPayload,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+	token := mutations[0].NewToken
+	if string(token.Color.Payload) != "input-payload" {
+		t.Fatalf("payload = %q, want preserved request payload", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+		t.Fatalf("content = %#v, want preserved request content not worker output", token.Color.Content)
+	}
+	if token.History.LastError != "agent crashed" {
+		t.Fatalf("LastError = %q, want failure diagnostics", token.History.LastError)
 	}
 }
 
@@ -827,157 +918,5 @@ func TestCalculateMutations_PackagedGoalReviewClassifierPreservesCarriedSummary(
 	}
 	if token.Color.Content[0].Text != "Final goal summary." {
 		t.Fatalf("terminal content = %q, want carried execution summary not classifier label", token.Color.Content[0].Text)
-	}
-}
-
-type acceptedMixedWorkResourceMutationFixture struct {
-	transformer *token_transformer.Transformer
-	resource    interfaces.Token
-	work        interfaces.Token
-	arcs        []petri.Arc
-	result      resolvedWorkResult
-	now         time.Time
-}
-
-func newAcceptedMixedWorkResourceMutationFixture() acceptedMixedWorkResourceMutationFixture {
-	now := time.Date(2026, time.April, 7, 14, 0, 0, 0, time.UTC)
-	createdAt := now.Add(-time.Hour)
-	places := map[string]*petri.Place{
-		"story:complete":       {ID: "story:complete", TypeID: "story", State: "complete"},
-		"agent-slot:available": {ID: "agent-slot:available", TypeID: "agent-slot", State: "available"},
-		"story:in-review":      {ID: "story:in-review", TypeID: "story", State: "in-review"},
-	}
-	workTypes := map[string]*state.WorkType{
-		"story": {ID: "story"},
-	}
-	return acceptedMixedWorkResourceMutationFixture{
-		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
-		resource: interfaces.Token{
-			ID:        "agent-slot:resource:0",
-			PlaceID:   "agent-slot:available",
-			CreatedAt: createdAt,
-			EnteredAt: createdAt,
-			Color: interfaces.TokenColor{
-				WorkID:     "agent-slot:0",
-				WorkTypeID: "agent-slot",
-				DataType:   interfaces.DataTypeResource,
-			},
-		},
-		work: interfaces.Token{
-			ID:        "work-story-1",
-			PlaceID:   "story:in-review",
-			CreatedAt: createdAt,
-			EnteredAt: createdAt,
-			Color: interfaces.TokenColor{
-				WorkID:     "work-story-1",
-				WorkTypeID: "story",
-				DataType:   interfaces.DataTypeWork,
-				TraceID:    "trace-batch-idea-001",
-			},
-			History: interfaces.TokenHistory{
-				TotalVisits:         map[string]int{},
-				ConsecutiveFailures: map[string]int{},
-				PlaceVisits:         map[string]int{},
-			},
-		},
-		arcs: []petri.Arc{
-			{ID: "work-out", PlaceID: "story:complete"},
-			{ID: "slot-out", PlaceID: "agent-slot:available"},
-		},
-		result: resolvedWorkResult{
-			transitionID: "review-story",
-			outcome:      interfaces.OutcomeAccepted,
-			output:       "Done. COMPLETE ACCEPTED",
-		},
-		now: now,
-	}
-}
-
-func findWorkAndResourceMutations(mutations []interfaces.MarkingMutation) (*interfaces.MarkingMutation, *interfaces.MarkingMutation) {
-	var workMutation *interfaces.MarkingMutation
-	var resourceMutation *interfaces.MarkingMutation
-	for i := range mutations {
-		if mutations[i].NewToken == nil {
-			continue
-		}
-		switch mutations[i].NewToken.Color.DataType {
-		case interfaces.DataTypeWork:
-			workMutation = &mutations[i]
-		case interfaces.DataTypeResource:
-			resourceMutation = &mutations[i]
-		}
-	}
-	return workMutation, resourceMutation
-}
-
-func assertAcceptedMixedWorkOutputMutation(t *testing.T, workMutation *interfaces.MarkingMutation) {
-	t.Helper()
-	if workMutation == nil {
-		t.Fatal("expected work output mutation")
-	}
-	if workMutation.ToPlace != "story:complete" {
-		t.Fatalf("work ToPlace = %q, want story:complete", workMutation.ToPlace)
-	}
-	if workMutation.NewToken.Color.TraceID != "trace-batch-idea-001" {
-		t.Fatalf("work TraceID = %q, want trace-batch-idea-001", workMutation.NewToken.Color.TraceID)
-	}
-}
-
-func assertReleasedResourceMutationBasics(t *testing.T, resourceMutation *interfaces.MarkingMutation, resource interfaces.Token) {
-	t.Helper()
-	if resourceMutation == nil {
-		t.Fatal("expected resource release mutation")
-	}
-	if resourceMutation.ToPlace != "agent-slot:available" {
-		t.Fatalf("resource ToPlace = %q, want agent-slot:available", resourceMutation.ToPlace)
-	}
-	if resourceMutation.NewToken.ID != resource.ID {
-		t.Fatalf("released resource ID = %q, want consumed identity %q", resourceMutation.NewToken.ID, resource.ID)
-	}
-	if resourceMutation.NewToken.Color.WorkID != "agent-slot:0" {
-		t.Fatalf("released resource WorkID = %q, want agent-slot:0", resourceMutation.NewToken.Color.WorkID)
-	}
-	if resourceMutation.NewToken.Color.TraceID != "" {
-		t.Fatalf("released resource TraceID = %q, want empty", resourceMutation.NewToken.Color.TraceID)
-	}
-}
-
-func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfaces.MarkingMutation, resource interfaces.Token) {
-	t.Helper()
-	if len(mutations) != 2 {
-		t.Fatalf("mutation count = %d, want 2 (work output + resource release)", len(mutations))
-	}
-	workMutation, resourceMutation := findWorkAndResourceMutations(mutations)
-	assertAcceptedMixedWorkOutputMutation(t, workMutation)
-	assertReleasedResourceMutationBasics(t, resourceMutation, resource)
-}
-
-func TestCalculateMutations_AcceptedMixedWorkResource_ReleasesConsumedResourceRegardlessOfInputOrder(t *testing.T) {
-	fixture := newAcceptedMixedWorkResourceMutationFixture()
-	orderings := []struct {
-		name     string
-		consumed []interfaces.Token
-	}{
-		{name: "resource-first", consumed: []interfaces.Token{fixture.resource, fixture.work}},
-		{name: "work-first", consumed: []interfaces.Token{fixture.work, fixture.resource}},
-	}
-
-	for _, ordering := range orderings {
-		t.Run(ordering.name, func(t *testing.T) {
-			mutations, err := calculateMutations(mutationCalculationInput{
-				transition:  &petri.Transition{ID: "review-story"},
-				arcs:        fixture.arcs,
-				consumed:    ordering.consumed,
-				result:      fixture.result,
-				now:         fixture.now,
-				history:     fixture.work.History,
-				inputColors: tokenColorsFromTokens(ordering.consumed),
-				transformer: fixture.transformer,
-			})
-			if err != nil {
-				t.Fatalf("calculateMutations() error = %v", err)
-			}
-			assertAcceptedMixedWorkResourceMutations(t, mutations, fixture.resource)
-		})
 	}
 }

@@ -729,6 +729,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			Output:              in.result.output,
 			WorkPropagationMode: workPropagationMode,
 			WorkstationName:     workstationName,
+			WorkstationType:     workstationType(in.workstation),
 			Outcome:             in.result.outcome,
 			TransitionID:        in.result.transitionID,
 			Error:               in.result.err,
@@ -769,6 +770,13 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 		}
 	}
 	return mutations, nil
+}
+
+func workstationType(workstation *interfaces.FactoryWorkstationConfig) string {
+	if workstation == nil {
+		return ""
+	}
+	return strings.TrimSpace(workstation.Type)
 }
 
 func mutationRepeatCountForArc(

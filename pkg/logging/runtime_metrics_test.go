@@ -97,6 +97,45 @@ func TestBuildRuntimeMetricsSinkUsesConfiguredRollingPolicy(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeMetricsSinkCreatesDatedDirectoriesOnFreshRoot(t *testing.T) {
+	metricsDir := t.TempDir()
+	assertRuntimeArtifactRootLacksCalendarDirectories(t, metricsDir)
+	before := time.Now().UTC()
+
+	sink, err := BuildRuntimeMetricsSink(
+		"session-fresh-root",
+		"runtime-fresh-root",
+		"/folder",
+		"/factory",
+		metricsDir,
+		RuntimeMetricsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+	defer sink.Close()
+	after := time.Now().UTC()
+
+	assertRuntimeArtifactDatedDirPresent(t, filepath.Dir(sink.Path()))
+	assertPathUsesPlatformSeparators(t, sink.Path())
+	assertRuntimeMetricsPathFormat(
+		t,
+		sink.Path(),
+		metricsDir,
+		"session-fresh-root",
+		"runtime-fresh-root",
+		before,
+		after,
+	)
+
+	if err := sink.Counter(context.Background(), "runtime.started", 1, metrics.Fields{}); err != nil {
+		t.Fatalf("Counter on fresh root metrics sink: %v", err)
+	}
+	if _, err := os.Stat(sink.Path()); err != nil {
+		t.Fatalf("active runtime metrics file %q should remain open after write: %v", sink.Path(), err)
+	}
+}
+
 func TestBuildRuntimeMetricsSinkCreatesUTCPathUnderConfiguredRoot(t *testing.T) {
 	metricsDir := t.TempDir()
 	before := time.Now().UTC()
@@ -455,7 +494,7 @@ func assertRuntimeMetricsPathFormat(t *testing.T, path, rootDir, sessionID, runt
 	if ok, err := regexp.MatchString(`^\d{2}$`, parts[2]); err != nil || !ok {
 		t.Fatalf("day directory = %q, want dd", parts[2])
 	}
-	filenamePattern := regexp.MustCompile(`^(\d{6}\.\d{9})-` + regexp.QuoteMeta(sessionID) + `-` + regexp.QuoteMeta(runtimeInstanceID) + `-[A-Za-z0-9_.-]+\.log$`)
+	filenamePattern := regexp.MustCompile(`^(\d{6}\.\d{9})-runtime-metrics-` + regexp.QuoteMeta(sessionID) + `-` + regexp.QuoteMeta(runtimeInstanceID) + `-[A-Za-z0-9_.-]+\.log$`)
 	matches := filenamePattern.FindStringSubmatch(parts[3])
 	if matches == nil {
 		t.Fatalf("runtime metrics filename = %q, want sortable UTC time, session ID, runtime ID, and uniqueness suffix", parts[3])
@@ -473,7 +512,7 @@ func assertPathContainsRuntimeMetricsIDs(t *testing.T, path, sessionID, runtimeI
 	t.Helper()
 
 	base := filepath.Base(path)
-	if !strings.Contains(base, "-"+sessionID+"-"+runtimeInstanceID+"-") {
+	if !strings.Contains(base, "-runtime-metrics-"+sessionID+"-"+runtimeInstanceID+"-") {
 		t.Fatalf("runtime metrics path %q does not include session ID %q and runtime instance ID %q", path, sessionID, runtimeInstanceID)
 	}
 }

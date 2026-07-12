@@ -424,7 +424,7 @@ func readPipeIntoChannel(readPipe *os.File, out chan<- []byte) {
 func requireQuietRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
 	t.Helper()
 
-	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*-"+runtimeInstanceID+"-*.log"))
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*", "*-runtime-log-"+runtimeInstanceID+"-*.log"))
 	if err != nil {
 		t.Fatalf("glob runtime log path: %v", err)
 	}

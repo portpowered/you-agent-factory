@@ -107,6 +107,9 @@ func resolveSubmittedWorkTerminalPrimaryResult(
 		logicalWorkID := logicalWorkIDForSubmittedItem(state.PayloadLineage, item.ID)
 		for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 			terminal := state.TerminalWorkByID[terminalWorkID]
+			if isFailedTerminalWork(terminal) {
+				continue
+			}
 			if logicalWorkID == "" {
 				if terminal.WorkItem.ID != item.ID {
 					continue
@@ -170,6 +173,9 @@ func collectExplicitPrimaryResultMatches(
 	matches := make([]interfaces.FactoryWorkItem, 0, len(state.TerminalWorkByID))
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
+		if isFailedTerminalWork(terminal) {
+			continue
+		}
 		if _, ok := scope[terminal.WorkItem.ID]; !ok {
 			continue
 		}
@@ -195,6 +201,9 @@ func collectExplicitPrimaryResultMatchesForInvocationTrace(
 	matches := make([]interfaces.FactoryWorkItem, 0, 1)
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
+		if isFailedTerminalWork(terminal) {
+			continue
+		}
 		if _, ok := traceIDs[strings.TrimSpace(terminal.WorkItem.TraceID)]; !ok {
 			continue
 		}
@@ -232,12 +241,19 @@ func collectUniqueExplicitTerminalMatches(
 	matches := make([]interfaces.FactoryWorkItem, 0, 1)
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
+		if isFailedTerminalWork(terminal) {
+			continue
+		}
 		if !explicitPrimaryResultMatches(terminal.WorkItem, cfg) {
 			continue
 		}
 		matches = append(matches, terminal.WorkItem)
 	}
 	return matches
+}
+
+func isFailedTerminalWork(terminal interfaces.FactoryTerminalWork) bool {
+	return strings.TrimSpace(terminal.Status) == "FAILED"
 }
 
 func selectedPrimaryResult(requestID, policy string, item interfaces.FactoryWorkItem) PrimaryResultSelection {
