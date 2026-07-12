@@ -874,6 +874,38 @@ func TestSessionScopedWorkRoutes_UnknownSessionReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRoots(t *testing.T) {
+	codexRoot := t.TempDir()
+	writeProviderSessionFixture(t, codexRoot, "sess_123", strings.Join([]string{
+		`{"type":"session_meta","id":"sess_123"}`,
+		`{"type":"response_item","item":{"type":"reasoning"}}`,
+	}, "\n"))
+
+	cursorRoot, cursorSessionID := writeCursorProviderSessionUUIDFixture(t)
+
+	srv := newTestServerWithProviderSessionRoots(codexRoot, cursorRoot)
+
+	codexReq := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
+	codexRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(codexRec, codexReq)
+	if codexRec.Code != http.StatusOK {
+		t.Fatalf("codex status = %d, want 200: %s", codexRec.Code, codexRec.Body.String())
+	}
+	codexResp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, codexRec)
+	assertProviderSessionResponseIdentity(t, codexResp)
+
+	cursorReq := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+cursorSessionID, nil)
+	cursorRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(cursorRec, cursorReq)
+	if cursorRec.Code != http.StatusOK {
+		t.Fatalf("cursor status = %d, want 200: %s", cursorRec.Code, cursorRec.Body.String())
+	}
+	cursorResp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, cursorRec)
+	if string(cursorResp.ProviderSession.Provider) != "cursor" || cursorResp.ProviderSession.Id != cursorSessionID {
+		t.Fatalf("cursor provider session = %#v, want cursor session_id %s", cursorResp.ProviderSession, cursorSessionID)
+	}
+}
+
 func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testing.T) {
 	root := t.TempDir()
 	writeProviderSessionFixture(t, root, "sess_123", strings.Join([]string{

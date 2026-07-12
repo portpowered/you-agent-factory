@@ -75,6 +75,18 @@ func newTestServerWithCursorRoot(root string) *Server {
 	}, 8080, logger, ServerOptions{CursorSessionsRoot: root})
 }
 
+func newTestServerWithProviderSessionRoots(codexRoot, cursorRoot string) *Server {
+	logger, _ := zap.NewDevelopment()
+	return NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, logger, ServerOptions{
+		CodexSessionsRoot:  codexRoot,
+		CursorSessionsRoot: cursorRoot,
+	})
+}
+
 func writeProviderSessionFixture(t *testing.T, root, id, contents string) {
 	t.Helper()
 
