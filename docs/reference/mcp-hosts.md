@@ -222,6 +222,62 @@ Use canonical `you.factory_session.*` names for this conversation.
 `you.workflow.*` names are compatibility-only aliases for existing
 integrations, not the recommended customer surface.
 
+## Reconnect With Stable Identifiers
+
+Before the host or its MCP child process disconnects, persist the identifiers
+needed to continue inspection:
+
+- the caller-supplied start `requestId` and returned Factory Session
+  `sessionId`;
+- any Dispatch `id` or FactoryArtifact `id` the host still needs to correlate
+  with later status, result, or event facts; and
+- the last processed FactoryEvent `id` (or its `context.sessionSequence`) as the
+  event cursor.
+
+After reconnecting to runtime-backed serve for the same project, resume reads
+against the retained Factory Session id. Reconnecting does not start or replay
+a Factory Session, so do not call `start_async` merely to recover visibility:
+
+```text
+host -> you.factory_session.get
+{"sessionId":"fs-host-demo-01"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","status":"RUNNING"}}
+
+host -> you.factory_session.read_events
+{"sessionId":"fs-host-demo-01","afterEventId":"event-host-demo-07"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","events":[{"id":"event-host-demo-08","type":"FactoryEventTypeSessionLifecycleControl","context":{"sessionSequence":8}}]}}
+
+host -> you.factory_session.get_result
+{"sessionId":"fs-host-demo-01","mode":"FINAL","includeArtifacts":true}
+```
+
+`afterEventId` returns ordered facts after the retained event. A host that
+retains `context.sessionSequence` instead may send `afterSequence`; when both
+are supplied, `afterEventId` wins. Advance the persisted cursor only after the
+host has processed the returned events.
+
+## Typed Outcomes And Host Action
+
+Treat the response envelope or lifecycle-control result as the decision input;
+do not turn every failure into a new start request.
+
+| Outcome | Host action |
+|---------|-------------|
+| `factory_session.result.not_ready` with `retryable: true` | Keep the same `sessionId`; poll `you.factory_session.get` and `you.factory_session.get_result` with backoff. Do not submit duplicate work. |
+| `factory_session.session.not_found` with `retryable: false` | Stop polling that value. Correct a stale or malformed `sessionId`, or stop recovery if the retained session no longer exists; a reconnect is not permission to substitute a new session. |
+| `factory_session.events.reconnect_cursor_not_found` with `retryable: false` | Keep the same `sessionId`, correct the stale event cursor from durable host state, and restart inspection from a known valid cursor. Do not guess that missing events were processed. |
+| Control result `NO_OP`, `INVALID_STATE`, or `TERMINAL_SESSION` for `RESUME` | Do not blindly retry. Re-read the same session: `NO_OP` means no transition was needed, `INVALID_STATE` requires correcting the operation for the current state, and `TERMINAL_SESSION` means resume cannot change the terminal session. |
+| `factory_session.start.request_id_conflict` with `retryable: false` | The request id was reused with a different start tuple. Preserve and retry the original `requestId` only with its original source and arguments; if the intended tuple changed, correct the request by assigning a new request id. |
+| `factory_session.service.unavailable` | Stop tool-call retries until the configured fixture or runtime backing service is available. Restore or respawn the correctly configured MCP server, then retry the same safe read or the same idempotent start tuple; do not invent a replacement `sessionId` or `requestId`. |
+
+These outcomes use the existing MCP contracts exercised by focused Factory
+Session failure, runtime, and lifecycle tests. They do not introduce a separate
+failure surface or change runtime recovery semantics.
+
 ## Generic MCP Host Pattern
 
 Most stdio MCP hosts accept the same child-process shape:
