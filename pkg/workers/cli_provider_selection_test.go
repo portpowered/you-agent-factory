@@ -537,36 +537,38 @@ func reversedCLIProviderRegistrations() []CLIProviderRegistration {
 	return reversed
 }
 
-func assertCLIProviderFullPrecedenceMatrix(t *testing.T, tc cliProviderFullPrecedenceMatrixCase) {
+func selectCLIProviderForMatrixCase(
+	tc cliProviderFullPrecedenceMatrixCase,
+	registrations []CLIProviderRegistration,
+) CLIProviderSelectionResult {
+	discovery := fakeCLIProviderDiscoveryView(tc.presentCommands)
+	if registrations != nil {
+		discovery.Registrations = registrations
+	}
+	return SelectCLIProvider(tc.input, discovery)
+}
+
+func assertCLIProviderMatrixFailure(t *testing.T, tc cliProviderFullPrecedenceMatrixCase, result CLIProviderSelectionResult) {
 	t.Helper()
 
-	runSelection := func(registrations []CLIProviderRegistration) CLIProviderSelectionResult {
-		discovery := fakeCLIProviderDiscoveryView(tc.presentCommands)
-		if registrations != nil {
-			discovery.Registrations = registrations
-		}
-		return SelectCLIProvider(tc.input, discovery)
+	if result.OK() {
+		t.Fatalf("result = %#v, want failure", result)
 	}
-
-	result := runSelection(nil)
-
-	if tc.wantFailure {
-		if result.OK() {
-			t.Fatalf("result = %#v, want failure", result)
-		}
-		if result.Selected != nil {
-			t.Fatalf("selected = %#v, want nil without deprecated model-default injection", result.Selected)
-		}
-		if result.Failure == nil || result.Failure.Code != tc.wantFailureCode {
-			t.Fatalf("failure = %#v, want code %q", result.Failure, tc.wantFailureCode)
-		}
-		for _, forbidden := range tc.forbidIdentities {
-			if result.Selected != nil && result.Selected.Identity == forbidden {
-				t.Fatalf("selected identity = %q, want forbidden deprecated fallback %q", result.Selected.Identity, forbidden)
-			}
-		}
-		return
+	if result.Selected != nil {
+		t.Fatalf("selected = %#v, want nil without deprecated model-default injection", result.Selected)
 	}
+	if result.Failure == nil || result.Failure.Code != tc.wantFailureCode {
+		t.Fatalf("failure = %#v, want code %q", result.Failure, tc.wantFailureCode)
+	}
+	for _, forbidden := range tc.forbidIdentities {
+		if result.Selected != nil && result.Selected.Identity == forbidden {
+			t.Fatalf("selected identity = %q, want forbidden deprecated fallback %q", result.Selected.Identity, forbidden)
+		}
+	}
+}
+
+func assertCLIProviderMatrixSuccess(t *testing.T, tc cliProviderFullPrecedenceMatrixCase, result CLIProviderSelectionResult) {
+	t.Helper()
 
 	if !result.OK() {
 		t.Fatalf("result = %#v, want success", result)
@@ -577,12 +579,12 @@ func assertCLIProviderFullPrecedenceMatrix(t *testing.T, tc cliProviderFullPrece
 	if result.Selected == nil || result.Selected.Identity != tc.wantIdentity {
 		t.Fatalf("selected = %#v, want identity %q", result.Selected, tc.wantIdentity)
 	}
+}
 
-	if !tc.assertRegistrationOrder {
-		return
-	}
+func assertCLIProviderMatrixRegistrationOrder(t *testing.T, tc cliProviderFullPrecedenceMatrixCase) {
+	t.Helper()
 
-	reversedResult := runSelection(reversedCLIProviderRegistrations())
+	reversedResult := selectCLIProviderForMatrixCase(tc, reversedCLIProviderRegistrations())
 	if !reversedResult.OK() {
 		t.Fatalf("reversed registrations result = %#v, want success", reversedResult)
 	}
@@ -595,6 +597,21 @@ func assertCLIProviderFullPrecedenceMatrix(t *testing.T, tc cliProviderFullPrece
 			reversedResult.Selected,
 			tc.wantIdentity,
 		)
+	}
+}
+
+func assertCLIProviderFullPrecedenceMatrix(t *testing.T, tc cliProviderFullPrecedenceMatrixCase) {
+	t.Helper()
+
+	result := selectCLIProviderForMatrixCase(tc, nil)
+	if tc.wantFailure {
+		assertCLIProviderMatrixFailure(t, tc, result)
+		return
+	}
+
+	assertCLIProviderMatrixSuccess(t, tc, result)
+	if tc.assertRegistrationOrder {
+		assertCLIProviderMatrixRegistrationOrder(t, tc)
 	}
 }
 
