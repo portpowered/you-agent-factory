@@ -46,7 +46,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	if helpRequested(cmd) {
 		return writeRunCommandHelp(cmd, &resolvedConfig)
 	}
-	err = runFactory(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
+	err = runFactory(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering))
 	if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}

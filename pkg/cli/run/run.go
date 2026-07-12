@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
@@ -100,6 +101,9 @@ type RunConfig struct {
 	MockWorkersEnabled    bool
 	MockWorkersConfigPath string
 	Verbose               bool
+	// TerminalPolicy carries the CLI-resolved quiet/normal/verbose contract for
+	// this invocation. When resolved, diagnostics and logger sinks consult it.
+	TerminalPolicy terminalpolicy.Policy
 	// SuppressDashboardRendering disables the simple stdout dashboard while
 	// preserving the normal service-layer run path.
 	SuppressDashboardRendering bool
@@ -573,9 +577,10 @@ func runFactoryServiceAndEmitResult(
 
 func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {
 	resolvedFactoryDir := resolveFactoryDirForDiagnostics(cfg.Dir)
+	diagnosticsEnabled := terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose)
 	clidiag.Printf(
 		cfg.Diagnostics,
-		cfg.Verbose,
+		diagnosticsEnabled,
 		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
 		resolvedFactoryDir,
 		cfg.Dir,
@@ -592,7 +597,7 @@ func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPa
 		requestedPort,
 		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
 	)
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "%s", cfg.OperatorDefaults.DiagnosticsLine())
+	clidiag.Printf(cfg.Diagnostics, diagnosticsEnabled, "%s", cfg.OperatorDefaults.DiagnosticsLine())
 }
 
 func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
@@ -603,7 +608,7 @@ func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
 
 	clidiag.Printf(
 		cfg.Diagnostics,
-		cfg.Verbose,
+		terminalpolicy.DiagnosticsEnabled(cfg.TerminalPolicy, cfg.Verbose),
 		"run named-factory resolution name=%q source=%s resolvedFactoryDir=%q projectRoot=%q globalRoot=%q precedence=%s",
 		resolution.Name,
 		resolution.Source,
