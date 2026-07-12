@@ -9,11 +9,12 @@ import (
 // implemented in story 002; flag and relationship walkers land in later stories.
 func Walk(root *cobra.Command) (Inventory, error) {
 	arguments := collectArgumentRecords(root)
+	flags := collectFlagRecords(root)
 
 	return Inventory{
 		FormatVersion: FormatVersion,
 		Arguments:     arguments,
-		Flags:         []FlagRecord{},
+		Flags:         flags,
 		Relationships: []RelationshipRecord{},
 	}, nil
 }

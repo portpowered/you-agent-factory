@@ -120,8 +120,8 @@ func TestWalk_SyntheticTreeDoesNotRecordFlagsAsArguments(t *testing.T) {
 			t.Fatalf("flag name %q was recorded as an argument on %q", record.Name, record.CommandPath)
 		}
 	}
-	if len(inv.Flags) != 0 {
-		t.Fatalf("Flags len = %d, want 0 until flag extraction lands", len(inv.Flags))
+	if len(inv.Flags) != 1 || inv.Flags[0].Long != "label" {
+		t.Fatalf("with-flag command flags = %#v, want single local flag label", inv.Flags)
 	}
 }
 
