@@ -368,7 +368,6 @@ func cleanInvocationCompletionMatchesTarget(
 }
 
 const (
-	responseStreamProgressPrefix          = "[you:progress] "
 	responseStreamPrimaryResultHeader     = "--- primary result ---"
 	responseStreamInvocationOutcomeHeader = "--- invocation outcome ---"
 	maxHumanProgressLineBytes             = 1024
@@ -612,8 +611,7 @@ func (r *humanResponseStreamRenderer) writeProgressLineLocked(payload string) {
 	if strings.TrimSpace(payload) == "" {
 		return
 	}
-	line := responseStreamProgressPrefix + payload
-	if !r.progress.enqueue([]byte(line)) {
+	if !r.progress.enqueue([]byte(payload)) {
 		r.emitTerminalBacklogNoticeLocked()
 		return
 	}
@@ -630,12 +628,7 @@ func (r *humanResponseStreamRenderer) emitTerminalBacklogNoticeLocked() {
 	if dropped <= 0 {
 		dropped = 1
 	}
-	notice := fmt.Sprintf(
-		"%s%s (%d progress lines dropped)",
-		responseStreamProgressPrefix,
-		"terminal output backlog",
-		dropped,
-	)
+	notice := fmt.Sprintf("terminal output backlog (%d progress lines dropped)", dropped)
 	r.progress.enqueueNotice([]byte(notice))
 	r.progressSeen = true
 }

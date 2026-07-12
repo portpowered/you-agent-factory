@@ -526,8 +526,8 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 
 	got := output.String()
 	wantProgress := []string{
-		"[you:progress] planning",
-		"[you:progress] reviewing",
+		"planning",
+		"reviewing",
 	}
 	for _, line := range wantProgress {
 		if !strings.Contains(got, line) {
@@ -539,7 +539,11 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 	if planningIdx < 0 || reviewingIdx < 0 || planningIdx > reviewingIdx {
 		t.Fatalf("progress lines out of order:\n%s", got)
 	}
-	if strings.Contains(got, "[you:progress] goal completed") {
+	beforePrimary := got
+	if idx := strings.Index(got, responseStreamPrimaryResultHeader); idx >= 0 {
+		beforePrimary = got[:idx]
+	}
+	if strings.Contains(beforePrimary, "goal completed") {
 		t.Fatalf("response fragment leaked into progress output:\n%s", got)
 	}
 	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
@@ -577,8 +581,9 @@ func TestHumanResponseStreamRenderer_SkipsDuplicateSequencesAndBoundsPayload(t *
 
 	renderer.stopProgressRendering()
 	got := output.String()
-	if strings.Count(got, "[you:progress]") != 1 {
-		t.Fatalf("expected one progress line, got:\n%s", got)
+	lines := strings.Split(strings.TrimSpace(got), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected one progress line, got %d:\n%s", len(lines), got)
 	}
 	if !strings.Contains(got, "...") {
 		t.Fatalf("expected bounded payload suffix, got:\n%s", got)
@@ -602,7 +607,7 @@ func TestHumanResponseStreamRenderer_SurfacesCompactionNotice(t *testing.T) {
 
 	renderer.stopProgressRendering()
 	got := output.String()
-	if !strings.Contains(got, "[you:progress] stream truncated (3 earlier events omitted)") {
+	if !strings.Contains(got, "stream truncated (3 earlier events omitted)") {
 		t.Fatalf("compaction notice = %q", got)
 	}
 }
@@ -690,7 +695,7 @@ func TestHumanResponseStreamRenderer_WritesInvocationOutcomeAfterProgress(t *tes
 	}
 
 	got := output.String()
-	if !strings.Contains(got, "[you:progress] waiting for review") {
+	if !strings.Contains(got, "waiting for review") {
 		t.Fatalf("output missing progress:\n%s", got)
 	}
 	if !strings.Contains(got, responseStreamInvocationOutcomeHeader) {
@@ -889,7 +894,7 @@ func TestHumanResponseStreamRenderer_SurfacesTerminalOutputBacklog(t *testing.T)
 	}
 
 	got := output.String()
-	backlogIdx := strings.Index(got, "[you:progress] terminal output backlog")
+	backlogIdx := strings.Index(got, "terminal output backlog")
 	primaryIdx := strings.Index(got, responseStreamPrimaryResultHeader)
 	if backlogIdx < 0 || primaryIdx < 0 || backlogIdx > primaryIdx {
 		t.Fatalf("want backlog before primary result:\n%s", got)
