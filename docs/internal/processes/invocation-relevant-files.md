@@ -342,12 +342,19 @@ primary-result behavior.
   `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`,
   proving real CLI `--output response-stream` still returns the packaged
   `primaryResult`, JSON response-stream NDJSON ends with a `primary_result`
-  record, durable `FactoryEvent` history omits internal response-stream terms,
+  record, primary-only and response-stream terminal `InvocationResponse` outcomes
+  match for the same successful fixture, JSON NDJSON uses the canonical CLI
+  `recordType` vocabulary (`progress`, `stream_gap`, `compaction`,
+  `primary_result`) without legacy provider fragment dialect, human stdout uses
+  the `[you:progress] ` prefix when progress arrives and avoids legacy fragment
+  terms, durable `FactoryEvent` history omits internal response-stream terms,
   and generated public API artifacts stay internal-only. Reuse
   `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
   and `support.StartFunctionalAPIServer` when extending boundary verification.
   Stream-responses gate audit intake and blocking residuals are recorded in
   `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`.
+  Story-002 goal stream integration evidence is recorded in
+  `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
