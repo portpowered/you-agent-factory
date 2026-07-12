@@ -1,4 +1,4 @@
-package cli
+package configinitcmd_test
 
 import (
 	"bytes"
@@ -9,24 +9,25 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/cli"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 )
 
 func TestConfigInitCommand_MapsGlobalJSONFlagToInitConfig(t *testing.T) {
-	originalConfigInit := configInit
+	originalRunInit := configinitcmd.RunInit
 	defer func() {
-		configInit = originalConfigInit
+		configinitcmd.RunInit = originalRunInit
 	}()
 
 	var got configinitcmd.InitConfig
-	configInit = func(cfg configinitcmd.InitConfig) error {
+	configinitcmd.RunInit = func(cfg configinitcmd.InitConfig) error {
 		got = cfg
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "config", "init"})
@@ -45,7 +46,7 @@ func TestConfigInitCommand_FreshIsolatedHomeCreatesSystemConfig(t *testing.T) {
 	t.Setenv("USERPROFILE", homeDir)
 
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"config", "init"})
@@ -86,7 +87,7 @@ func TestConfigInitCommand_JSONFreshHomeEmitsStructuredSummary(t *testing.T) {
 	t.Setenv("USERPROFILE", homeDir)
 
 	var stdout bytes.Buffer
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "config", "init"})
@@ -109,7 +110,7 @@ func TestConfigInitCommand_JSONFreshHomeEmitsStructuredSummary(t *testing.T) {
 
 func TestConfigInitCommand_HelpDocumentsInitSubcommand(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"config", "init", "--help"})
@@ -128,7 +129,7 @@ func TestConfigInitCommand_HelpDocumentsInitSubcommand(t *testing.T) {
 
 func TestSystemConfigCommand_HelpDistinguishesFactoryConfigTooling(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"config", "--help"})
@@ -147,7 +148,7 @@ func TestConfigInitCommand_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
 
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"config", "init"})
@@ -163,7 +164,7 @@ func TestConfigInitCommand_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-	root = NewRootCommand()
+	root = cli.NewRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"config", "init"})
@@ -202,7 +203,7 @@ func TestConfigInitCommand_ConfigCreationFailureReportsActionableError(t *testin
 		t.Fatalf("WriteFile(parent blocker): %v", err)
 	}
 
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"config", "init"})
@@ -238,7 +239,7 @@ func TestConfigInitCommand_FactoryMaterializationFailureReportsActionableError(t
 		t.Fatalf("WriteFile(factory scope blocker): %v", err)
 	}
 
-	root := NewRootCommand()
+	root := cli.NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"config", "init"})

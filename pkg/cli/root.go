@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
@@ -127,7 +128,12 @@ func NewRootCommand() *cobra.Command {
 
 	root.AddCommand(
 		newDocsCommand(diagnostics),
-		newSystemConfigCommand(globals, diagnostics),
+		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
+			JSON: func() bool { return globals.json },
+		}, configinitcmd.CommandDiagnostics{
+			Writer:  diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		}),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newMCPCommand(),

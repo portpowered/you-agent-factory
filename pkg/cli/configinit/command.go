@@ -1,15 +1,29 @@
-package cli
+package configinitcmd
 
 import (
 	"fmt"
+	"io"
 
-	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	"github.com/spf13/cobra"
 )
 
-var configInit = configinitcmd.Init
+// CommandGlobals carries top-level CLI flags used by you config init.
+type CommandGlobals struct {
+	JSON func() bool
+}
 
-func newSystemConfigCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+// CommandDiagnostics carries diagnostic output hooks for you config init.
+type CommandDiagnostics struct {
+	Writer  func(cmd *cobra.Command) io.Writer
+	Verbose func() bool
+}
+
+// RunInit is the init implementation invoked by the Cobra command. Tests may
+// replace it to observe mapped InitConfig without running the full initializer.
+var RunInit = Init
+
+// NewSystemConfigCommand wires the top-level you config command tree.
+func NewSystemConfigCommand(binaryName string, globals CommandGlobals, diagnostics CommandDiagnostics) *cobra.Command {
 	configCmd := &cobra.Command{
 		Use:   "config",
 		Short: "Initialize operator and system configuration",
@@ -18,7 +32,7 @@ func newSystemConfigCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 			"  init  create operator/system config on a fresh home without overwriting existing files\n\n" +
 			"Use `you factory config` to inspect or transform factory.json configuration.",
 		Example: "  # Bootstrap operator/system config on a fresh home.\n" +
-			"  " + cliBinaryName + " config init",
+			"  " + binaryName + " config init",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 {
 				return fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())
@@ -26,12 +40,12 @@ func newSystemConfigCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 			return cmd.Help()
 		},
 	}
-	configCmd.AddCommand(newSystemConfigInitCommand(globals, diagnostics))
+	configCmd.AddCommand(newSystemConfigInitCommand(binaryName, globals, diagnostics))
 	return configCmd
 }
 
-func newSystemConfigInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := configinitcmd.InitConfig{}
+func newSystemConfigInitCommand(binaryName string, globals CommandGlobals, diagnostics CommandDiagnostics) *cobra.Command {
+	cfg := InitConfig{}
 
 	cmd := &cobra.Command{
 		Use:   "init",
@@ -39,13 +53,13 @@ func newSystemConfigInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagn
 		Long: "Create operator/system config at ~/.you-agent-factory/config.json on a fresh home.\n\n" +
 			"Re-running against an existing config file succeeds without rewriting user-edited contents.",
 		Example: "  # Bootstrap operator/system config on a fresh home.\n" +
-			"  " + cliBinaryName + " config init",
+			"  " + binaryName + " config init",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
+			cfg.JSON = globals.JSON()
 			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			return configInit(cfg)
+			cfg.Diagnostics = diagnostics.Writer(cmd)
+			cfg.Verbose = diagnostics.Verbose()
+			return RunInit(cfg)
 		},
 	}
 	return cmd
