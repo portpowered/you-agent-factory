@@ -47,11 +47,6 @@ func NewBlockingFactoryLoadError(result factoryvalidation.Result) error {
 	}
 }
 
-// IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.
-func IsInvalidNamedFactory(err error) bool {
-	return errors.Is(err, factoryerrors.ErrInvalidNamedFactory)
-}
-
 // AsBlockingFactoryLoadError returns structured blocking findings when err wraps
 // a BlockingFactoryLoadError from materialization, upgrade, or factory load.
 func AsBlockingFactoryLoadError(err error) (*BlockingFactoryLoadError, bool) {

@@ -960,21 +960,10 @@ func BlockingFactoryLoadFindings(err error) []Finding {
 	return canonicalTargetsToFindings(loadErr.Targets)
 }
 
-// IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.
-func IsInvalidNamedFactory(err error) bool {
-	return blockingload.IsInvalidNamedFactory(err)
-}
-
 // FactoryConfigValidateRecoveryCommand returns the single recovery command
 // operators should run after a materialization or upgrade validation failure.
 func FactoryConfigValidateRecoveryCommand(factoryPath string) string {
 	return blockingload.FactoryConfigValidateRecoveryCommand(factoryPath)
-}
-
-// WrapBlockingFactoryLoadOperatorError formats err for operators when it wraps
-// structured blocking factory-load validation findings.
-func WrapBlockingFactoryLoadOperatorError(factoryPath string, err error) error {
-	return blockingload.WrapBlockingFactoryLoadOperatorError(factoryPath, err)
 }
 
 // MaybeFormatBlockingFactoryLoadOperatorError wraps err with operator diagnostics
