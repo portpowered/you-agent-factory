@@ -6,6 +6,7 @@ import { vi } from "vitest";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import * as factorySessionsAPI from "../../../api/factory-sessions";
+import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
 import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
@@ -648,9 +649,45 @@ describe("useDashboardSnapshot composer", () => {
       storageKey: checkpointStorageKey("session-stale-001"),
       streamIdentity: staleStreamIdentity,
     });
+    indexedDBRecords.set(checkpointStorageKey("session-beta"), {
+      checkpoint: {
+        afterEventId: "beta-event-9",
+        afterSequence: 9,
+        replayState: emptyReplayWorldState(9),
+        selectedTick: 9,
+      },
+      schemaVersion: 3,
+      storageKey: checkpointStorageKey("session-beta"),
+      streamIdentity: defaultStreamIdentity("session-beta"),
+    });
+    queryClient.setQueryData(["session-isolation", "session-stale-001"], {
+      value: "stale",
+    });
+    queryClient.setQueryData(["session-isolation", "session-beta"], {
+      value: "beta",
+    });
+    queryClient.setQueryData(FACTORY_SESSIONS_QUERY_KEY, [
+      {
+        factoryDir: "/workspace/default",
+        folderPath: "/workspace/default",
+        id: "session-stale-001",
+        isDefault: true,
+        project: "default",
+        target: { kind: "default" },
+      },
+      {
+        factoryDir: "/workspace/beta",
+        folderPath: "/workspace/beta",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: { kind: "named", name: "beta" },
+      },
+    ]);
     useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
+      pausedSessionIDs: ["session-stale-001", "session-beta"],
       selectedSessionID: "session-stale-001",
+      sessionTabOrder: ["session-stale-001", "session-beta"],
     });
     getFactorySessionSyncPreflightSpy.mockResolvedValue(
       buildSyncPreflightResponse({
@@ -682,9 +719,27 @@ describe("useDashboardSnapshot composer", () => {
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       remappedSessionID,
     );
+    expect(useDashboardSessionStore.getState().sessionTabOrder).toEqual([
+      remappedSessionID,
+      "session-beta",
+    ]);
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([
+      "session-beta",
+    ]);
     expect(
       indexedDBRecords.has(checkpointStorageKey("session-stale-001")),
     ).toBe(false);
+    expect(indexedDBRecords.has(checkpointStorageKey("session-beta"))).toBe(
+      true,
+    );
+    expect(
+      queryClient.getQueryData(["session-isolation", "session-beta"]),
+    ).toEqual({ value: "beta" });
+    expect(
+      queryClient
+        .getQueryData<Array<{ id: string }>>(FACTORY_SESSIONS_QUERY_KEY)
+        ?.map((session) => session.id),
+    ).toEqual([remappedSessionID, "session-beta"]);
   });
 
   it("remaps a stale session using envelope stream identity when checkpoint sync identity is absent", async () => {

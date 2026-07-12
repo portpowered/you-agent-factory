@@ -1,6 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { createContext, useContext, useEffect, useMemo } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+} from "react";
 
 import {
   type FactorySessionSummary,
@@ -148,5 +154,27 @@ export function useDashboardSession(): SessionScope {
 export function useRemapDashboardSelectedSession(): (
   sessionID: string,
 ) => void {
-  return useDashboardSessionStore((state) => state.setSelectedSessionID);
+  const queryClient = useQueryClient();
+  const remapSelectedSessionIdentity = useDashboardSessionStore(
+    (state) => state.remapSelectedSessionIdentity,
+  );
+  return useCallback(
+    (sessionID: string) => {
+      const supersededSessionID =
+        useDashboardSessionStore.getState().selectedSessionID;
+      if (supersededSessionID != null && supersededSessionID !== sessionID) {
+        queryClient.setQueryData<FactorySessionSummary[]>(
+          FACTORY_SESSIONS_QUERY_KEY,
+          (sessions) =>
+            sessions?.map((session) =>
+              session.id === supersededSessionID
+                ? { ...session, id: sessionID }
+                : session,
+            ),
+        );
+      }
+      remapSelectedSessionIdentity(sessionID);
+    },
+    [queryClient, remapSelectedSessionIdentity],
+  );
 }

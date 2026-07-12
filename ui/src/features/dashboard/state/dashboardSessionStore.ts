@@ -12,6 +12,7 @@ interface DashboardSessionStoreState {
     resolvedSessionID: string,
     discoveredSessionIDs: string[],
   ) => void;
+  remapSelectedSessionIdentity: (resolvedSessionID: string) => void;
   selectedSessionID: string | null;
   setSelectedSessionID: (sessionID: string | null) => void;
 }
@@ -99,6 +100,44 @@ export const useDashboardSessionStore = create<DashboardSessionStoreState>(
               ? normalizedResolved
               : current.selectedSessionID,
           sessionTabOrder: nextOrder,
+        };
+      });
+    },
+    remapSelectedSessionIdentity: (resolvedSessionID) => {
+      const normalizedResolved = resolvedSessionID.trim();
+      if (normalizedResolved.length === 0) {
+        return;
+      }
+
+      set((current) => {
+        const supersededSessionID = current.selectedSessionID?.trim();
+        if (
+          !supersededSessionID ||
+          supersededSessionID === normalizedResolved
+        ) {
+          return { selectedSessionID: normalizedResolved };
+        }
+
+        const replaceIdentity = (sessionIDs: string[]): string[] => {
+          const remapped: string[] = [];
+          for (const sessionID of sessionIDs) {
+            const candidate =
+              sessionID.trim() === supersededSessionID
+                ? normalizedResolved
+                : sessionID.trim();
+            if (candidate.length > 0 && !remapped.includes(candidate)) {
+              remapped.push(candidate);
+            }
+          }
+          return remapped;
+        };
+
+        return {
+          pausedSessionIDs: current.pausedSessionIDs.filter(
+            (sessionID) => sessionID.trim() !== supersededSessionID,
+          ),
+          selectedSessionID: normalizedResolved,
+          sessionTabOrder: replaceIdentity(current.sessionTabOrder),
         };
       });
     },

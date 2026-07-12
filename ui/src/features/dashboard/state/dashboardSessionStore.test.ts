@@ -76,6 +76,42 @@ describe("useDashboardSessionStore", () => {
     });
   });
 
+  it("atomically remaps a replaced live session without changing sibling tabs", () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: ["session-stale", "session-beta"],
+      selectedSessionID: "session-stale",
+      sessionTabOrder: ["session-stale", "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .remapSelectedSessionIdentity("session-replacement");
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      pausedSessionIDs: ["session-beta"],
+      selectedSessionID: "session-replacement",
+      sessionTabOrder: ["session-replacement", "session-beta"],
+    });
+  });
+
+  it("does not duplicate a replacement identity already present in tab metadata", () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: ["session-stale", "session-replacement"],
+      selectedSessionID: "session-stale",
+      sessionTabOrder: ["session-stale", "session-replacement", "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .remapSelectedSessionIdentity("session-replacement");
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      pausedSessionIDs: ["session-replacement"],
+      selectedSessionID: "session-replacement",
+      sessionTabOrder: ["session-replacement", "session-beta"],
+    });
+  });
+
   it("clears the selected session when set to null", () => {
     useDashboardSessionStore.getState().setSelectedSessionID(null);
     expect(useDashboardSessionStore.getState().selectedSessionID).toBeNull();
