@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1392,6 +1394,75 @@ func TestReplaySessionProjection_EquivalentOrchestratorsSharePublicSessionProjec
 	}
 	if petriPayload.TransitionId == "" || javascriptPayload.Label == "" {
 		t.Fatal("typed orchestrator-specific facts missing")
+	}
+}
+
+func TestReplayDispatchProjection_EquivalentOrchestratorsMatchLiveDispatchSummary(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 20, 0, 0, 0, time.UTC)
+	providerRef := ProviderSessionRef{Provider: "mock", Kind: "session_id", ID: "provider-session-parity-1"}
+
+	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+		t.Run(orchestratorKind, func(t *testing.T) {
+			session := SessionReadResult{
+				SessionID:        "dispatch-parity-" + strings.ToLower(orchestratorKind),
+				Status:           LifecycleStatusSucceeded,
+				OrchestratorKind: orchestratorKind,
+				Phase:            "execute",
+				Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+			}
+			live := DispatchSummary{
+				ID:                  "dispatch-equivalent-1",
+				Status:              DispatchStatusCompleted,
+				DispatchKind:        "AGENT",
+				Phase:               "execute",
+				Label:               "summarize findings",
+				RunnerID:            "worker-summary",
+				Model:               "mock-model",
+				Provider:            "mock",
+				ProviderSessionRefs: []ProviderSessionRef{providerRef},
+				OutputArtifactIDs:   []string{"artifact-equivalent-1"},
+			}
+			events := BuildCanonicalRuntimeSessionEvents(
+				session,
+				ResultReadResult{SessionID: session.SessionID, ResultStatus: ResultStatusFinal},
+				RuntimeDispatchEventInput{Dispatches: []DispatchSummary{live}},
+			)
+
+			replayed, err := ReplayDispatchProjection(events)
+			if err != nil {
+				t.Fatalf("ReplayDispatchProjection: %v", err)
+			}
+			if len(replayed) != 1 || !reflect.DeepEqual(replayed[0], live) {
+				t.Fatalf("replayed dispatch = %#v, want live projection %#v", replayed, live)
+			}
+		})
+	}
+}
+
+func TestReplayDispatchProjection_EquivalentOrchestratorsPreserveAbsentProviderSession(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 20, 5, 0, 0, time.UTC)
+	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+		t.Run(orchestratorKind, func(t *testing.T) {
+			session := SessionReadResult{
+				SessionID:        "dispatch-no-provider-" + strings.ToLower(orchestratorKind),
+				Status:           LifecycleStatusFailed,
+				OrchestratorKind: orchestratorKind,
+				Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+			}
+			live := DispatchSummary{ID: "dispatch-no-provider", Status: DispatchStatusFailed, DispatchKind: "AGENT"}
+			events := BuildCanonicalRuntimeSessionEvents(
+				session,
+				ResultReadResult{SessionID: session.SessionID, ResultStatus: ResultStatusUnavailable},
+				RuntimeDispatchEventInput{Dispatches: []DispatchSummary{live}},
+			)
+			replayed, err := ReplayDispatchProjection(events)
+			if err != nil {
+				t.Fatalf("ReplayDispatchProjection: %v", err)
+			}
+			if len(replayed) != 1 || len(replayed[0].ProviderSessionRefs) != 0 {
+				t.Fatalf("replayed dispatch = %#v, want absent provider session refs", replayed)
+			}
+		})
 	}
 }
 

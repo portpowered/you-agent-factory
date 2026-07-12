@@ -385,6 +385,7 @@ type dispatchReconciledEventPayload struct {
 	ReconciledStatus     string                       `json:"reconciledStatus"`
 	ReconciliationSource string                       `json:"reconciliationSource"`
 	Replayed             bool                         `json:"replayed"`
+	ProviderSessionRefs  []ProviderSessionRef         `json:"providerSessionRefs,omitempty"`
 	ArtifactIDs          []string                     `json:"artifactIds,omitempty"`
 	FailureDetail        *dispatchFailureEventPayload `json:"failureDetail,omitempty"`
 }
@@ -477,6 +478,9 @@ func buildDispatchReconciledEvent(
 		ReconciledStatus:     string(dispatch.Status),
 		ReconciliationSource: dispatchReconciliationSource(dispatch),
 		Replayed:             false,
+	}
+	if len(dispatch.ProviderSessionRefs) > 0 {
+		payload.ProviderSessionRefs = cloneProviderSessionRefs(dispatch.ProviderSessionRefs)
 	}
 	if len(dispatch.OutputArtifactIDs) > 0 {
 		payload.ArtifactIDs = append([]string(nil), dispatch.OutputArtifactIDs...)
