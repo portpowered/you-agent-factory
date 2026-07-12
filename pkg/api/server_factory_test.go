@@ -928,6 +928,30 @@ func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testi
 	}
 }
 
+func TestGetProviderSessionDetails_LoadsCursorUUIDSessionFromConfiguredRoot(t *testing.T) {
+	root, sessionID := writeCursorProviderSessionUUIDFixture(t)
+
+	srv := newTestServerWithCursorRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+sessionID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
+	if string(resp.ProviderSession.Provider) != "cursor" || string(resp.ProviderSession.Kind) != "session_id" || resp.ProviderSession.Id != sessionID {
+		t.Fatalf("provider session = %#v, want cursor session_id %s", resp.ProviderSession, sessionID)
+	}
+	wantRelativePath := customerCursorWorkspaceHash + "/" + sessionID + "/store.db"
+	if resp.Source.RelativePath != wantRelativePath || resp.Source.SizeBytes == 0 {
+		t.Fatalf("source = %#v, want rooted cursor store.db metadata at %s", resp.Source, wantRelativePath)
+	}
+	if resp.Parse.EventCount != 1 || len(resp.Transcript) != 1 || stringValue(resp.Transcript[0].Text) != "Hello from API fixture" {
+		t.Fatalf("response = %#v, want readable cursor transcript for UUID session_id", resp)
+	}
+}
+
 func TestGetProviderSessionDetails_LoadsLegacyAgentCursorSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeCursorProviderSessionFixture(t)
 

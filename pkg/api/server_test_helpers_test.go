@@ -101,12 +101,33 @@ func writeNamedProviderSessionFixture(t *testing.T, root, fileName, contents str
 	}
 }
 
+// customerCursorProviderSessionID mirrors the UUID-shaped session_id from the
+// reported Windows provider-session detail failure mode.
+const customerCursorProviderSessionID = "ed332681-38eb-485f-b3d3-d8b6df3a450b"
+
+// customerCursorWorkspaceHash mirrors the workspace-hash directory layout under ~/.cursor/chats.
+const customerCursorWorkspaceHash = "d2191e81bfe68d31807c1e354ea83571"
+
 func writeCursorProviderSessionFixture(t *testing.T) (root string, sessionID string) {
 	t.Helper()
 
 	root = t.TempDir()
 	sessionID = "cursor-api-readable"
-	dbPath := filepath.Join(root, "workspace-hash", sessionID, "store.db")
+	return writeCursorProviderSessionFixtureAt(t, root, "workspace-hash", sessionID)
+}
+
+func writeCursorProviderSessionUUIDFixture(t *testing.T) (root string, sessionID string) {
+	t.Helper()
+
+	root = t.TempDir()
+	sessionID = customerCursorProviderSessionID
+	return writeCursorProviderSessionFixtureAt(t, root, customerCursorWorkspaceHash, sessionID)
+}
+
+func writeCursorProviderSessionFixtureAt(t *testing.T, root, workspaceHash, sessionID string) (string, string) {
+	t.Helper()
+
+	dbPath := filepath.Join(root, workspaceHash, sessionID, "store.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		t.Fatalf("mkdir cursor provider fixture: %v", err)
 	}
@@ -132,7 +153,7 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 	if _, err := db.Exec(
 		`INSERT INTO meta (key, value) VALUES (?, ?)`,
 		"0",
-		`{"createdAt":1000,"agentId":"cursor-api-readable","name":"API fixture session"}`,
+		`{"createdAt":1000,"agentId":"`+sessionID+`","name":"API fixture session"}`,
 	); err != nil {
 		t.Fatalf("insert cursor provider session meta: %v", err)
 	}
@@ -150,8 +171,8 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 	}
 	if resolved, err := cursorstorage.ResolveStoreDB(normalizedRoot, sessionID); err != nil {
 		t.Fatalf("resolve cursor provider fixture: %v", err)
-	} else if resolved.RelativePath != "workspace-hash/"+sessionID+"/store.db" {
-		t.Fatalf("resolved relative path = %q, want workspace-hash/%s/store.db", resolved.RelativePath, sessionID)
+	} else if resolved.RelativePath != filepath.ToSlash(filepath.Join(workspaceHash, sessionID, "store.db")) {
+		t.Fatalf("resolved relative path = %q, want %s/%s/store.db", resolved.RelativePath, workspaceHash, sessionID)
 	}
 
 	return root, sessionID

@@ -26,6 +26,9 @@ func TestValidateSessionID_RejectsPathLikeIdentifiers(t *testing.T) {
 	if err := ValidateSessionID("cursor-session-abc"); err != nil {
 		t.Fatalf("ValidateSessionID(safe id) = %v, want nil", err)
 	}
+	if err := ValidateSessionID("ed332681-38eb-485f-b3d3-d8b6df3a450b"); err != nil {
+		t.Fatalf("ValidateSessionID(UUID session_id) = %v, want nil", err)
+	}
 }
 
 func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
@@ -52,6 +55,27 @@ func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
 	ordered := session.OrderedBubbles()
 	if len(ordered) == 0 || ordered[0].Text == "" {
 		t.Fatalf("ordered bubbles = %#v, want readable text", ordered)
+	}
+}
+
+func TestResolveAndLoadUUIDShapedSessionFixture(t *testing.T) {
+	root, sessionID := writeUUIDShapedAgentStorageFixture(t)
+
+	resolved, err := ResolveStoreDB(AgentStorageRoot(root), sessionID)
+	if err != nil {
+		t.Fatalf("ResolveStoreDB() = %v", err)
+	}
+	wantRelativePath := "d2191e81bfe68d31807c1e354ea83571/" + sessionID + "/store.db"
+	if resolved.RelativePath != wantRelativePath {
+		t.Fatalf("relative path = %q, want %q", resolved.RelativePath, wantRelativePath)
+	}
+
+	session, err := LoadSessionData(resolved)
+	if err != nil {
+		t.Fatalf("LoadSessionData() = %v", err)
+	}
+	if session.ParseStats.ReadableBlobCount == 0 {
+		t.Fatalf("parse stats = %#v, want readable blobs for UUID session_id", session.ParseStats)
 	}
 }
 
@@ -177,7 +201,19 @@ func writeReadableAgentStorageFixture(t *testing.T) (root string, sessionID stri
 	t.Helper()
 	root = t.TempDir()
 	sessionID = "cursor-fixture-readable"
-	dbPath := filepath.Join(root, "workspace-hash", sessionID, "store.db")
+	return writeReadableAgentStorageFixtureAt(t, root, "workspace-hash", sessionID)
+}
+
+func writeUUIDShapedAgentStorageFixture(t *testing.T) (root string, sessionID string) {
+	t.Helper()
+	root = t.TempDir()
+	sessionID = "ed332681-38eb-485f-b3d3-d8b6df3a450b"
+	return writeReadableAgentStorageFixtureAt(t, root, "d2191e81bfe68d31807c1e354ea83571", sessionID)
+}
+
+func writeReadableAgentStorageFixtureAt(t *testing.T, root, workspaceHash, sessionID string) (string, string) {
+	t.Helper()
+	dbPath := filepath.Join(root, workspaceHash, sessionID, "store.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -203,7 +239,7 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 	if _, err := db.Exec(
 		`INSERT INTO meta (key, value) VALUES (?, ?)`,
 		"0",
-		`{"createdAt":1000,"agentId":"cursor-fixture-readable","name":"Fixture session"}`,
+		`{"createdAt":1000,"agentId":"`+sessionID+`","name":"Fixture session"}`,
 	); err != nil {
 		t.Fatalf("insert meta: %v", err)
 	}
