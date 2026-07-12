@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
@@ -35,6 +36,11 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(() => dashboardSnapshotState),
 }));
 
+vi.mock("../session/dashboard-session-provider", () => ({
+  DashboardSessionProvider: ({ children }: { children: ReactNode }) => children,
+  useDashboardSession: () => ({ rawSessionID: "session-test" }),
+}));
+
 describe("DashboardScreen recovery keyboard access", () => {
   beforeEach(() => {
     useDashboardBentoStore.setState({
@@ -50,8 +56,7 @@ describe("DashboardScreen recovery keyboard access", () => {
       preflightStatus: "success",
       snapshot: null,
       streamState: {
-        message:
-          "The dashboard could not restore this session automatically.",
+        message: "The dashboard could not restore this session automatically.",
         status: "recovery_failed",
       },
     };
@@ -70,7 +75,9 @@ describe("DashboardScreen recovery keyboard access", () => {
       }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("heading", { name: messages.dashboardUnavailableTitle }),
+      screen.queryByRole("heading", {
+        name: messages.dashboardUnavailableTitle,
+      }),
     ).toBeNull();
 
     const retryButton = screen.getByRole("button", {

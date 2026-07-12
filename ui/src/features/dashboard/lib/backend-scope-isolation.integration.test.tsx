@@ -4,18 +4,18 @@ import type { PropsWithChildren } from "react";
 import { vi } from "vitest";
 
 import {
-  getCurrentFactoryDocument,
   type CurrentFactoryDocument,
+  getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   currentFactoryDefinitionQueryKey,
   useCurrentFactoryDefinition,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { StreamDerivedCacheIdentity } from "../../timeline/public";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
-import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useDashboardSessionLifecycle } from "../hooks/useDashboardSessionLifecycle";
+import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 vi.mock("../../../api/current-factory-definition", async () => {
   const actual = await vi.importActual(
@@ -57,7 +57,9 @@ function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };
@@ -90,9 +92,12 @@ describe("backend scope isolation integration", () => {
       resolvedStreamIdentity: streamIdentityA,
     });
 
-    const { result, rerender } = renderHook(() => useCurrentFactoryDefinition(), {
-      wrapper: createWrapper(queryClient),
-    });
+    const { result, rerender } = renderHook(
+      () => useCurrentFactoryDefinition(),
+      {
+        wrapper: createWrapper(queryClient),
+      },
+    );
 
     await waitFor(() => {
       expect(result.current.data?.workers[0]?.name).toBe(

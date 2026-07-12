@@ -10,6 +10,7 @@ import {
   fillWorkstationPromptBody,
   modelProviderOptionLabel,
   openBrowserPage,
+  resolvedDefaultFactorySessionID,
   selectLabeledComboboxOption,
   startBrowserPreview,
   startFactoryApiServer,
@@ -463,7 +464,11 @@ async function saveGraphDraft(page, toolbar) {
   const saveResponsePromise = page.waitForResponse(
     (response) =>
       response.request().method() === "PUT" &&
-      response.url().includes("/factory-sessions/~default/factory"),
+      response
+        .url()
+        .includes(
+          `/factory-sessions/${resolvedDefaultFactorySessionID}/factory`,
+        ),
     { timeout: uiInteractionTimeoutMs },
   );
   await confirmButton.click();

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach } from "vitest";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { dashboardSemanticSnapshotFixtures } from "../../../components/dashboard/fixtures";
@@ -11,9 +12,10 @@ const dashboardSnapshotState = vi.hoisted(() => ({
   value: {
     error: null as Error | null,
     isInitialLoading: false,
-    preflightRecovery: null as
-      | { reasonCode: string; requestedSessionId: string }
-      | null,
+    preflightRecovery: null as {
+      reasonCode: string;
+      requestedSessionId: string;
+    } | null,
     preflightStatus: "success" as const,
     snapshot: null as DashboardSnapshot | null,
     streamState: {
@@ -38,6 +40,11 @@ vi.mock("../../header/public", () => ({
 
 vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(() => dashboardSnapshotState.value),
+}));
+
+vi.mock("../session/dashboard-session-provider", () => ({
+  DashboardSessionProvider: ({ children }: { children: ReactNode }) => children,
+  useDashboardSession: () => ({ rawSessionID: "session-test" }),
 }));
 
 vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({

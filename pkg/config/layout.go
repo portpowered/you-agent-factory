@@ -15,6 +15,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/config/builtinsubagent"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -873,9 +874,10 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/fusion": BuiltInFusionFactoryJSON,
-	"@you/goal":   BuiltInGoalFactoryJSON,
-	"@you/tts":    BuiltInTTSFactoryJSON,
+	"@you/fusion":    BuiltInFusionFactoryJSON,
+	"@you/goal":      BuiltInGoalFactoryJSON,
+	"@you/subagent":  BuiltInSubagentFactoryJSON,
+	"@you/tts":       BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
@@ -955,11 +957,11 @@ func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*Name
 }
 
 func canonicalNamedFactoryName(name string) (string, error) {
-	segment, err := NamedFactoryNameToLayoutSegment(name)
+	segments, err := NamedFactoryPathSegments(name)
 	if err != nil {
 		return "", err
 	}
-	return NamedFactoryLayoutSegmentToName(segment)
+	return NamedFactoryNameFromPathSegments(segments)
 }
 
 const legacyPromptWorkIDTemplateMarker = "{{ .WorkID }}"
@@ -1068,11 +1070,10 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		return "", false, nil
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
+	targetDir, err := MapNamedFactoryDir(globalRoot, canonicalName)
 	if err != nil {
 		return "", false, err
 	}
-	targetDir := filepath.Join(globalRoot, segment)
 	if _, err := os.Stat(targetDir); err == nil {
 		if err := requireFactoryConfig(targetDir); err != nil {
 			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
@@ -1101,6 +1102,9 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 }
 
 var BuiltInGoalFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
+
+// BuiltInSubagentFactoryJSON is the canonical runnable @you/subagent packaged factory payload.
+var BuiltInSubagentFactoryJSON = builtinsubagent.BuiltInSubagentFactoryJSON
 
 // BuiltInFusionFactoryJSON is the canonical runnable @you/fusion packaged factory payload.
 var BuiltInFusionFactoryJSON = []byte(`{

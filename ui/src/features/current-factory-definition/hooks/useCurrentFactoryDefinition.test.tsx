@@ -6,7 +6,7 @@ import {
   type CurrentFactoryDocument,
   getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
-import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   useCurrentFactoryDefinition,
@@ -233,7 +233,9 @@ function createQueryClientWrapper(
   }): ReactNode {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };

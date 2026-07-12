@@ -24,6 +24,22 @@ describe("buildSessionScope", () => {
     }
   });
 
+  it("keeps resolved default semantics while routing every resource by UUID", () => {
+    const resolvedDefaultUUID = "a1b2c3d4-e5f6-4789-a012-3456789abcde";
+
+    expect(
+      buildSessionScope(resolvedDefaultUUID, [resolvedDefaultUUID], true),
+    ).toEqual({
+      eventsPath: `/factory-sessions/${resolvedDefaultUUID}/events`,
+      factoryPath: `/factory-sessions/${resolvedDefaultUUID}/factory`,
+      isDefault: true,
+      isPaused: false,
+      rawSessionID: resolvedDefaultUUID,
+      sessionID: resolvedDefaultUUID,
+      workPath: `/factory-sessions/${resolvedDefaultUUID}/work`,
+    });
+  });
+
   it("preserves non-default session identifiers and URL-encodes path segments", () => {
     const scope = buildSessionScope("session/beta", []);
 

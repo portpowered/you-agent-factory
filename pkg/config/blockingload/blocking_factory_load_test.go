@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
 	"github.com/portpowered/infinite-you/pkg/config/load"
+	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
@@ -90,10 +91,14 @@ func TestBlockingFactoryLoadError_DistinguishesIOErrorsFromValidationFailures(t 
 }
 
 func TestFactoryConfigValidateRecoveryCommand_UsesSingleValidatePath(t *testing.T) {
-	factoryPath := filepath.Join("global-root", "@you%2Fgoal")
+	factoryPath, err := namedfactorypath.MapDir("global-root", "@you/goal")
+	if err != nil {
+		t.Fatalf("MapDir: %v", err)
+	}
 	got := blockingload.FactoryConfigValidateRecoveryCommand(factoryPath)
-	if !strings.HasSuffix(got, factoryPath) && !strings.Contains(got, "@you%2Fgoal") {
-		t.Fatalf("recovery command = %q, want path %q", got, factoryPath)
+	normalized := strings.ReplaceAll(got, "\\", "/")
+	if !strings.Contains(normalized, "@you/goal") {
+		t.Fatalf("recovery command = %q, want @you/goal path", got)
 	}
 	if !strings.HasPrefix(got, "you factory config validate ") {
 		t.Fatalf("recovery command = %q, want validate prefix", got)
@@ -105,9 +110,12 @@ func TestFactoryConfigValidateRecoveryCommand_UsesSingleValidatePath(t *testing.
 
 func TestWrapBlockingFactoryLoadOperatorError_IncludesFindingsAndRecoveryCommand(t *testing.T) {
 	rootDir := t.TempDir()
-	factoryPath := filepath.Join(rootDir, "@you%2Fgoal")
+	factoryPath, err := namedfactorypath.MapDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("MapDir: %v", err)
+	}
 
-	_, err := factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+	_, err = factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
 	if err == nil {
 		t.Fatal("expected invalid named factory materialization to fail")
 	}
@@ -177,7 +185,10 @@ func TestFailureBaseline_InvalidTopology_MaterializedGoalUpgradePathReportsFindi
 func TestFailureBaseline_InvalidTopology_PreExistingInvalidMaterializedTargetReportsFindingsAndRecovery(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
-	factoryDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	factoryDir, err := namedfactorypath.MapDir(globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("MapDir: %v", err)
+	}
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
 	}
@@ -189,7 +200,7 @@ func TestFailureBaseline_InvalidTopology_PreExistingInvalidMaterializedTargetRep
 		t.Fatalf("WriteFile(factory.json): %v", err)
 	}
 
-	_, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	_, err = factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
 	if err == nil {
 		t.Fatal("expected invalid pre-existing materialized target to fail")
 	}
@@ -199,9 +210,12 @@ func TestFailureBaseline_InvalidTopology_PreExistingInvalidMaterializedTargetRep
 
 func TestFailureBaseline_InvalidTopology_MaterializeNamedFactoryFailureRetainsStructuredFindings(t *testing.T) {
 	rootDir := t.TempDir()
-	factoryPath := filepath.Join(rootDir, "@you%2Fgoal")
+	factoryPath, err := namedfactorypath.MapDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("MapDir: %v", err)
+	}
 
-	_, err := factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(failureBaselineInvalidGoalTopologyJSON))
+	_, err = factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(failureBaselineInvalidGoalTopologyJSON))
 	if err == nil {
 		t.Fatal("expected invalid goal materialization to fail")
 	}
@@ -259,8 +273,9 @@ func assertInvalidTopologyMaterializationOperatorDiagnostics(t *testing.T, err e
 	if !strings.Contains(got, recovery) {
 		t.Fatalf("error = %q, want recovery command %q", got, recovery)
 	}
-	if !strings.Contains(got, "@you%2Fgoal") {
-		t.Fatalf("error = %q, want resolved @you%%2Fgoal factory path", got)
+	normalized := strings.ReplaceAll(got, "\\", "/")
+	if !strings.Contains(normalized, "@you/goal") {
+		t.Fatalf("error = %q, want resolved @you/goal factory path", got)
 	}
 }
 

@@ -3,9 +3,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import { createReplayHarness } from "../../../../testing/replay-harness";
 import { useFactoryTimelineStore } from "../../../timeline/public";
-import { DashboardSessionProvider } from "../../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -55,7 +55,9 @@ export function createFactoryEventStreamTestWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };
