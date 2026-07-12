@@ -79,7 +79,7 @@ func validateDurableSessionRecord(record DurableSessionRecord) error {
 }
 
 func durableRecordsFromRuntimeState(state runtimeSessionState) []DurableSessionRecord {
-	records := make([]DurableSessionRecord, 0, len(state.events)+len(state.runtimeRecords))
+	records := make([]DurableSessionRecord, 0, len(state.events)+len(state.runtimeRecords)+len(state.petriMutations))
 	for _, event := range state.events {
 		records = append(records, DurableSessionRecord{
 			Kind: DurableRecordKindCanonicalFactoryEvent, CanonicalEvent: append(json.RawMessage(nil), event...),
@@ -91,7 +91,58 @@ func durableRecordsFromRuntimeState(state runtimeSessionState) []DurableSessionR
 			Kind: DurableRecordKindJavaScriptRuntime, JavaScriptRecord: &cloned,
 		})
 	}
+	for _, mutation := range state.petriMutations {
+		cloned := mutation
+		records = append(records, DurableSessionRecord{
+			Kind: DurableRecordKindPetriTokenMutation, PetriMutation: &cloned,
+		})
+	}
 	return records
+}
+
+func runtimeHistoryFromDurableRecords(records []DurableSessionRecord) (
+	[]json.RawMessage,
+	[]workflowruntime.RuntimeRecord,
+	[]interfaces.TokenMutationRecord,
+) {
+	events := make([]json.RawMessage, 0, len(records))
+	runtimeRecords := make([]workflowruntime.RuntimeRecord, 0, len(records))
+	petriMutations := make([]interfaces.TokenMutationRecord, 0, len(records))
+	for _, record := range records {
+		switch record.Kind {
+		case DurableRecordKindCanonicalFactoryEvent:
+			events = append(events, append(json.RawMessage(nil), record.CanonicalEvent...))
+		case DurableRecordKindJavaScriptRuntime:
+			runtimeRecords = append(runtimeRecords, cloneRuntimeRecord(*record.JavaScriptRecord))
+		case DurableRecordKindPetriTokenMutation:
+			petriMutations = append(petriMutations, *record.PetriMutation)
+		}
+	}
+	return events, runtimeRecords, petriMutations
+}
+
+func runtimeHistoryFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) (
+	[]json.RawMessage,
+	[]workflowruntime.RuntimeRecord,
+	[]interfaces.TokenMutationRecord,
+) {
+	if len(snapshot.Records) > 0 {
+		return runtimeHistoryFromDurableRecords(snapshot.Records)
+	}
+	events := make([]json.RawMessage, len(snapshot.Events))
+	for i, event := range snapshot.Events {
+		events[i] = append(json.RawMessage(nil), event...)
+	}
+	return events, cloneRuntimeRecords(snapshot.RuntimeRecords), nil
+}
+
+func clonePetriMutations(mutations []interfaces.TokenMutationRecord) []interfaces.TokenMutationRecord {
+	if len(mutations) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.TokenMutationRecord, len(mutations))
+	copy(cloned, mutations)
+	return cloned
 }
 
 // SyncOutcome reports how a sync start wait ended.

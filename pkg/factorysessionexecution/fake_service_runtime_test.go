@@ -28,6 +28,46 @@ import (
 func int64Ptr(value int64) *int64 {
 	return &value
 }
+
+func TestTaggedDurableHistoryIsAuthoritativeDuringHydrationAndResave(t *testing.T) {
+	canonical := json.RawMessage(`{"type":"SESSION_STARTED","context":{"sessionId":"dur-sess-tagged"}}`)
+	checkpoint := workflowruntime.RuntimeRecord{
+		Sequence: 2,
+		Kind:     workflowruntime.RecordKindCheckpoint,
+		Checkpoint: &workflowruntime.CheckpointRecord{
+			ID: "checkpoint-tagged", State: map[string]any{"position": "review"},
+		},
+	}
+	mutation := interfaces.TokenMutationRecord{
+		Type: interfaces.MutationMove, TransitionID: "approve", ToPlace: "review:approved",
+	}
+	snapshot := PersistedRuntimeSessionState{
+		Events:         []json.RawMessage{json.RawMessage(`{"type":"LEGACY_EVENT"}`)},
+		RuntimeRecords: []workflowruntime.RuntimeRecord{{Sequence: 99, Kind: workflowruntime.RecordKindPhase}},
+		Records: []DurableSessionRecord{
+			{Kind: DurableRecordKindCanonicalFactoryEvent, CanonicalEvent: canonical},
+			{Kind: DurableRecordKindJavaScriptRuntime, JavaScriptRecord: &checkpoint},
+			{Kind: DurableRecordKindPetriTokenMutation, PetriMutation: &mutation},
+		},
+	}
+
+	hydrated := runtimeStateFromPersistedSnapshot(snapshot)
+	if len(hydrated.events) != 1 || !bytes.Equal(hydrated.events[0], canonical) {
+		t.Fatalf("hydrated events = %s, want tagged canonical event", hydrated.events)
+	}
+	if len(hydrated.runtimeRecords) != 1 || hydrated.runtimeRecords[0].Checkpoint == nil || hydrated.runtimeRecords[0].Checkpoint.ID != "checkpoint-tagged" {
+		t.Fatalf("hydrated JavaScript records = %#v, want tagged checkpoint", hydrated.runtimeRecords)
+	}
+	if len(hydrated.petriMutations) != 1 || hydrated.petriMutations[0].TransitionID != "approve" || hydrated.petriMutations[0].ToPlace != "review:approved" {
+		t.Fatalf("hydrated Petri mutations = %#v, want tagged transition", hydrated.petriMutations)
+	}
+
+	resaved := persistedSnapshotFromRuntimeState(hydrated)
+	if len(resaved.Records) != 3 || resaved.Records[2].PetriMutation == nil || resaved.Records[2].PetriMutation.TransitionID != "approve" {
+		t.Fatalf("resaved tagged history = %#v, want lossless mixed records", resaved.Records)
+	}
+}
+
 func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-js-run-n-001")

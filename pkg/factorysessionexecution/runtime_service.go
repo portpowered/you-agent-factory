@@ -32,6 +32,7 @@ type runtimeSessionState struct {
 	dispatchStatusTransitions map[string][]DispatchStatus
 	artifacts                 []ArtifactSummary
 	runtimeRecords            []workflowruntime.RuntimeRecord
+	petriMutations            []interfaces.TokenMutationRecord
 	checkpointSummary         *jsstore.CheckpointSummary
 	startRequest              *StartRequest
 	resolvedSource            ResolvedSource
@@ -761,6 +762,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
 		artifacts:                 cloneArtifactSummaries(state.artifacts),
 		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
+		petriMutations:            clonePetriMutations(state.petriMutations),
 		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,
