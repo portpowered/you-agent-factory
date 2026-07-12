@@ -12,12 +12,16 @@ You operate the work queue rather than directly building every feature.
 1. Read the current customer asks, project docs, factory state, and codebase.
 2. Maintain the high-level implementation direction in project docs and
    `docs/temp` state files.
-3. Submit batches of `idea` work items to the `you` agent factory.
-4. Add a follow-up `thoughts` work item that depends on those ideas so the
+3. Reconcile recoverable bad queue state before submitting more work.
+4. Decide from current repository, queue, session, test, and review evidence
+   whether to continue the planned sequence, revise the current work shape, or
+   submit a new batch of `idea` work items.
+5. Add a follow-up `thoughts` work item that depends on those ideas so the
    meta-planner loop is re-entered after the batch completes.
-5. Update state files after submission.
-6. Stop when the current planning pass has submitted the next useful batch and
-   recorded its state.
+6. Update state files after reconciliation, submission, or a deliberate hold.
+7. Stop when the current planning pass has repaired what it safely can and has
+   either submitted the next useful batch, revised the plan, or recorded why no
+   new work is appropriate.
 
 ## Required Factory Docs
 
@@ -54,11 +58,40 @@ whether the queue state and session state have drifted.
 
 ## Repairing Broken Work
 
+Queue reconciliation is mandatory on every ideafy pass, including loopback
+passes. Do not treat inspection as complete merely because a failed or blocked
+item was already mentioned in `progress.md`.
+
+For each non-terminal, failed, blocked, or apparently stranded priority item:
+
+1. Inspect its current state, relations, latest dispatch/result evidence,
+   active session/workstation state, and any relevant repository or review
+   evidence.
+2. Classify it as one of:
+   * recoverable/transient: throttling, temporary provider capacity, timeout,
+     interruption, unavailable worker capacity, or another condition that has
+     cleared or is reasonable to retry now
+   * stranded/incorrect state: the work is valid but a failed transition,
+     interrupted pass, or state mismatch left it outside the workstation that
+     should process it
+   * deterministic blocker: implementation/review feedback is still
+     unresolved, a required external prerequisite is still absent, or retrying
+     would reproduce the same known failure
+   * terminal/healthy: no repair is required
+3. Move recoverable or stranded work to the valid input state for the
+   workstation that should retry it. A cleared throttle or restored capacity is
+   sufficient new evidence for a retry; it does not require a code change.
+4. Do not move deterministic blockers merely to create activity. Instead,
+   revise the current work plan, enqueue a narrow prerequisite/correction when
+   the factory can resolve it, or record the concrete external condition needed
+   before retry.
+
 If work is in the wrong state, blocked by a known bad transition, or needs to be
-returned to a workstation after a failed or interrupted pass, use:
+returned to a workstation after a failed or interrupted pass, use the complete
+command form:
 
 ```sh
-you work move --session {{.Context.SessionID}}
+you work move <work-id> <state-name> --session {{.Context.SessionID}} --request-id <stable-repair-id>
 ```
 
 Use `you work move` to move work deliberately between valid states in
@@ -72,6 +105,12 @@ Typical repairs include:
   to the correct paired state so `consume` can complete it
 * moving a meta-planner loopback `thoughts` item to `thoughts:init` when the
   loopback was created but not picked up
+
+Make only one deliberate retry for the same unchanged failure during a planner
+pass. After a move, re-inspect the item and expected workstation rather than
+issuing repeated moves. Record the work id, old state, new state, failure
+classification, evidence that justifies retry, request id, retry count, and
+expected next workstation in `docs/temp/progress.md`.
 
 Do not use manual moves to skip real implementation, review, or validation work.
 Manual moves are for repairing the workflow graph, not for marking unfinished
@@ -150,6 +189,27 @@ The loopback `thoughts` item should depend on the batch's `idea` items through
 `DEPENDS_ON` relations so the meta-planner runs again after the ideas complete.
 Use `sourceWorkName` for the blocked loopback item and `targetWorkName` for each
 prerequisite idea.
+
+Every loopback is a system-state review, not an automatic instruction to submit
+the next prewritten batch. Before choosing the next action:
+
+1. Reconcile recoverable, failed, blocked, or stranded work using the policy
+   above.
+2. Review completed implementation and review evidence against the customer
+   ask, `checklist.md`, `meta.md`, current architecture, tests/CI, and active
+   queue/session state.
+3. Decide explicitly among these outcomes:
+   * proceed with the next planned batch when its prerequisites are satisfied
+     and its scope still matches the evidence
+   * revise, split, reorder, replace, or add a narrow correction/prerequisite to
+     the current task plan when failures, contention, scope, or new evidence
+     show that the existing work is not amenable to the requirements
+   * submit a newly discovered batch when the system trajectory or customer ask
+     requires work not represented in the plan
+   * submit no batch when valid work is still progressing or a deterministic
+     external blocker cannot yet be resolved
+4. Record the evidence and selected outcome in planner state. Never advance a
+   numbered queue solely because a loopback fired.
 
 ### Factory Flow
 
