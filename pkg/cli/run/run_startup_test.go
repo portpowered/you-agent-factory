@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -304,7 +305,7 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 
 	var diagnostics bytes.Buffer
 	err := Run(context.Background(), RunConfig{
-		Dir:     dir,
+		Dir:      dir,
 		Workflow: "workflow-1",
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",
@@ -334,8 +335,8 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 	got := diagnostics.String()
 	for _, want := range []string{
 		"run startup",
-		`factoryDir="` + dir + `"`,
-		`configuredDir="` + dir + `"`,
+		"factoryDir=" + strconv.Quote(dir),
+		"configuredDir=" + strconv.Quote(dir),
 		"runtimeMode=BATCH",
 		`workflow="workflow-1"`,
 		"operatorDefaults precedence=file < env < flag",
@@ -399,7 +400,7 @@ func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent
 		FactoryDir:         "/tmp/project/factory/alpha",
 		Source:             factoryconfig.NamedFactoryResolutionSourceProjectLocal,
 		ProjectRoot:        "/tmp/project/factory",
-		GlobalRoot:         "/tmp/home/.you-agent-factory/factories",
+		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
 		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal,
 	}
 
@@ -462,10 +463,10 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	logger := zap.New(core)
 	resolution := &factoryconfig.NamedFactoryResolution{
 		Name:               "@you/tts",
-		FactoryDir:         "/tmp/home/.you-agent-factory/factories/@you%2Ftts",
+		FactoryDir:         "/tmp/home/.you-agent-factory/you-agent-factories/@you%2Ftts",
 		Source:             factoryconfig.NamedFactoryResolutionSourceBuiltin,
 		ProjectRoot:        "/tmp/project/factory",
-		GlobalRoot:         "/tmp/home/.you-agent-factory/factories",
+		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
 		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionNone,
 	}
 
@@ -487,7 +488,7 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	if got := context["named_factory_name"]; got != "@you/tts" {
 		t.Fatalf("built-in log name = %#v, want @you/tts", got)
 	}
-	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/factories/@you%2Ftts" {
+	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/you-agent-factories/@you%2Ftts" {
 		t.Fatalf("built-in log target dir = %#v", got)
 	}
 }

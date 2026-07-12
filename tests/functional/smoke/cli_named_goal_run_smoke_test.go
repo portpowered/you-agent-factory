@@ -136,7 +136,7 @@ func TestNamedGoalRun_RealCLIUpgradesLegacyMaterializedBuiltinBeforeBatchInvocat
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
 	if _, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, legacyBuiltInGoalFactoryJSON); err != nil {
 		t.Fatalf("PersistNamedFactory(legacy goal): %v", err)
 	}
@@ -192,7 +192,7 @@ func TestNamedGoalRun_RealCLIMaterializesFreshFactoryAndPreservesCustomerEditsOn
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	materializedDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "@you%2Fgoal")
+	materializedDir := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you%2Fgoal")
 	if _, err := os.Stat(materializedDir); !os.IsNotExist(err) {
 		t.Fatalf("fresh home should not already contain materialized @you/goal factory: stat %v", err)
 	}
@@ -297,7 +297,7 @@ func TestNamedGoalRun_RealCLIPreservesCustomerEditsWhileUpgradingLegacyMateriali
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
 	legacyDir, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, legacyBuiltInGoalFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(legacy goal): %v", err)

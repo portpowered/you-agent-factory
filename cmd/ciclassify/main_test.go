@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -383,7 +384,9 @@ func TestGitChangedPathsIncludesDeletedFilesInClassifierInput(t *testing.T) {
 		if got := strings.Join(args, "\x00"); got != strings.Join(wantArgs, "\x00") {
 			t.Fatalf("args = %#v, want %#v", args, wantArgs)
 		}
-		return exec.Command("sh", "-c", "printf 'docs/guide.md\\nui/src/App.tsx\\n'")
+		cmd := exec.Command(os.Args[0], "-test.run=TestGitChangedPathsCommandHelper")
+		cmd.Env = append(os.Environ(), "GO_WANT_GIT_CHANGED_PATHS_HELPER=1")
+		return cmd
 	}
 
 	paths, err := gitChangedPaths("origin/main", "HEAD")
@@ -393,6 +396,14 @@ func TestGitChangedPathsIncludesDeletedFilesInClassifierInput(t *testing.T) {
 	if got := strings.Join(paths, ","); got != "docs/guide.md,ui/src/App.tsx" {
 		t.Fatalf("gitChangedPaths() = %q, want parsed deleted-path-capable output", got)
 	}
+}
+
+func TestGitChangedPathsCommandHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_GIT_CHANGED_PATHS_HELPER") != "1" {
+		return
+	}
+	fmt.Print("docs/guide.md\nui/src/App.tsx\n")
+	os.Exit(0)
 }
 
 func TestDevelopmentGuideMatchesObservableCIRoutingContract(t *testing.T) {

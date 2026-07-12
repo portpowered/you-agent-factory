@@ -1134,6 +1134,27 @@ func TestValidate_JavaScriptFactoryRejectsMissingSource(t *testing.T) {
 	assertValidationCode(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeOrchestratorJavaScriptMissingSource)
 }
 
+func TestValidate_JavaScriptFactoryRejectsEmptyNamedAgentPreset(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		Name: "invalid-named-agent",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				SourceRef: "factory/workflows/review.js",
+				Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+					"reviewer": {Preset: "   "},
+				},
+			},
+		},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	assertValidationCode(t, result.Targets, factoryvalidation.CodeOrchestratorJavaScriptInvalidAgent)
+	if !strings.Contains(result.Targets[0].Message, "reviewer") {
+		t.Fatalf("diagnostic = %q, want agent id", result.Targets[0].Message)
+	}
+}
+
 func TestValidate_JavaScriptFactoryRejectsPetriGraphFields(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{
 		Name: "invalid-javascript",

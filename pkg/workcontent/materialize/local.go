@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 func materializeFileURL(rawURL string, parsed *url.URL) (string, CleanupFunc, error) {
@@ -14,6 +16,10 @@ func materializeFileURL(rawURL string, parsed *url.URL) (string, CleanupFunc, er
 	if path == "" {
 		return "", noopCleanup, notReadableError(rawURL, "empty file path")
 	}
+	if runtime.GOOS == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+		path = path[1:]
+	}
+	path = filepath.FromSlash(path)
 
 	info, err := os.Stat(path)
 	if err != nil {

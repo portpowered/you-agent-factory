@@ -8,11 +8,12 @@ import (
 )
 
 const (
-	sharedHomeDirName   = ".you-agent-factory"
-	operatorConfigFile  = "config.json"
-	recordingsDirName   = "recordings"
-	runtimeLogsDirName  = "logs"
-	runtimeMetricsName  = "metrics"
+	sharedHomeDirName     = ".you-agent-factory"
+	namedFactoriesDirName = "you-agent-factories"
+	operatorConfigFile    = "config.json"
+	recordingsDirName     = "recordings"
+	runtimeLogsDirName    = "logs"
+	runtimeMetricsName    = "metrics"
 	recordingsMonthFmt  = "2006-01"
 	recordingsDateFmt   = "2006-01-02"
 	runtimeMetricsYear  = "2006"
@@ -24,6 +25,12 @@ const (
 // directory.
 func SharedRoot(homeDir string) string {
 	return filepath.Join(homeDir, sharedHomeDirName)
+}
+
+// NamedFactoriesRoot returns the canonical customer-owned named-factories root
+// below homeDir.
+func NamedFactoriesRoot(homeDir string) string {
+	return filepath.Join(SharedRoot(homeDir), namedFactoriesDirName)
 }
 
 // OperatorConfigPath returns the default operator config path below homeDir.

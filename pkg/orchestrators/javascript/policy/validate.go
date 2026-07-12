@@ -8,12 +8,6 @@ import (
 )
 
 var (
-	knownReasoningEfforts = map[string]struct{}{
-		"minimal": {},
-		"low":     {},
-		"medium":  {},
-		"high":    {},
-	}
 	knownRouteProfiles = map[string]struct{}{
 		"scout":       {},
 		"reviewer":    {},
@@ -248,8 +242,7 @@ func validateModel(value string) *Issue {
 }
 
 func validateReasoningEffort(value string) *Issue {
-	effort := strings.ToLower(strings.TrimSpace(value))
-	if _, ok := knownReasoningEfforts[effort]; !ok {
+	if _, ok := interfaces.CanonicalizeReasoningEffort(value); !ok || strings.TrimSpace(value) == "" {
 		return &Issue{
 			Code:    CodeUnsupportedReasoning,
 			Message: fmt.Sprintf("unsupported reasoning effort %q", value),

@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -631,6 +633,9 @@ func packagedGoalBuiltInTopologyOpenAPIJSON() string {
 
 func writePackagedGoalBuiltInTopologyFixtureFiles(t *testing.T, dir string, cfg *interfaces.FactoryConfig) {
 	t.Helper()
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("packaged goal checker requires its configured POSIX shell: %v", err)
+	}
 
 	for _, workstation := range cfg.Workstations {
 		body := "---\ntype: MODEL_WORKSTATION\n---\nProcess packaged goal work.\n"
@@ -680,13 +685,14 @@ Review packaged goal work.
 func writePackagedGoalVerificationMakefile(t *testing.T, dir string) {
 	t.Helper()
 
-	const makefile = ".PHONY: test\n\ntest:\n\t@:\n"
+	const makefile = ".PHONY: test\n\ntest:\n\t@echo verification-ok\n"
 	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(makefile), 0o644); err != nil {
 		t.Fatalf("write packaged goal verification Makefile: %v", err)
 	}
 }
 
 func packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(reviewerWorkstation, reviewerOutput string) *factoryconfig.MockWorkersConfig {
+	command, args := echoCommand(reviewerOutput)
 	return &factoryconfig.MockWorkersConfig{
 		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
 		MockWorkers: []factoryconfig.MockWorkerConfig{
@@ -705,8 +711,8 @@ func packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(reviewerWorkstat
 				WorkstationName: reviewerWorkstation,
 				RunType:         factoryconfig.MockWorkerRunTypeScript,
 				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{reviewerOutput},
+					Command: command,
+					Args:    args,
 				},
 			},
 		},
@@ -746,6 +752,12 @@ func packagedGoalBuiltInTopologySequencedReviewerMockWorkersConfig(t *testing.T,
 }
 
 func packagedGoalBuiltInTopologyMockWorkersConfigForScript(reviewerWorkstation, scriptPath string) *factoryconfig.MockWorkersConfig {
+	command := scriptPath
+	var args []string
+	if runtime.GOOS == "windows" {
+		command = "sh"
+		args = []string{scriptPath}
+	}
 	return &factoryconfig.MockWorkersConfig{
 		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
 		MockWorkers: []factoryconfig.MockWorkerConfig{
@@ -764,11 +776,20 @@ func packagedGoalBuiltInTopologyMockWorkersConfigForScript(reviewerWorkstation, 
 				WorkstationName: reviewerWorkstation,
 				RunType:         factoryconfig.MockWorkerRunTypeScript,
 				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: scriptPath,
+					Command: command,
+					Args:    args,
 				},
 			},
 		},
 	}
+}
+
+func echoCommand(output string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		literal := strings.ReplaceAll(output, "'", "''")
+		return "powershell.exe", []string{"-NoProfile", "-NonInteractive", "-Command", "[Console]::Out.Write('" + literal + "')"}
+	}
+	return "/bin/echo", []string{output}
 }
 
 func goalCheckerWorkerConfig(cfg *interfaces.FactoryConfig) *interfaces.WorkerConfig {
@@ -784,14 +805,15 @@ func goalCheckerWorkerConfig(cfg *interfaces.FactoryConfig) *interfaces.WorkerCo
 }
 
 func packagedGoalReviewClassifierMockWorkersConfig(label string) *factoryconfig.MockWorkersConfig {
+	command, args := echoCommand(label)
 	return &factoryconfig.MockWorkersConfig{
 		MockWorkers: []factoryconfig.MockWorkerConfig{{
 			WorkerName:      "goal-reviewer",
 			WorkstationName: goal.PackagedReviewWorkstationName,
 			RunType:         factoryconfig.MockWorkerRunTypeScript,
 			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-				Command: "/bin/echo",
-				Args:    []string{label},
+				Command: command,
+				Args:    args,
 			},
 		}},
 	}

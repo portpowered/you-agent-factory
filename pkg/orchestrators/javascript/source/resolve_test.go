@@ -3,6 +3,7 @@ package workflowsource_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -190,7 +191,10 @@ func TestResolve_ArtifactRoot_RejectsSymlinkThatResolvesInsideRepo(t *testing.T)
 	}
 	outsideLink := filepath.Join(filepath.Dir(projectRoot), "outside-artifact-link")
 	if err := os.Symlink(insideRepo, outsideLink); err != nil {
-		t.Fatalf("symlink outside->inside: %v", err)
+		if runtime.GOOS != "windows" {
+			t.Fatalf("symlink outside->inside: %v", err)
+		}
+		t.Skipf("Windows symlink privilege unavailable: %v", err)
 	}
 
 	resolution := workflowsource.Resolve(workflowsource.Request{

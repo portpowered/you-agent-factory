@@ -1047,6 +1047,13 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	if svc.coordinatorPolicy().dir != alphaDir {
 		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
 	}
+	t.Cleanup(func() {
+		if startup := svc.startupRuntimeBundle(); startup != nil {
+			if err := closeRuntimeBundleSinks(startup.LogSink, startup.MetricsSink); err != nil {
+				t.Errorf("close startup runtime sinks: %v", err)
+			}
+		}
+	})
 
 	createReplacementWatchChannel(t, betaDir, "task", "activated")
 	replacement, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, defaultFactorySessionID)
@@ -1056,6 +1063,11 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	if replacement.Dir != betaDir {
 		t.Fatalf("replacement dir = %q, want %q", replacement.Dir, betaDir)
 	}
+	t.Cleanup(func() {
+		if err := closeRuntimeBundleSinks(replacement.LogSink, replacement.MetricsSink); err != nil {
+			t.Errorf("close replacement runtime sinks: %v", err)
+		}
+	})
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)

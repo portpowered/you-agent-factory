@@ -305,7 +305,7 @@ func TestMaterializedPackagedGoalFactory_SplitRolePromptRegressionFailsWhenPromp
 			if source.SourceKind == PackagedGoalRolePromptSourceKindWorkerBody {
 				wantErrFragment = interfaces.FactoryAgentsFileName
 			}
-			if !strings.Contains(err.Error(), wantErrFragment) {
+			if !strings.Contains(filepath.ToSlash(err.Error()), wantErrFragment) {
 				t.Fatalf("missing prompt error = %v, want reference to %q", err, wantErrFragment)
 			}
 		})
@@ -347,7 +347,7 @@ func TestMaterializedPackagedGoalFactory_SplitRolePromptRegressionFailsWhenPromp
 			if err == nil {
 				t.Fatalf("expected packaged goal load to fail when role %q promptFile is miswired", source.Role)
 			}
-			if !strings.Contains(err.Error(), miswiredPromptFile) {
+			if !strings.Contains(filepath.ToSlash(err.Error()), miswiredPromptFile) {
 				t.Fatalf("miswired prompt error = %v, want reference to %q", err, miswiredPromptFile)
 			}
 		})

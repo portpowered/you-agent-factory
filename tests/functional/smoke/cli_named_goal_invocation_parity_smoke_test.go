@@ -78,7 +78,7 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 	}
 
 	homeDir := t.TempDir()
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
 	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -348,7 +349,8 @@ func TestMockWorkerCommandRunner_RunNextUsesExecRunnerWhenNextMissing(t *testing
 	}
 
 	result, err := (&MockWorkerCommandRunner{}).runNext(context.Background(), workerprocess.CommandRequest{
-		Command: scriptPath,
+		Command: shellCommandForTest(scriptPath),
+		Args:    shellArgsForTest(scriptPath),
 		Env:     []string{"GREETING=hello"},
 		Stdin:   []byte("world"),
 		WorkDir: dir,
@@ -362,6 +364,25 @@ func TestMockWorkerCommandRunner_RunNextUsesExecRunnerWhenNextMissing(t *testing
 	if got := string(result.Stdout); !strings.HasPrefix(got, "cwd:") || !strings.Contains(got, " stdin:world env:hello") {
 		t.Fatalf("Stdout = %q, want exec runner output", got)
 	}
+}
+
+func shellCommandForTest(scriptPath string) string {
+	if runtime.GOOS == "windows" {
+		return "powershell.exe"
+	}
+	return scriptPath
+}
+
+func shellArgsForTest(scriptPath string) []string {
+	if runtime.GOOS == "windows" {
+		return []string{
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			`$value = [Console]::In.ReadToEnd(); [Console]::Out.Write("cwd:{0} stdin:{1} env:{2}", (Get-Location).Path, $value, $env:GREETING)`,
+		}
+	}
+	return nil
 }
 
 func TestRejectResultNilConfigDefaultsToExitCodeOne(t *testing.T) {

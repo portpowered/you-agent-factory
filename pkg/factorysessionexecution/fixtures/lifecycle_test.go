@@ -624,12 +624,17 @@ func TestBuildCanonicalRuntimeSessionEvents_ProjectsLiveProviderDispatchLifecycl
 		SessionStatus: fse.LifecycleStatusSucceeded,
 	}
 	dispatch := fse.DispatchSummary{
-		ID:           "dispatch-1",
-		Status:       fse.DispatchStatusCompleted,
-		DispatchKind: "JAVASCRIPT_AGENT",
-		Phase:        "execute",
-		Label:        "summarize findings",
-		Provider:     "mock",
+		ID:              "dispatch-1",
+		Status:          fse.DispatchStatusCompleted,
+		DispatchKind:    "JAVASCRIPT_AGENT",
+		Phase:           "execute",
+		Label:           "summarize findings",
+		Provider:        "mock",
+		PresetID:        "careful-review",
+		ModelProvider:   "CODEX",
+		Model:           "gpt-test",
+		ReasoningEffort: "high",
+		RunnerID:        "review",
 		ProviderSessionRefs: []fse.ProviderSessionRef{{
 			Provider: "mock",
 			Kind:     "session_id",
@@ -652,8 +657,13 @@ func TestBuildCanonicalRuntimeSessionEvents_ProjectsLiveProviderDispatchLifecycl
 		t.Fatalf("events = %#v, want DISPATCH_QUEUED", events)
 	}
 	var queuedPayload struct {
-		DispatchKind string `json:"dispatchKind"`
-		Provider     string `json:"provider"`
+		DispatchKind    string `json:"dispatchKind"`
+		Provider        string `json:"provider"`
+		PresetID        string `json:"presetId"`
+		ModelProvider   string `json:"modelProvider"`
+		Model           string `json:"model"`
+		ReasoningEffort string `json:"reasoningEffort"`
+		RunnerID        string `json:"runnerId"`
 	}
 	if err := json.Unmarshal(queued.Payload, &queuedPayload); err != nil {
 		t.Fatalf("unmarshal DISPATCH_QUEUED payload: %v", err)
@@ -661,6 +671,7 @@ func TestBuildCanonicalRuntimeSessionEvents_ProjectsLiveProviderDispatchLifecycl
 	if queuedPayload.DispatchKind != "JAVASCRIPT_AGENT" || queuedPayload.Provider != "mock" {
 		t.Fatalf("queued payload = %#v, want JAVASCRIPT_AGENT/mock", queuedPayload)
 	}
+	assertQueuedResolvedWorkerSelection(t, queuedPayload.PresetID, queuedPayload.ModelProvider, queuedPayload.Model, queuedPayload.ReasoningEffort, queuedPayload.RunnerID)
 
 	reconciled := findCanonicalDispatchEventByType(events, "DISPATCH_RECONCILED", sessionID, "dispatch-1")
 	if reconciled == nil {
@@ -682,6 +693,13 @@ func TestBuildCanonicalRuntimeSessionEvents_ProjectsLiveProviderDispatchLifecycl
 	}
 	if len(reconciledPayload.ArtifactIDs) != 1 || reconciledPayload.ArtifactIDs[0] != "child-artifact-1" {
 		t.Fatalf("artifactIds = %#v, want [child-artifact-1]", reconciledPayload.ArtifactIDs)
+	}
+}
+
+func assertQueuedResolvedWorkerSelection(t *testing.T, presetID, modelProvider, model, reasoningEffort, runnerID string) {
+	t.Helper()
+	if presetID != "careful-review" || modelProvider != "CODEX" || model != "gpt-test" || reasoningEffort != "high" || runnerID != "review" {
+		t.Fatalf("queued resolved worker selection = %q/%q/%q/%q/%q", presetID, modelProvider, model, reasoningEffort, runnerID)
 	}
 }
 
@@ -816,7 +834,6 @@ func replaySharedProjection(t *testing.T, events []json.RawMessage) (fse.Session
 	session.OrchestratorKind, session.Dialect, session.ResolvedSource.Dialect = "", "", ""
 	return session, result
 }
-
 
 func TestMapCanonicalRuntimeSessionEvents_RejectsMalformedFactsWithoutPartialEvents(t *testing.T) {
 	session := fse.SessionReadResult{

@@ -404,7 +404,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 
 	homeDir := t.TempDir()
 	if _, err := factoryconfig.PersistNamedFactory(
-		filepath.Join(homeDir, ".you-agent-factory", "factories"),
+		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		goal.PackagedFactoryName,
 		factoryconfig.BuiltInGoalFactoryJSON,
 	); err != nil {
