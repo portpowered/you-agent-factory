@@ -525,7 +525,11 @@ export async function waitForPortAvailable(
   }
 
   const suffix =
-    lastError instanceof Error ? `: ${lastError.message}` : lastError ? `: ${lastError}` : ".";
+    lastError instanceof Error
+      ? `: ${lastError.message}`
+      : lastError
+        ? `: ${lastError}`
+        : ".";
   throw new Error(
     `Timed out waiting for ${host}:${port} to become available${suffix}`,
   );
@@ -606,6 +610,7 @@ function spawnRuntime(args, extraEnv = {}, options = {}) {
 function spawnRepoProcess(command, args, options = {}) {
   return spawn(command, args, {
     cwd: path.resolve(packageRoot, ".."),
+    detached: process.platform !== "win32",
     env: createBunEnv(options.extraEnv),
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
@@ -666,8 +671,18 @@ async function stopProcess(child) {
     return;
   }
 
-  child.kill("SIGTERM");
-  await once(child, "exit");
+  // Commands such as `go run` launch the compiled program as a child process.
+  // Terminate the process group so that child cannot retain the shared API port
+  // after the launcher exits.
+  const exited = once(child, "exit");
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch (error) {
+    if (error?.code !== "ESRCH") {
+      throw error;
+    }
+  }
+  await exited;
 }
 
 async function waitForURL(url, timeoutMs = readyTimeoutMs) {
