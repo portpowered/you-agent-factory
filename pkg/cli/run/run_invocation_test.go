@@ -25,6 +25,7 @@ import (
 type stubInvocationService struct {
 	run    func(context.Context) error
 	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+	close  func(context.Context, string) error
 }
 
 func (s stubInvocationService) Run(ctx context.Context) error {
@@ -37,6 +38,13 @@ func (s stubInvocationService) GetCurrentFactoryForSession(context.Context, stri
 
 func (s stubInvocationService) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 	return s.invoke(ctx, sessionID, request)
+}
+
+func (s stubInvocationService) CloseFactorySession(ctx context.Context, sessionID string) error {
+	if s.close != nil {
+		return s.close(ctx, sessionID)
+	}
+	return nil
 }
 
 func TestBuildInvocationRunServiceConfig_ForcesNoServerBootstrapShape(t *testing.T) {
@@ -71,7 +79,7 @@ func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
 
 	text := "Plan the sprint"
 	var captured *service.FactoryServiceConfig
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		cloned := *cfg
 		captured = &cloned
 		return stubInvocationService{
@@ -109,6 +117,47 @@ func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
 	}
 	if captured.APIServerStarter != nil {
 		t.Fatal("captured APIServerStarter = non-nil, want nil")
+	}
+}
+
+func TestRun_FactoryInvocationReleasesSessionThroughFactoryServiceOwnership(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan the sprint"
+	var closedSessionID string
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					Status: factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "done",
+					}},
+				}, nil
+			},
+			close: func(_ context.Context, sessionID string) error {
+				closedSessionID = sessionID
+				return nil
+			},
+		}, nil
+	}
+
+	var output bytes.Buffer
+	if err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if closedSessionID == "" {
+		t.Fatal("expected CloseFactorySession through bootstrap ownership path")
 	}
 }
 
@@ -321,7 +370,7 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 	var output bytes.Buffer
 	core, observedLogs := observer.New(zap.InfoLevel)
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -373,7 +422,7 @@ func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
 	text := "hi there"
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -417,7 +466,7 @@ func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T
 	metadataJSON := `{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP"}`
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -474,7 +523,7 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 	var output bytes.Buffer
 	var captured *service.FactoryServiceConfig
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		captured = cfg
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
@@ -534,7 +583,7 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 	text := "Fix the lint issues"
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -682,7 +731,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 			preserveRunGlobals(t)
 
 			var output bytes.Buffer
-			buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+			buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 				return stubInvocationService{
 					run: func(ctx context.Context) error {
 						<-ctx.Done()
@@ -766,7 +815,7 @@ func TestRun_NamedGoalConflictingSourcesFailsBeforeInvocation(t *testing.T) {
 	var output bytes.Buffer
 	invokeCalled := false
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -882,7 +931,7 @@ func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.
 		return sharedResult, nil
 	}
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -936,7 +985,7 @@ func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *t
 	}
 
 	var jsonOutput bytes.Buffer
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -1051,7 +1100,7 @@ func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {
 	text := "pause the session"
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()

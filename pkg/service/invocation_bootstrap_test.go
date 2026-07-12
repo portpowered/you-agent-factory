@@ -120,6 +120,49 @@ func TestBuildInvocationBootstrap_LeavesNoFactoryAPIServerListener(t *testing.T)
 	}
 }
 
+func TestInvocationBootstrap_CloseFactorySessionReleasesLiveSession(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	writeInvocationBootstrapWorkerAgentsMD(t, dir, "worker-a")
+	writeInvocationBootstrapWorkstationAgentsMD(t, dir, "process")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bootstrap, err := service.BuildInvocationBootstrap(ctx, &service.FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: factoryconfig.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildInvocationBootstrap: %v", err)
+	}
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- bootstrap.Run(ctx)
+	}()
+
+	waitForInvocationBootstrapSessionReady(t, ctx, bootstrap, runErrCh)
+
+	if _, err := bootstrap.Service.GetFactorySession(ctx, factorysessions.DefaultSessionID); err != nil {
+		t.Fatalf("GetFactorySession before close: %v", err)
+	}
+	if err := bootstrap.CloseFactorySession(ctx, factorysessions.DefaultSessionID); err != nil {
+		t.Fatalf("CloseFactorySession: %v", err)
+	}
+	if _, err := bootstrap.Service.GetFactorySession(ctx, factorysessions.DefaultSessionID); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("GetFactorySession after close = %v, want %v", err, apisurface.ErrFactorySessionNotFound)
+	}
+
+	cancel()
+	if err := <-runErrCh; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
 func reserveInvocationBootstrapProbePort(t *testing.T) int {
 	t.Helper()
 

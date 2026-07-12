@@ -128,7 +128,7 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 
 	text := "quiet-leak baseline goal prompt"
 	var output bytes.Buffer
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -183,12 +183,16 @@ func (s failureBaselineNoServerInvocationService) InvokeFactorySession(context.C
 	return apisurface.FactoryInvocationResult{}, apisurface.ErrFactorySessionNotFound
 }
 
+func (s failureBaselineNoServerInvocationService) CloseFactorySession(context.Context, string) error {
+	return nil
+}
+
 func TestFailureBaseline_NoServer_RunNamedGoalInvocationReportsSessionStoppedBeforeReady(t *testing.T) {
 	preserveRunGlobals(t)
 
 	text := "no-server baseline goal prompt"
 	var output bytes.Buffer
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return failureBaselineNoServerInvocationService{
 			run: func(context.Context) error {
 				return nil

@@ -190,6 +190,7 @@ type sessionInvocationRunner interface {
 	factoryServiceRunner
 	apisurface.InvocationAPI
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
+	CloseFactorySession(context.Context, string) error
 }
 
 type invocationBootstrapBuilder func(context.Context, *service.FactoryServiceConfig) (sessionInvocationRunner, error)
@@ -200,15 +201,11 @@ func defaultBuildInvocationBootstrap(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 ) (sessionInvocationRunner, error) {
-	runner, err := buildFactoryService(ctx, cfg)
+	bootstrap, err := service.BuildInvocationBootstrap(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	invoker, ok := runner.(sessionInvocationRunner)
-	if !ok {
-		return nil, fmt.Errorf("factory invocation runner does not support session invocation")
-	}
-	return invoker, nil
+	return bootstrap, nil
 }
 
 type sessionResponseStreamInvocationRunner interface {
@@ -368,6 +365,9 @@ func runFactoryInvocation(
 	if streamRenderer != nil {
 		streamRenderer.stopProgressRendering()
 	}
+	if releaseErr := releaseInvocationSession(runCtx, invoker, factorysessions.DefaultSessionID); releaseErr != nil && err == nil {
+		err = releaseErr
+	}
 	cancel()
 	runErr := <-runErrCh
 	if err != nil {
@@ -389,6 +389,23 @@ func buildInvocationRunServiceConfig(
 ) *service.FactoryServiceConfig {
 	svcCfg := buildRunServiceConfig(cfg, logger, mockWorkersConfig, nil, make(chan struct{}), &sync.Once{})
 	return service.NormalizeInvocationBootstrapConfig(svcCfg)
+}
+
+func releaseInvocationSession(
+	ctx context.Context,
+	invoker sessionInvocationRunner,
+	sessionID string,
+) error {
+	if invoker == nil {
+		return fmt.Errorf("factory invocation runner is required")
+	}
+	if err := invoker.CloseFactorySession(ctx, sessionID); err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			return nil
+		}
+		return fmt.Errorf("release factory invocation session: %w", err)
+	}
+	return nil
 }
 
 func waitForInvocationSessionReady(

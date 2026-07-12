@@ -75,3 +75,12 @@ func (b *InvocationBootstrap) InvokeFactorySession(
 	}
 	return b.Service.InvokeFactorySession(ctx, sessionID, request)
 }
+
+// CloseFactorySession releases a bootstrap-owned live session through the same
+// FactoryService session ownership path used by API session lifecycle.
+func (b *InvocationBootstrap) CloseFactorySession(ctx context.Context, sessionID string) error {
+	if b == nil || b.Service == nil {
+		return fmt.Errorf("invocation bootstrap is required")
+	}
+	return b.Service.CloseFactorySession(ctx, sessionID)
+}
