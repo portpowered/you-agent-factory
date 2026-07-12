@@ -479,6 +479,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 
 	if outcome == LifecycleControlOutcomeAccepted {
 		priorState := cloneRuntimeSessionState(state)
+		priorRunCancel := state.runCancel
 		previousStatus := state.session.Status
 		if operation == LifecycleControlInterruptDispatch {
 			s.recordAcceptedRuntimeInterrupt(state, dispatchSummary, interrupt)
@@ -504,6 +505,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		if operation == LifecycleControlPause {
 			if err := s.persistSessionSnapshot(cloneRuntimeSessionState(state)); err != nil {
 				*state = cloneRuntimeSessionState(&priorState)
+				state.runCancel = priorRunCancel
 				return LifecycleControlResult{}, err
 			}
 		}

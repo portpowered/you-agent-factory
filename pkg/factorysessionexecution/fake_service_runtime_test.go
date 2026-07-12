@@ -2769,6 +2769,10 @@ func TestJavaScriptRuntimeService_PausePersistenceFailureKeepsRunningProjection(
 	if err := SeedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "running child"); err != nil {
 		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
 	}
+	cancelCalls := 0
+	service.mu.Lock()
+	service.sessions[sessionID].runCancel = func() { cancelCalls++ }
+	service.mu.Unlock()
 
 	_, err := service.Pause(context.Background(), sessionID, ControlRequest{})
 	if err == nil || !strings.Contains(err.Error(), "persist durable session snapshot") {
@@ -2780,6 +2784,12 @@ func TestJavaScriptRuntimeService_PausePersistenceFailureKeepsRunningProjection(
 	}
 	if read.Status != LifecycleStatusRunning || read.Lifecycle == nil || read.Lifecycle.PausedAt != nil {
 		t.Fatalf("session after rejected pause = %#v, want unchanged RUNNING projection", read)
+	}
+	if _, err := service.Cancel(context.Background(), sessionID, ControlRequest{}); err != nil {
+		t.Fatalf("Cancel after rejected pause: %v", err)
+	}
+	if cancelCalls != 1 {
+		t.Fatalf("cancel calls after rejected pause = %d, want 1", cancelCalls)
 	}
 }
 
