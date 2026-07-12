@@ -237,9 +237,6 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		}
 		childExecutorMode := normalizeChildExecutorMode(config.ChildExecutorMode)
 		provider := config.Provider
-		if childExecutorMode == ChildExecutorModeLive && provider == nil {
-			provider = SmokeLiveChildProvider()
-		}
 		if err := validateLiveChildExecutorConfig(childExecutorMode, provider); err != nil {
 			return nil, err
 		}
