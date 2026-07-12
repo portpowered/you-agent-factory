@@ -810,13 +810,8 @@ func persistNamedFactory(
 	if err := validateNamedFactoryTarget(targetDir, canonicalName, options); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(rootDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create factory root %s: %w", rootDir, err)
-	}
-	if parentDir := filepath.Dir(targetDir); parentDir != rootDir {
-		if err := os.MkdirAll(parentDir, 0o755); err != nil {
-			return nil, fmt.Errorf("create factory parent directory %s: %w", parentDir, err)
-		}
+	if err := ensureNamedFactoryPersistDirs(rootDir, targetDir); err != nil {
+		return nil, err
 	}
 	factoryCfg, canonical, err := resolveNamedFactoryPersistPayload(canonicalName, canonicalFactoryJSON, prepared)
 	if err != nil {
@@ -859,6 +854,20 @@ func persistNamedFactory(
 		FactoryDir:                      targetDir,
 		PortableBundledFileReplacements: clonePortableBundledFileReplacements(replacements),
 	}, nil
+}
+
+func ensureNamedFactoryPersistDirs(rootDir, targetDir string) error {
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		return fmt.Errorf("create factory root %s: %w", rootDir, err)
+	}
+	parentDir := filepath.Dir(targetDir)
+	if parentDir == rootDir {
+		return nil
+	}
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return fmt.Errorf("create factory parent directory %s: %w", parentDir, err)
+	}
+	return nil
 }
 
 func validateNamedFactoryTarget(targetDir, canonicalName string, options namedFactoryPersistOptions) error {
