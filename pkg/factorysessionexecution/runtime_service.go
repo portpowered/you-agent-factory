@@ -16,6 +16,7 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
 // NewDurableSessionID allocates one durable Factory Session identifier.
@@ -886,7 +887,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowrunti
 		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
 			return livechild.NewProviderChildExecutor(
 				sessionID,
-				provider,
+				providerexecution.NewProviderExecutor(provider),
 				runtimeSessionChildRecordSink{
 					base: records,
 					appendRecord: func(record workflowruntime.RuntimeRecord) {

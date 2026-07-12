@@ -3,33 +3,31 @@ package livechild
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	"github.com/portpowered/infinite-you/pkg/workers/provider"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
 // ProviderChildExecutor routes one child agent.run through a real provider inference call.
 type ProviderChildExecutor struct {
 	sessionID string
-	provider  workers.Provider
+	executor  providerexecution.Executor
 	records   workflowruntime.ChildRecordSink
 }
 
 // NewProviderChildExecutor constructs one provider-backed child executor.
 func NewProviderChildExecutor(
 	sessionID string,
-	provider workers.Provider,
+	executor providerexecution.Executor,
 	records workflowruntime.ChildRecordSink,
 ) *ProviderChildExecutor {
 	return &ProviderChildExecutor{
 		sessionID: sessionID,
-		provider:  provider,
+		executor:  executor,
 		records:   records,
 	}
 }
@@ -64,14 +62,17 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusQueued)
 	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusRunning)
 
-	inferReq := providerInferenceRequestFromChild(e.sessionID, dispatchID, req)
-	resp, err := e.provider.Infer(ctx, inferReq)
+	execution, err := e.executor.Execute(ctx, providerexecution.ExecutionInput{
+		Request: providerInferenceRequestFromChild(e.sessionID, dispatchID, req),
+		Attempt: 1,
+	})
 	if err != nil {
-		return e.failedChildResult(base, req, dispatchID, childIndex, providerName, providerSessionRef, err)
+		providerName, providerSessionRef = providerSessionFields(execution.ProviderSession)
+		return e.failedChildResult(base, req, dispatchID, childIndex, providerName, providerSessionRef, execution.FailureDetail)
 	}
 
-	providerName, providerSessionRef = providerSessionFields(resp.ProviderSession)
-	output := providerChildOutput(req, resp.Content)
+	providerName, providerSessionRef = providerSessionFields(execution.ProviderSession)
+	output := providerChildOutput(req, execution.Response.Content)
 
 	completed := base
 	completed.Status = workflowruntime.ChildDispatchStatusCompleted
@@ -103,18 +104,21 @@ func (e *ProviderChildExecutor) failedChildResult(
 	childIndex int,
 	providerName string,
 	providerSessionRef string,
-	err error,
+	failureDetail *interfaces.FailureDetail,
 ) (workflowruntime.ChildExecutionResult, error) {
 	failed := base
 	failed.Status = workflowruntime.ChildDispatchStatusFailed
 	failed.Provider = providerName
 	failed.ProviderSessionRef = providerSessionRef
-	failed.FailureDetail = childExecutionFailureDetail(err)
+	failed.FailureDetail = failureDetail
 	e.records.Append(workflowruntime.RuntimeRecord{
 		Kind:          workflowruntime.RecordKindChildDispatch,
 		ChildDispatch: &failed,
 	})
-	diagnostic := err.Error()
+	diagnostic := "Provider execution failed."
+	if failureDetail != nil && strings.TrimSpace(failureDetail.Message) != "" {
+		diagnostic = failureDetail.Message
+	}
 	return workflowruntime.ChildExecutionResult{
 		DispatchID:         dispatchID,
 		ChildIndex:         childIndex,
@@ -185,21 +189,4 @@ func providerSessionFields(session *interfaces.ProviderSessionMetadata) (provide
 	}
 	sessionRef = strings.TrimSpace(session.ID)
 	return providerName, sessionRef
-}
-
-func childExecutionFailureDetail(err error) *interfaces.FailureDetail {
-	detail := &interfaces.FailureDetail{
-		Reason:  interfaces.WorkFailureTypeUnknown,
-		Message: err.Error(),
-	}
-	var providerErr *provider.ProviderError
-	if errors.As(err, &providerErr) {
-		if providerErr.Type != "" {
-			detail.Reason = providerErr.Type
-		}
-		if providerErr.Message != "" {
-			detail.Message = providerErr.Message
-		}
-	}
-	return detail
 }

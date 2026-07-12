@@ -12,6 +12,7 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
 func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T) {
@@ -24,7 +25,7 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 		},
 	})
 	collectorSink := newTestChildRecordSink()
-	executor := NewProviderChildExecutor("session-live-child", provider, collectorSink)
+	executor := NewProviderChildExecutor("session-live-child", providerexecution.NewProviderExecutor(provider), collectorSink)
 
 	result, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{
 		Prompt:       "summarize workflows",
@@ -201,7 +202,7 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 		nil,
 	))
 	collectorSink := newTestChildRecordSink()
-	executor := NewProviderChildExecutor("session-live-child-failure", provider, collectorSink)
+	executor := NewProviderChildExecutor("session-live-child-failure", providerexecution.NewProviderExecutor(provider), collectorSink)
 
 	_, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{
 		Prompt:       "summarize workflows",
@@ -243,7 +244,7 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 func TestProviderChildExecutor_Execute_CanceledContext_InterruptsProviderInfer(t *testing.T) {
 	provider := newBlockingMockProvider()
 	collectorSink := newTestChildRecordSink()
-	executor := NewProviderChildExecutor("session-live-child-cancel", provider, collectorSink)
+	executor := NewProviderChildExecutor("session-live-child-cancel", providerexecution.NewProviderExecutor(provider), collectorSink)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -265,8 +266,8 @@ func TestProviderChildExecutor_Execute_CanceledContext_InterruptsProviderInfer(t
 		if err == nil {
 			t.Fatal("Execute: error = nil, want context cancellation")
 		}
-		if !strings.Contains(err.Error(), "context canceled") {
-			t.Fatalf("Execute error = %v, want context canceled", err)
+		if err.Error() != "Provider execution failed." {
+			t.Fatalf("Execute error = %v, want canonical cancellation diagnostic", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Execute did not return after context cancellation")
@@ -279,7 +280,7 @@ func TestProviderChildExecutor_Execute_CanceledContext_InterruptsProviderInfer(t
 func TestProviderChildExecutor_Execute_TimedOutContext_InterruptsProviderInfer(t *testing.T) {
 	provider := newBlockingMockProvider()
 	collectorSink := newTestChildRecordSink()
-	executor := NewProviderChildExecutor("session-live-child-timeout", provider, collectorSink)
+	executor := NewProviderChildExecutor("session-live-child-timeout", providerexecution.NewProviderExecutor(provider), collectorSink)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
@@ -291,8 +292,8 @@ func TestProviderChildExecutor_Execute_TimedOutContext_InterruptsProviderInfer(t
 	if err == nil {
 		t.Fatal("Execute: error = nil, want context deadline exceeded")
 	}
-	if !strings.Contains(err.Error(), "deadline exceeded") {
-		t.Fatalf("Execute error = %v, want deadline exceeded", err)
+	if err.Error() != "execution timeout" {
+		t.Fatalf("Execute error = %v, want canonical timeout diagnostic", err)
 	}
 	if provider.inferContextsHonored() == 0 {
 		t.Fatal("provider Infer did not observe timed-out context")
