@@ -27,6 +27,12 @@ properties:
     format: int32
     minimum: 1
     description: One-based attempt number for retried dispatches.
+  retryable:
+    type: boolean
+    description: Whether the provider failure that produced the current failed state was retryable.
+  failureClassification:
+    $ref: '../../../openapi-main.yaml#/components/schemas/WorkFailureType'
+    description: Stable canonical classification recorded for the current provider failure.
   runnerId:
     type: string
     description: Selected runner identifier when applicable.

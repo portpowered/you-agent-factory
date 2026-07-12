@@ -1621,6 +1621,10 @@ export interface components {
        * @description One-based attempt number for retried dispatches.
        */
       attempt?: number;
+      /** @description Whether the provider failure that produced the current failed state was retryable. */
+      retryable?: boolean;
+      /** @description Stable canonical classification recorded for the current provider failure. */
+      failureClassification?: components["schemas"]["WorkFailureType"];
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
       /** @description Selected model identifier when applicable. */
@@ -1746,6 +1750,10 @@ export interface components {
        * @description One-based attempt number for retried dispatches.
        */
       attempt?: number;
+      /** @description Whether the provider failure that produced the current failed state was retryable. */
+      retryable?: boolean;
+      /** @description Stable canonical classification recorded for the current provider failure. */
+      failureClassification?: components["schemas"]["WorkFailureType"];
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
       /** @description Selected model identifier when applicable. */

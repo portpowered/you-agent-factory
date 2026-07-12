@@ -753,6 +753,10 @@ func assertAPILiveProviderFailedSessionSnapshot(
 		t.Fatalf("dispatch executionMode = %#v, want live-provider", dispatchSummary.Javascript)
 	}
 	assertAPILiveProviderDispatchFailureDetail(t, dispatchSummary.FailureDetail)
+	if dispatchSummary.Attempt == nil || *dispatchSummary.Attempt != 1 || dispatchSummary.Retryable == nil || *dispatchSummary.Retryable ||
+		dispatchSummary.FailureClassification == nil || *dispatchSummary.FailureClassification != factoryapi.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("dispatch retry diagnostics = %#v", dispatchSummary)
+	}
 	return dispatchSummary, factoryapi.FactoryDispatch{}
 }
 
@@ -771,6 +775,10 @@ func assertAPILiveProviderFailedDispatchDetail(
 		t.Fatalf("dispatch detail executionMode = %#v, want live-provider", dispatchDetail.Javascript)
 	}
 	assertAPILiveProviderDispatchFailureDetail(t, dispatchDetail.FailureDetail)
+	if dispatchDetail.Attempt == nil || *dispatchDetail.Attempt != 1 || dispatchDetail.Retryable == nil || *dispatchDetail.Retryable ||
+		dispatchDetail.FailureClassification == nil || *dispatchDetail.FailureClassification != factoryapi.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("dispatch detail retry diagnostics = %#v", dispatchDetail)
+	}
 	assertAPIDispatchStatusTransitions(t, dispatchDetail.StatusTransitions, []factoryapi.FactoryDispatchStatus{
 		factoryapi.FactoryDispatchStatusQUEUED,
 		factoryapi.FactoryDispatchStatusRUNNING,

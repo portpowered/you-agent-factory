@@ -246,8 +246,14 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 	if failed.FailureDetail == nil || failed.FailureDetail.Reason != interfaces.WorkFailureTypePermanentBadRequest {
 		t.Fatalf("failureDetail = %#v, want %q", failed.FailureDetail, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if failed.FailureDetail.Message != failureMessage {
+	if failed.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("failure message = %q", failed.FailureDetail.Message)
+	}
+	if failed.Retryable == nil || *failed.Retryable || failed.FailureClassification != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("retry diagnostics = retryable:%v classification:%q", failed.Retryable, failed.FailureClassification)
+	}
+	if strings.Contains(failed.FailureDetail.Message, "gpt-5.6-sol") {
+		t.Fatalf("public failure message leaked provider detail: %q", failed.FailureDetail.Message)
 	}
 	encoded, marshalErr := json.Marshal(failed)
 	if marshalErr != nil {
@@ -308,6 +314,9 @@ func TestProviderChildExecutor_Execute_RetryExhaustionUsesConfiguredLimit(t *tes
 	failed := sink.failedDispatchRecords("dispatch-1")
 	if len(failed) != 1 || failed[0].Attempt != 3 {
 		t.Fatalf("failed dispatches = %#v, want one failure at attempt 3", failed)
+	}
+	if failed[0].Retryable == nil || !*failed[0].Retryable || failed[0].FailureClassification != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("retry diagnostics = retryable:%v classification:%q", failed[0].Retryable, failed[0].FailureClassification)
 	}
 }
 

@@ -217,21 +217,23 @@ type ProviderSessionRef struct {
 
 // DispatchSummary is the shared durable dispatch list projection.
 type DispatchSummary struct {
-	ID                  string
-	Status              DispatchStatus
-	DispatchKind        string
-	Phase               string
-	Label               string
-	Attempt             int
-	RunnerID            string
-	Model               string
-	Provider            string
-	ProviderSessionRefs []ProviderSessionRef
-	OutputArtifactIDs   []string
-	Usage               *DispatchUsage
-	Warnings            []DispatchWarning
-	FailureDetail       *DispatchFailureDetail
-	JavaScript          *DispatchJavaScriptProjection
+	ID                    string
+	Status                DispatchStatus
+	DispatchKind          string
+	Phase                 string
+	Label                 string
+	Attempt               int
+	Retryable             *bool
+	FailureClassification string
+	RunnerID              string
+	Model                 string
+	Provider              string
+	ProviderSessionRefs   []ProviderSessionRef
+	OutputArtifactIDs     []string
+	Usage                 *DispatchUsage
+	Warnings              []DispatchWarning
+	FailureDetail         *DispatchFailureDetail
+	JavaScript            *DispatchJavaScriptProjection
 }
 
 // DispatchDetail is the shared durable dispatch read projection.

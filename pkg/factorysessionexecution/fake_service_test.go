@@ -959,7 +959,9 @@ func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtif
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this focused projection regression keeps live and persisted-record assertions together.
 func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t *testing.T) {
+	retryable := true
 	records := []workflowruntime.RuntimeRecord{
 		{
 			Kind: workflowruntime.RecordKindChildDispatch,
@@ -990,6 +992,9 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 					Reason:  interfaces.WorkFailureTypeUnknown,
 					Message: "live child failed: simulated child error",
 				},
+				Attempt:               3,
+				Retryable:             &retryable,
+				FailureClassification: interfaces.WorkFailureTypeTimeout,
 			},
 		},
 	}
@@ -1008,6 +1013,21 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 	}
 	if dispatch.FailureDetail.Message != "live child failed: simulated child error" {
 		t.Fatalf("failure message = %q", dispatch.FailureDetail.Message)
+	}
+	if dispatch.Attempt != 3 || dispatch.Retryable == nil || !*dispatch.Retryable || dispatch.FailureClassification != string(interfaces.WorkFailureTypeTimeout) {
+		t.Fatalf("retry diagnostics = attempt:%d retryable:%v classification:%q", dispatch.Attempt, dispatch.Retryable, dispatch.FailureClassification)
+	}
+	encoded, err := json.Marshal(records)
+	if err != nil {
+		t.Fatalf("marshal records: %v", err)
+	}
+	var replayedRecords []workflowruntime.RuntimeRecord
+	if err := json.Unmarshal(encoded, &replayedRecords); err != nil {
+		t.Fatalf("unmarshal records: %v", err)
+	}
+	replayed := ProjectRuntimeExecutionRecords("session-live-child-failure", replayedRecords, observedAt).Dispatches[0]
+	if replayed.Attempt != dispatch.Attempt || replayed.Retryable == nil || *replayed.Retryable != *dispatch.Retryable || replayed.FailureClassification != dispatch.FailureClassification {
+		t.Fatalf("replayed retry diagnostics = %#v, want %#v", replayed, dispatch)
 	}
 	if len(projection.Artifacts) != 0 {
 		t.Fatalf("artifacts = %#v, want none for failed child", projection.Artifacts)

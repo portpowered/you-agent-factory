@@ -9,6 +9,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
@@ -195,8 +196,8 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 				{Code: "RATE_LIMIT", Message: " retried once "},
 			},
 			FailureDetail: &factorysessionexecution.DispatchFailureDetail{
-				Reason:     " TEMPORARY ",
-				Message:    " provider unavailable ",
+				Reason:  " TEMPORARY ",
+				Message: " provider unavailable ",
 			},
 		},
 		SessionID:         "dur-sess-1",
@@ -346,6 +347,7 @@ func testFactoryEventStreamBranches(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this boundary regression intentionally covers optional-field trimming in one table-like scenario.
 func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 	mapped := factorysession.ResultResponseToAPI(factorysessionexecution.ResultReadResult{
 		SessionID:        "dur-sess-1",
@@ -371,20 +373,23 @@ func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 		t.Fatalf("availability = %#v, want omitted", mapped.Availability)
 	}
 
+	retryable := true
 	dispatches := factorysession.ListDispatchesResponseToAPI(factorysessionexecution.ListDispatchesResult{
 		SessionID: "dur-sess-1",
 		Dispatches: []factorysessionexecution.DispatchSummary{{
-			ID:                  "disp-1",
-			Status:              factorysessionexecution.DispatchStatusRunning,
-			DispatchKind:        "MODEL",
-			Phase:               " plan ",
-			Label:               " summarize ",
-			Attempt:             2,
-			RunnerID:            "runner-1",
-			Model:               "gpt",
-			Provider:            "openai",
-			ProviderSessionRefs: []factorysessionexecution.ProviderSessionRef{{Provider: "openai", Kind: "RESPONSES", ID: "prov-1"}},
-			OutputArtifactIDs:   []string{" out-1 ", " "},
+			ID:                    "disp-1",
+			Status:                factorysessionexecution.DispatchStatusRunning,
+			DispatchKind:          "MODEL",
+			Phase:                 " plan ",
+			Label:                 " summarize ",
+			Attempt:               2,
+			Retryable:             &retryable,
+			FailureClassification: string(interfaces.WorkFailureTypeTimeout),
+			RunnerID:              "runner-1",
+			Model:                 "gpt",
+			Provider:              "openai",
+			ProviderSessionRefs:   []factorysessionexecution.ProviderSessionRef{{Provider: "openai", Kind: "RESPONSES", ID: "prov-1"}},
+			OutputArtifactIDs:     []string{" out-1 ", " "},
 		}},
 	})
 	if len(dispatches.Dispatches) != 1 {
@@ -395,6 +400,10 @@ func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 	}
 	if dispatches.Dispatches[0].ProviderSessionRefs == nil || len(*dispatches.Dispatches[0].ProviderSessionRefs) != 1 {
 		t.Fatalf("providerSessionRefs = %#v", dispatches.Dispatches[0].ProviderSessionRefs)
+	}
+	if dispatches.Dispatches[0].Retryable == nil || !*dispatches.Dispatches[0].Retryable ||
+		dispatches.Dispatches[0].FailureClassification == nil || *dispatches.Dispatches[0].FailureClassification != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf("retry diagnostics = retryable:%v classification:%v", dispatches.Dispatches[0].Retryable, dispatches.Dispatches[0].FailureClassification)
 	}
 
 	artifacts := factorysession.ListArtifactsResponseToAPI(factorysessionexecution.ListArtifactsResult{
@@ -550,8 +559,8 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 	}
 	if failure, ok := dispatch["failureDetail"].(map[string]any); ok {
 		summary.FailureDetail = &factorysessionexecution.DispatchFailureDetail{
-			Reason:     stringValue(failure, "reason"),
-			Message:    stringValue(failure, "message"),
+			Reason:  stringValue(failure, "reason"),
+			Message: stringValue(failure, "message"),
 		}
 	}
 	if javascript, ok := dispatch["javascript"].(map[string]any); ok {

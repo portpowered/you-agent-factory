@@ -177,6 +177,11 @@ func (e *ProviderChildExecutor) failedChildResult(
 	failed.Provider = providerName
 	failed.ProviderSessionRef = providerSessionRef
 	failed.FailureDetail = childExecutionFailureDetail(err)
+	if providerErr := providerErrorFrom(err); providerErr != nil {
+		decision := provider.WorkFailureDecisionFromProviderError(providerErr)
+		failed.Retryable = &decision.Retryable
+		failed.FailureClassification = providerErr.Type
+	}
 	e.records.Append(workflowruntime.RuntimeRecord{
 		Kind:          workflowruntime.RecordKindChildDispatch,
 		ChildDispatch: &failed,
@@ -261,12 +266,15 @@ func childExecutionFailureDetail(err error) *interfaces.FailureDetail {
 	}
 	var providerErr *provider.ProviderError
 	if errors.As(err, &providerErr) {
-		if providerErr.Type != "" {
-			detail.Reason = providerErr.Type
-		}
-		if providerErr.Message != "" {
-			detail.Message = providerErr.Message
-		}
+		return provider.SafeProviderFailureDetail(providerErr)
 	}
 	return detail
+}
+
+func providerErrorFrom(err error) *provider.ProviderError {
+	var providerErr *provider.ProviderError
+	if errors.As(err, &providerErr) {
+		return providerErr
+	}
+	return nil
 }

@@ -1281,8 +1281,11 @@ type FactoryDispatch struct {
 	Attempt *int32 `json:"attempt,omitempty"`
 
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
-	DispatchKind  FactoryDispatchKind `json:"dispatchKind"`
-	FailureDetail *FailureDetail      `json:"failureDetail,omitempty"`
+	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
+
+	// FailureClassification Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	FailureClassification *WorkFailureType `json:"failureClassification,omitempty"`
+	FailureDetail         *FailureDetail   `json:"failureDetail,omitempty"`
 
 	// Id Stable dispatch identifier.
 	Id         string                               `json:"id"`
@@ -1312,6 +1315,9 @@ type FactoryDispatch struct {
 
 	// RelatedWorkIds Related work identifiers consumed or produced by the dispatch.
 	RelatedWorkIds *[]string `json:"relatedWorkIds,omitempty"`
+
+	// Retryable Whether the provider failure that produced the current failed state was retryable.
+	Retryable *bool `json:"retryable,omitempty"`
 
 	// RunnerId Selected runner identifier when applicable.
 	RunnerId *string `json:"runnerId,omitempty"`
@@ -1968,8 +1974,11 @@ type FactorySessionDispatchSummary struct {
 	Attempt *int32 `json:"attempt,omitempty"`
 
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
-	DispatchKind  FactoryDispatchKind `json:"dispatchKind"`
-	FailureDetail *FailureDetail      `json:"failureDetail,omitempty"`
+	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
+
+	// FailureClassification Stable machine-readable failure type used to classify failed work across providers and runtimes.
+	FailureClassification *WorkFailureType `json:"failureClassification,omitempty"`
+	FailureDetail         *FailureDetail   `json:"failureDetail,omitempty"`
 
 	// Id Stable dispatch identifier.
 	Id         string                               `json:"id"`
@@ -1992,6 +2001,9 @@ type FactorySessionDispatchSummary struct {
 
 	// ProviderSessionRefs Provider-session correlation refs for model-backed dispatches.
 	ProviderSessionRefs *[]LoadableProviderSessionRef `json:"providerSessionRefs,omitempty"`
+
+	// Retryable Whether the provider failure that produced the current failed state was retryable.
+	Retryable *bool `json:"retryable,omitempty"`
 
 	// RunnerId Selected runner identifier when applicable.
 	RunnerId *string `json:"runnerId,omitempty"`
