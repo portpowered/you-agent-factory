@@ -165,3 +165,65 @@ func TestInit_DoubleRunJSONReportsSkippedOutcomes(t *testing.T) {
 		}
 	}
 }
+
+func TestInit_ConfigCreationFailureSurfacesActionableCLIError(t *testing.T) {
+	homeDir := t.TempDir()
+	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	parentDir := filepath.Dir(configPath)
+	if err := os.WriteFile(parentDir, []byte("blocks config directory creation\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(parent blocker): %v", err)
+	}
+
+	var stderr bytes.Buffer
+	err := Init(InitConfig{
+		HomeDir:     homeDir,
+		Output:      io.Discard,
+		Diagnostics: &stderr,
+		Verbose:     true,
+	})
+	if err == nil {
+		t.Fatal("expected config init failure")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"create system config at",
+		"config.json",
+		"is not a directory",
+		"remove or rename",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("error = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestInit_FactoryMaterializationFailureSurfacesActionableCLIError(t *testing.T) {
+	homeDir := t.TempDir()
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(namedFactoriesRoot): %v", err)
+	}
+	blocker := filepath.Join(namedFactoriesRoot, "@you")
+	if err := os.WriteFile(blocker, []byte("blocks hierarchical factory layout\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory scope blocker): %v", err)
+	}
+
+	err := Init(InitConfig{
+		HomeDir:     homeDir,
+		Output:      io.Discard,
+		Diagnostics: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected factory materialization failure")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"materialize packaged default factory",
+		"@you/fusion",
+		namedFactoriesRoot,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("error = %q, want substring %q", got, want)
+		}
+	}
+}

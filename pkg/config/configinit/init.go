@@ -4,6 +4,7 @@ package configinit
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -57,6 +58,10 @@ func Init(homeDir string) (Result, error) {
 	configPath := defaultpaths.OperatorConfigPath(homeDir)
 	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
 
+	if err := ensureSystemConfigParentIsDirectory(configPath); err != nil {
+		return Result{}, err
+	}
+
 	systemConfigOutcome := SystemConfigCreated
 	if _, err := os.Stat(configPath); err == nil {
 		if _, err := operatorconfig.LoadFileConfig(configPath); err != nil {
@@ -86,6 +91,25 @@ func Init(homeDir string) (Result, error) {
 		SystemConfigOutcome: systemConfigOutcome,
 		PackagedFactories:   packagedFactories,
 	}, nil
+}
+
+func ensureSystemConfigParentIsDirectory(configPath string) error {
+	parentDir := filepath.Dir(configPath)
+	info, err := os.Stat(parentDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("create system config at %s: inspect parent path %s: %w", configPath, parentDir, err)
+	}
+	if info.IsDir() {
+		return nil
+	}
+	return fmt.Errorf(
+		"create system config at %s: parent path %s exists but is not a directory; remove or rename it and retry",
+		configPath,
+		parentDir,
+	)
 }
 
 func ensurePackagedDefaultFactories(namedFactoriesRoot string) ([]PackagedFactoryResult, error) {

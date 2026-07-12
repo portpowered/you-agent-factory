@@ -435,3 +435,61 @@ func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[stri
 		t.Fatalf("directory %s changed after init:\nbefore=%#v\nafter=%#v", root, before, after)
 	}
 }
+
+func TestInit_ConfigCreationFailureReportsActionableError(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	parentDir := filepath.Dir(configPath)
+	if err := os.WriteFile(parentDir, []byte("blocks config directory creation\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(parent blocker): %v", err)
+	}
+
+	_, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected config init failure")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"create system config at",
+		"config.json",
+		".you-agent-factory",
+		"is not a directory",
+		"remove or rename",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("error = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(namedFactoriesRoot): %v", err)
+	}
+
+	blocker := filepath.Join(namedFactoriesRoot, "@you")
+	if err := os.WriteFile(blocker, []byte("blocks hierarchical factory layout\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory scope blocker): %v", err)
+	}
+
+	_, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected factory materialization failure")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"materialize packaged default factory",
+		"@you/fusion",
+		namedFactoriesRoot,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("error = %q, want substring %q", got, want)
+		}
+	}
+}

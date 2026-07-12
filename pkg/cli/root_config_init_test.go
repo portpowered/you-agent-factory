@@ -190,3 +190,71 @@ func TestConfigInitCommand_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigInitCommand_ConfigCreationFailureReportsActionableError(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	parentDir := filepath.Dir(configPath)
+	if err := os.WriteFile(parentDir, []byte("blocks config directory creation\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(parent blocker): %v", err)
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"config", "init"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected config init command failure")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"create system config at",
+		"config.json",
+		"is not a directory",
+		"remove or rename",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("error = %q, want substring %q", got, want)
+		}
+	}
+}
+
+func TestConfigInitCommand_FactoryMaterializationFailureReportsActionableError(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(namedFactoriesRoot): %v", err)
+	}
+	blocker := filepath.Join(namedFactoriesRoot, "@you")
+	if err := os.WriteFile(blocker, []byte("blocks hierarchical factory layout\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory scope blocker): %v", err)
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"config", "init"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected config init command failure")
+	}
+	got := err.Error()
+	for _, want := range []string{
+		"materialize packaged default factory",
+		"@you/fusion",
+		namedFactoriesRoot,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("error = %q, want substring %q", got, want)
+		}
+	}
+}
