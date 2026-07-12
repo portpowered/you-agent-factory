@@ -1,13 +1,24 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { FactoryEventReconnectCursor } from "../../../../api/events";
 import type {
   FactoryTimelineCheckpoint,
   TimelineCheckpointStreamIdentity,
 } from "../../../timeline/public";
-import type { DashboardSessionRecoveryState } from "../../lib/preflight/dashboard-session-sync-preflight";
-import { runDashboardCheckpointPreflight } from "../../lib/preflight/run-dashboard-checkpoint-preflight";
+import { clearTimelineCheckpointsForSession } from "../../../timeline/public";
+import {
+  isDefaultToRuntimeSessionAliasRemap,
+  recoverDashboardSessionScopedState,
+} from "../../lib/dashboard-session-lifecycle";
+import {
+  checkpointSyncIdentityFromPreflight,
+  type DashboardSessionRecoveryState,
+} from "../../lib/preflight/dashboard-session-sync-preflight";
+import {
+  type DashboardCheckpointPreflightResolution,
+  resolveDashboardCheckpointPreflight,
+} from "../../lib/preflight/resolve-dashboard-checkpoint-preflight";
 import { useRemapDashboardSelectedSession } from "../../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
@@ -44,6 +55,7 @@ function resetDashboardCheckpointPreflightState(
   setStreamIdentity(null);
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this hook deliberately owns the single guarded apply boundary for all preflight mutations.
 export function useDashboardCheckpointPreflight({
   checkpointHydrationKey,
   checkpointsDisabled,
@@ -80,13 +92,17 @@ export function useDashboardCheckpointPreflight({
   );
   const [streamIdentity, setStreamIdentity] =
     useState<TimelineCheckpointStreamIdentity | null>(null);
+  const invocationRevision = useRef(0);
 
   const checkpointHydrated = checkpointHydratedKey === checkpointHydrationKey;
   const preflightReady = preflightReadyKey === checkpointHydrationKey;
 
   useEffect(() => {
-    let cancelled = false;
+    const revision = ++invocationRevision.current;
     const abortController = new AbortController();
+    const isActive = (requestedSessionId: string): boolean =>
+      invocationRevision.current === revision &&
+      requestedSessionId === rawSessionID;
 
     resetDashboardCheckpointPreflightState(
       setCheckpointHydratedKey,
@@ -112,50 +128,93 @@ export function useDashboardCheckpointPreflight({
     }
 
     void (async () => {
-      const hydration = await runDashboardCheckpointPreflight({
-        isCurrent: () => !cancelled,
-        onRemapSessionID: remapSelectedSessionID,
-        onStreamOffline: (message) => {
-          setStreamState({
-            message,
-            status: "offline",
-          });
-        },
-        queryClient,
-        rawSessionID,
-        restoreCheckpoint,
-        signal: abortController.signal,
-      });
-      if (cancelled) {
-        return;
+      try {
+        const resolution = await resolveDashboardCheckpointPreflight({
+          indexedDB: window.indexedDB,
+          requestedSessionId: rawSessionID,
+          signal: abortController.signal,
+        });
+        await applyResolution(resolution, isActive, abortController.signal);
+      } catch (failure: unknown) {
+        if (!abortController.signal.aborted) {
+          throw failure;
+        }
       }
-
-      setPreflightRecovery(hydration.preflightRecovery);
-      setPreflightError(hydration.preflightError);
-
-      if (hydration.preflightRecovery != null) {
-        setPreflightReadyKey(checkpointHydrationKey);
-        setCheckpointHydratedKey(checkpointHydrationKey);
-        return;
-      }
-
-      if (hydration.preflightError != null) {
-        setCheckpointHydratedKey(checkpointHydrationKey);
-        return;
-      }
-
-      setResolvedSessionID(hydration.resolvedSessionID);
-      setStreamIdentity(hydration.streamIdentity);
-      setInitialReconnectCursor(hydration.initialReconnectCursor);
-      setPersistedCheckpoint(hydration.persistedCheckpoint);
-      setPreflightReadyKey(checkpointHydrationKey);
-      setCheckpointHydratedKey(checkpointHydrationKey);
     })();
 
     return () => {
-      cancelled = true;
+      invocationRevision.current += 1;
       abortController.abort();
     };
+
+    async function applyResolution(
+      resolution: DashboardCheckpointPreflightResolution,
+      remainsActive: (requestedSessionId: string) => boolean,
+      signal: AbortSignal,
+    ): Promise<void> {
+      if (!remainsActive(resolution.requestedSessionId)) return;
+
+      if (resolution.clearRequestedSessionCheckpoint) {
+        await clearTimelineCheckpointsForSession(
+          window.indexedDB,
+          resolution.requestedSessionId,
+          { signal },
+        );
+        if (!remainsActive(resolution.requestedSessionId)) return;
+        recoverDashboardSessionScopedState(
+          queryClient,
+          resolution.requestedSessionId,
+          () => {},
+        );
+      }
+
+      if (!remainsActive(resolution.requestedSessionId)) return;
+      setCheckpointHydratedKey(checkpointHydrationKey);
+
+      if (resolution.kind === "error") {
+        setPreflightError(resolution.error);
+        setStreamState({
+          message: resolution.error.message,
+          status: "offline",
+        });
+        return;
+      }
+      if (resolution.kind === "recovery") {
+        setPreflightRecovery({
+          reasonCode: resolution.reasonCode,
+          requestedSessionId: resolution.requestedSessionId,
+        });
+        setPreflightReadyKey(checkpointHydrationKey);
+        return;
+      }
+
+      if (
+        resolution.kind === "remap" &&
+        !isDefaultToRuntimeSessionAliasRemap(
+          resolution.requestedSessionId,
+          resolution.resolvedSessionId,
+        )
+      ) {
+        remapSelectedSessionID(resolution.resolvedSessionId);
+      }
+      if (resolution.kind === "resume" && resolution.checkpoint) {
+        restoreCheckpoint({
+          ...resolution.checkpoint,
+          syncIdentity: checkpointSyncIdentityFromPreflight(
+            resolution.streamIdentity,
+          ),
+        });
+      }
+      setResolvedSessionID(resolution.resolvedSessionId);
+      setStreamIdentity(resolution.streamIdentity);
+      setInitialReconnectCursor(
+        resolution.kind === "resume" ? resolution.reconnectCursor : undefined,
+      );
+      setPersistedCheckpoint(
+        resolution.kind === "resume" ? resolution.checkpoint : null,
+      );
+      setPreflightReadyKey(checkpointHydrationKey);
+    }
   }, [
     checkpointHydrationKey,
     checkpointsDisabled,

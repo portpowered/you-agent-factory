@@ -161,7 +161,7 @@ describe("DashboardScreen stale-cursor retry", () => {
           provided: true,
           validForStreamGeneration: true,
         },
-        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        requestedSessionId: RESOLVED_DEFAULT_SESSION_UUID,
         streamGenerationId: "2026-06-26T00:00:00Z",
       });
     listFactorySessionsSpy = vi
