@@ -38,6 +38,7 @@ func ExtractFromDocument(doc *openapi3.T) (*Inventory, error) {
 	}
 
 	var operations []Operation
+	seenOperationIDs := make(map[string]operationRef)
 	if doc.Paths != nil {
 		for path, pathItem := range doc.Paths.Map() {
 			if pathItem == nil {
@@ -46,6 +47,9 @@ func ExtractFromDocument(doc *openapi3.T) (*Inventory, error) {
 			for method, operation := range pathItem.Operations() {
 				if operation == nil {
 					continue
+				}
+				if err := validateOperationIdentity(path, method, operation, seenOperationIDs); err != nil {
+					return nil, err
 				}
 				operations = append(operations, buildOperation(path, method, operation))
 			}
@@ -58,6 +62,32 @@ func ExtractFromDocument(doc *openapi3.T) (*Inventory, error) {
 		FormatVersion: FormatVersion,
 		Operations:    operations,
 	}, nil
+}
+
+type operationRef struct {
+	method string
+	path   string
+}
+
+func validateOperationIdentity(path, method string, operation *openapi3.Operation, seenOperationIDs map[string]operationRef) error {
+	operationID := strings.TrimSpace(operation.OperationID)
+	upperMethod := strings.ToUpper(method)
+	if operationID == "" {
+		return fmt.Errorf("missing operationId for %s %s", upperMethod, path)
+	}
+
+	if first, ok := seenOperationIDs[operationID]; ok {
+		return fmt.Errorf(
+			"duplicate operationId %q for %s %s and %s %s",
+			operationID,
+			first.method,
+			first.path,
+			upperMethod,
+			path,
+		)
+	}
+	seenOperationIDs[operationID] = operationRef{method: upperMethod, path: path}
+	return nil
 }
 
 func buildOperation(path, method string, operation *openapi3.Operation) Operation {
