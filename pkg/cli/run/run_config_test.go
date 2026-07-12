@@ -593,7 +593,7 @@ func TestHumanResponseStreamRenderer_SkipsDuplicateSequencesAndBoundsPayload(t *
 	}
 }
 
-func TestHumanResponseStreamRenderer_SurfacesCompactionNotice(t *testing.T) {
+func TestHumanResponseStreamRenderer_SuppressesCompactionNotice(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
@@ -603,12 +603,65 @@ func TestHumanResponseStreamRenderer_SurfacesCompactionNotice(t *testing.T) {
 			Reason:               responsestream.CompactionReasonTruncated,
 			DroppedSequenceCount: 3,
 		},
+		Events: []responsestream.Event{
+			{
+				Sequence:   1,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "planning",
+			},
+		},
 	})
 
 	renderer.stopProgressRendering()
 	got := output.String()
-	if !strings.Contains(got, "stream truncated (3 earlier events omitted)") {
-		t.Fatalf("compaction notice = %q", got)
+	if strings.Contains(got, "stream truncated") || strings.Contains(got, "earlier events omitted") {
+		t.Fatalf("compaction notice must not appear in human output:\n%s", got)
+	}
+	if !strings.Contains(got, "planning") {
+		t.Fatalf("readable progress must still render:\n%s", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_SuppressesTokenUsageProgress(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onStreamSegment(responsestream.ReadResult{
+		Events: []responsestream.Event{
+			{
+				Sequence:          1,
+				Kind:              responsestream.EventKindProgressFragment,
+				Type:              responsestream.EventTypeProgress,
+				DispatchID:        "dispatch-1",
+				ExternalEventType: "token_count",
+				Payload:           "input_tokens=120 output_tokens=34 total_tokens=154",
+				Metadata: map[string]string{
+					"input_tokens":  "120",
+					"output_tokens": "34",
+				},
+			},
+			{
+				Sequence:   2,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "reviewing plan",
+			},
+		},
+	})
+
+	renderer.stopProgressRendering()
+	got := output.String()
+	for _, marker := range []string{"input_tokens", "output_tokens", "total_tokens", "token_count"} {
+		if strings.Contains(got, marker) {
+			t.Fatalf("token usage chatter must not appear in human output (%q):\n%s", marker, got)
+		}
+	}
+	if !strings.Contains(got, "reviewing plan") {
+		t.Fatalf("readable progress must still render:\n%s", got)
 	}
 }
 
@@ -880,7 +933,7 @@ func TestJSONResponseStreamRenderer_SurfacesCompactionAndStreamGapRecords(t *tes
 	}
 }
 
-func TestHumanResponseStreamRenderer_SurfacesTerminalOutputBacklog(t *testing.T) {
+func TestHumanResponseStreamRenderer_SuppressesTerminalOutputBacklog(t *testing.T) {
 	t.Parallel()
 
 	output := &gatedResponseStreamWriter{}
@@ -894,10 +947,12 @@ func TestHumanResponseStreamRenderer_SurfacesTerminalOutputBacklog(t *testing.T)
 	}
 
 	got := output.String()
-	backlogIdx := strings.Index(got, "terminal output backlog")
+	if strings.Contains(got, "terminal output backlog") {
+		t.Fatalf("terminal backlog notice must not appear in human output:\n%s", got)
+	}
 	primaryIdx := strings.Index(got, responseStreamPrimaryResultHeader)
-	if backlogIdx < 0 || primaryIdx < 0 || backlogIdx > primaryIdx {
-		t.Fatalf("want backlog before primary result:\n%s", got)
+	if primaryIdx < 0 {
+		t.Fatalf("want primary result header:\n%s", got)
 	}
 }
 

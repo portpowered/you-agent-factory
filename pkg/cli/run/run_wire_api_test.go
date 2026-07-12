@@ -861,8 +861,8 @@ func waitForResponseStreamRunCompletion(t *testing.T, done <-chan error, timeout
 func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStreamWriter, text string) {
 	t.Helper()
 	got := output.String()
-	if !strings.Contains(got, "terminal output backlog") {
-		t.Fatalf("output missing terminal backlog notice:\n%s", got)
+	if strings.Contains(got, "terminal output backlog") {
+		t.Fatalf("human output must not include terminal backlog notice:\n%s", got)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(got), text) {
 		t.Fatalf("output missing final primary result:\n%s", got)
