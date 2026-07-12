@@ -761,6 +761,18 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you run --dir ./factory --record ./docs/examples/sample-run.replay.json",
 		"you run --dir ./factory --replay ./docs/examples/sample-run.replay.json",
 		"you run --dir ./factory --no-record",
+		"you run --factory ./workflow.js",
+		"you run --record ./recordings/workflow-run.json --factory ./workflow.js",
+		"you run --replay ./recordings/workflow-run.json --factory ./workflow.js",
+		"you workflow status <session-id>",
+		"you workflow events <session-id>",
+		"you workflow artifacts <session-id>",
+		"you workflow result <session-id> --mode final",
+		"replayCompatibilityVersion",
+		"raw JavaScript runtime state",
+		"provider transcripts",
+		"child-dispatch lists",
+		"does not invoke a provider, dispatch a child, or execute the JavaScript source",
 		"`--record` with `--replay`",
 		"`--no-record` with `--record`",
 		"does not delete old artifacts automatically",
@@ -778,7 +790,6 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 		}
 	}
 }
-
 
 func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()

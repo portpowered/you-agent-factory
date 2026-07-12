@@ -65,6 +65,29 @@ These flag pairs are rejected for the same invocation:
 
 ## Example Commands
 
+Run a JavaScript factory and use the default recording path:
+
+```bash
+you run --factory ./workflow.js
+```
+
+The CLI prints `Recording saved: <path>` when the run shuts down. To choose the
+portable recording path explicitly instead:
+
+```bash
+you run --record ./recordings/workflow-run.json --factory ./workflow.js
+```
+
+Replay that JavaScript Factory Session without starting live child work:
+
+```bash
+you run --replay ./recordings/workflow-run.json --factory ./workflow.js
+```
+
+The workflow source selects the factory shape; replayed status, events,
+artifacts, checkpoints, and result availability come from the recording. Replay
+does not invoke a provider, dispatch a child, or execute the JavaScript source.
+
 Record to an explicit path you control:
 
 ```bash
@@ -100,6 +123,62 @@ you run --dir ./examples/write-code-review \
 
 [`docs/examples/README.md`](../examples/README.md) documents how the example
 files fit together.
+
+## Inspect a Replayed JavaScript Factory Session
+
+Use the Factory Session id reported by the replay with the public durable
+inspection commands:
+
+```bash
+you workflow status <session-id>
+you workflow events <session-id>
+you workflow artifacts <session-id>
+you workflow result <session-id> --mode partial
+you workflow result <session-id> --mode final
+```
+
+These reads expose the recorded public status, ordered `FactoryEvent`
+summaries, `FactoryArtifact` summaries, and partial or final result
+availability. A paused recording remains historical: it cannot be resumed or
+treated as a live Factory Session. Use live durable-session inspection when you
+need child-dispatch details or resumable checkpoint state.
+
+## JavaScript Recording Contract
+
+A portable JavaScript recording is a versioned, high-level Factory Session
+envelope. Its field groups are:
+
+| Field group | What it records |
+|-------------|-----------------|
+| `recordingKind`, `schemaVersion`, `replayCompatibilityVersion` | Contract identity, envelope shape, and replay compatibility |
+| `session` | Factory Session id, recorded lifecycle status, and `JAVASCRIPT` orchestrator kind |
+| `source` | Source reference and content hash; source contents are not embedded |
+| `argumentsDigest`, `policyHash` | Digests for identity and consistency checks, not raw arguments or policy secrets |
+| `artifacts` | Public artifact identity, kind, visibility, label, content hash, size, and creation time |
+| `events` | Canonical event id, type, sequence, timestamp, and bounded artifact or checkpoint references |
+| `checkpoint` | Optional public checkpoint reference and summary, never the checkpoint state body |
+| `result` | Recorded public partial/final result, availability or safe failure summary, and integrity references |
+| `redaction` | Applied omission flags and a bounded count of redacted secrets |
+
+Replay validates the recording kind, schema and compatibility versions,
+identity, hashes and digests, event ordering, and summary references before it
+projects any public state. Unsupported compatibility versions fail with
+supported-version or migration guidance. Malformed or inconsistent recordings
+fail closed instead of returning a partially trusted Factory Session.
+
+### Privacy and portability limits
+
+JavaScript recordings deliberately omit raw JavaScript runtime state, raw
+checkpoint bodies, provider transcripts, and child-dispatch lists. Redaction
+metadata reports those omissions without copying removed values into the
+recording. Secret counts are bounded metadata, not a list of secret names or
+contents.
+
+Artifact and event entries are inspection summaries. A hash or digest proves
+consistency with referenced public data; it does not make omitted source,
+artifact content, checkpoint state, provider output, or child-dispatch history
+recoverable. Keep recordings private even with these omissions because public
+results, labels, and event summaries can still contain customer information.
 
 ## Sensitivity and Retention
 
