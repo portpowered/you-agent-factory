@@ -222,6 +222,10 @@ func TestCompatibilityAliasRegister_WorkflowAliasesHaveCompleteMeasurableRecords
 	if len(rows) != len(expectations) {
 		t.Fatalf("workflow compatibility register has %d entries, want %d", len(rows), len(expectations))
 	}
+	windowsRows := compatibilityRegisterRows(strings.ReplaceAll(register, "\n", "\r\n"))
+	if len(windowsRows) != len(expectations) {
+		t.Fatalf("CRLF workflow compatibility register has %d entries, want %d", len(windowsRows), len(expectations))
+	}
 	for _, expectation := range expectations {
 		row, ok := findCompatibilityRow(rows, expectation.alias)
 		if !ok {
@@ -253,7 +257,7 @@ func compatibilityRegisterRows(register string) []map[string]string {
 		if !strings.HasPrefix(line, "| ") || strings.HasPrefix(line, "| Compatibility alias") {
 			continue
 		}
-		columns := strings.Split(strings.Trim(line, "|"), "|")
+		columns := strings.Split(strings.Trim(strings.TrimSpace(line), "|"), "|")
 		if len(columns) != 6 || strings.TrimSpace(columns[0]) == "---" {
 			continue
 		}
