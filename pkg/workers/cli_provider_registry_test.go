@@ -115,142 +115,96 @@ func TestCLIProviderIdentity_CompatibleWithProviderBackendScopeNaming(t *testing
 	}
 }
 
+type cliProviderProbeCase struct {
+	name            string
+	command         string
+	presentCommands map[string]bool
+	wantAvailable   bool
+	wantReason      string
+}
+
+func fakeCLIProviderProbeCases() []cliProviderProbeCase {
+	commands := []string{
+		string(interfaces.ModelProviderClaude),
+		string(interfaces.ModelProviderCodex),
+		string(interfaces.ModelProviderCursor),
+		string(interfaces.ModelProviderOpenCode),
+		string(interfaces.ModelProviderGemini),
+		string(interfaces.ModelProviderKiro),
+	}
+	cases := make([]cliProviderProbeCase, 0, len(commands)*2)
+	for _, command := range commands {
+		cases = append(cases,
+			cliProviderProbeCase{
+				name:            command + " present",
+				command:         command,
+				presentCommands: map[string]bool{command: true},
+				wantAvailable:   true,
+			},
+			cliProviderProbeCase{
+				name:            command + " absent",
+				command:         command,
+				presentCommands: map[string]bool{},
+				wantAvailable:   false,
+				wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+			},
+		)
+	}
+	return cases
+}
+
+func assertCLIProviderProbeAvailability(t *testing.T, tc cliProviderProbeCase) {
+	t.Helper()
+
+	var probedCommands []string
+	lookPath = func(file string) (string, error) {
+		probedCommands = append(probedCommands, file)
+		if tc.presentCommands[file] {
+			return "/fake/bin/" + file, nil
+		}
+		return "", exec.ErrNotFound
+	}
+
+	registration, ok := CLIProviderRegistrationByCommand(tc.command)
+	if !ok {
+		t.Fatalf("CLIProviderRegistrationByCommand(%q) miss", tc.command)
+	}
+
+	got := ProbeCLIProviderAvailability(registration)
+	if got.Available != tc.wantAvailable {
+		t.Fatalf("available = %v, want %v", got.Available, tc.wantAvailable)
+	}
+	if got.UnavailableReason != tc.wantReason {
+		t.Fatalf("unavailable reason = %q, want %q", got.UnavailableReason, tc.wantReason)
+	}
+	if len(probedCommands) != 1 || probedCommands[0] != tc.command {
+		t.Fatalf("lookPath commands = %#v, want [%q]", probedCommands, tc.command)
+	}
+}
+
 func TestProbeCLIProviderAvailability_FakePATHPresentAndAbsentPerCommand(t *testing.T) {
 	originalLookPath := lookPath
 	defer func() {
 		lookPath = originalLookPath
 	}()
 
-	cases := []struct {
-		name            string
-		command         string
-		presentCommands map[string]bool
-		wantAvailable   bool
-		wantReason      string
-	}{
-		{
-			name:            "claude present",
-			command:         string(interfaces.ModelProviderClaude),
-			presentCommands: map[string]bool{string(interfaces.ModelProviderClaude): true},
-			wantAvailable:   true,
-		},
-		{
-			name:            "claude absent",
-			command:         string(interfaces.ModelProviderClaude),
-			presentCommands: map[string]bool{},
-			wantAvailable:   false,
-			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
-		},
-		{
-			name:            "codex present",
-			command:         string(interfaces.ModelProviderCodex),
-			presentCommands: map[string]bool{string(interfaces.ModelProviderCodex): true},
-			wantAvailable:   true,
-		},
-		{
-			name:            "codex absent",
-			command:         string(interfaces.ModelProviderCodex),
-			presentCommands: map[string]bool{},
-			wantAvailable:   false,
-			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
-		},
-		{
-			name:            "cursor present",
-			command:         string(interfaces.ModelProviderCursor),
-			presentCommands: map[string]bool{string(interfaces.ModelProviderCursor): true},
-			wantAvailable:   true,
-		},
-		{
-			name:            "cursor absent",
-			command:         string(interfaces.ModelProviderCursor),
-			presentCommands: map[string]bool{},
-			wantAvailable:   false,
-			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
-		},
-		{
-			name:            "opencode present",
-			command:         string(interfaces.ModelProviderOpenCode),
-			presentCommands: map[string]bool{string(interfaces.ModelProviderOpenCode): true},
-			wantAvailable:   true,
-		},
-		{
-			name:            "opencode absent",
-			command:         string(interfaces.ModelProviderOpenCode),
-			presentCommands: map[string]bool{},
-			wantAvailable:   false,
-			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
-		},
-		{
-			name:            "gemini present",
-			command:         string(interfaces.ModelProviderGemini),
-			presentCommands: map[string]bool{string(interfaces.ModelProviderGemini): true},
-			wantAvailable:   true,
-		},
-		{
-			name:            "gemini absent",
-			command:         string(interfaces.ModelProviderGemini),
-			presentCommands: map[string]bool{},
-			wantAvailable:   false,
-			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
-		},
-		{
-			name:            "kiro present",
-			command:         string(interfaces.ModelProviderKiro),
-			presentCommands: map[string]bool{string(interfaces.ModelProviderKiro): true},
-			wantAvailable:   true,
-		},
-		{
-			name:            "kiro absent",
-			command:         string(interfaces.ModelProviderKiro),
-			presentCommands: map[string]bool{},
-			wantAvailable:   false,
-			wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
-		},
-	}
-
-	for _, tc := range cases {
+	for _, tc := range fakeCLIProviderProbeCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			var probedCommands []string
-			lookPath = func(file string) (string, error) {
-				probedCommands = append(probedCommands, file)
-				if tc.presentCommands[file] {
-					return "/fake/bin/" + file, nil
-				}
-				return "", exec.ErrNotFound
-			}
-
-			registration, ok := CLIProviderRegistrationByCommand(tc.command)
-			if !ok {
-				t.Fatalf("CLIProviderRegistrationByCommand(%q) miss", tc.command)
-			}
-
-			got := ProbeCLIProviderAvailability(registration)
-			if got.Available != tc.wantAvailable {
-				t.Fatalf("available = %v, want %v", got.Available, tc.wantAvailable)
-			}
-			if got.UnavailableReason != tc.wantReason {
-				t.Fatalf("unavailable reason = %q, want %q", got.UnavailableReason, tc.wantReason)
-			}
-			if len(probedCommands) != 1 || probedCommands[0] != tc.command {
-				t.Fatalf("lookPath commands = %#v, want [%q]", probedCommands, tc.command)
-			}
+			assertCLIProviderProbeAvailability(t, tc)
 		})
 	}
 }
 
-func TestDiscoverRegisteredCLIProvider_FakePATHDiscoveryTables(t *testing.T) {
-	originalLookPath := lookPath
-	defer func() {
-		lookPath = originalLookPath
-	}()
+type cliProviderDiscoveryCase struct {
+	name              string
+	presentCommands   map[string]bool
+	wantSelected      *CLIProviderIdentity
+	wantUnavailable   []CLIProviderIdentity
+	wantProbeCommands []string
+}
 
-	cases := []struct {
-		name              string
-		presentCommands   map[string]bool
-		wantSelected      *CLIProviderIdentity
-		wantUnavailable   []CLIProviderIdentity
-		wantProbeCommands []string
-	}{
+func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
+	return []cliProviderDiscoveryCase{
 		{
 			name: "all providers present prefers highest rank codex",
 			presentCommands: map[string]bool{
@@ -276,9 +230,9 @@ func TestDiscoverRegisteredCLIProvider_FakePATHDiscoveryTables(t *testing.T) {
 			presentCommands: map[string]bool{
 				string(interfaces.ModelProviderClaude):   true,
 				string(interfaces.ModelProviderCursor):   true,
-				string(interfaces.ModelProviderOpenCode):   true,
-				string(interfaces.ModelProviderGemini):     true,
-				string(interfaces.ModelProviderKiro):       true,
+				string(interfaces.ModelProviderOpenCode): true,
+				string(interfaces.ModelProviderGemini):   true,
+				string(interfaces.ModelProviderKiro):     true,
 			},
 			wantSelected: ptrCLIProviderIdentity(CLIProviderIdentityClaude),
 			wantUnavailable: []CLIProviderIdentity{
@@ -302,7 +256,7 @@ func TestDiscoverRegisteredCLIProvider_FakePATHDiscoveryTables(t *testing.T) {
 			name: "only lower ranked providers present selects gemini before kiro",
 			presentCommands: map[string]bool{
 				string(interfaces.ModelProviderGemini): true,
-				string(interfaces.ModelProviderKiro):   true,
+				string(interfaces.ModelProviderKiro): true,
 			},
 			wantSelected: ptrCLIProviderIdentity(CLIProviderIdentityGemini),
 			wantUnavailable: []CLIProviderIdentity{
@@ -326,74 +280,91 @@ func TestDiscoverRegisteredCLIProvider_FakePATHDiscoveryTables(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, tc := range cases {
+func registeredCLIProviderProbeCommands() []string {
+	return []string{
+		string(interfaces.ModelProviderCodex),
+		string(interfaces.ModelProviderClaude),
+		string(interfaces.ModelProviderCursor),
+		string(interfaces.ModelProviderOpenCode),
+		string(interfaces.ModelProviderGemini),
+		string(interfaces.ModelProviderKiro),
+	}
+}
+
+func assertCLIProviderDiscovery(t *testing.T, tc cliProviderDiscoveryCase) {
+	t.Helper()
+
+	var probedCommands []string
+	lookPath = func(file string) (string, error) {
+		probedCommands = append(probedCommands, file)
+		if tc.presentCommands[file] {
+			return "/fake/bin/" + file, nil
+		}
+		return "", exec.ErrNotFound
+	}
+
+	got := DiscoverRegisteredCLIProvider()
+
+	if tc.wantSelected == nil {
+		if got.Selected != nil {
+			t.Fatalf("selected = %#v, want nil", got.Selected)
+		}
+	} else if got.Selected == nil {
+		t.Fatalf("selected = nil, want %q", *tc.wantSelected)
+	} else if got.Selected.Identity != *tc.wantSelected {
+		t.Fatalf("selected identity = %q, want %q", got.Selected.Identity, *tc.wantSelected)
+	}
+
+	if len(got.Availability) != len(RegisteredCLIProviders()) {
+		t.Fatalf("availability len = %d, want %d", len(got.Availability), len(RegisteredCLIProviders()))
+	}
+
+	unavailable := make(map[CLIProviderIdentity]struct{})
+	for _, availability := range got.Availability {
+		if availability.Available {
+			continue
+		}
+		if availability.UnavailableReason != string(interfaces.WorkFailureTypeMissingExecutable) {
+			t.Fatalf("identity %q unavailable reason = %q, want %q",
+				availability.Registration.Identity,
+				availability.UnavailableReason,
+				interfaces.WorkFailureTypeMissingExecutable,
+			)
+		}
+		unavailable[availability.Registration.Identity] = struct{}{}
+	}
+
+	for _, identity := range tc.wantUnavailable {
+		if _, ok := unavailable[identity]; !ok {
+			t.Fatalf("identity %q not classified unavailable", identity)
+		}
+	}
+
+	wantProbeCommands := tc.wantProbeCommands
+	if wantProbeCommands == nil {
+		wantProbeCommands = registeredCLIProviderProbeCommands()
+	}
+	if len(probedCommands) != len(wantProbeCommands) {
+		t.Fatalf("lookPath commands = %#v, want %#v", probedCommands, wantProbeCommands)
+	}
+	for i, wantCommand := range wantProbeCommands {
+		if probedCommands[i] != wantCommand {
+			t.Fatalf("lookPath command[%d] = %q, want %q", i, probedCommands[i], wantCommand)
+		}
+	}
+}
+
+func TestDiscoverRegisteredCLIProvider_FakePATHDiscoveryTables(t *testing.T) {
+	originalLookPath := lookPath
+	defer func() {
+		lookPath = originalLookPath
+	}()
+
+	for _, tc := range fakeCLIProviderDiscoveryCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			var probedCommands []string
-			lookPath = func(file string) (string, error) {
-				probedCommands = append(probedCommands, file)
-				if tc.presentCommands[file] {
-					return "/fake/bin/" + file, nil
-				}
-				return "", exec.ErrNotFound
-			}
-
-			got := DiscoverRegisteredCLIProvider()
-
-			if tc.wantSelected == nil {
-				if got.Selected != nil {
-					t.Fatalf("selected = %#v, want nil", got.Selected)
-				}
-			} else if got.Selected == nil {
-				t.Fatalf("selected = nil, want %q", *tc.wantSelected)
-			} else if got.Selected.Identity != *tc.wantSelected {
-				t.Fatalf("selected identity = %q, want %q", got.Selected.Identity, *tc.wantSelected)
-			}
-
-			if len(got.Availability) != len(RegisteredCLIProviders()) {
-				t.Fatalf("availability len = %d, want %d", len(got.Availability), len(RegisteredCLIProviders()))
-			}
-
-			unavailable := make(map[CLIProviderIdentity]struct{})
-			for _, availability := range got.Availability {
-				if availability.Available {
-					continue
-				}
-				if availability.UnavailableReason != string(interfaces.WorkFailureTypeMissingExecutable) {
-					t.Fatalf("identity %q unavailable reason = %q, want %q",
-						availability.Registration.Identity,
-						availability.UnavailableReason,
-						interfaces.WorkFailureTypeMissingExecutable,
-					)
-				}
-				unavailable[availability.Registration.Identity] = struct{}{}
-			}
-
-			for _, identity := range tc.wantUnavailable {
-				if _, ok := unavailable[identity]; !ok {
-					t.Fatalf("identity %q not classified unavailable", identity)
-				}
-			}
-
-			wantProbeCommands := tc.wantProbeCommands
-			if wantProbeCommands == nil {
-				wantProbeCommands = []string{
-					string(interfaces.ModelProviderCodex),
-					string(interfaces.ModelProviderClaude),
-					string(interfaces.ModelProviderCursor),
-					string(interfaces.ModelProviderOpenCode),
-					string(interfaces.ModelProviderGemini),
-					string(interfaces.ModelProviderKiro),
-				}
-			}
-			if len(probedCommands) != len(wantProbeCommands) {
-				t.Fatalf("lookPath commands = %#v, want %#v", probedCommands, wantProbeCommands)
-			}
-			for i, wantCommand := range wantProbeCommands {
-				if probedCommands[i] != wantCommand {
-					t.Fatalf("lookPath command[%d] = %q, want %q", i, probedCommands[i], wantCommand)
-				}
-			}
+			assertCLIProviderDiscovery(t, tc)
 		})
 	}
 }
