@@ -5,8 +5,9 @@ replay-compatible artifact, locate the saved file after shutdown, or re-run
 from a saved history without dispatching live workers again.
 
 `you docs record-replay` is the canonical guide for `--record`, `--replay`, and
-`--no-record`. See `you docs authoring-factories` for the full
-factory setup workflow.
+`--no-record`, including JavaScript-orchestrated Factory Sessions. See `you docs
+javascript-workflows` for the supported JavaScript authoring contract and `you
+docs authoring-factories` for the full factory setup workflow.
 
 ## Default Recording On Live Runs
 
@@ -63,6 +64,64 @@ These flag pairs are rejected for the same invocation:
 - `--record` with `--replay`
 - `--no-record` with `--record`
 
+A flag validation failure happens before a new Factory Session starts, so there
+is no new session, Dispatch, FactoryArtifact, or FactoryEvent to inspect.
+
+## JavaScript Recording Contract
+
+A JavaScript workflow is recorded as the same canonical `FactorySession`
+history used by other orchestrators. The replay artifact is an event envelope,
+not a JavaScript VM snapshot. When the corresponding fact exists, the durable
+history can include:
+
+- the Factory Session id and JavaScript orchestrator identity;
+- the workflow source reference and source digest, effective policy digest, and
+  argument-schema digest recorded at session start;
+- ordered lifecycle, phase, checkpoint-reference, Dispatch, artifact, result,
+  and terminal `FactoryEvent` summaries;
+- checkpoint labels, resumability status, snapshot digests, and
+  `FactoryArtifact` references;
+- final, partial, or failed result availability and bounded failure detail; and
+- artifact audit mode, capture metadata, and redaction counts where those facts
+  were emitted by the run.
+
+These are high-level replay facts. A recording does **not** promise raw VM
+state, goja/runtime phase internals, raw checkpoint state bodies, a private
+child-dispatch list, provider transcripts, or provider reasoning. Inspect live
+or reconstructed work through the Factory Session, `Dispatch`,
+`FactoryArtifact`, and `FactoryEvent` surfaces. A digest proves identity or
+compatibility; it cannot be used to recover the source, arguments, policy, or
+checkpoint body.
+
+### Checkpoints and resume state
+
+`workflow.checkpoint({label, state})` accepts JSON-compatible application state.
+The runtime persists approved state through its checkpoint store and publishes
+a checkpoint artifact/reference plus a bounded summary. It does not serialize
+the JavaScript stack, closures, timers, module state, or host runtime.
+
+On an approved resume path, `workflow.resumeState()` exposes the application
+state associated with the selected checkpoint. On a fresh start it returns
+`undefined`. The replay file's public checkpoint event contains the reference,
+digest, label, and resumability facts, not a supported raw checkpoint-body
+interface. Use Factory Session resume and artifact APIs rather than reading or
+editing replay JSON to inject resume state.
+
+### Replay observations
+
+Replay reconstructs canonical Factory Session lifecycle status and the recorded
+event and artifact summaries. A completed recording can reconstruct final
+result availability; an interrupted or failed recording can reconstruct its
+terminal/partial status, safe failure detail, and the checkpoint or artifact
+references emitted before termination. Older recordings expose only the facts
+their events actually contain.
+
+Replay never dispatches live child work. It applies recorded Dispatch request
+and response facts and therefore does not contact model providers, rerun script
+workers, or resume a JavaScript VM. To continue from checkpoint application
+state, use the supported Factory Session resume path; to reproduce fresh live
+work, start a new Factory Session.
+
 ## Example Commands
 
 Record to an explicit path you control:
@@ -104,7 +163,11 @@ files fit together.
 ## Sensitivity and Retention
 
 Replay artifacts are sensitive because they can contain prompts, payloads,
-stdout, stderr, and diagnostic metadata.
+stdout, stderr, result summaries, and diagnostic metadata. Redaction metadata
+describes redaction that occurred; it is not a guarantee that every
+customer-authored payload is safe to disclose. Treat the whole artifact as
+sensitive, avoid putting secrets in workflow arguments or artifacts, and review
+an explicitly recorded file before sharing it.
 
 The first version does not delete old artifacts automatically. Manage retention
 in your own home directory or CI workspace. Do not commit generated replay
