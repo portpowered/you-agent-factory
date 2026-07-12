@@ -51,7 +51,7 @@ func ReplayRecording(value recording.Recording) (RecordingReplayProjection, erro
 	artifacts := replayArtifactSummaries(value.Artifacts)
 	result := replayResultProjection(value, artifacts)
 	session := replaySessionRead(value, result, artifacts)
-	events, err := replayEventSummaries(value.Session.ID, value.Events)
+	events, err := replayEventSummaries(value.Session.ID, value.Events, value.Checkpoint, value.Artifacts)
 	if err != nil {
 		return RecordingReplayProjection{}, err
 	}
@@ -150,13 +150,21 @@ func replayArtifactSummaries(values []recording.ArtifactSummary) []fse.ArtifactS
 	return artifacts
 }
 
-func replayEventSummaries(sessionID string, values []recording.EventSummary) ([]json.RawMessage, error) {
+func replayEventSummaries(sessionID string, values []recording.EventSummary, checkpoint *recording.CheckpointSummary, artifacts []recording.ArtifactSummary) ([]json.RawMessage, error) {
 	events := make([]json.RawMessage, 0, len(values))
 	for _, value := range values {
+		context := map[string]any{"sessionId": sessionID, "sequence": value.Sequence, "eventTime": value.Timestamp}
+		payload := map[string]any{"artifactIds": value.ArtifactIDs}
+		if value.CheckpointID != "" {
+			context["checkpointId"] = value.CheckpointID
+			if checkpoint != nil && checkpoint.ID == value.CheckpointID {
+				payload = replayCheckpointEventPayload(*checkpoint, artifacts)
+			}
+		}
 		event := map[string]any{
 			"id": value.ID, "type": value.Type,
-			"context": map[string]any{"sessionId": sessionID, "sequence": value.Sequence, "eventTime": value.Timestamp},
-			"payload": map[string]any{"artifactIds": value.ArtifactIDs},
+			"context": context,
+			"payload": payload,
 		}
 		encoded, err := json.Marshal(event)
 		if err != nil {
@@ -165,4 +173,23 @@ func replayEventSummaries(sessionID string, values []recording.EventSummary) ([]
 		events = append(events, encoded)
 	}
 	return events, nil
+}
+
+func replayCheckpointEventPayload(checkpoint recording.CheckpointSummary, artifacts []recording.ArtifactSummary) map[string]any {
+	payload := map[string]any{
+		"checkpointId": checkpoint.ID,
+		"label":        checkpoint.Label,
+		"summary":      checkpoint.Summary,
+		"timestamp":    checkpoint.Timestamp,
+	}
+	for _, artifact := range artifacts {
+		if artifact.ID == checkpoint.ArtifactID {
+			payload["artifactRef"] = map[string]any{
+				"id": artifact.ID, "kind": artifact.Kind, "visibility": artifact.Visibility,
+				"contentHash": artifact.ContentHash, "sizeBytes": artifact.SizeBytes,
+			}
+			break
+		}
+	}
+	return payload
 }

@@ -30,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -1705,6 +1706,103 @@ func TestFactoryService_PortableReplayRestoresTerminalPublicReadsWithoutLiveExec
 				t.Fatalf("live provider calls = %d", provider.calls.Load())
 			}
 		})
+	}
+}
+
+func TestFactoryService_PortableReplayRestoresPausedAndResumedPublicReadsWithoutLiveExecution(t *testing.T) {
+	for _, tc := range []struct {
+		name, status, resultStatus string
+		resumed                    bool
+	}{
+		{name: "paused", status: "PAUSED", resultStatus: "PARTIAL"},
+		{name: "resumed", status: "SUCCEEDED", resultStatus: "FINAL", resumed: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const sessionID = "dur-sess-lifecycle-recording"
+			path := filepath.Join(t.TempDir(), "session.json")
+			events := []json.RawMessage{
+				json.RawMessage(`{"id":"event-started","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T19:00:00Z"},"payload":{}}`),
+				json.RawMessage(`{"id":"event-checkpoint","type":"JAVASCRIPT_CHECKPOINT_REF","context":{"sequence":1,"eventTime":"2026-07-12T19:00:02Z","checkpointId":"checkpoint-public-1"},"payload":{"artifactIds":["artifact-checkpoint"]}}`),
+				json.RawMessage(`{"id":"event-paused","type":"SESSION_PAUSED","context":{"sequence":2,"eventTime":"2026-07-12T19:00:03Z"},"payload":{}}`),
+			}
+			result := &recording.CanonicalResult{Status: tc.resultStatus, Mode: "partial", PrimaryResult: json.RawMessage(`{"step":1}`), ArtifactIDs: []string{"artifact-checkpoint"}}
+			if tc.resumed {
+				events = append(events,
+					json.RawMessage(`{"id":"event-resumed","type":"SESSION_RESUMED","context":{"sequence":3,"eventTime":"2026-07-12T19:00:04Z"},"payload":{}}`),
+					json.RawMessage(`{"id":"event-completed","type":"SESSION_COMPLETED","context":{"sequence":4,"eventTime":"2026-07-12T19:00:05Z"},"payload":{"artifactIds":["artifact-checkpoint"]}}`),
+				)
+				result.Mode = "final"
+				result.PrimaryResult = json.RawMessage(`{"step":2}`)
+			}
+			checkpointAt := time.Date(2026, 7, 12, 19, 0, 2, 0, time.UTC)
+			value, err := recording.Build(recording.CanonicalFacts{
+				SessionID: sessionID, Status: tc.status, OrchestratorKind: "JAVASCRIPT",
+				SourceRef: "workflow/lifecycle.js", SourceHash: "sha256:" + strings.Repeat("d", 64),
+				PolicyHash: "sha256:" + strings.Repeat("e", 64), Arguments: map[string]any{"topic": "safe"},
+				Artifacts: []recording.CanonicalArtifact{{ID: "artifact-checkpoint", Kind: "CHECKPOINT", Visibility: "PUBLIC", ContentHash: "sha256:" + strings.Repeat("f", 64), SizeBytes: 12, CreatedAt: checkpointAt}},
+				Events:    events, Result: result,
+				Checkpoint: &recording.CanonicalCheckpoint{ID: "checkpoint-public-1", Label: "Approval", Summary: "Waiting for operator input", Timestamp: checkpointAt, ArtifactID: "artifact-checkpoint"},
+			})
+			if err != nil {
+				t.Fatalf("Build recording: %v", err)
+			}
+			if err := recording.Write(path, value); err != nil {
+				t.Fatalf("Write recording: %v", err)
+			}
+
+			provider := &countingReplayProvider{}
+			svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{ReplayPath: path, Dir: t.TempDir(), SystemConfigPath: filepath.Join(t.TempDir(), "config.json"), ProviderOverride: provider})
+			if err != nil {
+				t.Fatalf("BuildFactoryService: %v", err)
+			}
+			if err := svc.Run(context.Background()); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			assertPortableLifecycleReplayReads(t, svc, provider, sessionID, tc.status, tc.resultStatus, tc.resumed, len(events))
+		})
+	}
+}
+
+func assertPortableLifecycleReplayReads(t *testing.T, svc *FactoryService, provider *countingReplayProvider, sessionID, status, resultStatus string, resumed bool, eventCount int) {
+	t.Helper()
+	session, err := svc.GetDurableFactorySession(context.Background(), sessionID)
+	if err != nil || string(session.Status) != status || session.Lifecycle == nil || session.Lifecycle.PausedAt == nil {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	if resumed != (session.Lifecycle.ResumedAt != nil) {
+		t.Fatalf("resumed lifecycle = %#v, want resumed %t", session.Lifecycle, resumed)
+	}
+	resultRead, err := svc.GetDurableFactorySessionResult(context.Background(), sessionID, factoryapi.GetFactorySessionResultsParams{})
+	if err != nil || string(resultRead.ResultStatus) != resultStatus {
+		t.Fatalf("result = %#v, %v", resultRead, err)
+	}
+	assertPortableLifecycleReplayInspection(t, svc, provider, sessionID, eventCount)
+}
+
+func assertPortableLifecycleReplayInspection(t *testing.T, svc *FactoryService, provider *countingReplayProvider, sessionID string, eventCount int) {
+	t.Helper()
+	eventRead, err := svc.ReadDurableFactorySessionEvents(context.Background(), sessionID, factoryapi.GetEventsBySessionIdParams{})
+	if err != nil || len(eventRead.History) != eventCount {
+		t.Fatalf("events = %#v, %v", eventRead, err)
+	}
+	checkpointEvent, marshalErr := json.Marshal(eventRead.History[1])
+	if marshalErr != nil || !strings.Contains(string(checkpointEvent), "checkpoint-public-1") || !strings.Contains(string(checkpointEvent), "Waiting for operator input") {
+		t.Fatalf("checkpoint event = %s, %v", checkpointEvent, marshalErr)
+	}
+	artifactRead, err := svc.GetDurableFactorySessionArtifact(context.Background(), sessionID, "artifact-checkpoint")
+	if err != nil || artifactRead.Id != "artifact-checkpoint" {
+		t.Fatalf("checkpoint artifact = %#v, %v", artifactRead, err)
+	}
+	dispatches, err := svc.ListDurableFactorySessionDispatches(context.Background(), sessionID)
+	if err != nil || len(dispatches.Dispatches) != 0 {
+		t.Fatalf("dispatches = %#v, %v", dispatches, err)
+	}
+	_, controlErr := svc.ResumeDurableFactorySession(context.Background(), sessionID, factoryapi.FactorySessionLifecycleControlRequest{})
+	if !errors.Is(controlErr, recordingreplay.ErrNonLiveReplay) {
+		t.Fatalf("resume replay error = %v, want ErrNonLiveReplay", controlErr)
+	}
+	if provider.calls.Load() != 0 {
+		t.Fatalf("live provider calls = %d", provider.calls.Load())
 	}
 }
 
