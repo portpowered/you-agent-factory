@@ -409,6 +409,8 @@ func appendAcceptedSessionLifecycleEventIfNeeded(
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this runtime control helper keeps dispatch-targeted lifecycle validation and replay together on one seam.
+// backendsizecheck:ignore-function accepted control mutation, persistence rollback, and idempotent replay remain atomic on this runtime seam.
+// pkgmaintcheck:ignore-function-lines accepted control mutation, persistence rollback, and idempotent replay remain atomic on this runtime seam.
 func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	ctx context.Context,
 	sessionID string,
@@ -476,6 +478,8 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
+		priorState := cloneRuntimeSessionState(state)
+		priorRunCancel := state.runCancel
 		previousStatus := state.session.Status
 		if operation == LifecycleControlInterruptDispatch {
 			s.recordAcceptedRuntimeInterrupt(state, dispatchSummary, interrupt)
@@ -496,6 +500,13 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 				)
 			} else {
 				state.events = rebuildRuntimeSessionCanonicalEvents(state)
+			}
+		}
+		if operation == LifecycleControlPause {
+			if err := s.persistSessionSnapshot(cloneRuntimeSessionState(state)); err != nil {
+				*state = cloneRuntimeSessionState(&priorState)
+				state.runCancel = priorRunCancel
+				return LifecycleControlResult{}, err
 			}
 		}
 	}
@@ -615,6 +626,7 @@ func runtimeExtendedLifecycleControlResultFromState(
 	}
 	return result
 }
+
 // AppendSessionLifecycleControlEvent records one accepted pause or resume control on
 // the canonical session event stream without rebuilding earlier lifecycle events.
 func AppendSessionLifecycleControlEvent(

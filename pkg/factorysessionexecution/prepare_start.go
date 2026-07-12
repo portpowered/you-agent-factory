@@ -446,9 +446,9 @@ func appendCanonicalRuntimeDispatchLifecycleEvents(
 		if dispatch.Status == DispatchStatusInterrupted {
 			continue
 		}
-		dispatchEvents = append(dispatchEvents, buildDispatchQueuedEvent(events, dispatchEvents, session, dispatch, source, index)...)
+		dispatchEvents = buildDispatchQueuedEvent(events, dispatchEvents, session, dispatch, source, index)
 		if isReconciledDispatchStatus(dispatch.Status) {
-			dispatchEvents = append(dispatchEvents, buildDispatchReconciledEvent(events, dispatchEvents, session, dispatch, source)...)
+			dispatchEvents = buildDispatchReconciledEvent(events, dispatchEvents, session, dispatch, source)
 		}
 	}
 	if len(dispatchEvents) == 0 {
@@ -579,7 +579,10 @@ func dispatchLifecycleEvent(
 	source string,
 	payload json.RawMessage,
 ) json.RawMessage {
-	sequence, sessionSequence := nextCanonicalEventSequence(append(baseEvents, append(pending, json.RawMessage("{}"))...))
+	priorEvents := make([]json.RawMessage, 0, len(baseEvents)+len(pending))
+	priorEvents = append(priorEvents, baseEvents...)
+	priorEvents = append(priorEvents, pending...)
+	sequence, sessionSequence := nextCanonicalEventSequence(priorEvents)
 	eventTime := canonicalSessionEventTime(session).Add(time.Duration(sessionSequence) * time.Second)
 
 	sessionID := session.SessionID
@@ -655,5 +658,21 @@ func insertEventsBeforeSessionCompleted(events, insertion []json.RawMessage) []j
 	merged = append(merged, events[:completedIndex]...)
 	merged = append(merged, insertion...)
 	merged = append(merged, events[completedIndex:]...)
-	return merged
+	return resequenceCanonicalEvents(merged)
+}
+
+func resequenceCanonicalEvents(events []json.RawMessage) []json.RawMessage {
+	for index, raw := range events {
+		var event canonicalFactoryEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			continue
+		}
+		event.Context.Sequence = index + 1
+		event.Context.Tick = index + 1
+		event.Context.SessionSequence = intPtr(index)
+		if encoded, err := json.Marshal(event); err == nil {
+			events[index] = encoded
+		}
+	}
+	return events
 }
