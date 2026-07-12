@@ -1,0 +1,12 @@
+{
+  "recordingKind": "you.factory-session.javascript.recording",
+  "schemaVersion": "1",
+  "replayCompatibilityVersion": "1",
+  "session": {"id": "session-historical-001", "status": "FAILED", "orchestratorKind": "JAVASCRIPT"},
+  "source": {"ref": "workflow/historical.js", "hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+  "argumentsDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "policyHash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "artifacts": [],
+  "events": [{"id": "event-historical-1", "type": "SESSION_FAILED", "sequence": 0, "timestamp": "2025-12-01T00:00:00Z"}],
+  "redaction": {"runtimeStateOmitted": true, "checkpointBodiesOmitted": true, "providerTranscriptsOmitted": true, "childDispatchesOmitted": true, "secretsRedacted": 0}
+}
