@@ -16,6 +16,264 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
+func TestProjectAliasInventory_BuildsDocumentShape(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectAliasInventory()
+	if err != nil {
+		t.Fatalf("ProjectAliasInventory() error = %v", err)
+	}
+	if inventory.FormatVersion != mcpfactorysession.ToolInventoryFormatVersion {
+		t.Fatalf("formatVersion = %q, want %q", inventory.FormatVersion, mcpfactorysession.ToolInventoryFormatVersion)
+	}
+	if inventory.ProtocolVersion != mcpfactorysession.ToolInventoryProtocolVersion {
+		t.Fatalf("protocolVersion = %q, want %q", inventory.ProtocolVersion, mcpfactorysession.ToolInventoryProtocolVersion)
+	}
+	if len(inventory.Aliases) != len(mcpfactorysession.DiscoverCompatibilityAliases()) {
+		t.Fatalf("alias count = %d, want %d", len(inventory.Aliases), len(mcpfactorysession.DiscoverCompatibilityAliases()))
+	}
+}
+
+func TestProjectAliasInventory_AliasesSortedByName(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectAliasInventory()
+	if err != nil {
+		t.Fatalf("ProjectAliasInventory() error = %v", err)
+	}
+	names := make([]string, len(inventory.Aliases))
+	for i, alias := range inventory.Aliases {
+		names[i] = alias.Name
+	}
+	sorted := slices.Clone(names)
+	slices.Sort(sorted)
+	if !slices.Equal(names, sorted) {
+		t.Fatalf("alias names = %#v, want sorted %#v", names, sorted)
+	}
+}
+
+func TestProjectAliasInventory_EachAliasHasMappingFields(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectAliasInventory()
+	if err != nil {
+		t.Fatalf("ProjectAliasInventory() error = %v", err)
+	}
+	for _, alias := range inventory.Aliases {
+		if strings.TrimSpace(alias.Name) == "" {
+			t.Fatal("alias name is required")
+		}
+		if strings.TrimSpace(alias.CanonicalName) == "" {
+			t.Fatalf("alias %q canonical name is required", alias.Name)
+		}
+		if strings.TrimSpace(alias.Description) == "" {
+			t.Fatalf("alias %q description is required", alias.Name)
+		}
+		if !alias.CompatibilityOnly {
+			t.Fatalf("alias %q compatibilityOnly = false, want true", alias.Name)
+		}
+		if !strings.HasPrefix(alias.Name, "you.workflow.") {
+			t.Fatalf("alias %q should use workflow vocabulary", alias.Name)
+		}
+		if !strings.HasPrefix(alias.CanonicalName, "you.factory_session.") {
+			t.Fatalf("alias %q canonical target %q should use Factory Session vocabulary", alias.Name, alias.CanonicalName)
+		}
+	}
+}
+
+func TestProjectAliasInventory_MatchesDiscoverCompatibilityAliases(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectAliasInventory()
+	if err != nil {
+		t.Fatalf("ProjectAliasInventory() error = %v", err)
+	}
+	byName := aliasInventoryByName(t, inventory)
+	for _, discovered := range mcpfactorysession.DiscoverCompatibilityAliases() {
+		entry, ok := byName[discovered.Name]
+		if !ok {
+			t.Fatalf("inventory missing compatibility alias %q", discovered.Name)
+		}
+		if entry.CanonicalName != discovered.CanonicalName {
+			t.Fatalf("alias %q canonicalName = %q, want %q", discovered.Name, entry.CanonicalName, discovered.CanonicalName)
+		}
+		if entry.CompatibilityOnly != discovered.CompatibilityOnly {
+			t.Fatalf("alias %q compatibilityOnly = %v, want %v", discovered.Name, entry.CompatibilityOnly, discovered.CompatibilityOnly)
+		}
+		if entry.Description != discovered.Description {
+			t.Fatalf("alias %q description = %q, want %q", discovered.Name, entry.Description, discovered.Description)
+		}
+	}
+}
+
+func TestProjectAliasInventory_RepeatExtractionIsByteIdentical(t *testing.T) {
+	first, err := mcpfactorysession.MarshalAliasInventoryJSON(mustProjectAliasInventory(t))
+	if err != nil {
+		t.Fatalf("first MarshalAliasInventoryJSON() error = %v", err)
+	}
+	second, err := mcpfactorysession.MarshalAliasInventoryJSON(mustProjectAliasInventory(t))
+	if err != nil {
+		t.Fatalf("second MarshalAliasInventoryJSON() error = %v", err)
+	}
+	if string(first) != string(second) {
+		t.Fatalf("repeat extraction differs:\nfirst=%s\nsecond=%s", first, second)
+	}
+}
+
+func TestVerifyProjectedAliasInventory_PassesForLiveRegistry(t *testing.T) {
+	if err := mcpfactorysession.VerifyProjectedAliasInventory(); err != nil {
+		t.Fatalf("VerifyProjectedAliasInventory() error = %v", err)
+	}
+}
+
+func TestVerifyAliasInventory_RejectsAliasInCanonicalToolInventory(t *testing.T) {
+	inventory := mcpfactorysession.AliasInventory{
+		FormatVersion:   mcpfactorysession.ToolInventoryFormatVersion,
+		ProtocolVersion: mcpfactorysession.ToolInventoryProtocolVersion,
+		Aliases: []mcpfactorysession.AliasInventoryEntry{{
+			Name:              mcpfactorysession.ToolWorkflowValidate,
+			CanonicalName:     mcpfactorysession.ToolValidateSource,
+			CompatibilityOnly: true,
+			Description:       "probe alias that leaked into canonical inventory",
+		}},
+	}
+	toolInventory, err := mcpfactorysession.ProjectToolInventory()
+	if err != nil {
+		t.Fatalf("ProjectToolInventory() error = %v", err)
+	}
+	for i := range toolInventory.Tools {
+		if toolInventory.Tools[i].Name == mcpfactorysession.ToolWorkflowValidate {
+			t.Fatal("canonical tool inventory should not contain workflow alias names")
+		}
+	}
+	if err := mcpfactorysession.VerifyAliasInventory(inventory); err != nil {
+		t.Fatalf("VerifyAliasInventory() error = %v", err)
+	}
+}
+
+func TestVerifyAliasInventory_FailsWhenCanonicalTargetMissing(t *testing.T) {
+	inventory := mcpfactorysession.AliasInventory{
+		FormatVersion:   mcpfactorysession.ToolInventoryFormatVersion,
+		ProtocolVersion: mcpfactorysession.ToolInventoryProtocolVersion,
+		Aliases: []mcpfactorysession.AliasInventoryEntry{{
+			Name:              "you.workflow.probe",
+			CanonicalName:     "you.factory_session.unregistered_probe",
+			CompatibilityOnly: true,
+			Description:       "probe alias with missing canonical target",
+		}},
+	}
+	err := mcpfactorysession.VerifyAliasInventory(inventory)
+	if err == nil {
+		t.Fatal("VerifyAliasInventory() error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), "you.factory_session.unregistered_probe") {
+		t.Fatalf("VerifyAliasInventory() error = %v, want missing canonical target", err)
+	}
+}
+
+func TestVerifyAliasInventory_FailsWhenResolveToolNameDisagrees(t *testing.T) {
+	inventory := mcpfactorysession.AliasInventory{
+		FormatVersion:   mcpfactorysession.ToolInventoryFormatVersion,
+		ProtocolVersion: mcpfactorysession.ToolInventoryProtocolVersion,
+		Aliases: []mcpfactorysession.AliasInventoryEntry{{
+			Name:              mcpfactorysession.ToolWorkflowValidate,
+			CanonicalName:     mcpfactorysession.ToolStartSync,
+			CompatibilityOnly: true,
+			Description:       "probe alias with incorrect canonical mapping",
+		}},
+	}
+	err := mcpfactorysession.VerifyAliasInventory(inventory)
+	if err == nil {
+		t.Fatal("VerifyAliasInventory() error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), mcpfactorysession.ToolWorkflowValidate) {
+		t.Fatalf("VerifyAliasInventory() error = %v, want alias name", err)
+	}
+}
+
+func TestAliasBaselineFixtureMatchesProjectedInventory(t *testing.T) {
+	baselinePath := testutil.MustRepoPath(t, mcpfactorysession.AliasInventoryBaselineRelativePath)
+	baseline, err := os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatalf("read baseline fixture: %v", err)
+	}
+	projected, err := mcpfactorysession.MarshalAliasInventoryJSON(mustProjectAliasInventory(t))
+	if err != nil {
+		t.Fatalf("MarshalAliasInventoryJSON() error = %v", err)
+	}
+	if string(baseline) != string(projected) {
+		t.Fatalf("baseline fixture differs from projected inventory:\nbaseline=%s\nprojected=%s", baseline, projected)
+	}
+}
+
+func TestAliasBaselineFixtureMatchesDiscoverCompatibilityAliases(t *testing.T) {
+	baselinePath := testutil.MustRepoPath(t, mcpfactorysession.AliasInventoryBaselineRelativePath)
+	baseline, err := os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatalf("read baseline fixture: %v", err)
+	}
+	var inventory mcpfactorysession.AliasInventory
+	if err := json.Unmarshal(baseline, &inventory); err != nil {
+		t.Fatalf("unmarshal baseline fixture: %v", err)
+	}
+	if err := mcpfactorysession.VerifyAliasInventory(inventory); err != nil {
+		t.Fatalf("VerifyAliasInventory(baseline) error = %v", err)
+	}
+	byName := aliasInventoryByName(t, inventory)
+	for _, discovered := range mcpfactorysession.DiscoverCompatibilityAliases() {
+		entry, ok := byName[discovered.Name]
+		if !ok {
+			t.Fatalf("baseline missing compatibility alias %q", discovered.Name)
+		}
+		if entry.CanonicalName != discovered.CanonicalName {
+			t.Fatalf("baseline alias %q canonicalName = %q, want %q", discovered.Name, entry.CanonicalName, discovered.CanonicalName)
+		}
+	}
+}
+
+func TestAliasBaselineFixture_AliasNamesAbsentFromCanonicalToolsBaseline(t *testing.T) {
+	aliasBaselinePath := testutil.MustRepoPath(t, mcpfactorysession.AliasInventoryBaselineRelativePath)
+	toolBaselinePath := testutil.MustRepoPath(t, mcpfactorysession.ToolInventoryBaselineRelativePath)
+
+	aliasBaseline, err := os.ReadFile(aliasBaselinePath)
+	if err != nil {
+		t.Fatalf("read alias baseline fixture: %v", err)
+	}
+	toolBaseline, err := os.ReadFile(toolBaselinePath)
+	if err != nil {
+		t.Fatalf("read tool baseline fixture: %v", err)
+	}
+
+	var aliasInventory mcpfactorysession.AliasInventory
+	if err := json.Unmarshal(aliasBaseline, &aliasInventory); err != nil {
+		t.Fatalf("unmarshal alias baseline fixture: %v", err)
+	}
+	var toolInventory mcpfactorysession.ToolInventory
+	if err := json.Unmarshal(toolBaseline, &toolInventory); err != nil {
+		t.Fatalf("unmarshal tool baseline fixture: %v", err)
+	}
+
+	canonicalNames := make(map[string]struct{}, len(toolInventory.Tools))
+	for _, tool := range toolInventory.Tools {
+		canonicalNames[tool.Name] = struct{}{}
+	}
+	for _, alias := range aliasInventory.Aliases {
+		if _, ok := canonicalNames[alias.Name]; ok {
+			t.Fatalf("compatibility alias %q must not appear in canonical mcp-tools.json baseline", alias.Name)
+		}
+	}
+}
+
+func mustProjectAliasInventory(t *testing.T) mcpfactorysession.AliasInventory {
+	t.Helper()
+	inventory, err := mcpfactorysession.ProjectAliasInventory()
+	if err != nil {
+		t.Fatalf("ProjectAliasInventory() error = %v", err)
+	}
+	return inventory
+}
+
+func aliasInventoryByName(t *testing.T, inventory mcpfactorysession.AliasInventory) map[string]mcpfactorysession.AliasInventoryEntry {
+	t.Helper()
+	byName := make(map[string]mcpfactorysession.AliasInventoryEntry, len(inventory.Aliases))
+	for _, alias := range inventory.Aliases {
+		byName[alias.Name] = alias
+	}
+	return byName
+}
+
 func TestProjectResultPolicyInventory_BuildsDocumentShape(t *testing.T) {
 	inventory, err := mcpfactorysession.ProjectResultPolicyInventory()
 	if err != nil {
@@ -407,4 +665,130 @@ func namesFromProtocolErrorFixtures(fixtures []mcpfactorysession.ProtocolErrorFi
 		names[i] = fixture.Name
 	}
 	return names
+}
+
+func TestVerifyProjectedMCPBoundaryInventories_PassesForLiveProjections(t *testing.T) {
+	if err := mcpfactorysession.VerifyProjectedMCPBoundaryInventories(); err != nil {
+		t.Fatalf("VerifyProjectedMCPBoundaryInventories() error = %v", err)
+	}
+}
+
+func TestProjectMCPBoundaryInventories_DoesNotMutateDiscovery(t *testing.T) {
+	beforeTools := cloneToolDefinitions(t, mcpfactorysession.DiscoverTools())
+	beforeAliases := cloneCompatibilityAliases(t, mcpfactorysession.DiscoverCompatibilityAliases())
+
+	if _, err := mcpfactorysession.ProjectToolInventory(); err != nil {
+		t.Fatalf("ProjectToolInventory() error = %v", err)
+	}
+	if _, err := mcpfactorysession.ProjectAliasInventory(); err != nil {
+		t.Fatalf("ProjectAliasInventory() error = %v", err)
+	}
+	if _, err := mcpfactorysession.ProjectResultPolicyInventory(); err != nil {
+		t.Fatalf("ProjectResultPolicyInventory() error = %v", err)
+	}
+
+	afterTools := mcpfactorysession.DiscoverTools()
+	afterAliases := mcpfactorysession.DiscoverCompatibilityAliases()
+	if len(beforeTools) != len(afterTools) {
+		t.Fatalf("discover tool count changed: before=%d after=%d", len(beforeTools), len(afterTools))
+	}
+	for i := range beforeTools {
+		beforeJSON, err := json.Marshal(beforeTools[i])
+		if err != nil {
+			t.Fatalf("marshal before tool %q: %v", beforeTools[i].Name, err)
+		}
+		afterJSON, err := json.Marshal(afterTools[i])
+		if err != nil {
+			t.Fatalf("marshal after tool %q: %v", afterTools[i].Name, err)
+		}
+		if string(beforeJSON) != string(afterJSON) {
+			t.Fatalf("tool %q mutated by boundary inventory projections", beforeTools[i].Name)
+		}
+	}
+	if len(beforeAliases) != len(afterAliases) {
+		t.Fatalf("compatibility alias count changed: before=%d after=%d", len(beforeAliases), len(afterAliases))
+	}
+	for i := range beforeAliases {
+		beforeJSON, err := json.Marshal(beforeAliases[i])
+		if err != nil {
+			t.Fatalf("marshal before alias %q: %v", beforeAliases[i].Name, err)
+		}
+		afterJSON, err := json.Marshal(afterAliases[i])
+		if err != nil {
+			t.Fatalf("marshal after alias %q: %v", afterAliases[i].Name, err)
+		}
+		if string(beforeJSON) != string(afterJSON) {
+			t.Fatalf("compatibility alias %q mutated by boundary inventory projections", beforeAliases[i].Name)
+		}
+	}
+}
+
+func TestMCPBoundaryBaselineFixtures_RepeatExtractionIsByteIdentical(t *testing.T) {
+	aliasFirst, err := mcpfactorysession.MarshalAliasInventoryJSON(mustProjectAliasInventory(t))
+	if err != nil {
+		t.Fatalf("first MarshalAliasInventoryJSON() error = %v", err)
+	}
+	aliasSecond, err := mcpfactorysession.MarshalAliasInventoryJSON(mustProjectAliasInventory(t))
+	if err != nil {
+		t.Fatalf("second MarshalAliasInventoryJSON() error = %v", err)
+	}
+	if string(aliasFirst) != string(aliasSecond) {
+		t.Fatalf("alias repeat extraction differs")
+	}
+
+	policyFirst, err := mcpfactorysession.MarshalResultPolicyInventoryJSON(mustProjectResultPolicyInventory(t))
+	if err != nil {
+		t.Fatalf("first MarshalResultPolicyInventoryJSON() error = %v", err)
+	}
+	policySecond, err := mcpfactorysession.MarshalResultPolicyInventoryJSON(mustProjectResultPolicyInventory(t))
+	if err != nil {
+		t.Fatalf("second MarshalResultPolicyInventoryJSON() error = %v", err)
+	}
+	if string(policyFirst) != string(policySecond) {
+		t.Fatalf("result-policy repeat extraction differs")
+	}
+
+	aliasBaselinePath := testutil.MustRepoPath(t, mcpfactorysession.AliasInventoryBaselineRelativePath)
+	aliasBaseline, err := os.ReadFile(aliasBaselinePath)
+	if err != nil {
+		t.Fatalf("read alias baseline fixture: %v", err)
+	}
+	if string(aliasBaseline) != string(aliasFirst) {
+		t.Fatalf("alias baseline fixture differs from projected inventory")
+	}
+
+	policyBaselinePath := testutil.MustRepoPath(t, mcpfactorysession.ResultPolicyInventoryBaselineRelativePath)
+	policyBaseline, err := os.ReadFile(policyBaselinePath)
+	if err != nil {
+		t.Fatalf("read result-policy baseline fixture: %v", err)
+	}
+	if string(policyBaseline) != string(policyFirst) {
+		t.Fatalf("result-policy baseline fixture differs from projected inventory")
+	}
+}
+
+func TestMCPBoundaryBaselineFixtures_EveryDeclaredAliasResolvesOnce(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectAliasInventory()
+	if err != nil {
+		t.Fatalf("ProjectAliasInventory() error = %v", err)
+	}
+	if err := mcpfactorysession.VerifyAliasInventory(inventory); err != nil {
+		t.Fatalf("VerifyAliasInventory() error = %v", err)
+	}
+	if len(inventory.Aliases) != len(mcpfactorysession.DiscoverCompatibilityAliases()) {
+		t.Fatalf("alias count = %d, want %d", len(inventory.Aliases), len(mcpfactorysession.DiscoverCompatibilityAliases()))
+	}
+}
+
+func cloneCompatibilityAliases(t *testing.T, aliases []mcpfactorysession.CompatibilityAlias) []mcpfactorysession.CompatibilityAlias {
+	t.Helper()
+	encoded, err := json.Marshal(aliases)
+	if err != nil {
+		t.Fatalf("marshal compatibility aliases: %v", err)
+	}
+	var cloned []mcpfactorysession.CompatibilityAlias
+	if err := json.Unmarshal(encoded, &cloned); err != nil {
+		t.Fatalf("unmarshal compatibility aliases: %v", err)
+	}
+	return cloned
 }
