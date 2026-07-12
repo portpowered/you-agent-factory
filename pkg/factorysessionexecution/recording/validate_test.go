@@ -74,6 +74,84 @@ func TestStrictDecodeRejectsProhibitedOrUnknownDetail(t *testing.T) {
 	assertDiagnostic(t, err, recording.CodeMalformedContract, "")
 }
 
+func TestValidationRejectsMalformedPublicSummaries(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		code   recording.DiagnosticCode
+		path   string
+		mutate func(*recording.Recording)
+	}{
+		{"missing session id", recording.CodeInvalidIdentity, "session.id", func(r *recording.Recording) { r.Session.ID = "" }},
+		{"unknown session status", recording.CodeInvalidSummary, "session.status", func(r *recording.Recording) { r.Session.Status = "UNKNOWN" }},
+		{"wrong orchestrator", recording.CodeInvalidSummary, "session.orchestratorKind", func(r *recording.Recording) { r.Session.OrchestratorKind = "GO" }},
+		{"missing source ref", recording.CodeInvalidSummary, "source.ref", func(r *recording.Recording) { r.Source.Ref = "" }},
+		{"incomplete artifact", recording.CodeInvalidSummary, "artifacts[0]", func(r *recording.Recording) { r.Artifacts[0].Kind = "" }},
+		{"duplicate artifact", recording.CodeInvalidIdentity, "artifacts[1].id", func(r *recording.Recording) { r.Artifacts = append(r.Artifacts, r.Artifacts[0]) }},
+		{"artifact digest", recording.CodeInvalidDigest, "artifacts[0].contentHash", func(r *recording.Recording) { r.Artifacts[0].ContentHash = "invalid" }},
+		{"negative artifact size", recording.CodeInvalidSummary, "artifacts[0].sizeBytes", func(r *recording.Recording) { r.Artifacts[0].SizeBytes = -1 }},
+		{"incomplete event", recording.CodeInvalidSummary, "events[0]", func(r *recording.Recording) { r.Events[0].Type = "" }},
+		{"duplicate event", recording.CodeInvalidIdentity, "events[1].id", func(r *recording.Recording) { r.Events[1].ID = r.Events[0].ID }},
+		{"unsupported result status", recording.CodeInvalidSummary, "result.status", func(r *recording.Recording) { r.Result.Status = "UNKNOWN" }},
+		{"unsupported result mode", recording.CodeInvalidSummary, "result.mode", func(r *recording.Recording) { r.Result.Mode = "unknown" }},
+		{"unknown result artifact", recording.CodeInvalidSummary, "result.artifactIds[0]", func(r *recording.Recording) { r.Result.ArtifactIDs[0] = "missing" }},
+		{"hash without result", recording.CodeInvalidDigest, "result.contentHash", func(r *recording.Recording) { r.Result.ContentHash = digestForTest('5') }},
+		{"invalid inline result", recording.CodeInvalidSummary, "result.primaryResult", func(r *recording.Recording) { r.Result.PrimaryResult = []byte(`{`) }},
+		{"failed final result", recording.CodeInvalidSummary, "result.status", func(r *recording.Recording) { r.Session.Status = "FAILED" }},
+		{"omission flag false", recording.CodeInvalidSummary, "redaction", func(r *recording.Recording) { r.Redaction.RuntimeStateOmitted = false }},
+		{"negative redaction count", recording.CodeInvalidSummary, "redaction.secretsRedacted", func(r *recording.Recording) { r.Redaction.SecretsRedacted = -1 }},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			value, err := loadFixture("valid-v2.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.mutate(&value)
+			assertDiagnostic(t, recording.Validate(value), tc.code, tc.path)
+		})
+	}
+}
+
+func TestValidationRejectsMalformedCheckpointSummaries(t *testing.T) {
+	valid, err := loadFixture("valid-v2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid.Checkpoint = &recording.CheckpointSummary{ID: "checkpoint-1", Timestamp: valid.Events[0].Timestamp}
+	assertDiagnostic(t, recording.Validate(valid), recording.CodeInvalidSummary, "checkpoint.id")
+
+	valid.Events[0].CheckpointID = "checkpoint-1"
+	valid.Checkpoint.ArtifactID = "missing"
+	assertDiagnostic(t, recording.Validate(valid), recording.CodeInvalidSummary, "checkpoint.artifactId")
+
+	valid.Checkpoint.ArtifactID = "artifact-1"
+	valid.Checkpoint.ID = ""
+	assertDiagnostic(t, recording.Validate(valid), recording.CodeInvalidSummary, "checkpoint")
+}
+
+func TestDiagnosticErrorIncludesPathWhenPresent(t *testing.T) {
+	if got := (*recording.Diagnostic)(nil).Error(); got != "" {
+		t.Fatalf("nil diagnostic error = %q", got)
+	}
+	withoutPath := &recording.Diagnostic{Message: "message"}
+	if got := withoutPath.Error(); got != "message" {
+		t.Fatalf("diagnostic error = %q", got)
+	}
+	withPath := &recording.Diagnostic{Path: "session.id", Message: "is required"}
+	if got := withPath.Error(); got != "session.id: is required" {
+		t.Fatalf("diagnostic error = %q", got)
+	}
+}
+
+func digestForTest(character byte) string {
+	return "sha256:" + string(bytes.Repeat([]byte{character}, 64))
+}
+
 func loadFixture(name string) (recording.Recording, error) {
 	file, err := os.Open(filepath.Join("testdata", name))
 	if err != nil {
