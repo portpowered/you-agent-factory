@@ -10,8 +10,6 @@ import (
 )
 
 const (
-	valueTypeBool = "bool"
-
 	completionKindFilename = "filename"
 
 	flagBindingNone = ""
