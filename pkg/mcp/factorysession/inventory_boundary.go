@@ -309,8 +309,22 @@ func VerifyResultPolicyInventory(inventory ResultPolicyInventory) error {
 	if err := verifyProtocolErrorTransportPolicy(inventory.ProtocolErrorTransport); err != nil {
 		return err
 	}
+	if err := verifySuccessTransportPolicy(inventory.SuccessTransport); err != nil {
+		return err
+	}
+	if err := verifyResultPolicySuccessFixtures(inventory.Fixtures); err != nil {
+		return err
+	}
+	if err := verifyDomainErrorFixtures(inventory.DomainErrorFixtures); err != nil {
+		return err
+	}
+	if err := verifyProtocolErrorFixtures(inventory.ProtocolErrorFixtures); err != nil {
+		return err
+	}
+	return nil
+}
 
-	policy := inventory.SuccessTransport
+func verifySuccessTransportPolicy(policy SuccessTransportPolicy) error {
 	if policy.ContentItemCount != 1 {
 		return fmt.Errorf("success transport contentItemCount = %d, want 1", policy.ContentItemCount)
 	}
@@ -336,9 +350,12 @@ func VerifyResultPolicyInventory(inventory ResultPolicyInventory) error {
 			return fmt.Errorf("success transport unsupportedFields missing %q", unsupported)
 		}
 	}
+	return nil
+}
 
-	seenFixtureNames := make(map[string]struct{}, len(inventory.Fixtures))
-	for _, fixture := range inventory.Fixtures {
+func verifyResultPolicySuccessFixtures(fixtures []ResultPolicyFixture) error {
+	seenFixtureNames := make(map[string]struct{}, len(fixtures))
+	for _, fixture := range fixtures {
 		if _, duplicate := seenFixtureNames[fixture.Name]; duplicate {
 			return fmt.Errorf("result-policy fixture %q appears more than once", fixture.Name)
 		}
@@ -359,9 +376,12 @@ func VerifyResultPolicyInventory(inventory ResultPolicyInventory) error {
 			return err
 		}
 	}
+	return nil
+}
 
-	seenDomainFixtureNames := make(map[string]struct{}, len(inventory.DomainErrorFixtures))
-	for _, fixture := range inventory.DomainErrorFixtures {
+func verifyDomainErrorFixtures(fixtures []DomainErrorFixture) error {
+	seenDomainFixtureNames := make(map[string]struct{}, len(fixtures))
+	for _, fixture := range fixtures {
 		if _, duplicate := seenDomainFixtureNames[fixture.Name]; duplicate {
 			return fmt.Errorf("domain-error fixture %q appears more than once", fixture.Name)
 		}
@@ -370,9 +390,12 @@ func VerifyResultPolicyInventory(inventory ResultPolicyInventory) error {
 			return err
 		}
 	}
+	return nil
+}
 
-	seenProtocolFixtureNames := make(map[string]struct{}, len(inventory.ProtocolErrorFixtures))
-	for _, fixture := range inventory.ProtocolErrorFixtures {
+func verifyProtocolErrorFixtures(fixtures []ProtocolErrorFixture) error {
+	seenProtocolFixtureNames := make(map[string]struct{}, len(fixtures))
+	for _, fixture := range fixtures {
 		if _, duplicate := seenProtocolFixtureNames[fixture.Name]; duplicate {
 			return fmt.Errorf("protocol-error fixture %q appears more than once", fixture.Name)
 		}
