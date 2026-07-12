@@ -443,6 +443,169 @@ func TestSelectCLIProvider_NoAgentHarnessTables(t *testing.T) {
 	}
 }
 
+type cliProviderFullPrecedenceMatrixCase struct {
+	name                    string
+	input                   CLIProviderSelectionInput
+	presentCommands         map[string]bool
+	wantSource              CLIProviderSelectionSource
+	wantIdentity            CLIProviderIdentity
+	wantFailure             bool
+	wantFailureCode         CLIProviderSelectionFailureCode
+	assertRegistrationOrder bool
+	forbidIdentities        []CLIProviderIdentity
+}
+
+func fakeCLIProviderFullPrecedenceMatrixCases() []cliProviderFullPrecedenceMatrixCase {
+	allPresent := map[string]bool{
+		string(interfaces.ModelProviderCodex):    true,
+		string(interfaces.ModelProviderClaude):   true,
+		string(interfaces.ModelProviderCursor):   true,
+		string(interfaces.ModelProviderOpenCode): true,
+		string(interfaces.ModelProviderGemini):   true,
+		string(interfaces.ModelProviderKiro):     true,
+	}
+	return []cliProviderFullPrecedenceMatrixCase{
+		{
+			name: "edge explicit invocation wins over factory system and discovery",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: string(interfaces.ModelProviderClaude),
+				FactoryDefault:     string(interfaces.ModelProviderCodex),
+				SystemDefault:      string(interfaces.ModelProviderGemini),
+			},
+			presentCommands: allPresent,
+			wantSource:      CLIProviderSelectionSourceExplicitInvocation,
+			wantIdentity:    CLIProviderIdentityClaude,
+		},
+		{
+			name: "edge factory default wins when explicit unset",
+			input: CLIProviderSelectionInput{
+				FactoryDefault: string(interfaces.ModelProviderCursor),
+				SystemDefault:  string(interfaces.ModelProviderCodex),
+			},
+			presentCommands: allPresent,
+			wantSource:      CLIProviderSelectionSourceFactoryDefault,
+			wantIdentity:    CLIProviderIdentityCursor,
+		},
+		{
+			name: "edge system default wins when explicit and factory unset",
+			input: CLIProviderSelectionInput{
+				SystemDefault: string(interfaces.ModelProviderGemini),
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCodex): true,
+			},
+			wantSource:   CLIProviderSelectionSourceSystemDefault,
+			wantIdentity: CLIProviderIdentityGemini,
+		},
+		{
+			name: "edge discovery wins when all configured defaults unset",
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCursor):   true,
+				string(interfaces.ModelProviderOpenCode): true,
+				string(interfaces.ModelProviderGemini):   true,
+			},
+			wantSource:              CLIProviderSelectionSourceDiscovery,
+			wantIdentity:            CLIProviderIdentityCursor,
+			assertRegistrationOrder: true,
+		},
+		{
+			name:            "edge empty selection returns NO_AGENT_HARNESS",
+			presentCommands: map[string]bool{},
+			wantFailure:     true,
+			wantFailureCode: CLIProviderSelectionFailureNoAgentHarness,
+		},
+		{
+			name: "forbidden deprecated DEFAULT openai and legacy values do not inject codex fallback",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: interfaces.WorkerModelProviderDefault,
+				FactoryDefault:     "openai",
+				SystemDefault:      "legacy-model-default",
+			},
+			presentCommands:  map[string]bool{},
+			wantFailure:      true,
+			wantFailureCode:  CLIProviderSelectionFailureNoAgentHarness,
+			forbidIdentities: []CLIProviderIdentity{CLIProviderIdentityCodex},
+		},
+	}
+}
+
+func reversedCLIProviderRegistrations() []CLIProviderRegistration {
+	reversed := RegisteredCLIProviders()
+	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+		reversed[i], reversed[j] = reversed[j], reversed[i]
+	}
+	return reversed
+}
+
+func assertCLIProviderFullPrecedenceMatrix(t *testing.T, tc cliProviderFullPrecedenceMatrixCase) {
+	t.Helper()
+
+	runSelection := func(registrations []CLIProviderRegistration) CLIProviderSelectionResult {
+		discovery := fakeCLIProviderDiscoveryView(tc.presentCommands)
+		if registrations != nil {
+			discovery.Registrations = registrations
+		}
+		return SelectCLIProvider(tc.input, discovery)
+	}
+
+	result := runSelection(nil)
+
+	if tc.wantFailure {
+		if result.OK() {
+			t.Fatalf("result = %#v, want failure", result)
+		}
+		if result.Selected != nil {
+			t.Fatalf("selected = %#v, want nil without deprecated model-default injection", result.Selected)
+		}
+		if result.Failure == nil || result.Failure.Code != tc.wantFailureCode {
+			t.Fatalf("failure = %#v, want code %q", result.Failure, tc.wantFailureCode)
+		}
+		for _, forbidden := range tc.forbidIdentities {
+			if result.Selected != nil && result.Selected.Identity == forbidden {
+				t.Fatalf("selected identity = %q, want forbidden deprecated fallback %q", result.Selected.Identity, forbidden)
+			}
+		}
+		return
+	}
+
+	if !result.OK() {
+		t.Fatalf("result = %#v, want success", result)
+	}
+	if result.Source != tc.wantSource {
+		t.Fatalf("source = %q, want %q", result.Source, tc.wantSource)
+	}
+	if result.Selected == nil || result.Selected.Identity != tc.wantIdentity {
+		t.Fatalf("selected = %#v, want identity %q", result.Selected, tc.wantIdentity)
+	}
+
+	if !tc.assertRegistrationOrder {
+		return
+	}
+
+	reversedResult := runSelection(reversedCLIProviderRegistrations())
+	if !reversedResult.OK() {
+		t.Fatalf("reversed registrations result = %#v, want success", reversedResult)
+	}
+	if reversedResult.Source != tc.wantSource {
+		t.Fatalf("reversed registrations source = %q, want %q", reversedResult.Source, tc.wantSource)
+	}
+	if reversedResult.Selected == nil || reversedResult.Selected.Identity != tc.wantIdentity {
+		t.Fatalf(
+			"reversed registrations selected = %#v, want identity %q independent of slice order",
+			reversedResult.Selected,
+			tc.wantIdentity,
+		)
+	}
+}
+
+func TestSelectCLIProvider_FullPrecedenceMatrixTables(t *testing.T) {
+	for _, tc := range fakeCLIProviderFullPrecedenceMatrixCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			assertCLIProviderFullPrecedenceMatrix(t, tc)
+		})
+	}
+}
+
 func TestSelectCLIProvider_DiscoveryIgnoresRegistrationSliceOrder(t *testing.T) {
 	reversed := RegisteredCLIProviders()
 	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
