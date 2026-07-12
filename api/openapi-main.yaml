@@ -784,6 +784,8 @@ paths:
         GET /factory-sessions/{session_id}/dispatches/{dispatch_id}.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/FactoryDispatchPhase'
+        - $ref: '#/components/parameters/FactoryDispatchStatusFilter'
       responses:
         '200':
           description: Dispatch summaries for the targeted session.
@@ -793,6 +795,8 @@ paths:
                 $ref: '#/components/schemas/ListFactorySessionDispatchesResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/dispatches/{dispatch_id}:
@@ -1432,6 +1436,10 @@ components:
       $ref: './components/parameters/FactorySessionResultIncludeArtifacts.yaml'
     DispatchID:
       $ref: './components/parameters/DispatchID.yaml'
+    FactoryDispatchPhase:
+      $ref: './components/parameters/FactoryDispatchPhase.yaml'
+    FactoryDispatchStatusFilter:
+      $ref: './components/parameters/FactoryDispatchStatusFilter.yaml'
     ArtifactID:
       $ref: './components/parameters/ArtifactID.yaml'
     AfterEventId:
@@ -1732,6 +1740,8 @@ components:
       $ref: './components/schemas/api/FactorySessionGetResponse.yaml'
     FactorySessionDurablePhaseSummary:
       $ref: './components/schemas/api/FactorySessionDurablePhaseSummary.yaml'
+    FactorySessionCheckpointRef:
+      $ref: './components/schemas/api/FactorySessionCheckpointRef.yaml'
     FactorySessionDurableProgressCounts:
       $ref: './components/schemas/api/FactorySessionDurableProgressCounts.yaml'
     FactorySessionDurableActionAvailability:

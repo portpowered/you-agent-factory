@@ -1492,8 +1492,9 @@ func (fs *FactoryService) ReadDurableFactorySessionEvents(
 func (fs *FactoryService) ListDurableFactorySessionDispatches(
 	ctx context.Context,
 	sessionID string,
+	params factoryapi.ListFactorySessionDispatchesParams,
 ) (factoryapi.ListFactorySessionDispatchesResponse, error) {
-	return fs.durableSessionAPI().ListDurableFactorySessionDispatches(ctx, sessionID)
+	return fs.durableSessionAPI().ListDurableFactorySessionDispatches(ctx, sessionID, params)
 }
 
 func (fs *FactoryService) GetDurableFactorySessionDispatch(

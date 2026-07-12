@@ -873,6 +873,18 @@ describe("factory sessions read and durable API", () => {
         inFlightDispatches: 1,
         totalDispatches: 3,
       },
+      durableReadModel: expect.objectContaining({
+        dialect: "you-workflow-v1",
+        orchestratorKind: "JAVASCRIPT",
+        phase: "verify",
+        resolvedSource: {
+          kind: "WORKFLOW_NAME",
+          sourceHash: "sha256:js-workflow-release-train",
+          sourceRef: "workflow/release-train",
+        },
+        sessionId: "dur-sess-js-run-n-001",
+        status: "RUNNING",
+      }),
       partialResult: undefined,
       result: undefined,
       resultSummary: undefined,

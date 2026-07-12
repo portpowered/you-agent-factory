@@ -2221,6 +2221,8 @@ export interface components {
       phase?: string;
       /** @description Per-phase dispatch summaries for workflow inspection. */
       phaseSummaries?: components["schemas"]["FactorySessionDurablePhaseSummary"][];
+      /** @description Latest durable checkpoint, absent when no checkpoint has been written. */
+      latestCheckpoint?: components["schemas"]["FactorySessionCheckpointRef"];
       progress?: components["schemas"]["FactorySessionDurableProgressCounts"];
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage?: components["schemas"]["FactorySessionUsage"];
@@ -2252,6 +2254,14 @@ export interface components {
       /** @description Dispatches that failed in this phase. */
       failedDispatchCount?: number;
     };
+    FactorySessionCheckpointRef: {
+      /** @description Stable checkpoint identifier used for later inspection or resume. */
+      id: string;
+      /** @description Customer-visible checkpoint label when supplied by the orchestrator. */
+      label?: string;
+      /** @description Phase active when the checkpoint was written. */
+      phase?: string;
+    };
     FactorySessionDurableProgressCounts: {
       /** @description Total durable dispatches recorded for the session. */
       totalDispatches?: number;
@@ -2261,6 +2271,18 @@ export interface components {
       failedDispatches?: number;
       /** @description Dispatches currently running or awaiting completion. */
       inFlightDispatches?: number;
+      /** @description Dispatches waiting to start. */
+      queuedDispatches?: number;
+      /** @description Dispatches currently running. */
+      runningDispatches?: number;
+      /** @description Dispatches canceled before completion. */
+      canceledDispatches?: number;
+      /** @description Dispatches that exceeded their execution deadline. */
+      timedOutDispatches?: number;
+      /** @description Dispatches skipped by orchestration policy. */
+      skippedDispatches?: number;
+      /** @description Dispatches interrupted after starting. */
+      interruptedDispatches?: number;
       /** @description Number of workflow phases represented in phase summaries. */
       phaseCount?: number;
     };
@@ -5029,6 +5051,10 @@ export interface components {
     FactorySessionResultIncludeArtifacts: boolean;
     /** @description Stable factory-session dispatch identifier. */
     DispatchID: string;
+    /** @description Exact canonical phase identifier. Unknown phases return an empty collection. */
+    FactoryDispatchPhase: string;
+    /** @description Canonical Dispatch lifecycle status. */
+    FactoryDispatchStatusFilter: components["schemas"]["FactoryDispatchStatus"];
     /** @description Stable factory-session artifact identifier. */
     ArtifactID: string;
     /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
@@ -5789,7 +5815,12 @@ export interface operations {
   };
   listFactorySessionDispatches: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Exact canonical phase identifier. Unknown phases return an empty collection. */
+        phase?: components["parameters"]["FactoryDispatchPhase"];
+        /** @description Canonical Dispatch lifecycle status. */
+        status?: components["parameters"]["FactoryDispatchStatusFilter"];
+      };
       header?: never;
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
@@ -5808,6 +5839,7 @@ export interface operations {
           "application/json": components["schemas"]["ListFactorySessionDispatchesResponse"];
         };
       };
+      400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };

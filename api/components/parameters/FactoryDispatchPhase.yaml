@@ -1,0 +1,7 @@
+name: phase
+in: query
+required: false
+description: Exact canonical phase identifier. Unknown phases return an empty collection.
+schema:
+  type: string
+  minLength: 1

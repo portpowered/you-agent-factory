@@ -32,6 +32,7 @@ export function factorySessionDetailQueryKey(
 
 export interface FactorySessionDetailData {
   dispatches?: components["schemas"]["FactoryDispatch"][];
+  durableReadModel?: FactorySessionDurableReadModel;
   durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
