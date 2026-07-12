@@ -246,6 +246,28 @@ func writeFixtureToTemp(t *testing.T, rel string) string {
 	return path
 }
 
+func TestMarshalInputInventoryJSON_IsByteIdenticalAcrossRepeatedProjections(t *testing.T) {
+	t.Parallel()
+
+	first := operatorconfig.ProjectInputInventory()
+	second := operatorconfig.ProjectInputInventory()
+
+	firstJSON, err := operatorconfig.MarshalInputInventoryJSON(first)
+	if err != nil {
+		t.Fatalf("first MarshalInputInventoryJSON() error = %v", err)
+	}
+	secondJSON, err := operatorconfig.MarshalInputInventoryJSON(second)
+	if err != nil {
+		t.Fatalf("second MarshalInputInventoryJSON() error = %v", err)
+	}
+	if !bytes.Equal(firstJSON, secondJSON) {
+		t.Fatalf("repeated operator config input inventory json differs")
+	}
+	if firstJSON[len(firstJSON)-1] != '\n' {
+		t.Fatalf("operator config input inventory json missing trailing newline")
+	}
+}
+
 func TestProjectInputInventory_MatchesCommittedBaseline(t *testing.T) {
 	inventory := operatorconfig.ProjectInputInventory()
 	got, err := operatorconfig.MarshalInputInventoryJSON(inventory)

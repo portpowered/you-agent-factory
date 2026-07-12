@@ -85,6 +85,28 @@ func TestProjectTopologyInventory_RecordsRequiredFieldsAndLayers(t *testing.T) {
 	}
 }
 
+func TestMarshalCanonicalJSON_IsByteIdenticalAcrossRepeatedProjections(t *testing.T) {
+	t.Parallel()
+
+	first := globalconfiginventory.ProjectTopologyInventory()
+	second := globalconfiginventory.ProjectTopologyInventory()
+
+	firstJSON, err := globalconfiginventory.MarshalCanonicalJSON(first)
+	if err != nil {
+		t.Fatalf("first MarshalCanonicalJSON() error = %v", err)
+	}
+	secondJSON, err := globalconfiginventory.MarshalCanonicalJSON(second)
+	if err != nil {
+		t.Fatalf("second MarshalCanonicalJSON() error = %v", err)
+	}
+	if !bytes.Equal(firstJSON, secondJSON) {
+		t.Fatalf("repeated topology inventory json differs")
+	}
+	if firstJSON[len(firstJSON)-1] != '\n' {
+		t.Fatalf("topology inventory json missing trailing newline")
+	}
+}
+
 func TestProjectTopologyInventory_MatchesCommittedBaseline(t *testing.T) {
 	inventory := globalconfiginventory.ProjectTopologyInventory()
 	got, err := globalconfiginventory.MarshalCanonicalJSON(inventory)
