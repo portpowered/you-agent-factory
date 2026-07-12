@@ -68,11 +68,10 @@ TTS-only escape hatch.
 3. Built-in catalog materialization on first use
 
 On first invocation, `@you/tts` materializes into the global root using the
-normal named-factory persist pipeline. Scoped names use hierarchical safe
-segments on disk:
+normal named-factory persist pipeline. Scoped names are URL-encoded on disk:
 
 ```text
-~/.you-agent-factory/you-agent-factories/@you/tts/
+~/.you-agent-factory/you-agent-factories/@you%2Ftts/
 ```
 
 Inspect the materialized factory:

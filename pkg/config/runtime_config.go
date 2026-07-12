@@ -770,7 +770,7 @@ type namedFactoryPersistHooks struct {
 }
 
 func resolveNamedFactoryPersistPayload(
-	canonicalName string,
+	segment string,
 	canonicalFactoryJSON []byte,
 	prepared *PreparedFactoryLayoutPayload,
 ) (*interfaces.FactoryConfig, []byte, error) {
@@ -778,7 +778,7 @@ func resolveNamedFactoryPersistPayload(
 	case prepared != nil:
 		return prepared.Config, prepared.Canonical, nil
 	case len(canonicalFactoryJSON) > 0:
-		prepared, err := PrepareFactoryLayoutPayload(canonicalName, canonicalFactoryJSON)
+		prepared, err := PrepareFactoryLayoutPayload(segment, canonicalFactoryJSON)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -799,33 +799,26 @@ func persistNamedFactory(
 		return nil, fmt.Errorf("factory root is required")
 	}
 
-	canonicalName, err := canonicalNamedFactoryName(name)
+	segment, err := NamedFactoryNameToLayoutSegment(name)
 	if err != nil {
 		return nil, err
 	}
-	targetDir, err := MapNamedFactoryDir(rootDir, canonicalName)
-	if err != nil {
-		return nil, err
-	}
-	if err := validateNamedFactoryTarget(targetDir, canonicalName, options); err != nil {
+	targetDir := filepath.Join(rootDir, segment)
+	if err := validateNamedFactoryTarget(targetDir, segment, options); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create factory root %s: %w", rootDir, err)
 	}
-	stagingParent := filepath.Dir(targetDir)
-	if err := os.MkdirAll(stagingParent, 0o755); err != nil {
-		return nil, fmt.Errorf("create factory parent %s: %w", stagingParent, err)
-	}
-	factoryCfg, canonical, err := resolveNamedFactoryPersistPayload(canonicalName, canonicalFactoryJSON, prepared)
+	factoryCfg, canonical, err := resolveNamedFactoryPersistPayload(segment, canonicalFactoryJSON, prepared)
 	if err != nil {
 		return nil, err
 	}
 
 	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
-	stagingDir, err := os.MkdirTemp(stagingParent, namedFactoryStagingPrefix(canonicalName))
+	stagingDir, err := os.MkdirTemp(rootDir, "."+segment+".staging-")
 	if err != nil {
-		return nil, fmt.Errorf("create staging directory for factory %q: %w", canonicalName, err)
+		return nil, fmt.Errorf("create staging directory for factory %q: %w", segment, err)
 	}
 	keepStaging := false
 	defer func() {
@@ -843,14 +836,14 @@ func persistNamedFactory(
 	}
 	if hooks.afterWrite != nil {
 		if err := hooks.afterWrite(stagingDir); err != nil {
-			return nil, fmt.Errorf("prepare staged factory %q: %w", canonicalName, err)
+			return nil, fmt.Errorf("prepare staged factory %q: %w", segment, err)
 		}
 	}
 	loadRuntimeConfig := hooks.loadRuntimeConfig
 	if loadRuntimeConfig == nil {
 		loadRuntimeConfig = LoadRuntimeConfig
 	}
-	if err := commitNamedFactoryLayout(rootDir, canonicalName, stagingDir, targetDir, options, loadRuntimeConfig); err != nil {
+	if err := commitNamedFactoryLayout(rootDir, segment, stagingDir, targetDir, options, loadRuntimeConfig); err != nil {
 		return nil, err
 	}
 	keepStaging = true
@@ -860,17 +853,17 @@ func persistNamedFactory(
 	}, nil
 }
 
-func validateNamedFactoryTarget(targetDir, canonicalName string, options namedFactoryPersistOptions) error {
+func validateNamedFactoryTarget(targetDir, segment string, options namedFactoryPersistOptions) error {
 	if _, err := os.Stat(targetDir); err == nil {
 		if options.replaceExisting {
 			return nil
 		}
-		return fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, canonicalName)
+		return fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, segment)
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("check existing factory %q: %w", canonicalName, err)
+		return fmt.Errorf("check existing factory %q: %w", segment, err)
 	}
 	if options.replaceExisting {
-		return fmt.Errorf("replace factory %q: %w", canonicalName, os.ErrNotExist)
+		return fmt.Errorf("replace factory %q: %w", segment, os.ErrNotExist)
 	}
 	return nil
 }

@@ -246,11 +246,10 @@ factory is running, use `you docs sessions`, `you docs work`, and
 3. Built-in catalog materialization on first use
 
 On first invocation, `@you/goal` materializes into the global root using the
-normal named-factory persist pipeline. Scoped names use hierarchical safe
-segments on disk:
+normal named-factory persist pipeline. Scoped names are URL-encoded on disk:
 
 ```text
-~/.you-agent-factory/you-agent-factories/@you/goal/
+~/.you-agent-factory/you-agent-factories/@you%2Fgoal/
 ```
 
 Inspect the materialized factory:

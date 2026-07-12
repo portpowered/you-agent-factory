@@ -1065,10 +1065,11 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		return "", false, nil
 	}
 
-	targetDir, err := MapNamedFactoryDir(globalRoot, canonicalName)
+	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
 	if err != nil {
 		return "", false, err
 	}
+	targetDir := filepath.Join(globalRoot, segment)
 	if _, err := os.Stat(targetDir); err == nil {
 		if err := requireFactoryConfig(targetDir); err != nil {
 			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)

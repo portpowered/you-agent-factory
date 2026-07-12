@@ -175,7 +175,7 @@ func TestDelete_ScopedNonCurrentFactoryLeavesCurrentPointerResolvableInExplicitD
 	if want := filepath.Join(rootDir, "alpha"); resolvedDir != want {
 		t.Fatalf("resolved dir = %q, want %q", resolvedDir, want)
 	}
-	if _, err := os.Stat(filepath.Join(rootDir, "@you", "tts")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(rootDir, "@you%2Ftts")); !os.IsNotExist(err) {
 		t.Fatalf("scoped factory directory still exists: %v", err)
 	}
 }

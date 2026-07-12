@@ -225,7 +225,7 @@ func TestSaveFromFile_SetCurrentScopedNameKeepsResolveCurrentFactoryDirAligned(t
 	if err != nil {
 		t.Fatalf("ResolveCurrentFactoryDir: %v", err)
 	}
-	if want := filepath.Join(rootDir, "@you", "tts"); resolvedDir != want {
+	if want := filepath.Join(rootDir, "@you%2Ftts"); resolvedDir != want {
 		t.Fatalf("resolved dir = %q, want %q", resolvedDir, want)
 	}
 }

@@ -1507,7 +1507,7 @@ func setupNamedGoalCLIEnv(t *testing.T) namedGoalCLIEnv {
 }
 
 func materializedGoalDir(homeDir string) string {
-	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
+	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you%2Fgoal")
 }
 
 func executeNamedGoalRun(t *testing.T, root *cobra.Command) {

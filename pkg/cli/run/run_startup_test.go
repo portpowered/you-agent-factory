@@ -463,7 +463,7 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	logger := zap.New(core)
 	resolution := &factoryconfig.NamedFactoryResolution{
 		Name:               "@you/tts",
-		FactoryDir:         "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts",
+		FactoryDir:         "/tmp/home/.you-agent-factory/you-agent-factories/@you%2Ftts",
 		Source:             factoryconfig.NamedFactoryResolutionSourceBuiltin,
 		ProjectRoot:        "/tmp/project/factory",
 		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
@@ -488,7 +488,7 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	if got := context["named_factory_name"]; got != "@you/tts" {
 		t.Fatalf("built-in log name = %#v, want @you/tts", got)
 	}
-	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts" {
+	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/you-agent-factories/@you%2Ftts" {
 		t.Fatalf("built-in log target dir = %#v", got)
 	}
 }

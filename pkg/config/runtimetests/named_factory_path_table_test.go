@@ -9,53 +9,6 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/config"
 )
 
-func TestCrossPlatformNamedFactoryPathTable_ResolveHierarchicalPaths(t *testing.T) {
-	resolveCases := []struct {
-		name         string
-		wantSegments []string
-	}{
-		{name: "alpha", wantSegments: []string{"alpha"}},
-		{name: "@you/goal", wantSegments: []string{"@you", "goal"}},
-		{name: "@you/tts", wantSegments: []string{"@you", "tts"}},
-	}
-
-	for _, tc := range resolveCases {
-		t.Run(tc.name, func(t *testing.T) {
-			rootDir := t.TempDir()
-			project := strings.TrimPrefix(strings.ReplaceAll(tc.name, "/", "-"), "@")
-
-			factoryDir, err := PersistNamedFactory(rootDir, tc.name, namedFactoryPayload(t, project))
-			if err != nil {
-				t.Fatalf("PersistNamedFactory(%q): %v", tc.name, err)
-			}
-
-			wantDir := filepath.Join(append([]string{rootDir}, tc.wantSegments...)...)
-			if factoryDir != wantDir {
-				t.Fatalf("persisted dir = %q, want hierarchical %q", factoryDir, wantDir)
-			}
-			if strings.Contains(factoryDir, "%2F") {
-				t.Fatalf("persisted dir %q must not use percent-encoded scoped leaf names", factoryDir)
-			}
-
-			resolvedDir, err := ResolveNamedFactoryDir(rootDir, tc.name)
-			if err != nil {
-				t.Fatalf("ResolveNamedFactoryDir(%q): %v", tc.name, err)
-			}
-			if resolvedDir != wantDir {
-				t.Fatalf("resolved dir = %q, want %q", resolvedDir, wantDir)
-			}
-
-			entries, err := ListNamedFactories(rootDir)
-			if err != nil {
-				t.Fatalf("ListNamedFactories: %v", err)
-			}
-			if len(entries) != 1 || entries[0].Name != tc.name {
-				t.Fatalf("list entries = %#v, want canonical name %q", entries, tc.name)
-			}
-		})
-	}
-}
-
 func TestCrossPlatformNamedFactoryPathTable_RejectUnsafeNames(t *testing.T) {
 	rejectCases := []struct {
 		name       string
@@ -101,6 +54,48 @@ func TestCrossPlatformNamedFactoryPathTable_RejectUnsafeNames(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.wantSubstr) {
 				t.Fatalf("PersistNamedFactory error = %v, want substring %q", err, tc.wantSubstr)
+			}
+		})
+	}
+}
+
+func TestCrossPlatformNamedFactoryPathTable_MapHierarchicalContract(t *testing.T) {
+	resolveCases := []struct {
+		name         string
+		wantSegments []string
+	}{
+		{name: "alpha", wantSegments: []string{"alpha"}},
+		{name: "@you/goal", wantSegments: []string{"@you", "goal"}},
+		{name: "@you/tts", wantSegments: []string{"@you", "tts"}},
+	}
+
+	for _, tc := range resolveCases {
+		t.Run(tc.name, func(t *testing.T) {
+			rootDir := t.TempDir()
+
+			segments, err := NamedFactoryPathSegments(tc.name)
+			if err != nil {
+				t.Fatalf("NamedFactoryPathSegments(%q): %v", tc.name, err)
+			}
+			if len(segments) != len(tc.wantSegments) {
+				t.Fatalf("segments = %#v, want %#v", segments, tc.wantSegments)
+			}
+			for i := range tc.wantSegments {
+				if segments[i] != tc.wantSegments[i] {
+					t.Fatalf("segment[%d] = %q, want %q", i, segments[i], tc.wantSegments[i])
+				}
+			}
+
+			mappedDir, err := MapNamedFactoryDir(rootDir, tc.name)
+			if err != nil {
+				t.Fatalf("MapNamedFactoryDir(%q): %v", tc.name, err)
+			}
+			wantDir := filepath.Join(append([]string{rootDir}, tc.wantSegments...)...)
+			if mappedDir != wantDir {
+				t.Fatalf("MapNamedFactoryDir(%q) = %q, want %q", tc.name, mappedDir, wantDir)
+			}
+			if strings.Contains(mappedDir, "%2F") {
+				t.Fatalf("mapper dir %q must not use percent-encoded scoped leaf names", mappedDir)
 			}
 		})
 	}

@@ -141,7 +141,22 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 
 	collector := newNamedFactoryListCollector(currentName, len(children))
 	for _, child := range children {
-		collectNamedFactoryFromRootChild(rootDir, child, collector)
+		if !child.IsDir() {
+			continue
+		}
+		name := child.Name()
+		if isReservedNamedFactoryListDir(name) {
+			continue
+		}
+		factoryDir := filepath.Join(rootDir, name)
+		if err := requireFactoryConfig(factoryDir); err != nil {
+			continue
+		}
+		displayName, err := NamedFactoryLayoutSegmentToName(name)
+		if err != nil {
+			continue
+		}
+		collector.append(displayName, factoryDir)
 	}
 
 	entries := collector.entries()
@@ -203,53 +218,6 @@ func (c *namedFactoryListCollector) append(displayName, factoryDir string) {
 
 func (c *namedFactoryListCollector) entries() []NamedFactoryListEntry {
 	return c.items
-}
-
-func collectNamedFactoryFromRootChild(rootDir string, child os.DirEntry, collector *namedFactoryListCollector) {
-	if !child.IsDir() {
-		return
-	}
-	name := child.Name()
-	if isReservedNamedFactoryListDir(name) {
-		return
-	}
-	if strings.HasPrefix(name, scopedNamedFactoryPrefix) {
-		collectHierarchicalScopedNamedFactories(filepath.Join(rootDir, name), name, collector)
-		return
-	}
-	factoryDir := filepath.Join(rootDir, name)
-	if err := requireFactoryConfig(factoryDir); err != nil {
-		return
-	}
-	displayName, err := canonicalNamedFactoryName(name)
-	if err != nil {
-		return
-	}
-	collector.append(displayName, factoryDir)
-}
-
-func collectHierarchicalScopedNamedFactories(scopeDir, scopeDirName string, collector *namedFactoryListCollector) {
-	if !strings.HasPrefix(scopeDirName, scopedNamedFactoryPrefix) {
-		return
-	}
-	scopeChildren, err := os.ReadDir(scopeDir)
-	if err != nil {
-		return
-	}
-	for _, scopedChild := range scopeChildren {
-		if !scopedChild.IsDir() {
-			continue
-		}
-		scopedFactoryDir := filepath.Join(scopeDir, scopedChild.Name())
-		if err := requireFactoryConfig(scopedFactoryDir); err != nil {
-			continue
-		}
-		displayName := scopeDirName + "/" + scopedChild.Name()
-		if _, err := canonicalNamedFactoryName(displayName); err != nil {
-			continue
-		}
-		collector.append(displayName, scopedFactoryDir)
-	}
 }
 
 func readCurrentFactoryPointerForList(rootDir string) (string, error) {

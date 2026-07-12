@@ -80,11 +80,10 @@ return-policy contract.
 3. Built-in catalog materialization on first use
 
 On first invocation, `@you/fusion` materializes into the global root using the
-normal named-factory persist pipeline. Scoped names use hierarchical safe
-segments on disk:
+normal named-factory persist pipeline. Scoped names are URL-encoded on disk:
 
 ```text
-~/.you-agent-factory/you-agent-factories/@you/fusion/
+~/.you-agent-factory/you-agent-factories/@you%2Ffusion/
 ```
 
 Inspect the materialized factory:

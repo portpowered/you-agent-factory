@@ -252,7 +252,7 @@ func TestUpdateFromFile_ScopedCurrentPointerStillResolvesUpdatedFactoryInExplici
 	if err != nil {
 		t.Fatalf("ResolveCurrentFactoryDir: %v", err)
 	}
-	wantDir := filepath.Join(rootDir, "@you", "tts")
+	wantDir := filepath.Join(rootDir, "@you%2Ftts")
 	if resolvedDir != wantDir {
 		t.Fatalf("resolved dir = %q, want %q", resolvedDir, wantDir)
 	}
