@@ -1135,16 +1135,12 @@ func waitForSessionFactoryState(
 	t.Fatalf("timed out waiting for %s to reach factory state %s", label, want)
 }
 
-func readServiceRuntimeMetricsRecords(t *testing.T, path string) []map[string]any {
+func decodeServiceRuntimeMetricsRecords(t *testing.T, data []byte) ([]map[string]any, bool) {
 	t.Helper()
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read runtime metrics %q: %v", path, err)
-	}
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
-		t.Fatalf("runtime metrics %q contained no records", path)
+		return nil, false
 	}
 
 	records := make([]map[string]any, 0, len(lines))
@@ -1160,7 +1156,21 @@ func readServiceRuntimeMetricsRecords(t *testing.T, path string) []map[string]an
 		records = append(records, record)
 	}
 	if len(records) == 0 {
-		t.Fatalf("runtime metrics %q contained no decodable records", path)
+		return nil, false
+	}
+	return records, true
+}
+
+func readServiceRuntimeMetricsRecords(t *testing.T, path string) []map[string]any {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime metrics %q: %v", path, err)
+	}
+	records, ok := decodeServiceRuntimeMetricsRecords(t, data)
+	if !ok {
+		t.Fatalf("runtime metrics %q contained no records", path)
 	}
 	return records
 }
@@ -1176,17 +1186,20 @@ func waitForRuntimeMetricsRecord(
 
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err != nil {
+		data, err := os.ReadFile(path)
+		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				time.Sleep(10 * time.Millisecond)
 				continue
 			}
-			t.Fatalf("stat runtime metrics %q: %v", path, err)
+			t.Fatalf("read runtime metrics %q: %v", path, err)
 		}
-		records := readServiceRuntimeMetricsRecords(t, path)
-		for _, record := range records {
-			if predicate(record) {
-				return records
+		records, ok := decodeServiceRuntimeMetricsRecords(t, data)
+		if ok {
+			for _, record := range records {
+				if predicate(record) {
+					return records
+				}
 			}
 		}
 		time.Sleep(10 * time.Millisecond)
