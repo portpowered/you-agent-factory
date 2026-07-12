@@ -31,6 +31,7 @@ concept owners below when you need the complete customer-facing contract.
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `mcp-hosts` | Dynamic workflow MCP host setup, `you mcp serve`, transport assumptions, and host examples | [MCP host setup](mcp-hosts.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
+| `javascript-workflows` | Supported JavaScript inputs, globals, primitives, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
 | `mcp` | Canonical `you mcp serve` install path, preview tool catalog, and scope boundaries | [MCP install path](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
@@ -85,6 +86,8 @@ filesystem work around that invocation.
 - [Orchestrators](orchestrators.md) owns `Factory`, `FactoryOrchestrator`,
   `FactorySession`, `Dispatch`, `FactoryArtifact`, `FactoryEvent`, and accepted
   dynamic workflow aliases.
+- [JavaScript workflows](javascript-workflows.md) owns the supported JavaScript
+  authoring surface, host-capability boundary, and executable examples.
 - [MCP install path](mcp.md) owns the canonical `you mcp serve` host
   configuration, preview tool catalog, and install scope boundaries.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime

@@ -3,6 +3,10 @@
 These files are reusable inputs for the factory authoring workflow in
 `you docs authoring-factories`.
 
+`javascript-workflows/` contains the runnable authoring examples documented by
+`you docs javascript-workflows`. Focused runtime tests execute these exact files
+so the published primitive usage stays aligned with the shipped host API.
+
 - [`mock-workers.json`](mock-workers.json) enables deterministic mock-worker
   behavior for the review-loop example. It targets the `reviewer` worker at the
   `review-story` workstation and returns a rejection for consumed `story`
