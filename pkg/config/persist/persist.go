@@ -122,6 +122,12 @@ func NamedFactoryPathSegments(name string) ([]string, error) {
 	return config.NamedFactoryPathSegments(name)
 }
 
+// NamedFactoryNameFromPathSegments reconstructs the canonical named-factory
+// display name from validated hierarchical path segments.
+func NamedFactoryNameFromPathSegments(segments []string) (string, error) {
+	return config.NamedFactoryNameFromPathSegments(segments)
+}
+
 // MapNamedFactoryDir maps a canonical named-factory display name to its
 // hierarchical on-disk directory under factoriesRoot.
 func MapNamedFactoryDir(factoriesRoot, name string) (string, error) {

@@ -135,11 +135,12 @@ func TestReadWriteCurrentFactoryPointer_RoundTrip(t *testing.T) {
 }
 
 func TestNamedFactoryHelpers_MatchConfigPackage(t *testing.T) {
+	assertNamedFactoryPathSegmentsHelpersMatchConfig(t)
 	assertNamedFactorySegmentHelpersMatchConfig(t)
 	assertNamedFactoryRootHelpersMatchConfig(t)
 }
 
-func assertNamedFactorySegmentHelpersMatchConfig(t *testing.T) {
+func assertNamedFactoryPathSegmentsHelpersMatchConfig(t *testing.T) {
 	t.Helper()
 
 	facadeSegments, err := persist.NamedFactoryPathSegments("@you/goal")
@@ -158,6 +159,22 @@ func assertNamedFactorySegmentHelpersMatchConfig(t *testing.T) {
 			t.Fatalf("path segment[%d] = %q vs %q", i, facadeSegments[i], configSegments[i])
 		}
 	}
+
+	facadeRoundTrip, err := persist.NamedFactoryNameFromPathSegments(facadeSegments)
+	if err != nil {
+		t.Fatalf("persist.NamedFactoryNameFromPathSegments: %v", err)
+	}
+	configRoundTrip, err := config.NamedFactoryNameFromPathSegments(configSegments)
+	if err != nil {
+		t.Fatalf("config.NamedFactoryNameFromPathSegments: %v", err)
+	}
+	if facadeRoundTrip != configRoundTrip || facadeRoundTrip != "@you/goal" {
+		t.Fatalf("round-trip name = %q vs %q, want @you/goal", facadeRoundTrip, configRoundTrip)
+	}
+}
+
+func assertNamedFactorySegmentHelpersMatchConfig(t *testing.T) {
+	t.Helper()
 
 	rootDir := t.TempDir()
 	facadeDir, err := persist.MapNamedFactoryDir(rootDir, "@you/goal")

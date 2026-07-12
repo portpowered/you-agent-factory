@@ -96,6 +96,51 @@ func TestPathSegments_RejectsUnsafeInputs(t *testing.T) {
 	}
 }
 
+func TestPathSegments_RoundTrip(t *testing.T) {
+	names := []string{"alpha", "@you/goal", "@you/tts"}
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			segments, err := PathSegments(name)
+			if err != nil {
+				t.Fatalf("PathSegments(%q): %v", name, err)
+			}
+			roundTrip, err := NameFromPathSegments(segments)
+			if err != nil {
+				t.Fatalf("NameFromPathSegments(%#v): %v", segments, err)
+			}
+			if roundTrip != name {
+				t.Fatalf("round trip = %q, want %q", roundTrip, name)
+			}
+		})
+	}
+}
+
+func TestNameFromPathSegments_RejectsInvalidLayouts(t *testing.T) {
+	tests := []struct {
+		name       string
+		segments   []string
+		wantSubstr string
+	}{
+		{name: "empty", segments: nil, wantSubstr: "factory path segments are required"},
+		{name: "scope-only", segments: []string{"@you"}, wantSubstr: "not a valid hierarchical layout"},
+		{name: "too-many", segments: []string{"@you", "goal", "extra"}, wantSubstr: "not a valid hierarchical layout"},
+		{name: "unscoped-pair", segments: []string{"alpha", "beta"}, wantSubstr: "not a valid hierarchical layout"},
+		{name: "unsafe-segment", segments: []string{".."}, wantSubstr: "not a valid directory name"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NameFromPathSegments(tt.segments)
+			if err == nil {
+				t.Fatalf("NameFromPathSegments(%#v) expected error", tt.segments)
+			}
+			if !strings.Contains(err.Error(), tt.wantSubstr) {
+				t.Fatalf("error = %v, want substring %q", err, tt.wantSubstr)
+			}
+		})
+	}
+}
+
 func TestMapDir_RejectsEmptyRoot(t *testing.T) {
 	_, err := MapDir("", "alpha")
 	if err == nil {

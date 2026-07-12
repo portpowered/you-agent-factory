@@ -128,6 +128,14 @@ func TestMapNamedFactoryDir_HierarchicalScopedLayout(t *testing.T) {
 	if len(segments) != 2 || segments[0] != "@you" || segments[1] != "goal" {
 		t.Fatalf("segments = %#v, want [@you goal]", segments)
 	}
+
+	roundTrip, err := NamedFactoryNameFromPathSegments(segments)
+	if err != nil {
+		t.Fatalf("NamedFactoryNameFromPathSegments: %v", err)
+	}
+	if roundTrip != "@you/goal" {
+		t.Fatalf("round trip = %q, want @you/goal", roundTrip)
+	}
 }
 
 func TestNamedFactoryNameLayoutSegment_RoundTrip(t *testing.T) {

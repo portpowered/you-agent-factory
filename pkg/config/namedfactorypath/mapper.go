@@ -29,6 +29,36 @@ func MapDir(factoriesRoot, name string) (string, error) {
 	return filepath.Join(parts...), nil
 }
 
+// NameFromPathSegments reconstructs the canonical named-factory display name from
+// validated hierarchical path segments returned by PathSegments.
+func NameFromPathSegments(segments []string) (string, error) {
+	if len(segments) == 0 {
+		return "", fmt.Errorf("factory path segments are required")
+	}
+	switch len(segments) {
+	case 1:
+		segment := segments[0]
+		if strings.HasPrefix(segment, scopedNamedFactoryPrefix) {
+			return "", fmt.Errorf("factory path segments %#v are not a valid hierarchical layout", segments)
+		}
+		if _, err := safeSegment("factory", segment); err != nil {
+			return "", err
+		}
+		return segment, nil
+	case 2:
+		if !strings.HasPrefix(segments[0], scopedNamedFactoryPrefix) {
+			return "", fmt.Errorf("factory path segments %#v are not a valid hierarchical layout", segments)
+		}
+		name := segments[0] + "/" + segments[1]
+		if err := validateScopedNamedFactoryName(name); err != nil {
+			return "", err
+		}
+		return name, nil
+	default:
+		return "", fmt.Errorf("factory path segments %#v are not a valid hierarchical layout", segments)
+	}
+}
+
 // PathSegments returns the validated hierarchical path segments for a canonical
 // named-factory display name without joining them to a factories root.
 func PathSegments(name string) ([]string, error) {
