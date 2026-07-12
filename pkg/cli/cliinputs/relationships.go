@@ -31,7 +31,6 @@ var flagGroupSpecs = []flagGroupSpec{
 func collectRelationshipRecords(root *cobra.Command) []RelationshipRecord {
 	records := []RelationshipRecord{}
 	collectCommandRelationships(root, &records)
-	sortRelationshipRecords(records)
 	return records
 }
 
@@ -118,16 +117,3 @@ func relationshipKindToken(kind string) string {
 	}
 }
 
-func sortRelationshipRecords(records []RelationshipRecord) {
-	sort.Slice(records, func(i, j int) bool {
-		left := records[i]
-		right := records[j]
-		if left.CommandPath != right.CommandPath {
-			return left.CommandPath < right.CommandPath
-		}
-		if left.Kind != right.Kind {
-			return left.Kind < right.Kind
-		}
-		return strings.Join(left.Participants, "\x00") < strings.Join(right.Participants, "\x00")
-	})
-}
