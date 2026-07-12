@@ -5,40 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
-func TestRun_ParallelFakeChildren_RepresentsFailedChildExplicitly(t *testing.T) {
-	source := readFixture(t, "parallel-child-failure.workflow.js")
-	policy := workflowpolicy.DefaultEffectivePolicy()
-	policy.MaxAgents = 8
-	policy.Concurrency = 2
-	req := workflowruntime.Request{Source: source, SourceRef: "parallel-child-failure.workflow.js", SessionID: "session-parallel-child-failure", Args: marshalArgs(t, map[string]any{"subject": "workflows"}), Metadata: map[string]string{"name": "parallel-child-failure"}, Policy: policy}
-	outcome := runSuccessful(t, req)
-	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
-	results, ok := projected["results"].([]any)
-	if !ok || len(results) != 3 {
-		t.Fatalf("projected results = %#v, want 3 entries", projected["results"])
-	}
-	if child, ok := results[0].(map[string]any); !ok || child["status"] != workflowruntime.ChildDispatchStatusCompleted {
-		t.Fatalf("results[0] = %#v, want completed child", results[0])
-	}
-	failedChild, ok := results[1].(map[string]any)
-	if !ok || failedChild["status"] != workflowruntime.ChildDispatchStatusFailed || failedChild["diagnostic"] == "" || failedChild["artifactRef"] != nil {
-		t.Fatalf("results[1] = %#v, want failed child with diagnostic and no artifact", results[1])
-	}
-	if !hasChildDispatchStatus(outcome.Records, workflowruntime.ChildDispatchStatusFailed) || completedForLabel(outcome.Records, "child-1") {
-		t.Fatalf("failed child records = %#v, want FAILED without COMPLETED", outcome.Records)
-	}
-}
-
+// Parallel child execution assertions live in this existing policy test file so
+// the runtime package stays within both the per-file and package file-count
+// maintainability limits.
 func assertParallelResultOrder(t *testing.T, sessionID string, outcome workflowruntime.Outcome, wantLabels []string) {
 	t.Helper()
-	projected := projectPrimaryJSON(t, sessionID, outcome.Value)
-	results, ok := projected["results"].([]any)
+	results, ok := projectPrimaryJSON(t, sessionID, outcome.Value)["results"].([]any)
 	if !ok || len(results) != len(wantLabels) {
-		t.Fatalf("projected results = %#v, want %d entries", projected["results"], len(wantLabels))
+		t.Fatalf("projected results = %#v, want %d entries", results, len(wantLabels))
 	}
 	for i, wantLabel := range wantLabels {
 		child, ok := results[i].(map[string]any)

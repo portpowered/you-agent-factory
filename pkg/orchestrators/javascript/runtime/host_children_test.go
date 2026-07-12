@@ -915,3 +915,53 @@ func TestRun_ParallelFakeChildren_DeniesFanoutAboveMaxAgents(t *testing.T) {
 		t.Fatalf("records = %#v, want none after maxAgents denial", outcome.Records)
 	}
 }
+
+func TestRun_ParallelFakeChildren_RepresentsFailedChildExplicitly(t *testing.T) {
+	source := readFixture(t, "parallel-child-failure.workflow.js")
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.MaxAgents = 8
+	policy.Concurrency = 2
+
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "parallel-child-failure.workflow.js",
+		SessionID: "session-parallel-child-failure",
+		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
+		Metadata: map[string]string{
+			"name": "parallel-child-failure",
+		},
+		Policy: policy,
+	}
+
+	outcome := runSuccessful(t, req)
+	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 3 {
+		t.Fatalf("projected results = %#v, want 3 entries", projected["results"])
+	}
+
+	successChild, ok := results[0].(map[string]any)
+	if !ok || successChild["status"] != workflowruntime.ChildDispatchStatusCompleted {
+		t.Fatalf("results[0] = %#v, want completed child", results[0])
+	}
+	failedChild, ok := results[1].(map[string]any)
+	if !ok {
+		t.Fatalf("results[1] = %#v, want failed child object", results[1])
+	}
+	if failedChild["status"] != workflowruntime.ChildDispatchStatusFailed {
+		t.Fatalf("results[1].status = %#v, want FAILED", failedChild["status"])
+	}
+	if failedChild["diagnostic"] == "" {
+		t.Fatalf("results[1].diagnostic is empty")
+	}
+	if failedChild["artifactRef"] != nil {
+		t.Fatalf("results[1].artifactRef = %#v, want absent on failed child", failedChild["artifactRef"])
+	}
+
+	if !hasChildDispatchStatus(outcome.Records, workflowruntime.ChildDispatchStatusFailed) {
+		t.Fatal("expected FAILED child_dispatch record for simulated child failure")
+	}
+	if completedForLabel(outcome.Records, "child-1") {
+		t.Fatal("failed child should not emit COMPLETED child_dispatch record")
+	}
+}
