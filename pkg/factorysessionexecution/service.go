@@ -123,15 +123,6 @@ func (s *JavaScriptRuntimeService) publishAsyncTerminalCandidate(
 	s.mu.Unlock()
 }
 
-func safelyStartedAt(lifecycle *LifecycleTimestamps, fallback time.Time) *time.Time {
-	if lifecycle != nil && lifecycle.StartedAt != nil {
-		startedAt := lifecycle.StartedAt.UTC()
-		return &startedAt
-	}
-	startedAt := fallback.UTC()
-	return &startedAt
-}
-
 func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
 	state *runtimeSessionState,
 	terminal runtimeSessionState,
