@@ -604,3 +604,99 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 		t.Fatalf("output work echoed submitted request content")
 	}
 }
+
+func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNextTurnContentOnContinue(t *testing.T) {
+	eventTime := time.Date(2026, time.July, 12, 19, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	consumed := []interfaces.Token{{
+		ID:      "tok-input",
+		PlaceID: "task:init",
+		Color: interfaces.TokenColor{
+			DataType:   interfaces.DataTypeWork,
+			WorkID:     "work-input",
+			WorkTypeID: "task",
+			Name:       "Input",
+			TraceID:    "trace-input",
+			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
+		},
+	}}
+	outputToken := interfaces.Token{
+		ID:      "work-input",
+		PlaceID: "task:init",
+		Color: interfaces.TokenColor{
+			DataType:   interfaces.DataTypeWork,
+			WorkID:     "work-input",
+			WorkTypeID: "task",
+			Name:       "Input",
+			TraceID:    "trace-input",
+			Payload:    []byte("next-turn-output"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "next-turn-output",
+			}},
+			Tags: map[string]string{"continue_feedback": "needs revision"},
+		},
+	}
+
+	history.RecordWorkstationRequest(1, interfaces.FactoryDispatchRecord{
+		DispatchID: "dispatch-continue",
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID:      "dispatch-continue",
+			TransitionID:    "review",
+			WorkstationName: "Review",
+			InputTokens:     workers.InputTokens(consumed...),
+			Execution: interfaces.ExecutionMetadata{
+				WorkIDs: []string{"work-input"},
+			},
+		},
+	}, eventTime)
+	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+		DispatchID:   "dispatch-continue",
+		TransitionID: "review",
+		Outcome:      interfaces.OutcomeContinue,
+		Output:       "next-turn-output",
+		Feedback:     "needs revision",
+	}, interfaces.CompletedDispatch{
+		DispatchID:     "dispatch-continue",
+		TransitionID:   "review",
+		Outcome:        interfaces.OutcomeContinue,
+		EndTime:        eventTime,
+		Duration:       time.Second,
+		ConsumedTokens: consumed,
+		OutputMutations: []interfaces.TokenMutationRecord{{
+			Type:  interfaces.MutationCreate,
+			Token: &outputToken,
+		}},
+	})
+
+	events := history.Events()
+	if len(events) != 2 {
+		t.Fatalf("event count = %d, want 2", len(events))
+	}
+	response, err := events[1].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if response.OutputWork == nil || len(*response.OutputWork) != 1 {
+		t.Fatalf("output work = %#v, want one continued output work item", response.OutputWork)
+	}
+	work := (*response.OutputWork)[0]
+	if work.Content == nil || len(*work.Content) != 1 {
+		t.Fatalf("output work content = %#v, want one next-turn content part", work.Content)
+	}
+	textPart, err := (*work.Content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode text content: %v", err)
+	}
+	if textPart.Text != "next-turn-output" {
+		t.Fatalf("output work text = %q, want next-turn-output", textPart.Text)
+	}
+	if textPart.Text == "input-content" {
+		t.Fatalf("output work echoed submitted request content on continue")
+	}
+}

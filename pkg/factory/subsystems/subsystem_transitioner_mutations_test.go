@@ -505,6 +505,48 @@ func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *t
 	}
 }
 
+func TestCalculateMutations_OutputAsPayload_Continue_UsesNextTurnContent(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	mutations, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "continue", PlaceID: "wt-code:init"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeContinue,
+			output:       "next-turn-output",
+			feedback:     "needs revision",
+		},
+		&interfaces.FactoryWorkstationConfig{
+			Name: "review-story",
+			WorkPropagation: &interfaces.WorkPropagationConfig{
+				Mode: interfaces.WorkPropagationModeOutputAsPayload,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+	token := mutations[0].NewToken
+	if string(token.Color.Payload) != "next-turn-output" {
+		t.Fatalf("payload = %q, want next-turn-output", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "next-turn-output" {
+		t.Fatalf("content = %#v, want next-turn content not submitted request", token.Color.Content)
+	}
+	if token.Color.Tags["continue_feedback"] != "needs revision" {
+		t.Fatalf("continue feedback tag = %#v, want needs revision", token.Color.Tags)
+	}
+}
+
 func TestCalculateMutations_PreserveInput_WithoutConsumedWorkInput_ReturnsDiagnostic(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed = nil
