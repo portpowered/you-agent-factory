@@ -1137,6 +1137,7 @@ func waitForSessionFactoryState(
 
 func decodeServiceRuntimeMetricsRecords(t *testing.T, data []byte) ([]map[string]any, bool) {
 	t.Helper()
+	// Exclusive-create sink reservation leaves an empty file until the first write.
 
 	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
 	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
