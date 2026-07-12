@@ -371,7 +371,7 @@ func TestExecCommandRunner_LogsSuccessfulPostRunCleanupNoOp(t *testing.T) {
 func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 	logger := &recordingCommandLogger{}
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	req := commandCleanupTestRequest(t)
@@ -386,18 +386,24 @@ func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 	)
 	req.Command = os.Args[0]
 
-	_, err := ExecCommandRunner{Logger: logger}.Run(ctx, req)
-	if err == nil {
-		t.Fatal("Run error = nil, want context deadline error")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Run error = %v, want %v", err, context.DeadlineExceeded)
-	}
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := ExecCommandRunner{Logger: logger}.Run(ctx, req)
+		runDone <- err
+	}()
 
-	childPID := readCommandHelperPID(t, pidFile)
+	childPID := waitForCommandHelperPID(t, pidFile, 3*time.Second)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
+	cancel()
+	err := <-runDone
+	if err == nil {
+		t.Fatal("Run error = nil, want context canceled error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run error = %v, want %v", err, context.Canceled)
+	}
 
 	cancelCompleted := commandCleanupCompletedLogsForReason(logger, commandProcessCleanupReasonCancel)
 	if len(cancelCompleted) == 0 {
