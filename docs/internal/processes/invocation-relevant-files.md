@@ -203,6 +203,26 @@ primary-result behavior.
   directory so customer edits survive later `you run --named` reuse.
   `@you/fusion` factory JSON (`BuiltInFusionFactoryJSON`) is also registered from
   `builtInNamedFactoryCatalog`.
+- `pkg/config/builtinsubagent/` owns the authored `@you/subagent` one-pass factory
+  scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
+  exported from `pkg/config/layout.go`. The topology uses exactly one `AGENT_WORKER`
+  with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
+  `${input}` from the invocation signature into the workstation prompt body.
+  `@you/subagent` is registered in `builtInNamedFactoryCatalog` so first named
+  resolution materializes the split-layout factory under the global named-factory root.
+- `pkg/packagedfactories/subagent/` owns packaged subagent factory metadata constants,
+  topology validation coverage, materialization/edit-safe identity tests, response
+  shaping helpers for terminal `task:complete` work content, and primary-result
+  selection tests for the one-pass built-in factory JSON.
+- Hermetic no-server named `@you/subagent` package proof lives in
+  `pkg/cli/run/run_invocation_test.go`
+  (`TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer`,
+  `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,
+  `TestRun_NamedSubagentNoServerBootstrap_SuccessJSONMatchesAPIProjection`,
+  `TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof`), using the
+  real shared bootstrap path with mock workers and a TCP probe port to assert no
+  factory API/dashboard listener is bound and exactly one agent-response
+  `primaryResult` is returned.
 - `pkg/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
   for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
