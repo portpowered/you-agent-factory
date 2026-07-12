@@ -261,7 +261,8 @@ func buildProviderEnv(envVars map[string]string) []string {
 //--------
 
 func normalizeProviderExecutionError(provider string, result CommandResult, err error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
-	if provider == string(interfaces.ModelProviderCursor) {
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	if normalizedProvider == string(interfaces.ModelProviderCursor) {
 		fallbackReason := interfaces.WorkFailureTypeUnknown
 		switch {
 		case isProviderExecutionTimeout(err, result):
@@ -425,10 +426,21 @@ func providerOutputContainsTimeout(result CommandResult) bool {
 }
 
 func parseProviderTimeoutFailure(provider string, result CommandResult) ProviderFailureResult {
-	behavior := providerBehaviorForErrorClassification(strings.ToLower(strings.TrimSpace(provider)))
+	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+	message := formatProviderOutputOrDefault(result, "execution timeout")
+	switch normalizedProvider {
+	case string(interfaces.ModelProviderCodex):
+		if codexError, ok := extractCodexErrorLine(result); ok {
+			message = codexError
+		}
+	case string(interfaces.ModelProviderGemini):
+		message = geminiTimeoutFailureMessage
+	case string(interfaces.ModelProviderKiro):
+		message = kiroTimeoutFailureMessage
+	}
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeTimeout,
-		Message: behavior.FormatTimeoutFailure(result),
+		Message: message,
 	}
 }
 
