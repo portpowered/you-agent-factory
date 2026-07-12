@@ -1,0 +1,11 @@
+package livechild
+
+import (
+	"context"
+
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
+)
+
+func executeShared(ctx context.Context, live providerexecution.Executor) {
+	_, _ = live.Execute(ctx, providerexecution.ExecutionInput{})
+}

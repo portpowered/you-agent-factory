@@ -89,4 +89,7 @@ composition boundary in `pkg/factorysessionexecution/service.go`; production
 runtime code must receive either that injected store or an explicit disabled
 policy and must not use a persistence boolean. Package tests, `testdata`
 fixtures, generated code, dependencies, coverage, and build artifacts are not
-production construction sites.
+production construction sites. Production JavaScript live-child packages must
+also invoke providers through `pkg/workers/providerexecution`; the guard rejects
+direct provider-package imports and `Infer` calls there while permitting tests,
+deterministic fakes, and shared contract types.

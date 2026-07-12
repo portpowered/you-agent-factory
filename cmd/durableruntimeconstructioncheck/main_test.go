@@ -46,6 +46,38 @@ func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
 	}
 }
 
+func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/factorysessionexecution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",
+	})
+
+	findings, err := scan(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+
+	for _, prohibited := range []string{providerPackagePath, providerInferenceName, "pkg/workers/providerexecution"} {
+		if !containsFinding(findings, prohibited) {
+			t.Errorf("findings %#v do not report %s", findings, prohibited)
+		}
+	}
+}
+
+func TestScanAllowsLiveChildSharedBoundaryAndTestDoubles(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/factorysessionexecution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",
+		"pkg/factorysessionexecution/livechild/provider_test.go": "testdata/prohibited_live_child_provider.go.txt",
+	})
+
+	findings, err := scan(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("shared boundary or test double produced findings: %v", findings)
+	}
+}
+
 func fixtureRepository(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()

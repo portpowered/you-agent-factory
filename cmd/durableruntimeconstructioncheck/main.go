@@ -18,7 +18,14 @@ const (
 	storeConstructorName   = "NewDirectoryStore"
 	storeDirectoryName     = "DirForProjectRoot"
 	persistenceBooleanName = "PersistSessions"
+	providerInferenceName  = "Infer"
+	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
+
+var javascriptLiveChildRoots = []string{
+	"pkg/factorysessionexecution/livechild/",
+	"pkg/orchestrators/javascript/",
+}
 
 var approvedRuntimeConstructorFiles = map[string]struct{}{
 	"pkg/factorysessionexecution/service.go":             {},
@@ -97,10 +104,22 @@ func scan(root string) ([]string, error) {
 		if ast.IsGenerated(file) {
 			return nil
 		}
+		if isJavaScriptLiveChildFile(relative) {
+			for _, imported := range file.Imports {
+				if strings.Trim(imported.Path.Value, `"`) == providerPackagePath {
+					appendFinding(&findings, fileSet, imported.Pos(), relative, providerPackagePath,
+						"route production live-child provider execution through pkg/workers/providerexecution")
+				}
+			}
+		}
 		ast.Inspect(file, func(node ast.Node) bool {
 			switch value := node.(type) {
 			case *ast.CallExpr:
 				name := calledName(value.Fun)
+				if name == providerInferenceName && isJavaScriptLiveChildFile(relative) {
+					appendFinding(&findings, fileSet, value.Pos(), relative, name,
+						"route production live-child provider invocation through pkg/workers/providerexecution")
+				}
 				if name == runtimeConstructorName && !approved(relative, approvedRuntimeConstructorFiles) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
 						"construct durable execution in an approved composition owner")
@@ -130,6 +149,15 @@ func scan(root string) ([]string, error) {
 	}
 	sort.Strings(findings)
 	return findings, nil
+}
+
+func isJavaScriptLiveChildFile(relative string) bool {
+	for _, root := range javascriptLiveChildRoots {
+		if strings.HasPrefix(relative, root) {
+			return true
+		}
+	}
+	return false
 }
 
 func approved(relative string, files map[string]struct{}) bool {
