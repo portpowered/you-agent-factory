@@ -1,5 +1,4 @@
 import { useId } from "react";
-import { surfacePanelVariants } from "../../../../../components/ui";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import {
   useCurrentSelectionDetailMessages,
@@ -32,11 +31,7 @@ export function InferenceAttemptCard({
   return (
     <article
       aria-label={detailMessages.attemptAriaLabel(attempt.attempt)}
-      className={surfacePanelVariants({
-        className: "grid min-w-0 gap-2.5 p-0",
-        radius: "lg",
-        padding: "none",
-      })}
+      className="grid min-w-0 gap-2.5"
     >
       <CurrentSelectionExpandableSection
         className="mt-0"
