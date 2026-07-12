@@ -107,16 +107,14 @@ func providerArgIsSensitivePositional(provider string, args []string, index int)
 }
 
 func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInferenceRequest, execReq CommandRequest) []any {
-	fields := workLogFields(req.Dispatch.Execution,
+	fields := providerLogFields(req,
 		"event_name", ProviderInvocationPrepared,
-		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
 		"model", providerModelForLog(req.Model),
 		"command", execReq.Command,
 		"args", sanitizeProviderArgs(req.ModelProvider, execReq.Args),
 		"working_dir", execReq.WorkDir,
 		"stdin_bytes", len(execReq.Stdin),
-		"stdin_sha256", sha256Hex(execReq.Stdin),
-		"dispatch_id", req.Dispatch.DispatchID)
+		"stdin_sha256", sha256Hex(execReq.Stdin))
 	if deadline, ok := ctx.Deadline(); ok {
 		fields = append(fields, "deadline", deadline.UTC().Format(time.RFC3339Nano))
 	}
@@ -130,15 +128,14 @@ func providerFailureLogFields(
 	duration time.Duration,
 ) []any {
 	decision := WorkFailureDecisionFromProviderError(providerErr)
-	fields := workLogFields(req.Dispatch.Execution,
+	fields := providerLogFields(req,
 		"event_name", ProviderFailureNormalized,
-		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
 		"model", providerModelForLog(req.Model),
 		"failure_reason", providerErr.Type,
 		"failure_message", safeProviderFailureLogMessage(req.ModelProvider, providerErr),
 		"retryable", decision.Retryable,
-		"duration_ms", duration.Milliseconds(),
-		"dispatch_id", req.Dispatch.DispatchID)
+		"duration_ms", duration.Milliseconds())
+	fields = appendProviderSessionLogFields(fields, providerErr.ProviderSession)
 	if result.ExitCode != 0 {
 		fields = append(fields, "exit_code", result.ExitCode)
 	}
@@ -288,6 +285,25 @@ func workLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) 
 		"work_ids", cloneWorkIDs(metadata.WorkIDs),
 	}
 	return append(fields, keysAndValues...)
+}
+
+func providerLogFields(req interfaces.ProviderInferenceRequest, keysAndValues ...any) []any {
+	fields := workLogFields(req.Dispatch.Execution,
+		"dispatch_id", req.Dispatch.DispatchID,
+		"provider", interfaces.CanonicalProviderSessionProvider(req.ModelProvider),
+		"worker_type", firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
+		"workstation", req.Dispatch.WorkstationName)
+	return append(fields, keysAndValues...)
+}
+
+func appendProviderSessionLogFields(fields []any, session *interfaces.ProviderSessionMetadata) []any {
+	if session == nil {
+		return fields
+	}
+	return append(fields,
+		"provider_session_provider", interfaces.CanonicalProviderSessionProvider(session.Provider),
+		"provider_session_kind", session.Kind,
+		"provider_session_id", session.ID)
 }
 
 func primaryWorkID(workIDs []string) string {

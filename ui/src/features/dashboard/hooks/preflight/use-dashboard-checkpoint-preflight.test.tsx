@@ -7,7 +7,7 @@ import * as factorySessionsAPI from "../../../../api/factory-sessions";
 import type { FactorySessionSyncPreflightResponse } from "../../../../api/factory-sessions/sync-preflight";
 import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
 import * as timelinePublic from "../../../timeline/public";
-import * as preflightRunner from "../../lib/preflight/run-dashboard-checkpoint-preflight";
+import * as preflightResolver from "../../lib/preflight/resolve-dashboard-checkpoint-preflight";
 import {
   readSessionPersistenceInvalidationRecords,
   resetSessionPersistenceInvalidationRecords,
@@ -96,9 +96,9 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
 
   it("marks preflight ready when timeline checkpoints are disabled", async () => {
     const queryClient = new QueryClient();
-    const runPreflightSpy = vi.spyOn(
-      preflightRunner,
-      "runDashboardCheckpointPreflight",
+    const resolvePreflightSpy = vi.spyOn(
+      preflightResolver,
+      "resolveDashboardCheckpointPreflight",
     );
 
     const { result } = renderHook(
@@ -117,23 +117,25 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
       expect(result.current.preflightReady).toBe(true);
     });
     expect(result.current.resolvedSessionID).toBe("~default");
-    expect(runPreflightSpy).not.toHaveBeenCalled();
+    expect(resolvePreflightSpy).not.toHaveBeenCalled();
   });
 
   it("hydrates checkpoint preflight results from the runner", async () => {
     const queryClient = new QueryClient();
     vi.spyOn(
-      preflightRunner,
-      "runDashboardCheckpointPreflight",
+      preflightResolver,
+      "resolveDashboardCheckpointPreflight",
     ).mockResolvedValue({
-      initialReconnectCursor: {
+      checkpoint: null,
+      checkpointToDelete: null,
+      clearRequestedSessionCheckpoint: false,
+      kind: "resume",
+      reconnectCursor: {
         afterEventId: "event-2",
         afterSequence: 2,
       },
-      persistedCheckpoint: null,
-      preflightError: null,
-      preflightRecovery: null,
-      resolvedSessionID: "session-live-001",
+      requestedSessionId: "session-live-001",
+      resolvedSessionId: "session-live-001",
       streamIdentity: {
         backendScopeID: "backend-scope-a",
         factorySessionID: "session-live-001",
@@ -354,19 +356,16 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
 
   it("surfaces non-recoverable preflight recovery without stream identity", async () => {
     const queryClient = new QueryClient();
+    const restoreCheckpoint = vi.fn();
     vi.spyOn(
-      preflightRunner,
-      "runDashboardCheckpointPreflight",
+      preflightResolver,
+      "resolveDashboardCheckpointPreflight",
     ).mockResolvedValue({
-      initialReconnectCursor: undefined,
-      persistedCheckpoint: null,
-      preflightError: null,
-      preflightRecovery: {
-        reasonCode: "session_not_found",
-        requestedSessionId: "missing-session",
-      },
-      resolvedSessionID: null,
-      streamIdentity: null,
+      clearRequestedSessionCheckpoint: true,
+      checkpointToDelete: null,
+      kind: "recovery",
+      reasonCode: "session_not_found",
+      requestedSessionId: "missing-session",
     });
 
     const { result } = renderHook(
@@ -376,7 +375,7 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
           checkpointsDisabled: false,
           rawSessionID: "missing-session",
           refreshToken: 0,
-          restoreCheckpoint: vi.fn(),
+          restoreCheckpoint,
         }),
       { wrapper: createWrapper(queryClient) },
     );
@@ -394,16 +393,16 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
 
   it("hydrates checkpoint state on preflight error without marking ready", async () => {
     const queryClient = new QueryClient();
+    const restoreCheckpoint = vi.fn();
     vi.spyOn(
-      preflightRunner,
-      "runDashboardCheckpointPreflight",
+      preflightResolver,
+      "resolveDashboardCheckpointPreflight",
     ).mockResolvedValue({
-      initialReconnectCursor: undefined,
-      persistedCheckpoint: null,
-      preflightError: new Error("validation failed"),
-      preflightRecovery: null,
-      resolvedSessionID: null,
-      streamIdentity: null,
+      clearRequestedSessionCheckpoint: true,
+      checkpointToDelete: null,
+      error: new Error("validation failed"),
+      kind: "error",
+      requestedSessionId: "session-live-001",
     });
 
     const { result } = renderHook(
@@ -413,7 +412,7 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
           checkpointsDisabled: false,
           rawSessionID: "session-live-001",
           refreshToken: 0,
-          restoreCheckpoint: vi.fn(),
+          restoreCheckpoint,
         }),
       { wrapper: createWrapper(queryClient) },
     );
@@ -427,6 +426,7 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
 
   it("marks the stream offline when checkpoint preflight rejects", async () => {
     const queryClient = new QueryClient();
+    const restoreCheckpoint = vi.fn();
     const setStreamState = vi.fn();
     useDashboardStreamStore.setState({ setStreamState });
     vi.spyOn(
@@ -449,7 +449,7 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
           checkpointsDisabled: false,
           rawSessionID: "session-live-001",
           refreshToken: 0,
-          restoreCheckpoint: vi.fn(),
+          restoreCheckpoint,
         }),
       { wrapper: createWrapper(queryClient) },
     );

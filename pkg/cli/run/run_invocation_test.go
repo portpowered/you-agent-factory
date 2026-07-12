@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/subagent"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -1605,6 +1606,225 @@ func TestNoServerNamedInvocationIntegrationAndEquivalenceProof(t *testing.T) {
 			cfg.JSONOutput = true
 		})
 		assertCapturedRequestMatchesLogicalAPIText(t, capture, goalText)
+		assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
+	})
+}
+
+func namedSubagentNoServerInvocationRunConfig(t *testing.T, requestText string) RunConfig {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, subagent.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+
+	return RunConfig{
+		Dir:                        resolution.FactoryDir,
+		NamedFactoryName:           subagent.PackagedFactoryName,
+		NamedFactoryResolution:     resolution,
+		InvocationPositionalText:   &requestText,
+		StdinIsTTY:                 func() bool { return true },
+		SuppressDashboardRendering: true,
+		MockWorkersEnabled:         true,
+		MockWorkersConfigPath:      writePackagedSubagentNoServerMockWorkersConfig(t),
+		DisableDefaultRecording:    true,
+		Port:                       reserveNoServerInvocationProbePort(t),
+		AutoPort:                   true,
+		Logger:                     zap.NewNop(),
+	}
+}
+
+func runNoServerSubagentBootstrapEquivalenceCase(
+	t *testing.T,
+	requestText string,
+	mutate func(*RunConfig),
+) (*capturingBootstrapRunner, *bytes.Buffer) {
+	t.Helper()
+
+	preserveRunGlobals(t)
+	capture := installCapturingRealInvocationBootstrap(t)
+	cfg := namedSubagentNoServerInvocationRunConfig(t, requestText)
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	var output bytes.Buffer
+	cfg.Output = &output
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	if err := Run(ctx, cfg); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return capture, &output
+}
+
+func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for hermetic named subagent no-server invocation")
+	}
+
+	preserveRunGlobals(t)
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, subagent.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+
+	mockWorkersPath := writePackagedSubagentNoServerMockWorkersConfig(t)
+	probePort := reserveNoServerInvocationProbePort(t)
+	requestText := "hermetic no-server named subagent prompt"
+
+	var output bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	err = Run(ctx, RunConfig{
+		Dir:                        resolution.FactoryDir,
+		NamedFactoryName:           subagent.PackagedFactoryName,
+		NamedFactoryResolution:     resolution,
+		InvocationPositionalText:   &requestText,
+		StdinIsTTY:                 func() bool { return true },
+		SuppressDashboardRendering: true,
+		MockWorkersEnabled:         true,
+		MockWorkersConfigPath:      mockWorkersPath,
+		DisableDefaultRecording:    true,
+		Output:                     &output,
+		Port:                       probePort,
+		AutoPort:                   true,
+		Logger:                     zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := output.String(); got != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want agent response mock worker accepted", got)
+	}
+	if got := output.String(); got == requestText {
+		t.Fatalf("stdout echoed submitted request text instead of agent response")
+	}
+	assertNoServerInvocationProbePortFree(t, probePort)
+}
+
+func TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-server bootstrap subagent primary-result selection")
+	}
+
+	requestText := "no-server bootstrap subagent primary-result prompt"
+	_, output := runNoServerSubagentBootstrapEquivalenceCase(t, requestText, nil)
+	if got := output.String(); got != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want agent response mock worker accepted", got)
+	}
+	if got := output.String(); got == requestText {
+		t.Fatalf("stdout echoed submitted request text instead of agent response")
+	}
+}
+
+func TestRun_NamedSubagentNoServerBootstrap_SuccessJSONMatchesAPIProjection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-server bootstrap subagent CLI/API projection")
+	}
+
+	requestText := "no-server bootstrap subagent json parity prompt"
+	capture, output := runNoServerSubagentBootstrapEquivalenceCase(t, requestText, func(cfg *RunConfig) {
+		cfg.JSONOutput = true
+	})
+	assertCapturedRequestMatchesLogicalAPIText(t, capture, requestText)
+	assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
+	if capture.lastResult == nil || len(capture.lastResult.PrimaryResult) == 0 {
+		t.Fatalf("capture result = %#v, want primary result", capture.lastResult)
+	}
+	if got := capture.lastResult.PrimaryResult[0].Text; got != "mock worker accepted" {
+		t.Fatalf("primaryResult text = %q, want agent response mock worker accepted", got)
+	}
+	if got := capture.lastResult.PrimaryResult[0].Text; got == requestText {
+		t.Fatalf("primaryResult echoed submitted request text instead of agent response")
+	}
+	if !strings.Contains(output.String(), `"primaryResult"`) {
+		t.Fatalf("json output = %s, want primaryResult field", output.String())
+	}
+	if strings.Count(output.String(), `"primaryResult"`) != 1 {
+		t.Fatalf("json output = %s, want exactly one primaryResult field", output.String())
+	}
+}
+
+func writePackagedSubagentNoServerMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	cfg := factoryconfig.MockWorkersConfig{
+		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName:      subagent.PackagedWorkerName,
+				WorkstationName: subagent.PackagedRunWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mock workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-subagent-no-server.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write mock workers config: %v", err)
+	}
+	return path
+}
+
+// TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof is the
+// consolidated package integration and invocation-equivalence proof for hermetic
+// named one-shot @you/subagent invocation on the shared no-server bootstrap path.
+func TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("consolidated package integration and invocation-equivalence proof for no-server named subagent invocation")
+	}
+
+	t.Run("hermetic named success without listener", func(t *testing.T) {
+		preserveRunGlobals(t)
+
+		requestText := "consolidated no-server named subagent integration proof"
+		probePort := reserveNoServerInvocationProbePort(t)
+		cfg := namedSubagentNoServerInvocationRunConfig(t, requestText)
+		cfg.Port = probePort
+		cfg.AutoPort = true
+		var output bytes.Buffer
+		cfg.Output = &output
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		if err := Run(ctx, cfg); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if got := output.String(); got != "mock worker accepted" {
+			t.Fatalf("stdout = %q, want agent response mock worker accepted", got)
+		}
+		if got := output.String(); got == requestText {
+			t.Fatalf("stdout echoed submitted request text instead of agent response")
+		}
+		assertNoServerInvocationProbePortFree(t, probePort)
+	})
+
+	t.Run("shared input resolution and primary-result equivalence", func(t *testing.T) {
+		requestText := "consolidated no-server subagent equivalence proof"
+		capture, output := runNoServerSubagentBootstrapEquivalenceCase(t, requestText, func(cfg *RunConfig) {
+			cfg.JSONOutput = true
+		})
+		assertCapturedRequestMatchesLogicalAPIText(t, capture, requestText)
 		assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
 	})
 }

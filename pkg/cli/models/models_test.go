@@ -2,8 +2,10 @@ package models
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +16,10 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"go.uber.org/zap"
 )
 
 func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
@@ -93,26 +99,28 @@ func TestQueryModel_NotFoundUsesFriendlyError(t *testing.T) {
 }
 
 func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/invocations" {
-			t.Fatalf("path = %q, want invocation path", r.URL.Path)
-		}
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want POST", r.Method)
-		}
-		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/output.wav"}],"bindings":[]}`)
+	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+		return apisurface.ModelInvocationResult{
+			ModelName:        modelName,
+			Worker:           "tts-worker",
+			Operation:        request.Operation,
+			ProviderLocality: string(factoryapi.WorkerModelLocalityLocal),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeAudio,
+				File: "artifacts/output.wav",
+			}},
+		}, nil
 	}))
-	defer server.Close()
 
-	serverBase := strings.TrimSuffix(server.URL, "/")
 	var out bytes.Buffer
 	if err := Invoke(InvokeConfig{
-		ModelName: "OMNIVOICE_Q4_K_M",
-		Operation: "TTS",
-		Text:      "hello world",
-		Server:    serverBase,
-		JSON:      true,
-		Output:    &out,
+		ModelName:  "OMNIVOICE_Q4_K_M",
+		Operation:  "TTS",
+		Text:       "hello world",
+		FactoryDir: t.TempDir(),
+		Logger:     zap.NewNop(),
+		JSON:       true,
+		Output:     &out,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -125,30 +133,29 @@ func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
 
 func TestInvoke_AudioWritesOutputFile(t *testing.T) {
 	audioBytes := []byte("RIFF....WAVE")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want POST", r.Method)
+	streamFile := filepath.Join(t.TempDir(), "stream.wav")
+	if err := os.WriteFile(streamFile, audioBytes, 0o644); err != nil {
+		t.Fatalf("write stream file: %v", err)
+	}
+	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+		if request.Options == nil || request.Options.ResponseMode == nil || *request.Options.ResponseMode != factoryapi.AUDIOSTREAM {
+			t.Fatalf("request options = %#v, want AUDIO_STREAM mode", request.Options)
 		}
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read request body: %v", err)
-		}
-		if !bytes.Contains(body, []byte(`"responseMode":"AUDIO_STREAM"`)) {
-			t.Fatalf("request body missing AUDIO_STREAM mode:\n%s", body)
-		}
-		w.Header().Set("Content-Type", "audio/wav")
-		_, _ = w.Write(audioBytes)
+		return apisurface.ModelInvocationResult{
+			ModelName:  modelName,
+			Operation:  request.Operation,
+			StreamFile: streamFile,
+		}, nil
 	}))
-	defer server.Close()
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
-	serverBase := strings.TrimSuffix(server.URL, "/")
 	if err := Invoke(InvokeConfig{
 		ModelName:  "OMNIVOICE_Q4_K_M",
 		Operation:  "TTS",
 		Text:       "hello world",
 		OutputPath: outputPath,
-		Server:     serverBase,
+		FactoryDir: t.TempDir(),
+		Logger:     zap.NewNop(),
 		Output:     io.Discard,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
@@ -164,21 +171,27 @@ func TestInvoke_AudioWritesOutputFile(t *testing.T) {
 
 func TestInvoke_AudioVerboseLogsOutputPath(t *testing.T) {
 	audioBytes := []byte("RIFF....WAVE")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "audio/wav")
-		_, _ = w.Write(audioBytes)
+	streamFile := filepath.Join(t.TempDir(), "stream.wav")
+	if err := os.WriteFile(streamFile, audioBytes, 0o644); err != nil {
+		t.Fatalf("write stream file: %v", err)
+	}
+	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+		return apisurface.ModelInvocationResult{
+			ModelName:  modelName,
+			Operation:  request.Operation,
+			StreamFile: streamFile,
+		}, nil
 	}))
-	defer server.Close()
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	var diagnostics bytes.Buffer
-	serverBase := strings.TrimSuffix(server.URL, "/")
 	if err := Invoke(InvokeConfig{
 		ModelName:   "OMNIVOICE_Q4_K_M",
 		Operation:   "TTS",
 		Text:        "hello world",
 		OutputPath:  outputPath,
-		Server:      serverBase,
+		FactoryDir:  t.TempDir(),
+		Logger:      zap.NewNop(),
 		Output:      io.Discard,
 		Verbose:     true,
 		Diagnostics: &diagnostics,
@@ -186,20 +199,17 @@ func TestInvoke_AudioVerboseLogsOutputPath(t *testing.T) {
 		t.Fatalf("Invoke: %v", err)
 	}
 	assertDiagnosticsContains(t, diagnostics.String(), []string{
-		"models invoke request",
+		"models invoke bootstrap request",
 		"outputPath=" + outputPath,
-		"models invoke response",
-		"status=200",
+		"models invoke bootstrap response",
 		"outputPath=" + outputPath,
 	})
 }
 
 func TestInvoke_AudioNotFoundUsesFriendlyError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = io.WriteString(w, `{"message":"model not found","family":"NOT_FOUND","code":"NOT_FOUND"}`)
+	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, _ string, _ factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+		return apisurface.ModelInvocationResult{}, fmt.Errorf("%w: model not found", apisurface.ErrModelNotFound)
 	}))
-	defer server.Close()
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	err := Invoke(InvokeConfig{
@@ -207,7 +217,8 @@ func TestInvoke_AudioNotFoundUsesFriendlyError(t *testing.T) {
 		Operation:  "TTS",
 		Text:       "hello world",
 		OutputPath: outputPath,
-		Server:     strings.TrimSuffix(server.URL, "/"),
+		FactoryDir: t.TempDir(),
+		Logger:     zap.NewNop(),
 		Output:     io.Discard,
 	})
 	if err == nil {
@@ -218,20 +229,19 @@ func TestInvoke_AudioNotFoundUsesFriendlyError(t *testing.T) {
 	}
 }
 
-func TestInvoke_JSONSurfacesClassifiedLoadingFailureFromAPI(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusConflict)
-		_, _ = io.WriteString(w, `{"message":"model \"OMNIVOICE_Q4_K_M\" is still loading: wait for the managed runtime to finish loading and retry the invocation","family":"CLIENT_ERROR","code":"MODEL_RUNTIME_LOADING"}`)
+func TestInvoke_JSONSurfacesClassifiedLoadingFailureFromBootstrap(t *testing.T) {
+	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, _ string, _ factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+		return apisurface.ModelInvocationResult{}, fmt.Errorf("%w: wait for the managed runtime to finish loading and retry the invocation", apisurface.ErrManagedRuntimeLoading)
 	}))
-	defer server.Close()
 
 	err := Invoke(InvokeConfig{
-		ModelName: "OMNIVOICE_Q4_K_M",
-		Operation: "TTS",
-		Text:      "hello world",
-		Server:    strings.TrimSuffix(server.URL, "/"),
-		JSON:      true,
-		Output:    io.Discard,
+		ModelName:  "OMNIVOICE_Q4_K_M",
+		Operation:  "TTS",
+		Text:       "hello world",
+		FactoryDir: t.TempDir(),
+		Logger:     zap.NewNop(),
+		JSON:       true,
+		Output:     io.Discard,
 	})
 	if err == nil {
 		t.Fatal("expected loading failure")
@@ -241,21 +251,40 @@ func TestInvoke_JSONSurfacesClassifiedLoadingFailureFromAPI(t *testing.T) {
 	}
 }
 
-func TestInvoke_AudioUnreachableUsesEndpointMessage(t *testing.T) {
+func TestInvoke_AudioUnreachableUsesBootstrapInsteadOfTransportMessage(t *testing.T) {
+	originalBuilder := buildModelInvocationBootstrap
+	defer func() {
+		buildModelInvocationBootstrap = originalBuilder
+	}()
+
+	buildModelInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (modelBootstrapRunner, error) {
+		return &stubModelBootstrapRunner{
+			sessionReady: true,
+			invokeModel: func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+				return apisurface.ModelInvocationResult{
+					ModelName: modelName,
+					Operation: request.Operation,
+				}, nil
+			},
+		}, nil
+	}
+
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	err := Invoke(InvokeConfig{
 		ModelName:  "OMNIVOICE_Q4_K_M",
 		Operation:  "TTS",
 		Text:       "hello world",
 		OutputPath: outputPath,
+		FactoryDir: t.TempDir(),
 		Server:     "http://127.0.0.1:1",
 		Output:     io.Discard,
+		Logger:     zap.NewNop(),
 	})
 	if err == nil {
-		t.Fatal("expected unreachable error")
+		t.Fatal("expected bootstrap audio invoke without stream file to fail")
 	}
-	if !strings.Contains(err.Error(), "models endpoint not reachable at http://127.0.0.1:1/models/OMNIVOICE_Q4_K_M/invocations") {
-		t.Fatalf("error = %q, want models endpoint not reachable message", err)
+	if strings.Contains(err.Error(), "models endpoint not reachable at http://127.0.0.1:1/models/OMNIVOICE_Q4_K_M/invocations") {
+		t.Fatalf("error = %q, want bootstrap failure instead of unreachable transport message", err.Error())
 	}
 }
 
@@ -363,8 +392,6 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		case "/models/OMNIVOICE_Q4_K_M":
 			inspectRequests.Add(1)
 			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","managedRuntime":{"identity":"OMNIVOICE_Q4_K_M","readinessState":"READY","lifecycleState":"NOT_INSTALLED","locality":"LOCAL","supportedOperations":[{"name":"TTS"}],"diagnostics":{}},"providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
-		case "/models/OMNIVOICE_Q4_K_M/invocations":
-			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/sensitive-generated-output.wav"}],"bindings":[]}`)
 		case "/models/OMNIVOICE_Q4_K_M/pull":
 			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`)
 		default:
@@ -373,12 +400,34 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 	}))
 	defer server.Close()
 
+	installStubModelBootstrapRunner(t, readyStubModelBootstrapRunner(func(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+		return apisurface.ModelInvocationResult{
+			ModelName: modelName,
+			Worker:    "tts-worker",
+			Operation: request.Operation,
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeAudio,
+				File: "artifacts/sensitive-generated-output.wav",
+			}},
+		}, nil
+	}))
+
 	serverBase := strings.TrimSuffix(server.URL, "/")
 	var diagnostics bytes.Buffer
 	if err := Inspect(InspectConfig{ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
-	if err := Invoke(InvokeConfig{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS", Text: "secret direct input", Server: serverBase, JSON: true, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+	if err := Invoke(InvokeConfig{
+		ModelName:   "OMNIVOICE_Q4_K_M",
+		Operation:   "TTS",
+		Text:        "secret direct input",
+		FactoryDir:  t.TempDir(),
+		Logger:      zap.NewNop(),
+		JSON:        true,
+		Output:      io.Discard,
+		Verbose:     true,
+		Diagnostics: &diagnostics,
+	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
 	if err := Pull(PullConfig{ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
@@ -390,8 +439,9 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		"models inspect request",
 		"modelName=\"OMNIVOICE_Q4_K_M\"",
 		"readiness=READY",
-		"models invoke request",
+		"models invoke bootstrap request",
 		"operation=\"TTS\"",
+		"models invoke bootstrap response",
 		"worker=tts-worker",
 		"models pull request",
 		"pullOutcome=INSTALLED_SUCCESSFULLY",

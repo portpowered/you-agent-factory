@@ -312,7 +312,7 @@ describe("useDashboardSnapshot composer", () => {
       expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
         DEFAULT_FACTORY_SESSION_ID,
         undefined,
-        {},
+        { signal: expect.any(AbortSignal) },
       );
     });
     await waitFor(() => {
@@ -690,18 +690,21 @@ describe("useDashboardSnapshot composer", () => {
       selectedSessionID: "session-stale-001",
       sessionTabOrder: ["session-stale-001", "session-beta"],
     });
-    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+    getFactorySessionSyncPreflightSpy.mockImplementation(async (sessionID) =>
       buildSyncPreflightResponse({
         checkpointReusable: false,
         factorySessionId: remappedSessionID,
-        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reasonCode:
+          sessionID === remappedSessionID
+            ? FactorySessionSyncPreflightReasonCode.ok
+            : FactorySessionSyncPreflightReasonCode.logical_session_remap,
         reconnectCursor: {
           afterEventId: "checkpoint-event-7",
           afterSequence: 7,
           provided: true,
           validForStreamGeneration: false,
         },
-        requestedSessionId: "session-stale-001",
+        requestedSessionId: sessionID,
         streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
       }),
     );
@@ -762,18 +765,21 @@ describe("useDashboardSnapshot composer", () => {
       pausedSessionIDs: [],
       selectedSessionID: staleSessionID,
     });
-    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+    getFactorySessionSyncPreflightSpy.mockImplementation(async (sessionID) =>
       buildSyncPreflightResponse({
         checkpointReusable: false,
         factorySessionId: remappedSessionID,
-        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reasonCode:
+          sessionID === remappedSessionID
+            ? FactorySessionSyncPreflightReasonCode.ok
+            : FactorySessionSyncPreflightReasonCode.logical_session_remap,
         reconnectCursor: {
           afterEventId: "checkpoint-event-7",
           afterSequence: 7,
           provided: true,
           validForStreamGeneration: false,
         },
-        requestedSessionId: staleSessionID,
+        requestedSessionId: sessionID,
         streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
       }),
     );
@@ -789,10 +795,10 @@ describe("useDashboardSnapshot composer", () => {
           afterEventId: "checkpoint-event-7",
           afterSequence: 7,
         },
-        {
+        expect.objectContaining({
           backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
           logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
-        },
+        }),
       );
     });
     await waitFor(() => {

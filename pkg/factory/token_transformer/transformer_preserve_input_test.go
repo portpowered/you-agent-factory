@@ -115,6 +115,10 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
@@ -131,6 +135,216 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 	}
 	if string(token.Color.Payload) != "worker-output" {
 		t.Fatalf("payload = %q, want worker-output", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "worker-output" {
+		t.Fatalf("content = %#v, want response content not submitted request", token.Color.Content)
+	}
+}
+
+func TestOutputToken_OutputAsPayload_Continue_UsesNextTurnContent(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+		},
+		map[string]*state.WorkType{
+			"task": {ID: "task"},
+		},
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:init", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-1",
+			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
+		}},
+		Output:              "next-turn-output",
+		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
+		Outcome:             interfaces.OutcomeContinue,
+		Feedback:            "needs revision",
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if string(token.Color.Payload) != "next-turn-output" {
+		t.Fatalf("payload = %q, want next-turn-output", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "next-turn-output" {
+		t.Fatalf("content = %#v, want next-turn content not submitted request", token.Color.Content)
+	}
+	if token.Color.Tags["continue_feedback"] != "needs revision" {
+		t.Fatalf("continue feedback tag = %#v, want needs revision", token.Color.Tags)
+	}
+}
+
+func TestOutputToken_OutputAsPayload_RejectedLoopback_UsesNextTurnContent(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+		},
+		map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+				},
+			},
+		},
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:init", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-1",
+			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
+		}},
+		Output:              "next-turn-output",
+		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
+		Outcome:             interfaces.OutcomeRejected,
+		Feedback:            "try again",
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "next-turn-output" {
+		t.Fatalf("content = %#v, want next-turn content for loopback rejection", token.Color.Content)
+	}
+}
+
+func TestOutputToken_OutputAsPayload_RejectedFailurePlace_KeepsRequestContent(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:failed": {ID: "task:failed", TypeID: "task", State: "failed"},
+		},
+		map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+		},
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:failed", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-1",
+			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
+		Outcome:             interfaces.OutcomeRejected,
+		Feedback:            "rejected",
+		TransitionID:        "t1",
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+		t.Fatalf("content = %#v, want request content preserved on failure rejection", token.Color.Content)
+	}
+	if string(token.Color.Payload) != "input-payload" {
+		t.Fatalf("payload = %q, want input-payload preserved on failure rejection", token.Color.Payload)
+	}
+}
+
+func TestOutputToken_OutputAsPayload_Failed_KeepsRequestContentAndDiagnostics(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:failed": {ID: "task:failed", TypeID: "task", State: "failed"},
+		},
+		map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+		},
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:failed", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-1",
+			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
+		Outcome:             interfaces.OutcomeFailed,
+		Error:               "agent crashed",
+		TransitionID:        "t1",
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if string(token.Color.Payload) != "input-payload" {
+		t.Fatalf("payload = %q, want input-payload preserved on failure", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+		t.Fatalf("content = %#v, want request content preserved on failure", token.Color.Content)
+	}
+	if token.History.LastError != "agent crashed" {
+		t.Fatalf("LastError = %q, want failure diagnostics", token.History.LastError)
+	}
+	if len(token.History.FailureLog) != 1 || token.History.FailureLog[0].Error != "agent crashed" {
+		t.Fatalf("FailureLog = %#v, want failure record", token.History.FailureLog)
 	}
 }
 
@@ -469,5 +683,8 @@ func TestOutputToken_OutputAsPayloadExplicit_UsesWorkerOutput(t *testing.T) {
 	}
 	if string(token.Color.Payload) != "worker-output" {
 		t.Fatalf("payload = %q, want worker-output", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "worker-output" {
+		t.Fatalf("content = %#v, want response content not submitted request", token.Color.Content)
 	}
 }

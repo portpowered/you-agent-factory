@@ -165,9 +165,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	logger := logging.EnsureLogger(p.Logger)
 
 	logger.Info("inferencer: request starting",
-		workLogFields(req.Dispatch.Execution,
-			"dispatcher", string(req.ModelProvider),
-			"model", req.Model)...)
+		providerLogFields(req, "model", req.Model)...)
 
 	behavior := providerBehaviorFor(req.ModelProvider, logger)
 	buildCtx := &ProviderBuildContext{
@@ -178,9 +176,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	args, err := behavior.BuildArgs(ctx, req, p.SkipPermissions, buildCtx)
 	if err != nil {
 		logger.Error("inferencer: request argument validation failed",
-			workLogFields(req.Dispatch.Execution,
-				"dispatcher", string(req.ModelProvider),
-				"error", err.Error())...)
+			providerLogFields(req, "error", err.Error())...)
 		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
 			interfaces.WorkFailureTypePermanentBadRequest,
 			err.Error(),
@@ -199,8 +195,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
 	if err != nil {
 		logger.Error("inference dispatch failed with error",
-			"raw_error", err.Error(),
-		)
+			providerLogFields(req, "error", err.Error())...)
 		providerErr := normalizeProviderExecutionError(
 			req.ModelProvider, result, err, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
@@ -213,10 +208,10 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	}
 	if result.ExitCode != 0 {
 		logger.Error("inference dispatch failed with non-zero exit code",
-			"exit_code", result.ExitCode,
-			"stderr", result.Stderr,
-			"stdout", result.Stdout,
-		)
+			providerLogFields(req,
+				"exit_code", result.ExitCode,
+				"stdout_bytes", len(result.Stdout),
+				"stderr_bytes", len(result.Stderr))...)
 		providerErr := normalizeProviderExitFailure(
 			req.ModelProvider, result, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
@@ -234,9 +229,8 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 
 	content := string(result.Stdout)
 	logger.Info("inferencer: request completed",
-		workLogFields(req.Dispatch.Execution,
-			"dispatcher", string(req.ModelProvider),
-			"output_len", len(content))...)
+		appendProviderSessionLogFields(providerLogFields(req,
+			"output_len", len(content)), providerSession)...)
 	p.publishCompletedFragment(req.Dispatch.DispatchID, providerSession)
 
 	return interfaces.InferenceResponse{
@@ -453,8 +447,7 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 }
 
 func cursorFailureLogFields(req interfaces.RunnerExecutionRequest, cursorProvider bool, result CommandResult, extra ...any) []any {
-	return workLogFields(req.Dispatch.Execution,
-		append([]any{"dispatcher", string(req.ModelProvider)}, extra...)...)
+	return providerLogFields(req, extra...)
 }
 
 func cursorInferenceFailureDiagnostics(
@@ -490,9 +483,8 @@ func (p *ScriptWrapProvider) completeCursorInference(
 	}
 	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
 	logger.Info("inferencer: request completed",
-		workLogFields(req.Dispatch.Execution,
-			"dispatcher", string(req.ModelProvider),
-			"output_len", len(parsed.Content))...)
+		appendProviderSessionLogFields(providerLogFields(req,
+			"output_len", len(parsed.Content)), parsed.ProviderSession)...)
 	p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
 	return interfaces.InferenceResponse{
 		Content:         parsed.Content,

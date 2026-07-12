@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  createControlledIndexedDBTestDouble,
+  flushPromiseContinuations,
+} from "../../../../testing/controlled-indexeddb-test-utils";
 import { createTimelineCheckpointIndexedDBTestDouble } from "../../../../testing/timeline-checkpoint-indexeddb-test-utils";
 import { deletePersistedTimelineCheckpoint } from "./deletePersistedTimelineCheckpoint";
 
@@ -19,5 +23,29 @@ describe("deletePersistedTimelineCheckpoint", () => {
 
     expect(records.has("superseded-storage-key")).toBe(false);
     expect(records.has("unaffected-storage-key")).toBe(true);
+  });
+
+  it("preserves the envelope when an in-flight deletion is aborted", async () => {
+    const persisted = { storageKey: "superseded-storage-key" };
+    const { controls, indexedDB, records } =
+      createControlledIndexedDBTestDouble<typeof persisted>();
+    records.set(persisted.storageKey, persisted);
+    const controller = new AbortController();
+
+    const deletion = deletePersistedTimelineCheckpoint(
+      indexedDB,
+      persisted,
+      { signal: controller.signal },
+    );
+    await flushPromiseContinuations();
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    expect(controls.pendingOperations()).toEqual(["delete"]);
+
+    controller.abort();
+    controls.succeed("delete");
+    await deletion;
+
+    expect(records.get(persisted.storageKey)).toEqual(persisted);
   });
 });

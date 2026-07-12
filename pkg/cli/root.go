@@ -23,6 +23,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
@@ -100,7 +101,8 @@ func NewRootCommand() *cobra.Command {
 			"  # Agent orientation and command matrix.\n" +
 			"  " + cliBinaryName + " docs agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
+			policy := diagnostics.resolvePolicy(false)
+			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy)
 		},
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
@@ -128,7 +130,7 @@ func NewRootCommand() *cobra.Command {
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newMCPCommand(),
-		newModelsCommand(globals, diagnostics),
+		newModelsCommand(globals, diagnostics, operatorDefaults),
 		newRunCommand(globals, diagnostics, operatorDefaults),
 		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(globals, diagnostics),
@@ -159,15 +161,20 @@ func registerDeprecatedPortFlag(cmd *cobra.Command) {
 	_ = cmd.Flags().MarkHidden("port")
 }
 
+func (opts *cliDiagnosticsOptions) resolvePolicy(quiet bool) terminalpolicy.Policy {
+	return terminalpolicy.Resolve(terminalpolicy.Options{
+		Quiet:   quiet,
+		Verbose: opts.verbose,
+		Debug:   opts.debug,
+	})
+}
+
 func (opts *cliDiagnosticsOptions) verboseEnabled() bool {
-	return opts.verbose || opts.debug
+	return opts.resolvePolicy(false).VerboseEnabled()
 }
 
 func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
-	if !opts.verboseEnabled() {
-		return nil
-	}
-	return cmd.ErrOrStderr()
+	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 
 func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
@@ -437,19 +444,19 @@ func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 	return cmd
 }
 
-func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
 	modelsCmd := &cobra.Command{
 		Use:   "models",
 		Short: "Inspect discovered models from a running service",
 		Long: "Inspect discovered models from a running infinite-you service.\n\n" +
 			"Use list to discover model identifiers, inspect to view one model's readiness and capabilities, " +
-			"invoke to call a discovered model directly through the same /models contract exposed by the API, " +
+			"invoke to call a discovered model directly through the shared in-process bootstrap, " +
 			"and pull to populate the managed local-model cache for supported local assets.",
 	}
 	modelsCmd.AddCommand(
 		newModelsListCommand(globals, diagnostics),
 		newModelsInspectCommand(globals, diagnostics),
-		newModelsInvokeCommand(globals, diagnostics),
+		newModelsInvokeCommand(globals, diagnostics, operatorDefaults),
 		newModelsPullCommand(globals, diagnostics),
 	)
 	return modelsCmd
@@ -497,7 +504,7 @@ func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 	return cmd
 }
 
-func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
 	cfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
 	cmd := &cobra.Command{
 		Use:     "invoke <model-name>",
@@ -505,9 +512,19 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			logger, err := logging.BuildLogger(diagnostics.verboseEnabled(), diagnostics.debug)
+			if err != nil {
+				return err
+			}
+			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+			if err != nil {
+				return err
+			}
 			cfg.Server = globals.server
 			cfg.ModelName = args[0]
 			cfg.JSON = globals.json
+			cfg.OperatorDefaults = resolvedOperatorDefaults
+			cfg.Logger = logger
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -684,13 +701,14 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	return cmd
 }
 
-func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, verbose, debug bool) error {
-	logger, err := logging.BuildLogger(verbose, debug)
+func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy) error {
+	logger, err := policy.BuildLogger()
 	if err != nil {
 		return err
 	}
 	cfg.Logger = logger
-	cfg.Verbose = verbose || debug
+	cfg.Verbose = policy.VerboseEnabled()
+	cfg.TerminalPolicy = policy
 
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
@@ -711,16 +729,20 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
-	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation || textInvocation
+	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)
+	cfg.TerminalPolicy = runPolicy
+	cfg.Verbose = runPolicy.VerboseEnabled()
+	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
+	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
 	if cleanInvocation || textInvocation {
 		cfg.Output = cmd.OutOrStdout()
 	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		cfg.Output = cmd.OutOrStdout()
-		cfg.StartupOutput = cmd.OutOrStdout()
+		cfg.StartupOutput = humanTerminal
 	} else {
-		cfg.StartupOutput = cmd.OutOrStdout()
+		cfg.StartupOutput = humanTerminal
 	}
-	cfg.Diagnostics = cmd.ErrOrStderr()
+	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
 
 	ctx, cancel := context.WithCancel(cmd.Context())
@@ -739,6 +761,18 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	}()
 
 	return runCLI(ctx, cfg)
+}
+
+func resolveEffectiveRunPolicy(cmd *cobra.Command, cfg runcli.RunConfig, basePolicy terminalpolicy.Policy) terminalpolicy.Policy {
+	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
+	if cfg.SuppressDashboardRendering || cleanInvocation || textInvocation {
+		return terminalpolicy.Resolve(terminalpolicy.Options{
+			Quiet:   true,
+			Verbose: basePolicy.VerboseEnabled(),
+			Debug:   basePolicy.DebugEnabled(),
+		})
+	}
+	return basePolicy
 }
 
 func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {

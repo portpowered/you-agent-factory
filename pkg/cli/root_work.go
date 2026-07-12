@@ -46,9 +46,15 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	if helpRequested(cmd) {
 		return writeRunCommandHelp(cmd, &resolvedConfig)
 	}
-	err = runFactory(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
-	if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
-		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
+	err = runFactory(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy)
+	if err != nil {
+		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
+		if !runcli.WriteInvocationError(errorWriter, err, globals.json) {
+			if errorWriter != nil {
+				_, _ = fmt.Fprintln(errorWriter, err)
+			}
+		}
 	}
 	return err
 }

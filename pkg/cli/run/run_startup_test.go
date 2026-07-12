@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -150,13 +151,15 @@ func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
 	}()
 
 	startedAt := time.Date(2026, 5, 29, 4, 45, 3, 0, time.UTC)
+	runtimeLogPath := "/tmp/runtime-logs/2026/05/29/044503.000000000-runtime-log-runtime-1-abc123.log"
+	runtimeMetricsPath := "/tmp/runtime-metrics/2026/05/29/044503.000000000-runtime-metrics-session-1-runtime-1-def456.log"
 	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			runtimeLogDiagnostics: service.RuntimeLogDiagnostics{
-				Path:                "/tmp/runtime-logs/2026-05/2026-05-29/044503-runtime.log",
+				Path:                runtimeLogPath,
 				RootDir:             "/tmp/runtime-logs",
 				StartTimeUTC:        startedAt,
-				MetricsPath:         "/tmp/runtime-metrics/2026/05/29/044503-session-runtime.log",
+				MetricsPath:         runtimeMetricsPath,
 				MetricsRootDir:      "/tmp/runtime-metrics",
 				MetricsStartTimeUTC: startedAt,
 			},
@@ -184,21 +187,87 @@ func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
 	}
 
 	output := out.String()
-	if !strings.Contains(output, "Runtime log: /tmp/runtime-logs/2026-05/2026-05-29/044503-runtime.log") {
+	if !strings.Contains(output, "Runtime log: "+runtimeLogPath) {
 		t.Fatalf("startup output = %q, want runtime log path", output)
 	}
 	if !strings.Contains(output, "Runtime log start (UTC): 2026-05-29 04:45:03 UTC") {
 		t.Fatalf("startup output = %q, want UTC runtime log start", output)
 	}
-	if !strings.Contains(output, "Runtime metrics: /tmp/runtime-metrics/2026/05/29/044503-session-runtime.log") {
+	if !strings.Contains(output, "Runtime metrics: "+runtimeMetricsPath) {
 		t.Fatalf("startup output = %q, want runtime metrics path", output)
 	}
 	if !strings.Contains(output, "Runtime metrics start (UTC): 2026-05-29 04:45:03 UTC") {
 		t.Fatalf("startup output = %q, want UTC runtime metrics start", output)
 	}
+	assertStartupOutputSharedLayoutRuntimePaths(t, output, "/tmp/runtime-logs", "/tmp/runtime-metrics", startedAt, startedAt)
 	if strings.Contains(output, "0001-01-01") {
 		t.Fatalf("startup output = %q, must not expose Go zero-time output", output)
 	}
+}
+
+func TestRun_StartupOutputReportsSharedLayoutPathsFromBuiltService(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	writeRunWireTestWorkerAgentsMD(t, dir, "worker-a")
+	writeRunWireTestWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	logDir := filepath.Join(t.TempDir(), "runtime-logs")
+	metricsDir := filepath.Join(t.TempDir(), "runtime-metrics")
+	before := time.Now().UTC()
+
+	var builtService *service.FactoryService
+	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		svc, err := service.BuildFactoryService(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		builtService = svc
+		return stubFactoryService{
+			runtimeLogDiagnostics: svc.RuntimeLogDiagnostics(),
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+	t.Cleanup(func() {
+		if builtService == nil {
+			return
+		}
+		bundle := builtService.CurrentRuntimeBundle()
+		if bundle == nil {
+			return
+		}
+		if err := service.CloseRuntimeBundleSinksForCompose(bundle.LogSink, bundle.MetricsSink); err != nil {
+			t.Errorf("close runtime bundle sinks: %v", err)
+		}
+	})
+
+	var out bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		Dir:                        dir,
+		Port:                       0,
+		DisableDefaultRecording:    true,
+		RuntimeLogDir:              logDir,
+		RuntimeMetricsDir:          metricsDir,
+		MockWorkersEnabled:         true,
+		SuppressDashboardRendering: true,
+		StartupOutput:              &out,
+		Logger:                     zap.NewNop(),
+	})
+	after := time.Now().UTC()
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	assertStartupOutputSharedLayoutRuntimePaths(t, out.String(), logDir, metricsDir, before, after)
 }
 
 func TestRun_StartupOutputUsesFallbackForMissingRuntimeLogStartTime(t *testing.T) {
@@ -463,7 +532,7 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	logger := zap.New(core)
 	resolution := &factoryconfig.NamedFactoryResolution{
 		Name:               "@you/tts",
-		FactoryDir:         "/tmp/home/.you-agent-factory/you-agent-factories/@you%2Ftts",
+		FactoryDir:         "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts",
 		Source:             factoryconfig.NamedFactoryResolutionSourceBuiltin,
 		ProjectRoot:        "/tmp/project/factory",
 		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
@@ -488,7 +557,7 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	if got := context["named_factory_name"]; got != "@you/tts" {
 		t.Fatalf("built-in log name = %#v, want @you/tts", got)
 	}
-	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/you-agent-factories/@you%2Ftts" {
+	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts" {
 		t.Fatalf("built-in log target dir = %#v", got)
 	}
 }
@@ -813,5 +882,109 @@ func TestFormatCompactionNotice(t *testing.T) {
 	})
 	if got != "stream coalesced (2 earlier events omitted)" {
 		t.Fatalf("notice = %q", got)
+	}
+}
+
+func assertStartupOutputSharedLayoutRuntimePaths(
+	t *testing.T,
+	output, logRoot, metricsRoot string,
+	earliest, latest time.Time,
+) {
+	t.Helper()
+
+	logPath := startupArtifactPathLine(t, output, "Runtime log:")
+	metricsPath := startupArtifactPathLine(t, output, "Runtime metrics:")
+	assertStartupSharedLayoutRuntimeLogPath(t, logPath, logRoot, earliest, latest)
+	assertStartupSharedLayoutRuntimeMetricsPath(t, metricsPath, metricsRoot, earliest, latest)
+
+	logStart := startupArtifactStartLine(t, output, "Runtime log start (UTC):")
+	metricsStart := startupArtifactStartLine(t, output, "Runtime metrics start (UTC):")
+	if logStart != metricsStart {
+		t.Fatalf("runtime log start = %q, metrics start = %q, want matching UTC timestamps", logStart, metricsStart)
+	}
+}
+
+func startupArtifactPathLine(t *testing.T, output, prefix string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, prefix+" ") {
+			return strings.TrimPrefix(line, prefix+" ")
+		}
+	}
+	t.Fatalf("startup output missing %q line:\n%s", prefix, output)
+	return ""
+}
+
+func startupArtifactStartLine(t *testing.T, output, prefix string) string {
+	t.Helper()
+
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		}
+	}
+	t.Fatalf("startup output missing %q line:\n%s", prefix, output)
+	return ""
+}
+
+func assertStartupSharedLayoutRuntimeLogPath(t *testing.T, path, rootDir string, earliest, latest time.Time) {
+	t.Helper()
+
+	year, month, day, timeToken := splitStartupSharedLayoutArtifactPath(t, path, rootDir)
+	filenamePattern := regexp.MustCompile(`^` + regexp.QuoteMeta(timeToken) + `-runtime-log-[A-Za-z0-9_.-]+-[A-Za-z0-9_.-]+\.log$`)
+	if !filenamePattern.MatchString(filepath.Base(path)) {
+		t.Fatalf("runtime log filename = %q, want <time>-runtime-log-<runtime-id>-<unique>.log", filepath.Base(path))
+	}
+	assertStartupSharedLayoutTimestamp(t, year, month, day, timeToken, earliest, latest)
+}
+
+func assertStartupSharedLayoutRuntimeMetricsPath(t *testing.T, path, rootDir string, earliest, latest time.Time) {
+	t.Helper()
+
+	year, month, day, timeToken := splitStartupSharedLayoutArtifactPath(t, path, rootDir)
+	filenamePattern := regexp.MustCompile(`^` + regexp.QuoteMeta(timeToken) + `-runtime-metrics-[A-Za-z0-9_.-]+-[A-Za-z0-9_.-]+-[A-Za-z0-9_.-]+\.log$`)
+	if !filenamePattern.MatchString(filepath.Base(path)) {
+		t.Fatalf("runtime metrics filename = %q, want <time>-runtime-metrics-<session>-<runtime>-<unique>.log", filepath.Base(path))
+	}
+	assertStartupSharedLayoutTimestamp(t, year, month, day, timeToken, earliest, latest)
+}
+
+func splitStartupSharedLayoutArtifactPath(t *testing.T, path, rootDir string) (year, month, day, timeToken string) {
+	t.Helper()
+
+	rel, err := filepath.Rel(rootDir, path)
+	if err != nil {
+		t.Fatalf("artifact path %q is not below root %q: %v", path, rootDir, err)
+	}
+	parts := strings.Split(rel, string(os.PathSeparator))
+	if len(parts) != 4 {
+		t.Fatalf("artifact relative path = %q, want <yyyy>/<mm>/<dd>/<time-kind>.log", rel)
+	}
+	for _, part := range parts[:3] {
+		if ok, matchErr := regexp.MatchString(`^\d{2,4}$`, part); matchErr != nil || !ok {
+			t.Fatalf("calendar directory = %q, want numeric yyyy/mm/dd segment", part)
+		}
+	}
+	matches := regexp.MustCompile(`^(\d{6}\.\d{9})-runtime-`).FindStringSubmatch(parts[3])
+	if matches == nil {
+		t.Fatalf("artifact filename = %q, want sortable UTC time-kind prefix", parts[3])
+	}
+	return parts[0], parts[1], parts[2], matches[1]
+}
+
+func assertStartupSharedLayoutTimestamp(t *testing.T, year, month, day, timeToken string, earliest, latest time.Time) {
+	t.Helper()
+
+	startedAt, err := time.ParseInLocation(
+		"2006 01 02 150405.000000000",
+		year+" "+month+" "+day+" "+timeToken,
+		time.UTC,
+	)
+	if err != nil {
+		t.Fatalf("parse artifact timestamp from %s/%s/%s %s: %v", year, month, day, timeToken, err)
+	}
+	if startedAt.Before(earliest.Add(-time.Second)) || startedAt.After(latest.Add(time.Second)) {
+		t.Fatalf("artifact timestamp = %s, want between %s and %s", startedAt, earliest, latest)
 	}
 }
