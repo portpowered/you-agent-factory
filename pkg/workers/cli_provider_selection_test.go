@@ -333,6 +333,116 @@ func TestSelectCLIProvider_DiscoveryPreferenceRankTables(t *testing.T) {
 	}
 }
 
+type cliProviderNoAgentHarnessCase struct {
+	name            string
+	input           CLIProviderSelectionInput
+	presentCommands map[string]bool
+	wantGuidance    []string
+}
+
+func fakeCLIProviderNoAgentHarnessCases() []cliProviderNoAgentHarnessCase {
+	return []cliProviderNoAgentHarnessCase{
+		{
+			name:            "all defaults unset and no providers available",
+			presentCommands: map[string]bool{},
+			wantGuidance: []string{
+				"install a supported agent CLI provider on PATH",
+				"set an explicit invocation provider",
+				"configure a factory default provider",
+				"configure a system default provider",
+			},
+		},
+		{
+			name: "unsupported explicit falls through to empty discovery without deprecated model default injection",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: interfaces.WorkerModelProviderDefault,
+			},
+			presentCommands: map[string]bool{},
+			wantGuidance: []string{
+				"install a supported agent CLI provider on PATH",
+			},
+		},
+		{
+			name: "unsupported factory and system defaults fall through to empty discovery",
+			input: CLIProviderSelectionInput{
+				FactoryDefault: "openai",
+				SystemDefault:  "legacy-model-default",
+			},
+			presentCommands: map[string]bool{},
+			wantGuidance: []string{
+				"install a supported agent CLI provider on PATH",
+			},
+		},
+		{
+			name: "whitespace defaults with providers absent on PATH",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: "   ",
+				FactoryDefault:     "\t",
+				SystemDefault:      " ",
+			},
+			presentCommands: map[string]bool{},
+			wantGuidance: []string{
+				"install a supported agent CLI provider on PATH",
+			},
+		},
+		{
+			name: "unsupported values at all layers with no providers available",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: "openai",
+				FactoryDefault:     interfaces.WorkerModelProviderDefault,
+				SystemDefault:      "legacy-model-default",
+			},
+			presentCommands: map[string]bool{},
+			wantGuidance: []string{
+				"install a supported agent CLI provider on PATH",
+			},
+		},
+	}
+}
+
+func assertCLIProviderNoAgentHarness(t *testing.T, tc cliProviderNoAgentHarnessCase) {
+	t.Helper()
+
+	discovery := fakeCLIProviderDiscoveryView(tc.presentCommands)
+	result := SelectCLIProvider(tc.input, discovery)
+
+	if result.OK() {
+		t.Fatalf("result = %#v, want failure", result)
+	}
+	if result.Selected != nil {
+		t.Fatalf("selected = %#v, want nil without deprecated model-default injection", result.Selected)
+	}
+	if result.Failure == nil {
+		t.Fatal("failure = nil, want structured NO_AGENT_HARNESS failure")
+	}
+	if result.Failure.Code != CLIProviderSelectionFailureNoAgentHarness {
+		t.Fatalf("failure code = %q, want %q", result.Failure.Code, CLIProviderSelectionFailureNoAgentHarness)
+	}
+	if result.Failure.Message == "" {
+		t.Fatal("failure message = empty, want actionable text")
+	}
+	if result.Failure.Guidance == "" {
+		t.Fatal("failure guidance = empty, want actionable text")
+	}
+	for _, want := range tc.wantGuidance {
+		if !strings.Contains(result.Failure.Guidance, want) {
+			t.Fatalf("guidance = %q, want substring %q", result.Failure.Guidance, want)
+		}
+	}
+	formatted := FormatCLIProviderSelectionFailure(*result.Failure)
+	if !strings.Contains(formatted, string(CLIProviderSelectionFailureNoAgentHarness)) {
+		t.Fatalf("formatted = %q, want machine-readable code", formatted)
+	}
+}
+
+func TestSelectCLIProvider_NoAgentHarnessTables(t *testing.T) {
+	for _, tc := range fakeCLIProviderNoAgentHarnessCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			assertCLIProviderNoAgentHarness(t, tc)
+		})
+	}
+}
+
 func TestSelectCLIProvider_DiscoveryIgnoresRegistrationSliceOrder(t *testing.T) {
 	reversed := RegisteredCLIProviders()
 	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
