@@ -234,6 +234,7 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		fixture string
 		policy  workflowpolicy.EffectivePolicy
 		want    string
+		code    string
 	}{
 		{
 			fixture: "agent-run-policy-denied-model.workflow.js",
@@ -243,7 +244,8 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		{
 			fixture: "agent-run-policy-denied-command.workflow.js",
 			policy:  basePolicy,
-			want:    `policy denied: command "deploy" is not listed in allowedCommands`,
+			want:    `agent.run() does not support field "command"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-reasoning.workflow.js",
@@ -253,22 +255,26 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		{
 			fixture: "agent-run-policy-denied-sandbox.workflow.js",
 			policy:  basePolicy,
-			want:    `policy denied: sandbox "workspace-write" is not allowed when policy.mode is READ_ONLY`,
+			want:    `agent.run() does not support field "sandbox"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-writable-roots.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: writableRoots are not allowed by effective policy",
+			want:    `agent.run() does not support field "writableRoots"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-network.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: network access is not allowed by effective policy",
+			want:    `agent.run() does not support field "network"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-concurrency.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: requested concurrency 4 exceeds policy concurrency 2",
+			want:    `agent.run() does not support field "concurrency"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 	}
 
@@ -276,8 +282,12 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		t.Run(tc.fixture, func(t *testing.T) {
 			req := policyDeniedRequest(t, tc.fixture, tc.policy)
 			outcome := runExecutionFailure(t, req)
-			if outcome.Failure.Code != workflowruntime.CodeScriptError {
-				t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeScriptError)
+			wantCode := tc.code
+			if wantCode == "" {
+				wantCode = workflowruntime.CodeScriptError
+			}
+			if outcome.Failure.Code != wantCode {
+				t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, wantCode)
 			}
 			if !strings.Contains(outcome.Failure.Message, tc.want) {
 				t.Fatalf("failure message = %q, want substring %q", outcome.Failure.Message, tc.want)

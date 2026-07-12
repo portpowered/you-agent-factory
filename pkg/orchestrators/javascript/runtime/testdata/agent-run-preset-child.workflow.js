@@ -4,9 +4,6 @@ return (async function () {
     prompt: "summarize workflows",
     label: "summarize-findings",
     preset: "careful-review",
-    command: "review",
-    sandbox: "read-only",
-    outputSchema: { type: "object", properties: { text: { type: "string" } } },
   });
   return { label: meta.name, subject: args.subject, child: child };
 })();

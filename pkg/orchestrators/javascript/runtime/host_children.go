@@ -128,10 +128,12 @@ const (
 )
 
 type parallelItem struct {
-	index int
-	kind  parallelItemKind
-	spec  map[string]any
-	value goja.Value
+	index             int
+	kind              parallelItemKind
+	spec              map[string]any
+	request           ChildExecutionRequest
+	requestValidation error
+	value             goja.Value
 }
 
 func (g *runtimeGlobals) bindParallelAPI() error {
@@ -143,11 +145,12 @@ func (g *runtimeGlobals) hostParallel(call goja.FunctionCall) goja.Value {
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
-	if err := g.denyChildSlots(len(items)); err != nil {
+	dispatchableCount := g.normalizeParallelAgentSpecs(items)
+	if err := g.denyChildSlots(dispatchableCount); err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
-	concurrency := g.effectiveParallelConcurrency(len(items))
+	concurrency := g.effectiveParallelConcurrency(dispatchableCount)
 	results, err := g.executeParallel(items, concurrency)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
@@ -218,6 +221,29 @@ func (g *runtimeGlobals) effectiveParallelConcurrency(itemCount int) int {
 	return concurrency
 }
 
+// normalizeParallelAgentSpecs applies the runtime child contract before policy
+// accounts for dispatchable parallel work. Invalid object specs remain in the
+// result set as failures, but do not consume fanout budget or dispatch identity.
+func (g *runtimeGlobals) normalizeParallelAgentSpecs(items []parallelItem) int {
+	dispatchableCount := 0
+	for index := range items {
+		if items[index].kind == parallelItemFunction {
+			dispatchableCount++
+			continue
+		}
+		items[index].request, items[index].requestValidation = childExecutionRequestFromSpec(
+			items[index].spec,
+			g.workflowName(),
+			g.argsSubject(),
+			g.agents,
+		)
+		if items[index].requestValidation == nil {
+			dispatchableCount++
+		}
+	}
+	return dispatchableCount
+}
+
 func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) ([]any, error) {
 	results := make([]any, len(items))
 	if len(items) == 0 {
@@ -229,6 +255,10 @@ func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) 
 	for _, item := range items {
 		switch item.kind {
 		case parallelItemAgentSpec:
+			if item.requestValidation != nil {
+				results[item.index] = failedChildResultValue("", "", item.requestValidation)
+				continue
+			}
 			specItems = append(specItems, item)
 		case parallelItemFunction:
 			functionItems = append(functionItems, item)
@@ -281,12 +311,7 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 				return
 			}
 
-			req, err := childExecutionRequestFromSpec(item.spec, g.workflowName(), g.argsSubject(), g.agents)
-			if err != nil {
-				results[item.index] = failedChildResultValue("", "", err)
-				return
-			}
-			req, err = ResolveChildWorkerSettings(req, g.agents, g.workerSettings)
+			req, err := ResolveChildWorkerSettings(item.request, g.agents, g.workerSettings)
 			if err != nil {
 				results[item.index] = failedChildResultValue(req.Label, "", err)
 				return

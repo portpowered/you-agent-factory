@@ -3,11 +3,10 @@ return (async function () {
   const child = await agent.run({
     prompt: "summarize workflows",
     label: "summarize-findings",
+    preset: "careful",
+    modelProvider: "codex",
     model: "gpt-test",
     reasoningEffort: "medium",
-    command: "review",
-    sandbox: "read-only",
-    outputSchema: { type: "object", properties: { text: { type: "string" } } },
   });
   return {
     label: meta.name,
