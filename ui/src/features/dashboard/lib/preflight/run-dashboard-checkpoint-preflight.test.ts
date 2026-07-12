@@ -173,7 +173,9 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
       },
     );
     expect(onRemapSessionID).toHaveBeenCalledWith(remappedSessionID);
-    expect(timelinePublic.deletePersistedTimelineCheckpoint).toHaveBeenCalledWith(
+    expect(
+      timelinePublic.deletePersistedTimelineCheckpoint,
+    ).toHaveBeenCalledWith(
       window.indexedDB,
       expect.objectContaining({
         streamIdentity: expect.objectContaining({
@@ -182,6 +184,7 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
           streamGenerationID: "generation-stale",
         }),
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(
       timelinePublic.clearTimelineCheckpointsForSession,
@@ -290,6 +293,7 @@ describe("runDashboardCheckpointPreflight recovery", () => {
           streamGenerationID: "generation-stale",
         }),
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(hydration.initialReconnectCursor).toBeUndefined();
   });

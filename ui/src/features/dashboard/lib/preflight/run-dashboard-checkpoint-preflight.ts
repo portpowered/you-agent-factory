@@ -64,6 +64,7 @@ async function reconcileReconnectCursor({
   queryClient,
   requestedSessionId,
   resolvedStreamIdentity,
+  signal,
   validatedReconnectCursor,
 }: {
   peekedCheckpoint: Awaited<ReturnType<typeof peekPersistedTimelineCheckpoint>>;
@@ -71,6 +72,7 @@ async function reconcileReconnectCursor({
   queryClient: QueryClient;
   requestedSessionId: string;
   resolvedStreamIdentity: TimelineCheckpointStreamIdentity;
+  signal: AbortSignal;
   validatedReconnectCursor: ResumePreflightResolution["reconnectCursor"];
 }): Promise<ResumePreflightResolution["reconnectCursor"]> {
   if (
@@ -80,7 +82,16 @@ async function reconcileReconnectCursor({
       resolvedStreamIdentity,
     )
   ) {
-    await deletePersistedTimelineCheckpoint(window.indexedDB, peekedCheckpoint);
+    if (!isCurrent()) {
+      return undefined;
+    }
+    await deletePersistedTimelineCheckpoint(
+      window.indexedDB,
+      peekedCheckpoint,
+      {
+        signal,
+      },
+    );
     if (isCurrent()) {
       recoverDashboardSessionScopedState(
         queryClient,
@@ -121,7 +132,16 @@ async function loadRestoredCheckpoint({
   signal: AbortSignal;
 }): Promise<FactoryTimelineCheckpoint | null> {
   if (shouldClearCheckpointAfterPreflight(response)) {
-    await deletePersistedTimelineCheckpoint(window.indexedDB, peekedCheckpoint);
+    if (!isCurrent()) {
+      return null;
+    }
+    await deletePersistedTimelineCheckpoint(
+      window.indexedDB,
+      peekedCheckpoint,
+      {
+        signal,
+      },
+    );
     if (isCurrent()) {
       recoverDashboardSessionScopedState(
         queryClient,
@@ -193,6 +213,7 @@ async function hydrateResumePreflight({
     queryClient,
     requestedSessionId,
     resolvedStreamIdentity: checkpointStreamIdentity,
+    signal,
     validatedReconnectCursor,
   });
 

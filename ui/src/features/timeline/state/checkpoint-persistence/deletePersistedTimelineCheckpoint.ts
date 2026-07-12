@@ -9,6 +9,7 @@ const CHECKPOINT_STORE_NAME = "checkpoints";
 export async function deletePersistedTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   persistedCheckpoint: { storageKey: string } | null,
+  options: { signal?: AbortSignal } = {},
 ): Promise<void> {
   const storageKey = persistedCheckpoint?.storageKey.trim() ?? "";
   if (!indexedDB || !storageKey) {
@@ -24,6 +25,8 @@ export async function deletePersistedTimelineCheckpoint(
       );
       await indexedDBRequestToPromise(
         transaction.objectStore(CHECKPOINT_STORE_NAME).delete(storageKey),
+        transaction,
+        options.signal,
       );
     } finally {
       database.close();
