@@ -7403,6 +7403,11 @@ components:
           type: object
           additionalProperties: true
           description: Default JavaScript workflow policy object applied when no runtime override exists.
+        agents:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/FactoryOrchestratorJavaScriptAgent'
+          description: Named child-agent roles and their operator worker preset defaults.
     FactoryOrchestratorJavaScriptInlineSource:
       type: object
       additionalProperties: false
@@ -9316,6 +9321,17 @@ components:
         defaultContent:
           $ref: '#/components/schemas/WorkContent'
           description: Optional final fallback content when neither runtime input nor config content resolves the slot.
+    FactoryOrchestratorJavaScriptAgent:
+      type: object
+      additionalProperties: false
+      description: Default worker selection for one named JavaScript child-agent role.
+      required:
+        - preset
+      properties:
+        preset:
+          type: string
+          minLength: 1
+          description: Operator worker preset inherited by child calls using this agent id.
     WorkTypeHandlingBehavior:
       type: string
       description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.

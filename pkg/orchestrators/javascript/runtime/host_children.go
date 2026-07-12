@@ -23,7 +23,7 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 	if !ok {
 		panic(g.vm.NewTypeError("agent.run() requires an object argument"))
 	}
-	req, err := childExecutionRequestFromSpec(spec, g.workflowName(), g.argsSubject())
+	req, err := childExecutionRequestFromSpec(spec, g.workflowName(), g.argsSubject(), g.agents)
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
@@ -277,7 +277,7 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 				return
 			}
 
-			req, err := childExecutionRequestFromSpec(item.spec, g.workflowName(), g.argsSubject())
+			req, err := childExecutionRequestFromSpec(item.spec, g.workflowName(), g.argsSubject(), g.agents)
 			if err != nil {
 				results[item.index] = failedChildResultValue("", "", err)
 				return

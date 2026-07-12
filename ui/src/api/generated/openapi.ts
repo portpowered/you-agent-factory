@@ -3813,6 +3813,12 @@ export interface components {
       defaultPolicy?: {
         [key: string]: unknown;
       };
+      /** @description Named child-agent roles and their operator worker preset defaults. */
+      agents?: {
+        [
+          key: string
+        ]: components["schemas"]["FactoryOrchestratorJavaScriptAgent"];
+      };
     };
     /** @description Inline JavaScript workflow source carried directly in the factory definition. */
     FactoryOrchestratorJavaScriptInlineSource: {
@@ -4735,6 +4741,11 @@ export interface components {
       config?: components["schemas"]["WorkContent"];
       /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
       defaultContent?: components["schemas"]["WorkContent"];
+    };
+    /** @description Default worker selection for one named JavaScript child-agent role. */
+    FactoryOrchestratorJavaScriptAgent: {
+      /** @description Operator worker preset inherited by child calls using this agent id. */
+      preset: string;
     };
     /**
      * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.

@@ -3,6 +3,7 @@ package workflowruntime
 import (
 	"encoding/json"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
@@ -16,6 +17,7 @@ type Request struct {
 	Metadata  map[string]string
 	Policy    workflowpolicy.EffectivePolicy
 	Resume    *ResumeContext
+	Agents    map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 }
 
 // ChildRecordSink reserves child dispatch identity and appends typed runtime records.

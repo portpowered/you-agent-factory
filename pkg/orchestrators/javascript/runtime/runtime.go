@@ -47,6 +47,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		ctx:           ctx,
 		records:       records,
 		childExecutor: childExecutor,
+		agents:        req.Agents,
 		onArtifact:    hooks.OnArtifact,
 	}
 	globals.bindResumeCheckpointState(req.Resume)

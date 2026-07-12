@@ -8,10 +8,58 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
+
+func TestAgentRun_InheritsFactoryNamedAgentPreset(t *testing.T) {
+	req := workflowruntime.Request{
+		Source:    `return (async function () { return agent.run({agentId: "reviewer", prompt: "review"}); })();`,
+		SessionID: "session-named-agent",
+		Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+			"reviewer": {Preset: "careful-review"},
+		},
+	}
+	var captured workflowruntime.ChildExecutionRequest
+	outcome, err := workflowruntime.Run(context.Background(), req, workflowruntime.Hooks{
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+				captured = child
+				return workflowruntime.ChildExecutionResult{Status: "COMPLETED", Request: child}, nil
+			})
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+	if captured.AgentID != "reviewer" || captured.Preset != "careful-review" {
+		t.Fatalf("child selection = %#v", captured)
+	}
+}
+
+func TestAgentRun_RejectsUnknownFactoryNamedAgentBeforeDispatch(t *testing.T) {
+	called := false
+	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+		Source:    `agent.run({agentId: "missing", prompt: "review"}); return {ok: true};`,
+		SessionID: "session-unknown-agent",
+	}, workflowruntime.Hooks{NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+		return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+			called = true
+			return workflowruntime.ChildExecutionResult{}, nil
+		})
+	}})
+	if err != nil || outcome.OK || called || !strings.Contains(outcome.Failure.Message, `unknown factory agent "missing"`) {
+		t.Fatalf("Run() outcome=%#v err=%v called=%v", outcome, err, called)
+	}
+}
+
+type childExecutorFunc func(context.Context, workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error)
+
+func (f childExecutorFunc) Execute(ctx context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+	return f(ctx, req)
+}
 
 func TestRun_AgentRunFakeChild_EmitsOrderedChildDispatchRecords(t *testing.T) {
 	source := readFixture(t, "agent-run-fake-child.workflow.js")

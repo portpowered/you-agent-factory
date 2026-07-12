@@ -15,6 +15,8 @@ import (
 type ChildExecutionRequest struct {
 	Prompt           string
 	Label            string
+	AgentID          string
+	Preset           string
 	Model            string
 	ReasoningEffort  string
 	Command          string
@@ -180,7 +182,7 @@ func fakeChildOutput(req ChildExecutionRequest, dispatchID, providerSessionRef, 
 	}
 }
 
-func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubject string) (ChildExecutionRequest, error) {
+func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubject string, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent) (ChildExecutionRequest, error) {
 	prompt := stringField(spec, "prompt")
 	if prompt == "" {
 		return ChildExecutionRequest{}, fmt.Errorf(`agent.run() requires a string "prompt" property`)
@@ -207,9 +209,22 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 	if err != nil {
 		return ChildExecutionRequest{}, err
 	}
+	agentID := strings.TrimSpace(stringField(spec, "agentId"))
+	preset := strings.TrimSpace(stringField(spec, "preset"))
+	if agentID != "" {
+		agent, ok := agents[agentID]
+		if !ok {
+			return ChildExecutionRequest{}, fmt.Errorf(`agent.run() references unknown factory agent %q`, agentID)
+		}
+		if preset == "" {
+			preset = strings.TrimSpace(agent.Preset)
+		}
+	}
 	return ChildExecutionRequest{
 		Prompt:          prompt,
 		Label:           stringField(spec, "label"),
+		AgentID:         agentID,
+		Preset:          preset,
 		Model:           stringField(spec, "model"),
 		ReasoningEffort: stringField(spec, "reasoningEffort"),
 		Command:         stringField(spec, "command"),

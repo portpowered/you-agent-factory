@@ -153,6 +153,18 @@ func composeDurableExecution(
 	if err != nil {
 		return nil, fmt.Errorf("compose durable session persistence: %w", err)
 	}
+	operatorConfigPath, err := resolveSystemConfigPath(cfg)
+	if err != nil {
+		return nil, err
+	}
+	operatorConfig, err := operatorconfig.LoadFileConfig(operatorConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("compose durable session worker presets: %w", err)
+	}
+	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
+	for _, preset := range operatorConfig.WorkerPresets {
+		workerPresetIDs[preset.ID] = struct{}{}
+	}
 	return factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
 		factorysessionexecution.ServiceConfig{
@@ -161,6 +173,7 @@ func composeDurableExecution(
 			ProviderExecutor: providerexecution.NewExecutor(cfg.ProviderOverride),
 			Persistence:      persistence,
 			Clock:            clock,
+			WorkerPresetIDs:  workerPresetIDs,
 		},
 	)
 }

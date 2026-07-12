@@ -1739,8 +1739,17 @@ type FactoryOrchestrator struct {
 	Petri *FactoryOrchestratorPetriConfig `json:"petri,omitempty"`
 }
 
+// FactoryOrchestratorJavaScriptAgent Default worker selection for one named JavaScript child-agent role.
+type FactoryOrchestratorJavaScriptAgent struct {
+	// Preset Operator worker preset inherited by child calls using this agent id.
+	Preset string `json:"preset"`
+}
+
 // FactoryOrchestratorJavaScriptConfig JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
 type FactoryOrchestratorJavaScriptConfig struct {
+	// Agents Named child-agent roles and their operator worker preset defaults.
+	Agents *map[string]FactoryOrchestratorJavaScriptAgent `json:"agents,omitempty"`
+
 	// ArgsSchema JSON Schema object describing workflow invocation arguments.
 	ArgsSchema *map[string]interface{} `json:"argsSchema,omitempty"`
 

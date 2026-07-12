@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -16,7 +17,8 @@ import (
 // preparation before runtime execution begins.
 type StartPrepareContext struct {
 	StartSourceContext
-	DeploymentCap int
+	DeploymentCap   int
+	WorkerPresetIDs map[string]struct{}
 }
 
 // PreparedStart is the normalized, validated durable start tuple shared by
@@ -51,6 +53,9 @@ func PrepareStart(req StartRequest, ctx StartPrepareContext) (PreparedStart, err
 		return PreparedStart{}, err
 	}
 	if err := validateResolvedSourceContent(resolution); err != nil {
+		return PreparedStart{}, err
+	}
+	if err := validateNamedAgentPresets(resolution.Agents, ctx.WorkerPresetIDs); err != nil {
 		return PreparedStart{}, err
 	}
 
@@ -95,6 +100,19 @@ func PrepareStart(req StartRequest, ctx StartPrepareContext) (PreparedStart, err
 	}, nil
 }
 
+func validateNamedAgentPresets(agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent, presetIDs map[string]struct{}) error {
+	for agentID, agent := range agents {
+		presetID := strings.TrimSpace(agent.Preset)
+		if _, ok := presetIDs[presetID]; !ok {
+			return NewValidationError(
+				"orchestrator.javascript.agents."+agentID+".preset",
+				fmt.Sprintf("factory agent %q references unknown operator worker preset %q", agentID, presetID),
+			)
+		}
+	}
+	return nil
+}
+
 func resolveStartSourceWithResolution(req StartRequest, ctx StartSourceContext) (ResolvedSource, workflowsource.Resolution, error) {
 	projectRoot := strings.TrimSpace(ctx.ProjectRoot)
 	if projectRoot == "" {
@@ -123,6 +141,7 @@ func resolveStartSourceWithResolution(req StartRequest, ctx StartSourceContext) 
 		Metadata: map[string]string{
 			"project": sourceCtx.ProjectRoot,
 		},
+		Agents: resolution.Agents,
 	}
 	if stage := resolutionOrderForLookupStage(resolution.LookupStage); stage != "" {
 		resolved.ResolutionOrder = []string{stage}

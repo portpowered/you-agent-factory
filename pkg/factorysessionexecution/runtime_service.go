@@ -206,6 +206,7 @@ type JavaScriptRuntimeServiceConfig struct {
 	ProviderExecutor  providerexecution.Executor
 	Persistence       runtimepersist.Store
 	Clock             factory.Clock
+	WorkerPresetIDs   map[string]struct{}
 }
 
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
@@ -216,6 +217,7 @@ type JavaScriptRuntimeService struct {
 	providerExecutor  providerexecution.Executor
 	persistence       runtimepersist.Store
 	clock             factory.Clock
+	workerPresetIDs   map[string]struct{}
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -238,6 +240,7 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 		childExecutorMode: normalizeChildExecutorMode(config.ChildExecutorMode),
 		providerExecutor:  executor,
 		clock:             factory.EnsureClock(config.Clock),
+		workerPresetIDs:   config.WorkerPresetIDs,
 		persistence:       config.Persistence,
 		sessions:          make(map[string]*runtimeSessionState),
 		startReplay:       make(map[string]startReplayRecord),
@@ -621,6 +624,7 @@ func normalizeStartTuple(req StartRequest) (StartRequest, string, error) {
 func (s *JavaScriptRuntimeService) prepareStart(normalized StartRequest) (PreparedStart, error) {
 	return PrepareStart(normalized, StartPrepareContext{
 		StartSourceContext: StartSourceContext{ProjectRoot: s.projectRoot},
+		WorkerPresetIDs:    s.workerPresetIDs,
 	})
 }
 
@@ -701,6 +705,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		Args:      argsJSON,
 		Metadata:  workflowMetadataFromResolved(resolved, normalized),
 		Policy:    policyResolution.Policy,
+		Agents:    resolved.Agents,
 	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized)))
 }
 
