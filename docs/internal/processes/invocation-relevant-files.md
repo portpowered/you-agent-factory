@@ -257,6 +257,11 @@ primary-result behavior.
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
   fresh-home materialization smoke case, a customer-edit preservation rerun
   smoke case, and a legacy-materialized upgrade smoke case.
+- Hermetic no-server named `@you/goal` package proof lives in
+  `pkg/cli/run/run_invocation_test.go`
+  (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
+  the real shared bootstrap path with mock workers and a TCP probe port to
+  assert no factory API/dashboard listener is bound.
 - CLI/API invocation parity for packaged `@you/goal` lives in
   `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
   comparing live session invocation API responses with real CLI `--json` output

@@ -7,12 +7,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
@@ -1199,6 +1206,145 @@ type capturingInvocationMetricsRecorder struct {
 
 func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric service.InvocationMetric) {
 	r.metrics = append(r.metrics, metric)
+}
+
+func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for hermetic named goal no-server invocation")
+	}
+
+	preserveRunGlobals(t)
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, goal.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+
+	mockWorkersPath := writePackagedGoalNoServerMockWorkersConfig(t)
+	probePort := reserveNoServerInvocationProbePort(t)
+	goalText := "hermetic no-server named goal prompt"
+
+	var output bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	err = Run(ctx, RunConfig{
+		Dir:                        resolution.FactoryDir,
+		NamedFactoryName:           goal.PackagedFactoryName,
+		NamedFactoryResolution:     resolution,
+		InvocationPositionalText:   &goalText,
+		StdinIsTTY:                 func() bool { return true },
+		SuppressDashboardRendering: true,
+		MockWorkersEnabled:         true,
+		MockWorkersConfigPath:      mockWorkersPath,
+		DisableDefaultRecording:    true,
+		Output:                     &output,
+		Port:                       probePort,
+		AutoPort:                   true,
+		Logger:                     zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := output.String(); got != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want primary result mock worker accepted", got)
+	}
+	assertNoServerInvocationProbePortFree(t, probePort)
+}
+
+func writePackagedGoalNoServerMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	plainEcho, plainArgs := mockWorkerEchoCommand("plain")
+	acceptedEcho, acceptedArgs := mockWorkerEchoCommand("accepted")
+	cfg := factoryconfig.MockWorkersConfig{
+		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName:      "goal-planner",
+				WorkstationName: goal.PackagedPlanWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-executor",
+				WorkstationName: goal.PackagedExecuteWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-checker",
+				WorkstationName: goal.PackagedCheckWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: plainEcho,
+					Args:    plainArgs,
+				},
+			},
+			{
+				WorkerName:      "goal-reviewer",
+				WorkstationName: goal.PackagedReviewWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: acceptedEcho,
+					Args:    acceptedArgs,
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mock workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal-no-server.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write mock workers config: %v", err)
+	}
+	return path
+}
+
+func mockWorkerEchoCommand(output string) (command string, args []string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", []string{"/c", "echo", output}
+	}
+	return "/bin/echo", []string{output}
+}
+
+func reserveNoServerInvocationProbePort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Close listener: %v", err)
+	}
+	return port
+}
+
+func assertNoServerInvocationProbePortFree(t *testing.T, port int) {
+	t.Helper()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatalf("tcp %s accepted a connection, want no factory API/dashboard listener", addr)
+	}
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("tcp %s still held by bootstrap listener: %v", addr, err)
+	}
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Close probe listener: %v", err)
+	}
 }
 
 func (r *capturingInvocationMetricsRecorder) assertContainsMetricNames(t *testing.T, want ...string) {
