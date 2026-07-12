@@ -31,6 +31,21 @@ type syntheticFlagCase struct {
 }
 
 func syntheticFlagCases() []syntheticFlagCase {
+	cases := make([]syntheticFlagCase, 0)
+	cases = append(cases, syntheticFlagInheritanceCases()...)
+	cases = append(cases, syntheticFlagNoOptionCases()...)
+	cases = append(cases, syntheticFlagMetadataCases()...)
+	return cases
+}
+
+func syntheticFlagInheritanceCases() []syntheticFlagCase {
+	cases := make([]syntheticFlagCase, 0)
+	cases = append(cases, syntheticFlagLocalAndPersistentCases()...)
+	cases = append(cases, syntheticFlagInheritedAndShadowCases()...)
+	return cases
+}
+
+func syntheticFlagLocalAndPersistentCases() []syntheticFlagCase {
 	return []syntheticFlagCase{
 		{
 			commandPath:        "synth child-local",
@@ -95,6 +110,11 @@ func syntheticFlagCases() []syntheticFlagCase {
 			deprecated:         false,
 			deprecatedMessage:  "",
 		},
+	}
+}
+
+func syntheticFlagInheritedAndShadowCases() []syntheticFlagCase {
+	return []syntheticFlagCase{
 		{
 			commandPath:        "synth child-inherit",
 			commandIDCandidate: "synth.child-inherit",
@@ -137,6 +157,11 @@ func syntheticFlagCases() []syntheticFlagCase {
 			deprecated:         false,
 			deprecatedMessage:  "",
 		},
+	}
+}
+
+func syntheticFlagNoOptionCases() []syntheticFlagCase {
+	return []syntheticFlagCase{
 		{
 			commandPath:        "synth no-option",
 			commandIDCandidate: "synth.no-option",
@@ -179,6 +204,18 @@ func syntheticFlagCases() []syntheticFlagCase {
 			deprecated:         false,
 			deprecatedMessage:  "",
 		},
+	}
+}
+
+func syntheticFlagMetadataCases() []syntheticFlagCase {
+	cases := make([]syntheticFlagCase, 0)
+	cases = append(cases, syntheticFlagMetadataPrimaryCases()...)
+	cases = append(cases, syntheticFlagMetadataVisibilityCases()...)
+	return cases
+}
+
+func syntheticFlagMetadataPrimaryCases() []syntheticFlagCase {
+	return []syntheticFlagCase{
 		{
 			commandPath:        "synth flag-meta",
 			commandIDCandidate: "synth.flag-meta",
@@ -242,6 +279,11 @@ func syntheticFlagCases() []syntheticFlagCase {
 			deprecated:         false,
 			deprecatedMessage:  "",
 		},
+	}
+}
+
+func syntheticFlagMetadataVisibilityCases() []syntheticFlagCase {
+	return []syntheticFlagCase{
 		{
 			commandPath:        "synth flag-meta",
 			commandIDCandidate: "synth.flag-meta",
@@ -392,6 +434,7 @@ func TestWalk_SyntheticTreeDoesNotInventFlags(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity synthetic flag assertions keep the full plan §4.3 field contract visible in one helper.
 func assertSyntheticFlagRecord(t *testing.T, tc syntheticFlagCase, record cliinputs.FlagRecord) {
 	t.Helper()
 

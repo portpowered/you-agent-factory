@@ -22,6 +22,7 @@ type productionParserParityCase struct {
 	verify           func(t *testing.T, inv cliinputs.Inventory, leaf *cobra.Command, positionals []string)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity table-driven parser parity keeps inventory lookup, parse, and per-case verify hooks in one harness.
 func TestProductionParserParity_RepresentativeCommands(t *testing.T) {
 	root := cli.NewRootCommand()
 	inv, err := cliinputs.Walk(root)
@@ -72,6 +73,22 @@ func TestProductionParserParity_RepresentativeCommands(t *testing.T) {
 }
 
 func productionParserParityCases() []productionParserParityCase {
+	cases := make([]productionParserParityCase, 0)
+	cases = append(cases, productionParserParityRunCases()...)
+	cases = append(cases, productionParserParitySubmitCases()...)
+	cases = append(cases, productionParserParitySessionShowCases()...)
+	cases = append(cases, productionParserParitySessionCreateCases()...)
+	return cases
+}
+
+func productionParserParityRunCases() []productionParserParityCase {
+	cases := make([]productionParserParityCase, 0)
+	cases = append(cases, productionParserParityRunVariadicCases()...)
+	cases = append(cases, productionParserParityRunFlagCases()...)
+	return cases
+}
+
+func productionParserParityRunVariadicCases() []productionParserParityCase {
 	return []productionParserParityCase{
 		{
 			name:             "run variadic positional accepts zero trailing args",
@@ -105,6 +122,12 @@ func productionParserParityCases() []productionParserParityCase {
 				}
 			},
 		},
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity run parser parity cases keep inline verify closures beside argv fixtures for reviewer readability.
+func productionParserParityRunFlagCases() []productionParserParityCase {
+	return []productionParserParityCase{
 		{
 			name:        "run inherited verbose flag is exposed and parseable",
 			commandPath: "you run",
@@ -178,6 +201,12 @@ func productionParserParityCases() []productionParserParityCase {
 				}
 			},
 		},
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity submit parser parity cases keep inline verify closures beside argv fixtures for reviewer readability.
+func productionParserParitySubmitCases() []productionParserParityCase {
+	return []productionParserParityCase{
 		{
 			name:        "submit inherited json flag is parseable from root",
 			commandPath: "you submit",
@@ -264,6 +293,11 @@ func productionParserParityCases() []productionParserParityCase {
 				}
 			},
 		},
+	}
+}
+
+func productionParserParitySessionShowCases() []productionParserParityCase {
+	return []productionParserParityCase{
 		{
 			name:             "session show optional positional accepts omission",
 			commandPath:      "you session show",
@@ -321,6 +355,11 @@ func productionParserParityCases() []productionParserParityCase {
 				}
 			},
 		},
+	}
+}
+
+func productionParserParitySessionCreateCases() []productionParserParityCase {
+	return []productionParserParityCase{
 		{
 			name:        "session create shadows root json with local flag definition",
 			commandPath: "you session create",
