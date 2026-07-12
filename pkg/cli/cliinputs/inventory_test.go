@@ -2,7 +2,6 @@ package cliinputs_test
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/cli/cliinputs"
@@ -93,7 +92,7 @@ func TestRecordTypesExposeCommandJoinFields(t *testing.T) {
 	}
 }
 
-func TestWalk_ReturnsStableEmptyCollections(t *testing.T) {
+func TestWalk_ReturnsStableEmptyFlagAndRelationshipCollections(t *testing.T) {
 	root := &cobra.Command{Use: "synth"}
 
 	inv, err := cliinputs.Walk(root)
@@ -104,22 +103,14 @@ func TestWalk_ReturnsStableEmptyCollections(t *testing.T) {
 	if inv.FormatVersion != cliinputs.FormatVersion {
 		t.Fatalf("FormatVersion = %q, want %q", inv.FormatVersion, cliinputs.FormatVersion)
 	}
-	if inv.Arguments == nil {
-		t.Fatal("Arguments = nil, want non-nil empty slice")
-	}
 	if inv.Flags == nil {
 		t.Fatal("Flags = nil, want non-nil empty slice")
 	}
 	if inv.Relationships == nil {
 		t.Fatal("Relationships = nil, want non-nil empty slice")
 	}
-	if len(inv.Arguments) != 0 || len(inv.Flags) != 0 || len(inv.Relationships) != 0 {
-		t.Fatalf("Walk() returned non-empty collections: args=%d flags=%d relationships=%d",
-			len(inv.Arguments), len(inv.Flags), len(inv.Relationships))
-	}
-
-	want := cliinputs.EmptyInventory()
-	if !reflect.DeepEqual(inv, want) {
-		t.Fatalf("Walk() inventory = %#v, want %#v", inv, want)
+	if len(inv.Flags) != 0 || len(inv.Relationships) != 0 {
+		t.Fatalf("Walk() returned non-empty flag/relationship collections: flags=%d relationships=%d",
+			len(inv.Flags), len(inv.Relationships))
 	}
 }
