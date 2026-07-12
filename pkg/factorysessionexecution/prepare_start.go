@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
@@ -219,6 +219,7 @@ func effectivePolicyMap(policy workflowpolicy.EffectivePolicy) (map[string]any, 
 	}
 	return out, nil
 }
+
 const (
 	dispatchQueuedEventIDPrefix                   = "factory-event/dispatch-queued"
 	dispatchReconciledEventIDPrefix               = "factory-event/dispatch-reconciled"
@@ -384,14 +385,14 @@ type dispatchReconciledEventPayload struct {
 	ReconciledStatus     string                       `json:"reconciledStatus"`
 	ReconciliationSource string                       `json:"reconciliationSource"`
 	Replayed             bool                         `json:"replayed"`
+	ProviderSessionRefs  []ProviderSessionRef         `json:"providerSessionRefs,omitempty"`
 	ArtifactIDs          []string                     `json:"artifactIds,omitempty"`
 	FailureDetail        *dispatchFailureEventPayload `json:"failureDetail,omitempty"`
 }
 
 type dispatchFailureEventPayload struct {
-	Reason     string `json:"reason,omitempty"`
-	Message    string `json:"message,omitempty"`
-	ErrorClass string `json:"errorClass,omitempty"`
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
 }
 
 func appendCanonicalRuntimeDispatchLifecycleEvents(
@@ -478,14 +479,16 @@ func buildDispatchReconciledEvent(
 		ReconciliationSource: dispatchReconciliationSource(dispatch),
 		Replayed:             false,
 	}
+	if len(dispatch.ProviderSessionRefs) > 0 {
+		payload.ProviderSessionRefs = cloneProviderSessionRefs(dispatch.ProviderSessionRefs)
+	}
 	if len(dispatch.OutputArtifactIDs) > 0 {
 		payload.ArtifactIDs = append([]string(nil), dispatch.OutputArtifactIDs...)
 	}
 	if dispatch.FailureDetail != nil {
 		payload.FailureDetail = &dispatchFailureEventPayload{
-			Reason:     strings.TrimSpace(dispatch.FailureDetail.Reason),
-			Message:    strings.TrimSpace(dispatch.FailureDetail.Message),
-			ErrorClass: strings.TrimSpace(dispatch.FailureDetail.ErrorClass),
+			Reason:  strings.TrimSpace(dispatch.FailureDetail.Reason),
+			Message: strings.TrimSpace(dispatch.FailureDetail.Message),
 		}
 	}
 	encodedPayload, err := json.Marshal(payload)

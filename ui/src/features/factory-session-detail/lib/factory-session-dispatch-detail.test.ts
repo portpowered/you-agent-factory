@@ -83,9 +83,8 @@ const failedDispatchFixture = {
   artifactIds: [],
   dispatchKind: "JAVASCRIPT_VERIFY",
   failureDetail: {
-    errorClass: " verification_error ",
     message: " Expected release manifest checksum. ",
-    reason: " VERIFY_ASSERTION_FAILED ",
+    reason: "unknown",
   },
   id: "dispatch-failed-1",
   javascript: {
@@ -218,9 +217,8 @@ describe("normalizeFactorySessionDispatchDetail", () => {
       dispatchID: "dispatch-failed-1",
       dispatchKind: "JAVASCRIPT_VERIFY",
       failureDetail: {
-        errorClass: "verification_error",
         message: "Expected release manifest checksum.",
-        reason: "VERIFY_ASSERTION_FAILED",
+        reason: "unknown",
       },
       javascript: {
         executionMode: "live",
@@ -273,9 +271,8 @@ describe("factory session dispatch drilldown regression and scope", () => {
     const failedDispatchFixture = {
       dispatchKind: "JAVASCRIPT_VERIFY",
       failureDetail: {
-        errorClass: "verification_error",
         message: "Expected release manifest checksum.",
-        reason: "VERIFY_ASSERTION_FAILED",
+        reason: "unknown",
       },
       id: "dispatch-failed-1",
       orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
@@ -301,9 +298,8 @@ describe("factory session dispatch drilldown regression and scope", () => {
     expect(failed).toMatchObject({
       dispatchID: "dispatch-failed-1",
       failureDetail: {
-        errorClass: "verification_error",
         message: "Expected release manifest checksum.",
-        reason: "VERIFY_ASSERTION_FAILED",
+        reason: "unknown",
       },
       sessionID: "dur-sess-js-failed-1",
       status: "FAILED",

@@ -93,7 +93,7 @@ func packagedTTSFailureWorldState(requestID, workID, failureMessage string) inte
 	state.FailureDetailsByWorkID[workID] = interfaces.FactoryWorldFailureDetail{
 		WorkstationName: PackagedInvokeWorkstationName,
 		WorkItem:        failed,
-		FailureMessage:  failureMessage,
+		FailureDetail:   &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeUnknown, Message: failureMessage},
 	}
 	return state
 }

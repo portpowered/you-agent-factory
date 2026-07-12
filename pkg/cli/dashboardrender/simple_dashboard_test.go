@@ -71,9 +71,8 @@ func TestSimpleDashboardRenderDataFromWorldState_ReplaysWeirdNumberSummaryFixtur
 	if renderData.Session.FailedCount != 3 {
 		t.Fatalf("FailedCount = %d, want 3 failed work items", renderData.Session.FailedCount)
 	}
-	if len(renderData.Session.DispatchHistory) != 1 ||
-		renderData.Session.DispatchHistory[0].Result.FailureReason != "throttled" {
-		t.Fatalf("DispatchHistory = %#v, want retained failed dispatch details", renderData.Session.DispatchHistory)
+	if len(renderData.Session.DispatchHistory) != 1 || renderData.Session.DispatchHistory[0].Result.Outcome != string(interfaces.OutcomeFailed) {
+		t.Fatalf("DispatchHistory = %#v, want retained failed dispatch", renderData.Session.DispatchHistory)
 	}
 }
 

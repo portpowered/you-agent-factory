@@ -27,7 +27,7 @@ type ChildRecordSink interface {
 }
 
 // ChildExecutorFactory builds the child executor for one workflow run.
-type ChildExecutorFactory func(sessionID string, records ChildRecordSink) ChildExecutor
+type ChildExecutorFactory func(sessionID string, records ChildRecordSink, policy workflowpolicy.EffectivePolicy) ChildExecutor
 
 // Hooks supplies optional terminal result, artifact, and child-execution callbacks.
 type Hooks struct {

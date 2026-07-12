@@ -152,7 +152,6 @@ export function responseCompletion(
   const latestAttempt = latestWorkstationAttempt(
     state.inferenceAttemptsByDispatchID[dispatchID],
   );
-  const inferenceFailureDetail = latestAttempt?.failure_detail;
   const terminalRefs = terminalWork
     ? [workItemRef(terminalWork.work_item)]
     : [];
@@ -197,9 +196,11 @@ export function responseCompletion(
     ),
     selectedClassificationLabel: event.payload.selectedClassificationLabel,
     failureMessage:
-      event.payload.failureMessage ?? inferenceFailureDetail?.message,
+      event.payload.failureDetail?.message ??
+      latestAttempt?.failure_detail?.message,
     failureReason:
-      event.payload.failureReason ?? inferenceFailureDetail?.reason,
+      event.payload.failureDetail?.reason ??
+      latestAttempt?.failure_detail?.reason,
     inputItems: active?.workItems ?? [],
     outcome: event.payload.outcome,
     outputItems: uniqueSortedWorkRefs([...outputRefs, ...terminalRefs]),

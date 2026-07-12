@@ -711,9 +711,8 @@ func TestBuildCanonicalRuntimeSessionEvents_ProjectsFailedDispatchReconciliation
 			ExecutionMode: fse.ChildExecutorModeLive,
 		},
 		FailureDetail: &fse.DispatchFailureDetail{
-			Reason:     "permanent_bad_request",
-			Message:    "provider rejected child request",
-			ErrorClass: "terminal",
+			Reason:  "permanent_bad_request",
+			Message: "provider rejected child request",
 		},
 	}
 

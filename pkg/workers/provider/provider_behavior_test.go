@@ -261,26 +261,46 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 			want: []string{"chat", "--no-interactive", "summarize the workspace"},
 		},
 		{
-			name: "WithSystemPromptSessionAndTrustedTools",
+			name: "ComposedContextAndUserPrompt",
 			req: interfaces.ProviderInferenceRequest{
 				ModelProvider: string(interfaces.ModelProviderKiro),
 				SystemPrompt:  "You are a careful reviewer.",
 				UserMessage:   "run the tests",
-				SessionID:     "kiro-session-123",
 			},
-			skipPermissions: true,
 			want: []string{
 				"chat",
 				"--no-interactive",
-				"--resume-id",
-				"kiro-session-123",
-				"--trust-all-tools",
 				"System instructions:\nYou are a careful reviewer.\n\nUser request:\nrun the tests",
 			},
 		},
+		{
+			name: "EmptyPrompt",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+			},
+			want: []string{"chat", "--no-interactive"},
+		},
+		{
+			name: "TrustedTools",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "run the tests",
+			},
+			skipPermissions: true,
+			want:            []string{"chat", "--no-interactive", "--trust-all-tools", "run the tests"},
+		},
+		{
+			name: "ResumeSession",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "continue the review",
+				SessionID:     "kiro-session-123",
+			},
+			want: []string{"chat", "--no-interactive", "--resume-id", "kiro-session-123", "continue the review"},
+		},
 	}
 
-	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
+	behavior := providerBehaviorFor(string(interfaces.ModelProviderKiro), logging.NoopLogger{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
@@ -558,243 +578,90 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 	}
 }
 
-func TestNonCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
-	behaviors := map[string]providerBehavior{
-		string(interfaces.ModelProviderClaude):   claudeProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderGemini):   geminiProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderKiro):     kiroProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderCursor):   cursorProviderBehavior{logger: logging.NoopLogger{}},
-		string(interfaces.ModelProviderOpenCode): openCodeProviderBehavior{logger: logging.NoopLogger{}},
+func TestScriptWrapProvider_Infer_KiroKnownFailuresUseCanonicalParserAndPolicy(t *testing.T) {
+	fixtureNames := []string{
+		"kiro_structured_authentication_error",
+		"kiro_structured_invalid_request_stdout",
+		"kiro_text_authentication_stdout",
+		"kiro_structured_throttle_precedes_text",
+		"kiro_text_capacity_error",
+		"kiro_text_timeout_malformed_structured",
+		"kiro_structured_service_unavailable",
 	}
 
-	testCases := []struct {
-		name   string
-		result CommandResult
-		want   string
-	}{
-		{
-			name: "PrefersTrimmedStderr",
-			result: CommandResult{
-				Stderr: []byte("  provider timed out waiting for upstream  \n"),
-				Stdout: []byte("stdout fallback"),
-			},
-			want: "provider timed out waiting for upstream",
-		},
-		{
-			name: "FallsBackToStdout",
-			result: CommandResult{
-				Stdout: []byte("provider timeout echoed on stdout"),
-			},
-			want: "provider timeout echoed on stdout",
-		},
-		{
-			name:   "UsesDefaultMessageWhenNoOutputExists",
-			result: CommandResult{},
-			want:   "execution timeout",
-		},
-	}
-
-	for providerName, behavior := range behaviors {
-		t.Run(providerName, func(t *testing.T) {
-			for _, tc := range testCases {
-				t.Run(tc.name, func(t *testing.T) {
-					if got := behavior.FormatTimeoutFailure(tc.result); got != tc.want {
-						t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, tc.want)
-					}
-				})
-			}
+	for _, name := range fixtureNames {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: entry.CommandResult()}))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "private prompt that must stay out of normalized failures",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType: entry.ExpectedType, wantFamily: entry.ExpectedFamily,
+				wantMessage:   knownKiroFailure(entry.ExpectedType).Message,
+				rejectTexts:   append(entry.RejectMessageContains, "private prompt"),
+				wantRetryable: entry.Retryable, wantTerminal: !entry.Retryable,
+				wantThrottlePause: entry.TriggersThrottlePause,
+			})
 		})
 	}
 }
 
-func TestCodexProviderBehavior_FormatTimeoutFailure(t *testing.T) {
-	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
-
-	testCases := []struct {
-		name   string
-		result CommandResult
-		want   string
-	}{
-		{
-			name: "PrefersTrimmedStderr",
-			result: CommandResult{
-				Stderr: []byte("  provider timed out waiting for upstream  \n"),
-				Stdout: []byte("stdout fallback"),
-			},
-			want: "provider timed out waiting for upstream",
-		},
-		{
-			name: "FallsBackToStdout",
-			result: CommandResult{
-				Stdout: []byte("provider timeout echoed on stdout"),
-			},
-			want: "provider timeout echoed on stdout",
-		},
-		{
-			name:   "UsesDefaultMessageWhenNoOutputExists",
-			result: CommandResult{},
-			want:   "execution timeout",
-		},
+func TestScriptWrapProvider_Infer_KiroUnknownFailuresUseBoundedParserMessages(t *testing.T) {
+	testCases := map[string]string{
+		"kiro_unknown_stderr_excerpt_precedes_stdout":     "Kiro error: model registry handshake failed",
+		"kiro_unknown_stdout_excerpt_after_unsafe_stderr": "Kiro error: plugin bridge failed",
+		"kiro_unknown_noise_only_exit_fallback":           "kiro-cli exited with code 11",
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := behavior.FormatTimeoutFailure(tc.result); got != tc.want {
-				t.Fatalf("FormatTimeoutFailure() = %q, want %q", got, tc.want)
-			}
+	for name, wantMessage := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: entry.CommandResult()}))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderKiro),
+				UserMessage:   "private prompt that must stay out of normalized failures",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal,
+				wantMessage: wantMessage, rejectTexts: append(entry.RejectMessageContains, "private prompt"),
+				wantTerminal: true,
+			})
 		})
 	}
 }
 
-func TestGenericNonCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
-	for _, providerName := range []string{
-		string(interfaces.ModelProviderGemini),
-		string(interfaces.ModelProviderKiro),
-		string(interfaces.ModelProviderOpenCode),
-	} {
-		behavior := providerBehaviorForErrorClassification(providerName)
-		t.Run(providerName, func(t *testing.T) {
-			assertProviderExitFailureFormatting(t, behavior, providerName)
-			assertProviderExitFailureClassification(t, behavior)
-		})
-	}
-}
-
-func TestCursorAndCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
-	cursorBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCursor))
-	codexBehavior := providerBehaviorForErrorClassification(string(interfaces.ModelProviderCodex))
-
-	assertCodexDerivedExitFailureFormatting(t, cursorBehavior, string(interfaces.ModelProviderCursor))
-	assertCodexDerivedExitFailureFormatting(t, codexBehavior, string(interfaces.ModelProviderCodex))
-
-	result := CommandResult{
-		ExitCode: 1,
-		Stderr:   []byte("ERROR: unexpected status 500 from codex upstream"),
-	}
-	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("cursor ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
-	}
-	if got := codexBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("codex ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
-	}
-}
-
-func assertCodexDerivedExitFailureFormatting(t *testing.T, behavior providerBehavior, providerName string) {
-	t.Helper()
-
-	testCases := []struct {
-		name   string
-		result CommandResult
-		want   string
-	}{
+func providerOwnedCursorAndCodexFailureTestCases() []exitFailureInferenceTestCase {
+	return []exitFailureInferenceTestCase{
 		{
-			name:   "ExtractsCodexErrorLine",
-			result: CommandResult{ExitCode: 17, Stderr: []byte("noise before\nERROR: upstream rejected the request")},
-			want:   "ERROR: upstream rejected the request",
+			name:        "CursorUsesItsOwnErrorExtraction",
+			provider:    string(interfaces.ModelProviderCursor),
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
+			wantMessage: "ERROR: unexpected status 500 from cursor upstream",
+			wantType:    interfaces.WorkFailureTypeInternalServerError,
 		},
 		{
-			name:   "FallsBackToProviderExitCode",
-			result: CommandResult{ExitCode: 17, Stderr: []byte("stderr detail"), Stdout: []byte("stdout detail")},
-			want:   providerName + " exited with code 17",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := behavior.FormatExitFailure(providerName, tc.result); got != tc.want {
-				t.Fatalf("FormatExitFailure() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
-func assertProviderExitFailureFormatting(t *testing.T, behavior providerBehavior, providerName string) {
-	t.Helper()
-
-	testCases := []struct {
-		name   string
-		result CommandResult
-		want   string
-	}{
-		{
-			name: "PrefersTrimmedStderr",
-			result: CommandResult{
-				ExitCode: 17,
-				Stderr:   []byte("  stderr detail  \n"),
-				Stdout:   []byte("stdout fallback"),
-			},
-			want: "stderr detail",
+			name:        "CursorDoesNotInheritCodexHighDemandClassification",
+			provider:    string(interfaces.ModelProviderCursor),
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(codexHighDemandTemporaryErrorsNeedle)},
+			wantMessage: codexHighDemandTemporaryErrorsNeedle,
+			wantType:    interfaces.WorkFailureTypeUnknown,
 		},
 		{
-			name: "FallsBackToStdout",
-			result: CommandResult{
-				ExitCode: 17,
-				Stdout:   []byte("stdout detail"),
-			},
-			want: "stdout detail",
+			name:        "CodexUsesItsOwnSafeServerResult",
+			provider:    string(interfaces.ModelProviderCodex),
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from codex upstream")},
+			wantMessage: codexServerFailureMessage,
+			wantType:    interfaces.WorkFailureTypeInternalServerError,
 		},
 		{
-			name:   "UsesProviderSpecificFallback",
-			result: CommandResult{ExitCode: 17},
-			want:   providerName + " exited with code 17",
+			name:        "UnsupportedProviderDoesNotFallBackToCodexParser",
+			provider:    "custom-provider",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(codexHighDemandTemporaryErrorsNeedle)},
+			wantMessage: codexHighDemandTemporaryErrorsNeedle,
+			wantType:    interfaces.WorkFailureTypeUnknown,
 		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := behavior.FormatExitFailure(providerName, tc.result); got != tc.want {
-				t.Fatalf("FormatExitFailure() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
-func assertProviderExitFailureClassification(t *testing.T, behavior providerBehavior) {
-	t.Helper()
-
-	testCases := []struct {
-		name   string
-		result CommandResult
-		want   interfaces.WorkFailureType
-	}{
-		{
-			name:   "AuthFailure",
-			result: CommandResult{ExitCode: 1, Stderr: []byte("login required for this API key")},
-			want:   interfaces.WorkFailureTypeAuthFailure,
-		},
-		{
-			name:   "PermanentBadRequest",
-			result: CommandResult{ExitCode: 1, Stderr: []byte("invalid argument in request payload")},
-			want:   interfaces.WorkFailureTypePermanentBadRequest,
-		},
-		{
-			name:   "Throttled",
-			result: CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
-			want:   interfaces.WorkFailureTypeThrottled,
-		},
-		{
-			name:   "InternalServerError",
-			result: CommandResult{ExitCode: 1, Stderr: []byte("unexpected status 503 from upstream")},
-			want:   interfaces.WorkFailureTypeInternalServerError,
-		},
-		{
-			name:   "Timeout",
-			result: CommandResult{ExitCode: 124},
-			want:   interfaces.WorkFailureTypeTimeout,
-		},
-		{
-			name:   "Unknown",
-			result: CommandResult{ExitCode: 1, Stderr: []byte("provider stopped without classification markers")},
-			want:   interfaces.WorkFailureTypeUnknown,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := behavior.ClassifyExitFailure(tc.result); got != tc.want {
-				t.Fatalf("ClassifyExitFailure() = %q, want %q", got, tc.want)
-			}
-		})
 	}
 }
 

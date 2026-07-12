@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
@@ -132,15 +133,17 @@ func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutio
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    schemaDigest(req.OutputSchema),
-		ExecutionMode: ChildExecutionModeFake,
+		ExecutionMode:   ChildExecutionModeFake,
 	}
 	e.records.AppendChildDispatch(base, ChildDispatchStatusQueued)
 	e.records.AppendChildDispatch(base, ChildDispatchStatusRunning)
 	failed := base
 	failed.Status = ChildDispatchStatusFailed
 	diagnostic := fmt.Sprintf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
-	failed.FailureReason = ChildExecutionFailureReason
-	failed.FailureMessage = diagnostic
+	failed.FailureDetail = &interfaces.FailureDetail{
+		Reason:  interfaces.WorkFailureTypeUnknown,
+		Message: diagnostic,
+	}
 	e.records.Append(RuntimeRecord{
 		Kind:          RecordKindChildDispatch,
 		ChildDispatch: &failed,
@@ -171,8 +174,8 @@ func fakeChildOutput(req ChildExecutionRequest, dispatchID, providerSessionRef, 
 		req.ArgsSubject,
 	)
 	return map[string]any{
-		"text": text,
-		"subject": req.ArgsSubject,
+		"text":            text,
+		"subject":         req.ArgsSubject,
 		"schemaValidated": req.OutputSchema != nil,
 	}
 }

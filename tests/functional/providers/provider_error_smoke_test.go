@@ -299,7 +299,11 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 	if completion.Outcome != factoryapi.WorkOutcomeFailed {
 		t.Fatalf("DISPATCH_COMPLETED outcome = %s, want %s", completion.Outcome, factoryapi.WorkOutcomeFailed)
 	}
-	if got := stringPointerValue(completion.FailureReason); got != string(interfaces.WorkFailureTypeInternalServerError) {
+	if completion.FailureDetail == nil || string(completion.FailureDetail.Reason) != string(interfaces.WorkFailureTypeInternalServerError) {
+		got := ""
+		if completion.FailureDetail != nil {
+			got = string(completion.FailureDetail.Reason)
+		}
 		t.Fatalf("DISPATCH_COMPLETED failureReason = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
 	}
 	if completion.ProviderFailure == nil {
@@ -313,10 +317,10 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 	}
 	assertContainsAll(
 		t,
-		stringPointerValue(completion.FailureMessage),
+		completion.FailureDetail.Message,
 		[]string{"internal_server_error", "4294967295"},
 	)
-	assertNoAuthRemediationText(t, stringPointerValue(completion.FailureMessage))
+	assertNoAuthRemediationText(t, completion.FailureDetail.Message)
 }
 
 func TestProviderErrorSmoke_CodexHighDemandPersistentFailureFailsOnlyAfterGuardedLoopBreakerThreshold(t *testing.T) {

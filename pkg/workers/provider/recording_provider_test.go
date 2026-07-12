@@ -128,13 +128,10 @@ func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t
 	if response.Outcome != factoryapi.InferenceOutcomeFailed {
 		t.Fatalf("response outcome = %s, want FAILED", response.Outcome)
 	}
-	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("errorClass = %#v, want timeout", response.ErrorClass)
+	if response.FailureDetail == nil || response.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf("failureDetail = %#v, want timeout", response.FailureDetail)
 	}
-	if response.FailureDetail == nil || response.FailureDetail.Reason == nil || *response.FailureDetail.Reason != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("failureDetail = %#v, want timeout reason", response.FailureDetail)
-	}
-	if response.FailureDetail.Message == nil || !strings.Contains(*response.FailureDetail.Message, "provider timed out") {
+	if !strings.Contains(response.FailureDetail.Message, "provider timed out") {
 		t.Fatalf("failureDetail message = %#v, want provider timeout detail", response.FailureDetail.Message)
 	}
 	if response.ExitCode == nil || *response.ExitCode != 124 {
@@ -458,11 +455,11 @@ func TestRecordingProvider_Infer_RetryableFailureKeepsAttemptCounterUntilTermina
 	if firstFailure.Attempt != 1 || secondFailure.Attempt != 2 || finalSuccess.Attempt != 1 {
 		t.Fatalf("attempt sequence = [%d %d %d], want [1 2 1]", firstFailure.Attempt, secondFailure.Attempt, finalSuccess.Attempt)
 	}
-	if firstFailure.ErrorClass == nil || *firstFailure.ErrorClass != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("first failure errorClass = %#v, want timeout", firstFailure.ErrorClass)
+	if firstFailure.FailureDetail == nil || firstFailure.FailureDetail.Reason != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf("first failure detail = %#v, want timeout", firstFailure.FailureDetail)
 	}
-	if secondFailure.ErrorClass == nil || *secondFailure.ErrorClass != string(interfaces.WorkFailureTypePermanentBadRequest) {
-		t.Fatalf("second failure errorClass = %#v, want permanent bad request", secondFailure.ErrorClass)
+	if secondFailure.FailureDetail == nil || secondFailure.FailureDetail.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("second failure detail = %#v, want permanent bad request", secondFailure.FailureDetail)
 	}
 	if finalSuccess.Outcome != factoryapi.InferenceOutcomeSucceeded {
 		t.Fatalf("final success outcome = %s, want SUCCEEDED", finalSuccess.Outcome)
@@ -501,8 +498,8 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 	if response.Outcome != factoryapi.InferenceOutcomeFailed {
 		t.Fatalf("response outcome = %s, want FAILED", response.Outcome)
 	}
-	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.WorkFailureTypeMisconfigured) {
-		t.Fatalf("errorClass = %#v, want misconfigured", response.ErrorClass)
+	if response.FailureDetail == nil || response.FailureDetail.Reason != factoryapi.WorkFailureTypeMisconfigured {
+		t.Fatalf("failureDetail = %#v, want misconfigured", response.FailureDetail)
 	}
 	if response.ExitCode != nil {
 		t.Fatalf("exitCode = %#v, want nil", response.ExitCode)

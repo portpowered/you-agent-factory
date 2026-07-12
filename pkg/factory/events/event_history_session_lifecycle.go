@@ -59,7 +59,7 @@ type SessionLifecycleCompleteInput struct {
 	ResultStatus     *factoryapi.FactoryEventSessionResultStatus
 	ArtifactIDs      []string
 	DispatchCounts   *factoryapi.FactorySessionJavaScriptChildDispatchCounts
-	FailureDetail    *factoryapi.FactoryDispatchFailureDetail
+	FailureDetail    *factoryapi.FailureDetail
 }
 
 // SessionLifecycleControlInput carries replay-safe facts for SESSION_LIFECYCLE_CONTROL.
@@ -275,15 +275,12 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
 	finalStatus := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
 	resultStatus := factoryapi.FactoryEventSessionResultStatusFinal
-	var failureDetail *factoryapi.FactoryDispatchFailureDetail
+	var failureDetail *factoryapi.FailureDetail
 	if factoryState == interfaces.FactoryStateFailed {
 		finalStatus = factoryapi.FactorySessionDurableLifecycleStatusFailed
 		resultStatus = factoryapi.FactoryEventSessionResultStatusFailedWithPartial
 		if strings.TrimSpace(reason) != "" {
-			failureDetail = &factoryapi.FactoryDispatchFailureDetail{
-				Reason:  stringPtrIfNotEmpty("session_failed"),
-				Message: stringPtrIfNotEmpty(reason),
-			}
+			failureDetail = failureDetailValue(string(factoryapi.WorkFailureTypeUnknown), reason)
 		}
 	}
 	result := resultStatus

@@ -33,6 +33,57 @@ func TestSaveLoad_PreservesReplayArtifactFields(t *testing.T) {
 	assertReplayArtifactFieldPreservation(t, loaded)
 }
 
+func TestNormalizeHistoricalFailureDetails_PrecedenceAndCompleteness(t *testing.T) {
+	tests := []struct{ name, input, reason, message string }{
+		{"reason and message", `{"failureReason":"timeout","failureMessage":"timed out"}`, "timeout", "timed out"},
+		{"reason only", `{"failureReason":"throttled"}`, "throttled", unavailableHistoricalFailureMessage},
+		{"message only", `{"failureMessage":"provider failed"}`, "unknown", "provider failed"},
+		{"error class only", `{"errorClass":"PERMANENT_BAD_REQUEST"}`, "permanent_bad_request", unavailableHistoricalFailureMessage},
+		{"flattened reason wins", `{"failureReason":"timeout","failureMessage":"late","errorClass":"auth_failure"}`, "timeout", "late"},
+		{"canonical wins", `{"failureDetail":{"reason":"permanent_bad_request","message":"requires a newer Codex app or CLI"},"failureReason":"timeout","failureMessage":"stale"}`, "permanent_bad_request", "requires a newer Codex app or CLI"},
+		{"unknown values", `{"failureReason":"something-new","failureMessage":"failed"}`, "unknown", "failed"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			normalized, err := normalizeHistoricalFailureDetails([]byte(`{"payload":` + test.input + `}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result struct {
+				Payload struct {
+					FailureDetail struct{ Reason, Message string } `json:"failureDetail"`
+				} `json:"payload"`
+			}
+			if err := json.Unmarshal(normalized, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.Payload.FailureDetail.Reason != test.reason || result.Payload.FailureDetail.Message != test.message {
+				t.Fatalf("failureDetail = %#v, want reason=%q message=%q", result.Payload.FailureDetail, test.reason, test.message)
+			}
+			for _, legacy := range []string{"failureReason", "failureMessage", "errorClass"} {
+				if strings.Contains(string(normalized), legacy) {
+					t.Fatalf("normalized output retained %q: %s", legacy, normalized)
+				}
+			}
+		})
+	}
+}
+
+func TestNormalizeHistoricalFailureDetails_NormalizesOnlyEventPayloadBoundaries(t *testing.T) {
+	input := []byte(`{"events":[{"payload":{"failureReason":"permanent_bad_request","failureMessage":"requires a newer Codex app or CLI","customerData":{"errorClass":"leave untouched"}}},{"payload":{"errorClass":"TIMEOUT"}}]}`)
+	normalized, err := normalizeHistoricalFailureDetails(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(normalized)
+	if strings.Contains(text, "failureReason") || strings.Contains(text, "failureMessage") {
+		t.Fatalf("normalized output retained legacy fields: %s", text)
+	}
+	if !strings.Contains(text, `"reason":"permanent_bad_request"`) || !strings.Contains(text, `"reason":"timeout"`) || !strings.Contains(text, `"errorClass":"leave untouched"`) {
+		t.Fatalf("normalized output did not preserve mapped reasons: %s", text)
+	}
+}
+
 func TestSaveLoad_StripsUnsafeCompletionDiagnosticsFromStoredReplayEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "safe-diagnostics.replay.json")
 	artifact := safeDiagnosticsReplayArtifact(t)

@@ -215,8 +215,7 @@ type WorkstationResult struct {
 	Error                       string               `json:"error,omitempty"`
 	Feedback                    string               `json:"feedback,omitempty"`
 	SelectedClassificationLabel string               `json:"selected_classification_label,omitempty"`
-	FailureReason               string               `json:"failure_reason,omitempty"`
-	FailureMessage              string               `json:"failure_message,omitempty"`
+	FailureDetail               *FailureDetail       `json:"failureDetail,omitempty"`
 	FailureMetadata             *WorkFailureMetadata `json:"failure_metadata,omitempty"`
 }
 

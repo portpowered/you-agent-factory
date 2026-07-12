@@ -308,11 +308,6 @@ function DispatchFailureSection({
           value={data.failureDetail.reason}
         />
         <DispatchDetailItem
-          code
-          label={messages.failureErrorClassLabel}
-          value={data.failureDetail.errorClass}
-        />
-        <DispatchDetailItem
           label={messages.failureMessageLabel}
           value={
             data.failureDetail.message ?? messages.failureMessageUnavailable

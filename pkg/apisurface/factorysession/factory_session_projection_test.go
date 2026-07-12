@@ -9,6 +9,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
@@ -46,7 +47,7 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	if failedMapped.ResultStatus != factoryapi.FactorySessionResultStatusFailedWithPartial {
 		t.Fatalf("failed-with-partial status = %q", failedMapped.ResultStatus)
 	}
-	if failedMapped.Failure == nil || failedMapped.Failure.PartialResultAvailable == nil || !*failedMapped.Failure.PartialResultAvailable {
+	if failedMapped.FailureDetail == nil || failedMapped.PartialResultAvailable == nil || !*failedMapped.PartialResultAvailable {
 		t.Fatal("failed-with-partial failure detail missing")
 	}
 
@@ -195,9 +196,8 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 				{Code: "RATE_LIMIT", Message: " retried once "},
 			},
 			FailureDetail: &factorysessionexecution.DispatchFailureDetail{
-				Reason:     " TEMPORARY ",
-				Message:    " provider unavailable ",
-				ErrorClass: " transient ",
+				Reason:  " TEMPORARY ",
+				Message: " provider unavailable ",
 			},
 		},
 		SessionID:         "dur-sess-1",
@@ -210,7 +210,7 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 	if dispatchMapped.Warnings == nil || len(*dispatchMapped.Warnings) != 1 || (*dispatchMapped.Warnings)[0].Message != "retried once" {
 		t.Fatalf("dispatch warnings = %#v, want trimmed warning", dispatchMapped.Warnings)
 	}
-	if dispatchMapped.FailureDetail == nil || dispatchMapped.FailureDetail.Reason == nil || *dispatchMapped.FailureDetail.Reason != "TEMPORARY" {
+	if dispatchMapped.FailureDetail == nil || dispatchMapped.FailureDetail.Reason != factoryapi.WorkFailureTypeUnknown {
 		t.Fatalf("dispatch failure detail = %#v, want trimmed failure", dispatchMapped.FailureDetail)
 	}
 	if dispatchMapped.StatusTransitions == nil || len(*dispatchMapped.StatusTransitions) != 2 {
@@ -347,6 +347,7 @@ func testFactoryEventStreamBranches(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this boundary regression intentionally covers optional-field trimming in one table-like scenario.
 func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 	mapped := factorysession.ResultResponseToAPI(factorysessionexecution.ResultReadResult{
 		SessionID:        "dur-sess-1",
@@ -365,27 +366,30 @@ func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 	if mapped.ArtifactIds == nil || len(*mapped.ArtifactIds) != 2 || (*mapped.ArtifactIds)[0] != "one" {
 		t.Fatalf("artifactIds = %#v", mapped.ArtifactIds)
 	}
-	if mapped.Failure != nil {
-		t.Fatalf("failure = %#v, want omitted", mapped.Failure)
+	if mapped.FailureDetail != nil {
+		t.Fatalf("failure = %#v, want omitted", mapped.FailureDetail)
 	}
 	if mapped.Availability != nil {
 		t.Fatalf("availability = %#v, want omitted", mapped.Availability)
 	}
 
+	retryable := true
 	dispatches := factorysession.ListDispatchesResponseToAPI(factorysessionexecution.ListDispatchesResult{
 		SessionID: "dur-sess-1",
 		Dispatches: []factorysessionexecution.DispatchSummary{{
-			ID:                  "disp-1",
-			Status:              factorysessionexecution.DispatchStatusRunning,
-			DispatchKind:        "MODEL",
-			Phase:               " plan ",
-			Label:               " summarize ",
-			Attempt:             2,
-			RunnerID:            "runner-1",
-			Model:               "gpt",
-			Provider:            "openai",
-			ProviderSessionRefs: []factorysessionexecution.ProviderSessionRef{{Provider: "openai", Kind: "RESPONSES", ID: "prov-1"}},
-			OutputArtifactIDs:   []string{" out-1 ", " "},
+			ID:                    "disp-1",
+			Status:                factorysessionexecution.DispatchStatusRunning,
+			DispatchKind:          "MODEL",
+			Phase:                 " plan ",
+			Label:                 " summarize ",
+			Attempt:               2,
+			Retryable:             &retryable,
+			FailureClassification: string(interfaces.WorkFailureTypeTimeout),
+			RunnerID:              "runner-1",
+			Model:                 "gpt",
+			Provider:              "openai",
+			ProviderSessionRefs:   []factorysessionexecution.ProviderSessionRef{{Provider: "openai", Kind: "RESPONSES", ID: "prov-1"}},
+			OutputArtifactIDs:     []string{" out-1 ", " "},
 		}},
 	})
 	if len(dispatches.Dispatches) != 1 {
@@ -396,6 +400,10 @@ func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 	}
 	if dispatches.Dispatches[0].ProviderSessionRefs == nil || len(*dispatches.Dispatches[0].ProviderSessionRefs) != 1 {
 		t.Fatalf("providerSessionRefs = %#v", dispatches.Dispatches[0].ProviderSessionRefs)
+	}
+	if dispatches.Dispatches[0].Retryable == nil || !*dispatches.Dispatches[0].Retryable ||
+		dispatches.Dispatches[0].FailureClassification == nil || *dispatches.Dispatches[0].FailureClassification != factoryapi.WorkFailureTypeTimeout {
+		t.Fatalf("retry diagnostics = retryable:%v classification:%v", dispatches.Dispatches[0].Retryable, dispatches.Dispatches[0].FailureClassification)
 	}
 
 	artifacts := factorysession.ListArtifactsResponseToAPI(factorysessionexecution.ListArtifactsResult{
@@ -483,12 +491,11 @@ func resultFromFixture(result map[string]any) factorysessionexecution.ResultRead
 			}
 		}
 	}
-	if failure, ok := result["failure"].(map[string]any); ok {
+	if failure, ok := result["failureDetail"].(map[string]any); ok {
 		out.Failure = &factorysessionexecution.FailureSummary{
 			Reason:                 stringValue(failure, "reason"),
 			Message:                stringValue(failure, "message"),
-			ErrorClass:             stringValue(failure, "errorClass"),
-			PartialResultAvailable: boolValue(failure, "partialResultAvailable"),
+			PartialResultAvailable: boolValue(result, "partialResultAvailable"),
 		}
 	}
 	if availability, ok := result["availability"].(map[string]any); ok {
@@ -552,9 +559,8 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 	}
 	if failure, ok := dispatch["failureDetail"].(map[string]any); ok {
 		summary.FailureDetail = &factorysessionexecution.DispatchFailureDetail{
-			Reason:     stringValue(failure, "reason"),
-			Message:    stringValue(failure, "message"),
-			ErrorClass: stringValue(failure, "errorClass"),
+			Reason:  stringValue(failure, "reason"),
+			Message: stringValue(failure, "message"),
 		}
 	}
 	if javascript, ok := dispatch["javascript"].(map[string]any); ok {

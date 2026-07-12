@@ -60,8 +60,10 @@ function buildRuntimeRequest(
     },
     response: {
       duration_millis: 640,
-      failure_message: "Runtime failure message",
-      failure_reason: "runtime_failed",
+      failureDetail: {
+        message: "Runtime failure message",
+        reason: "unknown",
+      },
       outcome: "FAILED",
       output_work_items: [workBeta],
       script_response: {
@@ -181,6 +183,7 @@ describe("useCurrentSelection.request-helpers", () => {
     expect(
       resolveProjectedWorkstationRequestsByDispatchID(snapshot, undefined),
     ).toEqual({
+      agent_run_inspection: undefined,
       "dispatch-runtime": toDashboardWorkstationRequest(
         snapshot.runtime.workstation_requests_by_dispatch_id[
           "dispatch-runtime"
@@ -333,7 +336,7 @@ describe("useCurrentSelection.request-helpers", () => {
         diagnostics: undefined,
         dispatch_id: "dispatch-runtime",
         failure_message: "Existing provider failure",
-        failure_reason: "runtime_failed",
+        failure_reason: "unknown",
         outcome: "ACCEPTED",
         provider_session: {
           id: "runtime-session",
@@ -388,8 +391,10 @@ describe("useCurrentSelection.request-helpers", () => {
       },
       response: {
         durationMillis: 222,
-        failureMessage: "Camel failure message",
-        failureReason: "camel_failed",
+        failureDetail: {
+          message: "Camel failure message",
+          reason: "unknown",
+        },
         outcome: "FAILED",
         outputWorkItems: [workBeta],
         scriptResponse: {
@@ -419,11 +424,12 @@ describe("useCurrentSelection.request-helpers", () => {
     ).toBe("dispatch-legacy-id");
 
     expect(toDashboardWorkstationRequest(runtime)).toEqual({
+      agent_run_inspection: undefined,
       dispatch_id: "dispatch-runtime",
       dispatched_request_count: 1,
       errored_request_count: 0,
       failure_message: "Runtime failure message",
-      failure_reason: "runtime_failed",
+      failure_reason: "unknown",
       inference_attempts: [],
       outcome: "FAILED",
       request_view: {
@@ -441,8 +447,10 @@ describe("useCurrentSelection.request-helpers", () => {
       responded_request_count: 1,
       response_view: {
         duration_millis: 640,
-        failure_message: "Runtime failure message",
-        failure_reason: "runtime_failed",
+        failureDetail: {
+          message: "Runtime failure message",
+          reason: "unknown",
+        },
         outcome: "FAILED",
         output_work_items: [workBeta],
         runner: undefined,
@@ -476,11 +484,12 @@ describe("useCurrentSelection.request-helpers", () => {
     expect(
       toDashboardWorkstationRequest(runtime, runtimeInferenceAttempts),
     ).toEqual({
+      agent_run_inspection: undefined,
       dispatch_id: "dispatch-runtime",
       dispatched_request_count: 1,
       errored_request_count: 0,
       failure_message: "Runtime failure message",
-      failure_reason: "runtime_failed",
+      failure_reason: "unknown",
       inference_attempts: [
         buildInferenceAttempt("dispatch-runtime", 1),
         buildInferenceAttempt("dispatch-runtime", 2),
@@ -501,8 +510,10 @@ describe("useCurrentSelection.request-helpers", () => {
       responded_request_count: 1,
       response_view: {
         duration_millis: 640,
-        failure_message: "Runtime failure message",
-        failure_reason: "runtime_failed",
+        failureDetail: {
+          message: "Runtime failure message",
+          reason: "unknown",
+        },
         outcome: "FAILED",
         output_work_items: [workBeta],
         runner: undefined,
@@ -534,11 +545,12 @@ describe("useCurrentSelection.request-helpers", () => {
       workstation_node_id: "review",
     });
     expect(toDashboardWorkstationRequest(camelCaseRuntime)).toEqual({
+      agent_run_inspection: undefined,
       dispatch_id: "dispatch-runtime-camel-id",
       dispatched_request_count: 2,
       errored_request_count: 1,
       failure_message: "Camel failure message",
-      failure_reason: "camel_failed",
+      failure_reason: "unknown",
       inference_attempts: [],
       outcome: "FAILED",
       request_view: {
@@ -556,8 +568,10 @@ describe("useCurrentSelection.request-helpers", () => {
       responded_request_count: 1,
       response_view: {
         durationMillis: 222,
-        failureMessage: "Camel failure message",
-        failureReason: "camel_failed",
+        failureDetail: {
+          message: "Camel failure message",
+          reason: "unknown",
+        },
         outcome: "FAILED",
         outputWorkItems: [workBeta],
         runner: undefined,

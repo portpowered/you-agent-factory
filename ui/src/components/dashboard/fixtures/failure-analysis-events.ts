@@ -95,9 +95,10 @@ export const failureAnalysisTimelineEvents: FactoryEvent[] = [
   factoryEvent("failure-analysis-5", 4, FACTORY_EVENT_TYPES.dispatchResponse, {
     dispatchId: "dispatch-blocked-analysis",
     durationMillis: 900,
-    failureMessage:
-      "Provider rate limit exceeded while generating the analysis.",
-    failureReason: "provider_rate_limit",
+    failureDetail: {
+      message: "Provider rate limit exceeded while generating the analysis.",
+      reason: "throttled",
+    },
     outcome: "FAILED",
     outputWork: [
       {

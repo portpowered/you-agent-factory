@@ -54,7 +54,7 @@ func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupporte
 		"Pending Runtime Story",
 		"Completed Runtime Story",
 		"Failed Runtime Story",
-		"provider_rate_limit - Provider rate limit exceeded while reviewing the failed runtime story.",
+		"throttled - Provider rate limit exceeded while reviewing the failed runtime story.",
 		"Provider sessions:",
 		"sess-runtime-completed",
 		"sess-runtime-failed",
@@ -85,11 +85,11 @@ func assertSelectedTickCanonicalState(t *testing.T, worldState interfaces.Factor
 	if len(failedAttempts) != 1 {
 		t.Fatalf("failed inference attempts = %#v, want one attempt", failedAttempts)
 	}
-	if got := failedAttempts["dispatch-runtime-failed/inference-request/1"].ErrorClass; got != "rate_limited" {
-		t.Fatalf("failed inference error_class = %q, want rate_limited", got)
+	if detail := failedAttempts["dispatch-runtime-failed/inference-request/1"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("failed inference failureDetail = %#v, want throttled", detail)
 	}
-	if got := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureReason; got != "provider_rate_limit" {
-		t.Fatalf("failed work detail reason = %q, want provider_rate_limit", got)
+	if detail := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("failed work failureDetail = %#v, want throttled", detail)
 	}
 }
 
@@ -141,8 +141,8 @@ func assertSelectedTickWorkstationRequests(
 	if failed.Counts.DispatchedCount != 1 || failed.Counts.ErroredCount != 1 || failed.Counts.RespondedCount != 0 {
 		t.Fatalf("failed request counts = %#v, want dispatched=1 errored=1 responded=0", failed.Counts)
 	}
-	if failed.Response == nil || failed.Response.FailureReason == nil || *failed.Response.FailureReason != "provider_rate_limit" {
-		t.Fatalf("failed response = %#v, want provider_rate_limit", failed.Response)
+	if failed.Response == nil || failed.Response.FailureDetail == nil || failed.Response.FailureDetail.Reason != generated.WorkFailureTypeThrottled {
+		t.Fatalf("failed response = %#v, want throttled", failed.Response)
 	}
 }
 
@@ -370,6 +370,10 @@ func crossBoundaryInferenceResponseEvent(
 	providerSession *generated.ProviderSessionMetadata,
 	diagnostics *generated.SafeWorkDiagnostics,
 ) generated.FactoryEvent {
+	var failureDetail *generated.FailureDetail
+	if errorClass != "" {
+		failureDetail = &generated.FailureDetail{Reason: generated.WorkFailureTypeThrottled, Message: errorClass}
+	}
 	return crossBoundaryEvent(
 		generated.FactoryEventTypeInferenceResponse,
 		"inference-response/"+dispatchID,
@@ -380,7 +384,7 @@ func crossBoundaryInferenceResponseEvent(
 			Attempt:            1,
 			Diagnostics:        diagnostics,
 			DurationMillis:     durationMillis,
-			ErrorClass:         stringPtr(errorClass),
+			FailureDetail:      failureDetail,
 			InferenceRequestId: dispatchID + "/inference-request/1",
 			Outcome:            outcome,
 			ProviderSession:    providerSession,
@@ -432,11 +436,13 @@ func crossBoundaryFailedResponseEvent(
 		},
 		generated.DispatchResponseEventPayload{
 			DurationMillis: crossBoundaryInt64Ptr(600),
-			FailureMessage: stringPtr("Provider rate limit exceeded while reviewing the failed runtime story."),
-			FailureReason:  stringPtr("provider_rate_limit"),
-			Outcome:        generated.WorkOutcomeFailed,
-			OutputWork:     &outputWork,
-			TransitionId:   "t-review",
+			FailureDetail: &generated.FailureDetail{
+				Reason:  generated.WorkFailureTypeThrottled,
+				Message: "Provider rate limit exceeded while reviewing the failed runtime story.",
+			},
+			Outcome:      generated.WorkOutcomeFailed,
+			OutputWork:   &outputWork,
+			TransitionId: "t-review",
 		},
 	)
 }

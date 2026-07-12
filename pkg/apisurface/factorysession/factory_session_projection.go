@@ -68,7 +68,11 @@ func ResultResponseToAPI(result factorysessionexecution.ResultReadResult) factor
 		response.ArtifactRefs = refs
 	}
 	if failure := failureSummaryToAPI(result.Failure); failure != nil {
-		response.Failure = failure
+		response.FailureDetail = failure
+		if result.Failure.PartialResultAvailable {
+			value := true
+			response.PartialResultAvailable = &value
+		}
 	}
 	if availability := resultAvailabilityToAPI(result.Availability); availability != nil {
 		response.Availability = availability
@@ -111,6 +115,10 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 		attempt := int32(result.Attempt)
 		response.Attempt = &attempt
 	}
+	response.Retryable, response.FailureClassification = dispatchRetryDiagnosticsToAPI(
+		result.Retryable,
+		result.FailureClassification,
+	)
 	if runnerID := strings.TrimSpace(result.RunnerID); runnerID != "" {
 		response.RunnerId = &runnerID
 	}
@@ -262,6 +270,10 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 		attempt := int32(dispatch.Attempt)
 		response.Attempt = &attempt
 	}
+	response.Retryable, response.FailureClassification = dispatchRetryDiagnosticsToAPI(
+		dispatch.Retryable,
+		dispatch.FailureClassification,
+	)
 	if runnerID := strings.TrimSpace(dispatch.RunnerID); runnerID != "" {
 		response.RunnerId = &runnerID
 	}
@@ -419,24 +431,30 @@ func dispatchWarningsToAPI(warnings []factorysessionexecution.DispatchWarning) *
 	return &out
 }
 
-func dispatchFailureToAPI(failure *factorysessionexecution.DispatchFailureDetail) *factoryapi.FactoryDispatchFailureDetail {
+func dispatchFailureToAPI(failure *factorysessionexecution.DispatchFailureDetail) *factoryapi.FailureDetail {
 	if failure == nil {
 		return nil
 	}
-	out := &factoryapi.FactoryDispatchFailureDetail{}
-	if reason := strings.TrimSpace(failure.Reason); reason != "" {
-		out.Reason = &reason
-	}
-	if message := strings.TrimSpace(failure.Message); message != "" {
-		out.Message = &message
-	}
-	if errorClass := strings.TrimSpace(failure.ErrorClass); errorClass != "" {
-		out.ErrorClass = &errorClass
-	}
-	if out.Reason == nil && out.Message == nil && out.ErrorClass == nil {
+	reason := strings.TrimSpace(failure.Reason)
+	message := strings.TrimSpace(failure.Message)
+	if reason == "" || message == "" {
 		return nil
 	}
-	return out
+	return &factoryapi.FailureDetail{Reason: failureReasonToAPI(reason), Message: message}
+}
+
+func dispatchRetryDiagnosticsToAPI(retryable *bool, classification string) (*bool, *factoryapi.WorkFailureType) {
+	var retryableValue *bool
+	if retryable != nil {
+		value := *retryable
+		retryableValue = &value
+	}
+	classification = strings.TrimSpace(classification)
+	if classification == "" {
+		return retryableValue, nil
+	}
+	value := factoryapi.WorkFailureType(classification)
+	return retryableValue, &value
 }
 
 func dispatchPetriToAPI(petri *factorysessionexecution.DispatchPetriProjection) *factoryapi.FactoryDispatchPetriProjection {

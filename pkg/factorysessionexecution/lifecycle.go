@@ -463,11 +463,61 @@ func applyDispatchProjectionEvent(dispatches map[string]DispatchSummary, raw jso
 		return fmt.Errorf("unmarshal event envelope: %w", err)
 	}
 	switch strings.TrimSpace(envelope.Type) {
+	case "DISPATCH_QUEUED":
+		return applyDispatchQueuedProjection(dispatches, envelope)
+	case "DISPATCH_RECONCILED":
+		return applyDispatchReconciledProjection(dispatches, envelope)
 	case "DISPATCH_INTERRUPTED":
 		return applyDispatchInterruptedProjection(dispatches, envelope)
 	default:
 		return nil
 	}
+}
+
+func applyDispatchQueuedProjection(dispatches map[string]DispatchSummary, envelope canonicalFactoryEvent) error {
+	dispatchID := stringValuePtr(envelope.Context.DispatchID)
+	if dispatchID == "" {
+		return fmt.Errorf("DISPATCH_QUEUED missing dispatchId")
+	}
+	var payload dispatchQueuedEventPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal DISPATCH_QUEUED payload: %w", err)
+	}
+	dispatches[dispatchID] = DispatchSummary{
+		ID:           dispatchID,
+		Status:       DispatchStatusQueued,
+		DispatchKind: strings.TrimSpace(payload.DispatchKind),
+		Phase:        stringValuePtr(envelope.Context.PhaseID),
+		Label:        strings.TrimSpace(payload.Label),
+		RunnerID:     strings.TrimSpace(payload.RunnerID),
+		Model:        strings.TrimSpace(payload.Model),
+		Provider:     strings.TrimSpace(payload.Provider),
+	}
+	return nil
+}
+
+func applyDispatchReconciledProjection(dispatches map[string]DispatchSummary, envelope canonicalFactoryEvent) error {
+	dispatchID := stringValuePtr(envelope.Context.DispatchID)
+	if dispatchID == "" {
+		return fmt.Errorf("DISPATCH_RECONCILED missing dispatchId")
+	}
+	var payload dispatchReconciledEventPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal DISPATCH_RECONCILED payload: %w", err)
+	}
+	dispatch := dispatches[dispatchID]
+	dispatch.ID = dispatchID
+	dispatch.Status = DispatchStatus(strings.TrimSpace(payload.ReconciledStatus))
+	dispatch.ProviderSessionRefs = cloneProviderSessionRefs(payload.ProviderSessionRefs)
+	dispatch.OutputArtifactIDs = append([]string(nil), payload.ArtifactIDs...)
+	if payload.FailureDetail != nil {
+		dispatch.FailureDetail = &DispatchFailureDetail{
+			Reason:  strings.TrimSpace(payload.FailureDetail.Reason),
+			Message: strings.TrimSpace(payload.FailureDetail.Message),
+		}
+	}
+	dispatches[dispatchID] = dispatch
+	return nil
 }
 
 func applyDispatchInterruptedProjection(dispatches map[string]DispatchSummary, envelope canonicalFactoryEvent) error {
@@ -729,7 +779,6 @@ type ResultSummary struct {
 type FailureSummary struct {
 	Reason                 string
 	Message                string
-	ErrorClass             string
 	PartialResultAvailable bool
 }
 

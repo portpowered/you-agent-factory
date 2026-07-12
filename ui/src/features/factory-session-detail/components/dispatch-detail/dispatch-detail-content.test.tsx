@@ -128,7 +128,6 @@ describe("DispatchDetailContent", () => {
     const data = normalizeFactorySessionDispatchDetail({
       dispatchKind: "JAVASCRIPT_VERIFY",
       failureDetail: {
-        errorClass: "verification_error",
         message: "Expected release manifest checksum.",
         reason: "VERIFY_ASSERTION_FAILED",
       },
@@ -149,10 +148,10 @@ describe("DispatchDetailContent", () => {
     expect(screen.getAllByText("FAILED").length).toBeGreaterThan(0);
     expect(screen.getByText("Failure detail")).toBeTruthy();
     expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
-    expect(screen.getByText("verification_error")).toBeTruthy();
     expect(
       screen.getByText("Expected release manifest checksum."),
     ).toBeTruthy();
+    expect(screen.queryByText("Error class")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });
 

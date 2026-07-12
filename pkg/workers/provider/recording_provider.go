@@ -141,13 +141,7 @@ func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interf
 	baseDiagnostics := workDiagnosticsForInferenceRequest(req)
 	if err != nil {
 		payload.Outcome = factoryapi.InferenceOutcomeFailed
-		errorClass := providerErrorClass(err)
-		payload.ErrorClass = stringPtr(errorClass)
-		payload.FailureDetail = &factoryapi.FactoryDispatchFailureDetail{
-			ErrorClass: stringPtr(errorClass),
-			Message:    stringPtr(providerErrorMessage(err)),
-			Reason:     stringPtr(errorClass),
-		}
+		payload.FailureDetail = providerFailureDetail(err)
 		payload.ExitCode = providerErrorExitCode(err)
 		payload.ProviderSession = interfaces.GeneratedProviderSessionMetadata(providerSessionFromInferenceError(err))
 		payload.Diagnostics = interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
@@ -170,6 +164,21 @@ func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interf
 		Id:            fmt.Sprintf("%s/%s", inferenceResponseEventIDPrefix, inferenceRequestID),
 		Context:       inferenceEventContext(req, eventTime),
 		Payload:       inferenceResponseFactoryEventPayload(payload),
+	}
+}
+
+func providerFailureDetail(err error) *factoryapi.FailureDetail {
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		message := strings.TrimSpace(providerErr.Message)
+		if message == "" {
+			message = "The provider request failed without an available explanation."
+		}
+		return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(providerErrorClass(err)), Message: message}
+	}
+	return &factoryapi.FailureDetail{
+		Reason:  factoryapi.WorkFailureTypeUnknown,
+		Message: "The provider request failed without an available explanation.",
 	}
 }
 
@@ -221,14 +230,6 @@ func providerErrorClass(err error) string {
 		return string(providerErr.Type)
 	}
 	return string(interfaces.WorkFailureTypeUnknown)
-}
-
-func providerErrorMessage(err error) string {
-	var providerErr *ProviderError
-	if errors.As(err, &providerErr) && strings.TrimSpace(providerErr.Message) != "" {
-		return providerErr.Message
-	}
-	return err.Error()
 }
 
 func providerErrorExitCode(err error) *int {

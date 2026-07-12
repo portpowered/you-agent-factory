@@ -268,9 +268,10 @@ export const erroredWorkstationRequestFixture =
     request_id: "request-error-story",
     responded_request_count: 0,
     response_view: {
-      failure_message:
-        "Provider rate limit exceeded while reviewing the story.",
-      failure_reason: "provider_rate_limit",
+      failureDetail: {
+        message: "Provider rate limit exceeded while reviewing the story.",
+        reason: "throttled",
+      },
       outcome: "FAILED",
     },
   });

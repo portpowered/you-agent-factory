@@ -226,7 +226,7 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	if rejectResult.Outcome != factoryapi.WorkOutcome(interfaces.OutcomeFailed) {
 		t.Fatalf("reject-process outcome = %s, want %s", rejectResult.Outcome, interfaces.OutcomeFailed)
 	}
-	if rejectResult.FailureReason == nil || *rejectResult.FailureReason == "" {
+	if rejectResult.FailureDetail == nil || rejectResult.FailureDetail.Reason == "" {
 		t.Fatal("reject-process result missing failure reason")
 	}
 	if !strings.Contains(stringPointerValue(rejectResult.Error), "exited with code 13") {

@@ -15,6 +15,7 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
 // ErrServiceNotConfigured reports an application composition graph that did
@@ -150,6 +151,7 @@ type ServiceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
 	Provider          workers.Provider
+	ProviderExecutor  providerexecution.Executor
 	FakeOptions       []FakeServiceOption
 	Persistence       PersistenceChoice
 	Clock             factory.Clock
@@ -236,11 +238,14 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 			return nil, NewValidationError("projectRoot", "projectRoot is required")
 		}
 		childExecutorMode := normalizeChildExecutorMode(config.ChildExecutorMode)
-		provider := config.Provider
-		if childExecutorMode == ChildExecutorModeLive && provider == nil {
-			provider = SmokeLiveChildProvider()
+		executor := config.ProviderExecutor
+		if executor == nil && config.Provider != nil {
+			executor = providerexecution.NewProviderExecutor(config.Provider)
 		}
-		if err := validateLiveChildExecutorConfig(childExecutorMode, provider); err != nil {
+		if childExecutorMode == ChildExecutorModeLive && executor == nil {
+			return nil, NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
+		}
+		if err := validateLiveChildExecutorConfig(childExecutorMode, config.Provider); err != nil && executor == nil {
 			return nil, err
 		}
 		persistence, err := config.Persistence.resolve()
@@ -250,7 +255,8 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		return NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
 			ProjectRoot:       projectRoot,
 			ChildExecutorMode: childExecutorMode,
-			Provider:          provider,
+			Provider:          config.Provider,
+			ProviderExecutor:  executor,
 			Persistence:       persistence,
 			Clock:             config.Clock,
 		}), nil
@@ -415,14 +421,16 @@ func childArtifactFromDispatch(
 
 func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.ChildDispatchRecord) DispatchSummary {
 	summary := DispatchSummary{
-		ID:           child.DispatchID,
-		Status:       DispatchStatus(strings.TrimSpace(child.Status)),
-		DispatchKind: "JAVASCRIPT_AGENT",
-		Phase:        currentPhase,
-		Label:        child.Label,
-		Attempt:      1,
-		RunnerID:     strings.TrimSpace(child.RunnerID),
-		Model:        strings.TrimSpace(child.Model),
+		ID:                    child.DispatchID,
+		Status:                DispatchStatus(strings.TrimSpace(child.Status)),
+		DispatchKind:          "JAVASCRIPT_AGENT",
+		Phase:                 currentPhase,
+		Label:                 child.Label,
+		Attempt:               positiveDispatchAttempt(child.Attempt),
+		Retryable:             cloneBoolPtr(child.Retryable),
+		FailureClassification: strings.TrimSpace(string(child.FailureClassification)),
+		RunnerID:              strings.TrimSpace(child.RunnerID),
+		Model:                 strings.TrimSpace(child.Model),
 	}
 	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
 		summary.JavaScript = &javascript
@@ -449,21 +457,31 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 	return summary
 }
 
-func dispatchFailureDetailFromChildRecord(child workflowruntime.ChildDispatchRecord) *DispatchFailureDetail {
-	message := strings.TrimSpace(child.FailureMessage)
-	if message == "" {
+func cloneBoolPtr(value *bool) *bool {
+	if value == nil {
 		return nil
 	}
-	detail := &DispatchFailureDetail{Message: message}
-	if reason := strings.TrimSpace(child.FailureReason); reason != "" {
-		detail.Reason = reason
-	} else {
-		detail.Reason = workflowruntime.ChildExecutionFailureReason
+	cloned := *value
+	return &cloned
+}
+
+func positiveDispatchAttempt(attempt int) int {
+	if attempt > 0 {
+		return attempt
 	}
-	if errorClass := strings.TrimSpace(child.FailureErrorClass); errorClass != "" {
-		detail.ErrorClass = errorClass
+	return 1
+}
+
+func dispatchFailureDetailFromChildRecord(child workflowruntime.ChildDispatchRecord) *DispatchFailureDetail {
+	if child.FailureDetail == nil {
+		return nil
 	}
-	return detail
+	reason := strings.TrimSpace(string(child.FailureDetail.Reason))
+	message := strings.TrimSpace(child.FailureDetail.Message)
+	if reason == "" || message == "" {
+		return nil
+	}
+	return &DispatchFailureDetail{Reason: reason, Message: message}
 }
 
 func dispatchJavaScriptFromChildRecord(child workflowruntime.ChildDispatchRecord) DispatchJavaScriptProjection {

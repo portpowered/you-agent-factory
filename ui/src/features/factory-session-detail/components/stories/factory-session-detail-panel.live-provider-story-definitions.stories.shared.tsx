@@ -48,7 +48,9 @@ export const LiveProviderSuccessInspection = {
           method: "GET",
           path: `/factory-sessions/${successfulLiveProviderSessionID}`,
           response: {
-            body: buildSuccessfulDurableSession(successfulLiveProviderSessionID),
+            body: buildSuccessfulDurableSession(
+              successfulLiveProviderSessionID,
+            ),
           },
         },
         {
@@ -109,7 +111,8 @@ export const LiveProviderSuccessInspection = {
       await canvas.findByRole("link", { name: "art-js-success-001" }),
     ).toBeTruthy();
   },
-  render: () => renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
+  render: () =>
+    renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
 };
 
 export const FailedBridgedChildInspection = {
@@ -121,7 +124,9 @@ export const FailedBridgedChildInspection = {
           method: "GET",
           path: `/factory-sessions/${failedBridgedChildSessionID}`,
           response: {
-            body: buildFailedBridgedChildDurableSession(failedBridgedChildSessionID),
+            body: buildFailedBridgedChildDurableSession(
+              failedBridgedChildSessionID,
+            ),
           },
         },
         {
@@ -175,7 +180,6 @@ export const FailedBridgedChildInspection = {
     expect(
       await canvas.findByText("provider_version_incompatible"),
     ).toBeTruthy();
-    expect(await canvas.findByText("provider_error")).toBeTruthy();
     expect(
       await canvas.findByText(
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
@@ -201,7 +205,9 @@ export const LiveProviderAdjacentSurfacesRegression = {
           method: "GET",
           path: `/factory-sessions/${successfulLiveProviderSessionID}`,
           response: {
-            body: buildSuccessfulDurableSession(successfulLiveProviderSessionID),
+            body: buildSuccessfulDurableSession(
+              successfulLiveProviderSessionID,
+            ),
           },
         },
         {
@@ -222,7 +228,9 @@ export const LiveProviderAdjacentSurfacesRegression = {
           method: "GET",
           path: `/factory-sessions/${successfulLiveProviderSessionID}/events`,
           response: {
-            body: buildSuccessfulReplayEventStream(successfulLiveProviderSessionID),
+            body: buildSuccessfulReplayEventStream(
+              successfulLiveProviderSessionID,
+            ),
             headers: {
               "Content-Type": "text/event-stream",
             },
@@ -248,7 +256,9 @@ export const LiveProviderAdjacentSurfacesRegression = {
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    expect(await canvas.findByText("art-js-success-001 · FINAL_RESULT")).toBeTruthy();
+    expect(
+      await canvas.findByText("art-js-success-001 · FINAL_RESULT"),
+    ).toBeTruthy();
     expect(await canvas.findByText("Execution mode: live")).toBeTruthy();
     expect(
       await canvas.findByText(
@@ -266,7 +276,9 @@ export const LiveProviderAdjacentSurfacesRegression = {
     ).toBeTruthy();
 
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Expand Factory Event replay" }),
+      await canvas.findByRole("button", {
+        name: "Expand Factory Event replay",
+      }),
     );
     expect(await canvas.findByText("Showing 5 Factory Events.")).toBeTruthy();
     expect(await canvas.findByText("Session started")).toBeTruthy();
@@ -276,7 +288,8 @@ export const LiveProviderAdjacentSurfacesRegression = {
       ),
     ).toBeTruthy();
   },
-  render: () => renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
+  render: () =>
+    renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
 };
 
 export const LiveProviderDispatchDetailUnavailable = {
@@ -288,7 +301,9 @@ export const LiveProviderDispatchDetailUnavailable = {
           method: "GET",
           path: `/factory-sessions/${successfulLiveProviderSessionID}`,
           response: {
-            body: buildSuccessfulDurableSession(successfulLiveProviderSessionID),
+            body: buildSuccessfulDurableSession(
+              successfulLiveProviderSessionID,
+            ),
           },
         },
         {
@@ -343,8 +358,11 @@ export const LiveProviderDispatchDetailUnavailable = {
       ),
     ).toBeTruthy();
     expect(
-      await canvas.findByRole("button", { name: "Expand Factory Event replay" }),
+      await canvas.findByRole("button", {
+        name: "Expand Factory Event replay",
+      }),
     ).toBeTruthy();
   },
-  render: () => renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
+  render: () =>
+    renderFactorySessionDetailPanel(successfulLiveProviderSessionID),
 };

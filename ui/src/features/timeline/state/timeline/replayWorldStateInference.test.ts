@@ -275,10 +275,8 @@ describe("reconstructWorldState inference failures", () => {
           attempt: 1,
           diagnostics: { provider: "openai" },
           durationMillis: 250,
-          errorClass: "rate_limited",
           exitCode: 1,
           failureDetail: {
-            errorClass: "permanent_bad_request",
             message:
               "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
             reason: "codex_version_incompatible",
@@ -334,10 +332,9 @@ describe("reconstructWorldState inference failures", () => {
       state.inferenceAttemptsByDispatchID[dispatchID]?.[inferenceRequestID],
     ).toEqual(
       expect.objectContaining({
-        error_class: "rate_limited",
+        error_class: "codex_version_incompatible",
         exit_code: 1,
         failure_detail: {
-          errorClass: "permanent_bad_request",
           message:
             "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
           reason: "codex_version_incompatible",

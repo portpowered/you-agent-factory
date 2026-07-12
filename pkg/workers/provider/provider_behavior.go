@@ -21,30 +21,6 @@ const (
 
 const codexHighDemandTemporaryErrorsNeedle = "we're currently experiencing high demand, which may cause temporary errors."
 
-var codexThrottledFailureNeedles = []string{
-	"rate limit",
-	"too many requests",
-	"429",
-	"throttl",
-	"at capacity",
-	"model capacity",
-	"try a different model",
-	"usage limit",
-}
-
-var codexTemporaryServerFailureNeedles = []string{
-	"unexpected status 500",
-	"unexpected status 502",
-	"unexpected status 503",
-	"unexpected status 504",
-	"server_error",
-	"internal server error",
-	"overloaded",
-	"server had an error",
-	"connection reset by peer",
-	codexHighDemandTemporaryErrorsNeedle,
-}
-
 // ProviderBuildContext carries dispatch-scoped resources for provider argument building.
 type ProviderBuildContext struct {
 	ContentCache    *materialize.DispatchCache
@@ -54,9 +30,6 @@ type ProviderBuildContext struct {
 type providerBehavior interface {
 	BuildArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error)
 	BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest
-	FormatExitFailure(provider string, result CommandResult) string
-	ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType
-	FormatTimeoutFailure(result CommandResult) string
 }
 
 type sharedNonCodexProviderBehavior struct{}
@@ -76,7 +49,6 @@ type geminiProviderBehavior struct {
 }
 
 type kiroProviderBehavior struct {
-	sharedNonCodexProviderBehavior
 	logger logging.Logger
 }
 
@@ -107,51 +79,8 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 	}
 }
 
-func providerBehaviorForErrorClassification(provider string) providerBehavior {
-	switch provider {
-	case string(interfaces.ModelProviderClaude):
-		return claudeProviderBehavior{}
-	case string(interfaces.ModelProviderGemini):
-		return geminiProviderBehavior{}
-	case string(interfaces.ModelProviderKiro):
-		return kiroProviderBehavior{}
-	case string(interfaces.ModelProviderCursor):
-		return cursorProviderBehavior{}
-	case string(interfaces.ModelProviderOpenCode):
-		return openCodeProviderBehavior{}
-	default:
-		return codexProviderBehavior{}
-	}
-}
-
 func (sharedNonCodexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
 	return buildBaseProviderCommandRequest(req, args)
-}
-
-func (sharedNonCodexProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
-	return formatProviderOutputOrDefault(result, "execution timeout")
-}
-
-func (sharedNonCodexProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
-}
-
-func (sharedNonCodexProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
-	switch {
-	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return interfaces.WorkFailureTypeAuthFailure
-	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
-		return interfaces.WorkFailureTypePermanentBadRequest
-	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
-		return interfaces.WorkFailureTypeThrottled
-	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.WorkFailureTypeInternalServerError
-	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.WorkFailureTypeTimeout
-	default:
-		return interfaces.WorkFailureTypeUnknown
-	}
 }
 
 func (b claudeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -181,28 +110,6 @@ func (b claudeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	}
 	args = append(args, req.UserMessage)
 	return args, nil
-}
-
-func (b claudeProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return fmt.Sprintf("%s exited with code %d", provider, result.ExitCode)
-}
-
-func (b claudeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
-	switch {
-	case containsAny(normalizedOutput, `"type":"authentication_error"`, `"type":"permission_error"`, "api key", "authentication error", "permission error", "unauthorized", "forbidden"):
-		return interfaces.WorkFailureTypeAuthFailure
-	case containsAny(normalizedOutput, `"type":"invalid_request_error"`, "invalid_request_error", "bad request", "invalid request", "request_too_large"):
-		return interfaces.WorkFailureTypePermanentBadRequest
-	case containsAny(normalizedOutput, `"type":"rate_limit_error"`, `"type":"overloaded_error"`, "rate limit", "too many requests", "overloaded", "529"):
-		return interfaces.WorkFailureTypeThrottled
-	case containsAny(normalizedOutput, `"type":"api_error"`, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.WorkFailureTypeInternalServerError
-	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.WorkFailureTypeTimeout
-	default:
-		return interfaces.WorkFailureTypeUnknown
-	}
 }
 
 func (b codexProviderBehavior) BuildArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
@@ -242,44 +149,6 @@ func (b codexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInfere
 	return commandReq
 }
 
-func (b codexProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	if codexError, ok := extractCodexErrorLine(result); ok {
-		return codexError
-	}
-	return fmt.Sprintf("%s exited with code %d", provider, result.ExitCode)
-}
-
-func (b codexProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	normalizedOutput := strings.ToLower(formatCodexOutputForClassification(result))
-	switch {
-	case containsAny(normalizedOutput, `"type":"authentication_error"`, "authentication_error", "api key", "unauthorized", "forbidden", "401 unauthorized", "403 forbidden"):
-		return interfaces.WorkFailureTypeAuthFailure
-	case containsAny(normalizedOutput, `"type":"invalid_request_error"`, "invalid_request_error", "bad request", "400 item", "400 previous response", "400 ") && !containsAny(normalizedOutput, "timeout"):
-		return interfaces.WorkFailureTypePermanentBadRequest
-	case containsAny(normalizedOutput, codexThrottledFailureNeedles...):
-		return interfaces.WorkFailureTypeThrottled
-	case containsAny(normalizedOutput, codexTemporaryServerFailureNeedles...):
-		return interfaces.WorkFailureTypeInternalServerError
-	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.WorkFailureTypeTimeout
-	case result.ExitCode == codexWindowsProcessFailureExitCode:
-		// Windows sometimes reports interrupted Codex subprocess failures as
-		// 4294967295 without any audited provider signal. Keep that path on the
-		// shared retryable provider/process-failure class instead of falling
-		// through to a terminal bucket.
-		return interfaces.WorkFailureTypeInternalServerError
-	default:
-		return interfaces.WorkFailureTypeUnknown
-	}
-}
-
-func (b codexProviderBehavior) FormatTimeoutFailure(result CommandResult) string {
-	if codexError, ok := extractCodexErrorLine(result); ok {
-		return codexError
-	}
-	return formatProviderOutputOrDefault(result, "execution timeout")
-}
-
 func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateGeminiOptionalCapabilities(req); err != nil {
 		return nil, err
@@ -295,14 +164,6 @@ func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 		args = append(args, "--approval-mode", "yolo", "--sandbox", "false")
 	}
 	return args, nil
-}
-
-func (b geminiProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
-}
-
-func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
 func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -322,12 +183,8 @@ func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.Provid
 	return args, nil
 }
 
-func (b kiroProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
-}
-
-func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
+func (kiroProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+	return buildBaseProviderCommandRequest(req, args)
 }
 
 func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -357,14 +214,6 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	return args, nil
 }
 
-func (b cursorProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return codexProviderBehavior{}.FormatExitFailure(provider, result)
-}
-
-func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return codexProviderBehavior{}.ClassifyExitFailure(result)
-}
-
 func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateOpenCodeOptionalCapabilities(req); err != nil {
 		return nil, err
@@ -387,14 +236,6 @@ func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Pr
 	}
 	args = append(args, req.UserMessage)
 	return args, nil
-}
-
-func (b openCodeProviderBehavior) FormatExitFailure(provider string, result CommandResult) string {
-	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
-}
-
-func (b openCodeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
-	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
 func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
@@ -510,13 +351,6 @@ func formatCombinedProviderOutput(result CommandResult) string {
 	}, "\n")
 }
 
-func formatCodexOutputForClassification(result CommandResult) string {
-	if codexError, ok := extractCodexErrorLine(result); ok {
-		return codexError
-	}
-	return formatCombinedProviderOutput(result)
-}
-
 func extractCodexErrorLine(result CommandResult) (string, bool) {
 	combined := strings.Join([]string{
 		tailForCodexErrorScan(result.Stderr),
@@ -609,3 +443,79 @@ func formatProviderOutputOrDefault(result CommandResult, fallback string) string
 	}
 	return fallback
 }
+
+// WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
+// provider error using the same FailureMetadata projection as WorkResult.
+func WorkFailureDecisionFromProviderError(err *ProviderError) interfaces.WorkFailureDecision {
+	return WorkFailureDecisionFromMetadata(WorkFailureMetadataFromError(err))
+}
+
+// WorkFailureDecisionFromMetadata resolves retry behavior from durable
+// generalized failure metadata carried across runtime boundaries.
+// The normalized type is canonical when present; family remains a fallback for
+// older or partial metadata that omitted type.
+func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) interfaces.WorkFailureDecision {
+	if metadata == nil {
+		return interfaces.WorkFailureDecision{}
+	}
+	if metadata.Type != "" {
+		return providerFailurePolicyForReason(metadata.Type).Decision
+	}
+	return providerFailureDecisionForFamily(metadata.Family)
+}
+
+type providerFailurePolicy struct {
+	Family   interfaces.WorkFailureFamily
+	Decision interfaces.WorkFailureDecision
+}
+
+func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerFailurePolicy {
+	switch reason {
+	case interfaces.WorkFailureTypeThrottled:
+		return providerFailurePolicy{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Decision: interfaces.WorkFailureDecision{
+				Retryable:             true,
+				TriggersThrottlePause: true,
+			},
+		}
+	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyRetryable,
+			Decision: interfaces.WorkFailureDecision{Retryable: true},
+		}
+	case interfaces.WorkFailureTypeAuthFailure,
+		interfaces.WorkFailureTypePermanentBadRequest,
+		interfaces.WorkFailureTypeUnknown,
+		interfaces.WorkFailureTypeMisconfigured:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	default:
+		return providerFailurePolicy{
+			Family:   interfaces.WorkFailureFamilyTerminal,
+			Decision: interfaces.WorkFailureDecision{Terminal: true},
+		}
+	}
+}
+
+func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
+	switch family {
+	case interfaces.WorkFailureFamilyRetryable:
+		return interfaces.WorkFailureDecision{Retryable: true}
+	case interfaces.WorkFailureFamilyThrottle:
+		return interfaces.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
+	case interfaces.WorkFailureFamilyTerminal:
+		return interfaces.WorkFailureDecision{Terminal: true}
+	default:
+		return interfaces.WorkFailureDecision{Terminal: true}
+	}
+}
+
+func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
+	return providerFailurePolicyForReason(errorType).Family
+}
+
+// WorkFailureMetadataFromError projects a provider-shaped execution error onto
+// the in-process failure contract carried on WorkResult.FailureMetadata.

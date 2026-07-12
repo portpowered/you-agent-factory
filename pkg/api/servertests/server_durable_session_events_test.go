@@ -619,10 +619,10 @@ func assertAPIDispatchReconciledLifecycleEvent(
 		t.Fatalf("marshal DISPATCH_RECONCILED payload: %v", err)
 	}
 	var reconciledBody struct {
-		ReconciledStatus     factoryapi.FactoryDispatchStatus         `json:"reconciledStatus"`
-		ReconciliationSource factoryapi.DispatchReconciliationSource  `json:"reconciliationSource"`
-		ArtifactIds          *[]string                                `json:"artifactIds"`
-		FailureDetail        *factoryapi.FactoryDispatchFailureDetail `json:"failureDetail"`
+		ReconciledStatus     factoryapi.FactoryDispatchStatus        `json:"reconciledStatus"`
+		ReconciliationSource factoryapi.DispatchReconciliationSource `json:"reconciliationSource"`
+		ArtifactIds          *[]string                               `json:"artifactIds"`
+		FailureDetail        *factoryapi.FailureDetail               `json:"failureDetail"`
 	}
 	if err := json.Unmarshal(reconciledPayload, &reconciledBody); err != nil {
 		t.Fatalf("unmarshal DISPATCH_RECONCILED payload: %v", err)
@@ -690,20 +690,17 @@ func isTerminalFactoryDispatchStatus(status factoryapi.FactoryDispatchStatus) bo
 
 func assertAPILiveProviderDispatchFailureDetail(
 	t *testing.T,
-	failure *factoryapi.FactoryDispatchFailureDetail,
+	failure *factoryapi.FailureDetail,
 ) {
 	t.Helper()
-	if failure == nil || failure.Reason == nil {
+	if failure == nil {
 		t.Fatalf("failureDetail = %#v, want typed provider failure", failure)
 	}
-	if *failure.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
-		t.Fatalf("failure reason = %q, want %q", *failure.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	if failure.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("failure reason = %q, want %q", failure.Reason, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if failure.Message == nil || *failure.Message != "simulated live child error" {
-		t.Fatalf("failure message = %#v, want simulated live child error", failure.Message)
-	}
-	if failure.ErrorClass == nil || *failure.ErrorClass != string(interfaces.WorkFailureFamilyTerminal) {
-		t.Fatalf("failure errorClass = %#v, want %q", failure.ErrorClass, interfaces.WorkFailureFamilyTerminal)
+	if failure.Message != "Provider rejected the request as invalid." {
+		t.Fatalf("failure message = %#v, want sanitized provider failure", failure.Message)
 	}
 }
 

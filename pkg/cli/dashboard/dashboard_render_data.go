@@ -338,8 +338,7 @@ func dashboardFailedWorkDetailsFromRenderData(
 			DispatchID:      completion.DispatchID,
 			TransitionID:    dashboardCompatibilityTransitionID(completion.TransitionID),
 			WorkstationName: dashboardCompatibilityWorkstationName(completion.Workstation.Name, completion.TransitionID),
-			FailureReason:   completion.Result.FailureReason,
-			FailureMessage:  completion.Result.FailureMessage,
+			FailureDetail:   interfaces.CloneFailureDetail(completion.Result.FailureDetail),
 		})
 	}
 	return out

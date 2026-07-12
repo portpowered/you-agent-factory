@@ -268,8 +268,10 @@ export function projectWorkstationDispatchRequest(
     dispatch_id: dispatch.dispatchID,
     dispatched_request_count: counts.dispatchedCount ?? 0,
     errored_request_count: counts.erroredCount ?? 0,
-    failure_message: responseView?.failureMessage ?? completion?.failureMessage,
-    failure_reason: responseView?.failureReason ?? completion?.failureReason,
+    failure_message:
+      responseView?.failureDetail?.message ?? completion?.failureMessage,
+    failure_reason:
+      responseView?.failureDetail?.reason ?? completion?.failureReason,
     inference_attempts: [],
     model: diagnostics?.model ?? completion?.model ?? dispatch.model,
     outcome: responseView?.outcome ?? completion?.outcome,

@@ -92,6 +92,30 @@ func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 	}
 }
 
+func TestOpenAPIContract_DispatchResponseRejectsLegacyFlattenedFailure(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	schema := doc.Components.Schemas["DispatchResponseEventPayload"].Value
+	canonical := map[string]any{
+		"transitionId": "review",
+		"outcome":      "FAILED",
+		"failureDetail": map[string]any{
+			"reason":  "permanent_bad_request",
+			"message": "The model requires a newer Codex app or CLI.",
+		},
+	}
+	if err := schema.VisitJSON(canonical); err != nil {
+		t.Fatalf("canonical failureDetail payload should validate: %v", err)
+	}
+	legacy := map[string]any{
+		"transitionId":  "review",
+		"outcome":       "FAILED",
+		"failureReason": "permanent_bad_request",
+	}
+	if err := schema.VisitJSON(legacy); err == nil {
+		t.Fatal("legacy flattened failure payload should not validate")
+	}
+}
+
 func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for _, schema := range []string{
@@ -274,6 +298,8 @@ func assertUnifiedDispatchEvents(t *testing.T, schemas map[string]any) {
 
 	dispatchResponse := schemaObject(t, schemas, "DispatchResponseEventPayload")
 	dispatchResponseProperties := schemaProperties(t, dispatchResponse, "DispatchResponseEventPayload")
+	assertPropertyRef(t, dispatchResponseProperties, "failureDetail", "#/components/schemas/FailureDetail")
+	assertPropertiesAbsent(t, dispatchResponseProperties, "DispatchResponseEventPayload", "failureReason", "failureMessage", "errorClass")
 	assertDeprecatedEventFields(t, dispatchResponseProperties, "DispatchResponseEventPayload", "currentChainingTraceId", "previousChainingTraceIds")
 	assertArrayItemRef(t, dispatchResponseProperties, "outputWork", "#/components/schemas/Work")
 	assertArrayItemRef(t, dispatchResponseProperties, "outputResources", "#/components/schemas/Resource")
@@ -320,6 +346,14 @@ func assertUnifiedWorkStateChangeEvent(t *testing.T, schemas map[string]any) {
 
 func assertUnifiedInferenceEvents(t *testing.T, schemas map[string]any) {
 	t.Helper()
+	failureDetail := schemaObject(t, schemas, "FailureDetail")
+	assertRequiredFields(t, failureDetail, "reason", "message")
+	failureProperties := schemaProperties(t, failureDetail, "FailureDetail")
+	assertPropertyRef(t, failureProperties, "reason", "#/components/schemas/WorkFailureType")
+	assertSchemaPropertiesPresent(t, failureProperties, "FailureDetail", "reason", "message")
+	if len(failureProperties) != 2 {
+		t.Fatalf("FailureDetail.properties = %#v, want exactly reason and message", failureProperties)
+	}
 	inferenceRequest := schemaObject(t, schemas, "InferenceRequestEventPayload")
 	assertRequiredFields(t, inferenceRequest, "inferenceRequestId", "attempt", "workingDirectory", "worktree", "prompt")
 	inferenceRequestProperties := schemaProperties(t, inferenceRequest, "InferenceRequestEventPayload")
@@ -330,7 +364,9 @@ func assertUnifiedInferenceEvents(t *testing.T, schemas map[string]any) {
 	assertRequiredFields(t, inferenceResponse, "inferenceRequestId", "attempt", "outcome", "durationMillis")
 	inferenceResponseProperties := schemaProperties(t, inferenceResponse, "InferenceResponseEventPayload")
 	assertPropertyRef(t, inferenceResponseProperties, "outcome", "#/components/schemas/InferenceOutcome")
-	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "errorClass", "failureDetail")
+	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "failureDetail")
+	assertPropertyRef(t, inferenceResponseProperties, "failureDetail", "#/components/schemas/FailureDetail")
+	assertPropertiesAbsent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "errorClass", "failureReason", "failureMessage")
 	assertPropertiesAbsent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "dispatchId", "transitionId")
 	assertEnumValues(t, schemaObject(t, schemas, "InferenceOutcome"), "InferenceOutcome", []string{"SUCCEEDED", "FAILED"})
 }
@@ -348,7 +384,9 @@ func assertUnifiedModelEvents(t *testing.T, schemas map[string]any) {
 	modelResponse := schemaObject(t, schemas, "ModelResponseEventPayload")
 	assertRequiredFields(t, modelResponse, "modelRequestId", "attempt", "operation", "worker", "model", "providerLocality", "outcome", "durationMillis")
 	modelResponseProperties := schemaProperties(t, modelResponse, "ModelResponseEventPayload")
-	assertSchemaPropertiesPresent(t, modelResponseProperties, "ModelResponseEventPayload", "modelRequestId", "attempt", "operation", "worker", "model", "providerLocality", "durationMillis", "resources", "bindings", "resourceWaitMillis", "resourceAcquired", "loadRequested", "loadReused", "loadDurationMillis", "outputPreview", "outputContent", "diagnostics", "errorClass")
+	assertSchemaPropertiesPresent(t, modelResponseProperties, "ModelResponseEventPayload", "modelRequestId", "attempt", "operation", "worker", "model", "providerLocality", "durationMillis", "resources", "bindings", "resourceWaitMillis", "resourceAcquired", "loadRequested", "loadReused", "loadDurationMillis", "outputPreview", "outputContent", "diagnostics", "failureDetail")
+	assertPropertyRef(t, modelResponseProperties, "failureDetail", "#/components/schemas/FailureDetail")
+	assertPropertiesAbsent(t, modelResponseProperties, "ModelResponseEventPayload", "errorClass", "failureReason", "failureMessage")
 	assertArrayItemRef(t, modelResponseProperties, "resources", "#/components/schemas/ModelResourceSummary")
 	assertArrayItemRef(t, modelResponseProperties, "bindings", "#/components/schemas/ResolvedModelOperationBinding")
 	assertPropertyRef(t, modelResponseProperties, "outcome", "#/components/schemas/InferenceOutcome")

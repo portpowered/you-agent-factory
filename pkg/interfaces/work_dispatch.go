@@ -378,9 +378,8 @@ type FactorySessionDispatchWarning struct {
 
 // FactorySessionDispatchFailureDetail carries failure metadata for one dispatch.
 type FactorySessionDispatchFailureDetail struct {
-	Reason     string `json:"reason,omitempty"`
-	Message    string `json:"message,omitempty"`
-	ErrorClass string `json:"errorClass,omitempty"`
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
 }
 
 // FactorySessionDispatchPetriState carries Petri-specific dispatch projection fields.

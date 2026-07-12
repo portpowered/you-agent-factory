@@ -308,7 +308,10 @@ const failedInferenceResponse = event(
   {
     attempt: 2,
     durationMillis: 875,
-    errorClass: "rate_limited",
+    failureDetail: {
+      message: "Provider rate limit exceeded.",
+      reason: "throttled",
+    },
     exitCode: 1,
     inferenceRequestId: "dispatch-1/inference-request/2",
     outcome: "FAILED",
@@ -453,8 +456,10 @@ const failedResponse = event(
       },
     },
     durationMillis: 600,
-    failureMessage: "Provider rate limit exceeded.",
-    failureReason: "throttled",
+    failureDetail: {
+      message: "Provider rate limit exceeded.",
+      reason: "throttled",
+    },
     outcome: "FAILED",
     outputWork: [
       {
@@ -1044,8 +1049,10 @@ const scriptFailedDispatchResponse = event(
   {
     dispatchId: "dispatch-script-failed",
     durationMillis: 500,
-    failureMessage: "Script timed out.",
-    failureReason: "script_timeout",
+    failureDetail: {
+      message: "Script timed out.",
+      reason: "timeout",
+    },
     outcome: "FAILED",
     output: "legacy script failure output",
     outputWork: [
@@ -2166,8 +2173,10 @@ describe("factory timeline reconstruction trace lineage", () => {
       {
         dispatchId: "dispatch-failed-batch",
         durationMillis: 600,
-        failureMessage: "Provider rate limit exceeded.",
-        failureReason: "throttled",
+        failureDetail: {
+          message: "Provider rate limit exceeded.",
+          reason: "throttled",
+        },
         outcome: "FAILED",
         outputWork: [
           {
@@ -2326,8 +2335,10 @@ describe("factory timeline reconstruction request state", () => {
       {
         dispatchId: "dispatch-customer-failed",
         durationMillis: 100,
-        failureMessage: "Customer work failed.",
-        failureReason: "validation_error",
+        failureDetail: {
+          message: "Customer work failed.",
+          reason: "permanent_bad_request",
+        },
         outcome: "FAILED",
         outputWork: [
           {
@@ -2390,8 +2401,10 @@ describe("factory timeline reconstruction request state", () => {
       {
         dispatchId: "dispatch-system-time-failed",
         durationMillis: 20,
-        failureMessage: "System timer expired.",
-        failureReason: "timeout",
+        failureDetail: {
+          message: "System timer expired.",
+          reason: "timeout",
+        },
         outcome: "FAILED",
         outputWork: [
           {
@@ -2478,7 +2491,7 @@ describe("factory timeline reconstruction request state", () => {
     expect(failedAttempt).toMatchObject({
       attempt: 2,
       duration_millis: 875,
-      error_class: "rate_limited",
+      error_class: "throttled",
       exit_code: 1,
       outcome: "FAILED",
       prompt: "Retry the timeline story.",
@@ -2694,8 +2707,10 @@ describe("factory timeline reconstruction request state", () => {
         responded_count: 0,
       },
       response: {
-        failure_message: "Script timed out.",
-        failure_reason: "script_timeout",
+        failureDetail: {
+          message: "Script timed out.",
+          reason: "timeout",
+        },
         outcome: "FAILED",
         script_response: {
           duration_millis: 500,
@@ -2837,7 +2852,10 @@ describe("factory timeline reconstruction request state", () => {
         attempt: 1,
         dispatchId: "dispatch-failed",
         durationMillis: 600,
-        errorClass: "rate_limited",
+        failureDetail: {
+          message: "Provider rate limit exceeded.",
+          reason: "throttled",
+        },
         inferenceRequestId: "dispatch-failed/inference-request/1",
         outcome: "FAILED",
         transitionId: "review",
@@ -2871,8 +2889,10 @@ describe("factory timeline reconstruction request state", () => {
         responded_count: 0,
       },
       response: {
-        failure_message: "Provider rate limit exceeded.",
-        failure_reason: "throttled",
+        failureDetail: {
+          message: "Provider rate limit exceeded.",
+          reason: "throttled",
+        },
         outcome: "FAILED",
       },
     });
@@ -3130,7 +3150,10 @@ describe("factory timeline reconstruction request state", () => {
         attempt: 1,
         dispatchId: "dispatch-failed",
         durationMillis: 600,
-        errorClass: "rate_limited",
+        failureDetail: {
+          message: "Provider rate limit exceeded.",
+          reason: "throttled",
+        },
         inferenceRequestId: "dispatch-failed/inference-request/1",
         outcome: "FAILED",
         transitionId: "review",
@@ -3164,8 +3187,10 @@ describe("factory timeline reconstruction request state", () => {
       failure_message: "Provider rate limit exceeded.",
       failure_reason: "throttled",
       response_view: {
-        failure_message: "Provider rate limit exceeded.",
-        failure_reason: "throttled",
+        failureDetail: {
+          message: "Provider rate limit exceeded.",
+          reason: "throttled",
+        },
         outcome: "FAILED",
       },
       inference_attempts: [],
@@ -3176,7 +3201,7 @@ describe("factory timeline reconstruction request state", () => {
       ]?.["dispatch-failed/inference-request/1"],
     ).toMatchObject({
       prompt: "Retry the blocked story.",
-      error_class: "rate_limited",
+      error_class: "throttled",
       working_directory: "/work/error",
       worktree: "/work/error/.worktrees/story",
     });
@@ -3652,7 +3677,7 @@ describe("factory timeline store replay", () => {
       dispatched_request_count: 1,
       errored_request_count: 1,
       failure_message: "Script timed out.",
-      failure_reason: "script_timeout",
+      failure_reason: "timeout",
       responded_request_count: 0,
       script_request: {
         args: ["--work", "work-script-failed"],
@@ -3791,7 +3816,10 @@ describe("factory timeline store replay", () => {
         attempt: 1,
         dispatchId: "dispatch-failed",
         durationMillis: 600,
-        errorClass: "rate_limited",
+        failureDetail: {
+          message: "Provider rate limit exceeded.",
+          reason: "throttled",
+        },
         inferenceRequestId: "dispatch-failed/inference-request/1",
         outcome: "FAILED",
         transitionId: "review",
@@ -3828,9 +3856,10 @@ describe("factory timeline store replay", () => {
       (event) => event.type === FACTORY_EVENT_TYPES.dispatchResponse,
     );
     expect(responseEvent?.payload).toMatchObject({
-      failureMessage:
-        "Provider rate limit exceeded while generating the analysis.",
-      failureReason: "provider_rate_limit",
+      failureDetail: {
+        message: "Provider rate limit exceeded while generating the analysis.",
+        reason: "throttled",
+      },
       outcome: "FAILED",
     });
 
@@ -3879,7 +3908,7 @@ describe("factory timeline store replay", () => {
       dispatch_id: "dispatch-blocked-analysis",
       failure_message:
         "Provider rate limit exceeded while generating the analysis.",
-      failure_reason: "provider_rate_limit",
+      failure_reason: "throttled",
       transition_id: "review",
       workstation_name: "Review",
       work_item: {

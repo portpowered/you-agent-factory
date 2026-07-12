@@ -43,7 +43,7 @@ describe("terminal summary replay regression", () => {
       expect.objectContaining({
         failureMessage:
           'execution cancelled: exec: "python3": executable file not found in $PATH',
-        failureReason: "worker_error",
+        failureReason: "unknown",
         workstationName: "setup-workspace",
       }),
     );

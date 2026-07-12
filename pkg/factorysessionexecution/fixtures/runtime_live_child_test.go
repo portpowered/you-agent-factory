@@ -2,6 +2,7 @@ package fixtures_test
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +29,7 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          provider,
+		Persistence:       runtimePersistence(projectRoot),
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
@@ -47,7 +49,57 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 		t.Fatalf("StartSync: %v", err)
 	}
 
+	_, live, _ := loadLiveChildDispatchReads(t, service, completed)
 	assertLiveChildDispatchInspection(t, service, completed, provider.callCount)
+	assertSharedLiveChildDispatchContract(t, live)
+
+	reloaded := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: fse.ChildExecutorModeLive,
+		Provider:          provider,
+		Persistence:       runtimePersistence(projectRoot),
+	})
+	_, replayed, _ := loadLiveChildDispatchReads(t, reloaded, completed)
+	assertSharedLiveChildDispatchContract(t, replayed)
+	if !reflect.DeepEqual(sharedDispatchContract(live), sharedDispatchContract(replayed)) {
+		t.Fatalf("replayed shared dispatch = %#v, want live %#v", sharedDispatchContract(replayed), sharedDispatchContract(live))
+	}
+}
+
+func assertSharedLiveChildDispatchContract(t *testing.T, dispatch fse.DispatchSummary) {
+	t.Helper()
+	want := sharedDispatchProjection{
+		ID:       "dispatch-1",
+		Model:    "gpt-test",
+		Provider: "mock",
+		ProviderSession: fse.ProviderSessionRef{
+			Provider: "mock",
+			Kind:     "session_id",
+			ID:       "live-provider-session-1",
+		},
+	}
+	if got := sharedDispatchContract(dispatch); !reflect.DeepEqual(got, want) {
+		t.Fatalf("shared dispatch contract = %#v, want %#v", got, want)
+	}
+}
+
+type sharedDispatchProjection struct {
+	ID              string
+	Model           string
+	Provider        string
+	ProviderSession fse.ProviderSessionRef
+}
+
+func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjection {
+	projection := sharedDispatchProjection{
+		ID:       dispatch.ID,
+		Model:    dispatch.Model,
+		Provider: dispatch.Provider,
+	}
+	if len(dispatch.ProviderSessionRefs) == 1 {
+		projection.ProviderSession = dispatch.ProviderSessionRefs[0]
+	}
+	return projection
 }
 
 type fixtureMockProvider struct {
@@ -302,6 +354,7 @@ func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureA
 	assertParallelLiveChildFailureInspection(t, service, completed)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime fixture keeps terminal provider failure inspection in one end-to-end scenario.
 func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure(t *testing.T) {
 	provider := newFailingFixtureMockProvider(provider.NewProviderError(
 		interfaces.WorkFailureTypePermanentBadRequest,
@@ -356,8 +409,11 @@ func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatc
 	if dispatchDetail.FailureDetail == nil || dispatchDetail.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("dispatch failureDetail = %#v", dispatchDetail.FailureDetail)
 	}
-	if dispatchDetail.FailureDetail.Message != "simulated live child error" {
+	if dispatchDetail.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("dispatch failure message = %q", dispatchDetail.FailureDetail.Message)
+	}
+	if dispatchDetail.Attempt != 1 || dispatchDetail.Retryable == nil || *dispatchDetail.Retryable || dispatchDetail.FailureClassification != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("dispatch retry diagnostics = %#v", dispatchDetail.DispatchSummary)
 	}
 	if provider.inferCallCount != 1 {
 		t.Fatalf("provider infer call count = %d, want 1", provider.inferCallCount)
@@ -463,11 +519,19 @@ func assertLiveChildDispatchSummary(
 	if dispatch.Status != fse.DispatchStatusCompleted {
 		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
 	}
+	if dispatch.Attempt != 1 {
+		t.Fatalf("dispatch attempt = %d, want 1", dispatch.Attempt)
+	}
 	if dispatch.Provider != "mock" {
 		t.Fatalf("dispatch provider = %q, want mock", dispatch.Provider)
 	}
-	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0].ID != "live-provider-session-1" {
+	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0] != (fse.ProviderSessionRef{
+		Provider: "mock", Kind: "session_id", ID: "live-provider-session-1",
+	}) {
 		t.Fatalf("providerSessionRefs = %#v", dispatch.ProviderSessionRefs)
+	}
+	if dispatch.Model != "gpt-test" {
+		t.Fatalf("dispatch model = %q, want gpt-test", dispatch.Model)
 	}
 	if providerCallCount != 1 {
 		t.Fatalf("provider call count = %d, want 1", providerCallCount)
@@ -620,6 +684,7 @@ func assertParallelFailureSiblingDispatches(t *testing.T, dispatchByID map[strin
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this assertion verifies the complete failed-dispatch public projection.
 func assertParallelFailureFailedDispatch(
 	t *testing.T,
 	service fse.Service,
@@ -637,8 +702,11 @@ func assertParallelFailureFailedDispatch(
 	if failed.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("failure reason = %q, want %q", failed.FailureDetail.Reason, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if failed.FailureDetail.Message != "simulated child error" {
-		t.Fatalf("failure message = %q, want simulated child error detail", failed.FailureDetail.Message)
+	if failed.FailureDetail.Message != "Provider rejected the request as invalid." {
+		t.Fatalf("failure message = %q, want sanitized provider detail", failed.FailureDetail.Message)
+	}
+	if failed.Attempt != 1 || failed.Retryable == nil || *failed.Retryable || failed.FailureClassification != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("retry diagnostics = %#v", failed)
 	}
 	if len(failed.OutputArtifactIDs) != 0 {
 		t.Fatalf("failed outputArtifactIds = %#v, want none", failed.OutputArtifactIDs)
@@ -915,4 +983,3 @@ func dispatchExecutionMode(t *testing.T, service fse.Service, sessionID, dispatc
 	}
 	return detail.JavaScript.ExecutionMode
 }
-

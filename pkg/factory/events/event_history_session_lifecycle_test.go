@@ -92,7 +92,7 @@ func TestFactoryEventHistory_RecordSessionLifecycle_FailedRunEmitsFailedWithPart
 	if err != nil {
 		t.Fatalf("completed payload: %v", err)
 	}
-	if completedPayload.FailureDetail == nil || completedPayload.FailureDetail.Message == nil || *completedPayload.FailureDetail.Message != "dispatch failed" {
+	if completedPayload.FailureDetail == nil || completedPayload.FailureDetail.Message != "dispatch failed" {
 		t.Fatalf("completed failure detail = %#v, want dispatch failed message", completedPayload.FailureDetail)
 	}
 }

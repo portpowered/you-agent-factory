@@ -409,7 +409,6 @@ func newInterruptedStopSummaryServer(
 	workName := "Interrupted goal"
 	workState := "goal:review"
 	workstationName := "review child"
-	failureReason := "operator_interrupt"
 	return newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"session-interrupted": {
@@ -430,8 +429,10 @@ func newInterruptedStopSummaryServer(
 								Status:          factoryapi.FactoryDispatchStatusINTERRUPTED,
 								DispatchKind:    factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
 								WorkstationName: &workstationName,
-								FailureReason:   &failureReason,
-								FailureMessage:  &stopResult,
+								FailureDetail: &factoryapi.FailureDetail{
+									Reason:  factoryapi.WorkFailureTypeUnknown,
+									Message: stopResult,
+								},
 							},
 						},
 					},

@@ -2883,12 +2883,9 @@ components:
         workstationName:
           type: string
           description: Customer-authored workstation name when one existing workstation run explains the stop.
-        failureReason:
-          type: string
-          description: Stable failure or interruption reason when one is available from the latest relevant dispatch.
-        failureMessage:
-          type: string
-          description: Human-readable failure or interruption detail from the latest relevant dispatch when available.
+        failureDetail:
+          $ref: '#/components/schemas/FailureDetail'
+          description: Failure or interruption detail from the latest relevant dispatch when available.
     FactoryStopSummary:
       type: object
       additionalProperties: false
@@ -3304,9 +3301,12 @@ components:
           items:
             $ref: '#/components/schemas/FactoryArtifactRef'
           description: Artifact refs for large or non-text outputs when includeArtifacts is true.
-        failure:
-          $ref: '#/components/schemas/FactorySessionDurableFailureDetail'
+        failureDetail:
+          $ref: '#/components/schemas/FailureDetail'
           description: Failure details when resultStatus is FAILED_WITH_PARTIAL.
+        partialResultAvailable:
+          type: boolean
+          description: Whether partial results remain inspectable after the failure.
         availability:
           $ref: '#/components/schemas/FactorySessionResultAvailabilityDetail'
           description: Availability details when resultStatus is NOT_READY or UNAVAILABLE.
@@ -3359,6 +3359,12 @@ components:
           format: int32
           minimum: 1
           description: One-based attempt number for retried dispatches.
+        retryable:
+          type: boolean
+          description: Whether the provider failure that produced the current failed state was retryable.
+        failureClassification:
+          $ref: '#/components/schemas/WorkFailureType'
+          description: Stable canonical classification recorded for the current provider failure.
         runnerId:
           type: string
           description: Selected runner identifier when applicable.
@@ -3385,7 +3391,7 @@ components:
             type: string
           description: Artifact identifiers produced by the dispatch.
         failureDetail:
-          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+          $ref: '#/components/schemas/FailureDetail'
         javascript:
           $ref: '#/components/schemas/FactoryDispatchJavaScriptProjection'
     ListFactorySessionDispatchesResponse:
@@ -3579,6 +3585,12 @@ components:
           format: int32
           minimum: 1
           description: One-based attempt number for retried dispatches.
+        retryable:
+          type: boolean
+          description: Whether the provider failure that produced the current failed state was retryable.
+        failureClassification:
+          $ref: '#/components/schemas/WorkFailureType'
+          description: Stable canonical classification recorded for the current provider failure.
         runnerId:
           type: string
           description: Selected runner identifier when applicable.
@@ -3621,7 +3633,7 @@ components:
           items:
             $ref: '#/components/schemas/FactoryDispatchWarning'
         failureDetail:
-          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+          $ref: '#/components/schemas/FailureDetail'
         petri:
           $ref: '#/components/schemas/FactoryDispatchPetriProjection'
           description: Petri-specific dispatch projection. Present for Petri transition dispatches.
@@ -3770,19 +3782,19 @@ components:
         message:
           type: string
           description: Customer-visible warning message.
-    FactoryDispatchFailureDetail:
+    FailureDetail:
       type: object
       additionalProperties: false
+      required:
+        - reason
+        - message
       properties:
         reason:
-          type: string
-          description: Stable failure reason code when the dispatch failed.
+          $ref: '#/components/schemas/WorkFailureType'
         message:
           type: string
-          description: Customer-visible failure message.
-        errorClass:
-          type: string
-          description: Provider or runtime error class when available.
+          minLength: 1
+          description: Customer-safe, actionable explanation of the failure.
     FactoryArtifact:
       type: object
       additionalProperties: false
@@ -4110,7 +4122,7 @@ components:
           $ref: '#/components/schemas/FactorySessionJavaScriptChildDispatchCounts'
           description: Dispatch queue, running, and completed counts at terminal completion.
         failureDetail:
-          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+          $ref: '#/components/schemas/FailureDetail'
           description: Canonical failure details when the session completed unsuccessfully.
     OrchestratorPhaseChangedEventPayload:
       type: object
@@ -4275,7 +4287,7 @@ components:
             type: string
           description: Artifact identifiers produced or updated by reconciliation.
         failureDetail:
-          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+          $ref: '#/components/schemas/FailureDetail'
           description: Canonical failure details when reconciliation failed.
     JavaScriptCheckpointRefEventPayload:
       type: object
@@ -4481,8 +4493,11 @@ components:
           description: Customer-visible artifact refs without raw artifact bodies.
         resultSummary:
           $ref: '#/components/schemas/FactorySessionDurableResultSummary'
-        failure:
-          $ref: '#/components/schemas/FactorySessionDurableFailureDetail'
+        failureDetail:
+          $ref: '#/components/schemas/FailureDetail'
+        partialResultAvailable:
+          type: boolean
+          description: Whether partial results remain inspectable after the failure.
         lifecycle:
           $ref: '#/components/schemas/FactorySessionDurableLifecycleTimestamps'
         staleLease:
@@ -4586,22 +4601,6 @@ components:
           items:
             $ref: '#/components/schemas/FactoryArtifactRef'
           description: Artifact refs for large or non-text outputs without raw bodies.
-    FactorySessionDurableFailureDetail:
-      type: object
-      additionalProperties: false
-      properties:
-        reason:
-          type: string
-          description: Stable failure reason code when the session failed or was interrupted.
-        message:
-          type: string
-          description: Customer-visible failure message.
-        errorClass:
-          type: string
-          description: Provider or runtime error class when available.
-        partialResultAvailable:
-          type: boolean
-          description: Whether partial results remain inspectable after the failure.
     FactorySessionDurableLifecycleTimestamps:
       type: object
       additionalProperties: false
@@ -5970,10 +5969,8 @@ components:
           type: string
         selectedClassificationLabel:
           type: string
-        failureReason:
-          type: string
-        failureMessage:
-          type: string
+        failureDetail:
+          $ref: '#/components/schemas/FailureDetail'
         scriptResponse:
           $ref: '#/components/schemas/FactoryWorldScriptResponseView'
         agentRunInspection:
@@ -6503,9 +6500,8 @@ components:
           $ref: '#/components/schemas/WorkContent'
         diagnostics:
           $ref: '#/components/schemas/SafeWorkDiagnostics'
-        errorClass:
-          type: string
-          description: Stable failure classification when available.
+        failureDetail:
+          $ref: '#/components/schemas/FailureDetail'
     InferenceRequestEventPayload:
       type: object
       additionalProperties: false
@@ -6567,11 +6563,8 @@ components:
         exitCode:
           type: integer
           description: Process exit code when the provider failure exposes one.
-        errorClass:
-          type: string
-          description: Stable failure classification when available.
         failureDetail:
-          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+          $ref: '#/components/schemas/FailureDetail'
     ScriptRequestEventPayload:
       type: object
       additionalProperties: false
@@ -6699,10 +6692,8 @@ components:
           type: string
         selectedClassificationLabel:
           type: string
-        failureReason:
-          type: string
-        failureMessage:
-          type: string
+        failureDetail:
+          $ref: '#/components/schemas/FailureDetail'
         providerFailure:
           $ref: '#/components/schemas/ProviderFailureMetadata'
         metrics:

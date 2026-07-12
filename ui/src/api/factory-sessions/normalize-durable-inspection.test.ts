@@ -56,9 +56,9 @@ describe("normalize durable inspection helpers", () => {
     ).toEqual([
       expect.objectContaining({
         failureDetail: {
-          errorClass: "verification_error",
-          message: "Expected release manifest checksum.",
-          reason: "VERIFY_ASSERTION_FAILED",
+          message:
+            "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+          reason: "provider_version_incompatible",
         },
         id: "disp-js-fail-002",
         javascript: {

@@ -333,6 +333,7 @@ export function modelProviderOptionLabel(value) {
 const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
 const browserProcessStateKey = "__agentFactoryBrowserIntegrationBrowserState";
 const browserPreviewStateKey = "__agentFactoryBrowserIntegrationPreviewState";
+const repoProcessGroupKey = Symbol("repoProcessGroup");
 let browserArtifactSequence = 0;
 let sharedBrowserPorts = null;
 export const exportCoverImagePath = path.resolve(
@@ -525,7 +526,11 @@ export async function waitForPortAvailable(
   }
 
   const suffix =
-    lastError instanceof Error ? `: ${lastError.message}` : lastError ? `: ${lastError}` : ".";
+    lastError instanceof Error
+      ? `: ${lastError.message}`
+      : lastError
+        ? `: ${lastError}`
+        : ".";
   throw new Error(
     `Timed out waiting for ${host}:${port} to become available${suffix}`,
   );
@@ -604,12 +609,15 @@ function spawnRuntime(args, extraEnv = {}, options = {}) {
 }
 
 function spawnRepoProcess(command, args, options = {}) {
-  return spawn(command, args, {
+  const child = spawn(command, args, {
     cwd: path.resolve(packageRoot, ".."),
+    detached: process.platform !== "win32",
     env: createBunEnv(options.extraEnv),
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  child[repoProcessGroupKey] = process.platform !== "win32";
+  return child;
 }
 
 async function runRuntime(
@@ -653,7 +661,7 @@ async function runRuntime(
 }
 
 async function stopProcess(child) {
-  if (!child || child.exitCode !== null) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) {
     return;
   }
 
@@ -666,8 +674,22 @@ async function stopProcess(child) {
     return;
   }
 
-  child.kill("SIGTERM");
-  await once(child, "exit");
+  const exited = once(child, "exit");
+  if (child[repoProcessGroupKey]) {
+    // Commands such as `go run` launch the compiled program as a child process.
+    // Terminate the process group so that child cannot retain the shared API
+    // port after the launcher exits.
+    try {
+      process.kill(-child.pid, "SIGTERM");
+    } catch (error) {
+      if (error?.code !== "ESRCH") {
+        throw error;
+      }
+    }
+  } else {
+    child.kill("SIGTERM");
+  }
+  await exited;
 }
 
 async function waitForURL(url, timeoutMs = readyTimeoutMs) {

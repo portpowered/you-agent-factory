@@ -42,10 +42,10 @@ func TestMockClient_GetSession_FailedFixtureReturnsDeterministicStatusWithPartia
 		response.Result.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFailedWithPartial {
 		t.Fatalf("resultSummary = %#v, want FAILED_WITH_PARTIAL", response.Result.ResultSummary)
 	}
-	if response.Result.Failure == nil ||
-		response.Result.Failure.PartialResultAvailable == nil ||
-		!*response.Result.Failure.PartialResultAvailable {
-		t.Fatalf("failure = %#v, want partialResultAvailable=true", response.Result.Failure)
+	if response.Result.FailureDetail == nil ||
+		response.Result.PartialResultAvailable == nil ||
+		!*response.Result.PartialResultAvailable {
+		t.Fatalf("failure = %#v, want partialResultAvailable=true", response.Result.FailureDetail)
 	}
 }
 
@@ -82,10 +82,10 @@ func TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetail
 	if response.Result.PrimaryResult == nil || len(*response.Result.PrimaryResult) == 0 {
 		t.Fatal("primaryResult missing from failed-with-partial result")
 	}
-	if response.Result.Failure == nil ||
-		response.Result.Failure.PartialResultAvailable == nil ||
-		!*response.Result.Failure.PartialResultAvailable {
-		t.Fatalf("failure = %#v, want partialResultAvailable=true", response.Result.Failure)
+	if response.Result.FailureDetail == nil ||
+		response.Result.PartialResultAvailable == nil ||
+		!*response.Result.PartialResultAvailable {
+		t.Fatalf("failure = %#v, want partialResultAvailable=true", response.Result.FailureDetail)
 	}
 
 	service := fixtureFakeService(t)

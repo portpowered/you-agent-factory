@@ -256,7 +256,7 @@ func factorySessionResultSchema() map[string]any {
 			"message":   stringProperty("Availability message for polling clients."),
 			"retryable": booleanProperty("Whether polling or a later retry may return a ready result."),
 		}),
-		"failure": objectSchema(map[string]any{
+		"failureDetail": objectSchema(map[string]any{
 			"reason":  stringProperty("Stable failure reason when resultStatus is FAILED_WITH_PARTIAL."),
 			"message": stringProperty("Failure message when resultStatus is FAILED_WITH_PARTIAL."),
 		}),

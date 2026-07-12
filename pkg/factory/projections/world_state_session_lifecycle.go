@@ -140,9 +140,10 @@ func (r *factoryWorldReducer) applySessionCompletedEvent(event factoryapi.Factor
 		}
 	}
 	if payload.FailureDetail != nil {
-		bracket.FailureReason = stringValue(payload.FailureDetail.Reason)
-		bracket.FailureMessage = stringValue(payload.FailureDetail.Message)
-		bracket.FailureErrorClass = stringValue(payload.FailureDetail.ErrorClass)
+		bracket.FailureDetail = &interfaces.FailureDetail{
+			Reason:  interfaces.WorkFailureType(payload.FailureDetail.Reason),
+			Message: payload.FailureDetail.Message,
+		}
 	}
 	return nil
 }
@@ -180,24 +181,23 @@ func buildFactoryWorldSessionBracketProjection(
 		return nil
 	}
 	return &interfaces.FactoryWorldSessionBracketProjection{
-		SessionID:           bracket.SessionID,
-		OrchestratorKind:    bracket.OrchestratorKind,
-		OrchestratorDialect: bracket.OrchestratorDialect,
-		FactoryID:           bracket.FactoryID,
-		SourceRef:           bracket.SourceRef,
+		SessionID:              bracket.SessionID,
+		OrchestratorKind:       bracket.OrchestratorKind,
+		OrchestratorDialect:    bracket.OrchestratorDialect,
+		FactoryID:              bracket.FactoryID,
+		SourceRef:              bracket.SourceRef,
 		StartedAt:              bracket.StartedAt,
 		LifecycleControlStatus: bracket.LifecycleControlStatus,
 		PausedAt:               bracket.PausedAt,
 		ResumedAt:              bracket.ResumedAt,
 		ResultStatus:           bracket.ResultStatus,
-		ResultSummary:       cloneWorkContentParts(bracket.ResultSummary),
-		ArtifactIDs:         cloneStringSlice(bracket.ArtifactIDs),
-		Terminal:            bracket.Terminal,
-		FinalStatus:         bracket.FinalStatus,
-		CompletedAt:         bracket.CompletedAt,
-		DurationMillis:      bracket.DurationMillis,
-		FailureReason:       bracket.FailureReason,
-		FailureMessage:      bracket.FailureMessage,
+		ResultSummary:          cloneWorkContentParts(bracket.ResultSummary),
+		ArtifactIDs:            cloneStringSlice(bracket.ArtifactIDs),
+		Terminal:               bracket.Terminal,
+		FinalStatus:            bracket.FinalStatus,
+		CompletedAt:            bracket.CompletedAt,
+		DurationMillis:         bracket.DurationMillis,
+		FailureDetail:          interfaces.CloneFailureDetail(bracket.FailureDetail),
 	}
 }
 

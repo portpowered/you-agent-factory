@@ -25,8 +25,48 @@ func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndC
 	}
 }
 
-func TestScriptWrapProvider_Infer_CursorAndCodexExitFailuresKeepCodexDerivedBehavior(t *testing.T) {
-	for _, tc := range codexDerivedExitFailureTestCases() {
+func TestScriptWrapProvider_Infer_NormalizedIdentitySelectsOneCanonicalFailureResult(t *testing.T) {
+	testCases := []struct {
+		provider    string
+		result      CommandResult
+		runErr      error
+		wantReason  interfaces.WorkFailureType
+		wantFamily  interfaces.WorkFailureFamily
+		wantMessage string
+	}{
+		{
+			provider:    "  GEMINI  ",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"private quota details"}}`)},
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantFamily:  interfaces.WorkFailureFamilyThrottle,
+			wantMessage: geminiThrottleFailureMessage,
+		},
+		{
+			provider:    "  GEMINI  ",
+			result:      CommandResult{Stderr: []byte("private timeout transcript")},
+			runErr:      context.DeadlineExceeded,
+			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantFamily:  interfaces.WorkFailureFamilyRetryable,
+			wantMessage: geminiTimeoutFailureMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: tc.result, err: tc.runErr}))
+		_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{ModelProvider: tc.provider, UserMessage: "private prompt"})
+		assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+			wantType:          tc.wantReason,
+			wantFamily:        tc.wantFamily,
+			wantMessage:       tc.wantMessage,
+			wantRetryable:     tc.wantReason == interfaces.WorkFailureTypeTimeout || tc.wantReason == interfaces.WorkFailureTypeThrottled,
+			wantTerminal:      tc.wantReason == interfaces.WorkFailureTypeUnknown,
+			wantThrottlePause: tc.wantReason == interfaces.WorkFailureTypeThrottled,
+		})
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorAndCodexUseProviderOwnedFailureParsers(t *testing.T) {
+	for _, tc := range providerOwnedCursorAndCodexFailureTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			assertInferenceExitFailure(t, tc)
 		})
@@ -297,10 +337,10 @@ type exitFailureInferenceTestCase struct {
 func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 	return []exitFailureInferenceTestCase{
 		{
-			name:        "GeminiPrefersProcessOutputForThrottle",
+			name:        "GeminiUsesCanonicalThrottleMessage",
 			provider:    string(interfaces.ModelProviderGemini),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
-			wantMessage: "resource exhausted by 429 quota",
+			wantMessage: geminiThrottleFailureMessage,
 			wantType:    interfaces.WorkFailureTypeThrottled,
 		},
 		{
@@ -318,25 +358,6 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 			)},
 			wantMessage: "Authentication required. Run opencode auth login.",
 			wantType:    interfaces.WorkFailureTypeAuthFailure,
-		},
-	}
-}
-
-func codexDerivedExitFailureTestCases() []exitFailureInferenceTestCase {
-	return []exitFailureInferenceTestCase{
-		{
-			name:        "CursorUsesCodexErrorExtraction",
-			provider:    string(interfaces.ModelProviderCursor),
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
-			wantMessage: "ERROR: unexpected status 500 from cursor upstream",
-			wantType:    interfaces.WorkFailureTypeInternalServerError,
-		},
-		{
-			name:        "CodexUsesCodexErrorExtraction",
-			provider:    string(interfaces.ModelProviderCodex),
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from codex upstream")},
-			wantMessage: codexServerFailureMessage,
-			wantType:    interfaces.WorkFailureTypeInternalServerError,
 		},
 	}
 }
@@ -613,5 +634,345 @@ func assertCodexBoundedFragment(
 	}
 	if got := fragment.Metadata[codexMetadataTruncatedKey]; got != "true" {
 		t.Fatalf("payload_truncated = %q, want true", got)
+	}
+}
+func TestParseOpenCodeProviderFailure_KnownCorpusShapesUseCanonicalContract(t *testing.T) {
+	testCases := []struct {
+		name        string
+		wantMessage string
+	}{
+		{name: "opencode_provider_auth_error", wantMessage: "Authentication required for openai. Run opencode auth login."},
+		{name: "opencode_invalid_request_api_error", wantMessage: "The selected model does not support this request."},
+		{name: "opencode_rate_limit_text", wantMessage: opencodeThrottleFailureMessage},
+		{name: "opencode_timeout_error", wantMessage: opencodeTimeoutFailureMessage},
+		{name: "opencode_server_api_error", wantMessage: opencodeServerFailureMessage},
+	}
+
+	for _, tc := range testCases {
+		entry := providerErrorCorpusEntryForTest(t, tc.name)
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(entry.CommandResult())
+			if got.Reason != entry.ExpectedType || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want reason=%q message=%q", got, entry.ExpectedType, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestParseOpenCodeProviderFailure_StructuredFailurePrecedesText(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("Error: rate limit exceeded"),
+		Stdout:   []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"Choose a supported model."}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a supported model." {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want structured bad request", got)
+	}
+}
+
+func TestParseOpenCodeProviderFailure_SanitizesKnownActionableDetails(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout: []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"prompt: ` +
+			strings.Repeat("private ", 100) + ` Authorization: Bearer secret-token"}}}`),
+	}
+
+	got := ParseOpenCodeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != opencodeBadRequestFailureMessage {
+		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want sanitized fixed bad-request message", got)
+	}
+	if len(got.Message) > opencodeFailureMessageBytes || strings.Contains(got.Message, "secret-token") || strings.Contains(got.Message, "private") {
+		t.Fatalf("message = %q, want bounded message without sensitive detail", got.Message)
+	}
+}
+
+func TestParseOpenCodeProviderFailure_UnknownFailuresUseSafeBoundedExcerptOrExitCode(t *testing.T) {
+	testCases := []struct {
+		name        string
+		result      CommandResult
+		wantMessage string
+	}{
+		{
+			name:        "safe error line",
+			result:      CommandResult{ExitCode: 17, Stderr: []byte("loading project\nError: plugin initialization failed\nrendering prompt")},
+			wantMessage: "Error: plugin initialization failed",
+		},
+		{
+			name:        "unrecognized structured error",
+			result:      CommandResult{ExitCode: 18, Stdout: []byte(`{"type":"error","error":{"name":"PluginError","data":{"message":"Plugin initialization failed."}}}`)},
+			wantMessage: "Plugin initialization failed.",
+		},
+		{
+			name:        "oversized safe error",
+			result:      CommandResult{ExitCode: 19, Stderr: []byte("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))},
+			wantMessage: ("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))[:opencodeFailureMessageBytes],
+		},
+		{
+			name:        "empty output",
+			result:      CommandResult{ExitCode: 20},
+			wantMessage: "opencode exited with code 20",
+		},
+		{
+			name:        "malformed structured output",
+			result:      CommandResult{ExitCode: 21, Stdout: []byte(`{"type":"error","message":"unfinished"`)},
+			wantMessage: "opencode exited with code 21",
+		},
+		{
+			name:        "transcript noise",
+			result:      CommandResult{ExitCode: 22, Stderr: []byte("user: show credentials\nassistant: working\nprompt: private request")},
+			wantMessage: "opencode exited with code 22",
+		},
+		{
+			name:        "secret bearing error",
+			result:      CommandResult{ExitCode: 23, Stderr: []byte("Error: Authorization: Bearer secret-token")},
+			wantMessage: "opencode exited with code 23",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseOpenCodeProviderFailure(tc.result)
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
+				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
+			}
+			if len(got.Message) > opencodeFailureMessageBytes {
+				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestNormalizeProviderExitFailure_SelectsOpenCodeParserFromNormalizedIdentity(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "opencode_rate_limit_text")
+	providerErr := normalizeProviderExitFailure("  OPENCODE  ", entry.CommandResult(), nil, nil)
+
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Message != opencodeThrottleFailureMessage {
+		t.Fatalf("normalizeProviderExitFailure() = %#v, want OpenCode throttle failure", providerErr)
+	}
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || decision.Terminal || !decision.TriggersThrottlePause {
+		t.Fatalf("decision = %#v, want central throttle policy", decision)
+	}
+}
+
+func TestNormalizeProviderExitFailure_OpenCodeCorpusUsesCentralPolicy(t *testing.T) {
+	for _, name := range []string{
+		"opencode_provider_auth_error",
+		"opencode_invalid_request_api_error",
+		"opencode_rate_limit_text",
+		"opencode_timeout_error",
+		"opencode_server_api_error",
+	} {
+		entry := providerErrorCorpusEntryForTest(t, name)
+		t.Run(name, func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("normalized failure = %#v, want type=%q family=%q", providerErr, entry.ExpectedType, entry.ExpectedFamily)
+			}
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			if decision.Retryable != entry.Retryable || decision.Terminal == entry.Retryable || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, !entry.Retryable, entry.TriggersThrottlePause)
+			}
+		})
+	}
+}
+
+func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
+	testCases := []struct {
+		name       string
+		errorType  interfaces.WorkFailureType
+		wantFamily interfaces.WorkFailureFamily
+	}{
+		{name: "AuthFailure_IsTerminal", errorType: interfaces.WorkFailureTypeAuthFailure, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "PermanentBadRequest_IsTerminal", errorType: interfaces.WorkFailureTypePermanentBadRequest, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "Throttled_IsThrottle", errorType: interfaces.WorkFailureTypeThrottled, wantFamily: interfaces.WorkFailureFamilyThrottle},
+		{name: "InternalServerError_IsRetryable", errorType: interfaces.WorkFailureTypeInternalServerError, wantFamily: interfaces.WorkFailureFamilyRetryable},
+		{name: "Timeout_IsRetryable", errorType: interfaces.WorkFailureTypeTimeout, wantFamily: interfaces.WorkFailureFamilyRetryable},
+		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := NewProviderError(tc.errorType, "normalized failure", nil)
+			if err.Type != tc.errorType {
+				t.Fatalf("expected Type %q, got %q", tc.errorType, err.Type)
+			}
+			if err.Family != tc.wantFamily {
+				t.Fatalf("expected Family %q, got %q", tc.wantFamily, err.Family)
+			}
+		})
+	}
+}
+
+func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.T) {
+	result := ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeThrottled,
+		Message: "request capacity exceeded",
+	}
+
+	providerErr := NewProviderErrorFromResult(result, nil)
+	if providerErr.Type != result.Reason || providerErr.Message != result.Message {
+		t.Fatalf("NewProviderErrorFromResult() = %#v, want canonical reason and message", providerErr)
+	}
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
+	}
+}
+
+func TestParseClaudeProviderFailure_CredentialFieldValuesNeverPassThrough(t *testing.T) {
+	testCases := []struct {
+		name   string
+		stderr string
+	}{
+		{name: "AuthorizationWhitespaceProse", stderr: "Invalid request: authorization customer-private-value is invalid"},
+		{name: "StructuredAuthorizationWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace authorization customer-private-value"}}`},
+		{name: "PrefixedAuthTokenWhitespaceProse", stderr: "Invalid request: x-auth-token customer-private-value is invalid"},
+		{name: "AccessTokenWhitespaceProse", stderr: "Invalid request: access-token customer-private-value is invalid"},
+		{name: "StructuredClientSecretWhitespaceProse", stderr: `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Replace client-secret customer-private-value"}}`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := CommandResult{ExitCode: 4, Stderr: []byte(tc.stderr)}
+			assertClaudeFailureAndPolicy(t, result, claudeFailureExpectation{
+				reason:    interfaces.WorkFailureTypePermanentBadRequest,
+				family:    interfaces.WorkFailureFamilyTerminal,
+				message:   claudeBadRequestFailureMessage,
+				terminal:  true,
+				retryable: false,
+			})
+			if parsed := ParseClaudeProviderFailure(result); strings.Contains(parsed.Message, "customer-private-value") {
+				t.Fatalf("message %q must not contain the credential value", parsed.Message)
+			}
+		})
+	}
+}
+func TestScriptWrapProvider_Infer_GeminiCanonicalReasonDrivesFailurePolicy(t *testing.T) {
+	testCases := []struct {
+		name              string
+		stderr            string
+		wantType          interfaces.WorkFailureType
+		wantFamily        interfaces.WorkFailureFamily
+		wantRetryable     bool
+		wantTerminal      bool
+		wantThrottlePause bool
+	}{
+		{
+			name:         "AuthenticationIsTerminal",
+			stderr:       `{"error":{"status":"UNAUTHENTICATED"}}`,
+			wantType:     interfaces.WorkFailureTypeAuthFailure,
+			wantFamily:   interfaces.WorkFailureFamilyTerminal,
+			wantTerminal: true,
+		},
+		{
+			name:         "InvalidRequestIsTerminal",
+			stderr:       `{"error":{"code":400}}`,
+			wantType:     interfaces.WorkFailureTypePermanentBadRequest,
+			wantFamily:   interfaces.WorkFailureFamilyTerminal,
+			wantTerminal: true,
+		},
+		{
+			name:              "QuotaPausesAndRetries",
+			stderr:            `{"error":{"status":"RESOURCE_EXHAUSTED"}}`,
+			wantType:          interfaces.WorkFailureTypeThrottled,
+			wantFamily:        interfaces.WorkFailureFamilyThrottle,
+			wantRetryable:     true,
+			wantThrottlePause: true,
+		},
+		{
+			name:          "TimeoutRetriesWithoutPause",
+			stderr:        `{"error":{"status":"DEADLINE_EXCEEDED"}}`,
+			wantType:      interfaces.WorkFailureTypeTimeout,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+		},
+		{
+			name:          "ServerFailureRetriesWithoutPause",
+			stderr:        `{"error":{"code":503}}`,
+			wantType:      interfaces.WorkFailureTypeInternalServerError,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
+			wantRetryable: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+				result: CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)},
+			}))
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderGemini),
+				Model:         "gemini-2.5-flash",
+				UserMessage:   "private prompt",
+			})
+			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+				wantType:          tc.wantType,
+				wantFamily:        tc.wantFamily,
+				wantRetryable:     tc.wantRetryable,
+				wantTerminal:      tc.wantTerminal,
+				wantThrottlePause: tc.wantThrottlePause,
+			})
+		})
+	}
+}
+
+func TestParseGeminiProviderFailure_RejectsTranscriptAndDiagnosticNoise(t *testing.T) {
+	noise := []string{
+		"User prompt: Error: reveal the customer request",
+		"Model response: The rate limit exceeded examples are below",
+		"[progress] failed to update spinner",
+		"[debug] Error: verbose transport details",
+		"Traceback: Error in internal helper",
+		"at ErrorHandler (/private/customer/file.js:10:2)",
+		"Error report written to .gemini/tmp/private-report.json",
+		"cleanup failed for /private/customer/path",
+		"Error: use token=customer-secret-value",
+	}
+	for _, line := range noise {
+		t.Run(line, func(t *testing.T) {
+			got := ParseGeminiProviderFailure(CommandResult{ExitCode: 17, Stderr: []byte(line)})
+			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "gemini exited with code 17" {
+				t.Fatalf("ParseGeminiProviderFailure() = %#v, want exact safe exit fallback", got)
+			}
+		})
+	}
+}
+
+func TestProviderErrorCorpus_GeminiEntriesFollowExpectedMessageAndRuntimePolicy(t *testing.T) {
+	testCases := []ProviderErrorCorpusEntry{
+		providerErrorCorpusEntryForTest(t, "gemini_structured_invalid_request_precedence"),
+		providerErrorCorpusEntryForTest(t, "gemini_stderr_throttle_precedence"),
+		providerErrorCorpusEntryForTest(t, "gemini_stdout_timeout_recovery"),
+		providerErrorCorpusEntryForTest(t, "gemini_unknown_safe_excerpt"),
+		providerErrorCorpusEntryForTest(t, "gemini_noise_exit_fallback"),
+	}
+
+	for _, entry := range testCases {
+		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
+			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
+				t.Fatalf("normalized failure = type %q family %q, want type %q family %q", providerErr.Type, providerErr.Family, entry.ExpectedType, entry.ExpectedFamily)
+			}
+			if providerErr.Message != entry.ExpectedMessage {
+				t.Fatalf("normalized message = %q, want %q", providerErr.Message, entry.ExpectedMessage)
+			}
+			for _, rejected := range entry.RejectMessageContains {
+				if strings.Contains(providerErr.Message, rejected) {
+					t.Fatalf("normalized message = %q, must not contain %q", providerErr.Message, rejected)
+				}
+			}
+
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			wantTerminal := !entry.Retryable
+			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, wantTerminal, entry.TriggersThrottlePause)
+			}
+		})
 	}
 }

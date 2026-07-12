@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+required:
+  - reason
+  - message
+properties:
+  reason:
+    $ref: '../../../openapi-main.yaml#/components/schemas/WorkFailureType'
+  message:
+    type: string
+    minLength: 1
+    description: Customer-safe, actionable explanation of the failure.

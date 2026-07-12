@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -54,192 +55,235 @@ func providerErrorCorpusLastErrorLine(t *testing.T, entry ProviderErrorCorpusEnt
 	return lastMatch
 }
 
-func TestParseOpenCodeProviderFailure_KnownCorpusShapesUseCanonicalContract(t *testing.T) {
+func TestParseClaudeProviderFailure_StructuredTypesAndStatusesAreCanonical(t *testing.T) {
 	testCases := []struct {
 		name        string
-		wantMessage string
-	}{
-		{name: "opencode_provider_auth_error", wantMessage: "Authentication required for openai. Run opencode auth login."},
-		{name: "opencode_invalid_request_api_error", wantMessage: "The selected model does not support this request."},
-		{name: "opencode_rate_limit_text", wantMessage: opencodeThrottleFailureMessage},
-		{name: "opencode_timeout_error", wantMessage: opencodeTimeoutFailureMessage},
-		{name: "opencode_server_api_error", wantMessage: opencodeServerFailureMessage},
-	}
-
-	for _, tc := range testCases {
-		entry := providerErrorCorpusEntryForTest(t, tc.name)
-		t.Run(tc.name, func(t *testing.T) {
-			got := ParseOpenCodeProviderFailure(entry.CommandResult())
-			if got.Reason != entry.ExpectedType || got.Message != tc.wantMessage {
-				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want reason=%q message=%q", got, entry.ExpectedType, tc.wantMessage)
-			}
-			if len(got.Message) > opencodeFailureMessageBytes {
-				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
-			}
-		})
-	}
-}
-
-func TestParseOpenCodeProviderFailure_StructuredFailurePrecedesText(t *testing.T) {
-	result := CommandResult{
-		ExitCode: 1,
-		Stderr:   []byte("Error: rate limit exceeded"),
-		Stdout:   []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"Choose a supported model."}}}`),
-	}
-
-	got := ParseOpenCodeProviderFailure(result)
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a supported model." {
-		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want structured bad request", got)
-	}
-}
-
-func TestParseOpenCodeProviderFailure_SanitizesKnownActionableDetails(t *testing.T) {
-	result := CommandResult{
-		ExitCode: 1,
-		Stdout: []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"prompt: ` +
-			strings.Repeat("private ", 100) + ` Authorization: Bearer secret-token"}}}`),
-	}
-
-	got := ParseOpenCodeProviderFailure(result)
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != opencodeBadRequestFailureMessage {
-		t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want sanitized fixed bad-request message", got)
-	}
-	if len(got.Message) > opencodeFailureMessageBytes || strings.Contains(got.Message, "secret-token") || strings.Contains(got.Message, "private") {
-		t.Fatalf("message = %q, want bounded message without sensitive detail", got.Message)
-	}
-}
-
-func TestParseOpenCodeProviderFailure_UnknownFailuresUseSafeBoundedExcerptOrExitCode(t *testing.T) {
-	testCases := []struct {
-		name        string
-		result      CommandResult
+		stderr      string
+		wantReason  interfaces.WorkFailureType
 		wantMessage string
 	}{
 		{
-			name:        "safe error line",
-			result:      CommandResult{ExitCode: 17, Stderr: []byte("loading project\nError: plugin initialization failed\nrendering prompt")},
-			wantMessage: "Error: plugin initialization failed",
+			name:        "AuthenticationTypePreservesActionableMessage",
+			stderr:      `API Error: 500 {"type":"error","error":{"type":"authentication_error","message":"  Sign in again\nwith Claude Code.  "}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Sign in again with Claude Code.",
 		},
 		{
-			name:        "unrecognized structured error",
-			result:      CommandResult{ExitCode: 18, Stdout: []byte(`{"type":"error","error":{"name":"PluginError","data":{"message":"Plugin initialization failed."}}}`)},
-			wantMessage: "Plugin initialization failed.",
+			name:        "PermissionStatusFallbackPreservesActionableMessage",
+			stderr:      `API Error: 403 {"type":"error","error":{"message":"Ask an organization owner to grant access."}}`,
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Ask an organization owner to grant access.",
 		},
 		{
-			name:        "oversized safe error",
-			result:      CommandResult{ExitCode: 19, Stderr: []byte("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))},
-			wantMessage: ("Error: " + strings.Repeat("x", opencodeFailureMessageBytes))[:opencodeFailureMessageBytes],
+			name:        "InvalidRequestPreservesCorrection",
+			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Reduce the request size below 20 MB."}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "Reduce the request size below 20 MB.",
 		},
 		{
-			name:        "empty output",
-			result:      CommandResult{ExitCode: 20},
-			wantMessage: "opencode exited with code 20",
+			name:        "RequestSizeStatusFallback",
+			stderr:      `API Error: 413 {"type":"error","error":{"message":"The request is too large; remove an attachment."}}`,
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "The request is too large; remove an attachment.",
 		},
 		{
-			name:        "malformed structured output",
-			result:      CommandResult{ExitCode: 21, Stdout: []byte(`{"type":"error","message":"unfinished"`)},
-			wantMessage: "opencode exited with code 21",
+			name:        "RateLimitUsesStableGuidance",
+			stderr:      `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`,
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: claudeThrottleFailureMessage,
 		},
 		{
-			name:        "transcript noise",
-			result:      CommandResult{ExitCode: 22, Stderr: []byte("user: show credentials\nassistant: working\nprompt: private request")},
-			wantMessage: "opencode exited with code 22",
+			name:        "OverloadTypeWinsOverConflictingStatus",
+			stderr:      `API Error: 401 {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}`,
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: claudeThrottleFailureMessage,
 		},
 		{
-			name:        "secret bearing error",
-			result:      CommandResult{ExitCode: 23, Stderr: []byte("Error: Authorization: Bearer secret-token")},
-			wantMessage: "opencode exited with code 23",
+			name:        "ServerStatusFallback",
+			stderr:      `API Error: 502 {"type":"error","error":{"message":"gateway included internal diagnostics"}}`,
+			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantMessage: claudeServerFailureMessage,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ParseOpenCodeProviderFailure(tc.result)
-			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
-				t.Fatalf("ParseOpenCodeProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
-			}
-			if len(got.Message) > opencodeFailureMessageBytes {
-				t.Fatalf("message length = %d, want at most %d", len(got.Message), opencodeFailureMessageBytes)
+			got := ParseClaudeProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)})
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseClaudeProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
 			}
 		})
 	}
 }
 
-func TestNormalizeProviderExitFailure_SelectsOpenCodeParserFromNormalizedIdentity(t *testing.T) {
-	entry := providerErrorCorpusEntryForTest(t, "opencode_rate_limit_text")
-	providerErr := normalizeProviderExitFailure("  OPENCODE  ", entry.CommandResult(), nil, nil)
-
-	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Message != opencodeThrottleFailureMessage {
-		t.Fatalf("normalizeProviderExitFailure() = %#v, want OpenCode throttle failure", providerErr)
+func TestParseClaudeProviderFailure_StructuredRecordPrecedesSurroundingText(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stderr: []byte(strings.Join([]string{
+			"cleanup mentioned 429 rate limit and forbidden credentials",
+			`API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Choose a model available to this project."}}`,
+			"post-command timeout while deleting a temporary directory",
+		}, "\n")),
 	}
-	decision := WorkFailureDecisionFromProviderError(providerErr)
-	if !decision.Retryable || decision.Terminal || !decision.TriggersThrottlePause {
-		t.Fatalf("decision = %#v, want central throttle policy", decision)
-	}
-}
 
-func TestNormalizeProviderExitFailure_OpenCodeCorpusUsesCentralPolicy(t *testing.T) {
-	for _, name := range []string{
-		"opencode_provider_auth_error",
-		"opencode_invalid_request_api_error",
-		"opencode_rate_limit_text",
-		"opencode_timeout_error",
-		"opencode_server_api_error",
-	} {
-		entry := providerErrorCorpusEntryForTest(t, name)
-		t.Run(name, func(t *testing.T) {
-			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
-			if providerErr.Type != entry.ExpectedType || providerErr.Family != entry.ExpectedFamily {
-				t.Fatalf("normalized failure = %#v, want type=%q family=%q", providerErr, entry.ExpectedType, entry.ExpectedFamily)
-			}
-			decision := WorkFailureDecisionFromProviderError(providerErr)
-			if decision.Retryable != entry.Retryable || decision.Terminal == entry.Retryable || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
-				t.Fatalf("decision = %#v, want retryable=%t terminal=%t throttlePause=%t", decision, entry.Retryable, !entry.Retryable, entry.TriggersThrottlePause)
-			}
-		})
+	got := ParseClaudeProviderFailure(result)
+	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a model available to this project." {
+		t.Fatalf("ParseClaudeProviderFailure() = %#v, want structured invalid-request result", got)
 	}
 }
 
-func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
+func TestParseClaudeProviderFailure_BoundsAndRejectsCredentialBearingMessages(t *testing.T) {
+	longCorrection := strings.Repeat("remove one attachment ", 100)
 	testCases := []struct {
-		name       string
-		errorType  interfaces.WorkFailureType
-		wantFamily interfaces.WorkFailureFamily
+		name        string
+		message     string
+		wantMessage string
 	}{
-		{name: "AuthFailure_IsTerminal", errorType: interfaces.WorkFailureTypeAuthFailure, wantFamily: interfaces.WorkFailureFamilyTerminal},
-		{name: "PermanentBadRequest_IsTerminal", errorType: interfaces.WorkFailureTypePermanentBadRequest, wantFamily: interfaces.WorkFailureFamilyTerminal},
-		{name: "Throttled_IsThrottle", errorType: interfaces.WorkFailureTypeThrottled, wantFamily: interfaces.WorkFailureFamilyThrottle},
-		{name: "InternalServerError_IsRetryable", errorType: interfaces.WorkFailureTypeInternalServerError, wantFamily: interfaces.WorkFailureFamilyRetryable},
-		{name: "Timeout_IsRetryable", errorType: interfaces.WorkFailureTypeTimeout, wantFamily: interfaces.WorkFailureFamilyRetryable},
-		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
-		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{
+			name:        "BoundsNormalizedActionableDetail",
+			message:     longCorrection,
+			wantMessage: boundUTF8Bytes(strings.TrimSpace(longCorrection), claudeFailureMessageBytes),
+		},
+		{
+			name:        "CredentialSignalUsesProductFallback",
+			message:     "Replace Authorization: Bearer sk-ant-private",
+			wantMessage: claudeBadRequestFailureMessage,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := NewProviderError(tc.errorType, "normalized failure", nil)
-			if err.Type != tc.errorType {
-				t.Fatalf("expected Type %q, got %q", tc.errorType, err.Type)
+			payload, err := json.Marshal(map[string]any{
+				"type": "error",
+				"error": map[string]string{
+					"type":    "invalid_request_error",
+					"message": tc.message,
+				},
+			})
+			if err != nil {
+				t.Fatalf("marshal fixture: %v", err)
 			}
-			if err.Family != tc.wantFamily {
-				t.Fatalf("expected Family %q, got %q", tc.wantFamily, err.Family)
+			got := ParseClaudeProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte("API Error: 400 " + string(payload))})
+			if got.Message != tc.wantMessage || len(got.Message) > claudeFailureMessageBytes {
+				t.Fatalf("Message = %q (%d bytes), want %q bounded to %d bytes", got.Message, len(got.Message), tc.wantMessage, claudeFailureMessageBytes)
 			}
 		})
 	}
 }
 
-func TestNewProviderErrorFromResult_DerivesPolicyFromCanonicalReason(t *testing.T) {
-	result := ProviderFailureResult{
-		Reason:  interfaces.WorkFailureTypeThrottled,
-		Message: "request capacity exceeded",
-	}
+func TestNormalizeProviderExitFailure_ClaudeUsesOneParsedReasonAndMessageForPolicy(t *testing.T) {
+	entry := providerErrorCorpusEntryForTest(t, "claude_rate_limit_error")
+	providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
 
-	providerErr := NewProviderErrorFromResult(result, nil)
-	if providerErr.Type != result.Reason || providerErr.Message != result.Message {
-		t.Fatalf("NewProviderErrorFromResult() = %#v, want canonical reason and message", providerErr)
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Message != claudeThrottleFailureMessage {
+		t.Fatalf("normalized Claude failure = %#v, want parser reason and message", providerErr)
 	}
 	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
 		t.Fatalf("Family = %q, want %q", providerErr.Family, interfaces.WorkFailureFamilyThrottle)
+	}
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || !decision.TriggersThrottlePause || decision.Terminal {
+		t.Fatalf("decision = %#v, want retryable throttle pause", decision)
+	}
+}
+
+type claudeFallbackTestCase struct {
+	name        string
+	result      CommandResult
+	wantReason  interfaces.WorkFailureType
+	wantMessage string
+}
+
+func claudeFallbackTestCases() []claudeFallbackTestCase {
+	return []claudeFallbackTestCase{
+		{
+			name:        "TextConfigurationPreservesCorrection",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("Configuration error: set ANTHROPIC_BASE_URL to a valid URL.")},
+			wantReason:  interfaces.WorkFailureTypeMisconfigured,
+			wantMessage: "Configuration error: set ANTHROPIC_BASE_URL to a valid URL.",
+		},
+		{
+			name:        "TextAuthenticationPreservesCorrection",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte("Not logged in. Run /login to continue.")},
+			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantMessage: "Not logged in. Run /login to continue.",
+		},
+		{
+			name:        "MalformedEnvelopeFallsThroughToTextSignal",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(`API Error: 429 {"type":"error","error":{"type":"rate_limit_error"`)},
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantMessage: claudeThrottleFailureMessage,
+		},
+		{
+			name: "LastRecognizedTextRecordExcludesCleanup",
+			result: CommandResult{ExitCode: 1, Stderr: []byte(strings.Join([]string{
+				"rate limit exceeded",
+				"Invalid request: select a supported Claude model.",
+				"cleanup finished after timeout directory removal",
+			}, "\n"))},
+			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantMessage: "Invalid request: select a supported Claude model.",
+		},
+		{
+			name:        "TimeoutExitUsesStableGuidance",
+			result:      CommandResult{ExitCode: 124},
+			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantMessage: claudeTimeoutFailureMessage,
+		},
+		{
+			name:        "SingleSafeUnknownUsesBoundedExcerpt",
+			result:      CommandResult{ExitCode: 9, Stderr: []byte("some brand new claude failure")},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "Claude failed: some brand new claude failure",
+		},
+		{
+			name:        "NoisyUnknownUsesExitCodeFallback",
+			result:      CommandResult{ExitCode: 7, Stderr: []byte("User: private prompt\ncleanup complete")},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "claude exited with code 7",
+		},
+		{
+			name:        "CredentialUnknownUsesExitCodeFallback",
+			result:      CommandResult{ExitCode: 2, Stderr: []byte("Authorization: Bearer sk-ant-private")},
+			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantMessage: "claude exited with code 2",
+		},
+	}
+}
+
+func TestParseClaudeProviderFailure_TextMalformedNoisyAndUnknownOutcomes(t *testing.T) {
+	for _, tc := range claudeFallbackTestCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ParseClaudeProviderFailure(tc.result)
+			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
+				t.Fatalf("ParseClaudeProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
+			}
+			if len(got.Message) > claudeFailureMessageBytes {
+				t.Fatalf("Message length = %d, want at most %d bytes", len(got.Message), claudeFailureMessageBytes)
+			}
+		})
+	}
+}
+
+func TestProviderErrorCorpus_ClaudeFixturesMatchCanonicalParserAndPolicy(t *testing.T) {
+	corpus := loadProviderErrorCorpusForTest(t)
+	for _, entry := range corpus.allEntries {
+		if entry.Provider != interfaces.ModelProviderClaude {
+			continue
+		}
+		t.Run(entry.Name, func(t *testing.T) {
+			parsed := ParseClaudeProviderFailure(entry.CommandResult())
+			if parsed.Reason != entry.ExpectedType || parsed.Message != entry.ExpectedMessage {
+				t.Fatalf("parsed = %#v, want reason=%q message=%q", parsed, entry.ExpectedType, entry.ExpectedMessage)
+			}
+			providerErr := NewProviderErrorFromResult(parsed, nil)
+			decision := WorkFailureDecisionFromProviderError(providerErr)
+			if providerErr.Family != entry.ExpectedFamily ||
+				decision.Retryable != entry.Retryable ||
+				decision.TriggersThrottlePause != entry.TriggersThrottlePause {
+				t.Fatalf("policy = family %q decision %#v, want family %q retryable=%t throttle=%t", providerErr.Family, decision, entry.ExpectedFamily, entry.Retryable, entry.TriggersThrottlePause)
+			}
+		})
 	}
 }
 

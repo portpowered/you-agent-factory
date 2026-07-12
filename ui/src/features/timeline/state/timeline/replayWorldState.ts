@@ -384,7 +384,7 @@ function applyInferenceResponse(
     diagnostics: dashboardDiagnosticsFromEvent(payload.diagnostics),
     dispatch_id: dispatchID,
     duration_millis: payload.durationMillis,
-    error_class: payload.errorClass,
+    error_class: payload.failureDetail?.reason,
     exit_code: payload.exitCode,
     failure_detail: payload.failureDetail
       ? { ...payload.failureDetail }
