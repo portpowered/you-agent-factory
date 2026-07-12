@@ -874,6 +874,48 @@ func TestSessionScopedWorkRoutes_UnknownSessionReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testing.T) {
+	codexRoot := t.TempDir()
+	writeProviderSessionFixture(t, codexRoot, "sess_123", strings.Join([]string{
+		`{"type":"session_meta","id":"sess_123"}`,
+		`{"type":"response_item","item":{"type":"reasoning"}}`,
+	}, "\n"))
+
+	cursorRoot, cursorSessionID := writeCursorProviderSessionUUIDFixture(t)
+	srv := newTestServerWithProviderSessionRoots(codexRoot, cursorRoot)
+
+	codexEventRef := factoryapi.LoadableProviderSessionRef{
+		Provider: factoryapi.Codex,
+		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+		Id:       "sess_123",
+	}
+	assertProviderSessionDetailLoadsFromEventRef(t, srv, codexEventRef, factoryapi.Codex)
+
+	cursorEventRef := factoryapi.LoadableProviderSessionRef{
+		Provider: factoryapi.Cursor,
+		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+		Id:       cursorSessionID,
+	}
+	assertProviderSessionDetailLoadsFromEventRef(t, srv, cursorEventRef, factoryapi.Cursor)
+
+	legacyAgentEventRef := factoryapi.LoadableProviderSessionRef{
+		Provider: factoryapi.LoadableProviderSessionProvider("agent"),
+		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+		Id:       cursorSessionID,
+	}
+	assertProviderSessionDetailLoadsFromEventRef(t, srv, legacyAgentEventRef, factoryapi.Cursor)
+
+	canonicalizedLegacyRef := loadableProviderSessionRefFromEventMetadata(interfaces.ProviderSessionMetadata{
+		Provider: "agent",
+		Kind:     "session_id",
+		ID:       cursorSessionID,
+	})
+	if string(canonicalizedLegacyRef.Provider) != string(factoryapi.Cursor) {
+		t.Fatalf("canonicalized legacy ref provider = %q, want cursor", canonicalizedLegacyRef.Provider)
+	}
+	assertProviderSessionDetailLoadsFromEventRef(t, srv, canonicalizedLegacyRef, factoryapi.Cursor)
+}
+
 func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRoots(t *testing.T) {
 	codexRoot := t.TempDir()
 	writeProviderSessionFixture(t, codexRoot, "sess_123", strings.Join([]string{

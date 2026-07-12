@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,6 +195,53 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 	}
 
 	return root, sessionID
+}
+
+// providerSessionDetailURLFromEventRef builds the GET path the dashboard uses to
+// load a provider session from an event-emitted LoadableProviderSessionRef.
+func providerSessionDetailURLFromEventRef(ref factoryapi.LoadableProviderSessionRef) string {
+	query := url.Values{}
+	query.Set("provider", string(ref.Provider))
+	query.Set("kind", string(ref.Kind))
+	query.Set("id", ref.Id)
+	return "/provider-sessions/detail?" + query.Encode()
+}
+
+// loadableProviderSessionRefFromEventMetadata mirrors dispatch/event projection of
+// canonical provider-session metadata onto the loadable detail contract.
+func loadableProviderSessionRefFromEventMetadata(session interfaces.ProviderSessionMetadata) factoryapi.LoadableProviderSessionRef {
+	return factoryapi.LoadableProviderSessionRef{
+		Provider: factoryapi.LoadableProviderSessionProvider(interfaces.CanonicalProviderSessionProvider(session.Provider)),
+		Kind:     factoryapi.LoadableProviderSessionKind(session.Kind),
+		Id:       session.ID,
+	}
+}
+
+func assertProviderSessionDetailLoadsFromEventRef(
+	t *testing.T,
+	srv *Server,
+	ref factoryapi.LoadableProviderSessionRef,
+	wantProvider factoryapi.LoadableProviderSessionProvider,
+) factoryapi.ProviderSessionDetailResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, providerSessionDetailURLFromEventRef(ref), nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 for event ref %#v: %s", rec.Code, ref, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
+	if string(resp.ProviderSession.Provider) != string(wantProvider) ||
+		string(resp.ProviderSession.Kind) != string(ref.Kind) ||
+		resp.ProviderSession.Id != ref.Id {
+		t.Fatalf("provider session = %#v, want provider=%s kind=%s id=%s", resp.ProviderSession, wantProvider, ref.Kind, ref.Id)
+	}
+	if resp.Source.RelativePath == "" || resp.Source.SizeBytes == 0 {
+		t.Fatalf("source = %#v, want rooted source metadata for event ref %#v", resp.Source, ref)
+	}
+	return resp
 }
 
 func readSSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {
