@@ -219,14 +219,12 @@ func providerInferenceRequestFromChild(
 		Dispatch: interfaces.WorkDispatch{
 			DispatchID: dispatchID,
 		},
-		UserMessage:  req.Prompt,
-		Model:        req.Model,
-		OutputSchema: outputSchema,
-		SessionID:    sessionID,
-		RunnerID:     strings.TrimSpace(req.Command),
-	}
-	if req.Model != "" {
-		inferReq.ModelProvider = "workflow-child"
+		UserMessage:   req.Prompt,
+		Model:         req.Model,
+		ModelProvider: req.ModelProvider,
+		OutputSchema:  outputSchema,
+		SessionID:     sessionID,
+		RunnerID:      strings.TrimSpace(req.Command),
 	}
 	return inferReq
 }

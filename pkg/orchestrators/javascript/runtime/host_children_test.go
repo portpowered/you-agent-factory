@@ -105,6 +105,75 @@ func TestAgentRun_RejectsUnknownFactoryNamedAgentBeforeDispatch(t *testing.T) {
 	}
 }
 
+func TestAgentRun_GatesResolvedPresetWorkerSettingsBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		policy     workflowpolicy.EffectivePolicy
+		wantErr    string
+		wantModel  string
+		wantEffort string
+	}{
+		{
+			name:    "preset model denied",
+			source:  `return agent.run({preset: "careful", prompt: "review"});`,
+			policy:  policyWithWorkerAllowlists([]string{"allowed-model"}, []string{"high"}),
+			wantErr: `policy denied: model "preset-model" is not listed in allowedModels`,
+		},
+		{
+			name:    "preset reasoning denied",
+			source:  `return agent.run({preset: "careful", prompt: "review"});`,
+			policy:  policyWithWorkerAllowlists([]string{"preset-model"}, []string{"low"}),
+			wantErr: `policy denied: reasoningEffort "high" is not listed in allowedReasoningEfforts`,
+		},
+		{
+			name:       "explicit fields override preset and pass",
+			source:     `return agent.run({preset: "careful", model: "allowed-model", reasoningEffort: "low", prompt: "review"});`,
+			policy:     policyWithWorkerAllowlists([]string{"allowed-model"}, []string{"low"}),
+			wantModel:  "allowed-model",
+			wantEffort: "low",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			var captured workflowruntime.ChildExecutionRequest
+			outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+				Source: tc.source, SessionID: "session-policy-preset", Policy: tc.policy,
+				WorkerSettings: workflowruntime.WorkerSettingsConfig{Presets: map[string]workflowruntime.WorkerPreset{
+					"careful": {ModelProvider: "codex", Model: "preset-model", ReasoningEffort: "high"},
+				}},
+			}, workflowruntime.Hooks{NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+				return childExecutorFunc(func(_ context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+					calls++
+					captured = req
+					return workflowruntime.ChildExecutionResult{Status: workflowruntime.ChildDispatchStatusCompleted, Request: req}, nil
+				})
+			}})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if tc.wantErr != "" {
+				if outcome.OK || calls != 0 || len(outcome.Records) != 0 || !strings.Contains(outcome.Failure.Message, tc.wantErr) {
+					t.Fatalf("outcome=%#v calls=%d, want denial %q with no side effects", outcome, calls, tc.wantErr)
+				}
+				return
+			}
+			if !outcome.OK || calls != 1 || captured.Model != tc.wantModel || captured.ReasoningEffort != tc.wantEffort {
+				t.Fatalf("outcome=%#v calls=%d request=%#v", outcome, calls, captured)
+			}
+		})
+	}
+}
+
+func policyWithWorkerAllowlists(models, efforts []string) workflowpolicy.EffectivePolicy {
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.AllowedModels = models
+	policy.AllowedReasoningEfforts = efforts
+	return policy
+}
+
 type childExecutorFunc func(context.Context, workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error)
 
 func (f childExecutorFunc) Execute(ctx context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
