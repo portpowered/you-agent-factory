@@ -260,10 +260,6 @@ func buildProviderEnv(envVars map[string]string) []string {
 //Failed     process              14:03:20   14:06:29   3m8s     prd-endpoint-state-panels prd-endpoint-state-panels provider error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)
 //--------
 
-func formatProviderExitFailure(provider string, result CommandResult) string {
-	return providerBehaviorForErrorClassification(provider).FormatExitFailure(provider, result)
-}
-
 func normalizeProviderExecutionError(provider string, result CommandResult, err error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
 	if provider == string(interfaces.ModelProviderCursor) {
 		fallbackReason := interfaces.WorkFailureTypeUnknown
@@ -288,8 +284,12 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 		if diagnostics != nil && diagnostics.Command != nil {
 			diagnostics.Command.TimedOut = true
 		}
-		message := formatProviderTimeoutFailure(provider, result)
-		return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeTimeout, message, err, session, diagnostics)
+		return newProviderErrorFromResultWithDiagnostics(
+			parseProviderTimeoutFailure(provider, result),
+			err,
+			session,
+			diagnostics,
+		)
 	case errors.Is(err, exec.ErrNotFound):
 		message := formatProviderCommandFailure(provider, result, err)
 		return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeMisconfigured, message, err, session, diagnostics)
@@ -304,46 +304,63 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 }
 
 func normalizeProviderExitFailure(provider string, result CommandResult, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+	parsed := parseProviderExitFailure(provider, result)
+	if parsed.providerSession != nil {
+		session = parsed.providerSession
+	}
+	return newProviderErrorFromResultWithDiagnostics(parsed.failure, nil, session, diagnostics)
+}
+
+type parsedProviderFailure struct {
+	failure         ProviderFailureResult
+	providerSession *interfaces.ProviderSessionMetadata
+}
+
+func parseProviderExitFailure(provider string, result CommandResult) parsedProviderFailure {
 	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
 	switch normalizedProvider {
 	case string(interfaces.ModelProviderClaude):
-		return newProviderErrorFromResultWithDiagnostics(ParseClaudeProviderFailure(result), nil, session, diagnostics)
+		return parsedProviderFailure{failure: ParseClaudeProviderFailure(result)}
 	case string(interfaces.ModelProviderCodex):
-		return newProviderErrorFromResultWithDiagnostics(
-			ParseCodexProviderFailure(result),
-			nil,
-			session,
-			diagnostics,
-		)
+		return parsedProviderFailure{failure: ParseCodexProviderFailure(result)}
 	case string(interfaces.ModelProviderKiro):
-		return newProviderErrorFromResultWithDiagnostics(
-			ParseKiroProviderFailure(result),
-			nil,
-			session,
-			diagnostics,
-		)
+		return parsedProviderFailure{failure: ParseKiroProviderFailure(result)}
 	case string(interfaces.ModelProviderOpenCode):
-		return newProviderErrorFromResultWithDiagnostics(
-			ParseOpenCodeProviderFailure(result),
-			nil,
-			session,
-			diagnostics,
-		)
+		return parsedProviderFailure{failure: ParseOpenCodeProviderFailure(result)}
+	case string(interfaces.ModelProviderGemini):
+		return parsedProviderFailure{failure: ParseGeminiProviderFailure(result)}
+	case string(interfaces.ModelProviderCursor):
+		failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{
+			failure:         ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
+			providerSession: failure.ProviderSession,
+		}
+	default:
+		return parsedProviderFailure{failure: parseUnknownProviderFailure(normalizedProvider, result)}
 	}
-	if provider == string(interfaces.ModelProviderGemini) {
-		return newProviderErrorFromResultWithDiagnostics(
-			ParseGeminiProviderFailure(result),
-			nil,
-			session,
-			diagnostics,
-		)
+}
+
+func parseUnknownProviderFailure(provider string, result CommandResult) ProviderFailureResult {
+	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
+	reason := interfaces.WorkFailureTypeUnknown
+	switch {
+	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
+		reason = interfaces.WorkFailureTypeAuthFailure
+	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
+		reason = interfaces.WorkFailureTypePermanentBadRequest
+	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
+		reason = interfaces.WorkFailureTypeThrottled
+	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
+		reason = interfaces.WorkFailureTypeInternalServerError
+	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
+		reason = interfaces.WorkFailureTypeTimeout
 	}
-	if provider == string(interfaces.ModelProviderCursor) {
-		return cursorProviderError(result, "", "", nil, session, diagnostics)
+	return ProviderFailureResult{
+		Reason:  reason,
+		Message: formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode)),
 	}
-	message := formatProviderExitFailure(provider, result)
-	errorType := classifyProviderExitFailure(provider, result)
-	return newProviderErrorWithDiagnostics(errorType, message, nil, session, diagnostics)
 }
 
 func cursorProviderError(
@@ -378,10 +395,6 @@ func NormalizeProviderExitFailure(provider string, result CommandResult, session
 	return normalizeProviderExitFailure(provider, result, session, diagnostics)
 }
 
-func classifyProviderExitFailure(provider string, result CommandResult) interfaces.WorkFailureType {
-	return providerBehaviorForErrorClassification(provider).ClassifyExitFailure(result)
-}
-
 func isProviderExecutionTimeout(err error, result CommandResult) bool {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
@@ -411,8 +424,12 @@ func providerOutputContainsTimeout(result CommandResult) bool {
 	)
 }
 
-func formatProviderTimeoutFailure(provider string, result CommandResult) string {
-	return providerBehaviorForErrorClassification(provider).FormatTimeoutFailure(result)
+func parseProviderTimeoutFailure(provider string, result CommandResult) ProviderFailureResult {
+	behavior := providerBehaviorForErrorClassification(strings.ToLower(strings.TrimSpace(provider)))
+	return ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeTimeout,
+		Message: behavior.FormatTimeoutFailure(result),
+	}
 }
 
 func cursorFailureLogFields(req interfaces.RunnerExecutionRequest, cursorProvider bool, result CommandResult, extra ...any) []any {

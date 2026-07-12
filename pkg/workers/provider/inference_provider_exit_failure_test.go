@@ -25,6 +25,46 @@ func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndC
 	}
 }
 
+func TestScriptWrapProvider_Infer_NormalizedIdentitySelectsOneCanonicalFailureResult(t *testing.T) {
+	testCases := []struct {
+		provider    string
+		result      CommandResult
+		runErr      error
+		wantReason  interfaces.WorkFailureType
+		wantFamily  interfaces.WorkFailureFamily
+		wantMessage string
+	}{
+		{
+			provider:    "  GEMINI  ",
+			result:      CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"status":"RESOURCE_EXHAUSTED","message":"private quota details"}}`)},
+			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantFamily:  interfaces.WorkFailureFamilyThrottle,
+			wantMessage: geminiThrottleFailureMessage,
+		},
+		{
+			provider:    "  GEMINI  ",
+			result:      CommandResult{Stderr: []byte("private timeout transcript")},
+			runErr:      context.DeadlineExceeded,
+			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantFamily:  interfaces.WorkFailureFamilyRetryable,
+			wantMessage: geminiTimeoutFailureMessage,
+		},
+	}
+
+	for _, tc := range testCases {
+		provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: tc.result, err: tc.runErr}))
+		_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{ModelProvider: tc.provider, UserMessage: "private prompt"})
+		assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
+			wantType:          tc.wantReason,
+			wantFamily:        tc.wantFamily,
+			wantMessage:       tc.wantMessage,
+			wantRetryable:     tc.wantReason == interfaces.WorkFailureTypeTimeout || tc.wantReason == interfaces.WorkFailureTypeThrottled,
+			wantTerminal:      tc.wantReason == interfaces.WorkFailureTypeUnknown,
+			wantThrottlePause: tc.wantReason == interfaces.WorkFailureTypeThrottled,
+		})
+	}
+}
+
 func TestScriptWrapProvider_Infer_CursorAndCodexExitFailuresKeepCodexDerivedBehavior(t *testing.T) {
 	for _, tc := range codexDerivedExitFailureTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
