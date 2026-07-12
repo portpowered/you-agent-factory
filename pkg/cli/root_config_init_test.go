@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 )
 
@@ -57,8 +58,25 @@ func TestConfigInitCommand_FreshIsolatedHomeCreatesSystemConfig(t *testing.T) {
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("Stat(configPath): %v", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "Created system config at") {
+	got := stdout.String()
+	if !strings.Contains(got, "Created system config at") {
 		t.Fatalf("stdout = %q, want created system config message", got)
+	}
+	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+		if !strings.Contains(got, "Created packaged factory "+name) {
+			t.Fatalf("stdout = %q, want created packaged factory message for %q", got, name)
+		}
+	}
+
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+		wantDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, name)
+		if err != nil {
+			t.Fatalf("MapNamedFactoryDir(%q): %v", name, err)
+		}
+		if _, err := os.Stat(wantDir); err != nil {
+			t.Fatalf("Stat(%q): %v", wantDir, err)
+		}
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 )
 
@@ -28,8 +29,14 @@ func TestInit_FreshHomeCreatesSystemConfigAndReportsOutcome(t *testing.T) {
 	if _, err := os.Stat(configPath); err != nil {
 		t.Fatalf("Stat(configPath): %v", err)
 	}
-	if got := stdout.String(); !strings.Contains(got, "Created system config at "+filepath.Clean(configPath)) {
+	got := stdout.String()
+	if !strings.Contains(got, "Created system config at "+filepath.Clean(configPath)) {
 		t.Fatalf("stdout = %q, want created system config message", got)
+	}
+	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+		if !strings.Contains(got, "Created packaged factory "+name) {
+			t.Fatalf("stdout = %q, want created packaged factory message for %q", got, name)
+		}
 	}
 }
 
@@ -54,6 +61,12 @@ func TestInit_JSONEmitsStructuredSummary(t *testing.T) {
 	}
 	if payload.ConfigPath != defaultpaths.OperatorConfigPath(homeDir) {
 		t.Fatalf("configPath = %q, want %q", payload.ConfigPath, defaultpaths.OperatorConfigPath(homeDir))
+	}
+	if payload.NamedFactoriesRoot != defaultpaths.NamedFactoriesRoot(homeDir) {
+		t.Fatalf("namedFactoriesRoot = %q, want %q", payload.NamedFactoriesRoot, defaultpaths.NamedFactoriesRoot(homeDir))
+	}
+	if len(payload.PackagedFactories) != len(factoryconfig.BuiltInNamedFactoryNames()) {
+		t.Fatalf("packagedFactories count = %d, want %d", len(payload.PackagedFactories), len(factoryconfig.BuiltInNamedFactoryNames()))
 	}
 }
 

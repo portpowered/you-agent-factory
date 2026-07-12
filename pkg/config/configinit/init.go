@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
@@ -19,11 +20,30 @@ const (
 	SystemConfigSkipped SystemConfigOutcome = "skipped"
 )
 
+// PackagedFactoryOutcome reports whether init created or skipped one packaged
+// default factory.
+type PackagedFactoryOutcome string
+
+const (
+	PackagedFactoryCreated PackagedFactoryOutcome = "created"
+	PackagedFactorySkipped PackagedFactoryOutcome = "skipped"
+)
+
+// PackagedFactoryResult summarizes one packaged default factory ensure
+// operation during you config init.
+type PackagedFactoryResult struct {
+	Name       string
+	FactoryDir string
+	Outcome    PackagedFactoryOutcome
+}
+
 // Result summarizes a successful you config init run.
 type Result struct {
-	HomeDir             string
-	ConfigPath          string
-	SystemConfigOutcome SystemConfigOutcome
+	HomeDir              string
+	ConfigPath           string
+	NamedFactoriesRoot   string
+	SystemConfigOutcome  SystemConfigOutcome
+	PackagedFactories    []PackagedFactoryResult
 }
 
 // Init ensures operator/system config exists under homeDir without overwriting
@@ -35,29 +55,56 @@ func Init(homeDir string) (Result, error) {
 	}
 
 	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+
+	systemConfigOutcome := SystemConfigCreated
 	if _, err := os.Stat(configPath); err == nil {
 		if _, err := operatorconfig.LoadFileConfig(configPath); err != nil {
 			return Result{}, fmt.Errorf("read existing operator config %q: %w", configPath, err)
 		}
-		return Result{
-			HomeDir:             homeDir,
-			ConfigPath:          configPath,
-			SystemConfigOutcome: SystemConfigSkipped,
-		}, nil
+		systemConfigOutcome = SystemConfigSkipped
 	} else if !os.IsNotExist(err) {
 		return Result{}, fmt.Errorf("stat operator config %q: %w", configPath, err)
+	} else {
+		if _, err := systemconfig.EnsureLocalBackendScope(configPath); err != nil {
+			return Result{}, fmt.Errorf("create system config at %q: %w", configPath, err)
+		}
+		if _, err := operatorconfig.LoadFileConfig(configPath); err != nil {
+			return Result{}, fmt.Errorf("validate created operator config %q: %w", configPath, err)
+		}
 	}
 
-	if _, err := systemconfig.EnsureLocalBackendScope(configPath); err != nil {
-		return Result{}, fmt.Errorf("create system config at %q: %w", configPath, err)
-	}
-	if _, err := operatorconfig.LoadFileConfig(configPath); err != nil {
-		return Result{}, fmt.Errorf("validate created operator config %q: %w", configPath, err)
+	packagedFactories, err := ensurePackagedDefaultFactories(namedFactoriesRoot)
+	if err != nil {
+		return Result{}, err
 	}
 
 	return Result{
 		HomeDir:             homeDir,
 		ConfigPath:          configPath,
-		SystemConfigOutcome: SystemConfigCreated,
+		NamedFactoriesRoot:  namedFactoriesRoot,
+		SystemConfigOutcome: systemConfigOutcome,
+		PackagedFactories:   packagedFactories,
 	}, nil
+}
+
+func ensurePackagedDefaultFactories(namedFactoriesRoot string) ([]PackagedFactoryResult, error) {
+	factoryResults, err := factoryconfig.EnsureBuiltInNamedFactories(namedFactoriesRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	packagedFactories := make([]PackagedFactoryResult, 0, len(factoryResults))
+	for _, factoryResult := range factoryResults {
+		outcome := PackagedFactorySkipped
+		if factoryResult.Outcome == factoryconfig.BuiltInNamedFactoryCreated {
+			outcome = PackagedFactoryCreated
+		}
+		packagedFactories = append(packagedFactories, PackagedFactoryResult{
+			Name:       factoryResult.Name,
+			FactoryDir: factoryResult.FactoryDir,
+			Outcome:    outcome,
+		})
+	}
+	return packagedFactories, nil
 }

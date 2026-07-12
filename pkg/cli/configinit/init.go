@@ -23,9 +23,18 @@ type InitConfig struct {
 
 // InitResult is the JSON payload for a successful you config init run.
 type InitResult struct {
-	HomeDir             string `json:"homeDir"`
-	ConfigPath          string `json:"configPath"`
-	SystemConfigOutcome string `json:"systemConfigOutcome"`
+	HomeDir              string                      `json:"homeDir"`
+	ConfigPath           string                      `json:"configPath"`
+	NamedFactoriesRoot   string                      `json:"namedFactoriesRoot"`
+	SystemConfigOutcome  string                      `json:"systemConfigOutcome"`
+	PackagedFactories    []PackagedFactoryInitResult `json:"packagedFactories"`
+}
+
+// PackagedFactoryInitResult is the JSON payload for one packaged default factory.
+type PackagedFactoryInitResult struct {
+	Name       string `json:"name"`
+	FactoryDir string `json:"factoryDirectory"`
+	Outcome    string `json:"outcome"`
 }
 
 // Init runs the canonical system initializer for the configured home directory.
@@ -59,7 +68,9 @@ func Init(cfg InitConfig) error {
 		return json.NewEncoder(cfg.Output).Encode(InitResult{
 			HomeDir:             result.HomeDir,
 			ConfigPath:          result.ConfigPath,
+			NamedFactoriesRoot:  result.NamedFactoriesRoot,
 			SystemConfigOutcome: string(result.SystemConfigOutcome),
+			PackagedFactories:   packagedFactoryInitResults(result.PackagedFactories),
 		})
 	}
 
@@ -78,6 +89,29 @@ func Init(cfg InitConfig) error {
 		}
 	}
 
+	for _, factory := range result.PackagedFactories {
+		switch factory.Outcome {
+		case configinit.PackagedFactoryCreated:
+			if _, err := fmt.Fprintf(
+				cfg.Output,
+				"Created packaged factory %s at %s\n",
+				factory.Name,
+				factory.FactoryDir,
+			); err != nil {
+				return err
+			}
+		case configinit.PackagedFactorySkipped:
+			if _, err := fmt.Fprintf(
+				cfg.Output,
+				"Packaged factory %s already present at %s\n",
+				factory.Name,
+				factory.FactoryDir,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -87,4 +121,19 @@ func Init(cfg InitConfig) error {
 		result.SystemConfigOutcome,
 	)
 	return nil
+}
+
+func packagedFactoryInitResults(factories []configinit.PackagedFactoryResult) []PackagedFactoryInitResult {
+	if len(factories) == 0 {
+		return nil
+	}
+	results := make([]PackagedFactoryInitResult, 0, len(factories))
+	for _, factory := range factories {
+		results = append(results, PackagedFactoryInitResult{
+			Name:       factory.Name,
+			FactoryDir: factory.FactoryDir,
+			Outcome:    string(factory.Outcome),
+		})
+	}
+	return results
 }
