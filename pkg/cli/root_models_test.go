@@ -171,7 +171,7 @@ func TestModelsCommand_HelpMentionsDiscoverySurface(t *testing.T) {
 		t.Fatalf("execute models --help: %v", err)
 	}
 	help := out.String()
-	for _, want := range []string{"Inspect discovered models", "list", "inspect", "invoke", "pull", "/models"} {
+	for _, want := range []string{"Inspect discovered models", "list", "inspect", "invoke", "pull", "bootstrap"} {
 		if !bytes.Contains([]byte(help), []byte(want)) {
 			t.Fatalf("models help missing %q:\n%s", want, help)
 		}
