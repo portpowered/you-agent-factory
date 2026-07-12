@@ -52,6 +52,13 @@ var goalQuietLeakForbiddenMarkers = []string{
 	"Recording saved",
 }
 
+var goalQuietLeakExpectedMarkers = []string{
+	"Factory initiated",
+	"Dashboard URL",
+	"Runtime log",
+	"Recording saved",
+}
+
 func assertGoalQuietLeakContractForbidden(t *testing.T, output string) {
 	t.Helper()
 
@@ -60,6 +67,20 @@ func assertGoalQuietLeakContractForbidden(t *testing.T, output string) {
 			t.Fatalf("output = %q, want no quiet-leak marker %q", output, forbidden)
 		}
 	}
+}
+
+func assertGoalQuietLeakContractPresent(t *testing.T, output string) {
+	t.Helper()
+
+	if strings.TrimSpace(output) == "" {
+		t.Fatal("output is empty, want non-empty quiet-leak terminal chatter documenting today's contract")
+	}
+	for _, marker := range goalQuietLeakExpectedMarkers {
+		if strings.Contains(output, marker) {
+			return
+		}
+	}
+	t.Fatalf("output = %q, want at least one quiet-leak marker among %v", output, goalQuietLeakExpectedMarkers)
 }
 
 func TestFailureBaseline_NoServer_RunNamedGoalCommandReportsSessionStoppedBeforeReady(t *testing.T) {
@@ -229,6 +250,55 @@ func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraph
 	if !strings.Contains(err.Error(), "blocking validation targets") {
 		t.Fatalf("error = %q, want blocking validation target count", err.Error())
 	}
+}
+
+func TestFailureBaseline_QuietLeak_RunBatchQuietStillEmitsStartupChatter(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	workPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(workPath, []byte(`{"type":"FACTORY_REQUEST_BATCH","works":[]}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		if cfg.StartupOutput != nil {
+			io.WriteString(cfg.StartupOutput, "Factory initiated: "+cfg.Dir+"\n")
+			io.WriteString(cfg.StartupOutput, "Dashboard URL: http://127.0.0.1:7437/\n")
+		}
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--dir", dir,
+		"--work", workPath,
+		"--no-record",
+		"--quiet",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --dir --work --quiet: %v", err)
+	}
+	if !got.SuppressDashboardRendering {
+		t.Fatal("expected --quiet to suppress dashboard rendering")
+	}
+	if got.StartupOutput == nil {
+		t.Fatal("expected batch quiet run to keep startup output wired to terminal stdout")
+	}
+	if got.CleanInvocation {
+		t.Fatal("expected dir/work batch quiet run to keep operator startup output mode")
+	}
+	assertGoalQuietLeakContractPresent(t, stdout.String())
 }
 
 func TestFailureBaseline_QuietLeak_RunFactoryQuietPromptKeepsStartupOutputSuppressed(t *testing.T) {
