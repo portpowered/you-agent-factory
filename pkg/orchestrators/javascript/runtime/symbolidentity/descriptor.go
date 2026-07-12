@@ -19,6 +19,18 @@ func ProjectInstalledBindings() Inventory {
 	}
 }
 
+// ExpectedInstalledPaths returns the sorted full paths for the currently installed
+// JavaScript runtime binding surface described by the pure descriptor.
+func ExpectedInstalledPaths() []string {
+	records := installedBindingRecords()
+	paths := make([]string, len(records))
+	for i, record := range records {
+		paths[i] = record.Path
+	}
+	sort.Strings(paths)
+	return paths
+}
+
 func installedBindingRecords() []SymbolRecord {
 	workflowMembers := []string{
 		"artifact",
