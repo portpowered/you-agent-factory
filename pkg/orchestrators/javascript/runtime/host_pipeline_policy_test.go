@@ -243,7 +243,7 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		{
 			fixture: "agent-run-policy-denied-command.workflow.js",
 			policy:  basePolicy,
-			want:    `policy denied: command "deploy" is not listed in allowedCommands`,
+			want:    `agent.run() does not support field "command"`,
 		},
 		{
 			fixture: "agent-run-policy-denied-reasoning.workflow.js",
@@ -253,22 +253,22 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		{
 			fixture: "agent-run-policy-denied-sandbox.workflow.js",
 			policy:  basePolicy,
-			want:    `policy denied: sandbox "workspace-write" is not allowed when policy.mode is READ_ONLY`,
+			want:    `agent.run() does not support field "sandbox"`,
 		},
 		{
 			fixture: "agent-run-policy-denied-writable-roots.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: writableRoots are not allowed by effective policy",
+			want:    `agent.run() does not support field "writableRoots"`,
 		},
 		{
 			fixture: "agent-run-policy-denied-network.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: network access is not allowed by effective policy",
+			want:    `agent.run() does not support field "network"`,
 		},
 		{
 			fixture: "agent-run-policy-denied-concurrency.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: requested concurrency 4 exceeds policy concurrency 2",
+			want:    `agent.run() does not support field "concurrency"`,
 		},
 	}
 

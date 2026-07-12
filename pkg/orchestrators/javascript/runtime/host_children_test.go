@@ -104,9 +104,6 @@ func assertFakeChildDispatchRecordMetadata(
 	if child.Model != "gpt-test" || child.ReasoningEffort != "medium" {
 		t.Fatalf("records[%d] model metadata = %#v", index, child)
 	}
-	if child.Command != "review" || child.Sandbox != "read-only" {
-		t.Fatalf("records[%d] command/sandbox = %#v", index, child)
-	}
 	if child.ExecutionMode != "fake" {
 		t.Fatalf("records[%d].executionMode = %q, want fake", index, child.ExecutionMode)
 	}
@@ -118,9 +115,6 @@ func assertFakeChildDispatchRecordMetadata(
 	}
 	if child.PromptDigest != wantPromptDigest {
 		t.Fatalf("records[%d].promptDigest = %q, want %q", index, child.PromptDigest, wantPromptDigest)
-	}
-	if child.SchemaDigest == "" {
-		t.Fatalf("records[%d].schemaDigest is empty", index)
 	}
 }
 
@@ -162,7 +156,7 @@ func assertFakeChildProjectedMetadata(t *testing.T, child map[string]any, sessio
 	if child["label"] != "summarize-findings" || child["model"] != "gpt-test" {
 		t.Fatalf("child request metadata = %#v", child)
 	}
-	if child["reasoningEffort"] != "medium" || child["command"] != "review" || child["sandbox"] != "read-only" {
+	if child["reasoningEffort"] != "medium" {
 		t.Fatalf("child options = %#v", child)
 	}
 	if child["promptDigest"] != wantPromptDigest {
@@ -182,7 +176,7 @@ func assertFakeChildProjectedOutput(t *testing.T, child map[string]any) {
 	if output["subject"] != "workflows" {
 		t.Fatalf("child output subject = %#v", output["subject"])
 	}
-	if output["schemaValidated"] != true {
+	if output["schemaValidated"] != false {
 		t.Fatalf("child output schemaValidated = %#v", output["schemaValidated"])
 	}
 }
@@ -190,9 +184,10 @@ func assertFakeChildProjectedOutput(t *testing.T, child map[string]any) {
 const stubChildExecutionMode = "stub-dispatch"
 
 type stubChildExecutor struct {
-	mu     sync.Mutex
-	labels []string
-	mode   string
+	mu       sync.Mutex
+	labels   []string
+	requests []workflowruntime.ChildExecutionRequest
+	mode     string
 }
 
 func (s *stubChildExecutor) Execute(_ context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
@@ -200,6 +195,7 @@ func (s *stubChildExecutor) Execute(_ context.Context, req workflowruntime.Child
 	defer s.mu.Unlock()
 
 	s.labels = append(s.labels, req.Label)
+	s.requests = append(s.requests, req)
 	index := len(s.labels)
 	return workflowruntime.ChildExecutionResult{
 		DispatchID:    fmt.Sprintf("stub-dispatch-%d", index),
@@ -212,6 +208,34 @@ func (s *stubChildExecutor) Execute(_ context.Context, req workflowruntime.Child
 		},
 		Request: req,
 	}, nil
+}
+
+func (s *stubChildExecutor) executionRequests() []workflowruntime.ChildExecutionRequest {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]workflowruntime.ChildExecutionRequest(nil), s.requests...)
+}
+
+func TestRun_AgentRunDynamicObjectCarriesCanonicalFieldsToExecutor(t *testing.T) {
+	stub := &stubChildExecutor{mode: stubChildExecutionMode}
+	source := `const child = { prompt: " review ", label: " reviewer ", preset: " careful ", modelProvider: " codex ", model: " gpt-test ", reasoningEffort: " high " }; agent.run(child); return { ok: true };`
+	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+		Source: source, SourceRef: "inline", SessionID: "canonical-child-fields",
+		Policy: workflowpolicy.DefaultEffectivePolicy(),
+	}, workflowruntime.Hooks{NewChildExecutor: func(string, workflowruntime.ChildRecordSink, workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+		return stub
+	}})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() = outcome %#v, error %v", outcome, err)
+	}
+	requests := stub.executionRequests()
+	if len(requests) != 1 {
+		t.Fatalf("executor request count = %d, want 1", len(requests))
+	}
+	got := requests[0]
+	if got.Prompt != "review" || got.Label != "reviewer" || got.Preset != "careful" || got.ModelProvider != "codex" || got.Model != "gpt-test" || got.ReasoningEffort != "high" {
+		t.Fatalf("executor request = %#v, want normalized canonical fields", got)
+	}
 }
 
 func (s *stubChildExecutor) labelOrder() []string {

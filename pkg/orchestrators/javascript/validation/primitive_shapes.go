@@ -3,6 +3,7 @@ package workflowvalidation
 import (
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/childcontract"
 	"github.com/tdewolff/parse/v2/js"
 )
 
@@ -104,7 +105,16 @@ func (a *sourceAnalyzer) validateAgentRunCall(call *js.CallExpr) {
 	if !ok || obj == nil {
 		return
 	}
-	a.requireObjectStringProperty(call, obj, "agent.run", "prompt")
+	for _, field := range childcontract.SupportedFields() {
+		value, found := objectProperty(obj, field)
+		if field == childcontract.FieldPrompt && !found {
+			a.addIssue(shapeIssueCode("agent.run"), `agent.run() requires an object argument with a string "prompt" property`, call)
+			continue
+		}
+		if found && !isStringLiteral(value) {
+			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string literal`, field), call)
+		}
+	}
 }
 
 func (a *sourceAnalyzer) validateSingleStringArgCall(call *js.CallExpr, primitive string) {

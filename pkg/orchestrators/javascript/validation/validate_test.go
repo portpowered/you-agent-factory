@@ -1,6 +1,7 @@
 package workflowvalidation_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,6 +212,41 @@ func TestValidate_RejectsInvalidPrimitiveCallShapes(t *testing.T) {
 			}
 			if !found {
 				t.Fatalf("issues = %#v, want code %q", result.Issues, tc.code)
+			}
+		})
+	}
+}
+
+func TestValidate_AcceptsEverySupportedAgentRunField(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source: `agent.run({
+  prompt: "review",
+  label: "reviewer",
+  preset: "careful",
+  modelProvider: "codex",
+  model: "gpt-test",
+  reasoningEffort: "high",
+});`,
+		SourceRef: "inline",
+	})
+	if result.HasIssues() {
+		t.Fatalf("validation issues = %#v, want canonical agent.run fields accepted", result.Issues)
+	}
+}
+
+func TestValidate_RejectsInvalidSupportedAgentRunFieldValues(t *testing.T) {
+	for _, field := range []string{"prompt", "label", "preset", "modelProvider", "model", "reasoningEffort"} {
+		t.Run(field, func(t *testing.T) {
+			source := fmt.Sprintf(`agent.run({ prompt: "review", %s: 42 });`, field)
+			if field == "prompt" {
+				source = `agent.run({ prompt: 42 });`
+			}
+			result := workflowvalidation.Validate(workflowvalidation.Request{
+				Source:    source,
+				SourceRef: "inline",
+			})
+			if !result.HasIssues() || !strings.Contains(result.Issues[0].Message, field) {
+				t.Fatalf("validation issues = %#v, want field-specific shape issue", result.Issues)
 			}
 		})
 	}
