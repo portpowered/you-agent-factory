@@ -262,6 +262,12 @@ primary-result behavior.
   (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
   the real shared bootstrap path with mock workers and a TCP probe port to
   assert no factory API/dashboard listener is bound.
+- No-server bootstrap CLI/API invocation-equivalence proof lives in
+  `pkg/cli/run/run_invocation_test.go`
+  (`TestRun_NoServerBootstrapCLIAndAPIInvocationEquivalence`), capturing real
+  `defaultBuildInvocationBootstrap` invoke requests/results and comparing them
+  to the shared API text-input resolver plus `apisurface.InvocationResponseFromResult`
+  projection for packaged `@you/goal` primary-result selection.
 - CLI/API invocation parity for packaged `@you/goal` lives in
   `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
   comparing live session invocation API responses with real CLI `--json` output

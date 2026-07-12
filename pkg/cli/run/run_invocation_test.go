@@ -1208,6 +1208,214 @@ func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric servi
 	r.metrics = append(r.metrics, metric)
 }
 
+type capturingBootstrapRunner struct {
+	inner       sessionInvocationRunner
+	lastRequest *factoryapi.InvocationRequest
+	lastResult  *apisurface.FactoryInvocationResult
+}
+
+func (c *capturingBootstrapRunner) Run(ctx context.Context) error {
+	return c.inner.Run(ctx)
+}
+
+func (c *capturingBootstrapRunner) GetCurrentFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.Factory, error) {
+	return c.inner.GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (c *capturingBootstrapRunner) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	c.lastRequest = cloneInvocationRequestForCapture(request)
+	result, err := c.inner.InvokeFactorySession(ctx, sessionID, request)
+	if err == nil {
+		captured := result
+		c.lastResult = &captured
+	}
+	return result, err
+}
+
+func (c *capturingBootstrapRunner) CloseFactorySession(ctx context.Context, sessionID string) error {
+	return c.inner.CloseFactorySession(ctx, sessionID)
+}
+
+func cloneInvocationRequestForCapture(request factoryapi.InvocationRequest) *factoryapi.InvocationRequest {
+	data, err := json.Marshal(request)
+	if err != nil {
+		panic(fmt.Sprintf("marshal invocation request for capture: %v", err))
+	}
+	var cloned factoryapi.InvocationRequest
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		panic(fmt.Sprintf("unmarshal invocation request for capture: %v", err))
+	}
+	return &cloned
+}
+
+func installCapturingRealInvocationBootstrap(t *testing.T) *capturingBootstrapRunner {
+	t.Helper()
+
+	capture := &capturingBootstrapRunner{}
+	buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		inner, err := defaultBuildInvocationBootstrap(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		capture.inner = inner
+		return capture, nil
+	}
+	return capture
+}
+
+func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConfig {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, goal.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+
+	return RunConfig{
+		Dir:                      resolution.FactoryDir,
+		NamedFactoryName:         goal.PackagedFactoryName,
+		NamedFactoryResolution:   resolution,
+		InvocationPositionalText: &goalText,
+		StdinIsTTY:               func() bool { return true },
+		SuppressDashboardRendering: true,
+		MockWorkersEnabled:       true,
+		MockWorkersConfigPath:    writePackagedGoalNoServerMockWorkersConfig(t),
+		DisableDefaultRecording:  true,
+		Port:                     reserveNoServerInvocationProbePort(t),
+		AutoPort:                 true,
+		Logger:                   zap.NewNop(),
+	}
+}
+
+func TestRun_NoServerBootstrapCLIAndAPIInvocationEquivalence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-server bootstrap CLI/API invocation equivalence")
+	}
+
+	t.Run("positional input request matches API contract", func(t *testing.T) {
+		preserveRunGlobals(t)
+		capture := installCapturingRealInvocationBootstrap(t)
+
+		goalText := "no-server bootstrap positional parity prompt"
+		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+		var output bytes.Buffer
+		cfg.Output = &output
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		if err := Run(ctx, cfg); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		apiRequest, err := invocationRequestFromLogicalAPIText(goalText)
+		if err != nil {
+			t.Fatalf("invocationRequestFromLogicalAPIText: %v", err)
+		}
+		if capture.lastRequest == nil {
+			t.Fatal("expected InvokeFactorySession request capture on real no-server bootstrap")
+		}
+		assertEquivalentInvocationRequests(t, capture.lastRequest, apiRequest)
+	})
+
+	t.Run("piped stdin input request matches API contract", func(t *testing.T) {
+		preserveRunGlobals(t)
+		capture := installCapturingRealInvocationBootstrap(t)
+
+		goalText := "no-server bootstrap stdin parity prompt"
+		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+		cfg.InvocationPositionalText = nil
+		cfg.Stdin = strings.NewReader(goalText)
+		cfg.StdinIsTTY = func() bool { return false }
+		var output bytes.Buffer
+		cfg.Output = &output
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		if err := Run(ctx, cfg); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		apiRequest, err := invocationRequestFromLogicalAPIText(goalText)
+		if err != nil {
+			t.Fatalf("invocationRequestFromLogicalAPIText: %v", err)
+		}
+		if capture.lastRequest == nil {
+			t.Fatal("expected InvokeFactorySession request capture on real no-server bootstrap")
+		}
+		assertEquivalentInvocationRequests(t, capture.lastRequest, apiRequest)
+	})
+
+	t.Run("success json envelope matches API projection", func(t *testing.T) {
+		preserveRunGlobals(t)
+		capture := installCapturingRealInvocationBootstrap(t)
+
+		goalText := "no-server bootstrap json parity prompt"
+		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+		cfg.JSONOutput = true
+		var output bytes.Buffer
+		cfg.Output = &output
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		if err := Run(ctx, cfg); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if capture.lastResult == nil {
+			t.Fatal("expected InvokeFactorySession result capture on real no-server bootstrap")
+		}
+		if capture.lastResult.Status != factoryapi.InvocationTerminalStatusCompleted {
+			t.Fatalf("status = %q, want %q", capture.lastResult.Status, factoryapi.InvocationTerminalStatusCompleted)
+		}
+
+		var cliResponse factoryapi.InvocationResponse
+		if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &cliResponse); err != nil {
+			t.Fatalf("decode CLI invocation response: %v\n%s", err, output.String())
+		}
+		apiResponse := apisurface.InvocationResponseFromResult(*capture.lastResult)
+		if !reflect.DeepEqual(cliResponse, apiResponse) {
+			t.Fatalf("CLI response = %#v, API projection = %#v", cliResponse, apiResponse)
+		}
+		assertInvocationResponseMatchesFactoryResult(t, cliResponse, *capture.lastResult)
+	})
+
+	t.Run("text primary result follows invocationReturn selection", func(t *testing.T) {
+		preserveRunGlobals(t)
+		installCapturingRealInvocationBootstrap(t)
+
+		goalText := "no-server bootstrap primary-result prompt"
+		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+		var output bytes.Buffer
+		cfg.Output = &output
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		if err := Run(ctx, cfg); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if got := output.String(); got != "mock worker accepted" {
+			t.Fatalf("stdout = %q, want packaged goal invocationReturn primary result", got)
+		}
+		if got := output.String(); got == goalText {
+			t.Fatalf("stdout echoed submitted goal text instead of invocationReturn primary result")
+		}
+	})
+}
+
 func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test for hermetic named goal no-server invocation")
