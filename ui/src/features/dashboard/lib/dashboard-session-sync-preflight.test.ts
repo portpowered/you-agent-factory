@@ -151,6 +151,7 @@ describe("bootstrapDashboardSessionSyncPreflight recovery", () => {
       [
         identity.backendScopeID,
         STALE_SESSION_UUID,
+        identity.logicalSessionKeyID,
         identity.streamGenerationID,
       ].join("::"),
       {
@@ -164,6 +165,7 @@ describe("bootstrapDashboardSessionSyncPreflight recovery", () => {
         storageKey: [
           identity.backendScopeID,
           STALE_SESSION_UUID,
+          identity.logicalSessionKeyID,
           identity.streamGenerationID,
         ].join("::"),
         streamIdentity: {
@@ -237,6 +239,7 @@ describe("bootstrapDashboardSessionSyncPreflight cursor validation", () => {
     const storageKey = [
       identity.backendScopeID,
       identity.factorySessionID,
+      identity.logicalSessionKeyID,
       identity.streamGenerationID,
     ].join("::");
     records.set(storageKey, {
@@ -308,6 +311,7 @@ describe("bootstrapDashboardSessionSyncPreflight manual refresh", () => {
     const storageKey = [
       identity.backendScopeID,
       identity.factorySessionID,
+      identity.logicalSessionKeyID,
       identity.streamGenerationID,
     ].join("::");
     records.set(storageKey, {

@@ -65,12 +65,16 @@ function installPreflightMocks() {
   const clearCheckpointsSpy = vi
     .spyOn(timelinePublic, "clearTimelineCheckpointsForSession")
     .mockResolvedValue(undefined);
+  const clearCheckpointSpy = vi
+    .spyOn(timelinePublic, "deletePersistedTimelineCheckpoint")
+    .mockResolvedValue(undefined);
   const readCheckpointSpy = vi
     .spyOn(timelinePublic, "readTimelineCheckpoint")
     .mockResolvedValue(null);
 
   return {
     clearCheckpointsSpy,
+    clearCheckpointSpy,
     getSyncPreflightSpy,
     peekCheckpointSpy,
     queryClient,
@@ -144,7 +148,9 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
         streamGenerationId: "generation-live",
       }),
     );
-    const onRemapSessionID = vi.fn();
+    const operationOrder: string[] = [];
+    const onRemapSessionID = vi.fn(() => operationOrder.push("remap"));
+    const restoreCheckpoint = vi.fn(() => operationOrder.push("restore"));
 
     const hydration = await runDashboardCheckpointPreflight({
       isCurrent: () => true,
@@ -152,7 +158,7 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
       onStreamOffline: vi.fn(),
       queryClient: queryClient as never,
       rawSessionID: staleSessionID,
-      restoreCheckpoint: vi.fn(),
+      restoreCheckpoint,
     });
 
     expect(getSyncPreflightSpy).toHaveBeenCalledWith(
@@ -167,8 +173,29 @@ describe("runDashboardCheckpointPreflight alias remap", () => {
       },
     );
     expect(onRemapSessionID).toHaveBeenCalledWith(remappedSessionID);
+    expect(timelinePublic.deletePersistedTimelineCheckpoint).toHaveBeenCalledWith(
+      window.indexedDB,
+      expect.objectContaining({
+        streamIdentity: expect.objectContaining({
+          factorySessionID: staleSessionID,
+          logicalSessionKeyID,
+          streamGenerationID: "generation-stale",
+        }),
+      }),
+    );
+    expect(
+      timelinePublic.clearTimelineCheckpointsForSession,
+    ).not.toHaveBeenCalled();
+    expect(restoreCheckpoint).not.toHaveBeenCalled();
+    expect(operationOrder).toEqual(["remap"]);
     expect(hydration.initialReconnectCursor).toBeUndefined();
     expect(hydration.resolvedSessionID).toBe(remappedSessionID);
+  });
+});
+
+describe("runDashboardCheckpointPreflight selected identity remap", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("remaps the selected session id for logical session replacement", async () => {
@@ -206,12 +233,14 @@ describe("runDashboardCheckpointPreflight recovery", () => {
   let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
   let peekCheckpointSpy: ReturnType<typeof vi.spyOn>;
   let clearCheckpointsSpy: ReturnType<typeof vi.spyOn>;
+  let clearCheckpointSpy: ReturnType<typeof vi.spyOn>;
   let readCheckpointSpy: ReturnType<typeof vi.spyOn>;
   let queryClient: ReturnType<typeof installPreflightMocks>["queryClient"];
 
   beforeEach(() => {
     ({
       clearCheckpointsSpy,
+      clearCheckpointSpy,
       getSyncPreflightSpy,
       peekCheckpointSpy,
       queryClient,
@@ -253,7 +282,15 @@ describe("runDashboardCheckpointPreflight recovery", () => {
       restoreCheckpoint: vi.fn(),
     });
 
-    expect(clearCheckpointsSpy).toHaveBeenCalled();
+    expect(clearCheckpointsSpy).not.toHaveBeenCalled();
+    expect(clearCheckpointSpy).toHaveBeenCalledWith(
+      window.indexedDB,
+      expect.objectContaining({
+        streamIdentity: expect.objectContaining({
+          streamGenerationID: "generation-stale",
+        }),
+      }),
+    );
     expect(hydration.initialReconnectCursor).toBeUndefined();
   });
 

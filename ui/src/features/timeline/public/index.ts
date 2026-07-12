@@ -16,6 +16,7 @@ export {
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
 } from "../state/timelineCheckpointPersistence";
+export { deletePersistedTimelineCheckpoint } from "../state/checkpoint-persistence/deletePersistedTimelineCheckpoint";
 export { reconnectCursorFromCheckpoint } from "../state/timelineCheckpointReconnect";
 export {
   normalizeStreamDerivedCacheIdentity,
