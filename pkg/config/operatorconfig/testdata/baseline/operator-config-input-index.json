@@ -323,6 +323,42 @@
       }
     },
     {
+      "id": "resolve-provider-alias",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "accept",
+      "description": "provider aliases are canonicalized during resolve",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "kiro-cli"
+        },
+        "flag": {}
+      },
+      "precedenceWinners": {
+        "workerModelProviderSource": "file"
+      },
+      "expectedResolved": {
+        "workerModelProvider": "KIRO"
+      }
+    },
+    {
+      "id": "resolve-unsupported-provider",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "reject",
+      "description": "unsupported provider values fail resolve with accepted provider summary",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "not-a-provider"
+        },
+        "flag": {}
+      },
+      "errorFragments": [
+        "unsupported worker model provider",
+        "accepted canonical providers"
+      ]
+    },
+    {
       "id": "resolve-symbolic-default-from-file",
       "category": "resolve-symbolic-default",
       "entrypoint": "Resolve",
@@ -357,42 +393,6 @@
       },
       "errorFragments": [
         "concrete provider"
-      ]
-    },
-    {
-      "id": "resolve-provider-alias",
-      "category": "resolve-precedence",
-      "entrypoint": "Resolve",
-      "outcome": "accept",
-      "description": "provider aliases are canonicalized during resolve",
-      "resolveLayers": {
-        "fileDefaults": {
-          "workerModelProvider": "kiro-cli"
-        },
-        "flag": {}
-      },
-      "precedenceWinners": {
-        "workerModelProviderSource": "file"
-      },
-      "expectedResolved": {
-        "workerModelProvider": "KIRO"
-      }
-    },
-    {
-      "id": "resolve-unsupported-provider",
-      "category": "resolve-precedence",
-      "entrypoint": "Resolve",
-      "outcome": "reject",
-      "description": "unsupported provider values fail resolve with accepted provider summary",
-      "resolveLayers": {
-        "fileDefaults": {
-          "workerModelProvider": "not-a-provider"
-        },
-        "flag": {}
-      },
-      "errorFragments": [
-        "unsupported worker model provider",
-        "accepted canonical providers"
       ]
     }
   ]
