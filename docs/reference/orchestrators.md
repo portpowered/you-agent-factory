@@ -97,6 +97,53 @@ dashboard or Factory Session integrations.
 
 ## Operator Scope Boundaries
 
+### Beta JavaScript child-agent contract
+
+JavaScript workflows can start one child with `agent.run({ ... })`. Its beta
+argument contract is intentionally small:
+
+| Field | Requirement |
+|-------|-------------|
+| `prompt` | Required, non-empty string |
+| `label` | Optional string |
+| `preset` | Optional string |
+| `modelProvider` | Optional string |
+| `model` | Optional string |
+| `reasoningEffort` | Optional string |
+
+This complete example uses every supported field:
+
+```javascript agent-run-valid
+const child = await agent.run({
+  prompt: "Review the proposed change",
+  label: "reviewer",
+  preset: "careful",
+  modelProvider: "codex",
+  model: "gpt-example",
+  reasoningEffort: "high",
+});
+```
+
+All other per-child properties are rejected before dispatch. In particular,
+host-access fields, output schemas, per-child concurrency or agent caps, and
+duration controls are unsupported. Configure global budgets and permissions on
+an applicable factory or Factory Session policy surface when one exists; they
+are not `agent.run` arguments.
+
+For example, this workflow fails validation with
+`agent.run() does not support field "writableRoots"`; the diagnostic names the
+field but does not reproduce its value, prompt, workflow source, or secrets:
+
+```javascript agent-run-invalid
+await agent.run({
+  prompt: "Review the proposed change",
+  writableRoots: ["/example/not-a-real-path"],
+});
+```
+
+The same allowlist is checked again immediately before dispatch, so a
+dynamically constructed argument object cannot bypass it.
+
 The current canonical operator story is intentionally bounded:
 
 - Source validation before execution belongs to `you workflow validate` and the
