@@ -15,10 +15,12 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -840,6 +842,102 @@ func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *fa
 
 func sessionScopedRecordPath(basePath string, sessionID string) string {
 	return runtimebuild.SessionScopedRecordPath(basePath, sessionID)
+}
+
+// writeJavaScriptFactorySessionRecording replaces the compatibility replay artifact
+// with the privacy-bounded contract for JavaScript sessions. Petri recording is unchanged.
+func (fs *FactoryService) writeJavaScriptFactorySessionRecording(ctx context.Context, sessionID string) error {
+	path := strings.TrimSpace(fs.cfg.RecordPath)
+	if path == "" || strings.TrimSpace(fs.cfg.ReplayPath) != "" {
+		return nil
+	}
+	session, err := fs.GetFactorySession(ctx, sessionID)
+	if err != nil || session.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
+		return err
+	}
+	facts := portableCanonicalFacts(session)
+	if live := fs.currentSession(); live != nil {
+		for _, event := range (sessionGatewayHost{FactoryService: fs}).LiveSessionEvents(live) {
+			raw, marshalErr := json.Marshal(event)
+			if marshalErr != nil {
+				return fs.failPortableRecording(path, sessionID, marshalErr)
+			}
+			facts.Events = append(facts.Events, raw)
+		}
+	}
+	value, err := recording.Build(facts)
+	if err == nil {
+		err = recording.Write(path, value)
+	}
+	if err != nil {
+		return fs.failPortableRecording(path, sessionID, err)
+	}
+	return nil
+}
+
+func portableCanonicalFacts(session factoryapi.FactorySession) recording.CanonicalFacts {
+	status := portableRecordingStatus(session.Runtime)
+	facts := recording.CanonicalFacts{
+		SessionID: session.Id, Status: status, OrchestratorKind: string(session.Runtime.OrchestratorKind),
+		SourceRef: stringPointerValue(session.Runtime.SourceRef), SourceHash: stringPointerValue(session.Runtime.SourceHash),
+		PolicyHash: stringPointerValue(session.Runtime.PolicyHash), Result: portableRecordingResult(status),
+	}
+	if session.Runtime.Artifacts == nil {
+		return facts
+	}
+	for _, artifact := range *session.Runtime.Artifacts {
+		createdAt, secrets := time.Time{}, int64(0)
+		if artifact.CaptureMetadata != nil && artifact.CaptureMetadata.CapturedAt != nil {
+			createdAt = *artifact.CaptureMetadata.CapturedAt
+		}
+		if artifact.RedactionCounts != nil && artifact.RedactionCounts.Secrets != nil {
+			secrets = int64(*artifact.RedactionCounts.Secrets)
+		}
+		facts.Artifacts = append(facts.Artifacts, recording.CanonicalArtifact{
+			ID: artifact.Id, Kind: string(artifact.Kind), Visibility: string(artifact.Visibility), Label: stringPointerValue(artifact.Label),
+			ContentHash: stringPointerValue(artifact.ContentHash), SizeBytes: int64PointerValue(artifact.SizeBytes), CreatedAt: createdAt, SecretsRedacted: secrets,
+		})
+	}
+	return facts
+}
+
+func (fs *FactoryService) failPortableRecording(path, sessionID string, err error) error {
+	if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		err = errors.Join(err, fmt.Errorf("remove incomplete recording: %w", removeErr))
+	}
+	return &factorysessionexecution.RecordingError{SessionID: sessionID, Path: path, Err: err}
+}
+
+func portableRecordingStatus(runtime factoryapi.FactorySessionRuntime) string {
+	if runtime.LifecycleControlStatus != nil {
+		return string(*runtime.LifecycleControlStatus)
+	}
+	if runtime.Status == factoryapi.FactorySessionStatusFINISHED {
+		return "SUCCEEDED"
+	}
+	return string(runtime.Status)
+}
+
+func portableRecordingResult(status string) *recording.CanonicalResult {
+	result := &recording.CanonicalResult{Mode: "final"}
+	switch status {
+	case "SUCCEEDED", "COMPLETED":
+		result.Status = "FINAL"
+	case "FAILED", "CANCELED", "TIMED_OUT", "TERMINATED":
+		result.Status = "UNAVAILABLE"
+		result.Availability = &recording.AvailabilityDetail{Reason: "RESULT_UNAVAILABLE", Message: "No public final result was recorded."}
+	default:
+		result.Status = "NOT_READY"
+		result.Availability = &recording.AvailabilityDetail{Reason: "RESULT_NOT_READY", Message: "The recorded session did not have a final result.", Retryable: true}
+	}
+	return result
+}
+
+func int64PointerValue(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {

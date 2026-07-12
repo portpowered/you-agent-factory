@@ -547,6 +547,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 
 	err = fs.waitForActiveRuntime(ctx)
 	currentRuntime = fs.currentLiveRuntime()
+	recordingErr := fs.writeJavaScriptFactorySessionRecording(ctx, defaultFactorySessionID)
 	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
 		err = stopErr
 	}
@@ -560,11 +561,19 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	if fs.cfg.SimpleDashboardRenderer != nil {
 		fs.renderDashboard(ctx)
 	}
+	err = preferRunError(err, recordingErr)
 
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run: %w", err)
 	}
 	return nil
+}
+
+func preferRunError(runErr, recordingErr error) error {
+	if runErr != nil {
+		return runErr
+	}
+	return recordingErr
 }
 
 func (fs *FactoryService) startRunRuntime(

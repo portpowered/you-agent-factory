@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -1603,6 +1604,51 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableA
 	}
 	if first.Runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
 		t.Fatalf("stream generation id = %q, want %q", first.Runtime.StreamIdentity.StreamGenerationID, startedAt.Format(time.RFC3339Nano))
+	}
+}
+
+func TestFactoryService_WriteJavaScriptFactorySessionRecording_UsesProductionRecordPath(t *testing.T) {
+	recordPath := filepath.Join(t.TempDir(), "javascript-session.json")
+	factoryCfg := &interfaces.FactoryConfig{
+		Name: "recorded-workflow",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				Dialect: "workflow-v1", SourceRef: "factory/workflows/review.js",
+				SourceHash:    "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+				DefaultPolicy: json.RawMessage(`{}`),
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir(), RecordPath: recordPath}}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		RuntimeCfg: runtimeCfg,
+		Factory: &aggregateSnapshotFactory{engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusSucceeded),
+		}},
+	})
+	if err := svc.writeJavaScriptFactorySessionRecording(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("write production JavaScript recording: %v", err)
+	}
+	encoded, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatalf("read recording: %v", err)
+	}
+	var value recording.Recording
+	if err := json.Unmarshal(encoded, &value); err != nil {
+		t.Fatalf("decode recording: %v", err)
+	}
+	if err := recording.Validate(value); err != nil {
+		t.Fatalf("validate recording: %v", err)
+	}
+	if value.RecordingKind != recording.KindJavaScriptFactorySession || value.Session.OrchestratorKind != interfaces.OrchestratorKindJavaScript {
+		t.Fatalf("recording identity = %#v", value)
+	}
+	for _, forbidden := range []string{"stdout", "stderr", "diagnostics", "dispatches", "checkpointState", "providerTranscript"} {
+		if strings.Contains(string(encoded), `"`+forbidden+`"`) {
+			t.Fatalf("portable recording contains prohibited field %q: %s", forbidden, encoded)
+		}
 	}
 }
 
