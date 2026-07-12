@@ -404,6 +404,26 @@ describe("timeline checkpoint guard migration", () => {
       null,
     );
   });
+
+  it.each([
+    ["backend scope", { backendScopeID: "backend-scope-b" }],
+    ["logical session key", { logicalSessionKeyID: "logical-other" }],
+    ["factory session id", { factorySessionID: "session-other" }],
+    ["stream generation", { streamGenerationID: "2026-06-27T00:00:00Z" }],
+  ] as const)("fails closed for a %s mismatch", async (_label, mismatch) => {
+    const { indexedDB } = createIndexedDBTestDouble();
+    const checkpoint = checkpointFixture();
+    const persistedIdentity = streamIdentityFixture();
+
+    await persistTimelineCheckpoint(indexedDB, checkpoint, persistedIdentity);
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, {
+        ...persistedIdentity,
+        ...mismatch,
+      }),
+    ).resolves.toBe(null);
+  });
 });
 
 describe("timeline checkpoint reconnect cursors", () => {

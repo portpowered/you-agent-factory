@@ -278,13 +278,13 @@ describe("useDashboardSnapshot composer", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("preflights the selected session before restoring checkpoints or opening the stream", async () => {
+  it("preflights an unresolved default without borrowing concrete identity hints", async () => {
     indexedDBRecords.set(checkpointStorageKey(), {
       checkpoint: {
         afterEventId: "event-2",
         afterSequence: 2,
-        replayState: emptyReplayWorldState(SEEDED_SNAPSHOT.tick_count),
-        selectedTick: SEEDED_SNAPSHOT.tick_count,
+        replayState: emptyReplayWorldState(17),
+        selectedTick: 17,
       },
       schemaVersion: 3,
       storageKey: checkpointStorageKey(),
@@ -309,22 +309,14 @@ describe("useDashboardSnapshot composer", () => {
     await waitFor(() => {
       expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
         DEFAULT_FACTORY_SESSION_ID,
-        {
-          afterEventId: "event-2",
-          afterSequence: 2,
-        },
-        {
-          backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
-          logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
-        },
+        undefined,
+        {},
       );
     });
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
-    expect(useFactoryTimelineStore.getState().selectedTick).toBe(
-      SEEDED_SNAPSHOT.tick_count,
-    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(17);
   });
 
   it("surfaces a recoverable preflight recovery state when sync preflight cannot resolve the session", async () => {
@@ -561,7 +553,7 @@ describe("useDashboardSnapshot composer", () => {
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
 
-  it("clears a stale reconnect checkpoint and silently replays from scratch", async () => {
+  it("does not clear a concrete checkpoint for an unresolved default", async () => {
     useFactoryTimelineStore.getState().reset();
     indexedDBRecords.set(checkpointStorageKey(), {
       checkpoint: {
@@ -602,8 +594,8 @@ describe("useDashboardSnapshot composer", () => {
     });
     await expect(
       readTimelineCheckpoint(window.indexedDB, defaultStreamIdentity()),
-    ).resolves.toBe(null);
-    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
+    ).resolves.toEqual(expect.objectContaining({ selectedTick: 7 }));
+    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(true);
   });
 
   it("remaps the ~default alias to the resolved UUID runtime identity", async () => {

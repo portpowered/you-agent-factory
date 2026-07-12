@@ -7,7 +7,7 @@ import { emptyReplayWorldState } from "../features/timeline/state/timeline/repla
 export interface MultiSessionTimelineCheckpointFixture {
   checkpoint: FactoryTimelineCheckpoint;
   eventCount: number;
-  label: "A" | "B";
+  label: "A" | "B" | "C";
   streamIdentity: TimelineCheckpointStreamIdentity;
 }
 
@@ -82,4 +82,14 @@ export const MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO = {
     selectedTick: 13,
     streamGenerationID: "2026-07-10T11:00:00Z",
   }),
-} satisfies Record<"A" | "B", MultiSessionTimelineCheckpointFixture>;
+  C: createSessionFixture({
+    afterEventId: "session-c-event-19",
+    afterSequence: 41,
+    eventCount: 7,
+    factorySessionID: "33333333-3333-4333-8333-333333333333",
+    label: "C",
+    logicalSessionKeyID: "logical-session-c",
+    selectedTick: 19,
+    streamGenerationID: "2026-07-10T12:00:00Z",
+  }),
+} satisfies Record<"A" | "B" | "C", MultiSessionTimelineCheckpointFixture>;

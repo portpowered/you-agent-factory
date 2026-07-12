@@ -1,7 +1,4 @@
-import {
-  DEFAULT_FACTORY_SESSION_ID,
-  isDefaultFactorySessionID,
-} from "../../../api/session-routing";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   identityMismatchDiagnostic,
   recordSessionPersistenceInvalidation,
@@ -41,13 +38,8 @@ function matchesStoredCheckpointFactorySessionID(
   const requestedSessionID = factorySessionID.trim();
   const storedFactorySessionID =
     envelope.streamIdentity?.factorySessionID?.trim() ?? "";
-  if (storedFactorySessionID === requestedSessionID) {
-    return true;
-  }
   return (
-    isDefaultFactorySessionID(requestedSessionID) &&
-    storedFactorySessionID !== "" &&
-    !isDefaultFactorySessionID(storedFactorySessionID)
+    requestedSessionID !== "" && storedFactorySessionID === requestedSessionID
   );
 }
 
