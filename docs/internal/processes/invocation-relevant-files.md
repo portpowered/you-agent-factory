@@ -346,6 +346,8 @@ primary-result behavior.
   and generated public API artifacts stay internal-only. Reuse
   `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
   and `support.StartFunctionalAPIServer` when extending boundary verification.
+  Stream-responses gate audit intake and blocking residuals are recorded in
+  `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
