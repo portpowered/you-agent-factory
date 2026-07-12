@@ -824,11 +824,9 @@ func TestNormalizeProviderExitFailure_CursorCommandLineTooLongHasExplicitType(t 
 	}, nil, nil)
 	if providerErr.Type != interfaces.WorkFailureTypeCommandLineTooLong {
 		t.Fatalf("Type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypeCommandLineTooLong)
-	}
-	if providerErr.Family != interfaces.WorkFailureFamilyTerminal {
+	} else if providerErr.Family != interfaces.WorkFailureFamilyTerminal {
 		t.Fatalf("Family = %q, want terminal", providerErr.Family)
-	}
-	if providerErr.Message != "The command line is too long." {
+	} else if providerErr.Message != "The command line is too long." {
 		t.Fatalf("Message = %q, want bounded Cursor diagnostic", providerErr.Message)
 	}
 }
