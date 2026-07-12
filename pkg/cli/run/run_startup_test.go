@@ -400,7 +400,7 @@ func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent
 		FactoryDir:         "/tmp/project/factory/alpha",
 		Source:             factoryconfig.NamedFactoryResolutionSourceProjectLocal,
 		ProjectRoot:        "/tmp/project/factory",
-		GlobalRoot:         "/tmp/home/.you-agent-factory/factories",
+		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
 		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal,
 	}
 
@@ -463,10 +463,10 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	logger := zap.New(core)
 	resolution := &factoryconfig.NamedFactoryResolution{
 		Name:               "@you/tts",
-		FactoryDir:         "/tmp/home/.you-agent-factory/factories/@you/tts",
+		FactoryDir:         "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts",
 		Source:             factoryconfig.NamedFactoryResolutionSourceBuiltin,
 		ProjectRoot:        "/tmp/project/factory",
-		GlobalRoot:         "/tmp/home/.you-agent-factory/factories",
+		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
 		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionNone,
 	}
 
@@ -488,7 +488,7 @@ func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
 	if got := context["named_factory_name"]; got != "@you/tts" {
 		t.Fatalf("built-in log name = %#v, want @you/tts", got)
 	}
-	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/factories/@you/tts" {
+	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts" {
 		t.Fatalf("built-in log target dir = %#v", got)
 	}
 }

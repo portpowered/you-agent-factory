@@ -71,9 +71,9 @@ func TestFactoryListCommand_HelpDocumentsProjectAndGlobalRoots(t *testing.T) {
 	help := out.String()
 	for _, want := range []string{
 		"project-local named factories from ./factory",
-		"~/.you-agent-factory/factories",
+		"~/.you-agent-factory/you-agent-factories",
 		"never merges project-local and global entries",
-		"you factory list --dir ~/.you-agent-factory/factories",
+		"you factory list --dir ~/.you-agent-factory/you-agent-factories",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory list help missing %q:\n%s", want, help)

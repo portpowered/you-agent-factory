@@ -213,23 +213,19 @@ func collectNamedFactoryFromRootChild(rootDir string, child os.DirEntry, collect
 	if isReservedNamedFactoryListDir(name) {
 		return
 	}
-	factoryDir := filepath.Join(rootDir, name)
-	if collectLegacyNamedFactoryListEntry(factoryDir, name, collector) {
+	if strings.HasPrefix(name, scopedNamedFactoryPrefix) {
+		collectHierarchicalScopedNamedFactories(filepath.Join(rootDir, name), name, collector)
 		return
 	}
-	collectHierarchicalScopedNamedFactories(factoryDir, name, collector)
-}
-
-func collectLegacyNamedFactoryListEntry(factoryDir, segment string, collector *namedFactoryListCollector) bool {
+	factoryDir := filepath.Join(rootDir, name)
 	if err := requireFactoryConfig(factoryDir); err != nil {
-		return false
+		return
 	}
-	displayName, err := NamedFactoryLayoutSegmentToName(segment)
+	displayName, err := canonicalNamedFactoryName(name)
 	if err != nil {
-		return true
+		return
 	}
 	collector.append(displayName, factoryDir)
-	return true
 }
 
 func collectHierarchicalScopedNamedFactories(scopeDir, scopeDirName string, collector *namedFactoryListCollector) {

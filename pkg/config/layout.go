@@ -1082,24 +1082,6 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
 	}
 
-	if legacySegment, legacyErr := NamedFactoryNameToLayoutSegment(canonicalName); legacyErr == nil {
-		legacyDir := filepath.Join(globalRoot, legacySegment)
-		if legacyDir != targetDir {
-			if _, err := os.Stat(legacyDir); err == nil {
-				if err := requireFactoryConfig(legacyDir); err != nil {
-					return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
-				}
-				upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, legacyDir)
-				if err != nil {
-					return "", false, err
-				}
-				return upgradedDir, true, nil
-			} else if !errors.Is(err, os.ErrNotExist) {
-				return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
-			}
-		}
-	}
-
 	factoryDir, err := PersistNamedFactory(globalRoot, canonicalName, payload)
 	if err != nil {
 		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err)

@@ -7,7 +7,7 @@ import (
 )
 
 func TestMapDir_UnscopedName(t *testing.T) {
-	root := filepath.Join("home", ".you-agent-factory", "factories")
+	root := filepath.Join("home", ".you-agent-factory", "you-agent-factories")
 	got, err := MapDir(root, "alpha")
 	if err != nil {
 		t.Fatalf("MapDir(alpha): %v", err)
@@ -19,7 +19,7 @@ func TestMapDir_UnscopedName(t *testing.T) {
 }
 
 func TestMapDir_ScopedName(t *testing.T) {
-	root := filepath.Join("home", ".you-agent-factory", "factories")
+	root := filepath.Join("home", ".you-agent-factory", "you-agent-factories")
 	got, err := MapDir(root, "@you/goal")
 	if err != nil {
 		t.Fatalf("MapDir(@you/goal): %v", err)

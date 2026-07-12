@@ -839,19 +839,11 @@ func ReadCurrentFactoryPointer(rootDir string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("read current factory pointer %s: factory name is required", path)
 	}
-	if canonicalName, err := canonicalNamedFactoryName(trimmed); err == nil {
-		return canonicalName, nil
-	}
-
-	segment, err := safeFactoryLayoutSegment("factory", trimmed)
+	canonicalName, err := canonicalNamedFactoryName(trimmed)
 	if err != nil {
 		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
 	}
-	name, err := NamedFactoryLayoutSegmentToName(segment)
-	if err != nil {
-		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
-	}
-	return name, nil
+	return canonicalName, nil
 }
 
 // WriteCurrentFactoryPointer persists the selected named factory for later
@@ -895,39 +887,11 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 		return "", err
 	}
 
-	primaryDir, err := MapNamedFactoryDir(rootDir, canonicalName)
+	factoryDir, err := MapNamedFactoryDir(rootDir, canonicalName)
 	if err != nil {
 		return "", err
 	}
-	candidates := []string{primaryDir}
-	if legacySegment, err := NamedFactoryNameToLayoutSegment(canonicalName); err == nil {
-		legacyDir := filepath.Join(rootDir, legacySegment)
-		if legacyDir != primaryDir {
-			candidates = append(candidates, legacyDir)
-		}
-	}
-
-	var notFound error
-	for _, factoryDir := range candidates {
-		resolved, err := resolveNamedFactoryDirAtTarget(rootDir, canonicalName, factoryDir)
-		if err == nil {
-			return resolved, nil
-		}
-		if errors.Is(err, ErrNamedFactoryNotFound) {
-			notFound = err
-			continue
-		}
-		return "", err
-	}
-	if notFound != nil {
-		return "", notFound
-	}
-	return "", fmt.Errorf(
-		"resolve named factory %q in root %s: %w",
-		canonicalName,
-		rootDir,
-		newNamedFactoryNotFoundError(canonicalName),
-	)
+	return resolveNamedFactoryDirAtTarget(rootDir, canonicalName, factoryDir)
 }
 
 func resolveNamedFactoryDirAtTarget(rootDir, canonicalName, factoryDir string) (string, error) {

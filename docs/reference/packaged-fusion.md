@@ -76,20 +76,21 @@ return-policy contract.
 `you run --named @you/fusion` resolves named factories in this order:
 
 1. Project-local `./factory`
-2. Global shared root `~/.you-agent-factory/factories`
+2. Global shared root `~/.you-agent-factory/you-agent-factories`
 3. Built-in catalog materialization on first use
 
 On first invocation, `@you/fusion` materializes into the global root using the
-normal named-factory persist pipeline. Scoped names are URL-encoded on disk:
+normal named-factory persist pipeline. Scoped names use hierarchical safe
+segments on disk:
 
 ```text
-~/.you-agent-factory/factories/@you%2Ffusion/
+~/.you-agent-factory/you-agent-factories/@you/fusion/
 ```
 
 Inspect the materialized factory:
 
 ```bash
-you factory list --dir ~/.you-agent-factory/factories
+you factory list --dir ~/.you-agent-factory/you-agent-factories
 ```
 
 The materialized `factory.json` keeps the same `invocationSignature` used by

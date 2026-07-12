@@ -9,7 +9,7 @@ import (
 
 const (
 	sharedHomeDirName     = ".you-agent-factory"
-	namedFactoriesDirName = "factories"
+	namedFactoriesDirName = "you-agent-factories"
 	operatorConfigFile    = "config.json"
 	recordingsDirName     = "recordings"
 	runtimeLogsDirName    = "logs"
