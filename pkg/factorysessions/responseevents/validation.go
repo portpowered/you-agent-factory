@@ -76,122 +76,144 @@ func validateKindPhase(kind Kind, phase Phase) error {
 }
 
 func validatePayload(kind Kind, phase Phase, payload json.RawMessage) error {
+	if err := validatePayloadBasics(kind, payload); err != nil {
+		return err
+	}
+
+	switch kind {
+	case KindSession:
+		var body SessionPayload
+		return decodePayload(payload, &body, "SessionPayload")
+	case KindRun:
+		var body RunPayload
+		return decodePayload(payload, &body, "RunPayload")
+	case KindTurn:
+		var body TurnPayload
+		return decodePayload(payload, &body, "TurnPayload")
+	case KindMessage:
+		return validateMessageKindPayload(phase, payload)
+	case KindReasoning:
+		var body ReasoningPayload
+		return decodePayload(payload, &body, "ReasoningPayload")
+	case KindTool:
+		return validateToolKindPayload(phase, payload)
+	case KindFileChange:
+		return validateFileChangeKindPayload(payload)
+	case KindPlan:
+		var body PlanPayload
+		return decodePayload(payload, &body, "PlanPayload")
+	case KindProgress:
+		return validateProgressKindPayload(payload)
+	case KindUsage:
+		var body UsagePayload
+		return decodePayload(payload, &body, "UsagePayload")
+	case KindError:
+		return validateErrorKindPayload(payload)
+	case KindStreamGap:
+		return validateStreamGapKindPayload(payload)
+	default:
+		return validationError("kind", fmt.Sprintf("kind %q has no declared payload validator", kind))
+	}
+}
+
+func validatePayloadBasics(kind Kind, payload json.RawMessage) error {
 	if len(payload) == 0 {
 		return validationError("payload", fmt.Sprintf("payload is required for kind %q", kind))
 	}
 	if !json.Valid(payload) {
 		return validationError("payload", "payload must contain valid JSON")
 	}
+	return nil
+}
 
-	switch kind {
-	case KindSession:
-		var body SessionPayload
-		if err := decodePayload(payload, &body, "SessionPayload"); err != nil {
+func validateMessageKindPayload(phase Phase, payload json.RawMessage) error {
+	if phase == PhaseDelta {
+		if err := rejectPayloadKeys(payload, "MessageDeltaPayload", "role", "contentBlocks"); err != nil {
 			return err
 		}
-	case KindRun:
-		var body RunPayload
-		if err := decodePayload(payload, &body, "RunPayload"); err != nil {
+		var body MessageDeltaPayload
+		if err := decodePayload(payload, &body, "MessageDeltaPayload"); err != nil {
 			return err
 		}
-	case KindTurn:
-		var body TurnPayload
-		if err := decodePayload(payload, &body, "TurnPayload"); err != nil {
+		return validateMessageDeltaPayload(body)
+	}
+	if err := rejectPayloadKeys(payload, "MessagePayload", "contentBlockIndex", "contentBlockKind", "textDelta"); err != nil {
+		return err
+	}
+	var body MessagePayload
+	if err := decodePayload(payload, &body, "MessagePayload"); err != nil {
+		return err
+	}
+	return validateMessagePayload(body)
+}
+
+func validateToolKindPayload(phase Phase, payload json.RawMessage) error {
+	if phase == PhaseDelta {
+		if err := rejectPayloadKeys(payload, "ToolDeltaPayload", "toolName", "status", "argumentsSummary", "resultSummary"); err != nil {
 			return err
 		}
-	case KindMessage:
-		if phase == PhaseDelta {
-			if err := rejectPayloadKeys(payload, "MessageDeltaPayload", "role", "contentBlocks"); err != nil {
-				return err
-			}
-			var body MessageDeltaPayload
-			if err := decodePayload(payload, &body, "MessageDeltaPayload"); err != nil {
-				return err
-			}
-			return validateMessageDeltaPayload(body)
-		}
-		if err := rejectPayloadKeys(payload, "MessagePayload", "contentBlockIndex", "contentBlockKind", "textDelta"); err != nil {
+		var body ToolDeltaPayload
+		if err := decodePayload(payload, &body, "ToolDeltaPayload"); err != nil {
 			return err
 		}
-		var body MessagePayload
-		if err := decodePayload(payload, &body, "MessagePayload"); err != nil {
-			return err
-		}
-		return validateMessagePayload(body)
-	case KindReasoning:
-		var body ReasoningPayload
-		if err := decodePayload(payload, &body, "ReasoningPayload"); err != nil {
-			return err
-		}
-	case KindTool:
-		if phase == PhaseDelta {
-			if err := rejectPayloadKeys(payload, "ToolDeltaPayload", "toolName", "status", "argumentsSummary", "resultSummary"); err != nil {
-				return err
-			}
-			var body ToolDeltaPayload
-			if err := decodePayload(payload, &body, "ToolDeltaPayload"); err != nil {
-				return err
-			}
-			return validateToolDeltaPayload(body)
-		}
-		if err := rejectPayloadKeys(payload, "ToolPayload", "outputDelta"); err != nil {
-			return err
-		}
-		var body ToolPayload
-		if err := decodePayload(payload, &body, "ToolPayload"); err != nil {
-			return err
-		}
-		return validateToolPayload(body)
-	case KindFileChange:
-		var body FileChangePayload
-		if err := decodePayload(payload, &body, "FileChangePayload"); err != nil {
-			return err
-		}
-		if strings.TrimSpace(body.Path) == "" {
-			return validationError("payload.path", "path is required for FileChangePayload")
-		}
-		if strings.TrimSpace(body.Operation) == "" {
-			return validationError("payload.operation", "operation is required for FileChangePayload")
-		}
-	case KindPlan:
-		var body PlanPayload
-		if err := decodePayload(payload, &body, "PlanPayload"); err != nil {
-			return err
-		}
-	case KindProgress:
-		var body ProgressPayload
-		if err := decodePayload(payload, &body, "ProgressPayload"); err != nil {
-			return err
-		}
-		if strings.TrimSpace(body.Label) == "" {
-			return validationError("payload.label", "label is required for ProgressPayload")
-		}
-	case KindUsage:
-		var body UsagePayload
-		if err := decodePayload(payload, &body, "UsagePayload"); err != nil {
-			return err
-		}
-	case KindError:
-		var body ErrorPayload
-		if err := decodePayload(payload, &body, "ErrorPayload"); err != nil {
-			return err
-		}
-		if strings.TrimSpace(body.Code) == "" {
-			return validationError("payload.code", "code is required for ErrorPayload")
-		}
-		if strings.TrimSpace(body.Message) == "" {
-			return validationError("payload.message", "message is required for ErrorPayload")
-		}
-	case KindStreamGap:
-		var body StreamGapPayload
-		if err := decodePayload(payload, &body, "StreamGapPayload"); err != nil {
-			return err
-		}
-		if body.FromSequence < 0 || body.ToSequence < 0 {
-			return validationError("payload.fromSequence", "fromSequence and toSequence must be non-negative for StreamGapPayload")
-		}
-	default:
-		return validationError("kind", fmt.Sprintf("kind %q has no declared payload validator", kind))
+		return validateToolDeltaPayload(body)
+	}
+	if err := rejectPayloadKeys(payload, "ToolPayload", "outputDelta"); err != nil {
+		return err
+	}
+	var body ToolPayload
+	if err := decodePayload(payload, &body, "ToolPayload"); err != nil {
+		return err
+	}
+	return validateToolPayload(body)
+}
+
+func validateFileChangeKindPayload(payload json.RawMessage) error {
+	var body FileChangePayload
+	if err := decodePayload(payload, &body, "FileChangePayload"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(body.Path) == "" {
+		return validationError("payload.path", "path is required for FileChangePayload")
+	}
+	if strings.TrimSpace(body.Operation) == "" {
+		return validationError("payload.operation", "operation is required for FileChangePayload")
+	}
+	return nil
+}
+
+func validateProgressKindPayload(payload json.RawMessage) error {
+	var body ProgressPayload
+	if err := decodePayload(payload, &body, "ProgressPayload"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(body.Label) == "" {
+		return validationError("payload.label", "label is required for ProgressPayload")
+	}
+	return nil
+}
+
+func validateErrorKindPayload(payload json.RawMessage) error {
+	var body ErrorPayload
+	if err := decodePayload(payload, &body, "ErrorPayload"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(body.Code) == "" {
+		return validationError("payload.code", "code is required for ErrorPayload")
+	}
+	if strings.TrimSpace(body.Message) == "" {
+		return validationError("payload.message", "message is required for ErrorPayload")
+	}
+	return nil
+}
+
+func validateStreamGapKindPayload(payload json.RawMessage) error {
+	var body StreamGapPayload
+	if err := decodePayload(payload, &body, "StreamGapPayload"); err != nil {
+		return err
+	}
+	if body.FromSequence < 0 || body.ToSequence < 0 {
+		return validationError("payload.fromSequence", "fromSequence and toSequence must be non-negative for StreamGapPayload")
 	}
 	return nil
 }
