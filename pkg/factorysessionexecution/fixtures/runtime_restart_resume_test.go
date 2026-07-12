@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file restart-resume coverage keeps persistence, replay, provider, and event-lineage assertions in one integration fixture.
+// pkgmaintcheck:ignore-file-lines restart-resume coverage keeps persistence, replay, provider, and event-lineage assertions in one integration fixture.
 package fixtures_test
 
 import (

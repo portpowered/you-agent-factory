@@ -2653,6 +2653,8 @@ func TestFinalizeInterruptedTerminalSession_PreservesPartialAndUnavailableResult
 	})
 }
 
+// pkgmaintcheck:ignore-function-lines this restart integration test keeps the pre-restart and post-restart observable read assertions together.
+// pkgmaintcheck:ignore-cyclomatic-complexity each assertion validates one durable partial-result field across the restart boundary.
 func TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState(t *testing.T) {
 	store := &runtimeRecordingStore{}
 	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{

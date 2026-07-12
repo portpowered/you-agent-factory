@@ -409,6 +409,8 @@ func appendAcceptedSessionLifecycleEventIfNeeded(
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this runtime control helper keeps dispatch-targeted lifecycle validation and replay together on one seam.
+// backendsizecheck:ignore-function accepted control mutation, persistence rollback, and idempotent replay remain atomic on this runtime seam.
+// pkgmaintcheck:ignore-function-lines accepted control mutation, persistence rollback, and idempotent replay remain atomic on this runtime seam.
 func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	ctx context.Context,
 	sessionID string,
