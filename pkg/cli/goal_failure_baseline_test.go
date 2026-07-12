@@ -51,13 +51,6 @@ var goalQuietLeakForbiddenMarkers = []string{
 	"Recording saved",
 }
 
-var goalQuietLeakExpectedMarkers = []string{
-	"Factory initiated",
-	"Dashboard URL",
-	"Runtime log",
-	"Recording saved",
-}
-
 func assertGoalQuietLeakContractForbidden(t *testing.T, output string) {
 	t.Helper()
 
@@ -66,20 +59,6 @@ func assertGoalQuietLeakContractForbidden(t *testing.T, output string) {
 			t.Fatalf("output = %q, want no quiet-leak marker %q", output, forbidden)
 		}
 	}
-}
-
-func assertGoalQuietLeakContractPresent(t *testing.T, output string) {
-	t.Helper()
-
-	if strings.TrimSpace(output) == "" {
-		t.Fatal("output is empty, want non-empty quiet-leak terminal chatter documenting today's contract")
-	}
-	for _, marker := range goalQuietLeakExpectedMarkers {
-		if strings.Contains(output, marker) {
-			return
-		}
-	}
-	t.Fatalf("output = %q, want at least one quiet-leak marker among %v", output, goalQuietLeakExpectedMarkers)
 }
 
 func TestFailureBaseline_NoServer_ModelsInvokeCommandReportsUnreachableEndpoint(t *testing.T) {
@@ -208,7 +187,7 @@ func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraph
 	}
 }
 
-func TestFailureBaseline_QuietLeak_RunBatchQuietStillEmitsStartupChatter(t *testing.T) {
+func TestFailureBaseline_QuietLeak_RunBatchQuietSuppressesStartupChatter(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -248,13 +227,16 @@ func TestFailureBaseline_QuietLeak_RunBatchQuietStillEmitsStartupChatter(t *test
 	if !got.SuppressDashboardRendering {
 		t.Fatal("expected --quiet to suppress dashboard rendering")
 	}
-	if got.StartupOutput == nil {
-		t.Fatal("expected batch quiet run to keep startup output wired to terminal stdout")
+	if got.StartupOutput != nil {
+		t.Fatal("expected batch quiet run to suppress startup output wiring")
 	}
 	if got.CleanInvocation {
 		t.Fatal("expected dir/work batch quiet run to keep operator startup output mode")
 	}
-	assertGoalQuietLeakContractPresent(t, stdout.String())
+	if stdout.String() != "" {
+		t.Fatalf("stdout = %q, want empty quiet success terminal output", stdout.String())
+	}
+	assertGoalQuietLeakContractForbidden(t, stdout.String())
 }
 
 func TestFailureBaseline_QuietLeak_RunFactoryQuietPromptKeepsStartupOutputSuppressed(t *testing.T) {

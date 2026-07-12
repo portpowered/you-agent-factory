@@ -715,13 +715,14 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cfg.TerminalPolicy = runPolicy
 	cfg.Verbose = runPolicy.VerboseEnabled()
 	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
+	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
 	if cleanInvocation || textInvocation {
 		cfg.Output = cmd.OutOrStdout()
 	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		cfg.Output = cmd.OutOrStdout()
-		cfg.StartupOutput = cmd.OutOrStdout()
+		cfg.StartupOutput = humanTerminal
 	} else {
-		cfg.StartupOutput = cmd.OutOrStdout()
+		cfg.StartupOutput = humanTerminal
 	}
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json

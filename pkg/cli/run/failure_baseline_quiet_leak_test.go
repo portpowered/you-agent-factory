@@ -26,13 +26,6 @@ var quietLeakForbiddenMarkers = []string{
 	"Recording saved",
 }
 
-var quietLeakExpectedMarkers = []string{
-	"Factory initiated",
-	"Dashboard URL",
-	"Runtime log",
-	"Recording saved",
-}
-
 func assertQuietLeakContractForbidden(t *testing.T, output string) {
 	t.Helper()
 
@@ -43,32 +36,16 @@ func assertQuietLeakContractForbidden(t *testing.T, output string) {
 	}
 }
 
-func assertQuietLeakContractPresent(t *testing.T, output string) {
-	t.Helper()
-
-	if strings.TrimSpace(output) == "" {
-		t.Fatal("output is empty, want non-empty quiet-leak terminal chatter documenting today's contract")
-	}
-	for _, marker := range quietLeakExpectedMarkers {
-		if strings.Contains(output, marker) {
-			return
-		}
-	}
-	t.Fatalf("output = %q, want at least one quiet-leak marker among %v", output, quietLeakExpectedMarkers)
-}
-
-func TestFailureBaseline_QuietLeak_OneShotBatchQuietStillEmitsStartupChatter(t *testing.T) {
+func TestFailureBaseline_QuietLeak_OneShotBatchQuietSuppressesStartupChatter(t *testing.T) {
 	dir, workFile := writeDashboardRunFixture(t)
 	port := unusedTCPPort(t)
 
-	var startupOut bytes.Buffer
-	err := Run(context.Background(), RunConfig{
+	output, err := runWithCapturedStdout(t, RunConfig{
 		Dir:                        dir,
 		Port:                       port,
 		WorkFile:                   workFile,
 		MockWorkersEnabled:         true,
 		SuppressDashboardRendering: true,
-		StartupOutput:              &startupOut,
 		OpenDashboard:              false,
 		DisableDefaultRecording:    true,
 		Logger:                     zap.NewNop(),
@@ -76,7 +53,10 @@ func TestFailureBaseline_QuietLeak_OneShotBatchQuietStillEmitsStartupChatter(t *
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	assertQuietLeakContractPresent(t, startupOut.String())
+	if output != "" {
+		t.Fatalf("stdout = %q, want empty quiet success terminal output", output)
+	}
+	assertQuietLeakContractForbidden(t, output)
 }
 
 func TestFailureBaseline_QuietLeak_OneShotBatchRunSuppressesDashboardMarkers(t *testing.T) {

@@ -81,6 +81,9 @@ func TestRootCommand_ResolvesQuietRunPolicyForDiagnosticsAndLogger(t *testing.T)
 	if got.TerminalPolicy.Mode() != terminalpolicy.ModeQuiet {
 		t.Fatalf("terminal policy mode = %q, want %q", got.TerminalPolicy.Mode(), terminalpolicy.ModeQuiet)
 	}
+	if got.StartupOutput != nil {
+		t.Fatal("expected quiet run policy to suppress startup output wiring")
+	}
 	if got.Diagnostics != nil {
 		t.Fatal("expected quiet run policy to suppress diagnostics writer")
 	}
