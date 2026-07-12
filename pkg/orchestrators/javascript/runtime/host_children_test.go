@@ -667,3 +667,4 @@ func assertStubChildResult(t *testing.T, value any, wantLabel, wantDispatchID st
 		t.Fatalf("child output text = %#v, want %q", output["text"], wantText)
 	}
 }
+

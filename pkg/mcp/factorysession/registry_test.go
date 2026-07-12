@@ -39,6 +39,29 @@ func TestDiscoverTools_ExposesExpectedFactorySessionTools(t *testing.T) {
 	}
 }
 
+func TestDiscoverTools_MCPHostGuideTranscriptToolsAreRegistered(t *testing.T) {
+	requiredByGuide := []string{
+		"you.factory_session.validate_source",
+		"you.factory_session.start_async",
+		"you.factory_session.get",
+		"you.factory_session.get_result",
+		"you.factory_session.list_dispatches",
+		"you.factory_session.list_artifacts",
+		"you.factory_session.read_events",
+		"you.factory_session.control",
+	}
+	registered := map[string]bool{}
+	for _, tool := range mcpfactorysession.DiscoverTools() {
+		registered[tool.Name] = true
+	}
+
+	for _, name := range requiredByGuide {
+		if !registered[name] {
+			t.Errorf("MCP host guide transcript tool %q is missing from the registered MCP catalog", name)
+		}
+	}
+}
+
 func TestDiscoverTools_EachToolHasSchemasDescriptionsAndStableFields(t *testing.T) {
 	for _, tool := range mcpfactorysession.DiscoverTools() {
 		if strings.TrimSpace(tool.Name) == "" {

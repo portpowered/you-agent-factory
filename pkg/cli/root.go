@@ -124,7 +124,6 @@ func NewRootCommand() *cobra.Command {
 	)
 
 	root.AddCommand(
-		newConfigCommand(diagnostics),
 		newDocsCommand(diagnostics),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
@@ -179,17 +178,18 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"Subcommands:\n" +
 			"  query    show the current active factory from a running service\n" +
 			"  list     list persisted named factories under a factory root\n" +
-			"  validate validate a factory.json payload or factory directory\n" +
+			"  config   inspect and transform factory configuration\n" +
 			"  save     create a named factory from factory.json or persist the live current factory\n" +
 			"  update   replace an existing named factory from factory.json\n" +
 			"  delete   remove an unused named factory from disk\n\n" +
-			"Use query against a running service. Use list, save, update, and delete for on-disk " +
-			"named factories under --dir (default factory/). Live save with no name argument uses " +
-			"global --server and --session like query.",
+			"Use query against a running service. Use config validate, flatten, and expand for " +
+			"factory configuration inspection and transformation. Use list, save, update, and delete " +
+			"for on-disk named factories under --dir (default factory/). Live save with no name " +
+			"argument uses global --server and --session like query.",
 		Example: "  # Show the active factory from the running service.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
 			"  # Validate a factory config before saving it.\n" +
-			"  " + cliBinaryName + " factory validate ./factory.json\n\n" +
+			"  " + cliBinaryName + " factory config validate ./factory.json\n\n" +
 			"  # List persisted named factories and which one is current.\n" +
 			"  " + cliBinaryName + " factory list\n\n" +
 			"  # Save a new named factory from a config file.\n" +
@@ -204,12 +204,38 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	factoryCmd.AddCommand(
 		newFactoryQueryCommand(globals, diagnostics),
 		newFactoryListCommand(globals, diagnostics),
-		newFactoryValidateCommand(globals, diagnostics),
+		newFactoryConfigCommand(globals, diagnostics),
 		newFactorySaveCommand(globals, diagnostics),
 		newFactoryUpdateFromFileCommand(globals, diagnostics),
 		newFactoryDeleteCommand(globals, diagnostics),
 	)
 	return factoryCmd
+}
+
+func newFactoryConfigCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Inspect and transform factory configuration",
+		Long: "Inspect and transform factory configuration.\n\n" +
+			"Subcommands:\n" +
+			"  validate validate a factory.json payload or factory directory\n" +
+			"  flatten  write canonical single-file factory config to stdout\n" +
+			"  expand   write split factory config layout beside the input file\n\n" +
+			"Use validate before save or update. Use flatten and expand to move between " +
+			"single-file and split-layout factory directories.",
+		Example: "  # Validate a single-file factory config.\n" +
+			"  " + cliBinaryName + " factory config validate ./factory.json\n\n" +
+			"  # Flatten a split-layout factory directory.\n" +
+			"  " + cliBinaryName + " factory config flatten ./factory\n\n" +
+			"  # Expand a canonical factory.json into split layout.\n" +
+			"  " + cliBinaryName + " factory config expand ./factory.json",
+	}
+	configCmd.AddCommand(
+		newFactoryConfigValidateCommand(globals, diagnostics),
+		newFactoryConfigFlattenCommand(diagnostics),
+		newFactoryConfigExpandCommand(diagnostics),
+	)
+	return configCmd
 }
 
 func newFactoryDeleteCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
@@ -347,7 +373,7 @@ func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) 
 	return cmd
 }
 
-func newFactoryValidateCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
+func newFactoryConfigValidateCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
 	cfg := factorycli.ValidateConfig{}
 
 	cmd := &cobra.Command{
@@ -359,11 +385,11 @@ func newFactoryValidateCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptio
 			"prints blocking validation targets with inference, agent, script, or poller terminology " +
 			"when worker/workstation pairings are incompatible.",
 		Example: "  # Validate a single-file factory config.\n" +
-			"  " + cliBinaryName + " factory validate ./factory.json\n\n" +
+			"  " + cliBinaryName + " factory config validate ./factory.json\n\n" +
 			"  # Validate a split-layout factory directory.\n" +
-			"  " + cliBinaryName + " factory validate ./factory\n\n" +
+			"  " + cliBinaryName + " factory config validate ./factory\n\n" +
 			"  # Emit structured validation output for automation.\n" +
-			"  " + cliBinaryName + " --json factory validate ./factory.json",
+			"  " + cliBinaryName + " --json factory config validate ./factory.json",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -557,19 +583,7 @@ func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return docsCmd
 }
 
-func newConfigCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	configCmd := &cobra.Command{
-		Use:   "config",
-		Short: "Inspect and transform factory configuration",
-	}
-	configCmd.AddCommand(
-		newConfigExpandCommand(diagnostics),
-		newConfigFlattenCommand(diagnostics),
-	)
-	return configCmd
-}
-
-func newConfigFlattenCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newFactoryConfigFlattenCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := configcli.FactoryConfigFlattenConfig{}
 
 	cmd := &cobra.Command{
@@ -592,7 +606,7 @@ func newConfigFlattenCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command 
 	return cmd
 }
 
-func newConfigExpandCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newFactoryConfigExpandCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := configcli.FactoryConfigExpandConfig{}
 
 	cmd := &cobra.Command{
