@@ -1652,6 +1652,69 @@ func TestFactoryService_WriteJavaScriptFactorySessionRecording_UsesProductionRec
 	}
 }
 
+func TestFactoryService_PortableReplayRestoresTerminalPublicReadsWithoutLiveExecution(t *testing.T) {
+	for _, tc := range []struct {
+		name, status, resultStatus string
+		failure                    *recording.FailureSummary
+	}{
+		{name: "completed", status: "SUCCEEDED", resultStatus: "FINAL"},
+		{name: "failed", status: "FAILED", resultStatus: "FAILED_WITH_PARTIAL", failure: &recording.FailureSummary{Reason: "WORKFLOW_FAILED", Message: "safe failure", PartialResultAvailable: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.json")
+			value, err := recording.Build(recording.CanonicalFacts{
+				SessionID: "session-replayed", Status: tc.status, OrchestratorKind: "JAVASCRIPT",
+				SourceRef: "workflow.js", SourceHash: "sha256:" + strings.Repeat("a", 64),
+				PolicyHash: "sha256:" + strings.Repeat("b", 64), Arguments: map[string]any{"topic": "safe"},
+				Artifacts: []recording.CanonicalArtifact{{ID: "artifact-result", Kind: "RESULT", Visibility: "PUBLIC", ContentHash: "sha256:" + strings.Repeat("c", 64), SizeBytes: 16, CreatedAt: time.Date(2026, 7, 12, 18, 0, 1, 0, time.UTC)}},
+				Events:    []json.RawMessage{json.RawMessage(`{"id":"event-terminal","type":"SESSION_COMPLETED","context":{"sequence":0,"eventTime":"2026-07-12T18:00:01Z"},"payload":{"artifactIds":["artifact-result"]}}`)},
+				Result:    &recording.CanonicalResult{Status: tc.resultStatus, Mode: map[bool]string{true: "partial", false: "final"}[tc.failure != nil], PrimaryResult: json.RawMessage(`{"answer":"recorded"}`), ArtifactIDs: []string{"artifact-result"}, Failure: tc.failure},
+			})
+			if err != nil {
+				t.Fatalf("Build recording: %v", err)
+			}
+			if err := recording.Write(path, value); err != nil {
+				t.Fatalf("Write recording: %v", err)
+			}
+
+			provider := &countingReplayProvider{}
+			svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{ReplayPath: path, Dir: t.TempDir(), SystemConfigPath: filepath.Join(t.TempDir(), "config.json"), ProviderOverride: provider})
+			if err != nil {
+				t.Fatalf("BuildFactoryService: %v", err)
+			}
+			if err := svc.Run(context.Background()); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			session, err := svc.GetDurableFactorySession(context.Background(), "session-replayed")
+			if err != nil || string(session.Status) != tc.status {
+				t.Fatalf("session = %#v, %v", session, err)
+			}
+			result, err := svc.GetDurableFactorySessionResult(context.Background(), "session-replayed", factoryapi.GetFactorySessionResultsParams{})
+			if err != nil || string(result.ResultStatus) != tc.resultStatus {
+				t.Fatalf("result = %#v, %v", result, err)
+			}
+			events, err := svc.ReadDurableFactorySessionEvents(context.Background(), "session-replayed", factoryapi.GetEventsBySessionIdParams{})
+			if err != nil || len(events.History) != 1 {
+				t.Fatalf("events = %#v, %v", events, err)
+			}
+			artifacts, err := svc.ListDurableFactorySessionArtifacts(context.Background(), "session-replayed")
+			if err != nil || len(artifacts.Artifacts) != 1 {
+				t.Fatalf("artifacts = %#v, %v", artifacts, err)
+			}
+			if provider.calls.Load() != 0 {
+				t.Fatalf("live provider calls = %d", provider.calls.Load())
+			}
+		})
+	}
+}
+
+type countingReplayProvider struct{ calls atomic.Int32 }
+
+func (p *countingReplayProvider) Infer(context.Context, interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	p.calls.Add(1)
+	return interfaces.InferenceResponse{}, errors.New("live provider must not be used during recording replay")
+}
+
 func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHandshakeSnapshotToken(t *testing.T) {
 	startedAt := time.Date(2026, 6, 27, 8, 0, 0, 0, time.UTC)
 	factoryCfg := &interfaces.FactoryConfig{

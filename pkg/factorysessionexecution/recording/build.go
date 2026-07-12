@@ -1,6 +1,7 @@
 package recording
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -82,11 +83,19 @@ func Build(facts CanonicalFacts) (Recording, error) {
 			Failure:       facts.Result.Failure, Availability: facts.Result.Availability,
 		}
 		if len(value.Result.PrimaryResult) > 0 {
-			digest := sha256.Sum256(value.Result.PrimaryResult)
+			digest := sha256.Sum256(compactJSON(value.Result.PrimaryResult))
 			value.Result.ContentHash = "sha256:" + hex.EncodeToString(digest[:])
 		}
 	}
 	return value, Validate(value)
+}
+
+func compactJSON(value json.RawMessage) []byte {
+	var compacted bytes.Buffer
+	if err := json.Compact(&compacted, value); err != nil {
+		return value
+	}
+	return compacted.Bytes()
 }
 
 func digestCanonicalJSON(value map[string]any) (string, error) {

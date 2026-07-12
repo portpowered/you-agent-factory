@@ -3,7 +3,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -26,6 +28,8 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -43,6 +47,72 @@ import (
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
+
+// FactoryConfigLoadResult carries factory config load outputs needed before runtime construction.
+type FactoryConfigLoadResult struct {
+	LoadedFactoryCfg *factoryconfig.LoadedFactoryConfig
+	ReplayArtifact   *interfaces.ReplayArtifact
+	RecordingReplay  *recordingreplay.RecordingReplayProjection
+	SessionLogger    *zap.Logger
+}
+
+// LoadFactoryConfigForCompose loads factory.json or a portable recording for wire composition.
+func LoadFactoryConfigForCompose(cfg *FactoryServiceConfig, root FactoryServiceRoot) (FactoryConfigLoadResult, error) {
+	logger := runtimebuild.NewSessionLogger(root.BaseLogger, defaultFactorySessionID, root.FactoryRootDir, cfg.Dir)
+	if result, portable, err := portableReplayLoadResult(cfg, FactoryConfigLoadResult{SessionLogger: logger}); portable {
+		return result, err
+	}
+	loaded, artifact, err := loadFactoryConfigForService(cfg, logger)
+	if err != nil {
+		return FactoryConfigLoadResult{}, err
+	}
+	return FactoryConfigLoadResult{LoadedFactoryCfg: loaded, ReplayArtifact: artifact, SessionLogger: logger}, nil
+}
+
+func portableReplayLoadResult(cfg *FactoryServiceConfig, result FactoryConfigLoadResult) (FactoryConfigLoadResult, bool, error) {
+	if cfg.ReplayPath == "" {
+		return result, false, nil
+	}
+	projection, portable, err := loadPortableRecordingReplay(cfg.ReplayPath)
+	if err != nil {
+		return FactoryConfigLoadResult{}, true, fmt.Errorf("load portable replay: %w", err)
+	}
+	result.RecordingReplay = projection
+	return result, portable, nil
+}
+
+func loadPortableRecordingReplay(path string) (*recordingreplay.RecordingReplayProjection, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false, fmt.Errorf("read replay recording: %w", err)
+	}
+	var header struct {
+		RecordingKind string `json:"recordingKind"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil || header.RecordingKind != recording.KindJavaScriptFactorySession {
+		return nil, false, nil
+	}
+	value, err := recording.DecodeAndValidate(bytes.NewReader(data))
+	if err != nil {
+		return nil, true, err
+	}
+	projection, err := recordingreplay.ReplayRecording(value)
+	if err != nil {
+		return nil, true, err
+	}
+	return &projection, true, nil
+}
+
+func composePortableReplayCore(cfg *FactoryServiceConfig, root FactoryServiceRoot, collaborators FactoryServiceCollaborators, load FactoryConfigLoadResult, clock factory.Clock, hosted hostedworkers.Config) (*FactoryCore, bool) {
+	if load.RecordingReplay == nil {
+		return nil, false
+	}
+	return &FactoryCore{
+		cfg: cfg, root: root, collaborators: collaborators, hostedWorkers: hosted,
+		clock: clock, logger: load.SessionLogger, modelAssets: collaborators.LocalModels.Assets,
+		durableExecution: recordingreplay.NewService(*load.RecordingReplay),
+	}, true
+}
 
 // NewWorkersSchedulerService constructs the worker-sidecar owner at the
 // runtime composition boundary. Watcher paths must only use this initialized

@@ -142,7 +142,7 @@ func validateResult(r Recording) error {
 		if !json.Valid(result.PrimaryResult) {
 			return diagnostic(CodeInvalidSummary, "result", "result.primaryResult", "must be valid JSON")
 		}
-		digest := sha256.Sum256(result.PrimaryResult)
+		digest := sha256.Sum256(compactJSON(result.PrimaryResult))
 		if result.ContentHash != "sha256:"+hex.EncodeToString(digest[:]) {
 			return diagnostic(CodeInvalidDigest, "result", "result.contentHash", "does not match primaryResult")
 		}
