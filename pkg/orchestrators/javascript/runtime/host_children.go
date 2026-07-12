@@ -145,11 +145,12 @@ func (g *runtimeGlobals) hostParallel(call goja.FunctionCall) goja.Value {
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
-	if err := g.denyChildSlots(len(items)); err != nil {
+	dispatchableCount := g.normalizeParallelAgentSpecs(items)
+	if err := g.denyChildSlots(dispatchableCount); err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
-	concurrency := g.effectiveParallelConcurrency(len(items))
+	concurrency := g.effectiveParallelConcurrency(dispatchableCount)
 	results, err := g.executeParallel(items, concurrency)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
@@ -220,18 +221,14 @@ func (g *runtimeGlobals) effectiveParallelConcurrency(itemCount int) int {
 	return concurrency
 }
 
-func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) ([]any, error) {
-	results := make([]any, len(items))
-	if len(items) == 0 {
-		return results, nil
-	}
-
-	// Normalize every object spec before functions can launch child work or the
-	// runtime can reserve dispatch identities. Dynamically constructed objects
-	// cannot be proven safe by source validation, so this is the common
-	// pre-dispatch contract boundary for parallel object specs.
+// normalizeParallelAgentSpecs applies the runtime child contract before policy
+// accounts for dispatchable parallel work. Invalid object specs remain in the
+// result set as failures, but do not consume fanout budget or dispatch identity.
+func (g *runtimeGlobals) normalizeParallelAgentSpecs(items []parallelItem) int {
+	dispatchableCount := 0
 	for index := range items {
-		if items[index].kind != parallelItemAgentSpec {
+		if items[index].kind == parallelItemFunction {
+			dispatchableCount++
 			continue
 		}
 		items[index].request, items[index].requestValidation = childExecutionRequestFromSpec(
@@ -240,6 +237,17 @@ func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) 
 			g.argsSubject(),
 			g.agents,
 		)
+		if items[index].requestValidation == nil {
+			dispatchableCount++
+		}
+	}
+	return dispatchableCount
+}
+
+func (g *runtimeGlobals) executeParallel(items []parallelItem, concurrency int) ([]any, error) {
+	results := make([]any, len(items))
+	if len(items) == 0 {
+		return results, nil
 	}
 
 	specItems := make([]parallelItem, 0, len(items))
