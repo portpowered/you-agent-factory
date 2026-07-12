@@ -316,11 +316,7 @@ function recordCheckpointIdentityMismatch(
 function persistenceScopeFromTimelineIdentity(
   identity: TimelineCheckpointStreamIdentity,
 ): SessionPersistenceIdentityScope {
-  return {
-    backendScopeID: identity.backendScopeID,
-    factorySessionID: identity.factorySessionID,
-    streamGenerationID: identity.streamGenerationID,
-  };
+  return identity;
 }
 
 function checkpointStorageKey(
