@@ -135,6 +135,9 @@ type RunConfig struct {
 	// invocations. Empty uses the primary-result-only contract; response-stream
 	// attaches to internal SessionResponseStream progress when available.
 	InvocationOutputMode string
+	// InvocationArtifactOutputPath requests that a packaged invocation write its
+	// generated artifact at this path instead of printing metadata to stdout.
+	InvocationArtifactOutputPath string
 	// InvocationMetricsRecorder receives invocation counter emissions from the
 	// CLI boundary, including pre-runtime source conflicts.
 	InvocationMetricsRecorder service.InvocationMetricsRecorder

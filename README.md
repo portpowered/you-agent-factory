@@ -5,29 +5,33 @@
 [![Go Version](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE.md)
 
-**you-agent-factory** is an AI agent factory for scheduling and orchestrating concurrent AI work—the `you` CLI and dashboard let you run many agents at once instead of babysitting each task manually.
+**you-agent-factory** gives a job to a team of AI helpers. The helpers can work at the same time, so you do not have to wait for one before starting another.
 
-![you-agent-factory dashboard showing concurrent agent workstations, live work routing, and factory flow status](./docs/internal/resources/dashboard.png)
+![The you-agent-factory dashboard](./docs/internal/resources/dashboard.png)
 
-## Why?
+## What does it do?
 
-Leverage.
+Think of it as a small factory for AI work. You pick the steps. The factory sends each job to a helper.
 
-With **you-agent-factory**, you codify your process into a workflow with different `AGENTS.md` files and run them as wrappers around OpenAI Codex or other agent backends.
+It works with OpenAI Codex, Claude, and your own command-line helpers.
 
-For example:
+It can help you:
 
-- dispatch many agents to run independently in separate worktrees
-- have one agent loop through a series of tasks, then route output to a reviewer that re-queues failed work
-- submit plans in dependency order
-- use cron triggers to autonomously inspect git tasks and drive write/review cycles
+- run many helpers at once
+- ask another helper to check the work
+- try again if something needs fixing
+- start jobs at a set time
 
 ## Installation
 
 ### Prerequisites
 
-- **[Codex CLI](https://developers.openai.com/codex/cli)** (default agent backend for the starter factory): `npm i -g @openai/codex`
-- A project directory where you want the local `factory/` scaffold to live
+- A project folder
+- The **[Codex CLI](https://developers.openai.com/codex/cli)**. Install it with:
+
+  ```sh
+  npm i -g @openai/codex
+  ```
 
 ### Install the `you` CLI
 
@@ -43,74 +47,75 @@ curl -fsSL https://github.com/portpowered/you-agent-factory/releases/latest/down
 irm https://github.com/portpowered/you-agent-factory/releases/latest/download/install.ps1 | iex
 ```
 
-For custom install locations or pinned versions, see the [install script](./scripts/install.sh).
-
 ## Quick start
+#### Basic
 
-The default path uses the Codex-backed starter scaffold:
-
-1. `cd your-project-directory`
-2. Run `you` — bootstraps `./factory`, starts the runtime, and prints the dashboard URL (usually `http://localhost:7437/dashboard/ui`)
-3. Submit a task from the dashboard (for example, “write a report on my codebase to TEST.md”) and wait for completion
-
-For factory authoring, CLI topics, and advanced setup, see [Authoring factories](./docs/reference/authoring-factories.md) and [`you docs`](./docs/reference/README.md).
-
-### Alternate executor: Claude
-
-To scaffold a factory with Claude as the starter worker instead of Codex:
-
-```sh
-you init --executor claude --dir my-factory
-you docs workstation
 ```
+you run --named "@you/goal" --default-worker-model-provider "codex"  "go update my readme for me to be more emoji like"
+```
+
+#### Complex
+Open a terminal in the project you want help with:
+
+1. Go to the project: `cd your-project-directory`
+2. Start the factory: `you`
+3. Open the link it shows. It is usually `http://localhost:7437/dashboard/ui`.
+4. Give it a job. For example: “Write a report about my code in `TEST.md`.”
 
 ## Features
 
-you-agent-factory is a factory runtime: you define how work moves between workstations, and the `you` CLI plus dashboard schedule concurrent agent runs against that flow.
 
-- **Concurrent agent execution** — Run many agents at once across workstations; the dashboard shows live routing, session status, and factory flow state.
-- **Workflow customization** — Model processes as config (`factory.json`, workstation routes, `AGENTS.md`) instead of a fixed pipeline; adapt write/review loops, cron triggers, git worktrees, or other patterns to your repo.
-- **Review loops** — Route completed work to reviewer workstations and re-queue failed items; shipped factories such as Ralph and writer-reviewer demonstrate iterative plan/code/review cycles.
-- **Batch submission** — Submit single items from the CLI (`you submit`) or drive larger inputs through batch work types and dashboard submission.
-- **Example factories** — Load starter and advanced factories from [`examples/factories/`](./examples/factories/) in the dashboard, or scaffold your own with `you init`.
+### Tools
+1. graph orchestration: use `you` to run multiple agents in a graph, so that you can have agents hand off work from one point to another. 
+2. dynamic javascript orchestration: use `you` to run javascript based custom workflows that chain agents together. 
+3. cross harness interop: use `you` across a variety of agent harnesses including codex, cursor, claude, opencode, pi kiro, antigravity, and others.
+4. website visualization and configuration management. use the `you` self hosted website to control a view of all your work in progress.
+5. command line: use `you` cli to create and spawn independent factories of agents from the command line. manage factories from the command line. 
 
-Deeper product documentation:
 
-- [Authoring factories](./docs/reference/authoring-factories.md) — factory topology, workstations, workers, and customization workflow
-- [CLI reference topics](./docs/reference/README.md) — `you docs <topic>` for config, work, sessions, workstations, and related guides
-- [Architecture overview](./docs/architecture/architecture.md) and [data model](./docs/architecture/data-model.md) — how factories, work, and runtime state fit together
-- [Runnable examples](./examples/) — example factory directories and mock-worker inputs under `docs/examples/`
+### Complex graph support
 
-## Comparison
+you agent factory supports a very complex comes with support for
 
-How **you-agent-factory** fits next to nearby agent and workflow orchestrators. Dimensions focus on execution model, workflow flexibility, agent-harness support, and operational weight—not “best tool” claims. For a longer maintainer write-up, see [Comparing orchestration systems](./docs/comparatives/comparing-systems.md).
+1. interactive replay of events over time, see where things fail and what happened
+2. parallel session support, run multiple factories in different folders at the same time
+3. scripts and agents, use scripts when you want deterministic logic and agents for when you want flexibility. 
+4. split and merge. you agent factories, lets work to merge and split to make really complex workflows happen. 
+5. ticket based. you agent factory lets you create tickets in linear and github and poll them for work. 
+6. crons. you agent factory lets you create crons to trigger work at bespoke timing. 
+7. 
 
-| System | Execution model | Workflow shape | Agent harness | Durability / ops weight | Reference |
-| --- | --- | --- | --- | --- | --- |
-| **you-agent-factory** | Self-hosted `you` runtime and dashboard route work through factory workstations | Custom in-repo flow (`factory.json`, `AGENTS.md`, routes) without a fixed pipeline | Codex, Claude, and shell workers wired through factory config | Lightweight local runtime; no built-in durable workflow engine | [Architecture](./docs/architecture/architecture.md) · [Comparing systems](./docs/comparatives/comparing-systems.md) |
-| **[Gastown](https://github.com/steveyegge/gastown)** | Mayor-led multi-agent workspace with git-backed hooks and worktrees | Opinionated mayor/beads/convoy coordination around git | Hooks inject context into Claude Code, Copilot, Codex, and peers | Git/worktree persistence; heavier git + beads/dolt stack | [Gastown](https://github.com/steveyegge/gastown) |
-| **[Symphony](https://github.com/openai/symphony)** | Long-running orchestrator polls issue trackers and runs per-issue workspaces | Policy in-repo (`WORKFLOW.md`); spec-driven daemon workflow | Codex app-server sessions in isolated workspaces | Elixir daemon with supervision/retries; tracker-centric | [Symphony](https://github.com/openai/symphony) |
-| **[Factory](https://factory.ai/)** | Droid Missions orchestrator with Mission Control for multi-day projects | Milestone/feature decomposition with validation contracts | Droid workers with MCP, skills, hooks, and custom droids | Productized orchestration with milestone validation loops | [Factory Missions](https://docs.factory.ai/cli/features/missions) |
-| **[8090 Software Factory](https://www.8090.ai/software-factory)** | Hosted SDLC control plane (requirements → blueprints → work orders) | Upstream planning modules feed agents through MCP-connected work orders | External agents (Cursor, Claude Code, etc.) via MCP | Cloud platform with knowledge graph and audit trail | [8090 docs](https://www.8090.ai/docs/general/introduction) |
-| **[Claude workflow plugins](https://github.com/sighup/claude-workflow)** | In-IDE Claude Code skills/commands drive spec → plan → execute loops | Plugin-defined task graphs, parallel dispatch, and worktrees | Native Claude Code subagents and skills | Session/task files on disk; no separate orchestration server | [sighup/claude-workflow](https://github.com/sighup/claude-workflow) |
-| **Other orchestrators** ([Temporal](https://temporal.io/), [n8n](https://n8n.io/), [DBOS](https://www.dbos.dev/)) | General-purpose durable or RPA workflow engines | DAG/state-machine or node graphs; often code- or node-config driven | Agent harnesses typically custom-built | Strong durability/transactions; heavier for ad-hoc agent loops | [Comparing systems](./docs/comparatives/comparing-systems.md) |
+### Harness support
+
+### packaged factories
+
+You comes with some packaged factories that customers can use by default: 
+
+1. `@you/goal` lets customers run a command forever, until the agent feels its complete. 
+2. `@you/subagent` lets customers run against any harness with the same `you` CLI shell and have support for worktrees, skip permissions
+3. `@you/meta` runs the same type of factory as the you-agent-factory. it takes in an idea, converts into a big plan, creates lots of separate agents, and merges them to completion in github. 
+4. `@you/tts` runs a local tts model to convert some text into audio
+5. `@you/loop` runs a session that repeats a command every X hours.
+6. `@you/fusion` lets you have one agent do something, and then have another agent review the results
+7. `@you/reviewer` lets you have one agent do something, and have another agent review the results until it completes.
+8. `@you/ralph` converts your ask into a plan, and has the agent repeat until the plan is complete. 
+
+## Make it your own
+
+Choose where work goes next. For example: a writer works first, a reviewer checks it, then the writer fixes any problems.
+
+Start with an [example factory](./examples/), or make your own with `you init`. You can give helpers rules in `AGENTS.md` and change the steps in `factory.json`.
 
 ## References
 
-- [Comparing orchestration systems](./docs/comparatives/comparing-systems.md) — background on how you-agent-factory relates to nearby agent and workflow tools
-- [Authoring factories](./docs/reference/authoring-factories.md) — primary guide for defining and running factories
-- [CLI reference index](./docs/reference/README.md) — packaged `you docs` topics and links to customer-facing guides
-- [Work submission](./docs/reference/work.md) — `you submit`, batch inputs, and dashboard submission
-- [Factory CLI](./docs/reference/config.md) — `you factory query`, save/list/update, and runtime factory management
-- [Architecture](./docs/architecture/architecture.md) and [data model](./docs/architecture/data-model.md) — factory execution model and persisted state
-- [The zen of flow](./docs/reference/the-zen-of-flow.md) — design notes on work routing and factory composition
-- [Example factories](./examples/factories/) — drag-and-drop starter flows (doc reviewer, Ralph, timer, worktree, writer reviewer, and more)
-- [Dashboard demo](./docs/internal/resources/dashboard.gif) — animated view of concurrent agent dispatch
+- [Make your own factory](./docs/reference/authoring-factories.md)
+- [Command-line help](./docs/reference/README.md)
+- [How it works](./docs/architecture/architecture.md)
 
-Maintainers: edit packaged reference docs under [`docs/reference/`](./docs/reference/README.md); run `make docs-reference-smoke` before shipping doc changes and `make readme-check` before changing README structure or linked assets.
+## Comparison
+
+Want to see how it compares with other tools? Read the [comparison](./docs/comparatives/comparing-systems.md).
 
 ## License
 
 This repository is released under the [MIT License](./LICENSE.md).
-
-The README hero image (`docs/internal/resources/dashboard.png`) and the animated demo (`docs/internal/resources/dashboard.gif`) are screenshots maintained in this repository and depict the you-agent-factory dashboard UI.

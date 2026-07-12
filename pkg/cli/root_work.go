@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
@@ -11,6 +12,7 @@ import (
 	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/spf13/cobra"
 )
 
@@ -57,12 +59,17 @@ func applyRunCommandInvocationOutputMode(cmd *cobra.Command, cfg *runcli.RunConf
 	if !cmd.Flags().Changed("output") {
 		return nil
 	}
-	normalized, err := runcli.NormalizeInvocationOutputMode(cmd.Flag("output").Value.String())
-	if err != nil {
-		return err
+	raw := strings.TrimSpace(cmd.Flag("output").Value.String())
+	normalized, err := runcli.NormalizeInvocationOutputMode(raw)
+	if err == nil {
+		cfg.InvocationOutputMode = normalized
+		return nil
 	}
-	cfg.InvocationOutputMode = normalized
-	return nil
+	if strings.TrimSpace(cfg.NamedFactoryName) == tts.PackagedFactoryName && raw != "" {
+		cfg.InvocationArtifactOutputPath = raw
+		return nil
+	}
+	return err
 }
 
 func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, cfg *runcli.RunConfig) ([]string, runcli.RunConfig, error) {
@@ -129,7 +136,7 @@ func registerRunCommandFlags(cmd *cobra.Command, cfg *runcli.RunConfig, invocati
 	cmd.Flags().StringVar(&cfg.MockWorkersConfigPath, "with-mock-workers", "", "enable mock-worker execution with an optional mock-workers JSON config path")
 	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
 	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
-	cmd.Flags().StringVar(invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream for live internal session progress on supported one-shot factory runs")
+	cmd.Flags().StringVar(invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream; @you/tts also accepts an output audio file path")
 }
 
 func runCommandLongHelp() string {

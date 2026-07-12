@@ -288,10 +288,7 @@ type OmniVoiceInvocationPayload struct {
 }
 
 func NewOmniVoiceRuntime(runner workers.CommandRunner) Runtime {
-	if runner == nil {
-		runner = workers.ExecCommandRunner{}
-	}
-	return &omniVoiceLocalRuntime{runner: runner}
+	return newOmniVoiceRuntime(runner)
 }
 
 func (r *omniVoiceLocalRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {

@@ -98,6 +98,20 @@ func TestResolveAPITextInputContent_RejectsWhitespaceOnlyJoinedParts(t *testing.
 	assertInputEmptyError(t, err, InputSourcePositionalText)
 }
 
+func TestResolveAPITextInputContent_PreservesSingleTextPartMetadata(t *testing.T) {
+	got, err := ResolveAPITextInputContent([]interfaces.WorkContentPart{{
+		Type:     interfaces.WorkContentPartTypeText,
+		Text:     "hello",
+		Metadata: map[string]any{"reference": "voice.wav"},
+	}})
+	if err != nil {
+		t.Fatalf("ResolveAPITextInputContent: %v", err)
+	}
+	if len(got.Content) != 1 || got.Content[0].Metadata["reference"] != "voice.wav" {
+		t.Fatalf("content = %#v, want preserved metadata", got.Content)
+	}
+}
+
 func assertInputEmptyError(t *testing.T, err error, wantSource InputSourceLabel) {
 	t.Helper()
 

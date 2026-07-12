@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
@@ -484,12 +486,51 @@ func writeInvocationSuccess(
 	if err != nil {
 		return err
 	}
+	if outputPath := strings.TrimSpace(cfg.InvocationArtifactOutputPath); outputPath != "" {
+		return writeInvocationArtifact(text, outputPath)
+	}
 	output := cfg.Output
 	if output == nil {
 		output = os.Stdout
 	}
 	_, err = fmt.Fprint(output, text)
 	return err
+}
+
+func writeInvocationArtifact(primaryResult, outputPath string) error {
+	var metadata tts.InvocationMetadata
+	if err := json.Unmarshal([]byte(primaryResult), &metadata); err != nil {
+		return fmt.Errorf("decode invocation artifact metadata: %w", err)
+	}
+	sourcePath := strings.TrimSpace(metadata.ArtifactPath)
+	if sourcePath == "" {
+		return fmt.Errorf("invocation artifact metadata does not include artifactPath")
+	}
+	return copyInvocationArtifact(sourcePath, outputPath)
+}
+
+func copyInvocationArtifact(sourcePath, outputPath string) error {
+	input, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("open invocation artifact %q: %w", sourcePath, err)
+	}
+	defer input.Close()
+
+	outputDir := filepath.Dir(outputPath)
+	if outputDir != "." {
+		if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			return fmt.Errorf("create invocation artifact output directory: %w", err)
+		}
+	}
+	output, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("create invocation artifact output %q: %w", outputPath, err)
+	}
+	defer output.Close()
+	if _, err := io.Copy(output, input); err != nil {
+		return fmt.Errorf("write invocation artifact output %q: %w", outputPath, err)
+	}
+	return nil
 }
 
 func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResult) error {

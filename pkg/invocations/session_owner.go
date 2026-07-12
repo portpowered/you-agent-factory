@@ -223,7 +223,11 @@ func resolveStructuredSessionInvocationInput(
 	if normalized.CompatibilityInput != nil {
 		source = normalized.CompatibilityInput.Source
 	}
-	return ResolvedSessionInvocationInput{Source: source, NormalizedArguments: &normalized}, nil
+	materialized, err := ContentFromNormalizedArguments(signature, &normalized)
+	if err != nil {
+		return ResolvedSessionInvocationInput{}, err
+	}
+	return ResolvedSessionInvocationInput{Source: source, Content: materialized, NormalizedArguments: &normalized}, nil
 }
 
 func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest) ([]interfaces.WorkContentPart, error) {

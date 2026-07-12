@@ -96,6 +96,62 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	}
 }
 
+func TestWorkstationExecutor_LogsFailedExecutorResultReason(t *testing.T) {
+	logger := &workstationResultLogger{}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {Type: interfaces.WorkerTypeModel},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {Type: interfaces.WorkstationTypeModel},
+			},
+		},
+		&wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeFailed, Error: "local runtime is unavailable"}},
+	)
+	we.Logger = logger
+
+	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID: "dispatch-failed", TransitionID: "transition-failed", WorkerType: "worker-a", WorkstationName: "standard",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := logger.field("workstation: executor result", "error"); got != "local runtime is unavailable" {
+		t.Fatalf("failed executor log error = %q, want local runtime failure", got)
+	}
+}
+
+type workstationResultLogger struct{ entries []workstationResultLogEntry }
+
+type workstationResultLogEntry struct {
+	message string
+	fields  []any
+}
+
+func (l *workstationResultLogger) Debug(string, ...any)   {}
+func (l *workstationResultLogger) Warn(string, ...any)    {}
+func (l *workstationResultLogger) Error(string, ...any)   {}
+func (l *workstationResultLogger) Verbose(string, ...any) {}
+func (l *workstationResultLogger) Info(message string, fields ...any) {
+	l.entries = append(l.entries, workstationResultLogEntry{message: message, fields: fields})
+}
+
+func (l *workstationResultLogger) field(message, key string) string {
+	for _, entry := range l.entries {
+		if entry.message != message {
+			continue
+		}
+		for index := 0; index+1 < len(entry.fields); index += 2 {
+			if entry.fields[index] == key {
+				value, _ := entry.fields[index+1].(string)
+				return value
+			}
+		}
+	}
+	return ""
+}
+
 func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t *testing.T) {
 	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(

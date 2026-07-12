@@ -2,6 +2,7 @@ package models
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,6 +15,10 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 )
 
 func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
@@ -260,18 +265,13 @@ func TestInvoke_AudioUnreachableUsesEndpointMessage(t *testing.T) {
 }
 
 func TestPull_ClassifiedFailureReturnsManagedRuntimeOutcome(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnprocessableEntity)
-		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"","cachePath":"","revision":"","downloadedFiles":[],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"SOURCE_FETCH_FAILED","readinessState":"FAILED"}}`)
-	}))
-	defer server.Close()
-
 	var out bytes.Buffer
 	err := Pull(PullConfig{
-		ModelName: "OMNIVOICE_Q4_K_M",
-		Server:    strings.TrimSuffix(server.URL, "/"),
-		JSON:      true,
-		Output:    &out,
+		ModelName:     "OMNIVOICE_Q4_K_M",
+		JSON:          true,
+		Output:        &out,
+		runtimeConfig: directPullRuntimeConfig(t),
+		assetPuller:   directPullTestAssetPuller{err: apisurface.ErrManagedRuntimeSourceFetchFailed},
 	})
 	if err == nil {
 		t.Fatal("expected classified pull failure error")
@@ -289,24 +289,20 @@ func TestPull_ClassifiedFailureReturnsManagedRuntimeOutcome(t *testing.T) {
 }
 
 func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
-			t.Fatalf("path = %q, want pull path", r.URL.Path)
-		}
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want POST", r.Method)
-		}
-		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/OMNIVOICE_Q4_K_M/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
-	}))
-	defer server.Close()
-
-	serverBase := strings.TrimSuffix(server.URL, "/")
 	var out bytes.Buffer
 	if err := Pull(PullConfig{
-		ModelName: "OMNIVOICE_Q4_K_M",
-		Server:    serverBase,
-		JSON:      true,
-		Output:    &out,
+		ModelName:     "OMNIVOICE_Q4_K_M",
+		JSON:          true,
+		Output:        &out,
+		runtimeConfig: directPullRuntimeConfig(t),
+		assetPuller: directPullTestAssetPuller{result: apisurface.ModelPullResult{
+			ModelName:        "OMNIVOICE_Q4_K_M",
+			ProviderLocality: "LOCAL",
+			Outcome:          "PULLED",
+			CachePath:        "/tmp/models/OMNIVOICE_Q4_K_M/rev1",
+			Revision:         "rev1",
+			DownloadedFiles:  []apisurface.ModelPullDownloadedFile{{Path: "omnivoice-base-Q4_K_M.gguf", Bytes: 407}},
+		}},
 	}); err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
@@ -381,7 +377,13 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 	if err := Invoke(InvokeConfig{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS", Text: "secret direct input", Server: serverBase, JSON: true, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
-	if err := Pull(PullConfig{ModelName: "OMNIVOICE_Q4_K_M", Server: serverBase, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+	if err := Pull(PullConfig{ModelName: "OMNIVOICE_Q4_K_M", Output: io.Discard, Verbose: true, Diagnostics: &diagnostics,
+		runtimeConfig: directPullRuntimeConfig(t),
+		assetPuller: directPullTestAssetPuller{result: apisurface.ModelPullResult{
+			ModelName: "OMNIVOICE_Q4_K_M", ProviderLocality: "LOCAL", Outcome: "PULLED",
+			DownloadedFiles: []apisurface.ModelPullDownloadedFile{{Path: "omnivoice-base-Q4_K_M.gguf", Bytes: 407}},
+		}},
+	}); err != nil {
 		t.Fatalf("Pull: %v", err)
 	}
 
@@ -393,7 +395,7 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		"models invoke request",
 		"operation=\"TTS\"",
 		"worker=tts-worker",
-		"models pull request",
+		"models pull direct",
 		"pullOutcome=INSTALLED_SUCCESSFULLY",
 		"readiness=READY",
 		"downloadedFiles=1",
@@ -406,6 +408,36 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 	if got := inspectRequests.Load(); got != 1 {
 		t.Fatalf("inspect requests = %d, want 1", got)
 	}
+}
+
+func directPullRuntimeConfig(t *testing.T) *factoryconfig.LoadedFactoryConfig {
+	t.Helper()
+	loaded, err := factoryconfig.LoadFromCanonicalJSON(factoryconfig.BuiltInTTSFactoryJSON, nil)
+	if err != nil {
+		t.Fatalf("load direct-pull runtime config: %v", err)
+	}
+	return loaded
+}
+
+type directPullTestAssetPuller struct {
+	result apisurface.ModelPullResult
+	err    error
+}
+
+func (p directPullTestAssetPuller) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (apisurface.ModelPullResult, error) {
+	return p.result, p.err
+}
+
+func (directPullTestAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+	return nil
+}
+
+func (directPullTestAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+	return localmodels.CacheLayout{}, nil
+}
+
+func (directPullTestAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
+	return localmodels.RuntimeCacheInspection{Supported: true, Installed: true}, nil
 }
 
 func TestModelsVerboseFailureUsesBoundedNonJSONErrorPreview(t *testing.T) {

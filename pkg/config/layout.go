@@ -1231,6 +1231,31 @@ var BuiltInFusionFactoryJSON = []byte(`{
 var BuiltInTTSFactoryJSON = []byte(`{
   "name": "@you/tts",
   "id": "builtin-tts",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "text",
+        "description": "Text to synthesize.",
+        "required": true,
+        "bindings": [{"kind": "POSITIONAL", "position": 1}]
+      },
+      {
+        "name": "reference_audio",
+        "externalName": "ref-wav",
+        "description": "Optional WAV reference for voice cloning; requires --ref-text.",
+        "typeHint": "FILE_PATH",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "reference_text",
+        "externalName": "ref-text",
+        "description": "Transcript file for --ref-wav.",
+        "typeHint": "FILE_PATH",
+        "valueMode": "FILE_CONTENTS",
+        "bindings": [{"kind": "NAMED"}]
+      }
+    ]
+  },
   "workTypes": [
     {
       "name": "task",
@@ -1267,7 +1292,9 @@ var BuiltInTTSFactoryJSON = []byte(`{
         {
           "name": "TTS",
           "inputs": [
-            {"name": "text", "contentTypes": ["TEXT"], "required": true}
+            {"name": "text", "contentTypes": ["TEXT"], "required": true},
+            {"name": "reference_audio", "contentTypes": ["AUDIO"]},
+            {"name": "reference_text", "contentTypes": ["TEXT"]}
           ],
           "outputs": [
             {"name": "audio", "contentTypes": ["AUDIO"]}
@@ -1286,7 +1313,15 @@ var BuiltInTTSFactoryJSON = []byte(`{
       "operationBindings": [
         {
           "slot": "text",
-          "selector": {"type": "TEXT"}
+          "selector": {"label": "text", "type": "TEXT"}
+        },
+        {
+          "slot": "reference_audio",
+          "selector": {"label": "reference_audio", "type": "AUDIO"}
+        },
+        {
+          "slot": "reference_text",
+          "selector": {"label": "reference_text", "type": "TEXT"}
         }
       ],
       "inputs": [
@@ -1298,7 +1333,7 @@ var BuiltInTTSFactoryJSON = []byte(`{
       "onFailure": [
         {"workType": "task", "state": "failed"}
       ],
-      "body": "Convert the requested text into speech for {{ .WorkID }}."
+      "body": "Convert the requested text into speech."
     }
   ]
 }`)

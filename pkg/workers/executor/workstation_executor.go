@@ -488,11 +488,15 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request i
 		}, nil
 	}
 
-	logger.Info("workstation: executor result",
-		WorkLogFields(request.Dispatch.Execution,
-			"transition_id", request.Dispatch.TransitionID,
-			"dispatch_id", request.Dispatch.DispatchID,
-			"outcome", result.Outcome)...)
+	resultFields := WorkLogFields(request.Dispatch.Execution,
+		"transition_id", request.Dispatch.TransitionID,
+		"dispatch_id", request.Dispatch.DispatchID,
+		"outcome", result.Outcome,
+	)
+	if result.Outcome == interfaces.OutcomeFailed && strings.TrimSpace(result.Error) != "" {
+		resultFields = append(resultFields, "error", result.Error)
+	}
+	logger.Info("workstation: executor result", resultFields...)
 	result.Metrics.Duration = time.Since(start)
 	return result, nil
 }

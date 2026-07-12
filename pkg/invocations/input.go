@@ -154,9 +154,19 @@ func ResolveAPITextInputContent(parts []interfaces.WorkContentPart) (ResolvedInp
 	}
 
 	text := strings.Join(textParts, "\n")
-	return ResolveTextInput(TextInputSources{
+	resolved, err := ResolveTextInput(TextInputSources{
 		PositionalText: &text,
 	})
+	if err != nil || len(parts) != 1 {
+		return resolved, err
+	}
+	// A single text part is already one logical input. Retain its extended
+	// fields (for example metadata) while applying the canonical text
+	// validation and source selection above.
+	part := parts[0]
+	part.Text = resolved.Text
+	resolved.Content = []interfaces.WorkContentPart{part}
+	return resolved, nil
 }
 
 func resolvedTextInput(source InputSourceLabel, text string) ResolvedInput {

@@ -1,4 +1,5 @@
 bin/
+native/omnivoice/build/
 .playwright-mcp/
 tests/adhoc/.playwright-mcp/
 .DS_Store

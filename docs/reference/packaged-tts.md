@@ -20,6 +20,39 @@ Generate speech from positional text:
 you run --named @you/tts "hi there"
 ```
 
+Write the generated WAV directly to a chosen path:
+
+```bash
+you run --named @you/tts "hello there" --output data.wav
+```
+
+Clone a voice from a reference WAV and a UTF-8 transcript file:
+
+```bash
+you run --named @you/tts "hello there" --output data.wav \
+  --ref-wav ref.wav --ref-text ref.txt
+```
+
+`--ref-wav` and `--ref-text` must be supplied together. The CLI decodes the
+reference WAV, folds it to mono, resamples it to OmniVoice's required 24 kHz,
+and passes it with the transcript to the embedded runtime.
+
+## Embedded runtime builds
+
+The default development build preserves the command-runtime compatibility path.
+Build the embedded CGO runtime explicitly with the pinned `omnivoice.cpp`
+submodule:
+
+```powershell
+make build-embedded-omnivoice OMNIVOICE_BACKEND=cpu
+make build-embedded-omnivoice OMNIVOICE_BACKEND=cuda
+```
+
+The CUDA build includes the CPU backend as a fallback. It selects an available
+GPU by default; set `GGML_BACKEND=CPU` to force CPU execution. CUDA builds need
+the CUDA toolkit and a compatible C/C++ toolchain on the build machine; end
+users need the matching NVIDIA driver, not a separate OmniVoice installation.
+
 Pipe stdin when no positional text is present:
 
 ```bash
@@ -31,9 +64,9 @@ rejected with `INVOCATION_INPUT_SOURCE_CONFLICT` before runtime work starts.
 
 ## Default invocation result
 
-Successful `@you/tts` invocations return JSON metadata on stdout, not raw audio
-bytes. The primary result is authored by the packaged factory runtime through
-the shared invocation-return contract.
+Successful `@you/tts` invocations return JSON metadata on stdout unless an
+audio output path is supplied with `--output`. The primary result is authored
+by the packaged factory runtime through the shared invocation-return contract.
 
 Typical metadata shape:
 

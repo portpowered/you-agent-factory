@@ -1036,6 +1036,33 @@ func TestRunCommand_OutputResponseStreamFlagMapsToRunConfig(t *testing.T) {
 	}
 }
 
+func TestRunCommand_TTSOutputFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run", "--named", "@you/tts", "--output", "data.wav", "hello there",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute TTS run output flag: %v", err)
+	}
+	if got.InvocationArtifactOutputPath != "data.wav" {
+		t.Fatalf("InvocationArtifactOutputPath = %q, want data.wav", got.InvocationArtifactOutputPath)
+	}
+}
+
 func TestRunCommand_WithMockWorkersFlagMapsToRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

@@ -16,9 +16,12 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 )
 
 const (
@@ -68,6 +71,11 @@ type PullConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+
+	// runtimeConfig and assetPuller keep direct pull dependencies explicit for
+	// package tests. Production callers leave both unset.
+	runtimeConfig *factoryconfig.LoadedFactoryConfig
+	assetPuller   localmodels.AssetPuller
 }
 
 func List(cfg ListConfig) error {
@@ -166,12 +174,8 @@ func Pull(cfg PullConfig) error {
 	if modelName == "" {
 		return fmt.Errorf("model name is required")
 	}
-	response, err := pullModel(pullOptions{
-		Server:      cfg.Server,
-		ModelName:   modelName,
-		Verbose:     cfg.Verbose,
-		Diagnostics: cfg.Diagnostics,
-	})
+	response, err := pullModelDirectly(context.Background(), modelName, cfg.runtimeConfig, cfg.assetPuller)
+	logDirectPull(cfg, response, err)
 	if cfg.JSON {
 		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
 			return encodeErr
@@ -184,6 +188,41 @@ func Pull(cfg PullConfig) error {
 		return nil
 	}
 	return RenderPull(response, cfg.Output)
+}
+
+func pullModelDirectly(
+	ctx context.Context,
+	modelName string,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	puller localmodels.AssetPuller,
+) (factoryapi.ModelPullResponse, error) {
+	if runtimeCfg == nil {
+		loaded, err := factoryconfig.LoadFromCanonicalJSON(factoryconfig.BuiltInTTSFactoryJSON, nil)
+		if err != nil {
+			return factoryapi.ModelPullResponse{}, fmt.Errorf("load built-in managed model catalog: %w", err)
+		}
+		runtimeCfg = loaded
+	}
+	if puller == nil {
+		puller = localmodels.NewAssetPuller("")
+	}
+
+	result, err := localmodels.PullModelWithOptions(puller, ctx, runtimeCfg, modelName, localmodels.PullOptions{
+		RuntimeCacheInspector: puller,
+		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+	})
+	return apisurface.ModelPullResponseFromService(result), err
+}
+
+func logDirectPull(cfg PullConfig, response factoryapi.ModelPullResponse, err error) {
+	if !cfg.Verbose || cfg.Diagnostics == nil {
+		return
+	}
+	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, true, "models pull direct modelName=%q outcome=%s readiness=%s error=%t", cfg.ModelName, response.ManagedRuntimePull.PullOutcome, response.ManagedRuntimePull.ReadinessState, true)
+		return
+	}
+	clidiag.Printf(cfg.Diagnostics, true, "models pull direct modelName=%q pullOutcome=%s readiness=%s downloadedFiles=%d", cfg.ModelName, response.ManagedRuntimePull.PullOutcome, response.ManagedRuntimePull.ReadinessState, len(response.DownloadedFiles))
 }
 
 type queryOptions struct {

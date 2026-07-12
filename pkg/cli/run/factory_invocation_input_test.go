@@ -25,6 +25,31 @@ func TestResolveFactoryInvocationInput_NoInputReturnsEmptyWithoutError(t *testin
 	}
 }
 
+func TestResolveSignatureFactoryInvocationInput_MaterializesNamedFileParameters(t *testing.T) {
+	signature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+		{Name: "text", Required: true, Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}}},
+		{Name: "reference_audio", ExternalName: "ref-wav", TypeHint: "FILE_PATH", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}}},
+		{Name: "reference_text", ExternalName: "ref-text", ValueMode: "FILE_CONTENTS", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}}},
+	}}
+	normalized, err := ResolveSignatureFactoryInvocationInput(SignatureFactoryInvocationInputConfig{
+		PromptArgs: []string{"hello there", "--ref-wav", "reference.wav", "--ref-text", "reference.txt"},
+		Signature:  signature,
+		StdinIsTTY: func() bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("ResolveSignatureFactoryInvocationInput: %v", err)
+	}
+	if got := normalized.Arguments["text"].Values; len(got) != 1 || got[0] != "hello there" {
+		t.Fatalf("text = %#v", got)
+	}
+	if got := normalized.Arguments["reference_audio"].Values; len(got) != 1 || got[0] != "reference.wav" {
+		t.Fatalf("reference_audio = %#v", got)
+	}
+	if got := normalized.Arguments["reference_text"].Values; len(got) != 1 || got[0] != "reference.txt" {
+		t.Fatalf("reference_text = %#v", got)
+	}
+}
+
 func TestResolveFactoryInvocationInput_PositionalOnly(t *testing.T) {
 	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
 		PromptArgs: []string{"Fix", "the", "lint", "issues"},
