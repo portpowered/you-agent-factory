@@ -114,7 +114,11 @@ primary-result behavior.
   `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
   `pkg/cli/configinit/init_test.go` / `pkg/cli/root_config_init_test.go`. Keep
   `you factory config` factory.json tooling separate from this top-level
-  operator/system initializer.
+  operator/system initializer. Post-install bootstrap is invoked from
+  `scripts/install.sh` and `scripts/install.ps1` via the installed binary's
+  `config init` subcommand; installer smoke coverage lives in
+  `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
+  / `scripts/release/smoke-install.ps1`.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
