@@ -145,7 +145,7 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 			continue
 		}
 		name := child.Name()
-		if isReservedNamedFactoryListDir(name) || isNamedFactoryStagingDir(name) {
+		if isReservedNamedFactoryListDir(name) || isNamedFactoryStagingDir(name) || isLegacyEncodedNamedFactoryLeaf(name) {
 			continue
 		}
 		factoryDir := filepath.Join(rootDir, name)
@@ -210,6 +210,10 @@ func isReservedNamedFactoryListDir(name string) bool {
 
 func isNamedFactoryStagingDir(name string) bool {
 	return strings.HasPrefix(name, ".") && strings.Contains(name, ".staging-")
+}
+
+func isLegacyEncodedNamedFactoryLeaf(name string) bool {
+	return strings.Contains(name, "%2F")
 }
 
 type namedFactoryListCollector struct {

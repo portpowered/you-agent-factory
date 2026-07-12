@@ -113,3 +113,48 @@ func TestListNamedFactories_RejectsInvalidCurrentPointer(t *testing.T) {
 		t.Fatal("expected malformed current-factory pointer to fail")
 	}
 }
+
+func TestListNamedFactories_IgnoresLegacyEncodedLeafDirectories(t *testing.T) {
+	rootDir := t.TempDir()
+
+	segment, err := NamedFactoryNameToLayoutSegment("@you/goal")
+	if err != nil {
+		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
+	}
+	encodedDir := filepath.Join(rootDir, segment)
+	if err := os.MkdirAll(encodedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(encoded legacy dir): %v", err)
+	}
+	writeRuntimeFactoryJSON(t, encodedDir, map[string]any{
+		"name":    "legacy-encoded-only",
+		"project": "legacy-encoded-only",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "legacy-executor",
+			"type": "MODEL_WORKER",
+		}},
+		"workstations": []map[string]any{{
+			"name":    "legacy-execute",
+			"worker":  "legacy-executor",
+			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "task", "state": "complete"}},
+			"type":    "MODEL_WORKSTATION",
+		}},
+	})
+
+	entries, err := ListNamedFactories(rootDir)
+	if err != nil {
+		t.Fatalf("ListNamedFactories: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.Name == "@you/goal" {
+			t.Fatalf("ListNamedFactories must ignore legacy encoded leaf, got %#v", entry)
+		}
+	}
+}
