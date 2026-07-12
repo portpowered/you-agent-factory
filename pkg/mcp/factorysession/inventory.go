@@ -12,6 +12,8 @@ const (
 	ToolInventoryFormatVersion = "1"
 	// ToolInventoryProtocolVersion pins the MCP protocol revision for inventory docs.
 	ToolInventoryProtocolVersion = "2024-11-05"
+	// ToolInventoryBaselineRelativePath is the reviewed canonical MCP tool inventory fixture.
+	ToolInventoryBaselineRelativePath = "contracts/testdata/baseline/mcp-tools.json"
 )
 
 // ToolInventory is a pure, read-only projection of canonical MCP tool identities.

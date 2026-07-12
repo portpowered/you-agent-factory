@@ -2,11 +2,13 @@ package factorysession_test
 
 import (
 	"encoding/json"
+	"os"
 	"slices"
 	"strings"
 	"testing"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestProjectToolInventory_BuildsDocumentShape(t *testing.T) {
@@ -218,6 +220,66 @@ func TestProjectToolInventory_HandlerRegisteredForCanonicalTools(t *testing.T) {
 func TestVerifyProjectedToolInventory_PassesForLiveRegistry(t *testing.T) {
 	if err := mcpfactorysession.VerifyProjectedToolInventory(); err != nil {
 		t.Fatalf("VerifyProjectedToolInventory() error = %v", err)
+	}
+}
+
+func TestBaselineFixtureMatchesProjectedInventory(t *testing.T) {
+	baselinePath := testutil.MustRepoPath(t, mcpfactorysession.ToolInventoryBaselineRelativePath)
+	baseline, err := os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatalf("read baseline fixture: %v", err)
+	}
+	projected, err := mcpfactorysession.MarshalToolInventoryJSON(mustProjectToolInventory(t))
+	if err != nil {
+		t.Fatalf("MarshalToolInventoryJSON() error = %v", err)
+	}
+	if string(baseline) != string(projected) {
+		t.Fatalf("baseline fixture differs from projected inventory:\nbaseline=%s\nprojected=%s", baseline, projected)
+	}
+}
+
+func TestBaselineFixtureMatchesDiscoverToolsRegistry(t *testing.T) {
+	baselinePath := testutil.MustRepoPath(t, mcpfactorysession.ToolInventoryBaselineRelativePath)
+	baseline, err := os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatalf("read baseline fixture: %v", err)
+	}
+	var inventory mcpfactorysession.ToolInventory
+	if err := json.Unmarshal(baseline, &inventory); err != nil {
+		t.Fatalf("unmarshal baseline fixture: %v", err)
+	}
+	if inventory.FormatVersion != mcpfactorysession.ToolInventoryFormatVersion {
+		t.Fatalf("baseline formatVersion = %q, want %q", inventory.FormatVersion, mcpfactorysession.ToolInventoryFormatVersion)
+	}
+	if inventory.ProtocolVersion != mcpfactorysession.ToolInventoryProtocolVersion {
+		t.Fatalf("baseline protocolVersion = %q, want %q", inventory.ProtocolVersion, mcpfactorysession.ToolInventoryProtocolVersion)
+	}
+	if len(inventory.Tools) != len(mcpfactorysession.DiscoverTools()) {
+		t.Fatalf("baseline tool count = %d, want %d", len(inventory.Tools), len(mcpfactorysession.DiscoverTools()))
+	}
+	if err := mcpfactorysession.VerifyToolInventory(inventory); err != nil {
+		t.Fatalf("VerifyToolInventory(baseline) error = %v", err)
+	}
+	byName := inventoryToolsByName(t, inventory)
+	for _, discovered := range mcpfactorysession.DiscoverTools() {
+		entry, ok := byName[discovered.Name]
+		if !ok {
+			t.Fatalf("baseline missing discovered tool %q", discovered.Name)
+		}
+		if entry.Description != discovered.Description {
+			t.Fatalf("baseline tool %q description = %q, want %q", discovered.Name, entry.Description, discovered.Description)
+		}
+		canonicalSchema, err := json.Marshal(entry.InputSchema)
+		if err != nil {
+			t.Fatalf("marshal baseline schema for %q: %v", discovered.Name, err)
+		}
+		sourceSchema, err := json.Marshal(discovered.InputSchema)
+		if err != nil {
+			t.Fatalf("marshal discovered schema for %q: %v", discovered.Name, err)
+		}
+		if string(canonicalSchema) != string(sourceSchema) {
+			t.Fatalf("baseline tool %q input schema differs from discovery:\nbaseline=%s\ndiscovered=%s", discovered.Name, canonicalSchema, sourceSchema)
+		}
 	}
 }
 
