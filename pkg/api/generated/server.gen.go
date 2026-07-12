@@ -733,8 +733,10 @@ const (
 // Defines values for WorkFailureType.
 const (
 	WorkFailureTypeAuthFailure         WorkFailureType = "auth_failure"
+	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
 	WorkFailureTypeInternalServerError WorkFailureType = "internal_server_error"
 	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
+	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
 	WorkFailureTypePermanentBadRequest WorkFailureType = "permanent_bad_request"
 	WorkFailureTypeThrottled           WorkFailureType = "throttled"
 	WorkFailureTypeTimeout             WorkFailureType = "timeout"

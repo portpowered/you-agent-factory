@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -140,6 +141,9 @@ func assertPortableServiceBundledFile(t *testing.T, path, want string) {
 
 func assertPortableServiceBundledFileMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {

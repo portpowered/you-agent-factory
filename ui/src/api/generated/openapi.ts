@@ -7084,6 +7084,10 @@ export const WorkFailureType = {
   WorkFailureTypeUnknown: "unknown",
   // The worker or runtime was misconfigured and requires operator intervention.
   WorkFailureTypeMisconfigured: "misconfigured",
+  // The configured provider executable could not be found.
+  WorkFailureTypeMissingExecutable: "missing_executable",
+  // The provider command exceeded the operating system command-line size limit.
+  WorkFailureTypeCommandLineTooLong: "command_line_too_long",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -304,7 +305,7 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 
 	var diagnostics bytes.Buffer
 	err := Run(context.Background(), RunConfig{
-		Dir:     dir,
+		Dir:      dir,
 		Workflow: "workflow-1",
 		OperatorDefaults: operatorconfig.ResolvedDefaults{
 			WorkerModelProvider:       "CODEX",
@@ -334,8 +335,8 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 	got := diagnostics.String()
 	for _, want := range []string{
 		"run startup",
-		`factoryDir="` + dir + `"`,
-		`configuredDir="` + dir + `"`,
+		"factoryDir=" + strconv.Quote(dir),
+		"configuredDir=" + strconv.Quote(dir),
 		"runtimeMode=BATCH",
 		`workflow="workflow-1"`,
 		"operatorDefaults precedence=file < env < flag",

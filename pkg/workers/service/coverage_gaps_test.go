@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -117,7 +118,7 @@ func TestScriptPollerCommandRequest_ResolvesWorkstationEnvAndWorkerTimeout(t *te
 	if len(req.Env) != 1 || req.Env[0] != "POLLER_MODE=watch" {
 		t.Fatalf("poller env = %#v, want POLLER_MODE=watch", req.Env)
 	}
-	if !strings.Contains(req.WorkDir, "relative/workdir") {
+	if !strings.Contains(req.WorkDir, filepath.Join("relative", "workdir")) {
 		t.Fatalf("poller workdir = %q, want resolved relative path", req.WorkDir)
 	}
 }

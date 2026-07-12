@@ -11,7 +11,13 @@ import (
 
 func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
-	output := `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav","slot":"audio"}]`
+	encodedOutput, err := json.Marshal([]interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeAudio, File: audioPath, ContentType: "audio/wav", Slot: "audio",
+	}})
+	if err != nil {
+		t.Fatalf("marshal worker output: %v", err)
+	}
+	output := string(encodedOutput)
 	metadataContent, err := MetadataContentFromWorkerOutput(output, "trace-1", "session-1", "")
 	if err != nil {
 		t.Fatalf("MetadataContentFromWorkerOutput: %v", err)
