@@ -3,6 +3,8 @@ package runtimetests
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
@@ -64,4 +66,41 @@ func TestFailureBaseline_NamedPath_UnknownBuiltInGoalStyleNameReportsNotFound(t 
 
 func stringsContainsMaterializeBuiltIn(value string) bool {
 	return containsAll(value, "materialize built-in named factory")
+}
+
+func TestFailureBaseline_NamedPath_GoalLayoutSegmentEncodesSlash(t *testing.T) {
+	segment, err := NamedFactoryNameToLayoutSegment("@you/goal")
+	if err != nil {
+		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
+	}
+	if segment != "@you%2Fgoal" {
+		t.Fatalf("layout segment = %q, want @you%%2Fgoal", segment)
+	}
+	if strings.Contains(segment, "/") {
+		t.Fatalf("layout segment = %q, want slash encoded instead of path separator", segment)
+	}
+}
+
+func TestFailureBaseline_NamedPath_GoalMaterializationUsesPercentEncodedLayoutSegment(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(@you/goal): %v", err)
+	}
+	if resolution.Name != "@you/goal" {
+		t.Fatalf("resolution name = %q, want @you/goal", resolution.Name)
+	}
+
+	wantDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	if resolution.FactoryDir != wantDir {
+		t.Fatalf("factory dir = %q, want percent-encoded layout %q", resolution.FactoryDir, wantDir)
+	}
+	if !strings.Contains(resolution.FactoryDir, "@you%2Fgoal") {
+		t.Fatalf("factory dir = %q, want customer-visible @you%%2Fgoal segment", resolution.FactoryDir)
+	}
+	if _, statErr := os.Stat(wantDir); statErr != nil {
+		t.Fatalf("materialized factory dir %q: %v", wantDir, statErr)
+	}
 }

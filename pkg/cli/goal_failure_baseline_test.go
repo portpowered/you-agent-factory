@@ -437,6 +437,61 @@ func TestFailureBaseline_NamedPath_RunNamedMissingLocalFactoryRejectsBeforeInvoc
 	}
 }
 
+func TestFailureBaseline_NamedPath_RunNamedGoalSurfacesPercentEncodedFactoryDir(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	restore := withNamedPackagedFactoryRunRoot(t)
+	defer restore()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"percent-encoded-path baseline probe",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named %s: %v", goal.PackagedFactoryName, err)
+	}
+	if got.NamedFactoryName != goal.PackagedFactoryName {
+		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, goal.PackagedFactoryName)
+	}
+	if got.Dir == "" {
+		t.Fatal("expected resolved factory directory on run config")
+	}
+	if !strings.Contains(got.Dir, "@you%2Fgoal") {
+		t.Fatalf("run dir = %q, want customer-visible @you%%2Fgoal segment", got.Dir)
+	}
+	if got.NamedFactoryResolution == nil {
+		t.Fatal("expected named-factory resolution metadata")
+	}
+	if got.Dir != got.NamedFactoryResolution.FactoryDir {
+		t.Fatalf("run dir = %q, want resolved factory dir %q", got.Dir, got.NamedFactoryResolution.FactoryDir)
+	}
+	if !strings.Contains(got.NamedFactoryResolution.FactoryDir, "@you%2Fgoal") {
+		t.Fatalf("resolution factory dir = %q, want @you%%2Fgoal segment", got.NamedFactoryResolution.FactoryDir)
+	}
+	if filepath.Base(got.Dir) != "@you%2Fgoal" {
+		t.Fatalf("run dir base = %q, want @you%%2Fgoal layout segment", filepath.Base(got.Dir))
+	}
+	if !strings.Contains(got.Dir, filepath.Join(".you-agent-factory", "factories")) {
+		t.Fatalf("run dir = %q, want global named-factory root layout", got.Dir)
+	}
+}
+
 func TestFailureBaseline_NamedPath_RunNamedUnknownBuiltInGoalStyleNameRejectsBeforeInvocation(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
