@@ -9,6 +9,7 @@ import (
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/spf13/cobra"
@@ -47,6 +48,9 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		return writeRunCommandHelp(cmd, &resolvedConfig)
 	}
 	err = runFactory(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
+	if err != nil {
+		err = factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, resolvedConfig.Dir)
+	}
 	if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}

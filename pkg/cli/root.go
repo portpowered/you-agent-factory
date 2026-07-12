@@ -816,7 +816,7 @@ func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
 	}
 	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, cfg.NamedFactoryName)
 	if err != nil {
-		return err
+		return factoryconfig.MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(err, projectRoot, globalRoot, cfg.NamedFactoryName)
 	}
 	cfg.Dir = resolution.FactoryDir
 	cfg.NamedFactoryResolution = resolution

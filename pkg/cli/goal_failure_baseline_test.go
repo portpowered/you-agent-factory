@@ -203,8 +203,11 @@ func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraph
 	if !strings.Contains(err.Error(), "invalid graph references") {
 		t.Fatalf("error = %q, want invalid graph references guidance", err.Error())
 	}
-	if !strings.Contains(err.Error(), "blocking validation targets") {
-		t.Fatalf("error = %q, want blocking validation target count", err.Error())
+	if !strings.Contains(err.Error(), "Blocking findings:") {
+		t.Fatalf("error = %q, want blocking findings section", err.Error())
+	}
+	if strings.Count(err.Error(), "you factory config validate") != 1 {
+		t.Fatalf("error = %q, want exactly one recovery command", err.Error())
 	}
 }
 
