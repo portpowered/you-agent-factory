@@ -19,6 +19,9 @@ func Walk(root *cobra.Command) (Inventory, error) {
 		Relationships: collectRelationshipRecords(root),
 	}
 	sortInventoryCollections(&inv)
+	if err := ensureUniquePerCommandIdentities(inv); err != nil {
+		return Inventory{}, err
+	}
 
 	after := captureCommandInputsTreeState(root)
 	if err := commandInputsTreeStatesEqual(before, after); err != nil {
