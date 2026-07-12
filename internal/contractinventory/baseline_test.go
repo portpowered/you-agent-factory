@@ -22,6 +22,7 @@ func TestRepositoryBaseline_MatchesOpenAPIExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read baseline: %v", err)
 	}
+	baseline = normalizeFixtureNewlines(baseline)
 
 	inventory, err := ExtractFromOpenAPIYAML(openAPIData)
 	if err != nil {
@@ -65,4 +66,8 @@ func TestRepositoryOpenAPI_RepeatedExtractionsAreByteIdentical(t *testing.T) {
 	if !bytes.Equal(firstJSON, secondJSON) {
 		t.Fatalf("repeated repository openapi extraction json differs")
 	}
+}
+
+func normalizeFixtureNewlines(data []byte) []byte {
+	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
 }
