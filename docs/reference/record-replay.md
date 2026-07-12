@@ -231,8 +231,8 @@ fail closed instead of returning a partially trusted Factory Session.
 JavaScript recordings deliberately omit raw JavaScript runtime state, raw
 checkpoint bodies, provider transcripts, and child-dispatch lists. Redaction
 metadata reports those omissions without copying removed values into the
-recording. Secret counts are bounded metadata, not a list of secret names or
-contents.
+recording. Secret counts are bounded to 1,000,000 (values at or above that
+limit are reported as 1,000,000), not a list of secret names or contents.
 
 Artifact and event entries are inspection summaries. A hash or digest proves
 consistency with referenced public data; it does not make omitted source,

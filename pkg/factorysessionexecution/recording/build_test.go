@@ -2,6 +2,8 @@ package recording
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,6 +49,38 @@ func TestBuildRetainsCanonicalSummariesAndOmitsRuntimeDetails(t *testing.T) {
 		if strings.Contains(string(encoded), prohibited) {
 			t.Fatalf("portable recording leaked %q: %s", prohibited, encoded)
 		}
+	}
+}
+
+func TestBuildBoundsSecretsRedacted(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		counts []int64
+	}{
+		{name: "at maximum", counts: []int64{MaxSecretsRedacted}},
+		{name: "above maximum", counts: []int64{MaxSecretsRedacted + 1}},
+		{name: "aggregate overflow", counts: []int64{MaxSecretsRedacted - 1, math.MaxInt64}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			facts := minimalCanonicalFacts()
+			facts.Artifacts = make([]CanonicalArtifact, len(tt.counts))
+			for i, count := range tt.counts {
+				facts.Artifacts[i] = CanonicalArtifact{
+					ID: fmt.Sprintf("artifact-%d", i), Kind: "RESULT", Visibility: "PUBLIC",
+					ContentHash: digest(byte('1' + i)), CreatedAt: time.Now(), SecretsRedacted: count,
+				}
+			}
+			got, err := Build(facts)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			if got.Redaction.SecretsRedacted != MaxSecretsRedacted {
+				t.Fatalf("SecretsRedacted = %d, want %d", got.Redaction.SecretsRedacted, MaxSecretsRedacted)
+			}
+		})
 	}
 }
 

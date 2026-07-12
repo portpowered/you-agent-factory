@@ -195,8 +195,8 @@ func validateRedaction(redaction RedactionMetadata) error {
 	if !redaction.RuntimeStateOmitted || !redaction.CheckpointBodiesOmitted || !redaction.ProviderTranscriptsOmitted || !redaction.ChildDispatchesOmitted {
 		return diagnostic(CodeInvalidSummary, "redaction", "redaction", "all prohibited runtime detail omission flags must be true")
 	}
-	if redaction.SecretsRedacted < 0 {
-		return diagnostic(CodeInvalidSummary, "redaction", "redaction.secretsRedacted", "must be non-negative")
+	if redaction.SecretsRedacted < 0 || redaction.SecretsRedacted > MaxSecretsRedacted {
+		return diagnostic(CodeInvalidSummary, "redaction", "redaction.secretsRedacted", fmt.Sprintf("must be between 0 and %d", MaxSecretsRedacted))
 	}
 	return nil
 }

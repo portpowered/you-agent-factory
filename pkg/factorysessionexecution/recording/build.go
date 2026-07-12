@@ -62,7 +62,7 @@ func Build(facts CanonicalFacts) (Recording, error) {
 			Label: artifact.Label, ContentHash: artifact.ContentHash,
 			SizeBytes: artifact.SizeBytes, CreatedAt: artifact.CreatedAt.UTC(),
 		})
-		secretsRedacted += artifact.SecretsRedacted
+		secretsRedacted = saturatingSecretsRedacted(secretsRedacted, artifact.SecretsRedacted)
 	}
 	events, err := eventSummaries(facts.Events)
 	if err != nil {
@@ -93,6 +93,16 @@ func Build(facts CanonicalFacts) (Recording, error) {
 		}
 	}
 	return value, Validate(value)
+}
+
+func saturatingSecretsRedacted(total, count int64) int64 {
+	if count <= 0 || total >= MaxSecretsRedacted {
+		return total
+	}
+	if count >= MaxSecretsRedacted-total {
+		return MaxSecretsRedacted
+	}
+	return total + count
 }
 
 func compactJSON(value json.RawMessage) []byte {

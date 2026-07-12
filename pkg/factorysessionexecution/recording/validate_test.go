@@ -101,6 +101,7 @@ func TestValidationRejectsMalformedPublicSummaries(t *testing.T) {
 		{"failed final result", recording.CodeInvalidSummary, "result.status", func(r *recording.Recording) { r.Session.Status = "FAILED" }},
 		{"omission flag false", recording.CodeInvalidSummary, "redaction", func(r *recording.Recording) { r.Redaction.RuntimeStateOmitted = false }},
 		{"negative redaction count", recording.CodeInvalidSummary, "redaction.secretsRedacted", func(r *recording.Recording) { r.Redaction.SecretsRedacted = -1 }},
+		{"redaction count above maximum", recording.CodeInvalidSummary, "redaction.secretsRedacted", func(r *recording.Recording) { r.Redaction.SecretsRedacted = recording.MaxSecretsRedacted + 1 }},
 	}
 
 	for _, tc := range cases {

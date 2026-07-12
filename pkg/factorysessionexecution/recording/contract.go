@@ -11,6 +11,9 @@ const (
 	KindJavaScriptFactorySession = "you.factory-session.javascript.recording"
 	CurrentSchemaVersion         = "2"
 	ReplayCompatibilityVersion   = "1"
+	// MaxSecretsRedacted bounds the aggregate count exposed by a recording.
+	// Counts at or above this limit are reported as the limit.
+	MaxSecretsRedacted int64 = 1_000_000
 )
 
 var supportedSchemaVersions = []string{"1", CurrentSchemaVersion}
