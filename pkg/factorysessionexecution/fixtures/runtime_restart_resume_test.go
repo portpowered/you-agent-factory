@@ -47,6 +47,27 @@ func TestPersistedRuntimeSessionState_MixedTypedHistoryRoundTripsAndReplays(t *t
 		{Kind: fse.DurableRecordKindPetriTokenMutation, PetriMutation: &mutation},
 	}}
 
+	replayed := persistAndReloadRuntimeSnapshot(t, sessionID, snapshot)
+	if len(replayed.Records) != 3 {
+		t.Fatalf("record count = %d, want 3", len(replayed.Records))
+	}
+	session, _, err := fse.ReplaySessionProjection([]json.RawMessage{replayed.Records[0].CanonicalEvent})
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.SessionID != sessionID || session.Status != fse.LifecycleStatusRunning {
+		t.Fatalf("replayed session = %#v, want running %s", session, sessionID)
+	}
+	if got := replayed.Records[1].JavaScriptRecord; got == nil || got.Checkpoint == nil || got.Checkpoint.State["position"] != "review" {
+		t.Fatalf("replayed checkpoint = %#v", got)
+	}
+	if got := replayed.Records[2].PetriMutation; got == nil || got.Type != interfaces.MutationMove || got.TransitionID != "review" || got.ToPlace != "review:approved" {
+		t.Fatalf("replayed Petri mutation = %#v", got)
+	}
+}
+
+func persistAndReloadRuntimeSnapshot(t *testing.T, sessionID string, snapshot fse.PersistedRuntimeSessionState) fse.PersistedRuntimeSessionState {
+	t.Helper()
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("marshal mixed snapshot: %v", err)
@@ -66,22 +87,7 @@ func TestPersistedRuntimeSessionState_MixedTypedHistoryRoundTripsAndReplays(t *t
 	if err := json.Unmarshal(persisted, &replayed); err != nil {
 		t.Fatalf("decode mixed persisted history: %v", err)
 	}
-	if len(replayed.Records) != 3 {
-		t.Fatalf("record count = %d, want 3", len(replayed.Records))
-	}
-	session, _, err := fse.ReplaySessionProjection([]json.RawMessage{replayed.Records[0].CanonicalEvent})
-	if err != nil {
-		t.Fatalf("ReplaySessionProjection: %v", err)
-	}
-	if session.SessionID != sessionID || session.Status != fse.LifecycleStatusRunning {
-		t.Fatalf("replayed session = %#v, want running %s", session, sessionID)
-	}
-	if got := replayed.Records[1].JavaScriptRecord; got == nil || got.Checkpoint == nil || got.Checkpoint.State["position"] != "review" {
-		t.Fatalf("replayed checkpoint = %#v", got)
-	}
-	if got := replayed.Records[2].PetriMutation; got == nil || got.Type != interfaces.MutationMove || got.TransitionID != "review" || got.ToPlace != "review:approved" {
-		t.Fatalf("replayed Petri mutation = %#v", got)
-	}
+	return replayed
 }
 
 func TestPersistedRuntimeSessionState_MixedTypedHistoryRejectsUnknownAndMalformedRecords(t *testing.T) {

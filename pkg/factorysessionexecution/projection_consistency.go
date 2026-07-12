@@ -345,6 +345,7 @@ type sessionProjectionReducer struct {
 	session            SessionReadResult
 	result             ResultReadResult
 	resultAvailability *ResultAvailabilityDetail
+	terminal           bool
 }
 
 // ReplaySessionProjection reconstructs durable session and result read projections
@@ -365,6 +366,9 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 	var envelope canonicalFactoryEvent
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return fmt.Errorf("unmarshal event envelope: %w", err)
+	}
+	if r.terminal {
+		return nil
 	}
 	switch strings.TrimSpace(envelope.Type) {
 	case "SESSION_STARTED":
@@ -587,6 +591,7 @@ func (r *sessionProjectionReducer) applySessionCompleted(envelope canonicalFacto
 			Message: stringValuePtr(payload.FailureDetail.Message),
 		}
 	}
+	r.terminal = true
 	return nil
 }
 

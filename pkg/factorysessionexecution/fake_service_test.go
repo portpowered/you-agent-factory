@@ -1246,6 +1246,31 @@ func TestReplaySessionProjection_ReplacesArtifactStubsWithoutDuplication(t *test
 	}
 }
 
+func TestReplaySessionProjection_FirstTerminalOutcomeWinsCompetingRace(t *testing.T) {
+	startedAt := time.Date(2026, 7, 12, 8, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(time.Second)
+	sessionID := "dur-sess-replay-terminal-race"
+	base := SessionReadResult{
+		SessionID: sessionID, Status: LifecycleStatusCanceled, OrchestratorKind: "JAVASCRIPT",
+		Lifecycle: &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
+	}
+	canceled := BuildCanonicalRuntimeSessionEvents(base, ResultReadResult{
+		SessionID: sessionID, ResultStatus: ResultStatusUnavailable, SessionStatus: LifecycleStatusCanceled,
+	})
+	base.Status = LifecycleStatusFailed
+	failed := BuildCanonicalRuntimeSessionEvents(base, ResultReadResult{
+		SessionID: sessionID, ResultStatus: ResultStatusFailedWithPartial, SessionStatus: LifecycleStatusFailed,
+	})
+
+	session, result, err := ReplaySessionProjection(append(canceled, failed...))
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.Status != LifecycleStatusCanceled || result.SessionStatus != LifecycleStatusCanceled || result.ResultStatus != ResultStatusUnavailable {
+		t.Fatalf("late terminal outcome overwrote cancellation: session=%#v result=%#v", session, result)
+	}
+}
+
 func TestReplaySessionProjection_PreservesSyncTimeoutAvailability(t *testing.T) {
 	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
 	sessionID := "dur-sess-replay-timeout-availability"
