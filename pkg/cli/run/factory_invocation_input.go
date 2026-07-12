@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
@@ -191,6 +192,25 @@ type sessionInvocationRunner interface {
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 }
 
+type invocationBootstrapBuilder func(context.Context, *service.FactoryServiceConfig) (sessionInvocationRunner, error)
+
+var buildInvocationBootstrap = defaultBuildInvocationBootstrap
+
+func defaultBuildInvocationBootstrap(
+	ctx context.Context,
+	cfg *service.FactoryServiceConfig,
+) (sessionInvocationRunner, error) {
+	runner, err := buildFactoryService(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	invoker, ok := runner.(sessionInvocationRunner)
+	if !ok {
+		return nil, fmt.Errorf("factory invocation runner does not support session invocation")
+	}
+	return invoker, nil
+}
+
 type sessionResponseStreamInvocationRunner interface {
 	sessionInvocationRunner
 	sessionResponseStreamAttachable
@@ -306,20 +326,11 @@ func runFactoryInvocation(
 	request factoryapi.InvocationRequest,
 	logger *zap.Logger,
 	mockWorkersConfig *factoryconfig.MockWorkersConfig,
-	reservedAPIServer *reservedAPIServerListener,
 ) error {
-	svcCfg := buildRunServiceConfig(cfg, logger, mockWorkersConfig, reservedAPIServer, make(chan struct{}), &sync.Once{})
-	svcCfg.RuntimeMode = interfaces.RuntimeModeService
-	svcCfg.WorkFile = ""
-	svcCfg.SimpleDashboardRenderer = nil
-
-	factorySvc, err := buildFactoryService(ctx, svcCfg)
+	svcCfg := buildInvocationRunServiceConfig(cfg, logger, mockWorkersConfig)
+	invoker, err := buildInvocationBootstrap(ctx, svcCfg)
 	if err != nil {
 		return err
-	}
-	invoker, ok := factorySvc.(sessionInvocationRunner)
-	if !ok {
-		return fmt.Errorf("factory invocation runner does not support session invocation")
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -369,6 +380,15 @@ func runFactoryInvocation(
 		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)
+}
+
+func buildInvocationRunServiceConfig(
+	cfg RunConfig,
+	logger *zap.Logger,
+	mockWorkersConfig *factoryconfig.MockWorkersConfig,
+) *service.FactoryServiceConfig {
+	svcCfg := buildRunServiceConfig(cfg, logger, mockWorkersConfig, nil, make(chan struct{}), &sync.Once{})
+	return service.NormalizeInvocationBootstrapConfig(svcCfg)
 }
 
 func waitForInvocationSessionReady(

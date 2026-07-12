@@ -56,12 +56,14 @@ func preserveRunGlobals(t *testing.T) {
 	t.Helper()
 
 	originalBuilder := buildFactoryService
+	originalInvocationBootstrap := buildInvocationBootstrap
 	originalBootstrap := bootstrapFactory
 	originalOpener := dashboardOpener
 	originalInteractive := interactiveOutput
 	originalStartAPIServer := startAPIServer
 	t.Cleanup(func() {
 		buildFactoryService = originalBuilder
+		buildInvocationBootstrap = originalInvocationBootstrap
 		bootstrapFactory = originalBootstrap
 		dashboardOpener = originalOpener
 		interactiveOutput = originalInteractive

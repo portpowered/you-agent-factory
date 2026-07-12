@@ -44,8 +44,8 @@ func TestInjectCLIRunner_KeepsDashboardSuppressedRunsInactive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InjectCLIRunner: %v", err)
 	}
-	if _, legacy := runner.(*service.FactoryService); !legacy {
-		t.Fatalf("dashboard-suppressed runner type = %T, want compatibility service runner", runner)
+	if _, bootstrap := runner.(*service.InvocationBootstrap); !bootstrap {
+		t.Fatalf("dashboard-suppressed runner type = %T, want InvocationBootstrap", runner)
 	}
 }
 

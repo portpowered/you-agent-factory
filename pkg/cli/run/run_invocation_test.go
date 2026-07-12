@@ -39,6 +39,79 @@ func (s stubInvocationService) InvokeFactorySession(ctx context.Context, session
 	return s.invoke(ctx, sessionID, request)
 }
 
+func TestBuildInvocationRunServiceConfig_ForcesNoServerBootstrapShape(t *testing.T) {
+	t.Parallel()
+
+	cfg := buildInvocationRunServiceConfig(RunConfig{
+		Dir:  "/tmp/factory",
+		Port: 7437,
+	}, zap.NewNop(), nil)
+	if cfg.Port != 0 {
+		t.Fatalf("Port = %d, want 0", cfg.Port)
+	}
+	if cfg.APIServerStarter != nil {
+		t.Fatal("APIServerStarter = non-nil, want nil")
+	}
+	if cfg.APIServerReady != nil {
+		t.Fatal("APIServerReady = non-nil, want nil")
+	}
+	if cfg.SimpleDashboardRenderer != nil {
+		t.Fatal("SimpleDashboardRenderer = non-nil, want nil")
+	}
+	if cfg.RuntimeMode != interfaces.RuntimeModeService {
+		t.Fatalf("RuntimeMode = %q, want %q", cfg.RuntimeMode, interfaces.RuntimeModeService)
+	}
+	if cfg.WorkFile != "" {
+		t.Fatalf("WorkFile = %q, want empty", cfg.WorkFile)
+	}
+}
+
+func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan the sprint"
+	var captured *service.FactoryServiceConfig
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		cloned := *cfg
+		captured = &cloned
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					Status: factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "done",
+					}},
+				}, nil
+			},
+		}, nil
+	}
+
+	var output bytes.Buffer
+	if err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("expected factory invocation bootstrap config capture")
+	}
+	if captured.Port != 0 {
+		t.Fatalf("captured Port = %d, want 0", captured.Port)
+	}
+	if captured.APIServerStarter != nil {
+		t.Fatal("captured APIServerStarter = non-nil, want nil")
+	}
+}
+
 func TestResolveFactoryInvocationRequest_NamedFactoryDirPositionalText(t *testing.T) {
 	text := "hi there"
 
