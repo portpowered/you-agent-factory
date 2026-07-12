@@ -62,4 +62,21 @@ describe("previewWorkflow compatibility-only wrapper parity", () => {
   it("re-exports FactoryPreviewAPIError under the compatibility-only WorkflowPreview name", () => {
     expect(WorkflowPreviewAPIError).toBe(factoryPreview.FactoryPreviewAPIError);
   });
+
+  it("preserves the canonical Factory preview rejection", async () => {
+    const rejection = new factoryPreview.FactoryPreviewAPIError(
+      "INVALID_REQUEST",
+      "The Factory preview request is invalid.",
+      400,
+    );
+    vi.spyOn(factoryPreview, "previewFactory").mockRejectedValue(rejection);
+
+    await expect(
+      previewWorkflow({
+        sourceKind: "WORKFLOW_NAME",
+        projectRoot: "/tmp/project",
+        sourceValue: "missing",
+      }),
+    ).rejects.toBe(rejection);
+  });
 });

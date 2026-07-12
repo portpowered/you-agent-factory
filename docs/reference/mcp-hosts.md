@@ -99,7 +99,9 @@ Primary tool names use Factory Session vocabulary:
 | `you.factory_session.control` | Apply lifecycle controls such as pause, resume, cancel, or terminate |
 | `you.factory_session.read_events` | Read ordered Factory Session event facts |
 
-Compatibility-only workflow aliases resolve to the same handlers:
+Compatibility-only workflow aliases resolve to the same handlers. They do not
+name a separate workflow-run resource: their session arguments and results use
+the same Factory Session id returned by the canonical start tool.
 
 | Alias | Canonical tool |
 |-------|------------------|
@@ -110,7 +112,8 @@ Compatibility-only workflow aliases resolve to the same handlers:
 | `you.workflow.artifacts` | `you.factory_session.list_artifacts` |
 
 Hosts may discover either naming family. Prefer the `you.factory_session.*`
-tools in new configuration.
+tools in new configuration and use the returned Factory Session id unchanged
+for inspection, lifecycle control, events, artifacts, and result retrieval.
 
 ## Generic MCP Host Pattern
 

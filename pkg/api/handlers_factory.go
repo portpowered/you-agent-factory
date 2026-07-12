@@ -59,6 +59,11 @@ func (s *Server) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeFactoryPreview(w http.ResponseWriter, r *http.Request, compatibility bool) {
+	if compatibility {
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", `</factories/preview>; rel="successor-version"`)
+	}
+
 	req, err := decodeStrictJSON[factoryapi.FactoryPreviewRequest](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
@@ -78,11 +83,6 @@ func (s *Server) writeFactoryPreview(w http.ResponseWriter, r *http.Request, com
 		}
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
-	}
-
-	if compatibility {
-		w.Header().Set("Deprecation", "true")
-		w.Header().Set("Link", `</factories/preview>; rel="successor-version"`)
 	}
 
 	result := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(previewInput))

@@ -185,6 +185,40 @@ func TestPreviewWorkflowCompatibilityOnly_ReturnsSamePreviewBodyAsCanonicalFacto
 	if canonicalRec.Body.String() != aliasRec.Body.String() {
 		t.Fatalf("compatibility alias body = %s, want identical canonical body %s", aliasRec.Body.String(), canonicalRec.Body.String())
 	}
+	assertWorkflowPreviewSuccessorHeaders(t, aliasRec)
+}
+
+func TestPreviewWorkflowCompatibilityOnly_ReturnsSameInvalidRequestAsCanonicalFactoryPreview(t *testing.T) {
+	body := []byte(`{"sourceKind":"NOT_A_SOURCE_KIND"}`)
+	srv := newAPITestServer(nil)
+
+	request := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+
+	canonicalRec := request("/factories/preview")
+	aliasRec := request("/workflow-previews")
+	if aliasRec.Code != canonicalRec.Code {
+		t.Fatalf("compatibility alias status = %d, want canonical status %d", aliasRec.Code, canonicalRec.Code)
+	}
+	if aliasRec.Body.String() != canonicalRec.Body.String() {
+		t.Fatalf("compatibility alias body = %s, want identical canonical body %s", aliasRec.Body.String(), canonicalRec.Body.String())
+	}
+	assertWorkflowPreviewSuccessorHeaders(t, aliasRec)
+}
+
+func assertWorkflowPreviewSuccessorHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if rec.Header().Get("Deprecation") != "true" {
+		t.Fatalf("Deprecation = %q, want true for compatibility alias", rec.Header().Get("Deprecation"))
+	}
+	if got := rec.Header().Get("Link"); got != `</factories/preview>; rel="successor-version"` {
+		t.Fatalf("Link = %q, want successor-version link to /factories/preview", got)
+	}
 }
 
 func TestPreviewWorkflowCompatibilityOnly_ReturnsAliasWithDeprecationHeaders(t *testing.T) {
