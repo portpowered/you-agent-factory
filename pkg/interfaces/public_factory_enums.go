@@ -432,6 +432,18 @@ func CanonicalizeOperatorWorkerModelProviderInput(value string) (string, bool) {
 	return "", false
 }
 
+// CanonicalizeReasoningEffort trims and lowercases a supported worker
+// reasoning effort. The empty value is valid when the setting is optional.
+func CanonicalizeReasoningEffort(value string) (string, bool) {
+	canonical := strings.ToLower(strings.TrimSpace(value))
+	switch canonical {
+	case "", "minimal", "low", "medium", "high":
+		return canonical, true
+	default:
+		return "", false
+	}
+}
+
 // AcceptedPublicWorkerModelProviderSummary returns canonical provider names and
 // representative public aliases for operator-facing validation errors.
 func AcceptedPublicWorkerModelProviderSummary() string {

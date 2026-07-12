@@ -126,6 +126,7 @@ func TestParseProviderFailure_ClassifiesCursorStderrWithDeterministicPrecedence(
 		{name: "Capacity", stderr: "Cursor model capacity is exhausted", wantReason: interfaces.WorkFailureTypeThrottled, wantMessage: "Cursor model capacity is exhausted"},
 		{name: "Timeout", stderr: "Cursor request timed out", wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Cursor request timed out"},
 		{name: "Server", stderr: "Cursor provider unavailable with status 503", wantReason: interfaces.WorkFailureTypeInternalServerError, wantMessage: "Cursor provider unavailable with status 503"},
+		{name: "WindowsCommandLineTooLong", stderr: "The command line is too long.", wantReason: interfaces.WorkFailureTypeCommandLineTooLong, wantMessage: "The command line is too long."},
 		{
 			name:        "CategoryPrecedenceAndDuplicateNoise",
 			stderr:      "cleanup noise\nrate limit reached\nRATE LIMIT REACHED\nauthentication failed\nprocess already exited",

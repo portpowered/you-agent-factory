@@ -19,7 +19,11 @@ func FilesystemPathToContentURL(path string) (string, error) {
 	}
 	cleaned := filepath.Clean(trimmed)
 	if filepath.IsAbs(cleaned) {
-		return (&url.URL{Scheme: "file", Path: filepath.ToSlash(cleaned)}).String(), nil
+		urlPath := filepath.ToSlash(cleaned)
+		if volume := filepath.VolumeName(cleaned); volume != "" && !strings.HasPrefix(urlPath, "/") {
+			urlPath = "/" + urlPath
+		}
+		return (&url.URL{Scheme: "file", Path: urlPath}).String(), nil
 	}
 	return "file://" + filepath.ToSlash(cleaned), nil
 }

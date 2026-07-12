@@ -210,6 +210,32 @@ func writeExecutableTestScript(t *testing.T, path string, content string) {
 	releaseExecutableWriteLock(t, path)
 }
 
+func writeProviderOutputFixture(t *testing.T, path string, stdout, stderr []byte, exitCode int) string {
+	t.Helper()
+	dir := filepath.Dir(path)
+	stdoutPath := filepath.Join(dir, "fixture.stdout")
+	stderrPath := filepath.Join(dir, "fixture.stderr")
+	if err := os.WriteFile(stdoutPath, stdout, 0o600); err != nil {
+		t.Fatalf("write fixture stdout: %v", err)
+	}
+	if err := os.WriteFile(stderrPath, stderr, 0o600); err != nil {
+		t.Fatalf("write fixture stderr: %v", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		path += ".cmd"
+		body := fmt.Sprintf("@echo off\r\ntype %q\r\ntype %q 1>&2\r\nexit /b %d\r\n", stdoutPath, stderrPath, exitCode)
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatalf("write Windows provider fixture: %v", err)
+		}
+		return path
+	}
+
+	body := fmt.Sprintf("#!/bin/sh\ncat %q\ncat %q 1>&2\nexit %d\n", stdoutPath, stderrPath, exitCode)
+	writeExecutableTestScript(t, path, body)
+	return path
+}
+
 func releaseExecutableWriteLock(t *testing.T, path string) {
 	t.Helper()
 
@@ -694,8 +720,13 @@ func (e *codexMixedImageAssertExec) Run(ctx context.Context, req CommandRequest)
 func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *testing.T) {
 	t.Parallel()
 
-	scriptPath := filepath.Join(t.TempDir(), "stream.sh")
-	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\necho stdout-chunk\necho stderr-chunk 1>&2\n")
+	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "stream"), []byte("stdout-chunk\n"), []byte("stderr-chunk\n"), 0)
+	command := scriptPath
+	var args []string
+	if runtime.GOOS != "windows" {
+		command = "/bin/sh"
+		args = []string{scriptPath}
+	}
 
 	var publishedMu sync.Mutex
 	var published []InferenceProgressFragment
@@ -706,7 +737,8 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 	}, nil)
 
 	result, err := runner.Run(context.Background(), CommandRequest{
-		Command:    scriptPath,
+		Command:    command,
+		Args:       args,
 		DispatchID: "dispatch-stream-1",
 	})
 	if err != nil {
@@ -744,14 +776,12 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndLaterValidEventsInOrder(t *testing.T) {
 	scriptDir := t.TempDir()
 	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
-	script := "#!/bin/sh\n" +
-		"printf '%s\\n' '{not json}'\n" +
-		"printf '%s\\n' '{\"type\":\"mystery\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-session-123\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-session-123\"}'\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
+	writeProviderOutputFixture(t, scriptPath, []byte(
+		"{not json}\n"+
+			"{\"type\":\"mystery\"}\n"+
+			"{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-session-123\"}\n"+
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-session-123\"}\n",
+	), nil, 0)
 	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var publishedMu sync.Mutex
@@ -792,8 +822,7 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
 	t.Parallel()
 
-	scriptPath := filepath.Join(t.TempDir(), "nostream.sh")
-	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\necho stdout-fallback\necho stderr-fallback 1>&2\nexit 7\n")
+	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "nostream"), []byte("stdout-fallback\n"), []byte("stderr-fallback\n"), 7)
 
 	runner := NewInferenceProgressPublishingCommandRunner(nil, nil)
 	result, err := runner.Run(context.Background(), CommandRequest{

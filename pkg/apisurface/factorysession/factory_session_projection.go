@@ -122,9 +122,9 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 	if runnerID := strings.TrimSpace(result.RunnerID); runnerID != "" {
 		response.RunnerId = &runnerID
 	}
-	if model := strings.TrimSpace(result.Model); model != "" {
-		response.Model = &model
-	}
+	selection := resolvedWorkerSelectionToAPI(result.DispatchSummary)
+	response.PresetId, response.ModelProvider = selection.presetID, selection.modelProvider
+	response.Model, response.ReasoningEffort = selection.model, selection.reasoningEffort
 	if provider := strings.TrimSpace(result.Provider); provider != "" {
 		response.Provider = &provider
 	}
@@ -277,9 +277,9 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 	if runnerID := strings.TrimSpace(dispatch.RunnerID); runnerID != "" {
 		response.RunnerId = &runnerID
 	}
-	if model := strings.TrimSpace(dispatch.Model); model != "" {
-		response.Model = &model
-	}
+	selection := resolvedWorkerSelectionToAPI(dispatch)
+	response.PresetId, response.ModelProvider = selection.presetID, selection.modelProvider
+	response.Model, response.ReasoningEffort = selection.model, selection.reasoningEffort
 	if provider := strings.TrimSpace(dispatch.Provider); provider != "" {
 		response.Provider = &provider
 	}
@@ -302,6 +302,27 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 		response.Javascript = javascript
 	}
 	return response
+}
+
+type resolvedWorkerSelectionAPI struct {
+	presetID, modelProvider, model, reasoningEffort *string
+}
+
+func resolvedWorkerSelectionToAPI(dispatch factorysessionexecution.DispatchSummary) resolvedWorkerSelectionAPI {
+	return resolvedWorkerSelectionAPI{
+		presetID:        optionalTrimmedString(dispatch.PresetID),
+		modelProvider:   optionalTrimmedString(dispatch.ModelProvider),
+		model:           optionalTrimmedString(dispatch.Model),
+		reasoningEffort: optionalTrimmedString(dispatch.ReasoningEffort),
+	}
+}
+
+func optionalTrimmedString(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func artifactSummaryToAPI(artifact factorysessionexecution.ArtifactSummary) factoryapi.FactorySessionArtifactSummary {

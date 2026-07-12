@@ -3,19 +3,36 @@ package workflowruntime
 import (
 	"encoding/json"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 // Request carries explicit runtime inputs for one simple workflow execution.
 type Request struct {
-	Source    string
-	SourceRef string
-	SessionID string
-	Args      json.RawMessage
-	Metadata  map[string]string
-	Policy    workflowpolicy.EffectivePolicy
-	Resume    *ResumeContext
+	Source         string
+	SourceRef      string
+	SessionID      string
+	Args           json.RawMessage
+	Metadata       map[string]string
+	Policy         workflowpolicy.EffectivePolicy
+	Resume         *ResumeContext
+	Agents         map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	WorkerSettings WorkerSettingsConfig
+}
+
+// WorkerSettingsConfig supplies validated operator-owned child worker settings.
+type WorkerSettingsConfig struct {
+	Presets              map[string]WorkerPreset
+	DefaultModelProvider string
+	DefaultModel         string
+}
+
+// WorkerPreset is one validated reusable operator preset.
+type WorkerPreset struct {
+	ModelProvider   string
+	Model           string
+	ReasoningEffort string
 }
 
 // ChildRecordSink reserves child dispatch identity and appends typed runtime records.

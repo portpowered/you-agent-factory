@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/dop251/goja"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 )
 
@@ -20,6 +21,8 @@ type runtimeGlobals struct {
 	ctx                   context.Context
 	records               *recordCollector
 	childExecutor         ChildExecutor
+	agents                map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	workerSettings        WorkerSettingsConfig
 	onArtifact            func(kind string, content json.RawMessage) error
 	resumeCheckpointState map[string]any
 	finalValue            goja.Value

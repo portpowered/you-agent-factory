@@ -24,8 +24,7 @@ type ExecCommandRunner = workerprocess.ExecCommandRunner
 type LoggingCommandRunner = workerprocess.LoggingCommandRunner
 
 const (
-	omitZeroWorkerEventExitCode    = false
-	includeZeroWorkerEventExitCode = true
+	omitZeroWorkerEventExitCode = false
 )
 
 const (
@@ -166,6 +165,10 @@ func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) 
 		return "Provider request timed out."
 	case interfaces.WorkFailureTypeMisconfigured:
 		return "Provider command could not be started."
+	case interfaces.WorkFailureTypeMissingExecutable:
+		return "Provider executable could not be found."
+	case interfaces.WorkFailureTypeCommandLineTooLong:
+		return "Provider command exceeded the operating system command-line limit."
 	default:
 		return "Provider execution failed."
 	}

@@ -64,20 +64,20 @@ TTS-only escape hatch.
 `you run --named @you/tts` resolves named factories in this order:
 
 1. Project-local `./factory`
-2. Global shared root `~/.you-agent-factory/factories`
+2. Global shared root `~/.you-agent-factory/you-agent-factories`
 3. Built-in catalog materialization on first use
 
 On first invocation, `@you/tts` materializes into the global root using the
 normal named-factory persist pipeline. Scoped names are URL-encoded on disk:
 
 ```text
-~/.you-agent-factory/factories/@you%2Ftts/
+~/.you-agent-factory/you-agent-factories/@you%2Ftts/
 ```
 
 Inspect the materialized factory:
 
 ```bash
-you factory list --dir ~/.you-agent-factory/factories
+you factory list --dir ~/.you-agent-factory/you-agent-factories
 ```
 
 The directory contains `factory.json`, split `workers/` and `workstations/`

@@ -16,7 +16,7 @@ import (
 func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonicalFailure(t *testing.T) {
 	scriptDir := t.TempDir()
 	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
-	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\nprintf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Request timed out\",\"session_id\":\"cursor-session-error\"}'\n")
+	writeProviderOutputFixture(t, scriptPath, []byte("{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Request timed out\",\"session_id\":\"cursor-session-error\"}\n"), nil, 0)
 	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	var publishedMu sync.Mutex

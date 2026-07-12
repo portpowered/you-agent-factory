@@ -1627,8 +1627,14 @@ export interface components {
       failureClassification?: components["schemas"]["WorkFailureType"];
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
+      /** @description Resolved operator worker preset identifier when one was selected. */
+      presetId?: string;
+      /** @description Resolved canonical model-provider identifier when applicable. */
+      modelProvider?: string;
       /** @description Selected model identifier when applicable. */
       model?: string;
+      /** @description Resolved canonical reasoning effort when applicable. */
+      reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
       /** @description Provider-session correlation refs for model-backed dispatches. */
@@ -1756,8 +1762,14 @@ export interface components {
       failureClassification?: components["schemas"]["WorkFailureType"];
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
+      /** @description Resolved operator worker preset identifier when one was selected. */
+      presetId?: string;
+      /** @description Resolved canonical model-provider identifier when applicable. */
+      modelProvider?: string;
       /** @description Selected model identifier when applicable. */
       model?: string;
+      /** @description Resolved canonical reasoning effort when applicable. */
+      reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
       /** @description Provider-session correlation refs for model-backed dispatches. */
@@ -2051,8 +2063,14 @@ export interface components {
       coordinationRef?: string;
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
+      /** @description Resolved operator worker preset identifier when one was selected. */
+      presetId?: string;
+      /** @description Resolved canonical model-provider identifier when applicable. */
+      modelProvider?: string;
       /** @description Selected model identifier when applicable. */
       model?: string;
+      /** @description Resolved canonical reasoning effort when applicable. */
+      reasoningEffort?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
       /** @description Parent dispatch identifier when this dispatch was spawned from another dispatch. */
@@ -3813,6 +3831,12 @@ export interface components {
       defaultPolicy?: {
         [key: string]: unknown;
       };
+      /** @description Named child-agent roles and their operator worker preset defaults. */
+      agents?: {
+        [
+          key: string
+        ]: components["schemas"]["FactoryOrchestratorJavaScriptAgent"];
+      };
     };
     /** @description Inline JavaScript workflow source carried directly in the factory definition. */
     FactoryOrchestratorJavaScriptInlineSource: {
@@ -4735,6 +4759,11 @@ export interface components {
       config?: components["schemas"]["WorkContent"];
       /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
       defaultContent?: components["schemas"]["WorkContent"];
+    };
+    /** @description Default worker selection for one named JavaScript child-agent role. */
+    FactoryOrchestratorJavaScriptAgent: {
+      /** @description Operator worker preset inherited by child calls using this agent id. */
+      preset: string;
     };
     /**
      * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
@@ -7055,6 +7084,10 @@ export const WorkFailureType = {
   WorkFailureTypeUnknown: "unknown",
   // The worker or runtime was misconfigured and requires operator intervention.
   WorkFailureTypeMisconfigured: "misconfigured",
+  // The configured provider executable could not be found.
+  WorkFailureTypeMissingExecutable: "missing_executable",
+  // The provider command exceeded the operating system command-line size limit.
+  WorkFailureTypeCommandLineTooLong: "command_line_too_long",
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];

@@ -19,6 +19,77 @@ They live in `~/.you-agent-factory/config.json`, environment variables, and
 global CLI flags. See [Operator model defaults](#operator-model-defaults) before
 you repeat `modelProvider` or `model` on every model worker.
 
+Reusable JavaScript child-agent worker presets have the same operator-owned
+configuration file. They do not add environment variables or root CLI flags.
+
+## JavaScript Child-Agent Worker Presets
+
+Define reusable child settings in `~/.you-agent-factory/config.json`:
+
+```json
+{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  },
+  "workerPresets": [
+    {
+      "id": "careful-review",
+      "modelProvider": "codex",
+      "model": "gpt-5-codex",
+      "reasoningEffort": "high"
+    }
+  ]
+}
+```
+
+Preset ids must be unique, trimmed, and non-empty. `modelProvider` is required;
+`model` and `reasoningEffort` are optional. Provider aliases use the same
+canonicalization as scalar worker defaults. Supported reasoning efforts are
+`minimal`, `low`, `medium`, and `high`.
+
+A factory can give a named JavaScript agent a preset default:
+
+```yaml
+orchestrator:
+  kind: JAVASCRIPT
+  javascript:
+    agents:
+      reviewer:
+        preset: careful-review
+```
+
+The workflow may inherit that selection or choose a preset directly:
+
+```javascript
+await agent.run({ agentId: "reviewer", prompt: "Review this change" });
+await agent.run({
+  preset: "careful-review",
+  model: "gpt-5-codex-latest",
+  prompt: "Review this change"
+});
+```
+
+Resolution is independent for provider, model, and reasoning effort. From
+highest to lowest precedence it uses explicit `agent.run` fields, the preset
+selected by `agent.run`, the factory named-agent preset, that operator preset's
+values, then `defaults.workerModelProvider` and `defaults.workerModel`. The
+selected preset id is retained even when an explicit field overrides one value.
+The runtime canonicalizes the completed selection and applies effective policy
+before creating a child dispatch or calling a provider.
+
+Unknown child or factory preset references fail with the preset and source in
+the diagnostic. Duplicate or empty ids, unsupported providers, and unsupported
+reasoning efforts fail operator configuration loading with the rejected value
+and preset context. Policy-denied effective models or reasoning efforts fail
+before dispatch. Dispatch list/detail inspection and replay retain the resolved
+preset id, model provider, model, reasoning effort, runner, execution provider,
+and provider-session reference when available.
+
+Petri scalar worker defaults and JavaScript presets share this existing
+operator configuration owner. Preset definitions and one-run preset selection
+are intentionally not exposed through new environment variables or root flags.
+
 ## Operator Model Defaults
 
 Use operator defaults when you want one preferred model provider and model for

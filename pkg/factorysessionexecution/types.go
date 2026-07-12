@@ -223,6 +223,7 @@ type ResolvedSource struct {
 	Dialect         string
 	ResolutionOrder []string
 	Metadata        map[string]string
+	Agents          map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 }
 
 // InspectionLinks are API-relative links for polling and inspecting one session.

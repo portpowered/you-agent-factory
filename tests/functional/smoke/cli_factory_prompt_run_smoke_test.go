@@ -419,7 +419,7 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 	if err != nil {
 		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
 	}
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
 	namedFactoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", canonical)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)

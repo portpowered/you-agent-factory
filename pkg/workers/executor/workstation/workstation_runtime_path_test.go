@@ -165,7 +165,7 @@ func TestWorkstationExecutor_ResolvesTemplatedWorkingDirectoryFromSessionContext
 	if mock.dispatch.FactorySessionID != sessionID {
 		t.Fatalf("FactorySessionID = %q, want %q", mock.dispatch.FactorySessionID, sessionID)
 	}
-	if mock.dispatch.EnvVars["SESSION_WORKDIR"] != wantDir {
+	if filepath.Clean(mock.dispatch.EnvVars["SESSION_WORKDIR"]) != wantDir {
 		t.Fatalf("env vars = %#v, want SESSION_WORKDIR=%q", mock.dispatch.EnvVars, wantDir)
 	}
 }

@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file restart-resume coverage keeps persistence, replay, provider, and event-lineage assertions in one integration fixture.
+// pkgmaintcheck:ignore-file-lines restart-resume coverage keeps persistence, replay, provider, and event-lineage assertions in one integration fixture.
 package fixtures_test
 
 import (
@@ -490,6 +492,77 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_InvalidCheckpointSumm
 		RequestID: "req-runtime-resume-invalid-checkpoint-001",
 	})
 	assertResumeError(t, err, fse.ResumeOutcomeInvalidState, "checkpointSummary.kind")
+}
+
+func TestJavaScriptRuntimeService_ResumeInterruptedSession_NonApprovedCheckpointReturnsTypedFailure(t *testing.T) {
+	harness := startInterruptedResumableSession(t, "req-runtime-resume-non-approved-001")
+	beforeCalls := harness.provider.CallCount()
+	rewritePersistedSnapshot(t, harness.projectRoot, harness.sessionID, func(snapshot *fse.PersistedRuntimeSessionState) {
+		snapshot.CheckpointSummary.ResumeStrategy = ""
+	})
+
+	service := newResumedRuntimeService(harness)
+	_, err := service.ResumeInterruptedSession(context.Background(), harness.sessionID, fse.ResumeSessionRequest{
+		RequestID: "req-runtime-resume-non-approved-resume-001",
+	})
+	assertResumeError(t, err, fse.ResumeOutcomeInvalidState, "checkpointSummary.resumeStrategy")
+	if calls := harness.provider.CallCount(); calls != beforeCalls {
+		t.Fatalf("provider calls = %d, want unchanged %d after rejected resume", calls, beforeCalls)
+	}
+	if strings.Contains(err.Error(), "checkpointState") || strings.Contains(err.Error(), "firstLabel") {
+		t.Fatalf("resume diagnostic leaked checkpoint payload detail: %v", err)
+	}
+}
+
+func TestJavaScriptRuntimeService_ResumeInterruptedSession_RejectsCheckpointDispatchNotDurablyCompleted(t *testing.T) {
+	harness := startInterruptedResumableSession(t, "req-runtime-resume-dispatch-drift-001")
+	beforeCalls := harness.provider.CallCount()
+	rewritePersistedSnapshot(t, harness.projectRoot, harness.sessionID, func(snapshot *fse.PersistedRuntimeSessionState) {
+		snapshot.CheckpointSummary.CompletedDispatchIDs = append(snapshot.CheckpointSummary.CompletedDispatchIDs, "dispatch-missing")
+	})
+
+	service := newResumedRuntimeService(harness)
+	_, err := service.ResumeInterruptedSession(context.Background(), harness.sessionID, fse.ResumeSessionRequest{
+		RequestID: "req-runtime-resume-dispatch-drift-resume-001",
+	})
+	assertResumeError(t, err, fse.ResumeOutcomeInvalidState, "checkpointSummary.completedDispatchIds")
+	if calls := harness.provider.CallCount(); calls != beforeCalls {
+		t.Fatalf("provider calls = %d, want unchanged %d after rejected recovery", calls, beforeCalls)
+	}
+}
+
+func TestJavaScriptRuntimeService_ResumeInterruptedSession_RejectsRegressedEventCursor(t *testing.T) {
+	harness := startInterruptedResumableSession(t, "req-runtime-resume-cursor-drift-001")
+	beforeCalls := harness.provider.CallCount()
+	rewritePersistedSnapshot(t, harness.projectRoot, harness.sessionID, func(snapshot *fse.PersistedRuntimeSessionState) {
+		var event map[string]any
+		if err := json.Unmarshal(snapshot.Events[1], &event); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		event["context"].(map[string]any)["sequence"] = float64(1)
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal event: %v", err)
+		}
+		snapshot.Events[1] = encoded
+		canonicalIndex := 0
+		for index := range snapshot.Records {
+			if snapshot.Records[index].Kind != fse.DurableRecordKindCanonicalFactoryEvent {
+				continue
+			}
+			snapshot.Records[index].CanonicalEvent = snapshot.Events[canonicalIndex]
+			canonicalIndex++
+		}
+	})
+
+	service := newResumedRuntimeService(harness)
+	_, err := service.ResumeInterruptedSession(context.Background(), harness.sessionID, fse.ResumeSessionRequest{
+		RequestID: "req-runtime-resume-cursor-drift-resume-001",
+	})
+	assertResumeError(t, err, fse.ResumeOutcomeInvalidState, "events.sequence")
+	if calls := harness.provider.CallCount(); calls != beforeCalls {
+		t.Fatalf("provider calls = %d, want unchanged %d after rejected recovery", calls, beforeCalls)
+	}
 }
 
 func TestJavaScriptRuntimeService_ResumeInterruptedSession_NonInterruptedSessionReturnsTypedFailure(t *testing.T) {

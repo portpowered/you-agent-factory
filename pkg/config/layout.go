@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -782,6 +783,13 @@ func commitFactorySplitLayoutReplace(parentDir, targetDir, stagingDir, segment s
 	}
 
 	if err := os.Rename(targetDir, backupDir); err != nil {
+		if runtime.GOOS == "windows" {
+			if replaceErr := replaceWatchedDirectoryContents(targetDir, stagingDir, backupDir); replaceErr == nil {
+				return "", nil
+			} else {
+				return "", fmt.Errorf("backup existing factory %q: %w; Windows in-place replacement failed: %v", segment, err, replaceErr)
+			}
+		}
 		return "", fmt.Errorf("backup existing factory %q: %w", segment, err)
 	}
 	committed := false
@@ -799,6 +807,40 @@ func commitFactorySplitLayoutReplace(parentDir, targetDir, stagingDir, segment s
 	}
 	committed = true
 	return backupDir, nil
+}
+
+func replaceWatchedDirectoryContents(targetDir, stagingDir, backupDir string) error {
+	if err := os.CopyFS(backupDir, os.DirFS(targetDir)); err != nil {
+		return fmt.Errorf("snapshot existing factory: %w", err)
+	}
+	if err := clearDirectoryContents(targetDir); err != nil {
+		return err
+	}
+	if err := os.CopyFS(targetDir, os.DirFS(stagingDir)); err != nil {
+		_ = clearDirectoryContents(targetDir)
+		_ = os.CopyFS(targetDir, os.DirFS(backupDir))
+		return fmt.Errorf("copy staged factory: %w", err)
+	}
+	if err := os.RemoveAll(stagingDir); err != nil {
+		return fmt.Errorf("remove staged factory after commit: %w", err)
+	}
+	if err := os.RemoveAll(backupDir); err != nil {
+		return fmt.Errorf("remove factory backup after commit: %w", err)
+	}
+	return nil
+}
+
+func clearDirectoryContents(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read directory for replacement: %w", err)
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return fmt.Errorf("remove existing factory entry %q: %w", entry.Name(), err)
+		}
+	}
+	return nil
 }
 
 func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {

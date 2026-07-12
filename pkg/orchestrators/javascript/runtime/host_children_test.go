@@ -3,15 +3,292 @@ package workflowruntime_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
+
+func TestRun_DocumentedSimpleFinalWorkflow(t *testing.T) {
+	outcome := runDocumentedExample(t, "simple-final.workflow.js", map[string]any{
+		"greeting": "hello", "subject": "factory authors",
+	}, nil)
+	projected := projectPrimaryJSON(t, "session-documented-simple-final", outcome.Value)
+	if projected["greeting"] != "hello" || projected["subject"] != "factory authors" {
+		t.Fatalf("documented simple result = %#v", projected)
+	}
+	if len(outcome.Records) != 1 || outcome.Records[0].Kind != workflowruntime.RecordKindPhase {
+		t.Fatalf("documented simple records = %#v", outcome.Records)
+	}
+}
+
+func TestRun_DocumentedOrderedFanoutWorkflow(t *testing.T) {
+	outcome := runDocumentedExample(t, "ordered-fanout.workflow.js", map[string]any{
+		"topics": []string{"alpha", "beta", "gamma"},
+	}, nil)
+	projected := projectPrimaryJSON(t, "session-documented-ordered-fanout", outcome.Value)
+	reviews, ok := projected["reviews"].([]any)
+	if !ok || len(reviews) != 3 {
+		t.Fatalf("documented reviews = %#v", projected["reviews"])
+	}
+	for index, topic := range []string{"alpha", "beta", "gamma"} {
+		review, ok := reviews[index].(map[string]any)
+		if !ok || review["label"] != "review-"+topic {
+			t.Fatalf("documented reviews[%d] = %#v", index, reviews[index])
+		}
+	}
+	if synthesis, ok := projected["synthesis"].(map[string]any); !ok || synthesis["label"] != "synthesize" {
+		t.Fatalf("documented synthesis = %#v", projected["synthesis"])
+	}
+	if childTerminalRecordCount(outcome.Records) != 4 {
+		t.Fatalf("completed child dispatches = %d, want 4", childTerminalRecordCount(outcome.Records))
+	}
+}
+
+func TestRun_DocumentedCheckpointResumeWorkflow(t *testing.T) {
+	args := map[string]any{"topics": []string{"alpha", "beta"}}
+	fresh := runDocumentedExample(t, "checkpoint-resume.workflow.js", args, nil)
+	var checkpoint *workflowruntime.CheckpointRecord
+	for _, record := range fresh.Records {
+		if record.Checkpoint != nil {
+			checkpoint = record.Checkpoint
+		}
+	}
+	if checkpoint == nil || checkpoint.State["completedTopics"] == nil {
+		t.Fatalf("documented checkpoint records = %#v", fresh.Records)
+	}
+	resumed := runDocumentedExample(t, "checkpoint-resume.workflow.js", args, &workflowruntime.ResumeContext{
+		CheckpointState: checkpoint.State,
+	})
+	projected := projectPrimaryJSON(t, "session-documented-checkpoint-resume", resumed.Value)
+	if projected["path"] != "resumed" {
+		t.Fatalf("documented resumed result = %#v", projected)
+	}
+}
+
+func runDocumentedExample(t *testing.T, name string, args map[string]any, resume *workflowruntime.ResumeContext) workflowruntime.Outcome {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "..", "docs", "examples", "javascript-workflows", name)
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read documented workflow %s: %v", name, err)
+	}
+	return runSuccessful(t, workflowruntime.Request{
+		Source: string(source), SourceRef: path,
+		SessionID: "session-documented-" + strings.TrimSuffix(name, ".workflow.js"),
+		Args:      marshalArgs(t, args),
+		Metadata:  map[string]string{"name": strings.TrimSuffix(name, ".workflow.js")},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(), Resume: resume,
+	})
+}
+
+func childTerminalRecordCount(records []workflowruntime.RuntimeRecord) int {
+	count := 0
+	for _, record := range records {
+		if record.ChildDispatch != nil && record.ChildDispatch.Status == workflowruntime.ChildDispatchStatusCompleted {
+			count++
+		}
+	}
+	return count
+}
+
+func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
+	agents := map[string]interfaces.FactoryOrchestratorJavaScriptAgent{"reviewer": {Preset: "factory"}}
+	config := workflowruntime.WorkerSettingsConfig{
+		Presets: map[string]workflowruntime.WorkerPreset{
+			"child":   {ModelProvider: "claude", Model: "child-model", ReasoningEffort: "HIGH"},
+			"factory": {ModelProvider: "codex", Model: "factory-model", ReasoningEffort: "low"},
+		}, DefaultModelProvider: "gemini", DefaultModel: "scalar-model",
+	}
+	tests := []struct {
+		name      string
+		req, want workflowruntime.ChildExecutionRequest
+	}{
+		{"explicit fields", workflowruntime.ChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}, workflowruntime.ChildExecutionRequest{ModelProvider: "KIRO", Model: "explicit-model", ReasoningEffort: "minimal"}},
+		{"child preset", workflowruntime.ChildExecutionRequest{Preset: "child"}, workflowruntime.ChildExecutionRequest{Preset: "child", ModelProvider: "CLAUDE", Model: "child-model", ReasoningEffort: "high"}},
+		{"factory preset", workflowruntime.ChildExecutionRequest{AgentID: "reviewer"}, workflowruntime.ChildExecutionRequest{AgentID: "reviewer", Preset: "factory", ModelProvider: "CODEX", Model: "factory-model", ReasoningEffort: "low"}},
+		{"mixed fields", workflowruntime.ChildExecutionRequest{AgentID: "reviewer", Preset: "child", Model: "explicit-model"}, workflowruntime.ChildExecutionRequest{AgentID: "reviewer", Preset: "child", ModelProvider: "CLAUDE", Model: "explicit-model", ReasoningEffort: "high"}},
+		{"scalar defaults", workflowruntime.ChildExecutionRequest{}, workflowruntime.ChildExecutionRequest{ModelProvider: "GEMINI", Model: "scalar-model"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := workflowruntime.ResolveChildWorkerSettings(tc.req, agents, config)
+			if err != nil {
+				t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
+			}
+			if got.AgentID != tc.want.AgentID || got.Preset != tc.want.Preset || got.ModelProvider != tc.want.ModelProvider || got.Model != tc.want.Model || got.ReasoningEffort != tc.want.ReasoningEffort {
+				t.Fatalf("selection = %#v, want %#v", got, tc.want)
+			}
+			again, err := workflowruntime.ResolveChildWorkerSettings(tc.req, agents, config)
+			if err != nil || !reflect.DeepEqual(again, got) {
+				t.Fatalf("repeated selection = %#v, %v; want %#v", again, err, got)
+			}
+		})
+	}
+}
+
+func TestResolveChildWorkerSettings_UnknownPresetNamesSource(t *testing.T) {
+	_, err := workflowruntime.ResolveChildWorkerSettings(workflowruntime.ChildExecutionRequest{Preset: "missing"}, nil, workflowruntime.WorkerSettingsConfig{})
+	if err == nil || !strings.Contains(err.Error(), `"missing" from agent.run`) {
+		t.Fatalf("error = %v", err)
+	}
+	_, err = workflowruntime.ResolveChildWorkerSettings(workflowruntime.ChildExecutionRequest{AgentID: "reviewer"}, map[string]interfaces.FactoryOrchestratorJavaScriptAgent{"reviewer": {Preset: "missing"}}, workflowruntime.WorkerSettingsConfig{})
+	if err == nil || !strings.Contains(err.Error(), `"missing" from factory agent`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestFailureBaseline_AbsentDefault_GoalAgentRunLeavesEmptyModelProviderWithoutOperatorDefaults(t *testing.T) {
+	got, err := workflowruntime.ResolveChildWorkerSettings(
+		workflowruntime.ChildExecutionRequest{
+			AgentID: "goal-planner",
+			Prompt:  "plan the goal",
+		},
+		map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+			"goal-planner": {},
+		},
+		workflowruntime.WorkerSettingsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
+	}
+	if got.ModelProvider != "" {
+		t.Fatalf("modelProvider = %q, want empty when operator defaults are absent", got.ModelProvider)
+	}
+	if got.Model != "" {
+		t.Fatalf("model = %q, want empty when operator defaults are absent", got.Model)
+	}
+	if got.Command != "" {
+		t.Fatalf("command = %q, want empty provider command when operator defaults are absent", got.Command)
+	}
+}
+
+func TestAgentRun_InheritsFactoryNamedAgentPreset(t *testing.T) {
+	req := workflowruntime.Request{
+		Source:    `return (async function () { return agent.run({agentId: "reviewer", prompt: "review"}); })();`,
+		SessionID: "session-named-agent",
+		Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+			"reviewer": {Preset: "careful-review"},
+		},
+		WorkerSettings: workflowruntime.WorkerSettingsConfig{Presets: map[string]workflowruntime.WorkerPreset{
+			"careful-review": {ModelProvider: "CODEX"},
+		}},
+	}
+	var captured workflowruntime.ChildExecutionRequest
+	outcome, err := workflowruntime.Run(context.Background(), req, workflowruntime.Hooks{
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+				captured = child
+				return workflowruntime.ChildExecutionResult{Status: "COMPLETED", Request: child}, nil
+			})
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+	if captured.AgentID != "reviewer" || captured.Preset != "careful-review" {
+		t.Fatalf("child selection = %#v", captured)
+	}
+}
+
+func TestAgentRun_RejectsUnknownFactoryNamedAgentBeforeDispatch(t *testing.T) {
+	called := false
+	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+		Source:    `agent.run({agentId: "missing", prompt: "review"}); return {ok: true};`,
+		SessionID: "session-unknown-agent",
+	}, workflowruntime.Hooks{NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+		return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+			called = true
+			return workflowruntime.ChildExecutionResult{}, nil
+		})
+	}})
+	if err != nil || outcome.OK || called || !strings.Contains(outcome.Failure.Message, `unknown factory agent "missing"`) {
+		t.Fatalf("Run() outcome=%#v err=%v called=%v", outcome, err, called)
+	}
+}
+
+func TestAgentRun_GatesResolvedPresetWorkerSettingsBeforeDispatch(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     string
+		policy     workflowpolicy.EffectivePolicy
+		wantErr    string
+		wantModel  string
+		wantEffort string
+	}{
+		{
+			name:    "preset model denied",
+			source:  `return agent.run({preset: "careful", prompt: "review"});`,
+			policy:  policyWithWorkerAllowlists([]string{"allowed-model"}, []string{"high"}),
+			wantErr: `policy denied: model "preset-model" is not listed in allowedModels`,
+		},
+		{
+			name:    "preset reasoning denied",
+			source:  `return agent.run({preset: "careful", prompt: "review"});`,
+			policy:  policyWithWorkerAllowlists([]string{"preset-model"}, []string{"low"}),
+			wantErr: `policy denied: reasoningEffort "high" is not listed in allowedReasoningEfforts`,
+		},
+		{
+			name:       "explicit fields override preset and pass",
+			source:     `return agent.run({preset: "careful", model: "allowed-model", reasoningEffort: "low", prompt: "review"});`,
+			policy:     policyWithWorkerAllowlists([]string{"allowed-model"}, []string{"low"}),
+			wantModel:  "allowed-model",
+			wantEffort: "low",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			var captured workflowruntime.ChildExecutionRequest
+			outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+				Source: tc.source, SessionID: "session-policy-preset", Policy: tc.policy,
+				WorkerSettings: workflowruntime.WorkerSettingsConfig{Presets: map[string]workflowruntime.WorkerPreset{
+					"careful": {ModelProvider: "codex", Model: "preset-model", ReasoningEffort: "high"},
+				}},
+			}, workflowruntime.Hooks{NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+				return childExecutorFunc(func(_ context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+					calls++
+					captured = req
+					return workflowruntime.ChildExecutionResult{Status: workflowruntime.ChildDispatchStatusCompleted, Request: req}, nil
+				})
+			}})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if tc.wantErr != "" {
+				if outcome.OK || calls != 0 || len(outcome.Records) != 0 || !strings.Contains(outcome.Failure.Message, tc.wantErr) {
+					t.Fatalf("outcome=%#v calls=%d, want denial %q with no side effects", outcome, calls, tc.wantErr)
+				}
+				return
+			}
+			if !outcome.OK || calls != 1 || captured.Model != tc.wantModel || captured.ReasoningEffort != tc.wantEffort {
+				t.Fatalf("outcome=%#v calls=%d request=%#v", outcome, calls, captured)
+			}
+		})
+	}
+}
+
+func policyWithWorkerAllowlists(models, efforts []string) workflowpolicy.EffectivePolicy {
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.AllowedModels = models
+	policy.AllowedReasoningEfforts = efforts
+	return policy
+}
+
+type childExecutorFunc func(context.Context, workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error)
+
+func (f childExecutorFunc) Execute(ctx context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+	return f(ctx, req)
+}
 
 func TestRun_AgentRunFakeChild_EmitsOrderedChildDispatchRecords(t *testing.T) {
 	source := readFixture(t, "agent-run-fake-child.workflow.js")
@@ -388,6 +665,89 @@ func TestRun_ParallelFakeChildren_PreservesInputOrderAndConcurrency(t *testing.T
 
 	if string(first.Value.JSON) != string(second.Value.JSON) {
 		t.Fatalf("value drift across runs: first=%s second=%s", first.Value.JSON, second.Value.JSON)
+	}
+}
+
+func TestRun_ParallelObjectChildren_ResolveWorkerSettings(t *testing.T) {
+	var mu sync.Mutex
+	captured := make(map[string]workflowruntime.ChildExecutionRequest)
+	req := workflowruntime.Request{
+		Source: `return parallel([
+			{label: "child-preset", preset: "child", prompt: "one"},
+			{label: "factory-preset", agentId: "reviewer", prompt: "two"},
+			{label: "scalar-defaults", prompt: "three"}
+		]);`,
+		SessionID: "session-parallel-worker-settings",
+		Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+			"reviewer": {Preset: "factory"},
+		},
+		WorkerSettings: workflowruntime.WorkerSettingsConfig{
+			Presets: map[string]workflowruntime.WorkerPreset{
+				"child":   {ModelProvider: "claude", Model: "child-model", ReasoningEffort: "high"},
+				"factory": {ModelProvider: "codex", Model: "factory-model", ReasoningEffort: "low"},
+			},
+			DefaultModelProvider: "gemini",
+			DefaultModel:         "default-model",
+		},
+	}
+	outcome, err := workflowruntime.Run(context.Background(), req, workflowruntime.Hooks{
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+				mu.Lock()
+				captured[child.Label] = child
+				mu.Unlock()
+				return workflowruntime.ChildExecutionResult{Status: workflowruntime.ChildDispatchStatusCompleted, Request: child}, nil
+			})
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+	assertWorkerSelection(t, captured["child-preset"], "child", "CLAUDE", "child-model", "high")
+	assertWorkerSelection(t, captured["factory-preset"], "factory", "CODEX", "factory-model", "low")
+	assertWorkerSelection(t, captured["scalar-defaults"], "", "GEMINI", "default-model", "")
+}
+
+func TestRun_ParallelObjectChild_GatesResolvedPresetBeforeExecutor(t *testing.T) {
+	calls := 0
+	policy := policyWithWorkerAllowlists([]string{"allowed-model"}, []string{"high"})
+	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+		Source:    `return (async () => ({results: await parallel([{label: "denied", preset: "careful", prompt: "review"}])}))();`,
+		SessionID: "session-parallel-worker-policy",
+		Policy:    policy,
+		WorkerSettings: workflowruntime.WorkerSettingsConfig{Presets: map[string]workflowruntime.WorkerPreset{
+			"careful": {ModelProvider: "codex", Model: "denied-model", ReasoningEffort: "high"},
+		}},
+	}, workflowruntime.Hooks{
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+				calls++
+				return workflowruntime.ChildExecutionResult{Status: workflowruntime.ChildDispatchStatusCompleted, Request: child}, nil
+			})
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+	if calls != 0 || len(outcome.Records) != 0 {
+		t.Fatalf("executor calls=%d records=%#v, want no dispatch side effects", calls, outcome.Records)
+	}
+	projected := projectPrimaryJSON(t, "session-parallel-worker-policy", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one denied child", projected["results"])
+	}
+	denied, ok := results[0].(map[string]any)
+	if !ok || denied["status"] != workflowruntime.ChildDispatchStatusFailed ||
+		!strings.Contains(denied["diagnostic"].(string), `policy denied: model "denied-model"`) {
+		t.Fatalf("denied result = %#v", results[0])
+	}
+}
+
+func assertWorkerSelection(t *testing.T, got workflowruntime.ChildExecutionRequest, preset, provider, model, effort string) {
+	t.Helper()
+	if got.Preset != preset || got.ModelProvider != provider || got.Model != model || got.ReasoningEffort != effort {
+		t.Fatalf("worker selection = %#v, want preset=%q provider=%q model=%q effort=%q", got, preset, provider, model, effort)
 	}
 }
 

@@ -45,6 +45,29 @@ describe("InferenceAttemptCard", () => {
     expect(within(article).queryByText("dispatch-review")).toBeNull();
   });
 
+  it("does not render an outer outline around the attempt item", () => {
+    render(
+      <CurrentSelectionLocaleProvider>
+        <InferenceAttemptCard
+          attempt={inferenceAttempt("dispatch-review", {
+            attempt: 1,
+            outcome: "COMPLETED",
+          })}
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const article = screen.getByRole("article", {
+      name: "Inference attempt 1",
+    });
+
+    expect(article.className).not.toContain("border-outline");
+    expect(article.className).not.toContain("bg-surface-container-high");
+    expect(
+      within(article).getByRole("heading", { name: "Attempt 1" }),
+    ).toBeTruthy();
+  });
+
   it("reveals full details when expanded", () => {
     render(
       <CurrentSelectionLocaleProvider>

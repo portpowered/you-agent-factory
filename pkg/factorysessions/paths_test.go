@@ -36,6 +36,7 @@ func TestResolveSessionFolder_RejectsMissingDirectory(t *testing.T) {
 func TestExpandFolderHome_ExpandsTildePrefix(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	got, err := ExpandFolderHome("~/sessions/workspace")
 	if err != nil {
@@ -61,6 +62,7 @@ func TestSameFactoryDir_NormalizesEquivalentPaths(t *testing.T) {
 func TestResolveSessionFolder_ExpandsTildeBeforeStat(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	sessionDir := filepath.Join(home, "session-root")
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
