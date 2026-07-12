@@ -1,0 +1,17 @@
+Print packaged markdown reference topics from the installed binary.
+
+Run without a topic to print the quick-start blurb and packaged docs index. Use one supported topic argument to print the authored markdown page with no wrapper formatting.
+
+Usage:
+  you docs [topic] [flags]
+
+Flags:
+  -h, --help   help for docs
+
+Global Flags:
+  -d, --debug                                  emit lower-level command diagnostics where supported (implies --verbose)
+      --default-worker-model string            default worker model for model workers with omitted model
+      --default-worker-model-provider string   default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE; accepted aliases include codex, claude, gemini, kiro-cli, opencode, agent, cursor, and anthropic; DEFAULT resolves through lower-precedence concrete provider)
+      --json                                   emit structured JSON on stdout for supported commands; diagnostics remain on stderr
+      --server string                          factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port (default "http://localhost:7437")
+  -v, --verbose                                emit concise command diagnostics to stderr

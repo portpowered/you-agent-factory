@@ -116,6 +116,13 @@ type TopicSummary struct {
 	Description string
 }
 
+// TopicIndexEntry describes one canonical packaged docs topic plus CLI aliases.
+type TopicIndexEntry struct {
+	Name        string
+	Description string
+	Aliases     []string
+}
+
 // SupportedTopics returns the fixed docs topics exposed by the packaged CLI
 // docs surface in display order.
 func SupportedTopics() []string {
@@ -149,6 +156,25 @@ func TopicSummaries() []TopicSummary {
 		})
 	}
 	return summaries
+}
+
+// TopicIndexEntries returns canonical packaged docs topic metadata and CLI
+// aliases in display order.
+func TopicIndexEntries() []TopicIndexEntry {
+	entries := make([]TopicIndexEntry, 0, len(topicRegistry.ordered))
+	for _, doc := range topicRegistry.ordered {
+		aliases := make([]string, 0, len(doc.aliases))
+		for _, alias := range doc.aliases {
+			aliases = append(aliases, string(alias))
+		}
+		sort.Strings(aliases)
+		entries = append(entries, TopicIndexEntry{
+			Name:        string(doc.topic),
+			Description: doc.description,
+			Aliases:     aliases,
+		})
+	}
+	return entries
 }
 
 // QuickStartMarkdown returns the quick-start blurb printed before the docs index.
