@@ -187,24 +187,41 @@ func samplePayload(t *testing.T, kind responseevents.Kind, phase responseevents.
 	t.Helper()
 
 	switch kind {
+	case responseevents.KindMessage:
+		return sampleMessagePayload(phase)
+	case responseevents.KindTool:
+		return sampleToolPayload(phase)
+	default:
+		return sampleStaticKindPayload(t, kind)
+	}
+}
+
+func sampleMessagePayload(phase responseevents.Phase) json.RawMessage {
+	if phase == responseevents.PhaseDelta {
+		return json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`)
+	}
+	return json.RawMessage(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"hello"}]}`)
+}
+
+func sampleToolPayload(phase responseevents.Phase) json.RawMessage {
+	if phase == responseevents.PhaseDelta {
+		return json.RawMessage(`{"toolCallId":"call-1","outputDelta":"partial"}`)
+	}
+	return json.RawMessage(`{"toolCallId":"call-1","toolName":"read_file","status":"started"}`)
+}
+
+func sampleStaticKindPayload(t *testing.T, kind responseevents.Kind) json.RawMessage {
+	t.Helper()
+
+	switch kind {
 	case responseevents.KindSession:
 		return json.RawMessage(`{"status":"active","capabilities":{"nativeStreaming":true}}`)
 	case responseevents.KindRun:
 		return json.RawMessage(`{"status":"running"}`)
 	case responseevents.KindTurn:
 		return json.RawMessage(`{"turnIndex":1,"status":"active"}`)
-	case responseevents.KindMessage:
-		if phase == responseevents.PhaseDelta {
-			return json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`)
-		}
-		return json.RawMessage(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":"hello"}]}`)
 	case responseevents.KindReasoning:
 		return json.RawMessage(`{"summaryDelta":"thinking"}`)
-	case responseevents.KindTool:
-		if phase == responseevents.PhaseDelta {
-			return json.RawMessage(`{"toolCallId":"call-1","outputDelta":"partial"}`)
-		}
-		return json.RawMessage(`{"toolCallId":"call-1","toolName":"read_file","status":"started"}`)
 	case responseevents.KindFileChange:
 		return json.RawMessage(`{"path":"README.md","operation":"MODIFY"}`)
 	case responseevents.KindPlan:
