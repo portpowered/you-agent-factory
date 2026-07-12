@@ -97,6 +97,45 @@ func TestBuildRuntimeMetricsSinkUsesConfiguredRollingPolicy(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeMetricsSinkCreatesDatedDirectoriesOnFreshRoot(t *testing.T) {
+	metricsDir := t.TempDir()
+	assertRuntimeArtifactRootLacksCalendarDirectories(t, metricsDir)
+	before := time.Now().UTC()
+
+	sink, err := BuildRuntimeMetricsSink(
+		"session-fresh-root",
+		"runtime-fresh-root",
+		"/folder",
+		"/factory",
+		metricsDir,
+		RuntimeMetricsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+	defer sink.Close()
+	after := time.Now().UTC()
+
+	assertRuntimeArtifactDatedDirPresent(t, filepath.Dir(sink.Path()))
+	assertPathUsesPlatformSeparators(t, sink.Path())
+	assertRuntimeMetricsPathFormat(
+		t,
+		sink.Path(),
+		metricsDir,
+		"session-fresh-root",
+		"runtime-fresh-root",
+		before,
+		after,
+	)
+
+	if err := sink.Counter(context.Background(), "runtime.started", 1, metrics.Fields{}); err != nil {
+		t.Fatalf("Counter on fresh root metrics sink: %v", err)
+	}
+	if _, err := os.Stat(sink.Path()); err != nil {
+		t.Fatalf("active runtime metrics file %q should remain open after write: %v", sink.Path(), err)
+	}
+}
+
 func TestBuildRuntimeMetricsSinkCreatesUTCPathUnderConfiguredRoot(t *testing.T) {
 	metricsDir := t.TempDir()
 	before := time.Now().UTC()

@@ -262,6 +262,28 @@ func assertRotatedRuntimeLogMatches(t *testing.T, basePath string, matches []str
 	}
 }
 
+func TestBuildRuntimeLoggerCreatesDatedDirectoriesOnFreshRoot(t *testing.T) {
+	logDir := t.TempDir()
+	assertRuntimeArtifactRootLacksCalendarDirectories(t, logDir)
+	before := time.Now().UTC()
+
+	sink, err := BuildRuntimeLogger(zap.NewNop(), "runtime-fresh-root", logDir, RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+	defer sink.Close()
+	after := time.Now().UTC()
+
+	assertRuntimeArtifactDatedDirPresent(t, filepath.Dir(sink.Path()))
+	assertPathUsesPlatformSeparators(t, sink.Path())
+	assertRuntimeLogPathFormat(t, sink.Path(), logDir, "runtime-fresh-root", before, after)
+
+	sink.Logger().Info("fresh root runtime log")
+	if _, err := os.Stat(sink.Path()); err != nil {
+		t.Fatalf("active runtime log file %q should remain open after write: %v", sink.Path(), err)
+	}
+}
+
 func TestBuildRuntimeLoggerCreatesUTCSeparatedPathUnderConfiguredRoot(t *testing.T) {
 	logDir := t.TempDir()
 	before := time.Now().UTC()
