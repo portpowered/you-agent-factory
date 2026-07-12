@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"testing"
 
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 )
 
@@ -176,6 +179,165 @@ func TestFailureBaseline_AbsentDefault_RunNamedGoalLeavesOperatorDefaultsEmptyWi
 	if got.OperatorDefaults.WorkerModel != "" {
 		t.Fatalf("operator model = %q, want empty without configured defaults", got.OperatorDefaults.WorkerModel)
 	}
+}
+
+func assertInvalidTopologyMaterializationOperatorDiagnostics(t *testing.T, err error, wantFactoryDir string) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("expected invalid topology materialization or upgrade failure")
+	}
+	got := err.Error()
+	if !strings.Contains(got, "invalid graph references") {
+		t.Fatalf("error = %q, want invalid graph references guidance", got)
+	}
+	if !strings.Contains(got, "Blocking findings:") {
+		t.Fatalf("error = %q, want blocking findings section", got)
+	}
+	if strings.Contains(got, "blocking validation targets") {
+		t.Fatalf("error = %q, want findings instead of target count summary", got)
+	}
+	if strings.Count(got, "you factory config validate") != 1 {
+		t.Fatalf("error = %q, want exactly one recovery command", got)
+	}
+	wantFactoryDir = strings.TrimSpace(wantFactoryDir)
+	if wantFactoryDir == "" {
+		t.Fatal("wantFactoryDir is required")
+	}
+	recovery := factoryconfig.FactoryConfigValidateRecoveryCommand(wantFactoryDir)
+	if !strings.Contains(got, recovery) {
+		t.Fatalf("error = %q, want recovery command %q", got, recovery)
+	}
+	if !strings.Contains(got, "@you%2Fgoal") {
+		t.Fatalf("error = %q, want resolved @you%%2Fgoal factory path", got)
+	}
+}
+
+func corruptGoalFactoryPlanOutputStateForTest(t *testing.T, factoryDir, stateName string) {
+	t.Helper()
+
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	data, err := os.ReadFile(factoryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	workstations, ok := raw["workstations"].([]any)
+	if !ok || len(workstations) == 0 {
+		t.Fatal("factory.json workstations missing")
+	}
+	var workstation map[string]any
+	for _, entry := range workstations {
+		candidate, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if candidate["name"] == "plan-goal" {
+			workstation = candidate
+			break
+		}
+	}
+	if workstation == nil {
+		t.Fatal("factory.json plan-goal workstation not found")
+	}
+	outputs, ok := workstation["outputs"].([]any)
+	if !ok || len(outputs) == 0 {
+		t.Fatal("factory.json workstation outputs missing")
+	}
+	output, ok := outputs[0].(map[string]any)
+	if !ok {
+		t.Fatal("factory.json workstation output[0] is not an object")
+	}
+	output["state"] = stateName
+	updated, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal(factory.json): %v", err)
+	}
+	if err := os.WriteFile(factoryPath, updated, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+}
+
+func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsCorruptedMaterializedFactory(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	env := setupNamedGoalCLIEnv(t)
+	runCalled := false
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		runCalled = true
+		if cfg.NamedFactoryName != goal.PackagedFactoryName {
+			t.Fatalf("named factory = %q, want %q", cfg.NamedFactoryName, goal.PackagedFactoryName)
+		}
+		return nil
+	}
+
+	env.root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"invalid-topology-materialized-baseline",
+	})
+	if err := env.root.Execute(); err != nil {
+		t.Fatalf("execute first run --named %s: %v", goal.PackagedFactoryName, err)
+	}
+	if !runCalled {
+		t.Fatal("expected first named goal run to reach runCLI after materialization")
+	}
+
+	factoryDir := materializedGoalDir(env.homeDir)
+	corruptGoalFactoryPlanOutputStateForTest(t, factoryDir, "missing-plan-state")
+
+	runCalled = false
+	env.root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"invalid-topology-upgrade-baseline",
+	})
+	err := env.root.Execute()
+	assertInvalidTopologyMaterializationOperatorDiagnostics(t, err, factoryDir)
+	if runCalled {
+		t.Fatal("run should not start for corrupted materialized goal topology")
+	}
+}
+
+func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsInvalidPreExistingMaterializedTarget(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		t.Fatal("run should not start for invalid pre-existing materialized target")
+		return nil
+	}
+
+	env := setupNamedGoalCLIEnv(t)
+	factoryDir := materializedGoalDir(env.homeDir)
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
+	}
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, []byte(goalFailureBaselineInvalidTopologyJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", factoryPath, err)
+	}
+
+	env.root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"invalid-topology-existing-target-baseline",
+	})
+	err := env.root.Execute()
+	assertInvalidTopologyMaterializationOperatorDiagnostics(t, err, factoryDir)
 }
 
 func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraphReferences(t *testing.T) {
