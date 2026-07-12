@@ -1,0 +1,5 @@
+{
+  "defaults": {
+    "workerModel": "existing-model"
+  }
+}
