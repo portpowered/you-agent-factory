@@ -263,10 +263,6 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 	}
 	mergedRecords := mergeRuntimeRecords(priorRecords, outcome.Records)
 	outcome.Records = mergedRecords
-	state.runtimeRecords = mergedRecords
-	if checkpointSummary != nil {
-		state.checkpointSummary = cloneCheckpointSummary(checkpointSummary)
-	}
 
 	if err != nil {
 		failureOutcome := workflowruntime.Outcome{
@@ -278,17 +274,21 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 			Records: outcome.Records,
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
-		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
-		s.unlockRuntimeSessionAfterPersistence(state)
+		candidate := s.buildTerminalRuntimeCandidate(state, terminal, failureOutcome, startedAt)
+		candidate.runtimeRecords = cloneRuntimeRecords(mergedRecords)
+		candidate.checkpointSummary = cloneCheckpointSummary(checkpointSummary)
+		s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 		return
 	}
 
 	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
-	s.applyTerminalRuntimeState(state, terminal, outcome, startedAt)
-	if state.checkpointSummary == nil {
-		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
+	candidate := s.buildTerminalRuntimeCandidate(state, terminal, outcome, startedAt)
+	candidate.runtimeRecords = cloneRuntimeRecords(mergedRecords)
+	candidate.checkpointSummary = cloneCheckpointSummary(checkpointSummary)
+	if candidate.checkpointSummary == nil {
+		candidate.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, &candidate, candidate.runtimeRecords)
 	}
-	s.unlockRuntimeSessionAfterPersistence(state)
+	s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 }
 
 func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
@@ -739,10 +739,13 @@ type PersistedRuntimeSessionState struct {
 	Artifacts                 []ArtifactSummary
 	Events                    []json.RawMessage
 	RuntimeRecords            []workflowruntime.RuntimeRecord
-	CheckpointSummary         *jsstore.CheckpointSummary
-	StartRequest              *StartRequest
-	ResolvedSource            ResolvedSource
-	SourceContent             string
+	// Records is the tagged, lossless durable history. Events and RuntimeRecords
+	// remain populated for compatibility with snapshots written before this union.
+	Records           []DurableSessionRecord
+	CheckpointSummary *jsstore.CheckpointSummary
+	StartRequest      *StartRequest
+	ResolvedSource    ResolvedSource
+	SourceContent     string
 }
 
 func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
@@ -752,6 +755,7 @@ func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRunti
 		Dispatches:        cloneDispatchSummaries(state.dispatches),
 		Artifacts:         cloneArtifactSummaries(state.artifacts),
 		RuntimeRecords:    cloneRuntimeRecords(state.runtimeRecords),
+		Records:           durableRecordsFromRuntimeState(state),
 		CheckpointSummary: cloneCheckpointSummary(state.checkpointSummary),
 		StartRequest:      cloneStartRequestPtr(state.startRequest),
 		ResolvedSource:    state.resolvedSource,
@@ -773,12 +777,14 @@ func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRunti
 }
 
 func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) runtimeSessionState {
+	events, runtimeRecords, petriMutations := runtimeHistoryFromPersistedSnapshot(snapshot)
 	state := runtimeSessionState{
 		session:           cloneSessionRead(snapshot.Session),
 		result:            cloneResultRead(snapshot.Result),
 		dispatches:        cloneDispatchSummaries(snapshot.Dispatches),
 		artifacts:         cloneArtifactSummaries(snapshot.Artifacts),
-		runtimeRecords:    cloneRuntimeRecords(snapshot.RuntimeRecords),
+		runtimeRecords:    cloneRuntimeRecords(runtimeRecords),
+		petriMutations:    clonePetriMutations(petriMutations),
 		checkpointSummary: cloneCheckpointSummary(snapshot.CheckpointSummary),
 		startRequest:      cloneStartRequestPtr(snapshot.StartRequest),
 		resolvedSource:    snapshot.ResolvedSource,
@@ -790,9 +796,9 @@ func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) ru
 	if len(snapshot.DispatchStatusTransitions) > 0 {
 		state.dispatchStatusTransitions = cloneDispatchStatusTransitions(snapshot.DispatchStatusTransitions)
 	}
-	if len(snapshot.Events) > 0 {
-		state.events = make([]json.RawMessage, len(snapshot.Events))
-		for i, event := range snapshot.Events {
+	if len(events) > 0 {
+		state.events = make([]json.RawMessage, len(events))
+		for i, event := range events {
 			state.events[i] = append(json.RawMessage(nil), event...)
 		}
 	}
@@ -826,6 +832,9 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 }
 
 func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
+	if len(state.petriMutations) > 0 {
+		return true
+	}
 	if IsTerminalLifecycleStatus(state.session.Status) {
 		return true
 	}

@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,7 @@ type runtimeSessionState struct {
 	dispatchStatusTransitions map[string][]DispatchStatus
 	artifacts                 []ArtifactSummary
 	runtimeRecords            []workflowruntime.RuntimeRecord
+	petriMutations            []interfaces.TokenMutationRecord
 	checkpointSummary         *jsstore.CheckpointSummary
 	startRequest              *StartRequest
 	resolvedSource            ResolvedSource
@@ -387,13 +389,14 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		return SyncStartResult{}, err
 	}
 	s.mu.Lock()
-	applyRuntimeSessionFields(reserved.state, terminal)
-	reserved.state.runCancel = nil
-	persistState := cloneRuntimeSessionState(reserved.state)
-	s.mu.Unlock()
-	if err := s.persistTerminalSessionState(persistState); err != nil {
+	candidate := cloneRuntimeSessionState(reserved.state)
+	applyRuntimeSessionFields(&candidate, terminal)
+	candidate.runCancel = nil
+	if err := s.recordCanonicalTerminalState(reserved.state, candidate); err != nil {
+		s.mu.Unlock()
 		return SyncStartResult{}, err
 	}
+	s.mu.Unlock()
 
 	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
 	if err != nil {
@@ -669,48 +672,14 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 			},
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
-		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
-		state.runtimeRecords = mergeRuntimeRecords(state.runtimeRecords, failureOutcome.Records)
-		if state.session.Status == LifecycleStatusInterrupted {
-			state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
-		}
-		s.unlockRuntimeSessionAfterPersistence(state)
+		candidate := s.buildTerminalRuntimeCandidate(state, terminal, failureOutcome, startedAt)
+		s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 		return
 	}
 
 	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
-	s.applyTerminalRuntimeState(state, terminal, outcome, startedAt)
-	state.runtimeRecords = mergeRuntimeRecords(state.runtimeRecords, outcome.Records)
-	if state.session.Status == LifecycleStatusInterrupted {
-		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
-	}
-	s.unlockRuntimeSessionAfterPersistence(state)
-}
-
-func (s *JavaScriptRuntimeService) unlockRuntimeSessionAfterPersistence(state *runtimeSessionState) {
-	persistState := cloneRuntimeSessionState(state)
-	if shouldPersistSessionSnapshot(persistState) {
-		_ = s.persistSessionSnapshot(persistState)
-	}
-	s.mu.Unlock()
-}
-
-func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
-	state *runtimeSessionState,
-	terminal runtimeSessionState,
-	outcome workflowruntime.Outcome,
-	startedAt time.Time,
-) {
-	finishedAt := s.now()
-	applyTerminalRuntimeProjection(state, terminal, outcome)
-	if state.session.Lifecycle == nil {
-		state.session.Lifecycle = &LifecycleTimestamps{}
-	}
-	if state.session.Lifecycle.StartedAt == nil {
-		state.session.Lifecycle.StartedAt = &startedAt
-	}
-	state.session.Lifecycle.FinishedAt = &finishedAt
-	state.result.SessionStatus = state.session.Status
+	candidate := s.buildTerminalRuntimeCandidate(state, terminal, outcome, startedAt)
+	s.publishAsyncTerminalCandidate(state, candidate, normalized, resolved, policyResolution, startedAt)
 }
 
 func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
@@ -782,6 +751,44 @@ func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runti
 	return cloneRuntimeSessionState(&cached), nil
 }
 
+// RecordPetriTokenMutations appends applied Petri transition records through
+// the canonical Factory Session persistence owner. Persistence succeeds before
+// the updated history becomes visible to live readers.
+func (s *JavaScriptRuntimeService) RecordPetriTokenMutations(
+	sessionID string,
+	mutations []interfaces.TokenMutationRecord,
+) error {
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return err
+	}
+	if len(mutations) == 0 {
+		return nil
+	}
+	if _, err := s.snapshotSessionState(id); err != nil && !errors.Is(err, ErrSessionNotFound) {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[id]
+	if !ok {
+		initial := projectPetriRunningSessionState(id, s.now())
+		state = &initial
+	}
+	candidate := cloneRuntimeSessionState(state)
+	candidate.petriMutations = append(candidate.petriMutations, clonePetriMutations(mutations)...)
+	if err := s.persistSessionSnapshot(candidate); err != nil {
+		return err
+	}
+	if ok {
+		*state = candidate
+	} else {
+		s.sessions[id] = &candidate
+	}
+	return nil
+}
+
 func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 	if state == nil {
 		return runtimeSessionState{}
@@ -794,6 +801,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
 		artifacts:                 cloneArtifactSummaries(state.artifacts),
 		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
+		petriMutations:            clonePetriMutations(state.petriMutations),
 		checkpointSummary:         cloneCheckpointSummary(state.checkpointSummary),
 		startRequest:              cloneStartRequestPtr(state.startRequest),
 		resolvedSource:            state.resolvedSource,

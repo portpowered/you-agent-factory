@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -8,6 +10,43 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
+
+func TestTokenMutationRecordJSON_RoundTripPreservesPetriTransitionSemantics(t *testing.T) {
+	original := interfaces.TokenMutationRecord{
+		DispatchID:   "dispatch-petri-1",
+		TransitionID: "transition-review",
+		Outcome:      interfaces.OutcomeAccepted,
+		Type:         interfaces.MutationMove,
+		TokenID:      "token-work-1",
+		FromPlace:    "in-progress",
+		ToPlace:      "review",
+		Reason:       "transition fired",
+		Token: &interfaces.Token{
+			ID:      "token-work-1",
+			PlaceID: "review",
+			Color: interfaces.TokenColor{
+				WorkID:     "work-1",
+				WorkTypeID: "story",
+				Tags:       map[string]string{"trace": "trace-1"},
+			},
+		},
+	}
+
+	raw, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal Petri token mutation: %v", err)
+	}
+	var decoded interfaces.TokenMutationRecord
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal Petri token mutation: %v", err)
+	}
+	if !reflect.DeepEqual(decoded, original) {
+		t.Fatalf("decoded mutation = %#v, want %#v", decoded, original)
+	}
+	if decoded.Type != interfaces.MutationMove || decoded.TransitionID != "transition-review" {
+		t.Fatalf("decoded mutation lost explicit Petri type or transition: %#v", decoded)
+	}
+}
 
 func TestRuntimeState_Snapshot_Independence(t *testing.T) {
 	rs := buildRuntimeStateSnapshotFixture()

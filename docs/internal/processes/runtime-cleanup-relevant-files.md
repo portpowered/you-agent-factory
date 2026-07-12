@@ -93,3 +93,16 @@ production construction sites. Production JavaScript live-child packages must
 also invoke providers through `pkg/workers/providerexecution`; the guard rejects
 direct provider-package imports and `Infer` calls there while permitting tests,
 deterministic fakes, and shared contract types.
+
+Canonical Factory Session event recording follows the same ownership check.
+`pkg/factorysessionexecution` owns canonical event validation, ordered append,
+persistence, live publication, and replay projection. Production orchestrator
+packages return facts and typed orchestration records to that owner; they must
+not call canonical event builders or import `pkg/sessionpersistence` directly.
+Petri output mutations become final in the post-transition response boundary;
+wire them with `factory.WithPetriMutationRecorder` to
+`JavaScriptRuntimeService.RecordPetriTokenMutations`, and propagate persistence
+errors so an unrecorded completion cannot finish its tick.
+`make durable-runtime-construction-check` reports those bypasses with remediation
+to use the Factory Session recorder, while allowing package tests and explicitly
+typed JavaScript checkpoint or Petri internal records.

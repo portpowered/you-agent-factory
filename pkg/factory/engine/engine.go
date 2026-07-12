@@ -39,6 +39,7 @@ type FactoryEngine struct {
 	recordDispatch        func(interfaces.FactoryDispatchRecord)
 	recordCompletion      func(interfaces.FactoryCompletionRecord)
 	recordResponse        func(int, interfaces.WorkResult, interfaces.CompletedDispatch)
+	recordPetriMutations  func([]interfaces.TokenMutationRecord) error
 	dispatchHandler       func(interfaces.WorkDispatch)
 	dispatchHook          factory.DispatchResultHook
 	resultHandler         func() // called when a result event is processed (e.g. decrement in-flight counter)
@@ -541,6 +542,9 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 		if result == nil {
 			continue
 		}
+		if err := e.recordCompletedPetriMutations(result.CompletedDispatches); err != nil {
+			return false, false, err
+		}
 
 		if result.ShouldTerminate {
 			shouldTerminate = true
@@ -574,6 +578,21 @@ func (e *FactoryEngine) tick(ctx context.Context) (bool, bool, error) {
 	// deadlock detection when async results arrive mid-tick.
 	shouldTerminate = e.finishTick(keepAlive, shouldTerminate, totalDispatches, completedDispatches, rtSnapshot, mutated)
 	return mutated, shouldTerminate, nil
+}
+
+func (e *FactoryEngine) recordCompletedPetriMutations(completed []interfaces.CompletedDispatch) error {
+	if e.recordPetriMutations == nil {
+		return nil
+	}
+	for i := range completed {
+		if len(completed[i].OutputMutations) == 0 {
+			continue
+		}
+		if err := e.recordPetriMutations(completed[i].OutputMutations); err != nil {
+			return fmt.Errorf("record completed dispatch %q Petri mutations: %w", completed[i].DispatchID, err)
+		}
+	}
+	return nil
 }
 
 func (e *FactoryEngine) beginTick(ctx context.Context) (interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], bool, bool, error) {

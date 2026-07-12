@@ -914,7 +914,10 @@ func ComposeFactoryCore(
 	if err != nil {
 		return nil, err
 	}
-
+	collaborators.RuntimeBuild, err = composePetriRecordingRuntimeBuild(collaborators.RuntimeBuild, durableExecution)
+	if err != nil {
+		return nil, err
+	}
 	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
 		return nil, err

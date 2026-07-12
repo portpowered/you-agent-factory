@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -36,13 +37,13 @@ func IsRecoverableSession(status LifecycleStatus, staleLease bool) bool {
 // for one durable session status.
 func DeriveSessionActionAvailability(status LifecycleStatus) SessionActionAvailability {
 	return SessionActionAvailability{
-		CanPause:              EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
-		CanResume:             EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
-		CanCancel:             EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
-		CanTerminate:          EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
-		CanApprove:            status == LifecycleStatusAwaitingApproval,
-		CanRetryDispatch:      AllowsRetryDispatchOnTerminal(status),
-		CanInterruptDispatch:  AllowsInterruptDispatchOnSession(status),
+		CanPause:             EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
+		CanResume:            EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
+		CanCancel:            EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
+		CanTerminate:         EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
+		CanApprove:           status == LifecycleStatusAwaitingApproval,
+		CanRetryDispatch:     AllowsRetryDispatchOnTerminal(status),
+		CanInterruptDispatch: AllowsInterruptDispatchOnSession(status),
 	}
 }
 
@@ -366,11 +367,11 @@ type LiveSessionSummary struct {
 // SessionActionAvailability exposes which lifecycle controls are currently valid
 // for one listed durable session.
 type SessionActionAvailability struct {
-	CanPause         bool
-	CanResume        bool
-	CanCancel        bool
-	CanTerminate     bool
-	CanApprove       bool
+	CanPause             bool
+	CanResume            bool
+	CanCancel            bool
+	CanTerminate         bool
+	CanApprove           bool
 	CanRetryDispatch     bool
 	CanInterruptDispatch bool
 }
@@ -404,7 +405,6 @@ type ListSessionsResult struct {
 	DurableSessions []DurableSessionListSummary
 }
 
-
 const canonicalFactoryEventSchemaVersion = "agent-factory.event.v1"
 
 type canonicalFactoryEventContext struct {
@@ -429,7 +429,6 @@ type canonicalFactoryEvent struct {
 	Context       canonicalFactoryEventContext `json:"context"`
 	Payload       json.RawMessage              `json:"payload"`
 }
-
 
 const (
 	canonicalEventSourceFakeService    = "fake-service"
@@ -468,6 +467,77 @@ func BuildCanonicalRuntimeSessionEvents(
 		input,
 		canonicalEventSourceRuntimeService,
 	)
+}
+
+// MapCanonicalRuntimeSessionEvents validates shared runtime facts before mapping
+// them to canonical Factory Events. Callers at ingestion boundaries should use
+// this function so malformed facts cannot become a partial public event stream.
+func MapCanonicalRuntimeSessionEvents(
+	session SessionReadResult,
+	result ResultReadResult,
+	input RuntimeDispatchEventInput,
+) ([]json.RawMessage, error) {
+	if err := validateCanonicalRuntimeFacts(session, result, input); err != nil {
+		return nil, err
+	}
+	return BuildCanonicalRuntimeSessionEvents(session, result, input), nil
+}
+
+func validateCanonicalRuntimeFacts(
+	session SessionReadResult,
+	result ResultReadResult,
+	input RuntimeDispatchEventInput,
+) error {
+	if err := validateCanonicalSessionFact(session, result); err != nil {
+		return err
+	}
+	for index, dispatch := range input.Dispatches {
+		if err := validateCanonicalDispatchFact(session.SessionID, index, dispatch); err != nil {
+			return err
+		}
+	}
+	for index, artifact := range input.Artifacts {
+		if strings.TrimSpace(artifact.ID) == "" || strings.TrimSpace(artifact.Kind) == "" || strings.TrimSpace(artifact.Visibility) == "" {
+			return fmt.Errorf("map canonical runtime facts for session %q: artifact %d requires ID, kind, and visibility", session.SessionID, index)
+		}
+	}
+	for index, checkpoint := range input.CheckpointEvents {
+		if strings.TrimSpace(checkpoint.CheckpointID) == "" {
+			return fmt.Errorf("map canonical runtime facts for session %q: checkpoint %d ID is required", session.SessionID, index)
+		}
+	}
+	return nil
+}
+
+func validateCanonicalSessionFact(session SessionReadResult, result ResultReadResult) error {
+	if strings.TrimSpace(session.SessionID) == "" {
+		return fmt.Errorf("map canonical runtime facts: session ID is required")
+	}
+	if strings.TrimSpace(session.OrchestratorKind) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q: orchestrator kind is required", session.SessionID)
+	}
+	if result.SessionID != "" && result.SessionID != session.SessionID {
+		return fmt.Errorf("map canonical runtime facts for session %q: result session ID %q does not match", session.SessionID, result.SessionID)
+	}
+	return nil
+}
+
+func validateCanonicalDispatchFact(sessionID string, index int, dispatch DispatchSummary) error {
+	if strings.TrimSpace(dispatch.ID) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q: dispatch %d ID is required", sessionID, index)
+	}
+	if strings.TrimSpace(string(dispatch.Status)) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: status is required", sessionID, dispatch.ID)
+	}
+	if strings.TrimSpace(dispatch.DispatchKind) == "" {
+		return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: dispatch kind is required", sessionID, dispatch.ID)
+	}
+	for refIndex, ref := range dispatch.ProviderSessionRefs {
+		if strings.TrimSpace(ref.Provider) == "" || strings.TrimSpace(ref.Kind) == "" || strings.TrimSpace(ref.ID) == "" {
+			return fmt.Errorf("map canonical runtime facts for session %q dispatch %q: provider session ref %d requires provider, kind, and ID", sessionID, dispatch.ID, refIndex)
+		}
+	}
+	return nil
 }
 
 func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadResult, source string) []json.RawMessage {

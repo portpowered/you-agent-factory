@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -122,6 +123,28 @@ func TestNew_BatchModeWithoutInitialWork_TerminatesWithoutCancellation(t *testin
 	}
 	if snapshot.FactoryState != string(interfaces.FactoryStateCompleted) {
 		t.Fatalf("factory state = %q, want %q", snapshot.FactoryState, interfaces.FactoryStateCompleted)
+	}
+}
+
+func TestPetriMutationRecorderFailureStopsRuntimeWithDispatchContext(t *testing.T) {
+	f, err := New(
+		factory.WithNet(buildSimpleNet()),
+		factory.WithInlineDispatch(),
+		factory.WithWorkerExecutor("mock", &passExecutor{}),
+		factory.WithLogger(logging.NoopLogger{}),
+		factory.WithPetriMutationRecorder(func(string, []interfaces.TokenMutationRecord) error {
+			return errors.New("persistence unavailable")
+		}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-recording-failure"}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	err = f.Run(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "record completed dispatch") || !strings.Contains(err.Error(), "persistence unavailable") {
+		t.Fatalf("Run error = %v, want contextual Petri recording failure", err)
 	}
 }
 

@@ -20,7 +20,14 @@ const (
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"
 	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/workers/provider"
+	sessionPersistencePath = "github.com/portpowered/infinite-you/pkg/sessionpersistence"
 )
+
+var canonicalEventOwnerCalls = map[string]struct{}{
+	"AppendDispatchInterruptedEvent":     {},
+	"BuildCanonicalRuntimeSessionEvents": {},
+	"MapCanonicalRuntimeSessionEvents":   {},
+}
 
 var javascriptLiveChildRoots = []string{
 	"pkg/factorysessionexecution/livechild/",
@@ -104,6 +111,14 @@ func scan(root string) ([]string, error) {
 		if ast.IsGenerated(file) {
 			return nil
 		}
+		if isJavaScriptOrchestratorFile(relative) {
+			for _, imported := range file.Imports {
+				if strings.Trim(imported.Path.Value, `"`) == sessionPersistencePath {
+					appendFinding(&findings, fileSet, imported.Pos(), relative, sessionPersistencePath,
+						"return typed orchestration records to the canonical Factory Session recorder instead of persisting them directly")
+				}
+			}
+		}
 		if isJavaScriptLiveChildFile(relative) {
 			for _, imported := range file.Imports {
 				if strings.Trim(imported.Path.Value, `"`) == providerPackagePath {
@@ -116,6 +131,11 @@ func scan(root string) ([]string, error) {
 			switch value := node.(type) {
 			case *ast.CallExpr:
 				name := calledName(value.Fun)
+				if _, canonicalOwnerCall := canonicalEventOwnerCalls[name]; canonicalOwnerCall &&
+					!strings.HasPrefix(relative, "pkg/factorysessionexecution/") {
+					appendFinding(&findings, fileSet, value.Pos(), relative, name,
+						"route canonical Factory Events through the pkg/factorysessionexecution recorder and persistence owner")
+				}
 				if name == providerInferenceName && isJavaScriptLiveChildFile(relative) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
 						"route production live-child provider invocation through pkg/workers/providerexecution")
@@ -158,6 +178,10 @@ func isJavaScriptLiveChildFile(relative string) bool {
 		}
 	}
 	return false
+}
+
+func isJavaScriptOrchestratorFile(relative string) bool {
+	return strings.HasPrefix(relative, "pkg/orchestrators/javascript/")
 }
 
 func approved(relative string, files map[string]struct{}) bool {

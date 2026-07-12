@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -744,6 +746,114 @@ func TestBuildCanonicalRuntimeSessionEvents_ProjectsFailedDispatchReconciliation
 		t.Fatalf("failureDetail = %#v, want permanent_bad_request", reconciledPayload.FailureDetail)
 	}
 }
+
+func TestMapCanonicalRuntimeSessionEvents_EquivalentOrchestratorsHaveSharedPublicMeaning(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name           string
+		sessionStatus  fse.LifecycleStatus
+		resultStatus   fse.ResultStatus
+		dispatchStatus fse.DispatchStatus
+		artifactIDs    []string
+	}{
+		{name: "successful", sessionStatus: fse.LifecycleStatusSucceeded, resultStatus: fse.ResultStatusFinal, dispatchStatus: fse.DispatchStatusCompleted, artifactIDs: []string{"artifact-1"}},
+		{name: "failed", sessionStatus: fse.LifecycleStatusFailed, resultStatus: fse.ResultStatusUnavailable, dispatchStatus: fse.DispatchStatusFailed},
+		{name: "canceled", sessionStatus: fse.LifecycleStatusCanceled, resultStatus: fse.ResultStatusUnavailable, dispatchStatus: fse.DispatchStatusCanceled},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base, result, input := canonicalBoundaryFacts(startedAt, tc.name, tc.sessionStatus, tc.resultStatus, tc.dispatchStatus, tc.artifactIDs)
+			petriEvents := mapCanonicalFactsForOrchestrator(t, base, result, input, interfaces.OrchestratorKindPetri, "")
+			javascriptEvents := mapCanonicalFactsForOrchestrator(t, base, result, input, interfaces.OrchestratorKindJavaScript, "you-workflow-v1")
+			if got, want := sharedEventMeaning(t, javascriptEvents), sharedEventMeaning(t, petriEvents); !reflect.DeepEqual(got, want) {
+				t.Fatalf("shared public meaning differs:\nJavaScript: %#v\nPetri: %#v", got, want)
+			}
+			petriSession, petriResult := replaySharedProjection(t, petriEvents)
+			javascriptSession, javascriptResult := replaySharedProjection(t, javascriptEvents)
+			if !reflect.DeepEqual(javascriptSession, petriSession) || !reflect.DeepEqual(javascriptResult, petriResult) {
+				t.Fatalf("replayed shared projection differs:\nJavaScript: %#v %#v\nPetri: %#v %#v", javascriptSession, javascriptResult, petriSession, petriResult)
+			}
+			if javascriptSession.Status != tc.sessionStatus || javascriptResult.ResultStatus != tc.resultStatus {
+				t.Fatalf("replayed terminal projection = %#v %#v", javascriptSession, javascriptResult)
+			}
+			duplicated := append(append([]json.RawMessage(nil), javascriptEvents...), javascriptEvents...)
+			duplicateSession, duplicateResult := replaySharedProjection(t, duplicated)
+			if !reflect.DeepEqual(duplicateSession, javascriptSession) || !reflect.DeepEqual(duplicateResult, javascriptResult) {
+				t.Fatalf("duplicate input advanced projection: %#v %#v", duplicateSession, duplicateResult)
+			}
+		})
+	}
+}
+
+func canonicalBoundaryFacts(startedAt time.Time, suffix string, sessionStatus fse.LifecycleStatus, resultStatus fse.ResultStatus, dispatchStatus fse.DispatchStatus, artifactIDs []string) (fse.SessionReadResult, fse.ResultReadResult, fse.RuntimeDispatchEventInput) {
+	sessionID := "session-shared-facts-" + suffix
+	base := fse.SessionReadResult{SessionID: sessionID, Status: sessionStatus, Phase: "execute", Lifecycle: &fse.LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: timePtr(startedAt.Add(time.Second))}}
+	result := fse.ResultReadResult{SessionID: sessionID, ResultStatus: resultStatus, SessionStatus: sessionStatus, ArtifactIDs: artifactIDs}
+	dispatch := fse.DispatchSummary{ID: "dispatch-1", Status: dispatchStatus, DispatchKind: "AGENT", Phase: "execute", Provider: "mock", ProviderSessionRefs: []fse.ProviderSessionRef{{Provider: "mock", Kind: "session_id", ID: "provider-session-1"}}, OutputArtifactIDs: artifactIDs}
+	input := fse.RuntimeDispatchEventInput{Dispatches: []fse.DispatchSummary{dispatch}}
+	if len(artifactIDs) > 0 {
+		input.Artifacts = []fse.ArtifactSummary{{ID: artifactIDs[0], Kind: "worker-output", Visibility: "session", Label: "shared output", ContentHash: "sha256:shared-output", SizeBytes: 42, CreatedAt: timePtr(startedAt.Add(500 * time.Millisecond)), DispatchID: dispatch.ID}}
+	}
+	return base, result, input
+}
+
+func mapCanonicalFactsForOrchestrator(t *testing.T, base fse.SessionReadResult, result fse.ResultReadResult, input fse.RuntimeDispatchEventInput, kind, dialect string) []json.RawMessage {
+	t.Helper()
+	base.OrchestratorKind, base.Dialect = kind, dialect
+	events, err := fse.MapCanonicalRuntimeSessionEvents(base, result, input)
+	if err != nil {
+		t.Fatalf("map %s facts: %v", kind, err)
+	}
+	return events
+}
+
+func replaySharedProjection(t *testing.T, events []json.RawMessage) (fse.SessionReadResult, fse.ResultReadResult) {
+	t.Helper()
+	session, result, err := fse.ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("replay canonical history: %v", err)
+	}
+	session.OrchestratorKind, session.Dialect, session.ResolvedSource.Dialect = "", "", ""
+	return session, result
+}
+
+
+func TestMapCanonicalRuntimeSessionEvents_RejectsMalformedFactsWithoutPartialEvents(t *testing.T) {
+	session := fse.SessionReadResult{
+		SessionID:        "session-invalid-facts-001",
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+	}
+	events, err := fse.MapCanonicalRuntimeSessionEvents(session, fse.ResultReadResult{SessionID: session.SessionID}, fse.RuntimeDispatchEventInput{
+		Dispatches: []fse.DispatchSummary{{Status: fse.DispatchStatusQueued, DispatchKind: "AGENT"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "dispatch 0 ID is required") {
+		t.Fatalf("error = %v, want missing dispatch ID", err)
+	}
+	if events != nil {
+		t.Fatalf("events = %#v, want nil on invalid input", events)
+	}
+}
+
+func sharedEventMeaning(t *testing.T, events []json.RawMessage) []map[string]any {
+	t.Helper()
+	meaning := make([]map[string]any, 0, len(events))
+	for _, raw := range events {
+		var event map[string]any
+		if err := json.Unmarshal(raw, &event); err != nil {
+			t.Fatalf("unmarshal canonical event: %v", err)
+		}
+		context, ok := event["context"].(map[string]any)
+		if !ok {
+			t.Fatalf("event context = %#v", event["context"])
+		}
+		delete(context, "orchestratorKind")
+		delete(context, "orchestratorDialect")
+		meaning = append(meaning, event)
+	}
+	return meaning
+}
+
+func timePtr(value time.Time) *time.Time { return &value }
 
 func findCanonicalDispatchEventByType(events []json.RawMessage, eventType, sessionID, dispatchID string) *struct {
 	Payload json.RawMessage `json:"payload"`

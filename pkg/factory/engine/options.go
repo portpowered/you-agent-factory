@@ -120,6 +120,14 @@ func WithWorkstationResponseRecorder(fn func(int, interfaces.WorkResult, interfa
 	}
 }
 
+// WithPetriMutationRecorder registers the persistence boundary invoked after
+// transition routing and before the resulting marking mutations are applied.
+func WithPetriMutationRecorder(fn func([]interfaces.TokenMutationRecord) error) Option {
+	return func(e *FactoryEngine) {
+		e.recordPetriMutations = fn
+	}
+}
+
 // WithAutomaticTicksPaused registers a predicate that suppresses automatic
 // subsystem ticks (dispatch, transition, cascade, scheduling) while returning
 // true. Operator control ingress such as MoveWork is unaffected.

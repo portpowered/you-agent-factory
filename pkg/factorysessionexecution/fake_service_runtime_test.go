@@ -3,11 +3,13 @@
 package factorysessionexecution
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -26,6 +28,46 @@ import (
 func int64Ptr(value int64) *int64 {
 	return &value
 }
+
+func TestTaggedDurableHistoryIsAuthoritativeDuringHydrationAndResave(t *testing.T) {
+	canonical := json.RawMessage(`{"type":"SESSION_STARTED","context":{"sessionId":"dur-sess-tagged"}}`)
+	checkpoint := workflowruntime.RuntimeRecord{
+		Sequence: 2,
+		Kind:     workflowruntime.RecordKindCheckpoint,
+		Checkpoint: &workflowruntime.CheckpointRecord{
+			ID: "checkpoint-tagged", State: map[string]any{"position": "review"},
+		},
+	}
+	mutation := interfaces.TokenMutationRecord{
+		Type: interfaces.MutationMove, TransitionID: "approve", ToPlace: "review:approved",
+	}
+	snapshot := PersistedRuntimeSessionState{
+		Events:         []json.RawMessage{json.RawMessage(`{"type":"LEGACY_EVENT"}`)},
+		RuntimeRecords: []workflowruntime.RuntimeRecord{{Sequence: 99, Kind: workflowruntime.RecordKindPhase}},
+		Records: []DurableSessionRecord{
+			{Kind: DurableRecordKindCanonicalFactoryEvent, CanonicalEvent: canonical},
+			{Kind: DurableRecordKindJavaScriptRuntime, JavaScriptRecord: &checkpoint},
+			{Kind: DurableRecordKindPetriTokenMutation, PetriMutation: &mutation},
+		},
+	}
+
+	hydrated := runtimeStateFromPersistedSnapshot(snapshot)
+	if len(hydrated.events) != 1 || !bytes.Equal(hydrated.events[0], canonical) {
+		t.Fatalf("hydrated events = %s, want tagged canonical event", hydrated.events)
+	}
+	if len(hydrated.runtimeRecords) != 1 || hydrated.runtimeRecords[0].Checkpoint == nil || hydrated.runtimeRecords[0].Checkpoint.ID != "checkpoint-tagged" {
+		t.Fatalf("hydrated JavaScript records = %#v, want tagged checkpoint", hydrated.runtimeRecords)
+	}
+	if len(hydrated.petriMutations) != 1 || hydrated.petriMutations[0].TransitionID != "approve" || hydrated.petriMutations[0].ToPlace != "review:approved" {
+		t.Fatalf("hydrated Petri mutations = %#v, want tagged transition", hydrated.petriMutations)
+	}
+
+	resaved := persistedSnapshotFromRuntimeState(hydrated)
+	if len(resaved.Records) != 3 || resaved.Records[2].PetriMutation == nil || resaved.Records[2].PetriMutation.TransitionID != "approve" {
+		t.Fatalf("resaved tagged history = %#v, want lossless mixed records", resaved.Records)
+	}
+}
+
 func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-js-run-n-001")
@@ -646,6 +688,20 @@ const busyLoopWorkflowSource = `while (true) {}`
 
 const throwErrorWorkflowSource = `throw new Error("workflow execution failed: " + args.subject);`
 
+const progressThenFinalWorkflowSource = `
+phase("execute");
+const artifactRef = workflow.artifact({
+  kind: "log",
+  label: "unpersisted-output",
+  content: { message: "must roll back" },
+});
+workflow.checkpoint({
+  label: "before-final",
+  state: { artifactRef: artifactRef },
+});
+return { artifactRef: artifactRef };
+`
+
 type durableFixedClock struct{ now time.Time }
 
 func (c durableFixedClock) Now() time.Time { return c.now }
@@ -712,6 +768,149 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 	testJavaScriptRuntimeSyncCompletedSession(t, service, started.SessionID)
 	testJavaScriptRuntimeSyncCompletedResult(t, service, started.SessionID)
 	testJavaScriptRuntimeSyncCompletedEvents(t, service, started.SessionID)
+}
+
+func TestJavaScriptRuntimeService_StartSync_PersistenceFailureDoesNotPublishSuccess(t *testing.T) {
+	store := &runtimeRecordingStore{saveErr: errors.New("append unavailable")}
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+	})
+
+	started, err := service.StartSync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-sync-persist-failure-001",
+		simpleFinalWorkflowSource,
+		nil,
+		nil,
+	))
+	if err == nil || !strings.Contains(err.Error(), "append unavailable") {
+		t.Fatalf("StartSync result = %#v, error = %v, want persistence failure", started, err)
+	}
+
+	store.mu.Lock()
+	saveCalls := store.saveCalls
+	store.mu.Unlock()
+	if saveCalls != 1 {
+		t.Fatalf("persistence save calls = %d, want exactly one", saveCalls)
+	}
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	for _, state := range service.sessions {
+		if state.session.Status == LifecycleStatusSucceeded || state.result.ResultStatus == ResultStatusFinal {
+			t.Fatalf("unpersisted success became live: session=%#v result=%#v", state.session, state.result)
+		}
+	}
+}
+
+func TestJavaScriptRuntimeService_StartAsync_PersistenceFailurePublishesFailureNotSuccess(t *testing.T) {
+	store := &runtimeRecordingStore{saveErr: errors.New("append unavailable")}
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+	})
+
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-async-persist-failure-001",
+		progressThenFinalWorkflowSource,
+		nil,
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	failed := waitUntilSessionStatus(t, service, started.SessionID, LifecycleStatusFailed, 2*time.Second)
+	if failed.Failure == nil || !strings.Contains(failed.Failure.Message, "append unavailable") {
+		t.Fatalf("failure = %#v, want explicit persistence failure", failed.Failure)
+	}
+	assertPersistenceFailureRolledBackLiveProjections(t, service, started.SessionID)
+
+	store.mu.Lock()
+	saveCalls := store.saveCalls
+	store.mu.Unlock()
+	if saveCalls != 1 {
+		t.Fatalf("persistence save calls = %d, want exactly one", saveCalls)
+	}
+}
+
+func assertPersistenceFailureRolledBackLiveProjections(
+	t *testing.T,
+	service *JavaScriptRuntimeService,
+	sessionID string,
+) {
+	t.Helper()
+	result, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus == ResultStatusFinal {
+		t.Fatalf("unpersisted terminal result status = %q, want unavailable", result.ResultStatus)
+	}
+	dispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if len(dispatches.Dispatches) != 0 {
+		t.Fatalf("unpersisted dispatches = %#v, want none", dispatches.Dispatches)
+	}
+	artifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if len(artifacts.Artifacts) != 0 {
+		t.Fatalf("unpersisted artifacts = %#v, want none", artifacts.Artifacts)
+	}
+	events, err := service.ReadEvents(context.Background(), sessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	encodedEvents, err := json.Marshal(events.Events)
+	if err != nil {
+		t.Fatalf("marshal events: %v", err)
+	}
+	if bytes.Contains(encodedEvents, []byte("unpersisted-output")) || bytes.Contains(encodedEvents, []byte("checkpoint")) {
+		t.Fatalf("event history retained unpersisted terminal records: %s", encodedEvents)
+	}
+	assertPersistenceFailureClearedInternalRuntimeState(t, service, sessionID)
+}
+
+func assertPersistenceFailureClearedInternalRuntimeState(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	service.mu.RLock()
+	live := cloneRuntimeSessionState(service.sessions[sessionID])
+	service.mu.RUnlock()
+	if live.session.Phase != "" || live.session.Progress != nil || len(live.session.ArtifactRefs) != 0 {
+		t.Fatalf("session retained unpersisted projection: %#v", live.session)
+	}
+	if len(live.runtimeRecords) != 0 || live.checkpointSummary != nil {
+		t.Fatalf("runtime state retained unpersisted records: records=%#v checkpoint=%#v", live.runtimeRecords, live.checkpointSummary)
+	}
+}
+
+type runtimeRecordingStore struct {
+	mu        sync.Mutex
+	saveCalls int
+	saveErr   error
+	payload   []byte
+}
+
+func (s *runtimeRecordingStore) Save(_ string, encoded []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.saveCalls++
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	s.payload = append([]byte(nil), encoded...)
+	return nil
+}
+
+func (s *runtimeRecordingStore) Load(string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.payload) == 0 {
+		return nil, os.ErrNotExist
+	}
+	return append([]byte(nil), s.payload...), nil
 }
 
 func TestJavaScriptRuntimeService_StartAsync_RunningCancelAndReads(t *testing.T) {

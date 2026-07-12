@@ -278,6 +278,11 @@ func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger
 			}
 		}),
 	}
+	if cfg.PetriMutationRecorder != nil {
+		engineOpts = append(engineOpts, engine.WithPetriMutationRecorder(func(mutations []interfaces.TokenMutationRecord) error {
+			return cfg.PetriMutationRecorder(sessionIDFromFactoryConfig(cfg), mutations)
+		}))
+	}
 	if cfg.SubmissionRecorder != nil {
 		engineOpts = append(engineOpts, engine.WithSubmissionRecorder(cfg.SubmissionRecorder))
 	}
