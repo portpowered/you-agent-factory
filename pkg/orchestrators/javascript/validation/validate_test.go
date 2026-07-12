@@ -252,6 +252,36 @@ func TestValidate_RejectsInvalidSupportedAgentRunFieldValues(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsUnsupportedAgentRunFieldsWithoutExposingValues(t *testing.T) {
+	unsupported := []string{
+		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
+		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+	}
+	for _, field := range unsupported {
+		t.Run(field, func(t *testing.T) {
+			source := fmt.Sprintf(`agent.run({ prompt: "prompt-secret", %s: "value-secret" });`, field)
+			result := workflowvalidation.Validate(workflowvalidation.Request{Source: source, SourceRef: "inline"})
+			want := `agent.run() does not support field "` + field + `"`
+			if len(result.Issues) != 1 || result.Issues[0].Code != workflowvalidation.CodeUnsupportedPrimitive || result.Issues[0].Message != want {
+				t.Fatalf("validation issues = %#v, want one field-specific unsupported-primitive issue", result.Issues)
+			}
+			if strings.Contains(result.Issues[0].Message, "value-secret") || strings.Contains(result.Issues[0].Message, "prompt-secret") {
+				t.Fatalf("validation message = %q, want redacted diagnostic", result.Issues[0].Message)
+			}
+		})
+	}
+}
+
+func TestValidate_RejectsQuotedUnsupportedAgentRunField(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:    `agent.run({ prompt: "review", "outputSchema": "secret" });`,
+		SourceRef: "inline",
+	})
+	if len(result.Issues) != 1 || result.Issues[0].Message != `agent.run() does not support field "outputSchema"` {
+		t.Fatalf("validation issues = %#v, want quoted field rejection", result.Issues)
+	}
+}
+
 func TestValidateFactory_RejectsInlineForbiddenHostAccess(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{
 		Name: "dynamic-workflow",

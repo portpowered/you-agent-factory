@@ -2,6 +2,7 @@ package workflowvalidation
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/childcontract"
 	"github.com/tdewolff/parse/v2/js"
@@ -105,6 +106,16 @@ func (a *sourceAnalyzer) validateAgentRunCall(call *js.CallExpr) {
 	if !ok || obj == nil {
 		return
 	}
+	for _, property := range obj.List {
+		field, visible := staticPropertyName(property)
+		if visible && !childcontract.IsSupportedField(field) {
+			a.addIssue(
+				shapeIssueCode("agent.run"),
+				fmt.Sprintf(`agent.run() does not support field %q`, field),
+				call,
+			)
+		}
+	}
 	for _, field := range childcontract.SupportedFields() {
 		value, found := objectProperty(obj, field)
 		if field == childcontract.FieldPrompt && !found {
@@ -114,6 +125,22 @@ func (a *sourceAnalyzer) validateAgentRunCall(call *js.CallExpr) {
 		if found && !isStringLiteral(value) {
 			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string literal`, field), call)
 		}
+	}
+}
+
+func staticPropertyName(property js.Property) (string, bool) {
+	if property.Spread || property.Name == nil || property.Name.IsComputed() {
+		return "", false
+	}
+	literal := property.Name.Literal
+	switch literal.TokenType {
+	case js.IdentifierToken:
+		return string(literal.Data), true
+	case js.StringToken:
+		name, err := strconv.Unquote(string(literal.Data))
+		return name, err == nil
+	default:
+		return "", false
 	}
 }
 

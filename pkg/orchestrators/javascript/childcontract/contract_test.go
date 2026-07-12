@@ -47,3 +47,29 @@ func TestNormalize_RequiresUsablePrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalize_RejectsUnsupportedFieldsWithoutExposingValues(t *testing.T) {
+	unsupported := []string{
+		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
+		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+	}
+	const secret = "secret-value-that-must-not-appear"
+	for _, field := range unsupported {
+		t.Run(field, func(t *testing.T) {
+			_, err := childcontract.Normalize(map[string]any{
+				"prompt": "prompt-that-must-not-appear",
+				field:    secret,
+			})
+			if err == nil {
+				t.Fatal("Normalize() error = nil, want unsupported-field error")
+			}
+			want := `agent.run() does not support field "` + field + `"`
+			if err.Error() != want {
+				t.Fatalf("Normalize() error = %q, want %q", err, want)
+			}
+			if strings.Contains(err.Error(), secret) || strings.Contains(err.Error(), "prompt-that-must-not-appear") {
+				t.Fatalf("Normalize() error = %q, want redacted diagnostic", err)
+			}
+		})
+	}
+}
