@@ -79,6 +79,22 @@ validate`, `run`, `start`, `status`, `result`, `dispatches`, `artifacts`, and
 dashboard successors in the canonical surface map. `Dynamic workflow` likewise
 means JavaScript orchestration and never introduces a workflow-run resource.
 
+#### API and CLI compatibility map
+
+This customer map covers every retained public workflow-named API and CLI
+spelling. The accountable ownership and measurable removal gates live in the
+maintainer compatibility register; no entry is approved for removal in this
+batch.
+
+| Public compatibility alias | Exact canonical successor | Observable compatibility expectation |
+|----------------------------|---------------------------|--------------------------------------|
+| `POST /workflow-previews` | `POST /factories/preview` (Factory Preview) | Same status and response body for the same request; the alias additionally returns `Deprecation: true` and `Link: </factories/preview>; rel="successor-version"`. |
+| `WorkflowPreviewRequest` / `WorkflowPreviewResult` | `FactoryPreviewRequest` / `FactoryPreviewResult` | Same fields, validation rules, and preview outcome; alias schemas remain deprecated. |
+| `you workflow validate` / `preview` | `POST /factories/preview` or `you.factory_session.validate_source` (Factory Preview) | Same source validation and preview diagnostics without creating a Factory Session. |
+| `you workflow run` / `start` | `POST /factory-sessions/sync` / `POST /factory-sessions/async` | Same shared execution request and synchronous or asynchronous Factory Session outcome. |
+| `you workflow status` / `result` | `GET /factory-sessions/{session_id}` / `GET /factory-sessions/{session_id}/results` | Same lifecycle, progress, result availability, and result outcome, with CLI formatting only. |
+| `you workflow dispatches` / `artifacts` / `events` | Corresponding `/factory-sessions/{session_id}/{dispatches|artifacts|events}` read; `you session dispatches` is also canonical where available | Same ordered session-owned facts and reconnect behavior, with CLI formatting only. |
+
 ### Supported scope today
 
 - Use `POST /factories/preview` (or
