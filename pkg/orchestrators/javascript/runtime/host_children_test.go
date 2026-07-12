@@ -3,6 +3,8 @@ package workflowruntime_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -14,6 +16,89 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
+
+func TestRun_DocumentedSimpleFinalWorkflow(t *testing.T) {
+	outcome := runDocumentedExample(t, "simple-final.workflow.js", map[string]any{
+		"greeting": "hello", "subject": "factory authors",
+	}, nil)
+	projected := projectPrimaryJSON(t, "session-documented-simple-final", outcome.Value)
+	if projected["greeting"] != "hello" || projected["subject"] != "factory authors" {
+		t.Fatalf("documented simple result = %#v", projected)
+	}
+	if len(outcome.Records) != 1 || outcome.Records[0].Kind != workflowruntime.RecordKindPhase {
+		t.Fatalf("documented simple records = %#v", outcome.Records)
+	}
+}
+
+func TestRun_DocumentedOrderedFanoutWorkflow(t *testing.T) {
+	outcome := runDocumentedExample(t, "ordered-fanout.workflow.js", map[string]any{
+		"topics": []string{"alpha", "beta", "gamma"},
+	}, nil)
+	projected := projectPrimaryJSON(t, "session-documented-ordered-fanout", outcome.Value)
+	reviews, ok := projected["reviews"].([]any)
+	if !ok || len(reviews) != 3 {
+		t.Fatalf("documented reviews = %#v", projected["reviews"])
+	}
+	for index, topic := range []string{"alpha", "beta", "gamma"} {
+		review, ok := reviews[index].(map[string]any)
+		if !ok || review["label"] != "review-"+topic {
+			t.Fatalf("documented reviews[%d] = %#v", index, reviews[index])
+		}
+	}
+	if synthesis, ok := projected["synthesis"].(map[string]any); !ok || synthesis["label"] != "synthesize" {
+		t.Fatalf("documented synthesis = %#v", projected["synthesis"])
+	}
+	if childTerminalRecordCount(outcome.Records) != 4 {
+		t.Fatalf("completed child dispatches = %d, want 4", childTerminalRecordCount(outcome.Records))
+	}
+}
+
+func TestRun_DocumentedCheckpointResumeWorkflow(t *testing.T) {
+	args := map[string]any{"topics": []string{"alpha", "beta"}}
+	fresh := runDocumentedExample(t, "checkpoint-resume.workflow.js", args, nil)
+	var checkpoint *workflowruntime.CheckpointRecord
+	for _, record := range fresh.Records {
+		if record.Checkpoint != nil {
+			checkpoint = record.Checkpoint
+		}
+	}
+	if checkpoint == nil || checkpoint.State["completedTopics"] == nil {
+		t.Fatalf("documented checkpoint records = %#v", fresh.Records)
+	}
+	resumed := runDocumentedExample(t, "checkpoint-resume.workflow.js", args, &workflowruntime.ResumeContext{
+		CheckpointState: checkpoint.State,
+	})
+	projected := projectPrimaryJSON(t, "session-documented-checkpoint-resume", resumed.Value)
+	if projected["path"] != "resumed" {
+		t.Fatalf("documented resumed result = %#v", projected)
+	}
+}
+
+func runDocumentedExample(t *testing.T, name string, args map[string]any, resume *workflowruntime.ResumeContext) workflowruntime.Outcome {
+	t.Helper()
+	path := filepath.Join("..", "..", "..", "..", "docs", "examples", "javascript-workflows", name)
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read documented workflow %s: %v", name, err)
+	}
+	return runSuccessful(t, workflowruntime.Request{
+		Source: string(source), SourceRef: path,
+		SessionID: "session-documented-" + strings.TrimSuffix(name, ".workflow.js"),
+		Args:      marshalArgs(t, args),
+		Metadata:  map[string]string{"name": strings.TrimSuffix(name, ".workflow.js")},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(), Resume: resume,
+	})
+}
+
+func childTerminalRecordCount(records []workflowruntime.RuntimeRecord) int {
+	count := 0
+	for _, record := range records {
+		if record.ChildDispatch != nil && record.ChildDispatch.Status == workflowruntime.ChildDispatchStatusCompleted {
+			count++
+		}
+	}
+	return count
+}
 
 func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
 	agents := map[string]interfaces.FactoryOrchestratorJavaScriptAgent{"reviewer": {Preset: "factory"}}

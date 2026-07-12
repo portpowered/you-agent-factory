@@ -29,7 +29,7 @@ small host API; it does not receive general-purpose machine access.
 | `phase` | `phase(name: string): void` | Appends an ordered phase observation for the `FactorySession` and its `FactoryEvent` stream. |
 | `log` | `log(message: string, fields?: object): void` | Appends a structured log observation. Fields must be JSON-compatible. |
 | `workflow.log` | `workflow.log(message: string, fields?: object): void` | Same observable log contract as `log`. |
-| `agent.run` | `await agent.run({prompt, label?, model?, reasoningEffort?, command?, sandbox?, writableRoots?, allowNetwork?, concurrency?, outputSchema?})` | Requests one child execution and resolves to its structured result. Its lifecycle is inspectable as a `Dispatch` and related `FactoryEvent` records. Explicit settings remain subject to policy. |
+| `agent.run` | `await agent.run({prompt, label?, agentId?, preset?, modelProvider?, model?, reasoningEffort?, command?, sandbox?, writableRoots?, allowNetwork?, concurrency?, outputSchema?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. Explicit settings remain subject to policy. |
 | `parallel` | `await parallel(items)` where each item is an `agent.run` request object or async function | Runs bounded child work and returns results in input order. Child work remains individually inspectable as `Dispatch` records. |
 | `pipeline` | `await pipeline(items, worker, next?)` | Runs `worker(item, index)` and optional `next(workerResult, item, index)` for each item. Returns ordered per-item status and stage results. |
 | `workflow.checkpoint` | `workflow.checkpoint({label: string, state?: object}): void` | Persists JSON-compatible application state as a checkpoint artifact/reference and appends a checkpoint observation. It does not snapshot the JavaScript VM. |
@@ -96,6 +96,86 @@ that approved state. The checkpoint reference is a `FactoryArtifact`, its
 write is a `FactoryEvent`, and child work remains visible as `Dispatch`
 records. Raw VM state is not captured.
 
+## Equivalent CLI, API, and MCP execution
+
+CLI, REST, and MCP are adapters over the same durable Factory Session execution
+contract. Pick one `requestId` as the idempotency key, retain the returned
+`sessionId`, and use that same stable Factory Session identifier for every
+later status, result, dispatch, artifact, and event read. A synchronous start
+waits for a terminal outcome (or its configured timeout); an asynchronous start
+returns the same session concept immediately for polling. Terminal status and
+result availability have the same meaning on every surface.
+
+| Operation | CLI | REST API | MCP |
+|-----------|-----|----------|-----|
+| Validate or resolve source without starting a session | `you workflow validate --workflow review` | `POST /factories/preview` | `you.factory_session.validate_source` |
+| Start and wait | `you --json workflow run --request-id req-review-1 --workflow review` | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
+| Start for polling | `you --json workflow start --request-id req-review-1 --workflow review` | `POST /factory-sessions/async` | `you.factory_session.start_async` |
+| Read status or final/partial result | `you --json workflow status SESSION_ID`; `you --json workflow result SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
+| Inspect child work and durable facts | `you --json workflow dispatches SESSION_ID`; `artifacts`; `events` | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
+
+Start requests use the shared `FactorySessionExecutionRequest` shape: one source
+selector, JSON-compatible `args`, requested policy where applicable, and the
+stable request id. Responses expose the same `FactorySession`, result
+availability, and inspection links rather than transport-specific workflow-run
+resources. A completed result is the same session result whether read from the
+sync response or fetched later; running sessions can report a not-ready final
+result while their status, partial result, dispatches, artifacts, and events
+remain inspectable.
+
+`you mcp serve` is fixture-backed by default for deterministic offline contract
+scenarios. Use `you mcp serve --runtime` for live JavaScript execution. Both
+modes expose the same `you.factory_session.*` tool envelopes, but fixture-backed
+calls return catalog scenarios while runtime-backed calls execute resolved
+source. Workflow-named MCP tools such as `you.workflow.run`,
+`you.workflow.status`, and `you.workflow.result` are compatibility aliases;
+new integrations should use `you.factory_session.*`.
+
+## Child worker presets
+
+Reusable JavaScript child settings are operator-owned in
+`~/.you-agent-factory/config.json`:
+
+```json
+{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  },
+  "workerPresets": [
+    {
+      "id": "careful-review",
+      "modelProvider": "codex",
+      "model": "gpt-5-codex",
+      "reasoningEffort": "high"
+    }
+  ]
+}
+```
+
+Each preset supports a required, unique, non-empty `id` and required
+`modelProvider`; `model` and `reasoningEffort` are optional. Supported reasoning
+efforts are `minimal`, `low`, `medium`, and `high`. Reference a preset directly
+with `agent.run({preset: "careful-review", ...})`, or assign it to a named
+factory agent under `orchestrator.javascript.agents.<agentId>.preset` and call
+`agent.run({agentId: "reviewer", ...})`.
+
+Worker fields resolve independently. Highest precedence is an explicit
+`agent.run` field, then the preset selected directly by that call, then the
+named factory agent's preset, then that preset's fields, then operator
+`defaults.workerModelProvider` and `defaults.workerModel`. The selected preset
+id remains observable even when an explicit child field overrides one preset
+value. The completed selection is canonicalized and checked against effective
+policy before a `Dispatch` is created.
+
+Unknown direct or named-agent presets are rejected with the preset id and its
+selection source. Invalid preset definitions fail operator configuration load;
+policy-denied resolved models or reasoning efforts fail before child dispatch.
+Successful dispatch list/detail, event, and replay projections retain the
+resolved preset id, provider, model, reasoning effort, runner, execution
+provider, and provider-session reference when available. See `you docs config`
+for the complete operator configuration contract.
+
 ## Inspection model
 
 These examples execute as JavaScript-backed `FactorySession` resources—not as
@@ -108,4 +188,6 @@ promise to expose raw JavaScript engine state or provider transcripts.
 
 - `you docs orchestrators` — canonical Factory Session terminology
 - `you docs sessions` — session discovery and inspection
+- `you docs mcp-hosts` — fixture-backed and runtime-backed MCP setup
+- `you docs config` — worker preset and operator-default configuration
 - `you docs record-replay` — recording and replay modes
