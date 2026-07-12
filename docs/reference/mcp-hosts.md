@@ -112,6 +112,116 @@ Compatibility-only workflow aliases resolve to the same handlers:
 Hosts may discover either naming family. Prefer the `you.factory_session.*`
 tools in new configuration.
 
+## Complete Runtime-Backed Factory Session Transcript
+
+The following abbreviated host conversation uses `you mcp serve --runtime` and
+one illustrative dynamic workflow. The host sends each object as the
+`arguments` value of an MCP `tools/call`. The responses show representative
+stable fields only: timestamps, progress counts, event ids, artifact ids, and
+workflow payloads vary by execution and are not fixed contract values.
+
+First validate the source before creating runtime work:
+
+```text
+host -> you.factory_session.validate_source
+{"kind":"INLINE_WORKFLOW","inlineSource":"export default async function ({ final }) { return final({ answer: 'ready' }) }"}
+
+you ->
+{"result":{"valid":true,"diagnostics":[]}}
+```
+
+Then start it asynchronously with a caller-supplied request id. Live dynamic
+workflow execution requires runtime-backed serve; the default fixture-backed
+mode only resolves deterministic catalog scenarios.
+
+```text
+host -> you.factory_session.start_async
+{"source":{"kind":"INLINE_WORKFLOW","inlineWorkflow":{"inlineSource":{"encoding":"utf-8","inline":"export default async function ({ final }) { return final({ answer: 'ready' }) }"}}},"requestId":"req-host-demo-001"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","requestId":"req-host-demo-001","status":"RUNNING"}}
+```
+
+Retain `fs-host-demo-01`. Every post-start call below addresses that same
+Factory Session; none creates or substitutes another session. Poll its durable
+status and result independently:
+
+```text
+host -> you.factory_session.get
+{"sessionId":"fs-host-demo-01"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","status":"RUNNING","progress":{"completedDispatches":0}}}
+
+host -> you.factory_session.get_result
+{"sessionId":"fs-host-demo-01","mode":"FINAL","includeArtifacts":true}
+
+you ->
+{"error":{"code":"factory_session.result.not_ready","retryable":true,"sessionId":"fs-host-demo-01"}}
+```
+
+Inspect the work owned by the Factory Session while it runs. A Dispatch is one
+child execution; a `FactoryArtifact` is durable output metadata; and a
+`FactoryEvent` is an ordered runtime fact.
+
+```text
+host -> you.factory_session.list_dispatches
+{"sessionId":"fs-host-demo-01"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","dispatches":[{"id":"dispatch-host-demo-01","status":"RUNNING"}]}}
+
+host -> you.factory_session.list_artifacts
+{"sessionId":"fs-host-demo-01"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","artifacts":[{"id":"artifact-checkpoint-01","kind":"CHECKPOINT","visibility":"INTERNAL_CHECKPOINT"}]}}
+
+host -> you.factory_session.read_events
+{"sessionId":"fs-host-demo-01"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","events":[{"id":"event-host-demo-07","type":"FactoryEventTypeDispatchQueued","context":{"sessionSequence":7,"dispatchId":"dispatch-host-demo-01"}}]}}
+```
+
+For a workflow that is still running, this is a valid control-and-observe
+sequence. Wait for each accepted operation to become visible before sending the
+next operation:
+
+```text
+host -> you.factory_session.control
+{"sessionId":"fs-host-demo-01","operation":"PAUSE","requestId":"req-pause-host-demo-01","reason":"host maintenance"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","operation":"PAUSE","outcome":"ACCEPTED","status":"PAUSED"}}
+
+host -> you.factory_session.get
+{"sessionId":"fs-host-demo-01"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","status":"PAUSED"}}
+
+host -> you.factory_session.control
+{"sessionId":"fs-host-demo-01","operation":"RESUME","requestId":"req-resume-host-demo-01"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","operation":"RESUME","outcome":"ACCEPTED","status":"RUNNING"}}
+```
+
+Continue polling the same id. Completion is confirmed when
+`you.factory_session.get` reports a terminal status and
+`you.factory_session.get_result` returns a terminal result. The final
+`you.factory_session.list_dispatches` view should show terminal Dispatch
+statuses, `you.factory_session.list_artifacts` should expose any final
+`FactoryArtifact` references, and `you.factory_session.read_events` should
+contain ordered `FactoryEvent` facts for the lifecycle controls and completion.
+These facts, rather than the illustrative ids or timestamps above, confirm the
+outcome.
+
+Use canonical `you.factory_session.*` names for this conversation.
+`you.workflow.*` names are compatibility-only aliases for existing
+integrations, not the recommended customer surface.
+
 ## Generic MCP Host Pattern
 
 Most stdio MCP hosts accept the same child-process shape:
