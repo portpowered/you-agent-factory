@@ -2,7 +2,10 @@
 // Session recording contract. It contains no persistence or replay side effects.
 package recording
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const (
 	KindJavaScriptFactorySession = "you.factory-session.javascript.recording"
@@ -23,6 +26,7 @@ type Recording struct {
 	PolicyHash                 string            `json:"policyHash"`
 	Artifacts                  []ArtifactSummary `json:"artifacts"`
 	Events                     []EventSummary    `json:"events"`
+	Result                     *ResultProjection `json:"result,omitempty"`
 	Redaction                  RedactionMetadata `json:"redaction"`
 }
 
@@ -53,6 +57,30 @@ type EventSummary struct {
 	Sequence    int64     `json:"sequence"`
 	Timestamp   time.Time `json:"timestamp"`
 	ArtifactIDs []string  `json:"artifactIds,omitempty"`
+}
+
+// ResultProjection contains only the canonical public result read model. The
+// digest protects inline public result data independently from artifact summaries.
+type ResultProjection struct {
+	Status        string              `json:"status"`
+	Mode          string              `json:"mode"`
+	PrimaryResult json.RawMessage     `json:"primaryResult,omitempty"`
+	ContentHash   string              `json:"contentHash,omitempty"`
+	ArtifactIDs   []string            `json:"artifactIds,omitempty"`
+	Failure       *FailureSummary     `json:"failure,omitempty"`
+	Availability  *AvailabilityDetail `json:"availability,omitempty"`
+}
+
+type FailureSummary struct {
+	Reason                 string `json:"reason"`
+	Message                string `json:"message,omitempty"`
+	PartialResultAvailable bool   `json:"partialResultAvailable"`
+}
+
+type AvailabilityDetail struct {
+	Reason    string `json:"reason"`
+	Message   string `json:"message,omitempty"`
+	Retryable bool   `json:"retryable"`
 }
 
 type RedactionMetadata struct {

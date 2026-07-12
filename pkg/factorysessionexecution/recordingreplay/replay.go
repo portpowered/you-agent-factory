@@ -1,0 +1,124 @@
+package recordingreplay
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
+)
+
+// RecordingReplayProjection is the complete public inspection surface restored
+// from a portable recording. It intentionally has no live execution controls.
+type RecordingReplayProjection struct {
+	Session   fse.SessionReadResult
+	Events    fse.EventReadResult
+	Artifacts fse.ListArtifactsResult
+	Result    fse.ResultReadResult
+}
+
+// ReplayRecording validates and maps a privacy-bounded recording without
+// constructing an executor, provider, network client, or JavaScript runtime.
+func ReplayRecording(value recording.Recording) (RecordingReplayProjection, error) {
+	if err := recording.Validate(value); err != nil {
+		return RecordingReplayProjection{}, err
+	}
+	if value.Result == nil {
+		return RecordingReplayProjection{}, &recording.Diagnostic{
+			Code: recording.CodeInvalidSummary, Area: "result", Path: "result",
+			Message: "recording has no referenced public result data; migrate or re-record the session",
+		}
+	}
+
+	artifacts := replayArtifactSummaries(value.Artifacts)
+	result := replayResultProjection(value, artifacts)
+	session := replaySessionRead(value, result, artifacts)
+	events, err := replayEventSummaries(value.Session.ID, value.Events)
+	if err != nil {
+		return RecordingReplayProjection{}, err
+	}
+	return RecordingReplayProjection{
+		Session:   session,
+		Events:    fse.EventReadResult{SessionID: value.Session.ID, Events: events},
+		Artifacts: fse.ListArtifactsResult{SessionID: value.Session.ID, Artifacts: artifacts},
+		Result:    result,
+	}, nil
+}
+
+func replaySessionRead(value recording.Recording, result fse.ResultReadResult, artifacts []fse.ArtifactSummary) fse.SessionReadResult {
+	status := fse.LifecycleStatus(value.Session.Status)
+	if status == "COMPLETED" {
+		status = fse.LifecycleStatusSucceeded
+	}
+	refs := make([]fse.ArtifactRefSummary, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		refs = append(refs, fse.ArtifactRefSummary{ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility, ContentHash: artifact.ContentHash, SizeBytes: artifact.SizeBytes})
+	}
+	session := fse.SessionReadResult{
+		SessionID: value.Session.ID, Status: status, OrchestratorKind: value.Session.OrchestratorKind,
+		ResolvedSource: fse.ResolvedSource{SourceRef: value.Source.Ref, SourceHash: value.Source.Hash},
+		SourceHash:     value.Source.Hash, Policy: fse.PolicyProjection{EffectiveHash: value.PolicyHash},
+		Usage: fse.EmptySessionUsage(), ResultSummary: &fse.ResultSummary{ResultStatus: string(result.ResultStatus)},
+		ArtifactRefs: refs, ArtifactCount: len(refs), Links: fse.InspectionLinksForSession(value.Session.ID, true),
+	}
+	if result.Failure != nil {
+		failure := *result.Failure
+		session.Failure = &failure
+	}
+	return session
+}
+
+func replayResultProjection(value recording.Recording, artifacts []fse.ArtifactSummary) fse.ResultReadResult {
+	result := value.Result
+	projected := fse.ResultReadResult{
+		SessionID: value.Session.ID, SessionStatus: fse.LifecycleStatus(value.Session.Status),
+		ResultStatus: fse.ResultStatus(result.Status), Mode: fse.ResultMode(result.Mode),
+		PrimaryResult: append(json.RawMessage(nil), result.PrimaryResult...),
+		ArtifactIDs:   append([]string(nil), result.ArtifactIDs...),
+	}
+	if projected.SessionStatus == "COMPLETED" {
+		projected.SessionStatus = fse.LifecycleStatusSucceeded
+	}
+	artifactByID := make(map[string]fse.ArtifactSummary, len(artifacts))
+	for _, artifact := range artifacts {
+		artifactByID[artifact.ID] = artifact
+	}
+	for _, id := range projected.ArtifactIDs {
+		artifact := artifactByID[id]
+		projected.ArtifactRefs = append(projected.ArtifactRefs, fse.ArtifactRefSummary{ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility, ContentHash: artifact.ContentHash, SizeBytes: artifact.SizeBytes})
+	}
+	if result.Failure != nil {
+		projected.Failure = &fse.FailureSummary{Reason: result.Failure.Reason, Message: result.Failure.Message, PartialResultAvailable: result.Failure.PartialResultAvailable}
+	}
+	if result.Availability != nil {
+		projected.Availability = &fse.ResultAvailabilityDetail{Reason: result.Availability.Reason, Message: result.Availability.Message, Retryable: result.Availability.Retryable}
+	}
+	return projected
+}
+
+func replayArtifactSummaries(values []recording.ArtifactSummary) []fse.ArtifactSummary {
+	artifacts := make([]fse.ArtifactSummary, 0, len(values))
+	for _, value := range values {
+		createdAt := value.CreatedAt
+		artifacts = append(artifacts, fse.ArtifactSummary{ID: value.ID, Kind: value.Kind, Visibility: value.Visibility, Label: value.Label, ContentHash: value.ContentHash, SizeBytes: value.SizeBytes, CreatedAt: &createdAt})
+	}
+	return artifacts
+}
+
+func replayEventSummaries(sessionID string, values []recording.EventSummary) ([]json.RawMessage, error) {
+	events := make([]json.RawMessage, 0, len(values))
+	for _, value := range values {
+		event := map[string]any{
+			"id": value.ID, "type": value.Type,
+			"context": map[string]any{"sessionId": sessionID, "sequence": value.Sequence, "eventTime": value.Timestamp},
+			"payload": map[string]any{"artifactIds": value.ArtifactIDs},
+		}
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			return nil, fmt.Errorf("replay event summary %q: %w", strings.TrimSpace(value.ID), err)
+		}
+		events = append(events, encoded)
+	}
+	return events, nil
+}

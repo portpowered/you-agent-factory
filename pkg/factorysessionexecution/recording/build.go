@@ -18,6 +18,7 @@ type CanonicalFacts struct {
 	Arguments                           map[string]any
 	Artifacts                           []CanonicalArtifact
 	Events                              []json.RawMessage
+	Result                              *CanonicalResult
 }
 
 type CanonicalArtifact struct {
@@ -25,6 +26,14 @@ type CanonicalArtifact struct {
 	SizeBytes                                int64
 	CreatedAt                                time.Time
 	SecretsRedacted                          int64
+}
+
+type CanonicalResult struct {
+	Status, Mode  string
+	PrimaryResult json.RawMessage
+	ArtifactIDs   []string
+	Failure       *FailureSummary
+	Availability  *AvailabilityDetail
 }
 
 // Build maps canonical public facts into the portable privacy-bounded contract.
@@ -55,6 +64,18 @@ func Build(facts CanonicalFacts) (Recording, error) {
 		ArgumentsDigest:            argumentsDigest, PolicyHash: facts.PolicyHash,
 		Artifacts: artifacts, Events: events,
 		Redaction: RedactionMetadata{RuntimeStateOmitted: true, CheckpointBodiesOmitted: true, ProviderTranscriptsOmitted: true, ChildDispatchesOmitted: true, SecretsRedacted: secretsRedacted},
+	}
+	if facts.Result != nil {
+		value.Result = &ResultProjection{
+			Status: facts.Result.Status, Mode: facts.Result.Mode,
+			PrimaryResult: append(json.RawMessage(nil), facts.Result.PrimaryResult...),
+			ArtifactIDs:   append([]string(nil), facts.Result.ArtifactIDs...),
+			Failure:       facts.Result.Failure, Availability: facts.Result.Availability,
+		}
+		if len(value.Result.PrimaryResult) > 0 {
+			digest := sha256.Sum256(value.Result.PrimaryResult)
+			value.Result.ContentHash = "sha256:" + hex.EncodeToString(digest[:])
+		}
 	}
 	return value, Validate(value)
 }

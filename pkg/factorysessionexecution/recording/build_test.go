@@ -21,6 +21,7 @@ func TestBuildRetainsCanonicalSummariesAndOmitsRuntimeDetails(t *testing.T) {
 			json.RawMessage(`{"id":"event-1","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T16:00:00Z"},"payload":{"checkpointBody":{"secret":"checkpoint"},"childDispatches":[{"id":"dispatch-secret"}]}}`),
 			json.RawMessage(`{"id":"event-2","type":"SESSION_COMPLETED","context":{"sequence":1,"eventTime":"2026-07-12T16:00:02Z"},"payload":{"artifactIds":["artifact-1"],"providerTranscript":"provider-secret"}}`),
 		},
+		Result: &CanonicalResult{Status: "FINAL", Mode: "final", PrimaryResult: json.RawMessage(`{"answer":"done"}`), ArtifactIDs: []string{"artifact-1"}},
 	}
 
 	value, err := Build(facts)
@@ -82,7 +83,7 @@ func TestBuildRejectsMalformedCanonicalEvent(t *testing.T) {
 }
 
 func minimalCanonicalFacts() CanonicalFacts {
-	return CanonicalFacts{SessionID: "session-js-002", Status: "COMPLETED", OrchestratorKind: "JAVASCRIPT", SourceRef: "workflow/audit.js", SourceHash: digest('1'), PolicyHash: digest('2')}
+	return CanonicalFacts{SessionID: "session-js-002", Status: "COMPLETED", OrchestratorKind: "JAVASCRIPT", SourceRef: "workflow/audit.js", SourceHash: digest('1'), PolicyHash: digest('2'), Result: &CanonicalResult{Status: "FINAL", Mode: "final"}}
 }
 
 func digest(character byte) string { return "sha256:" + strings.Repeat(string(character), 64) }

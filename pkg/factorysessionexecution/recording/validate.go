@@ -1,6 +1,8 @@
 package recording
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -72,7 +74,52 @@ func Validate(r Recording) error {
 	if err := validateEvents(r.Events, r.Artifacts); err != nil {
 		return err
 	}
+	if err := validateResult(r); err != nil {
+		return err
+	}
 	return validateRedaction(r.Redaction)
+}
+
+func validateResult(r Recording) error {
+	if r.Result == nil {
+		if r.SchemaVersion == CurrentSchemaVersion {
+			return diagnostic(CodeInvalidSummary, "result", "result", "is required for the current schema version")
+		}
+		return nil
+	}
+	result := r.Result
+	if !slices.Contains([]string{"NOT_READY", "PARTIAL", "FINAL", "FAILED_WITH_PARTIAL", "UNAVAILABLE"}, result.Status) {
+		return diagnostic(CodeInvalidSummary, "result", "result.status", "is not a supported result status")
+	}
+	if !slices.Contains([]string{"final", "partial"}, result.Mode) {
+		return diagnostic(CodeInvalidSummary, "result", "result.mode", "must be final or partial")
+	}
+	artifactIDs := make(map[string]struct{}, len(r.Artifacts))
+	for _, artifact := range r.Artifacts {
+		artifactIDs[artifact.ID] = struct{}{}
+	}
+	for index, id := range result.ArtifactIDs {
+		if _, ok := artifactIDs[id]; !ok {
+			return diagnostic(CodeInvalidSummary, "result", fmt.Sprintf("result.artifactIds[%d]", index), "references an unknown artifact")
+		}
+	}
+	if len(result.PrimaryResult) == 0 {
+		if result.ContentHash != "" {
+			return diagnostic(CodeInvalidDigest, "result", "result.contentHash", "must be absent when primaryResult is absent")
+		}
+	} else {
+		if !json.Valid(result.PrimaryResult) {
+			return diagnostic(CodeInvalidSummary, "result", "result.primaryResult", "must be valid JSON")
+		}
+		digest := sha256.Sum256(result.PrimaryResult)
+		if result.ContentHash != "sha256:"+hex.EncodeToString(digest[:]) {
+			return diagnostic(CodeInvalidDigest, "result", "result.contentHash", "does not match primaryResult")
+		}
+	}
+	if r.Session.Status == "FAILED" && result.Status == "FINAL" {
+		return diagnostic(CodeInvalidSummary, "result", "result.status", "failed sessions cannot declare a final result")
+	}
+	return nil
 }
 
 func validateCompatibility(r Recording) error {

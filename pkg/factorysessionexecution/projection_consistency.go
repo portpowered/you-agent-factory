@@ -36,6 +36,7 @@ func (s *JavaScriptRuntimeService) WriteRecording(ctx context.Context, sessionID
 	snapshot := cloneRuntimeSessionState(state)
 	s.mu.RUnlock()
 	facts := recording.CanonicalFacts{SessionID: snapshot.session.SessionID, Status: string(snapshot.session.Status), OrchestratorKind: snapshot.session.OrchestratorKind, SourceRef: snapshot.session.ResolvedSource.SourceRef, SourceHash: snapshot.session.SourceHash, PolicyHash: snapshot.session.Policy.EffectiveHash, Events: snapshot.events}
+	facts.Result = canonicalRecordingResult(snapshot.session.Status, snapshot.result)
 	if snapshot.startRequest != nil {
 		facts.Arguments = snapshot.startRequest.Args
 	}
@@ -57,6 +58,34 @@ func (s *JavaScriptRuntimeService) WriteRecording(ctx context.Context, sessionID
 		return &RecordingError{sessionID, path, err}
 	}
 	return nil
+}
+
+func canonicalRecordingResult(sessionStatus LifecycleStatus, result ResultReadResult) *recording.CanonicalResult {
+	projected := &recording.CanonicalResult{
+		Status: string(result.ResultStatus), Mode: string(result.Mode),
+		PrimaryResult: append(json.RawMessage(nil), result.PrimaryResult...),
+		ArtifactIDs:   append([]string(nil), result.ArtifactIDs...),
+	}
+	if projected.Mode == "" {
+		projected.Mode = string(ResultModeFinal)
+	}
+	if projected.Status == "" {
+		switch sessionStatus {
+		case LifecycleStatusSucceeded:
+			projected.Status = string(ResultStatusFinal)
+		case LifecycleStatusFailed:
+			projected.Status = string(ResultStatusUnavailable)
+		default:
+			projected.Status = string(ResultStatusNotReady)
+		}
+	}
+	if result.Failure != nil {
+		projected.Failure = &recording.FailureSummary{Reason: result.Failure.Reason, Message: result.Failure.Message, PartialResultAvailable: result.Failure.PartialResultAvailable}
+	}
+	if result.Availability != nil {
+		projected.Availability = &recording.AvailabilityDetail{Reason: result.Availability.Reason, Message: result.Availability.Message, Retryable: result.Availability.Retryable}
+	}
+	return projected
 }
 
 // projectPetriRunningSessionState initializes the canonical read model owned by

@@ -11,5 +11,6 @@
     {"id": "event-1", "type": "SESSION_STARTED", "sequence": 0, "timestamp": "2026-07-12T12:00:00Z"},
     {"id": "event-2", "type": "SESSION_COMPLETED", "sequence": 1, "timestamp": "2026-07-12T12:00:02Z", "artifactIds": ["artifact-1"]}
   ],
+  "result": {"status": "FINAL", "mode": "final", "artifactIds": ["artifact-1"]},
   "redaction": {"runtimeStateOmitted": true, "checkpointBodiesOmitted": true, "providerTranscriptsOmitted": true, "childDispatchesOmitted": true, "secretsRedacted": 2}
 }
