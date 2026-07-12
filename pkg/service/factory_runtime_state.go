@@ -855,7 +855,11 @@ func (fs *FactoryService) writeJavaScriptFactorySessionRecording(ctx context.Con
 	if err != nil || session.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		return err
 	}
-	facts := portableCanonicalFacts(session)
+	projectionCtx, projectionErr := fs.buildSessionProjectionContext(ctx, fs.currentSession())
+	if projectionErr != nil {
+		return fs.failPortableRecording(path, sessionID, projectionErr)
+	}
+	facts := portableCanonicalFacts(session, projectionCtx.JavaScript)
 	if live := fs.currentSession(); live != nil {
 		for _, event := range (sessionGatewayHost{FactoryService: fs}).LiveSessionEvents(live) {
 			raw, marshalErr := json.Marshal(event)
@@ -875,13 +879,17 @@ func (fs *FactoryService) writeJavaScriptFactorySessionRecording(ctx context.Con
 	return nil
 }
 
-func portableCanonicalFacts(session factoryapi.FactorySession) recording.CanonicalFacts {
+func portableCanonicalFacts(
+	session factoryapi.FactorySession,
+	javascript *interfaces.FactorySessionJavaScriptRuntimeState,
+) recording.CanonicalFacts {
 	status := portableRecordingStatus(session.Runtime)
 	facts := recording.CanonicalFacts{
 		SessionID: session.Id, Status: status, OrchestratorKind: string(session.Runtime.OrchestratorKind),
 		SourceRef: stringPointerValue(session.Runtime.SourceRef), SourceHash: stringPointerValue(session.Runtime.SourceHash),
 		PolicyHash: stringPointerValue(session.Runtime.PolicyHash), Result: portableRecordingResult(status),
 	}
+	recording.ApplyJavaScriptProjectionFacts(&facts, javascript)
 	if session.Runtime.Artifacts == nil {
 		return facts
 	}

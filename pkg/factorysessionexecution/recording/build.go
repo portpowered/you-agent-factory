@@ -17,6 +17,7 @@ type CanonicalFacts struct {
 	SessionID, Status, OrchestratorKind string
 	SourceRef, SourceHash, PolicyHash   string
 	Arguments                           map[string]any
+	ArgumentsDigest                     string
 	Artifacts                           []CanonicalArtifact
 	Events                              []json.RawMessage
 	Checkpoint                          *CanonicalCheckpoint
@@ -45,9 +46,13 @@ type CanonicalResult struct {
 
 // Build maps canonical public facts into the portable privacy-bounded contract.
 func Build(facts CanonicalFacts) (Recording, error) {
-	argumentsDigest, err := digestCanonicalJSON(facts.Arguments)
-	if err != nil {
-		return Recording{}, fmt.Errorf("digest arguments: %w", err)
+	argumentsDigest := strings.TrimSpace(facts.ArgumentsDigest)
+	if argumentsDigest == "" {
+		var err error
+		argumentsDigest, err = digestCanonicalJSON(facts.Arguments)
+		if err != nil {
+			return Recording{}, fmt.Errorf("digest arguments: %w", err)
+		}
 	}
 	artifacts := make([]ArtifactSummary, 0, len(facts.Artifacts))
 	var secretsRedacted int64

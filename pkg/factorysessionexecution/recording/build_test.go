@@ -48,6 +48,21 @@ func TestBuildRetainsCanonicalSummariesAndOmitsRuntimeDetails(t *testing.T) {
 	}
 }
 
+func TestBuildRetainsCanonicalPrecomputedArgumentsDigest(t *testing.T) {
+	t.Parallel()
+	facts := minimalCanonicalFacts()
+	facts.ArgumentsDigest = digest('9')
+	facts.Arguments = map[string]any{"must": "not be re-digested"}
+
+	value, err := Build(facts)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if value.ArgumentsDigest != digest('9') {
+		t.Fatalf("argumentsDigest = %q, want canonical projection digest", value.ArgumentsDigest)
+	}
+}
+
 func TestWriteFailureLeavesNoCompleteRecording(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "destination-is-directory")

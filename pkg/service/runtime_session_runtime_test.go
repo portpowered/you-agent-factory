@@ -1653,6 +1653,57 @@ func TestFactoryService_WriteJavaScriptFactorySessionRecording_UsesProductionRec
 	}
 }
 
+func TestPortableCanonicalFactsRetainJavaScriptProjectionInputsCheckpointAndResult(t *testing.T) {
+	t.Parallel()
+	checkpointTime := time.Date(2026, 7, 12, 19, 30, 0, 0, time.UTC)
+	argsDigest := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	javascript := &interfaces.FactorySessionJavaScriptRuntimeState{
+		ArgsDigest: argsDigest,
+		Checkpoints: []interfaces.FactorySessionJavaScriptCheckpointRef{{
+			ID: "checkpoint-1", Label: "approval", Summary: "waiting for approval", Timestamp: checkpointTime,
+			ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{ID: "artifact-checkpoint"},
+		}},
+		ResultStatus: "FAILED_WITH_PARTIAL",
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "safe partial result"},
+			{Type: interfaces.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
+		},
+	}
+	succeeded := factoryapi.FactorySessionDurableLifecycleStatusFailed
+	sourceRef := "workflow/review.js"
+	sourceHash := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	policyHash := "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+	artifactHash := "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+	artifactSize := int64(12)
+	capture := &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &checkpointTime}
+	artifacts := []factoryapi.FactoryArtifact{{
+		Id: "artifact-checkpoint", Kind: factoryapi.FactoryArtifactKindCHECKPOINT,
+		Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT, ContentHash: &artifactHash, SizeBytes: &artifactSize, CaptureMetadata: capture,
+	}, {
+		Id: "artifact-result", Kind: factoryapi.FactoryArtifactKindFINALRESULT,
+		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC, ContentHash: &artifactHash, SizeBytes: &artifactSize, CaptureMetadata: capture,
+	}}
+	facts := portableCanonicalFacts(factoryapi.FactorySession{
+		Id: "default", Runtime: factoryapi.FactorySessionRuntime{
+			OrchestratorKind: factoryapi.JAVASCRIPT, LifecycleControlStatus: &succeeded,
+			SourceRef: &sourceRef, SourceHash: &sourceHash, PolicyHash: &policyHash, Artifacts: &artifacts,
+		},
+	}, javascript)
+
+	if facts.ArgumentsDigest != argsDigest {
+		t.Fatalf("argumentsDigest = %q, want %q", facts.ArgumentsDigest, argsDigest)
+	}
+	if facts.Checkpoint == nil || facts.Checkpoint.ID != "checkpoint-1" || facts.Checkpoint.ArtifactID != "artifact-checkpoint" || facts.Checkpoint.Timestamp != checkpointTime {
+		t.Fatalf("checkpoint = %#v, want canonical public checkpoint", facts.Checkpoint)
+	}
+	if facts.Result == nil || facts.Result.Status != "FAILED_WITH_PARTIAL" || facts.Result.Mode != "partial" || len(facts.Result.ArtifactIDs) != 1 || facts.Result.ArtifactIDs[0] != "artifact-result" {
+		t.Fatalf("result = %#v, want canonical partial result", facts.Result)
+	}
+	if !strings.Contains(string(facts.Result.PrimaryResult), "safe partial result") {
+		t.Fatalf("primaryResult = %s, want recorded public content", facts.Result.PrimaryResult)
+	}
+}
+
 func TestFactoryService_PortableReplayRestoresTerminalPublicReadsWithoutLiveExecution(t *testing.T) {
 	for _, tc := range []struct {
 		name, status, resultStatus string
