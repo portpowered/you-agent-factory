@@ -134,6 +134,134 @@ func TestVerifyResultPolicyInventory_FailsWhenCallToolResultEncodingDrifts(t *te
 	}
 }
 
+func TestProjectResultPolicyInventory_DomainErrorTransportPolicy(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectResultPolicyInventory()
+	if err != nil {
+		t.Fatalf("ProjectResultPolicyInventory() error = %v", err)
+	}
+	policy := inventory.DomainErrorTransport
+	if policy.FailureClass != mcpfactorysession.FailureClassDomain {
+		t.Fatalf("failureClass = %q, want %q", policy.FailureClass, mcpfactorysession.FailureClassDomain)
+	}
+	if policy.IsError {
+		t.Fatal("isError = true, want false for typed ToolErrorEnvelope payloads")
+	}
+	if !slices.Equal(policy.StableEnvelopeFields, []string{
+		"error.code",
+		"error.message",
+		"error.retryable",
+		"error.sessionId",
+		"error.details",
+	}) {
+		t.Fatalf("stableEnvelopeFields = %#v, want shared error stable fields", policy.StableEnvelopeFields)
+	}
+}
+
+func TestProjectResultPolicyInventory_ProtocolErrorTransportPolicy(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectResultPolicyInventory()
+	if err != nil {
+		t.Fatalf("ProjectResultPolicyInventory() error = %v", err)
+	}
+	policy := inventory.ProtocolErrorTransport
+	if policy.FailureClass != mcpfactorysession.FailureClassProtocol {
+		t.Fatalf("failureClass = %q, want %q", policy.FailureClass, mcpfactorysession.FailureClassProtocol)
+	}
+	if policy.Transport != mcpfactorysession.ProtocolTransportJSONRPCError {
+		t.Fatalf("transport = %q, want %q", policy.Transport, mcpfactorysession.ProtocolTransportJSONRPCError)
+	}
+}
+
+func TestProjectResultPolicyInventory_DomainAndProtocolFixturesSortedByName(t *testing.T) {
+	inventory, err := mcpfactorysession.ProjectResultPolicyInventory()
+	if err != nil {
+		t.Fatalf("ProjectResultPolicyInventory() error = %v", err)
+	}
+	for _, fixtures := range [][]string{
+		namesFromDomainErrorFixtures(inventory.DomainErrorFixtures),
+		namesFromProtocolErrorFixtures(inventory.ProtocolErrorFixtures),
+	} {
+		sorted := slices.Clone(fixtures)
+		slices.Sort(sorted)
+		if !slices.Equal(fixtures, sorted) {
+			t.Fatalf("fixture names = %#v, want sorted %#v", fixtures, sorted)
+		}
+	}
+}
+
+func TestDomainErrorFixture_MatchesServerToolsCallEncoding(t *testing.T) {
+	client := newResultPolicyFixtureMCPClient(t)
+	arguments := json.RawMessage(`{"sessionId":"dur-sess-missing-999"}`)
+	raw, err := client.CallTool(mcpfactorysession.ToolGetSession, arguments)
+	if err != nil {
+		t.Fatalf("CallTool(get_session) error = %v", err)
+	}
+
+	srv := newResultPolicyTestServer(t, client)
+	result := decodeToolsCallResult(t, runResultPolicyServerHandleLine(t, srv,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"you.factory_session.get","arguments":{"sessionId":"dur-sess-missing-999"}}}`,
+	))
+
+	projected, err := mcpfactorysession.MarshalSuccessCallToolResultJSON(raw)
+	if err != nil {
+		t.Fatalf("MarshalSuccessCallToolResultJSON() error = %v", err)
+	}
+	serverEncoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal server result: %v", err)
+	}
+	if string(projected) != string(serverEncoded) {
+		t.Fatalf("projected domain-error envelope differs from server:\nprojected=%s\nserver=%s", projected, serverEncoded)
+	}
+
+	inventory, err := mcpfactorysession.ProjectResultPolicyInventory()
+	if err != nil {
+		t.Fatalf("ProjectResultPolicyInventory() error = %v", err)
+	}
+	if string(inventory.DomainErrorFixtures[0].ToolResponse) != string(raw) {
+		t.Fatalf("fixture toolResponse = %s, want %s", inventory.DomainErrorFixtures[0].ToolResponse, raw)
+	}
+	if string(inventory.DomainErrorFixtures[0].CallToolResult) != string(serverEncoded) {
+		t.Fatalf("fixture callToolResult = %s, want %s", inventory.DomainErrorFixtures[0].CallToolResult, serverEncoded)
+	}
+}
+
+func TestProtocolErrorFixtures_MatchServerJSONRPCResponses(t *testing.T) {
+	srv := newResultPolicyTestServer(t, newResultPolicyFixtureMCPClient(t))
+	inventory, err := mcpfactorysession.ProjectResultPolicyInventory()
+	if err != nil {
+		t.Fatalf("ProjectResultPolicyInventory() error = %v", err)
+	}
+	for _, fixture := range inventory.ProtocolErrorFixtures {
+		t.Run(fixture.Name, func(t *testing.T) {
+			line := runResultPolicyServerHandleLine(t, srv, fixture.RequestLine)
+			if string(fixture.JSONRPCResponse) != line {
+				t.Fatalf("fixture jsonRpcResponse = %s, want server %s", fixture.JSONRPCResponse, line)
+			}
+		})
+	}
+}
+
+func TestResultPolicyBaselineFixtureIncludesDomainAndProtocolErrors(t *testing.T) {
+	baselinePath := testutil.MustRepoPath(t, mcpfactorysession.ResultPolicyInventoryBaselineRelativePath)
+	baseline, err := os.ReadFile(baselinePath)
+	if err != nil {
+		t.Fatalf("read baseline fixture: %v", err)
+	}
+	var inventory mcpfactorysession.ResultPolicyInventory
+	if err := json.Unmarshal(baseline, &inventory); err != nil {
+		t.Fatalf("unmarshal baseline fixture: %v", err)
+	}
+	if len(inventory.DomainErrorFixtures) == 0 {
+		t.Fatal("baseline domainErrorFixtures is empty")
+	}
+	if len(inventory.ProtocolErrorFixtures) < 2 {
+		t.Fatalf("protocolErrorFixtures = %d, want at least 2", len(inventory.ProtocolErrorFixtures))
+	}
+	if err := mcpfactorysession.VerifyResultPolicyInventory(inventory); err != nil {
+		t.Fatalf("VerifyResultPolicyInventory(baseline) error = %v", err)
+	}
+}
+
 func TestEncodeSuccessCallToolResult_MatchesServerToolsCallSuccessEncoding(t *testing.T) {
 	client := newResultPolicyFixtureMCPClient(t)
 	raw, err := client.CallTool(mcpfactorysession.ToolListSessions, json.RawMessage(`{}`))
@@ -263,4 +391,20 @@ func decodeToolsCallResult(t *testing.T, line string) map[string]any {
 		t.Fatal("tools/call response result is nil")
 	}
 	return response.Result
+}
+
+func namesFromDomainErrorFixtures(fixtures []mcpfactorysession.DomainErrorFixture) []string {
+	names := make([]string, len(fixtures))
+	for i, fixture := range fixtures {
+		names[i] = fixture.Name
+	}
+	return names
+}
+
+func namesFromProtocolErrorFixtures(fixtures []mcpfactorysession.ProtocolErrorFixture) []string {
+	names := make([]string, len(fixtures))
+	for i, fixture := range fixtures {
+		names[i] = fixture.Name
+	}
+	return names
 }
