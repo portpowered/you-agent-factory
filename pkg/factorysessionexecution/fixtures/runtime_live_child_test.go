@@ -24,19 +24,20 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 			ID:       "live-provider-session-1",
 		},
 	})
-	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-preset-child.workflow.js", "agent-run-preset-child")
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          provider,
 		Persistence:       runtimePersistence(projectRoot),
+		WorkerSettings:    presetWorkerSettings(),
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
 		RequestID: "req-runtime-agent-run-live-child",
 		Source: fse.Source{
 			Kind:         workflowsource.KindWorkflowName,
-			WorkflowName: "agent-run-fake-child",
+			WorkflowName: "agent-run-preset-child",
 		},
 		Args: map[string]any{
 			"subject": "workflows",
@@ -58,6 +59,7 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          provider,
 		Persistence:       runtimePersistence(projectRoot),
+		WorkerSettings:    presetWorkerSettings(),
 	})
 	_, replayed, _ := loadLiveChildDispatchReads(t, reloaded, completed)
 	assertSharedLiveChildDispatchContract(t, replayed)
@@ -69,9 +71,13 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 func assertSharedLiveChildDispatchContract(t *testing.T, dispatch fse.DispatchSummary) {
 	t.Helper()
 	want := sharedDispatchProjection{
-		ID:       "dispatch-1",
-		Model:    "gpt-test",
-		Provider: "mock",
+		ID:              "dispatch-1",
+		PresetID:        "careful-review",
+		ModelProvider:   "CODEX",
+		Model:           "gpt-test",
+		ReasoningEffort: "medium",
+		RunnerID:        "",
+		Provider:        "mock",
 		ProviderSession: fse.ProviderSessionRef{
 			Provider: "mock",
 			Kind:     "session_id",
@@ -85,16 +91,24 @@ func assertSharedLiveChildDispatchContract(t *testing.T, dispatch fse.DispatchSu
 
 type sharedDispatchProjection struct {
 	ID              string
+	PresetID        string
+	ModelProvider   string
 	Model           string
+	ReasoningEffort string
+	RunnerID        string
 	Provider        string
 	ProviderSession fse.ProviderSessionRef
 }
 
 func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjection {
 	projection := sharedDispatchProjection{
-		ID:       dispatch.ID,
-		Model:    dispatch.Model,
-		Provider: dispatch.Provider,
+		ID:              dispatch.ID,
+		PresetID:        dispatch.PresetID,
+		ModelProvider:   dispatch.ModelProvider,
+		Model:           dispatch.Model,
+		ReasoningEffort: dispatch.ReasoningEffort,
+		RunnerID:        dispatch.RunnerID,
+		Provider:        dispatch.Provider,
 	}
 	if len(dispatch.ProviderSessionRefs) == 1 {
 		projection.ProviderSession = dispatch.ProviderSessionRefs[0]

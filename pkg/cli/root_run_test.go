@@ -1260,6 +1260,7 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.
 		}
 	}()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	var got runcli.RunConfig
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
@@ -1383,6 +1384,7 @@ func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 func TestRootCommand_NoArgsHonorsDefaultWorkerModelFlags(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	originalRunCLI := runCLI
 	defer func() {
@@ -1414,6 +1416,7 @@ func TestRootCommand_NoArgsHonorsDefaultWorkerModelFlags(t *testing.T) {
 func TestRootCommand_DefaultProviderFlagRejectsUnresolvedSymbolicDefault(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
@@ -1432,6 +1435,7 @@ func TestRootCommand_DefaultProviderFlagRejectsUnresolvedSymbolicDefault(t *test
 func TestRootCommand_DefaultProviderFlagResolvesSymbolicDefaultFromFile(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	configPath := operatorconfig.DefaultConfigPath(homeDir)
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -1494,6 +1498,7 @@ func setupNamedGoalCLIEnv(t *testing.T) namedGoalCLIEnv {
 		}
 	})
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
@@ -1600,6 +1605,7 @@ func assertLoadedGoalWorkerBody(t *testing.T, factoryDir, editedBody string) {
 func TestRunCommand_VerboseDiagnosticsIncludeOperatorDefaultPrecedence(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 
 	originalRunCLI := runCLI
 	defer func() {

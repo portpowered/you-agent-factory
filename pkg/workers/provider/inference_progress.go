@@ -576,5 +576,10 @@ func NewInferenceProgressPublishingCommandRunner(
 }
 
 func isCodexCommand(command string) bool {
-	return strings.EqualFold(filepath.Base(strings.TrimSpace(command)), string(interfaces.ModelProviderCodex))
+	base := filepath.Base(strings.ReplaceAll(strings.TrimSpace(command), `\`, "/"))
+	extension := strings.ToLower(filepath.Ext(base))
+	if extension == ".exe" || extension == ".cmd" || extension == ".bat" {
+		base = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	return strings.EqualFold(base, string(interfaces.ModelProviderCodex))
 }

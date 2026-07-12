@@ -16,6 +16,7 @@ import (
 type ChildExecutionRequest struct {
 	Prompt           string
 	Label            string
+	AgentID          string
 	Preset           string
 	ModelProvider    string
 	Model            string
@@ -55,6 +56,60 @@ type ChildExecutor interface {
 	Execute(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error)
 }
 
+// ResolveChildWorkerSettings deterministically fills each worker field from the
+// highest-precedence source that supplies it. It performs no IO or mutation.
+func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent, config WorkerSettingsConfig) (ChildExecutionRequest, error) {
+	explicitPreset := strings.TrimSpace(req.Preset)
+	explicitProvider := strings.TrimSpace(req.ModelProvider)
+	explicitEffort := strings.TrimSpace(req.ReasoningEffort)
+	factoryPreset := ""
+	if agent, ok := agents[strings.TrimSpace(req.AgentID)]; ok {
+		factoryPreset = strings.TrimSpace(agent.Preset)
+	}
+	selectedPreset, source := explicitPreset, "agent.run"
+	if selectedPreset == "" {
+		selectedPreset, source = factoryPreset, "factory agent"
+	}
+	preset := WorkerPreset{}
+	if selectedPreset != "" {
+		var ok bool
+		preset, ok = config.Presets[selectedPreset]
+		if !ok && source == "factory agent" {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() references unknown operator worker preset %q from %s", selectedPreset, source)
+		}
+	}
+	req.Preset = selectedPreset
+	req.ModelProvider = firstWorkerValue(req.ModelProvider, preset.ModelProvider, config.DefaultModelProvider)
+	req.Model = firstWorkerValue(req.Model, preset.Model, config.DefaultModel)
+	req.ReasoningEffort = firstWorkerValue(req.ReasoningEffort, preset.ReasoningEffort)
+	if provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(req.ModelProvider); req.ModelProvider != "" {
+		if !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective modelProvider %q", req.ModelProvider)
+		}
+		if explicitProvider == "" {
+			req.ModelProvider = provider
+		}
+	}
+	if effort, ok := interfaces.CanonicalizeReasoningEffort(req.ReasoningEffort); req.ReasoningEffort != "" {
+		if !ok {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective reasoningEffort %q", req.ReasoningEffort)
+		}
+		if explicitEffort == "" {
+			req.ReasoningEffort = effort
+		}
+	}
+	return req, nil
+}
+
+func firstWorkerValue(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 // FakeChildExecutor provides deterministic fake child execution for workflow tests.
 type FakeChildExecutor struct {
 	sessionID string
@@ -89,6 +144,8 @@ func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionReque
 		ChildIndex:         childIndex,
 		Label:              req.Label,
 		PromptDigest:       textDigest(req.Prompt),
+		Preset:             req.Preset,
+		ModelProvider:      req.ModelProvider,
 		Model:              req.Model,
 		ReasoningEffort:    req.ReasoningEffort,
 		Command:            req.Command,
@@ -131,6 +188,8 @@ func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutio
 		ChildIndex:      childIndex,
 		Label:           req.Label,
 		PromptDigest:    textDigest(req.Prompt),
+		Preset:          req.Preset,
+		ModelProvider:   req.ModelProvider,
 		Model:           req.Model,
 		ReasoningEffort: req.ReasoningEffort,
 		Command:         req.Command,
@@ -183,7 +242,10 @@ func fakeChildOutput(req ChildExecutionRequest, dispatchID, providerSessionRef, 
 	}
 }
 
-func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubject string) (ChildExecutionRequest, error) {
+func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubject string, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent) (ChildExecutionRequest, error) {
+	// Factory agent definitions remain runtime configuration; they do not widen
+	// the intentionally small per-child argument contract.
+	_ = agents
 	normalized, err := childcontract.Normalize(spec)
 	if err != nil {
 		return ChildExecutionRequest{}, err

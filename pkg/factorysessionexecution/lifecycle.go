@@ -714,7 +714,7 @@ func mergePreservedDispatchInterruptedEvents(projected, preserved []json.RawMess
 		merged = append(merged, raw)
 		seen[key] = struct{}{}
 	}
-	return merged
+	return resequenceCanonicalEvents(merged)
 }
 
 func eventIdentityKey(raw json.RawMessage) string {

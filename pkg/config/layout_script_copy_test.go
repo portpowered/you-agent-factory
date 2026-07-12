@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -659,6 +658,9 @@ func assertPortableBundledExecutableScriptMode(t *testing.T, path string) {
 
 func assertPortableBundledRegularFileMode(t *testing.T, path string, wantPerm os.FileMode) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {
@@ -690,11 +692,7 @@ func mustCreatePortableBundledDirLink(t *testing.T, targetPath, linkPath string)
 		t.Fatalf("Symlink(%s -> %s): %v", linkPath, targetPath, err)
 	}
 
-	cmd := exec.Command("cmd", "/c", "mklink", "/J", linkPath, targetPath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("mklink /J %s %s: %v (%s)", linkPath, targetPath, err, strings.TrimSpace(string(output)))
-	}
+	t.Skip("Windows symlink privilege unavailable; junctions do not exercise symlink resolution semantics")
 }
 
 func writeFactorySplitLayoutForExpand(

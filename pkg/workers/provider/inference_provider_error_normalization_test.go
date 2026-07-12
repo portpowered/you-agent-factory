@@ -859,9 +859,9 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 			rejectText:  "raw inference transcript",
 		},
 		{
-			name:       "ExecutableMissing_IsMisconfigured",
+			name:       "ExecutableMissing_HasExplicitType",
 			runErr:     exec.ErrNotFound,
-			wantType:   interfaces.WorkFailureTypeMisconfigured,
+			wantType:   interfaces.WorkFailureTypeMissingExecutable,
 			wantFamily: interfaces.WorkFailureFamilyTerminal,
 		},
 		{

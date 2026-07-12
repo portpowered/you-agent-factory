@@ -169,6 +169,8 @@ const (
 	WorkFailureTypeTimeout             WorkFailureType = "timeout"
 	WorkFailureTypeUnknown             WorkFailureType = "unknown"
 	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
+	WorkFailureTypeCommandLineTooLong  WorkFailureType = "command_line_too_long"
+	WorkFailureTypeMissingExecutable   WorkFailureType = "missing_executable"
 )
 
 // FailureDetail is the canonical customer-safe explanation of a failed

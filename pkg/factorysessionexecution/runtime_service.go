@@ -206,6 +206,8 @@ type JavaScriptRuntimeServiceConfig struct {
 	ProviderExecutor  providerexecution.Executor
 	Persistence       runtimepersist.Store
 	Clock             factory.Clock
+	WorkerPresetIDs   map[string]struct{}
+	WorkerSettings    workflowruntime.WorkerSettingsConfig
 }
 
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
@@ -216,6 +218,8 @@ type JavaScriptRuntimeService struct {
 	providerExecutor  providerexecution.Executor
 	persistence       runtimepersist.Store
 	clock             factory.Clock
+	workerPresetIDs   map[string]struct{}
+	workerSettings    workflowruntime.WorkerSettingsConfig
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -238,6 +242,8 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 		childExecutorMode: normalizeChildExecutorMode(config.ChildExecutorMode),
 		providerExecutor:  executor,
 		clock:             factory.EnsureClock(config.Clock),
+		workerPresetIDs:   config.WorkerPresetIDs,
+		workerSettings:    config.WorkerSettings,
 		persistence:       config.Persistence,
 		sessions:          make(map[string]*runtimeSessionState),
 		startReplay:       make(map[string]startReplayRecord),
@@ -606,21 +612,10 @@ func (s *JavaScriptRuntimeService) executeImmediateSyncSession(
 	return projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt), nil
 }
 
-func normalizeStartTuple(req StartRequest) (StartRequest, string, error) {
-	normalized, err := NormalizeStartRequest(req)
-	if err != nil {
-		return StartRequest{}, "", err
-	}
-	tupleHash, err := IdempotencyTupleHash(normalized)
-	if err != nil {
-		return StartRequest{}, "", err
-	}
-	return normalized, tupleHash, nil
-}
-
 func (s *JavaScriptRuntimeService) prepareStart(normalized StartRequest) (PreparedStart, error) {
 	return PrepareStart(normalized, StartPrepareContext{
 		StartSourceContext: StartSourceContext{ProjectRoot: s.projectRoot},
+		WorkerPresetIDs:    s.workerPresetIDs,
 	})
 }
 
@@ -695,12 +690,14 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		return workflowruntime.Outcome{}, err
 	}
 	return workflowruntime.Run(ctx, workflowruntime.Request{
-		Source:    sourceContent,
-		SourceRef: resolved.SourceRef,
-		SessionID: sessionID,
-		Args:      argsJSON,
-		Metadata:  workflowMetadataFromResolved(resolved, normalized),
-		Policy:    policyResolution.Policy,
+		Source:         sourceContent,
+		SourceRef:      resolved.SourceRef,
+		SessionID:      sessionID,
+		Args:           argsJSON,
+		Metadata:       workflowMetadataFromResolved(resolved, normalized),
+		Policy:         policyResolution.Policy,
+		Agents:         resolved.Agents,
+		WorkerSettings: s.workerSettings,
 	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized)))
 }
 

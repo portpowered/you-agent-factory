@@ -31,3 +31,8 @@ properties:
     type: object
     additionalProperties: true
     description: Default JavaScript workflow policy object applied when no runtime override exists.
+  agents:
+    type: object
+    additionalProperties:
+      $ref: './FactoryOrchestratorJavaScriptAgent.yaml'
+    description: Named child-agent roles and their operator worker preset defaults.
