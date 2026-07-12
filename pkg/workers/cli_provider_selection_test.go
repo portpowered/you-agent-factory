@@ -243,6 +243,122 @@ func TestSelectCLIProvider_FactoryAndSystemDefaultPrecedenceTables(t *testing.T)
 	}
 }
 
+type cliProviderDiscoveryPrecedenceCase struct {
+	name              string
+	input             CLIProviderSelectionInput
+	presentCommands   map[string]bool
+	registrations     []CLIProviderRegistration
+	wantIdentity      CLIProviderIdentity
+}
+
+func fakeCLIProviderDiscoveryPrecedenceCases() []cliProviderDiscoveryPrecedenceCase {
+	allPresent := map[string]bool{
+		string(interfaces.ModelProviderCodex):    true,
+		string(interfaces.ModelProviderClaude):   true,
+		string(interfaces.ModelProviderCursor):   true,
+		string(interfaces.ModelProviderOpenCode): true,
+		string(interfaces.ModelProviderGemini):   true,
+		string(interfaces.ModelProviderKiro):     true,
+	}
+	return []cliProviderDiscoveryPrecedenceCase{
+		{
+			name:            "all providers available selects highest preference codex",
+			presentCommands: allPresent,
+			wantIdentity:    CLIProviderIdentityCodex,
+		},
+		{
+			name: "codex absent falls through to claude",
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderClaude):   true,
+				string(interfaces.ModelProviderCursor):   true,
+				string(interfaces.ModelProviderOpenCode): true,
+				string(interfaces.ModelProviderGemini):   true,
+				string(interfaces.ModelProviderKiro):     true,
+			},
+			wantIdentity: CLIProviderIdentityClaude,
+		},
+		{
+			name: "subset available selects highest preference cursor over gemini and kiro",
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCursor):   true,
+				string(interfaces.ModelProviderOpenCode): true,
+				string(interfaces.ModelProviderGemini):   true,
+				string(interfaces.ModelProviderKiro):     true,
+			},
+			wantIdentity: CLIProviderIdentityCursor,
+		},
+		{
+			name: "only lower ranked providers present selects gemini before kiro",
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderGemini): true,
+				string(interfaces.ModelProviderKiro):   true,
+			},
+			wantIdentity: CLIProviderIdentityGemini,
+		},
+		{
+			name: "single available provider selects that provider",
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderOpenCode): true,
+			},
+			wantIdentity: CLIProviderIdentityOpenCode,
+		},
+	}
+}
+
+func assertCLIProviderDiscoveryPrecedence(t *testing.T, tc cliProviderDiscoveryPrecedenceCase) {
+	t.Helper()
+
+	discovery := fakeCLIProviderDiscoveryView(tc.presentCommands)
+	if tc.registrations != nil {
+		discovery.Registrations = tc.registrations
+	}
+	result := SelectCLIProvider(tc.input, discovery)
+
+	if !result.OK() {
+		t.Fatalf("result = %#v, want success", result)
+	}
+	if result.Source != CLIProviderSelectionSourceDiscovery {
+		t.Fatalf("source = %q, want %q", result.Source, CLIProviderSelectionSourceDiscovery)
+	}
+	if result.Selected == nil || result.Selected.Identity != tc.wantIdentity {
+		t.Fatalf("selected = %#v, want identity %q", result.Selected, tc.wantIdentity)
+	}
+}
+
+func TestSelectCLIProvider_DiscoveryPreferenceRankTables(t *testing.T) {
+	for _, tc := range fakeCLIProviderDiscoveryPrecedenceCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			assertCLIProviderDiscoveryPrecedence(t, tc)
+		})
+	}
+}
+
+func TestSelectCLIProvider_DiscoveryIgnoresRegistrationSliceOrder(t *testing.T) {
+	reversed := RegisteredCLIProviders()
+	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+		reversed[i], reversed[j] = reversed[j], reversed[i]
+	}
+
+	discovery := fakeCLIProviderDiscoveryView(map[string]bool{
+		string(interfaces.ModelProviderCodex):  true,
+		string(interfaces.ModelProviderGemini): true,
+		string(interfaces.ModelProviderKiro):   true,
+	})
+	discovery.Registrations = reversed
+
+	result := SelectCLIProvider(CLIProviderSelectionInput{}, discovery)
+
+	if !result.OK() {
+		t.Fatalf("result = %#v, want success", result)
+	}
+	if result.Source != CLIProviderSelectionSourceDiscovery {
+		t.Fatalf("source = %q, want %q", result.Source, CLIProviderSelectionSourceDiscovery)
+	}
+	if result.Selected == nil || result.Selected.Identity != CLIProviderIdentityCodex {
+		t.Fatalf("selected = %#v, want codex despite reversed registration slice", result.Selected)
+	}
+}
+
 func TestSelectCLIProvider_AcceptsLayeredPrecedenceInputs(t *testing.T) {
 	discovery := fakeCLIProviderDiscoveryView(map[string]bool{
 		string(interfaces.ModelProviderGemini): true,

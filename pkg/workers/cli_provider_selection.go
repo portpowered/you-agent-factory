@@ -2,6 +2,7 @@ package workers
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -129,6 +130,8 @@ func selectDiscoveredCLIProvider(view CLIProviderDiscoveryView) (CLIProviderRegi
 	registrations := view.Registrations
 	if len(registrations) == 0 {
 		registrations = RegisteredCLIProviders()
+	} else {
+		registrations = sortCLIProviderRegistrationsByPreferenceRank(registrations)
 	}
 	probe := view.Probe
 	if probe == nil {
@@ -140,6 +143,19 @@ func selectDiscoveredCLIProvider(view CLIProviderDiscoveryView) (CLIProviderRegi
 		}
 	}
 	return CLIProviderRegistration{}, false
+}
+
+func sortCLIProviderRegistrationsByPreferenceRank(
+	registrations []CLIProviderRegistration,
+) []CLIProviderRegistration {
+	sorted := append([]CLIProviderRegistration(nil), registrations...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].PreferenceRank != sorted[j].PreferenceRank {
+			return sorted[i].PreferenceRank < sorted[j].PreferenceRank
+		}
+		return sorted[i].Identity < sorted[j].Identity
+	})
+	return sorted
 }
 
 func noAgentHarnessSelectionFailure() *CLIProviderSelectionFailure {
