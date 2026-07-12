@@ -550,7 +550,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "id": "processor",
-      "modelProvider": "CODEX",
+      "modelProvider": "CURSOR",
+      "model": "composer-2.5",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
@@ -569,7 +570,8 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "id": "planner",
-      "modelProvider": "CODEX",
+      "model": "grok-4.5-high",
+      "modelProvider": "CURSOR",
       "name": "planner",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
@@ -768,7 +770,6 @@
         }
       ],
       "name": "review",
-      "outcomeFormat": "decision-envelope",
       "onFailure": [
         {
           "state": "failed",
