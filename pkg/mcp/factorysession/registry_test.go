@@ -148,6 +148,17 @@ func assertRepresentativeInputSchemaFields(t *testing.T, byName map[string]mcpfa
 		}
 	}
 
+	getSessionProps := byName[mcpfactorysession.ToolGetSession].InputSchema["properties"].(map[string]any)
+	if len(getSessionProps) != 1 {
+		t.Fatalf("get session input fields = %#v, want only sessionId", getSessionProps)
+	}
+	dispatchProps := byName[mcpfactorysession.ToolListDispatches].InputSchema["properties"].(map[string]any)
+	for _, field := range []string{"sessionId", "phase", "status"} {
+		if _, ok := dispatchProps[field]; !ok {
+			t.Fatalf("list dispatches input missing %q", field)
+		}
+	}
+
 	controlProps := byName[mcpfactorysession.ToolControl].InputSchema["properties"].(map[string]any)
 	for _, field := range []string{"sessionId", "operation"} {
 		if _, ok := controlProps[field]; !ok {
@@ -245,12 +256,20 @@ func assertGetSessionSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysess
 		t,
 		resultSchema,
 		reflect.TypeOf(factoryapi.FactorySessionDurableReadModel{}),
+		"artifactRefs",
+		"budgets",
+		"effectivePolicy",
+		"failureDetail",
+		"latestCheckpoint",
+		"lifecycle",
 		"sessionId",
 		"status",
 		"orchestratorKind",
 		"resolvedSource",
+		"phaseSummaries",
 		"progress",
 		"resultSummary",
+		"usage",
 	)
 	progress := nestedSchemaProperties(t, resultSchema, "progress")
 	requireSchemaFieldsMatchGenerated(
@@ -313,6 +332,12 @@ func assertListDispatchesSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactory
 		"status",
 		"phase",
 		"label",
+		"runnerId",
+		"model",
+		"providerSessionRefs",
+		"attempt",
+		"outputArtifactIds",
+		"failureDetail",
 	)
 	requireSchemaFieldsAbsent(t, dispatches, "dispatchId", "kind", "sessionId")
 }
@@ -330,6 +355,11 @@ func assertListArtifactsSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorys
 		"visibility",
 		"contentHash",
 		"dispatchId",
+		"createdAt",
+		"label",
+		"auditMode",
+		"redactionCounts",
+		"retrievalRef",
 	)
 	requireSchemaFieldsAbsent(t, artifacts, "artifactId", "sessionId")
 }

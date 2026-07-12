@@ -126,8 +126,6 @@ func getSessionTool() ToolDefinition {
 			"phase, progress, and result summary. Maps to GET /factory-sessions/{session_id}.",
 		InputSchema: objectSchema(map[string]any{
 			"sessionId": stringProperty("Stable durable Factory Session identifier."),
-			"phase":     stringProperty("Exact canonical phase identifier."),
-			"status":    stringProperty("Canonical Dispatch lifecycle status."),
 		}, "sessionId"),
 		OutputSchema: toolResponseSchema(factorySessionDurableReadModelSchema()),
 		SuccessStableFields: []string{
@@ -136,7 +134,13 @@ func getSessionTool() ToolDefinition {
 			"result.orchestratorKind",
 			"result.resolvedSource",
 			"result.phase",
+			"result.phaseSummaries",
 			"result.progress",
+			"result.latestCheckpoint",
+			"result.effectivePolicy",
+			"result.budgets",
+			"result.usage",
+			"result.artifactRefs",
 			"result.resultSummary.resultStatus",
 		},
 		ErrorStableFields: sharedErrorStableFields,
@@ -179,6 +183,8 @@ func listDispatchesTool() ToolDefinition {
 			"and provider-session correlation metadata when available. Maps to GET /factory-sessions/{session_id}/dispatches.",
 		InputSchema: objectSchema(map[string]any{
 			"sessionId": stringProperty("Stable durable Factory Session identifier."),
+			"phase":     stringProperty("Exact canonical phase identifier."),
+			"status":    stringProperty("Canonical Dispatch lifecycle status."),
 		}, "sessionId"),
 		OutputSchema: toolResponseSchema(listFactorySessionDispatchesResponseSchema()),
 		SuccessStableFields: []string{
@@ -188,6 +194,12 @@ func listDispatchesTool() ToolDefinition {
 			"result.dispatches[].status",
 			"result.dispatches[].dispatchKind",
 			"result.dispatches[].phase",
+			"result.dispatches[].runnerId",
+			"result.dispatches[].model",
+			"result.dispatches[].providerSessionRefs",
+			"result.dispatches[].attempt",
+			"result.dispatches[].outputArtifactIds",
+			"result.dispatches[].failureDetail",
 		},
 		ErrorStableFields: sharedErrorStableFields,
 	}
