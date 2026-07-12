@@ -754,6 +754,14 @@ func MapNamedFactoryDir(factoriesRoot, name string) (string, error) {
 	return dir, nil
 }
 
+func namedFactoryStagingPrefix(name string) string {
+	safe := strings.NewReplacer("/", "--", `\`, "--", "@", "").Replace(strings.TrimSpace(name))
+	if safe == "" {
+		safe = "factory"
+	}
+	return "." + safe + ".staging-"
+}
+
 // NamedFactoryNameToLayoutSegment maps a canonical named-factory display name into the single on-disk directory segment used under a factory root.
 func NamedFactoryNameToLayoutSegment(name string) (string, error) {
 	trimmed := strings.TrimSpace(name)
@@ -886,6 +894,22 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 	}
 
 	entries := make([]NamedFactoryListEntry, 0, len(children))
+	seen := make(map[string]struct{}, len(children))
+	appendEntry := func(displayName, factoryDir string) {
+		if displayName == "" || factoryDir == "" {
+			return
+		}
+		if _, ok := seen[displayName]; ok {
+			return
+		}
+		seen[displayName] = struct{}{}
+		entries = append(entries, NamedFactoryListEntry{
+			Name:       displayName,
+			FactoryDir: factoryDir,
+			Current:    currentName != "" && displayName == currentName,
+		})
+	}
+
 	for _, child := range children {
 		if !child.IsDir() {
 			continue
@@ -895,18 +919,35 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 			continue
 		}
 		factoryDir := filepath.Join(rootDir, name)
-		if err := requireFactoryConfig(factoryDir); err != nil {
+		if err := requireFactoryConfig(factoryDir); err == nil {
+			displayName, err := NamedFactoryLayoutSegmentToName(name)
+			if err != nil {
+				continue
+			}
+			appendEntry(displayName, factoryDir)
 			continue
 		}
-		displayName, err := NamedFactoryLayoutSegmentToName(name)
+		if !strings.HasPrefix(name, scopedNamedFactoryPrefix) {
+			continue
+		}
+		scopeChildren, err := os.ReadDir(factoryDir)
 		if err != nil {
 			continue
 		}
-		entries = append(entries, NamedFactoryListEntry{
-			Name:       displayName,
-			FactoryDir: factoryDir,
-			Current:    currentName != "" && displayName == currentName,
-		})
+		for _, scopedChild := range scopeChildren {
+			if !scopedChild.IsDir() {
+				continue
+			}
+			scopedFactoryDir := filepath.Join(factoryDir, scopedChild.Name())
+			if err := requireFactoryConfig(scopedFactoryDir); err != nil {
+				continue
+			}
+			displayName := name + "/" + scopedChild.Name()
+			if _, err := canonicalNamedFactoryName(displayName); err != nil {
+				continue
+			}
+			appendEntry(displayName, scopedFactoryDir)
+		}
 	}
 
 	sort.Slice(entries, func(i, j int) bool {

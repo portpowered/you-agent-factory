@@ -835,7 +835,15 @@ func ReadCurrentFactoryPointer(rootDir string) (string, error) {
 		return "", err
 	}
 
-	segment, err := safeFactoryLayoutSegment("factory", string(data))
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return "", fmt.Errorf("read current factory pointer %s: factory name is required", path)
+	}
+	if canonicalName, err := canonicalNamedFactoryName(trimmed); err == nil {
+		return canonicalName, nil
+	}
+
+	segment, err := safeFactoryLayoutSegment("factory", trimmed)
 	if err != nil {
 		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
 	}
@@ -853,19 +861,23 @@ func WriteCurrentFactoryPointer(rootDir, name string) error {
 		return fmt.Errorf("factory root is required")
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(name)
+	canonicalName, err := canonicalNamedFactoryName(name)
 	if err != nil {
 		return err
 	}
-	if err := requireFactoryConfig(filepath.Join(rootDir, segment)); err != nil {
-		return fmt.Errorf("set current factory %q: %w", segment, err)
+	factoryDir, err := MapNamedFactoryDir(rootDir, canonicalName)
+	if err != nil {
+		return err
+	}
+	if err := requireFactoryConfig(factoryDir); err != nil {
+		return fmt.Errorf("set current factory %q: %w", canonicalName, err)
 	}
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return fmt.Errorf("create factory root %s: %w", rootDir, err)
 	}
 
 	path := filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile)
-	if err := os.WriteFile(path, []byte(segment+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(canonicalName+"\n"), 0o644); err != nil {
 		return fmt.Errorf("write current factory pointer %s: %w", path, err)
 	}
 	return nil
@@ -882,12 +894,43 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
+
+	primaryDir, err := MapNamedFactoryDir(rootDir, canonicalName)
 	if err != nil {
 		return "", err
 	}
+	candidates := []string{primaryDir}
+	if legacySegment, err := NamedFactoryNameToLayoutSegment(canonicalName); err == nil {
+		legacyDir := filepath.Join(rootDir, legacySegment)
+		if legacyDir != primaryDir {
+			candidates = append(candidates, legacyDir)
+		}
+	}
 
-	factoryDir := filepath.Join(rootDir, segment)
+	var notFound error
+	for _, factoryDir := range candidates {
+		resolved, err := resolveNamedFactoryDirAtTarget(rootDir, canonicalName, factoryDir)
+		if err == nil {
+			return resolved, nil
+		}
+		if errors.Is(err, ErrNamedFactoryNotFound) {
+			notFound = err
+			continue
+		}
+		return "", err
+	}
+	if notFound != nil {
+		return "", notFound
+	}
+	return "", fmt.Errorf(
+		"resolve named factory %q in root %s: %w",
+		canonicalName,
+		rootDir,
+		newNamedFactoryNotFoundError(canonicalName),
+	)
+}
+
+func resolveNamedFactoryDirAtTarget(rootDir, canonicalName, factoryDir string) (string, error) {
 	if err := requireFactoryConfig(factoryDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if info, statErr := os.Stat(factoryDir); statErr == nil && info.IsDir() {

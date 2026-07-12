@@ -770,7 +770,7 @@ type namedFactoryPersistHooks struct {
 }
 
 func resolveNamedFactoryPersistPayload(
-	segment string,
+	canonicalName string,
 	canonicalFactoryJSON []byte,
 	prepared *PreparedFactoryLayoutPayload,
 ) (*interfaces.FactoryConfig, []byte, error) {
@@ -778,7 +778,7 @@ func resolveNamedFactoryPersistPayload(
 	case prepared != nil:
 		return prepared.Config, prepared.Canonical, nil
 	case len(canonicalFactoryJSON) > 0:
-		prepared, err := PrepareFactoryLayoutPayload(segment, canonicalFactoryJSON)
+		prepared, err := PrepareFactoryLayoutPayload(canonicalName, canonicalFactoryJSON)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -799,26 +799,33 @@ func persistNamedFactory(
 		return nil, fmt.Errorf("factory root is required")
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(name)
+	canonicalName, err := canonicalNamedFactoryName(name)
 	if err != nil {
 		return nil, err
 	}
-	targetDir := filepath.Join(rootDir, segment)
-	if err := validateNamedFactoryTarget(targetDir, segment, options); err != nil {
+	targetDir, err := MapNamedFactoryDir(rootDir, canonicalName)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateNamedFactoryTarget(targetDir, canonicalName, options); err != nil {
 		return nil, err
 	}
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create factory root %s: %w", rootDir, err)
 	}
-	factoryCfg, canonical, err := resolveNamedFactoryPersistPayload(segment, canonicalFactoryJSON, prepared)
+	stagingParent := filepath.Dir(targetDir)
+	if err := os.MkdirAll(stagingParent, 0o755); err != nil {
+		return nil, fmt.Errorf("create factory parent %s: %w", stagingParent, err)
+	}
+	factoryCfg, canonical, err := resolveNamedFactoryPersistPayload(canonicalName, canonicalFactoryJSON, prepared)
 	if err != nil {
 		return nil, err
 	}
 
 	sourcePath := filepath.Join(targetDir, interfaces.FactoryConfigFile)
-	stagingDir, err := os.MkdirTemp(rootDir, "."+segment+".staging-")
+	stagingDir, err := os.MkdirTemp(stagingParent, namedFactoryStagingPrefix(canonicalName))
 	if err != nil {
-		return nil, fmt.Errorf("create staging directory for factory %q: %w", segment, err)
+		return nil, fmt.Errorf("create staging directory for factory %q: %w", canonicalName, err)
 	}
 	keepStaging := false
 	defer func() {
@@ -836,14 +843,14 @@ func persistNamedFactory(
 	}
 	if hooks.afterWrite != nil {
 		if err := hooks.afterWrite(stagingDir); err != nil {
-			return nil, fmt.Errorf("prepare staged factory %q: %w", segment, err)
+			return nil, fmt.Errorf("prepare staged factory %q: %w", canonicalName, err)
 		}
 	}
 	loadRuntimeConfig := hooks.loadRuntimeConfig
 	if loadRuntimeConfig == nil {
 		loadRuntimeConfig = LoadRuntimeConfig
 	}
-	if err := commitNamedFactoryLayout(rootDir, segment, stagingDir, targetDir, options, loadRuntimeConfig); err != nil {
+	if err := commitNamedFactoryLayout(rootDir, canonicalName, stagingDir, targetDir, options, loadRuntimeConfig); err != nil {
 		return nil, err
 	}
 	keepStaging = true
@@ -853,17 +860,17 @@ func persistNamedFactory(
 	}, nil
 }
 
-func validateNamedFactoryTarget(targetDir, segment string, options namedFactoryPersistOptions) error {
+func validateNamedFactoryTarget(targetDir, canonicalName string, options namedFactoryPersistOptions) error {
 	if _, err := os.Stat(targetDir); err == nil {
 		if options.replaceExisting {
 			return nil
 		}
-		return fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, segment)
+		return fmt.Errorf("%w: factory %q already exists", ErrNamedFactoryAlreadyExists, canonicalName)
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("check existing factory %q: %w", segment, err)
+		return fmt.Errorf("check existing factory %q: %w", canonicalName, err)
 	}
 	if options.replaceExisting {
-		return fmt.Errorf("replace factory %q: %w", segment, os.ErrNotExist)
+		return fmt.Errorf("replace factory %q: %w", canonicalName, os.ErrNotExist)
 	}
 	return nil
 }
@@ -887,31 +894,31 @@ func normalizeNamedFactoryPayload(segment string, canonicalFactoryJSON []byte) (
 
 func commitNamedFactoryLayout(
 	rootDir string,
-	segment string,
+	canonicalName string,
 	stagingDir string,
 	targetDir string,
 	options namedFactoryPersistOptions,
 	loadRuntimeConfig func(factoryDir string, workstationLoader WorkstationLoader) (*LoadedFactoryConfig, error),
 ) error {
 	if _, err := loadRuntimeConfig(stagingDir, nil); err != nil {
-		return fmt.Errorf("%w: validate factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+		return fmt.Errorf("%w: validate factory %q config: %w", ErrInvalidNamedFactory, canonicalName, err)
 	}
 	if options.replaceExisting {
-		return replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir)
+		return replaceNamedFactoryDir(rootDir, canonicalName, stagingDir, targetDir)
 	}
 	if err := os.Rename(stagingDir, targetDir); err != nil {
-		return fmt.Errorf("commit factory %q: %w", segment, err)
+		return fmt.Errorf("commit factory %q: %w", canonicalName, err)
 	}
 	return nil
 }
 
-func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) error {
-	backupDir, err := os.MkdirTemp(rootDir, "."+segment+".previous-")
+func replaceNamedFactoryDir(rootDir, canonicalName, stagingDir, targetDir string) error {
+	backupDir, err := os.MkdirTemp(filepath.Dir(targetDir), namedFactoryStagingPrefix(canonicalName)+"previous-")
 	if err != nil {
-		return fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
+		return fmt.Errorf("prepare replacement backup for factory %q: %w", canonicalName, err)
 	}
 	if err := os.Remove(backupDir); err != nil {
-		return fmt.Errorf("prepare replacement backup for factory %q: %w", segment, err)
+		return fmt.Errorf("prepare replacement backup for factory %q: %w", canonicalName, err)
 	}
 
 	if err := os.Rename(targetDir, backupDir); err != nil {
@@ -919,10 +926,10 @@ func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) erro
 			if replaceErr := replaceWatchedDirectoryContents(targetDir, stagingDir, backupDir); replaceErr == nil {
 				return nil
 			} else {
-				return fmt.Errorf("backup existing factory %q: %w; Windows in-place replacement failed: %v", segment, err, replaceErr)
+				return fmt.Errorf("backup existing factory %q: %w; Windows in-place replacement failed: %v", canonicalName, err, replaceErr)
 			}
 		}
-		return fmt.Errorf("backup existing factory %q: %w", segment, err)
+		return fmt.Errorf("backup existing factory %q: %w", canonicalName, err)
 	}
 	committed := false
 	defer func() {
@@ -933,9 +940,9 @@ func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) erro
 
 	if err := os.Rename(stagingDir, targetDir); err != nil {
 		if restoreErr := os.Rename(backupDir, targetDir); restoreErr != nil {
-			return fmt.Errorf("commit replacement factory %q: %w; restore failed: %w", segment, err, restoreErr)
+			return fmt.Errorf("commit replacement factory %q: %w; restore failed: %w", canonicalName, err, restoreErr)
 		}
-		return fmt.Errorf("commit replacement factory %q: %w", segment, err)
+		return fmt.Errorf("commit replacement factory %q: %w", canonicalName, err)
 	}
 	committed = true
 	return nil

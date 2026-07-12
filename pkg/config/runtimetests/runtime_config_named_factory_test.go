@@ -44,7 +44,7 @@ func TestPersistNamedFactory_WritesScopedNamedLayout(t *testing.T) {
 		t.Fatalf("PersistNamedFactory(scoped): %v", err)
 	}
 
-	wantDir := filepath.Join(rootDir, "@you%2Ftts")
+	wantDir := filepath.Join(rootDir, "@you", "tts")
 	assertScopedNamedFactoryPaths(t, factoryDir, wantDir)
 
 	resolved, err := ResolveNamedFactoryDir(rootDir, "@you/tts")
@@ -85,8 +85,8 @@ func assertScopedCurrentFactoryPointer(t *testing.T, rootDir string) {
 	if err != nil {
 		t.Fatalf("ReadFile(current pointer): %v", err)
 	}
-	if got := string(pointerBytes); got != "@you%2Ftts\n" {
-		t.Fatalf("current pointer content = %q, want encoded scoped segment", got)
+	if got := string(pointerBytes); got != "@you/tts\n" {
+		t.Fatalf("current pointer content = %q, want canonical scoped display name", got)
 	}
 	current, err := ReadCurrentFactoryPointer(rootDir)
 	if err != nil {

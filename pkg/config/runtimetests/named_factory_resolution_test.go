@@ -130,7 +130,7 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInGoalIntoGlobalRoot(t 
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(builtin goal): %v", err)
 	}
 
-	wantDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	wantDir := filepath.Join(globalRoot, "@you", "goal")
 	assertNamedFactoryResolution(t, resolution, "@you/goal", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
 	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionNone {
 		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionNone)
@@ -155,7 +155,7 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInIntoGlobalRoot(t *tes
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(builtin): %v", err)
 	}
 
-	wantDir := filepath.Join(globalRoot, "@you%2Ftts")
+	wantDir := filepath.Join(globalRoot, "@you", "tts")
 	assertNamedFactoryResolution(t, resolution, "@you/tts", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
 	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionNone {
 		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionNone)
