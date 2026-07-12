@@ -735,6 +735,35 @@ func TestSelectCLIProvider_UsesInjectedDiscoveryProbeView(t *testing.T) {
 	}
 }
 
+func TestDefaultCLIProviderDiscoveryView_UsesInjectedProbe(t *testing.T) {
+	discovery := DefaultCLIProviderDiscoveryView(func(registration CLIProviderRegistration) CLIProviderAvailability {
+		available := registration.Identity == CLIProviderIdentityGemini
+		if available {
+			return CLIProviderAvailability{
+				Registration: registration,
+				Available:    true,
+			}
+		}
+		return CLIProviderAvailability{
+			Registration:      registration,
+			Available:         false,
+			UnavailableReason: string(interfaces.WorkFailureTypeMissingExecutable),
+		}
+	})
+
+	result := SelectCLIProvider(CLIProviderSelectionInput{}, discovery)
+
+	if !result.OK() {
+		t.Fatalf("result = %#v, want discovery success", result)
+	}
+	if result.Source != CLIProviderSelectionSourceDiscovery {
+		t.Fatalf("source = %q, want %q", result.Source, CLIProviderSelectionSourceDiscovery)
+	}
+	if result.Selected == nil || result.Selected.Identity != CLIProviderIdentityGemini {
+		t.Fatalf("selected = %#v, want gemini via default discovery view", result.Selected)
+	}
+}
+
 func TestFormatCLIProviderSelectionFailure_IncludesCodeAndGuidance(t *testing.T) {
 	formatted := FormatCLIProviderSelectionFailure(CLIProviderSelectionFailure{
 		Code:     CLIProviderSelectionFailureNoAgentHarness,
