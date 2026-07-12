@@ -1308,6 +1308,111 @@ func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
 	}
 }
 
+func TestReplaySessionProjection_EquivalentOrchestratorsSharePublicSessionProjection(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 18, 30, 0, 0, time.UTC)
+	sessionID := "dur-sess-orchestrator-parity-001"
+	baseSession := SessionReadResult{
+		SessionID:      sessionID,
+		Status:         LifecycleStatusRunning,
+		SourceHash:     "sha256:equivalent-source",
+		Policy:         PolicyProjection{EffectiveHash: "sha256:equivalent-policy"},
+		ResolvedSource: ResolvedSource{SourceHash: "sha256:equivalent-source"},
+		Lifecycle:      &LifecycleTimestamps{StartedAt: &startedAt},
+		Phase:          "execute",
+	}
+	result := ResultReadResult{SessionID: sessionID, ResultStatus: ResultStatusNotReady}
+
+	petriSession := baseSession
+	petriSession.OrchestratorKind = "PETRI"
+	petriEvents := BuildCanonicalRuntimeSessionEvents(petriSession, result)
+	petriPayload := factoryapi.DispatchRequestEventPayload{
+		Inputs:       []factoryapi.DispatchConsumedWorkRef{},
+		TransitionId: "transition-review",
+	}
+	petriEvents = append(petriEvents, canonicalTypedInternalEvent(t, "DISPATCH_REQUEST", sessionID, petriPayload))
+
+	javascriptSession := baseSession
+	javascriptSession.OrchestratorKind = "JAVASCRIPT"
+	javascriptSession.Dialect = "you-workflow-v1"
+	javascriptEvents := BuildCanonicalRuntimeSessionEvents(javascriptSession, result)
+	javascriptPayload := factoryapi.OrchestratorCheckpointWrittenEventPayload{
+		Label:              "after-review",
+		ResumabilityStatus: factoryapi.RESUMABLE,
+		Timestamp:          &startedAt,
+	}
+	javascriptEvents = append(javascriptEvents, canonicalTypedInternalEvent(t, "ORCHESTRATOR_CHECKPOINT_WRITTEN", sessionID, javascriptPayload))
+
+	petriProjection, _, err := ReplaySessionProjection(petriEvents)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection(PETRI): %v", err)
+	}
+	javascriptProjection, _, err := ReplaySessionProjection(javascriptEvents)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection(JAVASCRIPT): %v", err)
+	}
+
+	type sharedPublicSession struct {
+		SessionID     string
+		Status        LifecycleStatus
+		SourceHash    string
+		PolicyHash    string
+		Phase         string
+		StartedAt     time.Time
+		ResultStatus  string
+		ArtifactCount int
+		Links         InspectionLinks
+	}
+	sharedProjection := func(session SessionReadResult) sharedPublicSession {
+		t.Helper()
+		if session.Lifecycle == nil || session.Lifecycle.StartedAt == nil {
+			t.Fatalf("lifecycle = %#v, want startedAt", session.Lifecycle)
+		}
+		if session.ResultSummary == nil {
+			t.Fatal("resultSummary missing")
+		}
+		return sharedPublicSession{
+			SessionID:     session.SessionID,
+			Status:        session.Status,
+			SourceHash:    session.SourceHash,
+			PolicyHash:    session.Policy.EffectiveHash,
+			Phase:         session.Phase,
+			StartedAt:     session.Lifecycle.StartedAt.UTC(),
+			ResultStatus:  session.ResultSummary.ResultStatus,
+			ArtifactCount: session.ArtifactCount,
+			Links:         session.Links,
+		}
+	}
+	petriPublic := sharedProjection(petriProjection)
+	javascriptPublic := sharedProjection(javascriptProjection)
+	if petriPublic != javascriptPublic {
+		t.Fatalf("shared public session projection differs by orchestrator:\nPETRI: %#v\nJAVASCRIPT: %#v", petriPublic, javascriptPublic)
+	}
+	if petriProjection.OrchestratorKind != "PETRI" || javascriptProjection.OrchestratorKind != "JAVASCRIPT" {
+		t.Fatalf("orchestrator identity lost: PETRI=%q JAVASCRIPT=%q", petriProjection.OrchestratorKind, javascriptProjection.OrchestratorKind)
+	}
+	if petriPayload.TransitionId == "" || javascriptPayload.Label == "" {
+		t.Fatal("typed orchestrator-specific facts missing")
+	}
+}
+
+func canonicalTypedInternalEvent(t *testing.T, eventType, sessionID string, payload any) json.RawMessage {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"schemaVersion": canonicalFactoryEventSchemaVersion,
+		"id":            "internal/" + eventType,
+		"type":          eventType,
+		"context": map[string]any{
+			"sequence":  99,
+			"sessionId": sessionID,
+		},
+		"payload": payload,
+	})
+	if err != nil {
+		t.Fatalf("marshal %s event: %v", eventType, err)
+	}
+	return raw
+}
+
 func TestAppendDispatchInterruptedEvent_RecordsCanonicalMetadata(t *testing.T) {
 	startedAt := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
 	session := SessionReadResult{
