@@ -379,6 +379,8 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 		return r.applySessionLifecycleControl(envelope)
 	case "SESSION_COMPLETED":
 		return r.applySessionCompleted(envelope)
+	case "ARTIFACT_CREATED":
+		return r.applyArtifactCreated(envelope)
 	default:
 		return nil
 	}
@@ -590,6 +592,34 @@ func (r *sessionProjectionReducer) applySessionCompleted(envelope canonicalFacto
 	return nil
 }
 
+func (r *sessionProjectionReducer) applyArtifactCreated(envelope canonicalFactoryEvent) error {
+	var payload struct {
+		Artifact struct {
+			ID          string `json:"id"`
+			Kind        string `json:"kind"`
+			Visibility  string `json:"visibility"`
+			ContentHash string `json:"contentHash"`
+			SizeBytes   int64  `json:"sizeBytes"`
+		} `json:"artifact"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal ARTIFACT_CREATED payload: %w", err)
+	}
+	artifactID := strings.TrimSpace(payload.Artifact.ID)
+	if artifactID == "" {
+		return fmt.Errorf("ARTIFACT_CREATED missing artifact id")
+	}
+	r.mergeSessionIdentity(envelope.Context)
+	r.upsertArtifactRef(ArtifactRefSummary{
+		ID:          artifactID,
+		Kind:        strings.TrimSpace(payload.Artifact.Kind),
+		Visibility:  strings.TrimSpace(payload.Artifact.Visibility),
+		ContentHash: strings.TrimSpace(payload.Artifact.ContentHash),
+		SizeBytes:   payload.Artifact.SizeBytes,
+	})
+	return nil
+}
+
 func (r *sessionProjectionReducer) mergeSessionIdentity(context canonicalFactoryEventContext) {
 	if sessionID := stringValuePtr(context.SessionID); sessionID != "" && r.session.SessionID == "" {
 		r.session.SessionID = sessionID
@@ -626,11 +656,30 @@ func (r *sessionProjectionReducer) replaceArtifactStubs(artifactIDs []string) {
 	refs := make([]ArtifactRefSummary, 0, len(artifactIDs))
 	for _, artifactID := range artifactIDs {
 		if id := strings.TrimSpace(artifactID); id != "" {
-			refs = append(refs, ArtifactRefSummary{ID: id})
+			ref := ArtifactRefSummary{ID: id}
+			for _, existing := range r.session.ArtifactRefs {
+				if existing.ID == id {
+					ref = existing
+					break
+				}
+			}
+			refs = append(refs, ref)
 		}
 	}
 	r.session.ArtifactRefs = refs
 	r.session.ArtifactCount = len(refs)
+}
+
+func (r *sessionProjectionReducer) upsertArtifactRef(ref ArtifactRefSummary) {
+	for index := range r.session.ArtifactRefs {
+		if r.session.ArtifactRefs[index].ID == ref.ID {
+			r.session.ArtifactRefs[index] = ref
+			r.session.ArtifactCount = len(r.session.ArtifactRefs)
+			return
+		}
+	}
+	r.session.ArtifactRefs = append(r.session.ArtifactRefs, ref)
+	r.session.ArtifactCount = len(r.session.ArtifactRefs)
 }
 
 func (r *sessionProjectionReducer) finalize() {

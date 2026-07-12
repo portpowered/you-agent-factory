@@ -1466,6 +1466,71 @@ func TestReplayDispatchProjection_EquivalentOrchestratorsPreserveAbsentProviderS
 	}
 }
 
+func TestReplaySessionProjection_EquivalentOrchestratorsRestoreArtifactsAndLatestLifecycle(t *testing.T) {
+	startedAt := time.Date(2026, 7, 11, 21, 0, 0, 0, time.UTC)
+	pausedAt := startedAt.Add(time.Minute)
+	resumedAt := pausedAt.Add(time.Minute)
+	artifact := map[string]any{
+		"id":          "artifact-parity-1",
+		"kind":        "FINAL_RESULT",
+		"visibility":  "PUBLIC",
+		"contentHash": "sha256:artifact-parity",
+		"sizeBytes":   128,
+	}
+
+	for _, orchestratorKind := range []string{"PETRI", "JAVASCRIPT"} {
+		t.Run(orchestratorKind, func(t *testing.T) {
+			sessionID := "artifact-parity-" + strings.ToLower(orchestratorKind)
+			session := SessionReadResult{
+				SessionID:        sessionID,
+				Status:           LifecycleStatusRunning,
+				OrchestratorKind: orchestratorKind,
+				Lifecycle: &LifecycleTimestamps{
+					StartedAt: &startedAt,
+					PausedAt:  &pausedAt,
+					ResumedAt: &resumedAt,
+				},
+			}
+			events := BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{
+				SessionID:    sessionID,
+				ResultStatus: ResultStatusPartial,
+				ArtifactIDs:  []string{"artifact-parity-1"},
+			})
+			artifactEvent := canonicalTypedInternalEvent(t, "ARTIFACT_CREATED", sessionID, map[string]any{
+				"artifact":   artifact,
+				"capturedAt": resumedAt.Format(time.RFC3339),
+			})
+			var artifactEnvelope map[string]any
+			if err := json.Unmarshal(artifactEvent, &artifactEnvelope); err != nil {
+				t.Fatalf("unmarshal artifact envelope: %v", err)
+			}
+			context := artifactEnvelope["context"].(map[string]any)
+			context["orchestratorKind"] = orchestratorKind
+			artifactEvent, _ = json.Marshal(artifactEnvelope)
+
+			internalType := "DISPATCH_REQUESTED"
+			internalPayload := map[string]any{"transitionId": "transition-1"}
+			if orchestratorKind == "JAVASCRIPT" {
+				internalType = "ORCHESTRATOR_CHECKPOINT_WRITTEN"
+				internalPayload = map[string]any{"checkpointId": "checkpoint-1"}
+			}
+			events = append(events, artifactEvent, canonicalTypedInternalEvent(t, internalType, sessionID, internalPayload))
+
+			replayed, _, err := ReplaySessionProjection(events)
+			if err != nil {
+				t.Fatalf("ReplaySessionProjection: %v", err)
+			}
+			wantRef := ArtifactRefSummary{ID: "artifact-parity-1", Kind: "FINAL_RESULT", Visibility: "PUBLIC", ContentHash: "sha256:artifact-parity", SizeBytes: 128}
+			if replayed.ArtifactCount != 1 || !reflect.DeepEqual(replayed.ArtifactRefs, []ArtifactRefSummary{wantRef}) {
+				t.Fatalf("artifact projection = count %d refs %#v, want %#v", replayed.ArtifactCount, replayed.ArtifactRefs, wantRef)
+			}
+			if replayed.Status != LifecycleStatusRunning || replayed.Lifecycle == nil || !replayed.Lifecycle.ResumedAt.Equal(resumedAt) {
+				t.Fatalf("lifecycle = status %q timestamps %#v, want latest RUNNING at %s", replayed.Status, replayed.Lifecycle, resumedAt)
+			}
+		})
+	}
+}
+
 func canonicalTypedInternalEvent(t *testing.T, eventType, sessionID string, payload any) json.RawMessage {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
