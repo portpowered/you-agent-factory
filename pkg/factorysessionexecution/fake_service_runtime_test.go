@@ -2521,10 +2521,11 @@ func TestJavaScriptRuntimeService_InterruptRunningDispatch_PreservesObservedCanc
 func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T) {
 	sessionID := "dur-sess-checkpoint-validation-001"
 	valid := &jsstore.CheckpointSummary{
-		Kind:          jsstore.CheckpointSummaryKind,
-		SchemaVersion: jsstore.CheckpointSummarySchemaVersion,
-		CheckpointID:  "checkpoint-1",
-		SessionID:     sessionID,
+		Kind:           jsstore.CheckpointSummaryKind,
+		SchemaVersion:  jsstore.CheckpointSummarySchemaVersion,
+		CheckpointID:   "checkpoint-1",
+		SessionID:      sessionID,
+		ResumeStrategy: jsstore.ResumeStrategyReplayCompletedThenContinue,
 	}
 	if err := validateCheckpointSummaryForResume(valid, sessionID); err != nil {
 		t.Fatalf("validateCheckpointSummaryForResume(valid): %v", err)
@@ -2566,10 +2567,18 @@ func TestValidateCheckpointSummaryForResume_RejectsInvalidMetadata(t *testing.T)
 		{
 			name: "session id mismatch",
 			summary: &jsstore.CheckpointSummary{
-				CheckpointID: "checkpoint-1",
-				SessionID:    "dur-sess-other",
+				CheckpointID:   "checkpoint-1",
+				SessionID:      "dur-sess-other",
+				ResumeStrategy: jsstore.ResumeStrategyReplayCompletedThenContinue,
 			},
 			field: "checkpointSummary.sessionId",
+		},
+		{
+			name: "checkpoint not approved for resume",
+			summary: &jsstore.CheckpointSummary{
+				CheckpointID: "checkpoint-1",
+			},
+			field: "checkpointSummary.resumeStrategy",
 		},
 	}
 	for _, tc := range cases {

@@ -216,6 +216,14 @@ func validateCheckpointSummaryForResume(summary *jsstore.CheckpointSummary, sess
 			Message:   "persisted checkpoint summary sessionId does not match the interrupted session",
 		}
 	}
+	if strings.TrimSpace(summary.ResumeStrategy) != jsstore.ResumeStrategyReplayCompletedThenContinue {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.resumeStrategy",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is not approved for resume",
+		}
+	}
 	return nil
 }
 

@@ -492,6 +492,26 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_InvalidCheckpointSumm
 	assertResumeError(t, err, fse.ResumeOutcomeInvalidState, "checkpointSummary.kind")
 }
 
+func TestJavaScriptRuntimeService_ResumeInterruptedSession_NonApprovedCheckpointReturnsTypedFailure(t *testing.T) {
+	harness := startInterruptedResumableSession(t, "req-runtime-resume-non-approved-001")
+	beforeCalls := harness.provider.CallCount()
+	rewritePersistedSnapshot(t, harness.projectRoot, harness.sessionID, func(snapshot *fse.PersistedRuntimeSessionState) {
+		snapshot.CheckpointSummary.ResumeStrategy = ""
+	})
+
+	service := newResumedRuntimeService(harness)
+	_, err := service.ResumeInterruptedSession(context.Background(), harness.sessionID, fse.ResumeSessionRequest{
+		RequestID: "req-runtime-resume-non-approved-resume-001",
+	})
+	assertResumeError(t, err, fse.ResumeOutcomeInvalidState, "checkpointSummary.resumeStrategy")
+	if calls := harness.provider.CallCount(); calls != beforeCalls {
+		t.Fatalf("provider calls = %d, want unchanged %d after rejected resume", calls, beforeCalls)
+	}
+	if strings.Contains(err.Error(), "checkpointState") || strings.Contains(err.Error(), "firstLabel") {
+		t.Fatalf("resume diagnostic leaked checkpoint payload detail: %v", err)
+	}
+}
+
 func TestJavaScriptRuntimeService_ResumeInterruptedSession_NonInterruptedSessionReturnsTypedFailure(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(
 		t,
