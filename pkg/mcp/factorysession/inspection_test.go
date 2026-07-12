@@ -77,13 +77,36 @@ func assertDocumentedPauseResume(t *testing.T, client *mcpfactorysession.Client,
 
 func assertDocumentedLifecycleEvents(t *testing.T, client *mcpfactorysession.Client, sessionID string) {
 	t.Helper()
-	response, err := client.ReadEvents(mcpfactorysession.ReadEventsInput{SessionID: sessionID})
-	if err != nil || response.Error != nil || response.Result == nil {
+	raw, err := client.CallTool(
+		mcpfactorysession.ToolReadEvents,
+		mustJSON(t, mcpfactorysession.ReadEventsInput{SessionID: sessionID}),
+	)
+	if err != nil {
+		t.Fatalf("ReadEvents after controls: %v", err)
+	}
+	var response mcpfactorysession.ToolResponse[mcpfactorysession.ReadEventsResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode ReadEvents after controls: %v", err)
+	}
+	if response.Error != nil || response.Result == nil {
 		t.Fatalf("ReadEvents after controls: response=%#v err=%v", response, err)
 	}
 	controls := 0
 	for _, event := range response.Result.Events {
 		if event.Type == factoryapi.FactoryEventTypeSessionLifecycleControl {
+			serialized, err := json.Marshal(event)
+			if err != nil {
+				t.Fatalf("marshal lifecycle event: %v", err)
+			}
+			var wireEvent struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(serialized, &wireEvent); err != nil {
+				t.Fatalf("decode lifecycle event wire value: %v", err)
+			}
+			if wireEvent.Type != "SESSION_LIFECYCLE_CONTROL" {
+				t.Fatalf("serialized lifecycle event type = %q, want SESSION_LIFECYCLE_CONTROL", wireEvent.Type)
+			}
 			controls++
 		}
 	}

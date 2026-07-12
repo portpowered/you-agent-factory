@@ -261,7 +261,7 @@ host -> you.factory_session.read_events
 {"sessionId":"fs-host-demo-01","afterEventId":"event-host-demo-07"}
 
 you ->
-{"result":{"sessionId":"fs-host-demo-01","events":[{"id":"event-host-demo-08","type":"FactoryEventTypeSessionLifecycleControl","context":{"sessionSequence":8}}]}}
+{"result":{"sessionId":"fs-host-demo-01","events":[{"id":"event-host-demo-08","type":"SESSION_LIFECYCLE_CONTROL","context":{"sessionSequence":8}}]}}
 
 host -> you.factory_session.get_result
 {"sessionId":"fs-host-demo-01","mode":"FINAL","includeArtifacts":true}
