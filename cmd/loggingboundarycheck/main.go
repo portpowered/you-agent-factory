@@ -137,7 +137,7 @@ func scanFile(path, relative string) ([]string, error) {
 		return nil, nil
 	}
 	aliases := prohibitedImportAliases(file)
-	var findings []string
+	findings := prohibitedDotImportFindings(fileSet, file, relative)
 	ast.Inspect(file, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
@@ -166,6 +166,28 @@ func scanFile(path, relative string) ([]string, error) {
 		return true
 	})
 	return findings, nil
+}
+
+func prohibitedDotImportFindings(fileSet *token.FileSet, file *ast.File, relative string) []string {
+	var findings []string
+	for _, imported := range file.Imports {
+		if imported.Name == nil || imported.Name.Name != "." {
+			continue
+		}
+		path, err := strconv.Unquote(imported.Path.Value)
+		if err != nil {
+			continue
+		}
+		if _, prohibited := prohibitedCalls[path]; !prohibited {
+			continue
+		}
+		position := fileSet.Position(imported.Pos())
+		findings = append(findings, fmt.Sprintf(
+			"[agent-factory:logging-boundary] %s:%d dot-imports %s; use a named import and accept or propagate an injected logger",
+			relative, position.Line, path,
+		))
+	}
+	return findings
 }
 
 func prohibitedImportAliases(file *ast.File) map[string]string {

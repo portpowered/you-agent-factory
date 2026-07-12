@@ -36,6 +36,24 @@ func fallback() {
 	}
 }
 
+func TestScanRejectsProhibitedDotImports(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/runtime/dot_import.go": `package runtime
+import . "go.uber.org/zap"
+func fallback() { _ = L() }`,
+	})
+
+	findings, err := scan(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+	for _, want := range []string{"dot-imports go.uber.org/zap", "use a named import", "accept or propagate an injected logger"} {
+		if !containsFinding(findings, want) {
+			t.Errorf("findings %#v do not report %q", findings, want)
+		}
+	}
+}
+
 func TestScanAllowsInjectedAndExplicitNoopLoggers(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/runtime/injected.go": `package runtime
