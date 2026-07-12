@@ -144,8 +144,11 @@ primary-result behavior.
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
-  `primary_result` NDJSON record. Internal stream listing for
-  CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
+  `primary_result` NDJSON record. Human-only suppression helpers:
+  `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
+  `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop
+  compaction/backlog/stream-gap text and token-usage chatter while JSON mode
+  keeps `compaction` / `stream_gap` records. Internal stream listing for
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
   late CLI pollers can still subscribe and drain retained progress until the
