@@ -163,6 +163,29 @@ func TestInvoke_UnreachableServerDoesNotFailWithTransportUnreachableMessage(t *t
 	}
 }
 
+func TestMapBootstrapModelInvokeError_PreservesInferenceFailureCauseChain(t *testing.T) {
+	readinessErr := apisurface.InvocationErrorFromManagedRuntime(factoryapi.ManagedRuntime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
+		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+	})
+	failure, ok := apisurface.ClassifyInferenceFailure(readinessErr, apisurface.InferenceFailureContext{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Operation: "TTS",
+	})
+	if !ok || failure == nil {
+		t.Fatal("expected classified inference failure")
+	}
+
+	mapped := mapBootstrapModelInvokeError(failure)
+	if !errors.Is(mapped, apisurface.ErrManagedRuntimeLoading) {
+		t.Fatalf("mapped error = %v, want ErrManagedRuntimeLoading in chain", mapped)
+	}
+	if failure, ok := apisurface.AsInferenceFailure(mapped); !ok || failure.Class != apisurface.InferenceFailureClassLoadingModel {
+		t.Fatalf("mapped error = %T, want loading_model InferenceFailure", mapped)
+	}
+}
+
 func TestInvoke_AudioBootstrapCopiesStreamFile(t *testing.T) {
 	originalBuilder := buildModelInvocationBootstrap
 	defer func() {

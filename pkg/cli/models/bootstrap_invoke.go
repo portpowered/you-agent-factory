@@ -303,18 +303,14 @@ func mapBootstrapModelInvokeError(err error) error {
 		return nil
 	}
 	if failure, ok := apisurface.AsInferenceFailure(err); ok {
-		return fmt.Errorf("%s", failure.Error())
+		return failure
 	}
 	switch {
 	case errors.Is(err, apisurface.ErrModelNotFound):
 		return fmt.Errorf("%w: model not found", ErrModelNotFound)
-	case apisurface.IsManagedRuntimeMissing(err), errors.Is(err, apisurface.ErrModelNotAvailable):
-		return err
-	case errors.Is(err, apisurface.ErrManagedRuntimeLoading):
-		return err
-	case errors.Is(err, apisurface.ErrManagedRuntimeFailed):
-		return err
-	case errors.Is(err, apisurface.ErrManagedRuntimeUnsupported):
+	case apisurface.IsManagedRuntimeInvocationBlocked(err),
+		apisurface.IsManagedRuntimeMissing(err),
+		errors.Is(err, apisurface.ErrModelNotAvailable):
 		return err
 	case errors.Is(err, apisurface.ErrModelInvocationUnsupportedOperation),
 		errors.Is(err, apisurface.ErrModelInvocationUnsupportedMode):

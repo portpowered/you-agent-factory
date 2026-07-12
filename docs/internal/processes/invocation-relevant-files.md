@@ -110,7 +110,10 @@ primary-result behavior.
   `FactoryService.InvokeModel` through the bootstrap-owned service rather than
   posting to `/models/{model_name}/invocations`; keep managed readiness/lifecycle
   error mapping aligned with `pkg/api/handlers_models.go` via
-  `mapBootstrapModelInvokeError`. Factory root resolution for invoke belongs in
+  `mapBootstrapModelInvokeError`. Return classified `InferenceFailure` and
+  `ManagedRuntimeInvocationError` values without re-wrapping so readiness causes
+  stay `errors.Is`-able; non-ready bootstrap invoke coverage lives in
+  `pkg/cli/models/non_ready_invoke_test.go`. Factory root resolution for invoke belongs in
   `pkg/cli/models` (`resolveModelsInvokeFactoryDir`), with operator defaults and
   logger passed from `pkg/cli/root.go` `newModelsInvokeCommand`.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
