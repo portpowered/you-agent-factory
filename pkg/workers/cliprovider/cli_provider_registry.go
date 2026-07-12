@@ -1,6 +1,7 @@
-package workers
+package cliprovider
 
 import (
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -136,6 +137,8 @@ func NormalizeCLIProviderIdentity(id string) CLIProviderIdentity {
 func CLIProviderScopeSegment(id CLIProviderIdentity) string {
 	return string(NormalizeCLIProviderIdentity(string(id)))
 }
+
+var lookPath = exec.LookPath
 
 // ProbeCLIProviderAvailability checks whether one registered provider command
 // is resolvable on PATH. Probes perform only command-resolution checks.
