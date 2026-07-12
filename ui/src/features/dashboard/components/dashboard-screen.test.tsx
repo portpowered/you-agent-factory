@@ -80,12 +80,6 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   ),
 }));
 
-vi.mock("./dashboard-session-lifecycle-banner", () => ({
-  DashboardSessionLifecycleBanner: () => (
-    <section data-testid="dashboard-session-lifecycle-banner-probe" />
-  ),
-}));
-
 function expectDashboardShellContract() {
   const shell = screen.getByRole("main");
 
@@ -227,6 +221,39 @@ describe("DashboardScreen content states", () => {
         status: "connecting",
       },
     };
+  });
+
+  it("does not render the session lifecycle banner for an active session", () => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
+      snapshot: {
+        factory_state: "RUNNING",
+        runtime: {
+          session: {
+            bracket: {
+              result_status: "IN_PROGRESS",
+              started_at: "2026-06-09T12:00:00Z",
+            },
+          },
+        },
+      } as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
+    };
+
+    render(<DashboardScreen />);
+
+    expect(
+      screen.queryByTestId("dashboard-session-lifecycle-banner"),
+    ).toBeNull();
+    expect(screen.queryByText("Session started")).toBeNull();
+    expect(screen.getByText("Dashboard header en")).toBeTruthy();
+    expect(screen.getByText("Dashboard bento en")).toBeTruthy();
   });
 
   it("renders the dashboard content inside the tighter shell spacing on success", () => {
