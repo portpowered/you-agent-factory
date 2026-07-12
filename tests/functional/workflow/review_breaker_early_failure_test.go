@@ -26,13 +26,19 @@ func TestGuardedLoopBreaker_DoesNotRouteBelowThresholdAfterReviewContinue(t *tes
 		reviewDualInput:     true,
 	})
 
-	responses := make([]interfaces.InferenceResponse, 0, reviewContinueReworkCycles*2)
+	responses := make([]interfaces.InferenceResponse, 0, (reviewContinueReworkCycles+1)*2)
 	for round := 1; round <= reviewContinueReworkCycles; round++ {
 		responses = append(responses,
 			interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
 			interfaces.InferenceResponse{Content: reviewContinueEnvelope(round)},
 		)
 	}
+	// Let the harness settle after below-threshold rework instead of looping on the
+	// mock provider default response until visit thresholds are hit.
+	responses = append(responses,
+		interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
+		interfaces.InferenceResponse{Content: `{"decision":"ACCEPTED","feedback":"settle below breaker threshold"}`},
+	)
 
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": responses,
@@ -101,7 +107,7 @@ func TestGuardedLoopBreaker_DoesNotRouteBelowThresholdAfterReviewContinue(t *tes
 
 	harness.Assert().
 		HasNoTokenInPlace("task:failed").
-		HasTokenInPlace("task:init")
+		HasTokenInPlace("task:complete")
 }
 
 func reviewContinueEnvelope(round int) string {

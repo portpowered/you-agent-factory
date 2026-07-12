@@ -61,11 +61,16 @@ func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResu
 		PlaceVisits:         make(map[string]int),
 	}
 
-	// Merge input token histories so visit counts accumulate.
+	// Merge input token histories. Co-consumed tokens from the same dispatch often
+	// carry copies of the same lineage visit counts (for example task + review
+	// companions in executor/review loops). Use max per key so visit counts reflect
+	// one work lineage instead of summing duplicate counters.
 	for _, consumed := range consumedTokens {
 		ih := consumed.History
 		for tid, v := range ih.TotalVisits {
-			history.TotalVisits[tid] += v
+			if v > history.TotalVisits[tid] {
+				history.TotalVisits[tid] = v
+			}
 		}
 		for tid, v := range ih.ConsecutiveFailures {
 			if v > history.ConsecutiveFailures[tid] {
@@ -73,7 +78,9 @@ func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResu
 			}
 		}
 		for pid, v := range ih.PlaceVisits {
-			history.PlaceVisits[pid] += v
+			if v > history.PlaceVisits[pid] {
+				history.PlaceVisits[pid] = v
+			}
 		}
 		if ih.LastError != "" {
 			history.LastError = ih.LastError
