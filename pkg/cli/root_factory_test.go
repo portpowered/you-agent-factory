@@ -61,32 +61,30 @@ func TestFactorySaveCommand_DoesNotInvokeOwningPersistence(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "save", "staging", "--from", "./factory.json"})
-	if err := root.Execute(); err == nil {
-		t.Fatal("expected removed factory save with --from to fail")
+	cases := [][]string{
+		{"factory", "save", "staging", "--from", "./factory.json"},
+		{"factory", "save"},
+		{"factory", "save", "staging"},
+		{"factory", "nosuch"},
+	}
+	for _, args := range cases {
+		root := NewRootCommand()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		err := root.Execute()
+		if err == nil {
+			t.Fatalf("expected removed/unknown factory subcommand %v to fail", args)
+		}
+		if !strings.Contains(err.Error(), "unknown command") {
+			t.Fatalf("execute %v: got %v, want unknown-command error", args, err)
+		}
 	}
 	if createCalled {
 		t.Fatal("removed factory save must not invoke create persistence")
 	}
 	if replaceCalled {
 		t.Fatal("removed factory save must not invoke replace-current persistence")
-	}
-
-	root = NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "save"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory save: %v", err)
-	}
-	if createCalled {
-		t.Fatal("nameless factory save must not invoke create persistence")
-	}
-	if replaceCalled {
-		t.Fatal("nameless factory save must not invoke replace-current persistence")
 	}
 }
 
@@ -178,14 +176,16 @@ func TestFactoryConfigCommand_DirectFactoryValidateDoesNotRun(t *testing.T) {
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "validate", "./factory.json"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory validate: %v", err)
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected removed factory validate to fail as unknown command")
+	} else if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("factory validate error = %v, want unknown-command failure", err)
 	}
 	if called {
 		t.Fatal("direct you factory validate must not invoke factory validation")
 	}
-	if !strings.Contains(out.String(), "you factory config validate") {
-		t.Fatalf("factory validate should fall back to factory help, got:\n%s", out.String())
+	if out.Len() != 0 {
+		t.Fatalf("factory validate should not write stdout, got:\n%s", out.String())
 	}
 }
 
