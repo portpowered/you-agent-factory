@@ -2,6 +2,8 @@ package workers
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -28,6 +30,33 @@ func TestRunnerFromProviderUsesProviderInference(t *testing.T) {
 	}
 	if result.Content != provider.response.Content {
 		t.Fatalf("runner returned content %q, want %q", result.Content, provider.response.Content)
+	}
+}
+
+func TestRunnerFromProviderPreservesProviderFailureAndRequest(t *testing.T) {
+	providerErr := errors.New("canonical provider failure")
+	provider := &stubProvider{err: providerErr}
+	request := interfaces.RunnerExecutionRequest{
+		SystemPrompt:     "system",
+		UserMessage:      "user",
+		ModelProvider:    string(interfaces.ModelProviderCursor),
+		Model:            "cursor-model",
+		WorkingDirectory: "/tmp/runtime-worktree",
+		SessionID:        "session-1",
+	}
+
+	result, err := RunnerFromProvider(provider).Execute(context.Background(), request)
+	if !errors.Is(err, providerErr) {
+		t.Fatalf("runner error = %v, want provider error %v", err, providerErr)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("provider calls = %d, want 1", provider.calls)
+	}
+	if !reflect.DeepEqual(provider.lastRequest, request) {
+		t.Fatalf("provider request = %#v, want %#v", provider.lastRequest, request)
+	}
+	if !reflect.DeepEqual(result, (interfaces.RunnerExecutionResult{})) {
+		t.Fatalf("runner result = %#v, want zero result on provider failure", result)
 	}
 }
 
@@ -152,11 +181,14 @@ var _ Runner = stubRunner{}
 type stubProvider struct {
 	lastRequest interfaces.ProviderInferenceRequest
 	response    interfaces.InferenceResponse
+	err         error
+	calls       int
 }
 
 func (s *stubProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	s.calls++
 	s.lastRequest = req
-	return s.response, nil
+	return s.response, s.err
 }
 
 type stubWorkerExecutor struct {
