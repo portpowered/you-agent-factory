@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -19,6 +20,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
@@ -35,6 +37,38 @@ import (
 
 	"go.uber.org/zap"
 )
+
+func portableRecordingArtifacts(artifacts []factoryapi.FactoryArtifact, checkpoint *recording.CanonicalCheckpoint) []recording.CanonicalArtifact {
+	result := make([]recording.CanonicalArtifact, 0, len(artifacts))
+	artifactIndex := make(map[string]int, len(artifacts))
+	for _, artifact := range artifacts {
+		candidate := portableRecordingArtifact(artifact, checkpoint)
+		if index, exists := artifactIndex[candidate.ID]; exists {
+			result[index] = candidate
+			continue
+		}
+		artifactIndex[candidate.ID] = len(result)
+		result = append(result, candidate)
+	}
+	return result
+}
+
+func portableRecordingArtifact(artifact factoryapi.FactoryArtifact, checkpoint *recording.CanonicalCheckpoint) recording.CanonicalArtifact {
+	createdAt, secrets := time.Time{}, int64(0)
+	if artifact.CaptureMetadata != nil && artifact.CaptureMetadata.CapturedAt != nil {
+		createdAt = *artifact.CaptureMetadata.CapturedAt
+	}
+	if createdAt.IsZero() && checkpoint != nil && artifact.Id == checkpoint.ArtifactID {
+		createdAt = checkpoint.Timestamp
+	}
+	if artifact.RedactionCounts != nil && artifact.RedactionCounts.Secrets != nil {
+		secrets = int64(*artifact.RedactionCounts.Secrets)
+	}
+	return recording.CanonicalArtifact{
+		ID: artifact.Id, Kind: string(artifact.Kind), Visibility: string(artifact.Visibility), Label: stringPointerValue(artifact.Label),
+		ContentHash: stringPointerValue(artifact.ContentHash), SizeBytes: int64PointerValue(artifact.SizeBytes), CreatedAt: createdAt, SecretsRedacted: secrets,
+	}
+}
 
 // SimpleDashboardRenderInput carries the low-level engine snapshot that powers
 // runtime diagnostics together with the dedicated event-first render DTO used

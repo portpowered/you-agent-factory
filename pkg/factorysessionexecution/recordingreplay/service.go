@@ -17,6 +17,10 @@ func NewService(projection RecordingReplayProjection) *Service {
 	return &Service{projection: projection}
 }
 
+// IsNonLiveReplay lets control-plane routing recognize recorded canonical
+// session identities that predate the durable-execution ID prefix convention.
+func (*Service) IsNonLiveReplay() bool { return true }
+
 var _ fse.Service = (*Service)(nil)
 
 func (s *Service) session(sessionID string) error {

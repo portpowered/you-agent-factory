@@ -1843,54 +1843,109 @@ func terminalJavaScriptRecordingHistory(
 func TestFactoryService_PortableReplayRestoresPausedAndResumedPublicReadsWithoutLiveExecution(t *testing.T) {
 	for _, tc := range []struct {
 		name, status, resultStatus string
+		finalStatus                factoryapi.FactorySessionDurableLifecycleStatus
 		resumed                    bool
 	}{
-		{name: "paused", status: "PAUSED", resultStatus: "PARTIAL"},
-		{name: "resumed", status: "SUCCEEDED", resultStatus: "FINAL", resumed: true},
+		{name: "paused", status: "PAUSED", resultStatus: "PARTIAL", finalStatus: factoryapi.FactorySessionDurableLifecycleStatusPaused},
+		{name: "resumed", status: "SUCCEEDED", resultStatus: "FINAL", finalStatus: factoryapi.FactorySessionDurableLifecycleStatusSucceeded, resumed: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			const sessionID = "dur-sess-lifecycle-recording"
-			path := filepath.Join(t.TempDir(), "session.json")
-			events := []json.RawMessage{
-				json.RawMessage(`{"id":"event-started","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T19:00:00Z"},"payload":{}}`),
-				json.RawMessage(`{"id":"event-checkpoint","type":"JAVASCRIPT_CHECKPOINT_REF","context":{"sequence":1,"eventTime":"2026-07-12T19:00:02Z","checkpointId":"checkpoint-public-1"},"payload":{"artifactIds":["artifact-checkpoint"]}}`),
-				json.RawMessage(`{"id":"event-paused","type":"SESSION_PAUSED","context":{"sequence":2,"eventTime":"2026-07-12T19:00:03Z"},"payload":{}}`),
-			}
-			result := &recording.CanonicalResult{Status: tc.resultStatus, Mode: "partial", PrimaryResult: json.RawMessage(`{"step":1}`), ArtifactIDs: []string{"artifact-checkpoint"}}
-			if tc.resumed {
-				events = append(events,
-					json.RawMessage(`{"id":"event-resumed","type":"SESSION_RESUMED","context":{"sequence":3,"eventTime":"2026-07-12T19:00:04Z"},"payload":{}}`),
-					json.RawMessage(`{"id":"event-completed","type":"SESSION_COMPLETED","context":{"sequence":4,"eventTime":"2026-07-12T19:00:05Z"},"payload":{"artifactIds":["artifact-checkpoint"]}}`),
-				)
-				result.Mode = "final"
-				result.PrimaryResult = json.RawMessage(`{"step":2}`)
-			}
-			checkpointAt := time.Date(2026, 7, 12, 19, 0, 2, 0, time.UTC)
-			value, err := recording.Build(recording.CanonicalFacts{
-				SessionID: sessionID, Status: tc.status, OrchestratorKind: "JAVASCRIPT",
-				SourceRef: "workflow/lifecycle.js", SourceHash: "sha256:" + strings.Repeat("d", 64),
-				PolicyHash: "sha256:" + strings.Repeat("e", 64), Arguments: map[string]any{"topic": "safe"},
-				Artifacts: []recording.CanonicalArtifact{{ID: "artifact-checkpoint", Kind: "CHECKPOINT", Visibility: "PUBLIC", ContentHash: "sha256:" + strings.Repeat("f", 64), SizeBytes: 12, CreatedAt: checkpointAt}},
-				Events:    events, Result: result,
-				Checkpoint: &recording.CanonicalCheckpoint{ID: "checkpoint-public-1", Label: "Approval", Summary: "Waiting for operator input", Timestamp: checkpointAt, ArtifactID: "artifact-checkpoint"},
-			})
-			if err != nil {
-				t.Fatalf("Build recording: %v", err)
-			}
-			if err := recording.Write(path, value); err != nil {
-				t.Fatalf("Write recording: %v", err)
-			}
-
-			provider := &countingReplayProvider{}
-			svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{ReplayPath: path, Dir: t.TempDir(), SystemConfigPath: filepath.Join(t.TempDir(), "config.json"), ProviderOverride: provider})
-			if err != nil {
-				t.Fatalf("BuildFactoryService: %v", err)
-			}
-			if err := svc.Run(context.Background()); err != nil {
-				t.Fatalf("Run: %v", err)
-			}
-			assertPortableLifecycleReplayReads(t, svc, provider, sessionID, tc.status, tc.resultStatus, tc.resumed, len(events))
+			assertLifecycleProductionRecordThenReplay(t, tc.status, tc.resultStatus, tc.finalStatus, tc.resumed)
 		})
+	}
+}
+
+func assertLifecycleProductionRecordThenReplay(t *testing.T, status, resultStatus string, finalStatus factoryapi.FactorySessionDurableLifecycleStatus, resumed bool) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "session.json")
+	argsDigest := "sha256:" + strings.Repeat("7", 64)
+	history, checkpoint := lifecycleJavaScriptRecordingHistory(t, finalStatus, argsDigest, resumed)
+	recorder := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir(), RecordPath: path}}
+	bindServiceStartupRuntime(recorder, &factoryRuntimeBundle{
+		RuntimeCfg:   newLoadedFactoryConfigForServiceTest(t, "", terminalJavaScriptRecordingFactoryConfig(), nil, nil),
+		EventHistory: history,
+		Factory: &aggregateSnapshotFactory{engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			LifecycleControlStatus: string(finalStatus), TickCount: 7,
+		}},
+	})
+	recorder.javascriptCheckpointStoreDirect(recorder.currentSession()).Put(checkpoint)
+	if err := recorder.writeJavaScriptFactorySessionRecording(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("write production lifecycle recording: %v", err)
+	}
+	value := decodeTerminalProductionRecording(t, path, argsDigest)
+	if value.Checkpoint == nil || value.Checkpoint.Summary != checkpoint.Summary {
+		t.Fatalf("recorded checkpoint = %#v, want public summary", value.Checkpoint)
+	}
+	encoded, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read lifecycle recording: %v", err)
+	}
+	for _, prohibited := range []string{"must-not-replay", checkpoint.StoragePath, "checkpointState", "dispatches"} {
+		if strings.Contains(string(encoded), prohibited) {
+			t.Fatalf("production lifecycle recording leaked %q: %s", prohibited, encoded)
+		}
+	}
+	provider := &countingReplayProvider{}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		ReplayPath: path, Dir: t.TempDir(), SystemConfigPath: filepath.Join(t.TempDir(), "config.json"), ProviderOverride: provider,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if err := svc.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	assertPortableLifecycleReplayReads(t, svc, provider, value.Session.ID, status, resultStatus, resumed, len(value.Events))
+}
+
+func lifecycleJavaScriptRecordingHistory(t *testing.T, finalStatus factoryapi.FactorySessionDurableLifecycleStatus, argsDigest string, resumed bool) (*factoryevents.FactoryEventHistory, interfaces.JavaScriptCheckpointRecord) {
+	t.Helper()
+	eventTime := time.Date(2026, 7, 12, 19, 0, 0, 0, time.UTC)
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime })
+	history.RecordSessionStarted(factoryevents.SessionLifecycleStartInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1",
+		Source: "runtime", FactoryID: "recorded-workflow", SourceRef: "workflow.js",
+		SourceHash: "sha256:" + strings.Repeat("b", 64), PolicyHash: "sha256:" + strings.Repeat("c", 64), ArgsDigest: argsDigest,
+	}, eventTime)
+	checkpointAt := eventTime.Add(time.Second)
+	artifactHash, artifactSize := "sha256:"+strings.Repeat("f", 64), int64(12)
+	history.RecordArtifactCreated(factoryevents.ArtifactCreatedInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 1,
+		Artifact: factoryapi.FactoryArtifact{Id: "artifact-checkpoint", Kind: factoryapi.FactoryArtifactKindCHECKPOINT,
+			Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT, ContentHash: &artifactHash, SizeBytes: &artifactSize,
+			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &checkpointAt}}, CapturedAt: &checkpointAt,
+	}, checkpointAt)
+	history.RecordOrchestratorCheckpointWritten(factoryevents.OrchestratorCheckpointWrittenInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1",
+		CheckpointID: "checkpoint-public-1", Source: "runtime", Tick: 2, Label: "Approval", Timestamp: &checkpointAt,
+		SourceHash: "sha256:" + strings.Repeat("b", 64), RuntimeSnapshotDigest: "sha256:" + strings.Repeat("8", 64),
+		ArtifactRef: &factoryapi.FactoryArtifactRef{Id: "artifact-checkpoint", Kind: factoryapi.FactoryArtifactKindCHECKPOINT,
+			Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT, ContentHash: &artifactHash, SizeBytes: &artifactSize},
+		ResumabilityStatus: factoryapi.RESUMABLE,
+	}, checkpointAt)
+	partialStatus := factoryapi.FactoryEventSessionResultStatusPartial
+	history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 3,
+		ResultStatus: partialStatus, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded partial result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
+	}, eventTime.Add(2*time.Second))
+	control := factoryevents.SessionLifecycleControlInput{SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1", Source: "runtime"}
+	history.RecordSessionPaused(control, eventTime.Add(3*time.Second))
+	if resumed {
+		history.RecordSessionResumed(control, eventTime.Add(4*time.Second))
+		finalResultStatus := factoryapi.FactoryEventSessionResultStatusFinal
+		history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
+			SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 6,
+			ResultStatus: finalResultStatus, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded final result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
+		}, eventTime.Add(5*time.Second))
+		history.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
+			SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 7,
+			FinalStatus: finalStatus, ResultStatus: &finalResultStatus, ArtifactIDs: []string{"artifact-checkpoint"},
+		}, eventTime.Add(6*time.Second))
+	}
+	return history, interfaces.JavaScriptCheckpointRecord{
+		ID: "checkpoint-public-1", Label: "Approval", Summary: "Waiting for operator input", Timestamp: checkpointAt,
+		ArtifactID: "artifact-checkpoint", ContentHash: artifactHash, SizeBytes: artifactSize,
+		RawBody: json.RawMessage(`{"secret":"must-not-replay"}`), StoragePath: "/private/checkpoint.json",
 	}
 }
 
@@ -1916,9 +1971,19 @@ func assertPortableLifecycleReplayInspection(t *testing.T, svc *FactoryService, 
 	if err != nil || len(eventRead.History) != eventCount {
 		t.Fatalf("events = %#v, %v", eventRead, err)
 	}
-	checkpointEvent, marshalErr := json.Marshal(eventRead.History[1])
-	if marshalErr != nil || !strings.Contains(string(checkpointEvent), "checkpoint-public-1") || !strings.Contains(string(checkpointEvent), "Waiting for operator input") {
-		t.Fatalf("checkpoint event = %s, %v", checkpointEvent, marshalErr)
+	checkpointEvent := []byte(nil)
+	for _, event := range eventRead.History {
+		encoded, marshalErr := json.Marshal(event)
+		if marshalErr != nil {
+			t.Fatalf("marshal replay event: %v", marshalErr)
+		}
+		if strings.Contains(string(encoded), "checkpoint-public-1") {
+			checkpointEvent = encoded
+			break
+		}
+	}
+	if !strings.Contains(string(checkpointEvent), "Waiting for operator input") {
+		t.Fatalf("checkpoint event = %s, want public checkpoint summary", checkpointEvent)
 	}
 	artifactRead, err := svc.GetDurableFactorySessionArtifact(context.Background(), sessionID, "artifact-checkpoint")
 	if err != nil || artifactRead.Id != "artifact-checkpoint" {

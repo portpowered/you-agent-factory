@@ -904,19 +904,7 @@ func portableCanonicalFacts(
 	if session.Runtime.Artifacts == nil {
 		return facts
 	}
-	for _, artifact := range *session.Runtime.Artifacts {
-		createdAt, secrets := time.Time{}, int64(0)
-		if artifact.CaptureMetadata != nil && artifact.CaptureMetadata.CapturedAt != nil {
-			createdAt = *artifact.CaptureMetadata.CapturedAt
-		}
-		if artifact.RedactionCounts != nil && artifact.RedactionCounts.Secrets != nil {
-			secrets = int64(*artifact.RedactionCounts.Secrets)
-		}
-		facts.Artifacts = append(facts.Artifacts, recording.CanonicalArtifact{
-			ID: artifact.Id, Kind: string(artifact.Kind), Visibility: string(artifact.Visibility), Label: stringPointerValue(artifact.Label),
-			ContentHash: stringPointerValue(artifact.ContentHash), SizeBytes: int64PointerValue(artifact.SizeBytes), CreatedAt: createdAt, SecretsRedacted: secrets,
-		})
-	}
+	facts.Artifacts = portableRecordingArtifacts(*session.Runtime.Artifacts, facts.Checkpoint)
 	return facts
 }
 
