@@ -1,7 +1,6 @@
 package baseline_test
 
 import (
-	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -14,11 +13,10 @@ const docsTopicIndexFixture = "testdata/docs_topic_index.txt"
 func TestDocsTopicIndexBaseline_MatchesFixture(t *testing.T) {
 	got := baseline.SerializeDocsTopicIndex()
 
-	wantBytes, err := os.ReadFile(docsTopicIndexFixture)
+	want, err := baseline.ReadFixtureText(docsTopicIndexFixture)
 	if err != nil {
 		t.Fatalf("read docs topic index baseline fixture: %v", err)
 	}
-	want := string(wantBytes)
 
 	if got == want {
 		return

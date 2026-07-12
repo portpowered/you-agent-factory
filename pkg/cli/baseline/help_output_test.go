@@ -1,7 +1,6 @@
 package baseline_test
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -65,11 +64,10 @@ func assertHelpMatchesFixture(t *testing.T, fixture string, args []string) {
 		t.Fatalf("capture help output: %v", err)
 	}
 
-	wantBytes, err := os.ReadFile(fixture)
+	want, err := baseline.ReadFixtureText(fixture)
 	if err != nil {
 		t.Fatalf("read help baseline fixture: %v", err)
 	}
-	want := baseline.NormalizeHelpOutput(string(wantBytes))
 
 	if got == want {
 		return

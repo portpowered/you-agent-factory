@@ -1,7 +1,6 @@
 package baseline_test
 
 import (
-	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -16,11 +15,10 @@ func TestCommandTreeBaseline_MatchesFixture(t *testing.T) {
 	root := cli.NewRootCommand()
 	got := baseline.SerializeCommandTree(root)
 
-	wantBytes, err := os.ReadFile(commandTreeFixture)
+	want, err := baseline.ReadFixtureText(commandTreeFixture)
 	if err != nil {
 		t.Fatalf("read command tree baseline fixture: %v", err)
 	}
-	want := string(wantBytes)
 
 	if got == want {
 		return

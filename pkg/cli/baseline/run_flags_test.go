@@ -1,7 +1,6 @@
 package baseline_test
 
 import (
-	"os"
 	"sort"
 	"strings"
 	"testing"
@@ -17,11 +16,10 @@ func TestRunFlagsBaseline_MatchesFixture(t *testing.T) {
 	runCmd := productionRunCommand(t)
 	got := baseline.SerializeRunFlags(runCmd)
 
-	wantBytes, err := os.ReadFile(runFlagsFixture)
+	want, err := baseline.ReadFixtureText(runFlagsFixture)
 	if err != nil {
 		t.Fatalf("read run flags baseline fixture: %v", err)
 	}
-	want := string(wantBytes)
 
 	if got == want {
 		return

@@ -3,7 +3,6 @@ package baseline
 import (
 	"bytes"
 	"io"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -25,10 +24,5 @@ func CaptureHelpOutput(root *cobra.Command, args []string) (string, error) {
 // NormalizeHelpOutput canonicalizes help text so fixtures stay stable across
 // platforms and repeated runs.
 func NormalizeHelpOutput(output string) string {
-	normalized := strings.ReplaceAll(output, "\r\n", "\n")
-	normalized = strings.ReplaceAll(normalized, "\r", "\n")
-	if normalized != "" && !strings.HasSuffix(normalized, "\n") {
-		normalized += "\n"
-	}
-	return normalized
+	return NormalizeFixtureText(output)
 }
