@@ -29,10 +29,10 @@ func TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult(t *testing.
 	assertLiveProviderDispatchExecutionMode(t, service, runResponse.SessionId)
 }
 
-// TestRunSync_LiveProviderJavaScriptSession_ReReadAcrossFreshServices proves
-// runtime-backed CLI inspection survives separate service construction, matching
-// separate `you workflow` CLI invocations without an injected in-memory Service.
-func TestRunSync_LiveProviderJavaScriptSession_ReReadAcrossFreshServices(t *testing.T) {
+// TestRunSync_LiveProviderJavaScriptSession_RequiresConfiguredProvider proves
+// the CLI does not silently install a fake provider when live execution is
+// requested without an injected execution service.
+func TestRunSync_LiveProviderJavaScriptSession_RequiresConfiguredProvider(t *testing.T) {
 	projectRoot := setupCLIAgentRunWorkflowFixture(t)
 	backend := sessionexecution.ExecutionBackendConfig{
 		Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
@@ -40,7 +40,7 @@ func TestRunSync_LiveProviderJavaScriptSession_ReReadAcrossFreshServices(t *test
 	}
 
 	var runOutput bytes.Buffer
-	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+	err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
 		StartConfig: sessionexecution.StartConfig{
 			Mode:              sessionexecution.ExecutionModeSync,
 			RequestID:         "req-cli-live-child-fresh-service-001",
@@ -51,70 +51,9 @@ func TestRunSync_LiveProviderJavaScriptSession_ReReadAcrossFreshServices(t *test
 		ExecutionBackendConfig: backend,
 		JSON:                   true,
 		Output:                 &runOutput,
-	}); err != nil {
-		t.Fatalf("RunSync: %v", err)
-	}
-
-	var runResponse factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
-		t.Fatalf("decode run output: %v", err)
-	}
-	sessionID := runResponse.SessionId
-	if sessionID == "" {
-		t.Fatal("sessionId = empty, want durable session id")
-	}
-
-	var statusOutput bytes.Buffer
-	if err := sessionexecution.RunStatus(context.Background(), sessionexecution.StatusConfig{
-		SessionID:              sessionID,
-		ExecutionBackendConfig: backend,
-		JSON:                   true,
-		Output:                 &statusOutput,
-	}); err != nil {
-		t.Fatalf("RunStatus: %v", err)
-	}
-	var statusResponse factoryapi.FactorySessionDurableReadModel
-	if err := json.Unmarshal(bytes.TrimSpace(statusOutput.Bytes()), &statusResponse); err != nil {
-		t.Fatalf("decode status output: %v", err)
-	}
-	if statusResponse.SessionId != sessionID {
-		t.Fatalf("status sessionId = %q, want %q", statusResponse.SessionId, sessionID)
-	}
-	if statusResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("status = %q, want SUCCEEDED", statusResponse.Status)
-	}
-
-	var resultOutput bytes.Buffer
-	if err := sessionexecution.RunResult(context.Background(), sessionexecution.ResultConfig{
-		SessionID:              sessionID,
-		ExecutionBackendConfig: backend,
-		JSON:                   true,
-		Output:                 &resultOutput,
-	}); err != nil {
-		t.Fatalf("RunResult: %v", err)
-	}
-	var resultResponse factoryapi.FactorySessionResult
-	if err := json.Unmarshal(bytes.TrimSpace(resultOutput.Bytes()), &resultResponse); err != nil {
-		t.Fatalf("decode result output: %v", err)
-	}
-	if resultResponse.SessionId != sessionID {
-		t.Fatalf("result sessionId = %q, want %q", resultResponse.SessionId, sessionID)
-	}
-	if resultResponse.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultStatus = %q, want FINAL", resultResponse.ResultStatus)
-	}
-
-	var dispatchesOutput bytes.Buffer
-	if err := sessionexecution.RunDispatches(context.Background(), sessionexecution.DispatchesConfig{
-		SessionID:              sessionID,
-		ExecutionBackendConfig: backend,
-		JSON:                   true,
-		Output:                 &dispatchesOutput,
-	}); err != nil {
-		t.Fatalf("RunDispatches: %v", err)
-	}
-	if !strings.Contains(dispatchesOutput.String(), "live-provider-session-1") {
-		t.Fatalf("dispatches output = %q, want live-provider session ref", dispatchesOutput.String())
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider is required for live-provider child execution") {
+		t.Fatalf("RunSync error = %v, want missing live provider", err)
 	}
 }
 
@@ -132,11 +71,11 @@ func TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection(t *testi
 	assertLiveProviderArtifactCLIOutput(t, service, sessionID, backend)
 }
 
-func TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixtureStub(t *testing.T) {
+func TestRunSync_JavaScriptRuntimeBackend_DoesNotInstallLiveFixtureProvider(t *testing.T) {
 	projectRoot := setupCLIAgentRunWorkflowFixture(t)
 
 	var runOutput bytes.Buffer
-	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+	err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
 		StartConfig: sessionexecution.StartConfig{
 			Mode:              sessionexecution.ExecutionModeSync,
 			RequestID:         "req-cli-live-child-resolver-smoke-001",
@@ -150,19 +89,9 @@ func TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixture
 		},
 		JSON:   true,
 		Output: &runOutput,
-	}); err != nil {
-		t.Fatalf("RunSync: %v", err)
-	}
-
-	var runResponse factoryapi.FactorySessionSyncExecutionResponse
-	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
-		t.Fatalf("decode run output: %v", err)
-	}
-	if !strings.HasPrefix(runResponse.SessionId, "dur-sess-") {
-		t.Fatalf("sessionId = %q, want runtime-backed durable session id", runResponse.SessionId)
-	}
-	if runResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("status = %q, want SUCCEEDED", runResponse.Status)
+	})
+	if err == nil || !strings.Contains(err.Error(), "provider is required for live-provider child execution") {
+		t.Fatalf("RunSync error = %v, want missing live provider", err)
 	}
 }
 

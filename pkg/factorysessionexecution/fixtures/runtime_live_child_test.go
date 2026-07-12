@@ -519,6 +519,9 @@ func assertLiveChildDispatchSummary(
 	if dispatch.Status != fse.DispatchStatusCompleted {
 		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
 	}
+	if dispatch.Attempt != 1 {
+		t.Fatalf("dispatch attempt = %d, want 1", dispatch.Attempt)
+	}
 	if dispatch.Provider != "mock" {
 		t.Fatalf("dispatch provider = %q, want mock", dispatch.Provider)
 	}

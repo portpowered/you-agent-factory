@@ -15,6 +15,7 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
 // ErrServiceNotConfigured reports an application composition graph that did
@@ -150,6 +151,7 @@ type ServiceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
 	Provider          workers.Provider
+	ProviderExecutor  providerexecution.Executor
 	FakeOptions       []FakeServiceOption
 	Persistence       PersistenceChoice
 	Clock             factory.Clock
@@ -236,11 +238,14 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 			return nil, NewValidationError("projectRoot", "projectRoot is required")
 		}
 		childExecutorMode := normalizeChildExecutorMode(config.ChildExecutorMode)
-		provider := config.Provider
-		if childExecutorMode == ChildExecutorModeLive && provider == nil {
-			provider = SmokeLiveChildProvider()
+		executor := config.ProviderExecutor
+		if executor == nil && config.Provider != nil {
+			executor = providerexecution.NewProviderExecutor(config.Provider)
 		}
-		if err := validateLiveChildExecutorConfig(childExecutorMode, provider); err != nil {
+		if childExecutorMode == ChildExecutorModeLive && executor == nil {
+			return nil, NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
+		}
+		if err := validateLiveChildExecutorConfig(childExecutorMode, config.Provider); err != nil && executor == nil {
 			return nil, err
 		}
 		persistence, err := config.Persistence.resolve()
@@ -250,7 +255,8 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		return NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
 			ProjectRoot:       projectRoot,
 			ChildExecutorMode: childExecutorMode,
-			Provider:          provider,
+			Provider:          config.Provider,
+			ProviderExecutor:  executor,
 			Persistence:       persistence,
 			Clock:             config.Clock,
 		}), nil

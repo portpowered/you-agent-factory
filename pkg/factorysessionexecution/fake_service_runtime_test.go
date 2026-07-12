@@ -933,6 +933,15 @@ func testExecutionServicePersistenceChoices(t *testing.T) {
 	if disabled.(*JavaScriptRuntimeService).persistence != nil {
 		t.Fatal("disabled persistence unexpectedly configured a store")
 	}
+	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: ChildExecutorModeLive,
+		Persistence:       DisabledPersistence(),
+	}); err == nil {
+		t.Fatal("NewExecutionService(live runtime without provider) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "runtime.childExecutorMode" {
+		t.Fatalf("live runtime without provider error = %#v, want runtime.childExecutorMode ValidationError", err)
+	}
 	contradictory := PersistenceChoice{store: runtimepersist.DirectoryStore{Dir: t.TempDir()}, disabled: true}
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
 		ProjectRoot: projectRoot,

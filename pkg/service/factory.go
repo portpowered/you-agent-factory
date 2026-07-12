@@ -28,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
@@ -155,10 +156,11 @@ func composeDurableExecution(
 	return factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
 		factorysessionexecution.ServiceConfig{
-			ProjectRoot: projectRoot,
-			Provider:    cfg.ProviderOverride,
-			Persistence: persistence,
-			Clock:       clock,
+			ProjectRoot:      projectRoot,
+			Provider:         cfg.ProviderOverride,
+			ProviderExecutor: providerexecution.NewExecutor(cfg.ProviderOverride),
+			Persistence:      persistence,
+			Clock:            clock,
 		},
 	)
 }
