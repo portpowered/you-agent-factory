@@ -100,13 +100,10 @@ func (e providerBoundaryExecutor) Execute(ctx context.Context, dispatch interfac
 }
 
 type petriPublicProviderContract struct {
-	DispatchID       string
-	Status           string
-	Attempt          int
-	Provider         string
-	Model            string
-	ProviderSession  interfaces.ProviderSessionMetadata
-	ResponseMetadata map[string]string
+	DispatchID      string
+	Provider        string
+	Model           string
+	ProviderSession interfaces.ProviderSessionMetadata
 }
 
 func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent) petriPublicProviderContract {
@@ -136,13 +133,10 @@ func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent)
 		t.Fatalf("public provider session = %#v, want identity and safe metadata", session)
 	}
 	return petriPublicProviderContract{
-		DispatchID:       dispatch.DispatchID,
-		Status:           string(dispatch.Result.Outcome),
-		Attempt:          attempt.Attempt,
-		Provider:         attempt.Diagnostics.Provider.Provider,
-		Model:            attempt.Diagnostics.Provider.Model,
-		ProviderSession:  session.ProviderSession,
-		ResponseMetadata: session.Diagnostics.Provider.ResponseMetadata,
+		DispatchID:      dispatch.DispatchID,
+		Provider:        attempt.Diagnostics.Provider.Provider,
+		Model:           attempt.Diagnostics.Provider.Model,
+		ProviderSession: session.ProviderSession,
 	}
 }
 

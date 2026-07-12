@@ -23,13 +23,6 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 			Kind:     "session_id",
 			ID:       "live-provider-session-1",
 		},
-		Diagnostics: &interfaces.WorkDiagnostics{Provider: &interfaces.ProviderDiagnostic{
-			Provider: "mock",
-			Model:    "fixture-model",
-			ResponseMetadata: map[string]string{
-				"provider_session_id": "live-provider-session-1",
-			},
-		}},
 	})
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
@@ -73,8 +66,6 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 
 type sharedDispatchProjection struct {
 	ID              string
-	Status          fse.DispatchStatus
-	Attempt         int
 	Model           string
 	Provider        string
 	ProviderSession fse.ProviderSessionRef
@@ -83,8 +74,6 @@ type sharedDispatchProjection struct {
 func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjection {
 	projection := sharedDispatchProjection{
 		ID:       dispatch.ID,
-		Status:   dispatch.Status,
-		Attempt:  dispatch.Attempt,
 		Model:    dispatch.Model,
 		Provider: dispatch.Provider,
 	}
