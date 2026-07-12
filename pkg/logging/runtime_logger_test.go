@@ -460,7 +460,7 @@ func assertRuntimeLogPathFormat(t *testing.T, path, rootDir, runtimeInstanceID s
 	if ok, err := regexp.MatchString(`^\d{2}$`, parts[2]); err != nil || !ok {
 		t.Fatalf("day directory = %q, want dd", parts[2])
 	}
-	filenamePattern := regexp.MustCompile(`^(\d{6}\.\d{9})-` + regexp.QuoteMeta(runtimeInstanceID) + `-[A-Za-z0-9_.-]+\.log$`)
+	filenamePattern := regexp.MustCompile(`^(\d{6}\.\d{9})-runtime-log-` + regexp.QuoteMeta(runtimeInstanceID) + `-[A-Za-z0-9_.-]+\.log$`)
 	matches := filenamePattern.FindStringSubmatch(parts[3])
 	if matches == nil {
 		t.Fatalf("runtime log filename = %q, want sortable UTC time, runtime ID, and uniqueness suffix", parts[3])
@@ -477,7 +477,7 @@ func assertRuntimeLogPathFormat(t *testing.T, path, rootDir, runtimeInstanceID s
 func assertPathContainsRuntimeInstanceID(t *testing.T, path, runtimeInstanceID string) {
 	t.Helper()
 
-	if !strings.Contains(filepath.Base(path), "-"+runtimeInstanceID+"-") {
+	if !strings.Contains(filepath.Base(path), "-runtime-log-"+runtimeInstanceID+"-") {
 		t.Fatalf("runtime log path %q does not include runtime instance ID %q", path, runtimeInstanceID)
 	}
 }

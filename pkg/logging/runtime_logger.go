@@ -6,10 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
@@ -22,8 +20,8 @@ import (
 const (
 	legacyRuntimeLogDirName  = ".agent-factory"
 	runtimeLogSubdirName     = "logs"
-	runtimeLogExtension      = ".log"
-	runtimeLogTimeLayout     = "150405.000000000"
+	runtimeLogExtension  = defaultpaths.RuntimeArtifactExtension
+	runtimeLogTimeLayout = defaultpaths.RuntimeArtifactTimeLayout
 	defaultRuntimeLogMaxSize = 100
 	defaultRuntimeLogBackups = 20
 	defaultRuntimeLogMaxAge  = 30
@@ -265,41 +263,8 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 }
 
 func runtimeLogPath(rootDir, runtimeInstanceID string, startTime time.Time, uniqueID string) string {
-	startTime = startTime.UTC()
-	filename := fmt.Sprintf(
-		"%s-%s-%s%s",
-		startTime.Format(runtimeLogTimeLayout),
-		safeRuntimeLogPathComponent(runtimeInstanceID),
-		safeRuntimeLogPathComponent(uniqueID),
-		runtimeLogExtension,
-	)
-	return filepath.Join(defaultpaths.RuntimeLogsDatedDir(rootDir, startTime), filename)
-}
-
-func safeRuntimeLogPathComponent(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return "unknown"
-	}
-	var b strings.Builder
-	b.Grow(len(value))
-	lastUnderscore := false
-	for _, r := range value {
-		if r == '-' || r == '_' || r == '.' || unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-			lastUnderscore = false
-			continue
-		}
-		if !lastUnderscore {
-			b.WriteByte('_')
-			lastUnderscore = true
-		}
-	}
-	trimmed := strings.Trim(b.String(), "_.-")
-	if trimmed == "" {
-		return "unknown"
-	}
-	return trimmed
+	suffix := defaultpaths.RuntimeArtifactPathComponents(runtimeInstanceID, uniqueID)
+	return defaultpaths.RuntimeArtifactPath(rootDir, startTime, defaultpaths.RuntimeArtifactKindLog, suffix)
 }
 
 func normalizeRuntimeLogConfig(config RuntimeLogConfig) RuntimeLogConfig {

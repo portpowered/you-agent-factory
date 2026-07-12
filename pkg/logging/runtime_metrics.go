@@ -252,16 +252,8 @@ func (w *runtimeMetricsWriter) Close() error {
 }
 
 func runtimeMetricsPath(rootDir, sessionID, runtimeInstanceID string, startTime time.Time, uniqueID string) string {
-	startTime = startTime.UTC()
-	filename := fmt.Sprintf(
-		"%s-%s-%s-%s%s",
-		startTime.Format(runtimeLogTimeLayout),
-		safeRuntimeLogPathComponent(sessionID),
-		safeRuntimeLogPathComponent(runtimeInstanceID),
-		safeRuntimeLogPathComponent(uniqueID),
-		runtimeLogExtension,
-	)
-	return filepath.Join(defaultpaths.RuntimeMetricsDatedDir(rootDir, startTime), filename)
+	suffix := defaultpaths.RuntimeArtifactPathComponents(sessionID, runtimeInstanceID, uniqueID)
+	return defaultpaths.RuntimeArtifactPath(rootDir, startTime, defaultpaths.RuntimeArtifactKindMetrics, suffix)
 }
 
 func normalizeRuntimeMetricsConfig(config RuntimeMetricsConfig) RuntimeMetricsConfig {
