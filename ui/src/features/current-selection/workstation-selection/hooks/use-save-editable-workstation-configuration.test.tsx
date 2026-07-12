@@ -4,10 +4,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import { DashboardSessionStoreTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import { mockFactoryDocumentSave } from "../../../../testing/factory-document-save-mocks";
 import { staleFactoryVersionTarget } from "../../../../testing/factory-validation-target-fixtures";
 import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
-import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
 import type { EditableWorkstationConfigurationState } from "../lib/keys/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
@@ -488,8 +488,12 @@ describe("useSaveEditableWorkstationConfiguration", () => {
   });
 
   it("saves model invoke workstation bindings through the scoped running-factory save payload", async () => {
-    const { editableConfigurationState, expectedSavePayload, markChangesSaved, saveAsync } =
-      buildModelInvokeSaveScenario();
+    const {
+      editableConfigurationState,
+      expectedSavePayload,
+      markChangesSaved,
+      saveAsync,
+    } = buildModelInvokeSaveScenario();
     vi.spyOn(
       factoryDocumentSaveHooks,
       "useFactoryDocumentSave",
@@ -578,7 +582,9 @@ function createQueryClientWrapper() {
   return function QueryClientWrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };
@@ -671,7 +677,9 @@ function buildReadyEditableConfigurationState(overrides?: {
     schedule: string;
     triggerAtStart?: boolean;
   };
-  draft?: Partial<Extract<EditableWorkstationConfigurationState, { status: "ready" }>["draft"]>;
+  draft?: Partial<
+    Extract<EditableWorkstationConfigurationState, { status: "ready" }>["draft"]
+  >;
   hasValidationErrors?: boolean;
   markChangesSaved?: () => void;
   pendingFactoryDefinition?: EditableWorkstationConfigurationState extends {

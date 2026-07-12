@@ -141,22 +141,7 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 
 	collector := newNamedFactoryListCollector(currentName, len(children))
 	for _, child := range children {
-		if !child.IsDir() {
-			continue
-		}
-		name := child.Name()
-		if isReservedNamedFactoryListDir(name) {
-			continue
-		}
-		factoryDir := filepath.Join(rootDir, name)
-		if err := requireFactoryConfig(factoryDir); err != nil {
-			continue
-		}
-		displayName, err := NamedFactoryLayoutSegmentToName(name)
-		if err != nil {
-			continue
-		}
-		collector.append(displayName, factoryDir)
+		collectNamedFactoriesFromRootChild(rootDir, child, collector)
 	}
 
 	entries := collector.entries()
@@ -185,6 +170,64 @@ func validateNamedFactoryListRoot(rootDir string) error {
 
 func isReservedNamedFactoryListDir(name string) bool {
 	return name == interfaces.InputsDir || name == interfaces.WorkersDir || name == interfaces.WorkstationsDir
+}
+
+func isNamedFactoryStagingDir(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.Contains(name, ".staging-")
+}
+
+func isLegacyEncodedNamedFactoryLeaf(name string) bool {
+	return strings.Contains(name, "%2F")
+}
+
+func shouldSkipNamedFactoryListEntry(name string) bool {
+	return isReservedNamedFactoryListDir(name) ||
+		isNamedFactoryStagingDir(name) ||
+		isLegacyEncodedNamedFactoryLeaf(name)
+}
+
+func collectNamedFactoriesFromRootChild(rootDir string, child os.DirEntry, collector *namedFactoryListCollector) {
+	if !child.IsDir() {
+		return
+	}
+	name := child.Name()
+	if shouldSkipNamedFactoryListEntry(name) {
+		return
+	}
+	factoryDir := filepath.Join(rootDir, name)
+	if err := requireFactoryConfig(factoryDir); err == nil {
+		displayName, err := NamedFactoryLayoutSegmentToName(name)
+		if err != nil {
+			return
+		}
+		collector.append(displayName, factoryDir)
+		return
+	}
+	collectScopedNamedFactories(factoryDir, name, collector)
+}
+
+func collectScopedNamedFactories(scopeDir, scopeName string, collector *namedFactoryListCollector) {
+	if !strings.HasPrefix(scopeName, scopedNamedFactoryPrefix) {
+		return
+	}
+	scopeChildren, err := os.ReadDir(scopeDir)
+	if err != nil {
+		return
+	}
+	for _, scopeChild := range scopeChildren {
+		if !scopeChild.IsDir() || isNamedFactoryStagingDir(scopeChild.Name()) {
+			continue
+		}
+		scopedFactoryDir := filepath.Join(scopeDir, scopeChild.Name())
+		if err := requireFactoryConfig(scopedFactoryDir); err != nil {
+			continue
+		}
+		displayName, err := NamedFactoryNameFromPathSegments([]string{scopeName, scopeChild.Name()})
+		if err != nil {
+			continue
+		}
+		collector.append(displayName, scopedFactoryDir)
+	}
 }
 
 type namedFactoryListCollector struct {
@@ -242,11 +285,7 @@ func DeleteNamedFactory(rootDir, name string) error {
 		return fmt.Errorf("factory root is required")
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(name)
-	if err != nil {
-		return err
-	}
-	canonicalName, err := NamedFactoryLayoutSegmentToName(segment)
+	canonicalName, err := canonicalNamedFactoryName(name)
 	if err != nil {
 		return err
 	}
@@ -263,13 +302,13 @@ func DeleteNamedFactory(rootDir, name string) error {
 	if current == canonicalName {
 		return fmt.Errorf(
 			"delete factory %q: %w: switch .current-factory to another factory first",
-			segment,
+			canonicalName,
 			ErrNamedFactoryIsCurrent,
 		)
 	}
 
 	if err := os.RemoveAll(factoryDir); err != nil {
-		return fmt.Errorf("delete factory %q: %w", segment, err)
+		return fmt.Errorf("delete factory %q: %w", canonicalName, err)
 	}
 	return nil
 }

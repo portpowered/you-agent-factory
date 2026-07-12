@@ -600,12 +600,15 @@ function resolveRuntimeCommand(args) {
 
 function spawnRuntime(args, extraEnv = {}, options = {}) {
   const runtime = resolveRuntimeCommand(args);
-  return spawn(runtime.command, runtime.args, {
+  const child = spawn(runtime.command, runtime.args, {
     cwd: packageRoot,
+    detached: process.platform !== "win32",
     env: createBunEnv(extraEnv, options),
     shell: false,
     stdio: "pipe",
   });
+  child[repoProcessGroupKey] = process.platform !== "win32";
+  return child;
 }
 
 function spawnRepoProcess(command, args, options = {}) {
@@ -1044,7 +1047,7 @@ export async function startBrowserPreview() {
   const preview = await state.previewPromise;
   return {
     ...preview,
-    stop: async () => {},
+    stop: stopBrowserPreview,
   };
 }
 
@@ -1373,7 +1376,7 @@ export async function startFactoryApiServer({
     return {
       factoryDir: sessionState.session.factoryDir,
       folderPath: sessionState.session.folderPath,
-      id: sessionState.session.id,
+      id: resolvedFactorySessionIDForSession(sessionState.session),
       isDefault: sessionState.session.isDefault,
       project: sessionState.session.project,
       runtime: {
@@ -1407,7 +1410,7 @@ export async function startFactoryApiServer({
   }
 
   function bumpEditableFactoryDefinitionVersion(sessionID) {
-    const sessionState = sessionRegistry.state.get(sessionID);
+    const sessionState = sessionStateForRequest(sessionID);
     sessionState.version = {
       logical: sessionState.version.logical + 1,
       physical: new Date().toISOString(),
@@ -1440,7 +1443,9 @@ export async function startFactoryApiServer({
       });
       response.end(
         JSON.stringify({
-          sessions: sessionRegistry.sessions,
+          sessions: sessionRegistry.sessions.map((session) =>
+            buildFactorySessionDocument(session.id),
+          ),
         }),
       );
       return;
