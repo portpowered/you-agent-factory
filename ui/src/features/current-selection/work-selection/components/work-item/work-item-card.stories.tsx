@@ -1,4 +1,4 @@
-import { expect, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import "../../../../../styles.css";
 import type {
@@ -219,29 +219,72 @@ const codexFailureMessage =
   "Model gpt-5.6-sol requires a newer version of Codex. Update Codex to a compatible release before retrying this provider request; the installed version cannot run the selected model.";
 
 export const ProviderFailureDetails = {
-  render: () => (
-    <SelectedWorkDispatchHistoryStory
-      request={{
-        ...dashboardWorkstationRequestFixtures.errored,
-        failure_message: codexFailureMessage,
-        failure_reason: "provider_version_incompatible",
-        inference_attempts:
-          dashboardWorkstationRequestFixtures.errored.inference_attempts?.map(
-            (attempt) => ({
-              ...attempt,
-              failure_detail: {
-                errorClass: "provider_version_incompatible",
-                message: codexFailureMessage,
-                reason: "provider_version_incompatible",
-              },
-            }),
-          ),
-        response_view: {
-          ...dashboardWorkstationRequestFixtures.errored.response_view,
+  render: () => {
+    const { dispatchID } = getSelectedWorkItemFixture();
+
+    return (
+      <SelectedWorkDispatchHistoryStory
+        request={{
+          ...dashboardWorkstationRequestFixtures.errored,
+          dispatch_id: dispatchID,
           failure_message: codexFailureMessage,
           failure_reason: "provider_version_incompatible",
-        },
-      }}
-    />
-  ),
+          inference_attempts:
+            dashboardWorkstationRequestFixtures.errored.inference_attempts?.map(
+              (attempt) => ({
+                ...attempt,
+                dispatch_id: dispatchID,
+                failure_detail: {
+                  errorClass: "provider_version_incompatible",
+                  message: codexFailureMessage,
+                  reason: "provider_version_incompatible",
+                },
+              }),
+            ),
+          response_view: {
+            ...dashboardWorkstationRequestFixtures.errored.response_view,
+            failure_message: codexFailureMessage,
+            failure_reason: "provider_version_incompatible",
+          },
+        }}
+      />
+    );
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const inferenceHeading = canvas.getByRole("heading", {
+      name: "Inference attempts",
+    });
+    const inferenceToggle =
+      inferenceHeading.parentElement?.parentElement?.parentElement?.querySelector(
+        "button",
+      );
+
+    if (!inferenceToggle) {
+      throw new Error("expected provider failure detail toggles");
+    }
+
+    await userEvent.click(inferenceToggle);
+    await userEvent.click(
+      canvas.getByRole("button", { name: "Expand attempt 1" }),
+    );
+    const failureHeading = canvas.getByRole("heading", {
+      name: "Failure details",
+    });
+    const failureToggle =
+      failureHeading.parentElement?.parentElement?.parentElement?.querySelector(
+        "button",
+      );
+
+    if (!failureToggle) {
+      throw new Error("expected provider failure detail toggles");
+    }
+
+    await userEvent.click(failureToggle);
+
+    await expect(
+      canvas.getAllByText("provider_version_incompatible"),
+    ).not.toHaveLength(0);
+    await expect(canvas.getAllByText(codexFailureMessage)).not.toHaveLength(0);
+  },
 };
