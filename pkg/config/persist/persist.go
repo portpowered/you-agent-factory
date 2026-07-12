@@ -116,6 +116,18 @@ func ValidateNamedFactoryName(name string) error {
 	return config.ValidateNamedFactoryName(name)
 }
 
+// NamedFactoryPathSegments returns the validated hierarchical path segments for
+// a canonical named-factory display name.
+func NamedFactoryPathSegments(name string) ([]string, error) {
+	return config.NamedFactoryPathSegments(name)
+}
+
+// MapNamedFactoryDir maps a canonical named-factory display name to its
+// hierarchical on-disk directory under factoriesRoot.
+func MapNamedFactoryDir(factoriesRoot, name string) (string, error) {
+	return config.MapNamedFactoryDir(factoriesRoot, name)
+}
+
 // NamedFactoryNameToLayoutSegment maps a canonical named-factory display name
 // into the single on-disk directory segment used under a factory root.
 func NamedFactoryNameToLayoutSegment(name string) (string, error) {

@@ -109,6 +109,27 @@ func assertScopedNamedFactoryList(t *testing.T, rootDir string) {
 	}
 }
 
+func TestMapNamedFactoryDir_HierarchicalScopedLayout(t *testing.T) {
+	rootDir := t.TempDir()
+
+	got, err := MapNamedFactoryDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(@you/goal): %v", err)
+	}
+	want := filepath.Join(rootDir, "@you", "goal")
+	if got != want {
+		t.Fatalf("MapNamedFactoryDir(@you/goal) = %q, want %q", got, want)
+	}
+
+	segments, err := NamedFactoryPathSegments("@you/goal")
+	if err != nil {
+		t.Fatalf("NamedFactoryPathSegments(@you/goal): %v", err)
+	}
+	if len(segments) != 2 || segments[0] != "@you" || segments[1] != "goal" {
+		t.Fatalf("segments = %#v, want [@you goal]", segments)
+	}
+}
+
 func TestNamedFactoryNameLayoutSegment_RoundTrip(t *testing.T) {
 	tests := []struct {
 		name        string

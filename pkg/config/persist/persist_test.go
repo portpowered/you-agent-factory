@@ -142,6 +142,36 @@ func TestNamedFactoryHelpers_MatchConfigPackage(t *testing.T) {
 func assertNamedFactorySegmentHelpersMatchConfig(t *testing.T) {
 	t.Helper()
 
+	facadeSegments, err := persist.NamedFactoryPathSegments("@you/goal")
+	if err != nil {
+		t.Fatalf("persist.NamedFactoryPathSegments: %v", err)
+	}
+	configSegments, err := config.NamedFactoryPathSegments("@you/goal")
+	if err != nil {
+		t.Fatalf("config.NamedFactoryPathSegments: %v", err)
+	}
+	if len(facadeSegments) != len(configSegments) {
+		t.Fatalf("path segments = %#v vs %#v", facadeSegments, configSegments)
+	}
+	for i := range facadeSegments {
+		if facadeSegments[i] != configSegments[i] {
+			t.Fatalf("path segment[%d] = %q vs %q", i, facadeSegments[i], configSegments[i])
+		}
+	}
+
+	rootDir := t.TempDir()
+	facadeDir, err := persist.MapNamedFactoryDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("persist.MapNamedFactoryDir: %v", err)
+	}
+	configDir, err := config.MapNamedFactoryDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("config.MapNamedFactoryDir: %v", err)
+	}
+	if facadeDir != configDir {
+		t.Fatalf("mapped dir = %q vs %q", facadeDir, configDir)
+	}
+
 	facadeSegment, err := persist.NamedFactoryNameToLayoutSegment("@you/tts")
 	if err != nil {
 		t.Fatalf("persist.NamedFactoryNameToLayoutSegment: %v", err)

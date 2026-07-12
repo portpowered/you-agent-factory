@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/inboxgitkeep"
+	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -729,6 +730,29 @@ const (
 	defaultProjectNamedFactoryRoot = "factory"
 	scopedNamedFactoryPrefix       = "@"
 )
+
+// NamedFactoryPathSegments returns the validated hierarchical path segments for
+// a canonical named-factory display name.
+func NamedFactoryPathSegments(name string) ([]string, error) {
+	segments, err := namedfactorypath.PathSegments(name)
+	if err != nil {
+		return nil, wrapInvalidNamedFactoryName(name, err)
+	}
+	return segments, nil
+}
+
+// MapNamedFactoryDir maps a canonical named-factory display name to its
+// hierarchical on-disk directory under factoriesRoot.
+func MapNamedFactoryDir(factoriesRoot, name string) (string, error) {
+	if strings.TrimSpace(factoriesRoot) == "" {
+		return "", fmt.Errorf("factory root is required")
+	}
+	dir, err := namedfactorypath.MapDir(factoriesRoot, name)
+	if err != nil {
+		return "", wrapInvalidNamedFactoryName(name, err)
+	}
+	return dir, nil
+}
 
 // NamedFactoryNameToLayoutSegment maps a canonical named-factory display name into the single on-disk directory segment used under a factory root.
 func NamedFactoryNameToLayoutSegment(name string) (string, error) {
