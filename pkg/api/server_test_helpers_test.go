@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,6 +67,12 @@ func newTestServerWithCodexRoot(root string) *Server {
 	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
 }
 
+func newTestServerWithUnavailableCursorRoot(t *testing.T) *Server {
+	t.Helper()
+	missingRoot := filepath.Join(t.TempDir(), "cursor-root-unavailable")
+	return newTestServerWithCursorRoot(missingRoot)
+}
+
 func newTestServerWithCursorRoot(root string) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{
@@ -73,6 +80,18 @@ func newTestServerWithCursorRoot(root string) *Server {
 			Tokens: make(map[string]*interfaces.Token),
 		},
 	}, 8080, logger, ServerOptions{CursorSessionsRoot: root})
+}
+
+func newTestServerWithProviderSessionRoots(codexRoot, cursorRoot string) *Server {
+	logger, _ := zap.NewDevelopment()
+	return NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, logger, ServerOptions{
+		CodexSessionsRoot:  codexRoot,
+		CursorSessionsRoot: cursorRoot,
+	})
 }
 
 func writeProviderSessionFixture(t *testing.T, root, id, contents string) {
@@ -101,12 +120,33 @@ func writeNamedProviderSessionFixture(t *testing.T, root, fileName, contents str
 	}
 }
 
+// customerCursorProviderSessionID mirrors the UUID-shaped session_id from the
+// reported Windows provider-session detail failure mode.
+const customerCursorProviderSessionID = "ed332681-38eb-485f-b3d3-d8b6df3a450b"
+
+// customerCursorWorkspaceHash mirrors the workspace-hash directory layout under ~/.cursor/chats.
+const customerCursorWorkspaceHash = "d2191e81bfe68d31807c1e354ea83571"
+
 func writeCursorProviderSessionFixture(t *testing.T) (root string, sessionID string) {
 	t.Helper()
 
 	root = t.TempDir()
 	sessionID = "cursor-api-readable"
-	dbPath := filepath.Join(root, "workspace-hash", sessionID, "store.db")
+	return writeCursorProviderSessionFixtureAt(t, root, "workspace-hash", sessionID)
+}
+
+func writeCursorProviderSessionUUIDFixture(t *testing.T) (root string, sessionID string) {
+	t.Helper()
+
+	root = t.TempDir()
+	sessionID = customerCursorProviderSessionID
+	return writeCursorProviderSessionFixtureAt(t, root, customerCursorWorkspaceHash, sessionID)
+}
+
+func writeCursorProviderSessionFixtureAt(t *testing.T, root, workspaceHash, sessionID string) (string, string) {
+	t.Helper()
+
+	dbPath := filepath.Join(root, workspaceHash, sessionID, "store.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		t.Fatalf("mkdir cursor provider fixture: %v", err)
 	}
@@ -132,7 +172,7 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 	if _, err := db.Exec(
 		`INSERT INTO meta (key, value) VALUES (?, ?)`,
 		"0",
-		`{"createdAt":1000,"agentId":"cursor-api-readable","name":"API fixture session"}`,
+		`{"createdAt":1000,"agentId":"`+sessionID+`","name":"API fixture session"}`,
 	); err != nil {
 		t.Fatalf("insert cursor provider session meta: %v", err)
 	}
@@ -150,11 +190,58 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 	}
 	if resolved, err := cursorstorage.ResolveStoreDB(normalizedRoot, sessionID); err != nil {
 		t.Fatalf("resolve cursor provider fixture: %v", err)
-	} else if resolved.RelativePath != "workspace-hash/"+sessionID+"/store.db" {
-		t.Fatalf("resolved relative path = %q, want workspace-hash/%s/store.db", resolved.RelativePath, sessionID)
+	} else if resolved.RelativePath != filepath.ToSlash(filepath.Join(workspaceHash, sessionID, "store.db")) {
+		t.Fatalf("resolved relative path = %q, want %s/%s/store.db", resolved.RelativePath, workspaceHash, sessionID)
 	}
 
 	return root, sessionID
+}
+
+// providerSessionDetailURLFromEventRef builds the GET path the dashboard uses to
+// load a provider session from an event-emitted LoadableProviderSessionRef.
+func providerSessionDetailURLFromEventRef(ref factoryapi.LoadableProviderSessionRef) string {
+	query := url.Values{}
+	query.Set("provider", string(ref.Provider))
+	query.Set("kind", string(ref.Kind))
+	query.Set("id", ref.Id)
+	return "/provider-sessions/detail?" + query.Encode()
+}
+
+// loadableProviderSessionRefFromEventMetadata mirrors dispatch/event projection of
+// canonical provider-session metadata onto the loadable detail contract.
+func loadableProviderSessionRefFromEventMetadata(session interfaces.ProviderSessionMetadata) factoryapi.LoadableProviderSessionRef {
+	return factoryapi.LoadableProviderSessionRef{
+		Provider: factoryapi.LoadableProviderSessionProvider(interfaces.CanonicalProviderSessionProvider(session.Provider)),
+		Kind:     factoryapi.LoadableProviderSessionKind(session.Kind),
+		Id:       session.ID,
+	}
+}
+
+func assertProviderSessionDetailLoadsFromEventRef(
+	t *testing.T,
+	srv *Server,
+	ref factoryapi.LoadableProviderSessionRef,
+	wantProvider factoryapi.LoadableProviderSessionProvider,
+) factoryapi.ProviderSessionDetailResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, providerSessionDetailURLFromEventRef(ref), nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 for event ref %#v: %s", rec.Code, ref, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
+	if string(resp.ProviderSession.Provider) != string(wantProvider) ||
+		string(resp.ProviderSession.Kind) != string(ref.Kind) ||
+		resp.ProviderSession.Id != ref.Id {
+		t.Fatalf("provider session = %#v, want provider=%s kind=%s id=%s", resp.ProviderSession, wantProvider, ref.Kind, ref.Id)
+	}
+	if resp.Source.RelativePath == "" || resp.Source.SizeBytes == 0 {
+		t.Fatalf("source = %#v, want rooted source metadata for event ref %#v", resp.Source, ref)
+	}
+	return resp
 }
 
 func readSSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {
