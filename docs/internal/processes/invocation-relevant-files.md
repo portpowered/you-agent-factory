@@ -264,7 +264,10 @@ primary-result behavior.
   assert no factory API/dashboard listener is bound.
 - No-server bootstrap CLI/API invocation-equivalence proof lives in
   `pkg/cli/run/run_invocation_test.go`
-  (`TestRun_NoServerBootstrapCLIAndAPIInvocationEquivalence`), capturing real
+  (`TestRun_NoServerBootstrap_PositionalInputMatchesAPIContract`,
+  `TestRun_NoServerBootstrap_StdinInputMatchesAPIContract`,
+  `TestRun_NoServerBootstrap_SuccessJSONMatchesAPIProjection`,
+  `TestRun_NoServerBootstrap_TextPrimaryResultFollowsInvocationReturn`), capturing real
   `defaultBuildInvocationBootstrap` invoke requests/results and comparing them
   to the shared API text-input resolver plus `apisurface.InvocationResponseFromResult`
   projection for packaged `@you/goal` primary-result selection.
