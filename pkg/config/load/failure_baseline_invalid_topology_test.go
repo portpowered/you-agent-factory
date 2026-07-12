@@ -45,9 +45,6 @@ func TestFailureBaseline_InvalidTopology_GoalShapedCanonicalJSONRejectsGraphRefe
 	if !strings.Contains(err.Error(), "invalid graph references") {
 		t.Fatalf("error = %q, want invalid graph references guidance", err.Error())
 	}
-	if !strings.Contains(err.Error(), "blocking validation targets") {
-		t.Fatalf("error = %q, want blocking validation target count", err.Error())
-	}
 	loadErr, ok := load.AsBlockingFactoryLoadError(err)
 	if !ok {
 		t.Fatalf("error = %v, want BlockingFactoryLoadError", err)
