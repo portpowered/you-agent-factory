@@ -225,6 +225,9 @@ func applyOutputPayloadPropagation(
 	case interfaces.WorkPropagationModePreserveInput:
 		return ApplyPreservedInputToColor(color, in.InputColors, targetTypeID, in.WorkstationName)
 	default:
+		if shouldPreserveRequestWorkPayloadOnOutcome(in, place, workTypes, color.WorkTypeID) {
+			return nil
+		}
 		if in.Output != "" {
 			color.Payload = []byte(in.Output)
 		}
@@ -234,6 +237,22 @@ func applyOutputPayloadPropagation(
 			}
 		}
 		return nil
+	}
+}
+
+func shouldPreserveRequestWorkPayloadOnOutcome(
+	in OutputTokenInput,
+	place *petri.Place,
+	workTypes map[string]*state.WorkType,
+	workTypeID string,
+) bool {
+	switch in.Outcome {
+	case interfaces.OutcomeFailed:
+		return true
+	case interfaces.OutcomeRejected:
+		return isRejectedFailurePlace(place, workTypes, workTypeID)
+	default:
+		return false
 	}
 }
 

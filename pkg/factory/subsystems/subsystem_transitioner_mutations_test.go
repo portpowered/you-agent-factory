@@ -547,6 +547,48 @@ func TestCalculateMutations_OutputAsPayload_Continue_UsesNextTurnContent(t *test
 	}
 }
 
+func TestCalculateMutations_OutputAsPayload_Failed_PreservesRequestContentAndDiagnostics(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	mutations, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "fail", PlaceID: "wt-code:failed"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeFailed,
+			output:       "worker-output",
+			err:          "agent crashed",
+		},
+		&interfaces.FactoryWorkstationConfig{
+			Name: "execute-story",
+			WorkPropagation: &interfaces.WorkPropagationConfig{
+				Mode: interfaces.WorkPropagationModeOutputAsPayload,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+	token := mutations[0].NewToken
+	if string(token.Color.Payload) != "input-payload" {
+		t.Fatalf("payload = %q, want preserved request payload", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+		t.Fatalf("content = %#v, want preserved request content not worker output", token.Color.Content)
+	}
+	if token.History.LastError != "agent crashed" {
+		t.Fatalf("LastError = %q, want failure diagnostics", token.History.LastError)
+	}
+}
+
 func TestCalculateMutations_PreserveInput_WithoutConsumedWorkInput_ReturnsDiagnostic(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed = nil

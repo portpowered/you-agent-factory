@@ -239,6 +239,51 @@ func TestClassifyMissingPrimaryResult_ReturnsNeedsHumanForScopedWorkItem(t *test
 	})
 }
 
+func TestResolvePrimaryResult_FailedTerminalDoesNotReturnResponseShapedContent(t *testing.T) {
+	state := invocationWorldStateFixture()
+	requestContent := []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "submitted request text",
+	}}
+	responseContent := []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "worker response that must not become primary result",
+	}}
+	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
+	rootInitial.Content = requestContent
+	rootFailed := invocationWorkItem("work-root", "task", "failed", "root", "task:failed")
+	rootFailed.Content = responseContent
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.TerminalWorkByID[rootFailed.ID] = interfaces.FactoryTerminalWork{WorkItem: rootFailed, Status: "FAILED"}
+	state.FailedWorkItemsByID[rootFailed.ID] = rootFailed
+
+	_, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err == nil {
+		t.Fatal("ResolvePrimaryResult() error = nil, want unresolved primary result for failed terminal work")
+	}
+	primaryErr, ok := err.(*PrimaryResultError)
+	if !ok {
+		t.Fatalf("error = %T, want *PrimaryResultError", err)
+	}
+	if primaryErr.Code != PrimaryResultErrorCodeUnresolved {
+		t.Fatalf("code = %q, want %q", primaryErr.Code, PrimaryResultErrorCodeUnresolved)
+	}
+
+	got, ok := ClassifyFailedInvocation("session-1", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected failed classification")
+	}
+	if got.Code != PrimaryResultErrorCodeFailed {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeFailed)
+	}
+}
+
 func TestClassifyFailedInvocation_ReturnsFailedForScopedFailedWorkItem(t *testing.T) {
 	state := invocationWorldStateFixture()
 	rootInitial := invocationWorkItem("work-root", "goal", "init", "Failed goal", "goal:init")
