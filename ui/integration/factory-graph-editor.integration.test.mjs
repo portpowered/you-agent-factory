@@ -9,11 +9,11 @@ import { buildReplayCoverageReport } from "../src/testing/replay-fixture-catalog
 import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
-  defaultFactorySessionID,
   expectNoBrowserErrors,
   exportCoverImagePath,
   fillWorkstationPromptBody,
   openBrowserPage,
+  resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
@@ -521,7 +521,7 @@ describe.sequential("factory graph editor browser integration", () => {
         });
         expect(sessionFactoryPutRequests).toHaveLength(1);
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
-          defaultFactorySessionID,
+          resolvedDefaultFactorySessionID,
         );
         expect(sessionFactoryPutRequests[0]?.body).toMatchObject({
           ...exportFactoryDefinition,
@@ -644,7 +644,11 @@ describe.sequential("factory graph editor browser integration", () => {
         const saveResponsePromise = browserPage.page.waitForResponse(
           (response) =>
             response.request().method() === "PUT" &&
-            response.url().includes("/factory-sessions/~default/factory"),
+            response
+              .url()
+              .includes(
+                `/factory-sessions/${resolvedDefaultFactorySessionID}/factory`,
+              ),
           { timeout: uiInteractionTimeoutMs },
         );
         await saveDialog
@@ -661,7 +665,9 @@ describe.sequential("factory graph editor browser integration", () => {
           .toBe(1);
 
         expect(saveRequests).toHaveLength(1);
-        expect(saveRequests[0]?.sessionID).toBe("~default");
+        expect(saveRequests[0]?.sessionID).toBe(
+          resolvedDefaultFactorySessionID,
+        );
         expect(saveRequests[0]?.body).toMatchObject({
           name: editableGraphFactoryDefinition.name,
           version: {

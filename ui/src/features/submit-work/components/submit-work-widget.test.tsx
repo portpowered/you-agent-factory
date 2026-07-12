@@ -14,13 +14,13 @@ import userEvent from "@testing-library/user-event";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import {
   DashboardSessionTestProvider,
   renderWithDashboardSessionTest,
 } from "../../../testing";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
-import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
@@ -29,7 +29,7 @@ import { SubmitWorkWidget } from "./submit-work-widget";
 
 vi.mock("../../current-factory-definition/public", async () => {
   const actual = (await vi.importActual(
-    "../../current-factory-definition/public"
+    "../../current-factory-definition/public",
   )) as typeof import("../../current-factory-definition/public");
 
   return {
@@ -1378,9 +1378,9 @@ describe("SubmitWorkWidget submission behavior", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByRole("combobox", { name: /Work type/ })).toHaveTextContent(
-      "Select a work type",
-    );
+    expect(
+      screen.getByRole("combobox", { name: /Work type/ }),
+    ).toHaveTextContent("Select a work type");
   });
 
   it("shows inline request-name validation and skips the network request when the name is blank", async () => {
@@ -1581,7 +1581,9 @@ describe("SubmitWorkWidget submission behavior", () => {
   });
 
   it("shows network submission failures through the card status panel", async () => {
-    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);
     renderSubmitWorkWidget(
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
@@ -1601,9 +1603,9 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(
       screen.getByRole("textbox", { name: /Request name/ }),
     ).not.toHaveAttribute("aria-invalid");
-    expect(screen.getByRole("combobox", { name: /Work type/ })).not.toHaveAttribute(
-      "aria-invalid",
-    );
+    expect(
+      screen.getByRole("combobox", { name: /Work type/ }),
+    ).not.toHaveAttribute("aria-invalid");
   });
 
   it("shows the server error inline and preserves the draft after a failed submission", async () => {
@@ -1831,7 +1833,9 @@ function renderSubmitWorkWidgetWithStore(element: React.ReactElement) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <DashboardSessionProvider>{element}</DashboardSessionProvider>
+      <DashboardSessionStoreTestProvider>
+        {element}
+      </DashboardSessionStoreTestProvider>
     </QueryClientProvider>,
   );
 }

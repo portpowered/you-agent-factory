@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 
 export const editableFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -50,7 +50,9 @@ export function createFactoryDocumentSaveQueryClientWrapper(
   return function QueryClientWrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };

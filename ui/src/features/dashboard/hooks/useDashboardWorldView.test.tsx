@@ -2,8 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -13,7 +13,11 @@ import { useDashboardWorldView } from "./useDashboardWorldView";
 
 function createWrapper() {
   return function Wrapper({ children }: PropsWithChildren) {
-    return <DashboardSessionProvider>{children}</DashboardSessionProvider>;
+    return (
+      <DashboardSessionStoreTestProvider>
+        {children}
+      </DashboardSessionStoreTestProvider>
+    );
   };
 }
 
