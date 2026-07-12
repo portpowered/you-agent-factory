@@ -1793,7 +1793,9 @@ func assertPortableLifecycleReplayInspection(t *testing.T, svc *FactoryService, 
 	if err != nil || artifactRead.Id != "artifact-checkpoint" {
 		t.Fatalf("checkpoint artifact = %#v, %v", artifactRead, err)
 	}
-	dispatches, err := svc.ListDurableFactorySessionDispatches(context.Background(), sessionID)
+	dispatches, err := svc.ListDurableFactorySessionDispatches(
+		context.Background(), sessionID, factoryapi.ListFactorySessionDispatchesParams{},
+	)
 	if err != nil || len(dispatches.Dispatches) != 0 {
 		t.Fatalf("dispatches = %#v, %v", dispatches, err)
 	}

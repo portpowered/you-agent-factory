@@ -7,12 +7,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
@@ -25,6 +32,7 @@ import (
 type stubInvocationService struct {
 	run    func(context.Context) error
 	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+	close  func(context.Context, string) error
 }
 
 func (s stubInvocationService) Run(ctx context.Context) error {
@@ -37,6 +45,127 @@ func (s stubInvocationService) GetCurrentFactoryForSession(context.Context, stri
 
 func (s stubInvocationService) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 	return s.invoke(ctx, sessionID, request)
+}
+
+func (s stubInvocationService) CloseFactorySession(ctx context.Context, sessionID string) error {
+	if s.close != nil {
+		return s.close(ctx, sessionID)
+	}
+	return nil
+}
+
+func TestBuildInvocationRunServiceConfig_ForcesNoServerBootstrapShape(t *testing.T) {
+	t.Parallel()
+
+	cfg := buildInvocationRunServiceConfig(RunConfig{
+		Dir:  "/tmp/factory",
+		Port: 7437,
+	}, zap.NewNop(), nil)
+	if cfg.Port != 0 {
+		t.Fatalf("Port = %d, want 0", cfg.Port)
+	}
+	if cfg.APIServerStarter != nil {
+		t.Fatal("APIServerStarter = non-nil, want nil")
+	}
+	if cfg.APIServerReady != nil {
+		t.Fatal("APIServerReady = non-nil, want nil")
+	}
+	if cfg.SimpleDashboardRenderer != nil {
+		t.Fatal("SimpleDashboardRenderer = non-nil, want nil")
+	}
+	if cfg.RuntimeMode != interfaces.RuntimeModeService {
+		t.Fatalf("RuntimeMode = %q, want %q", cfg.RuntimeMode, interfaces.RuntimeModeService)
+	}
+	if cfg.WorkFile != "" {
+		t.Fatalf("WorkFile = %q, want empty", cfg.WorkFile)
+	}
+}
+
+func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan the sprint"
+	var captured *service.FactoryServiceConfig
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		cloned := *cfg
+		captured = &cloned
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					Status: factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "done",
+					}},
+				}, nil
+			},
+		}, nil
+	}
+
+	var output bytes.Buffer
+	if err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if captured == nil {
+		t.Fatal("expected factory invocation bootstrap config capture")
+	}
+	if captured.Port != 0 {
+		t.Fatalf("captured Port = %d, want 0", captured.Port)
+	}
+	if captured.APIServerStarter != nil {
+		t.Fatal("captured APIServerStarter = non-nil, want nil")
+	}
+}
+
+func TestRun_FactoryInvocationReleasesSessionThroughFactoryServiceOwnership(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan the sprint"
+	var closedSessionID string
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					Status: factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "done",
+					}},
+				}, nil
+			},
+			close: func(_ context.Context, sessionID string) error {
+				closedSessionID = sessionID
+				return nil
+			},
+		}, nil
+	}
+
+	var output bytes.Buffer
+	if err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if closedSessionID == "" {
+		t.Fatal("expected CloseFactorySession through bootstrap ownership path")
+	}
 }
 
 func TestResolveFactoryInvocationRequest_NamedFactoryDirPositionalText(t *testing.T) {
@@ -248,7 +377,7 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 	var output bytes.Buffer
 	core, observedLogs := observer.New(zap.InfoLevel)
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -300,7 +429,7 @@ func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
 	text := "hi there"
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -344,7 +473,7 @@ func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T
 	metadataJSON := `{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP"}`
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -401,7 +530,7 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 	var output bytes.Buffer
 	var captured *service.FactoryServiceConfig
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		captured = cfg
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
@@ -461,7 +590,7 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 	text := "Fix the lint issues"
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -609,7 +738,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 			preserveRunGlobals(t)
 
 			var output bytes.Buffer
-			buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+			buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 				return stubInvocationService{
 					run: func(ctx context.Context) error {
 						<-ctx.Done()
@@ -693,7 +822,7 @@ func TestRun_NamedGoalConflictingSourcesFailsBeforeInvocation(t *testing.T) {
 	var output bytes.Buffer
 	invokeCalled := false
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -809,7 +938,7 @@ func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.
 		return sharedResult, nil
 	}
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -863,7 +992,7 @@ func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *t
 	}
 
 	var jsonOutput bytes.Buffer
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -978,7 +1107,7 @@ func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {
 	text := "pause the session"
 	var output bytes.Buffer
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -1079,6 +1208,347 @@ func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric servi
 	r.metrics = append(r.metrics, metric)
 }
 
+type capturingBootstrapRunner struct {
+	inner       sessionInvocationRunner
+	lastRequest *factoryapi.InvocationRequest
+	lastResult  *apisurface.FactoryInvocationResult
+}
+
+func (c *capturingBootstrapRunner) Run(ctx context.Context) error {
+	return c.inner.Run(ctx)
+}
+
+func (c *capturingBootstrapRunner) GetCurrentFactoryForSession(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.Factory, error) {
+	return c.inner.GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (c *capturingBootstrapRunner) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	c.lastRequest = cloneInvocationRequestForCapture(request)
+	result, err := c.inner.InvokeFactorySession(ctx, sessionID, request)
+	if err == nil {
+		captured := result
+		c.lastResult = &captured
+	}
+	return result, err
+}
+
+func (c *capturingBootstrapRunner) CloseFactorySession(ctx context.Context, sessionID string) error {
+	return c.inner.CloseFactorySession(ctx, sessionID)
+}
+
+func cloneInvocationRequestForCapture(request factoryapi.InvocationRequest) *factoryapi.InvocationRequest {
+	data, err := json.Marshal(request)
+	if err != nil {
+		panic(fmt.Sprintf("marshal invocation request for capture: %v", err))
+	}
+	var cloned factoryapi.InvocationRequest
+	if err := json.Unmarshal(data, &cloned); err != nil {
+		panic(fmt.Sprintf("unmarshal invocation request for capture: %v", err))
+	}
+	return &cloned
+}
+
+func installCapturingRealInvocationBootstrap(t *testing.T) *capturingBootstrapRunner {
+	t.Helper()
+
+	capture := &capturingBootstrapRunner{}
+	buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		inner, err := defaultBuildInvocationBootstrap(ctx, cfg)
+		if err != nil {
+			return nil, err
+		}
+		capture.inner = inner
+		return capture, nil
+	}
+	return capture
+}
+
+func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConfig {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, goal.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+
+	return RunConfig{
+		Dir:                      resolution.FactoryDir,
+		NamedFactoryName:         goal.PackagedFactoryName,
+		NamedFactoryResolution:   resolution,
+		InvocationPositionalText: &goalText,
+		StdinIsTTY:               func() bool { return true },
+		SuppressDashboardRendering: true,
+		MockWorkersEnabled:       true,
+		MockWorkersConfigPath:    writePackagedGoalNoServerMockWorkersConfig(t),
+		DisableDefaultRecording:  true,
+		Port:                     reserveNoServerInvocationProbePort(t),
+		AutoPort:                 true,
+		Logger:                   zap.NewNop(),
+	}
+}
+
+func runNoServerBootstrapEquivalenceCase(
+	t *testing.T,
+	goalText string,
+	mutate func(*RunConfig),
+) (*capturingBootstrapRunner, *bytes.Buffer) {
+	t.Helper()
+
+	preserveRunGlobals(t)
+	capture := installCapturingRealInvocationBootstrap(t)
+	cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	var output bytes.Buffer
+	cfg.Output = &output
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	if err := Run(ctx, cfg); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	return capture, &output
+}
+
+func assertCapturedRequestMatchesLogicalAPIText(t *testing.T, capture *capturingBootstrapRunner, goalText string) {
+	t.Helper()
+
+	apiRequest, err := invocationRequestFromLogicalAPIText(goalText)
+	if err != nil {
+		t.Fatalf("invocationRequestFromLogicalAPIText: %v", err)
+	}
+	if capture.lastRequest == nil {
+		t.Fatal("expected InvokeFactorySession request capture on real no-server bootstrap")
+	}
+	assertEquivalentInvocationRequests(t, capture.lastRequest, apiRequest)
+}
+
+func assertCapturedResultMatchesCLIJSONOutput(t *testing.T, capture *capturingBootstrapRunner, output *bytes.Buffer) {
+	t.Helper()
+
+	if capture.lastResult == nil {
+		t.Fatal("expected InvokeFactorySession result capture on real no-server bootstrap")
+	}
+	if capture.lastResult.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("status = %q, want %q", capture.lastResult.Status, factoryapi.InvocationTerminalStatusCompleted)
+	}
+
+	var cliResponse factoryapi.InvocationResponse
+	if err := json.Unmarshal(bytes.TrimSpace(output.Bytes()), &cliResponse); err != nil {
+		t.Fatalf("decode CLI invocation response: %v\n%s", err, output.String())
+	}
+	apiResponse := apisurface.InvocationResponseFromResult(*capture.lastResult)
+	if !reflect.DeepEqual(cliResponse, apiResponse) {
+		t.Fatalf("CLI response = %#v, API projection = %#v", cliResponse, apiResponse)
+	}
+	assertInvocationResponseMatchesFactoryResult(t, cliResponse, *capture.lastResult)
+}
+
+func TestRun_NoServerBootstrap_PositionalInputMatchesAPIContract(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-server bootstrap CLI/API invocation equivalence")
+	}
+
+	goalText := "no-server bootstrap positional parity prompt"
+	capture, _ := runNoServerBootstrapEquivalenceCase(t, goalText, nil)
+	assertCapturedRequestMatchesLogicalAPIText(t, capture, goalText)
+}
+
+func TestRun_NoServerBootstrap_StdinInputMatchesAPIContract(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-server bootstrap CLI/API invocation equivalence")
+	}
+
+	goalText := "no-server bootstrap stdin parity prompt"
+	capture, _ := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
+		cfg.InvocationPositionalText = nil
+		cfg.Stdin = strings.NewReader(goalText)
+		cfg.StdinIsTTY = func() bool { return false }
+	})
+	assertCapturedRequestMatchesLogicalAPIText(t, capture, goalText)
+}
+
+func TestRun_NoServerBootstrap_SuccessJSONMatchesAPIProjection(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-server bootstrap CLI/API invocation equivalence")
+	}
+
+	goalText := "no-server bootstrap json parity prompt"
+	capture, output := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
+		cfg.JSONOutput = true
+	})
+	assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
+}
+
+func TestRun_NoServerBootstrap_TextPrimaryResultFollowsInvocationReturn(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for no-server bootstrap CLI/API invocation equivalence")
+	}
+
+	goalText := "no-server bootstrap primary-result prompt"
+	_, output := runNoServerBootstrapEquivalenceCase(t, goalText, nil)
+	if got := output.String(); got != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want packaged goal invocationReturn primary result", got)
+	}
+	if got := output.String(); got == goalText {
+		t.Fatalf("stdout echoed submitted goal text instead of invocationReturn primary result")
+	}
+}
+
+func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for hermetic named goal no-server invocation")
+	}
+
+	preserveRunGlobals(t)
+
+	homeDir := t.TempDir()
+	setUserHomeForTest(t, homeDir)
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, goal.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+
+	mockWorkersPath := writePackagedGoalNoServerMockWorkersConfig(t)
+	probePort := reserveNoServerInvocationProbePort(t)
+	goalText := "hermetic no-server named goal prompt"
+
+	var output bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	err = Run(ctx, RunConfig{
+		Dir:                        resolution.FactoryDir,
+		NamedFactoryName:           goal.PackagedFactoryName,
+		NamedFactoryResolution:     resolution,
+		InvocationPositionalText:   &goalText,
+		StdinIsTTY:                 func() bool { return true },
+		SuppressDashboardRendering: true,
+		MockWorkersEnabled:         true,
+		MockWorkersConfigPath:      mockWorkersPath,
+		DisableDefaultRecording:    true,
+		Output:                     &output,
+		Port:                       probePort,
+		AutoPort:                   true,
+		Logger:                     zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := output.String(); got != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want primary result mock worker accepted", got)
+	}
+	assertNoServerInvocationProbePortFree(t, probePort)
+}
+
+func writePackagedGoalNoServerMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	plainEcho, plainArgs := mockWorkerEchoCommand("plain")
+	acceptedEcho, acceptedArgs := mockWorkerEchoCommand("accepted")
+	cfg := factoryconfig.MockWorkersConfig{
+		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName:      "goal-planner",
+				WorkstationName: goal.PackagedPlanWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-executor",
+				WorkstationName: goal.PackagedExecuteWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-checker",
+				WorkstationName: goal.PackagedCheckWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: plainEcho,
+					Args:    plainArgs,
+				},
+			},
+			{
+				WorkerName:      "goal-reviewer",
+				WorkstationName: goal.PackagedReviewWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: acceptedEcho,
+					Args:    acceptedArgs,
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mock workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal-no-server.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write mock workers config: %v", err)
+	}
+	return path
+}
+
+func mockWorkerEchoCommand(output string) (command string, args []string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", []string{"/c", "echo", output}
+	}
+	return "/bin/echo", []string{output}
+}
+
+func reserveNoServerInvocationProbePort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Close listener: %v", err)
+	}
+	return port
+}
+
+func assertNoServerInvocationProbePortFree(t *testing.T, port int) {
+	t.Helper()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatalf("tcp %s accepted a connection, want no factory API/dashboard listener", addr)
+	}
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("tcp %s still held by bootstrap listener: %v", addr, err)
+	}
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Close probe listener: %v", err)
+	}
+}
+
 func (r *capturingInvocationMetricsRecorder) assertContainsMetricNames(t *testing.T, want ...string) {
 	t.Helper()
 
@@ -1094,4 +1564,47 @@ func (r *capturingInvocationMetricsRecorder) assertContainsMetricNames(t *testin
 			t.Fatalf("metrics = %#v, want to include %q", r.metrics, name)
 		}
 	}
+}
+
+// TestNoServerNamedInvocationIntegrationAndEquivalenceProof is the consolidated
+// package integration and invocation-equivalence proof for hermetic named
+// one-shot invocation on the shared no-server bootstrap path. It fails if named
+// runs regress to requiring a listening HTTP server or drift from shared CLI/API
+// input-resolution and primary-result contracts.
+func TestNoServerNamedInvocationIntegrationAndEquivalenceProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("consolidated package integration and invocation-equivalence proof for no-server named invocation")
+	}
+
+	t.Run("hermetic named success without listener", func(t *testing.T) {
+		preserveRunGlobals(t)
+
+		goalText := "consolidated no-server named integration proof"
+		probePort := reserveNoServerInvocationProbePort(t)
+		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+		cfg.Port = probePort
+		cfg.AutoPort = true
+		var output bytes.Buffer
+		cfg.Output = &output
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		if err := Run(ctx, cfg); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if got := output.String(); got != "mock worker accepted" {
+			t.Fatalf("stdout = %q, want invocationReturn primary result mock worker accepted", got)
+		}
+		assertNoServerInvocationProbePortFree(t, probePort)
+	})
+
+	t.Run("shared input resolution and primary-result equivalence", func(t *testing.T) {
+		goalText := "consolidated no-server equivalence proof"
+		capture, output := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
+			cfg.JSONOutput = true
+		})
+		assertCapturedRequestMatchesLogicalAPIText(t, capture, goalText)
+		assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
+	})
 }

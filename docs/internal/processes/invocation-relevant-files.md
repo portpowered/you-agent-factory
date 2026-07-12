@@ -103,7 +103,7 @@ primary-result behavior.
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`), and `cmd/factory/main.go` (`buildCLIRuntimeRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/cli/run/run_api_compose_test.go`, and consolidated startup parity plus cross-transport composition evidence in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
+- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`, `InjectCLIRunner`), and `cmd/factory/main.go` (`buildCLIRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `InjectCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Compose regression coverage for quiet batch work-file preservation lives in `cmd/factory/compose/compose_test.go` (`TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchMode`). Focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/service/invocation_bootstrap_test.go`, `pkg/service/invocation_bootstrap_ownership_test.go`, and consolidated startup parity plus cross-transport composition evidence in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
@@ -264,6 +264,25 @@ primary-result behavior.
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
   fresh-home materialization smoke case, a customer-edit preservation rerun
   smoke case, and a legacy-materialized upgrade smoke case.
+- Hermetic no-server named `@you/goal` package proof lives in
+  `pkg/cli/run/run_invocation_test.go`
+  (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
+  the real shared bootstrap path with mock workers and a TCP probe port to
+  assert no factory API/dashboard listener is bound.
+- No-server bootstrap CLI/API invocation-equivalence proof lives in
+  `pkg/cli/run/run_invocation_test.go`
+  (`TestRun_NoServerBootstrap_PositionalInputMatchesAPIContract`,
+  `TestRun_NoServerBootstrap_StdinInputMatchesAPIContract`,
+  `TestRun_NoServerBootstrap_SuccessJSONMatchesAPIProjection`,
+  `TestRun_NoServerBootstrap_TextPrimaryResultFollowsInvocationReturn`), capturing real
+  `defaultBuildInvocationBootstrap` invoke requests/results and comparing them
+  to the shared API text-input resolver plus `apisurface.InvocationResponseFromResult`
+  projection for packaged `@you/goal` primary-result selection.
+- Consolidated no-server named integration and invocation-equivalence proof for
+  reviewers lives in `pkg/cli/run/run_invocation_test.go`
+  (`TestNoServerNamedInvocationIntegrationAndEquivalenceProof`), combining
+  hermetic `@you/goal` success without a TCP listener with shared input-resolution
+  and primary-result equivalence on the real bootstrap path.
 - CLI/API invocation parity for packaged `@you/goal` lives in
   `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
   comparing live session invocation API responses with real CLI `--json` output

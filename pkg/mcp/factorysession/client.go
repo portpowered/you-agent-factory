@@ -36,51 +36,75 @@ func callToolJSON[Input any, Response any](
 	return json.Marshal(handler(request))
 }
 
-// CallTool invokes one discovered Factory Session MCP tool by stable name.
-// Workflow-named compatibility aliases resolve to the same canonical handlers.
-func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, error) {
-	switch ResolveToolName(name) {
-	case ToolListSessions:
+type canonicalToolHandler func(*Client, json.RawMessage) (json.RawMessage, error)
+
+var canonicalToolHandlers = map[string]canonicalToolHandler{
+	ToolListSessions: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list sessions input", func(request ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
 			return ListSessions(c.service, request)
 		})
-	case ToolValidateSource:
+	},
+	ToolValidateSource: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode validate source input", ValidateSource)
-	case ToolStartSync:
+	},
+	ToolStartSync: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start sync input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
 			return StartSync(c.service, request)
 		})
-	case ToolStartAsync:
+	},
+	ToolStartAsync: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start async input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
 			return StartAsync(c.service, request)
 		})
-	case ToolGetSession:
+	},
+	ToolGetSession: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get session input", func(request GetSessionInput) ToolResponse[factoryapi.FactorySessionDurableReadModel] {
 			return GetSession(c.service, request)
 		})
-	case ToolGetResult:
+	},
+	ToolGetResult: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get result input", func(request GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
 			return GetResult(c.service, request)
 		})
-	case ToolListDispatches:
+	},
+	ToolListDispatches: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list dispatches input", func(request ListDispatchesInput) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
 			return ListDispatches(c.service, request)
 		})
-	case ToolListArtifacts:
+	},
+	ToolListArtifacts: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list artifacts input", func(request ListArtifactsInput) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
 			return ListArtifacts(c.service, request)
 		})
-	case ToolReadEvents:
+	},
+	ToolReadEvents: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode read events input", func(request ReadEventsInput) ToolResponse[ReadEventsResult] {
 			return ReadEvents(c.service, request)
 		})
-	case ToolControl:
+	},
+	ToolControl: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode control input", func(request ControlInput) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
 			return Control(c.service, request)
 		})
-	default:
+	},
+}
+
+// IsCanonicalToolHandlerRegistered reports whether the live CallTool path
+// registers a handler for one canonical Factory Session tool name.
+func IsCanonicalToolHandlerRegistered(name string) bool {
+	_, ok := canonicalToolHandlers[name]
+	return ok
+}
+
+// CallTool invokes one discovered Factory Session MCP tool by stable name.
+// Workflow-named compatibility aliases resolve to the same canonical handlers.
+func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, error) {
+	resolved := ResolveToolName(name)
+	handler, ok := canonicalToolHandlers[resolved]
+	if !ok {
 		return nil, fmt.Errorf("unsupported tool %q", name)
 	}
+	return handler(c, input)
 }
 
 // ListSessions calls you.factory_session.list through the mock client.

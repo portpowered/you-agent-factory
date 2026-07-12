@@ -365,6 +365,70 @@ type ListDispatchesResult struct {
 	Dispatches []DispatchSummary
 }
 
+// DispatchFilters narrows a canonical Dispatch read by phase and status.
+type DispatchFilters struct {
+	Phase  string
+	Status DispatchStatus
+}
+
+// NormalizeDispatchFilters validates and canonicalizes transport-provided filters.
+func NormalizeDispatchFilters(filters DispatchFilters) (DispatchFilters, error) {
+	filters.Phase = strings.TrimSpace(filters.Phase)
+	status := DispatchStatus(strings.ToUpper(strings.TrimSpace(string(filters.Status))))
+	if status != "" && !isCanonicalDispatchStatus(status) {
+		return DispatchFilters{}, NewValidationError("status", "status must be QUEUED, RUNNING, COMPLETED, FAILED, CANCELED, TIMED_OUT, SKIPPED, or INTERRUPTED")
+	}
+	filters.Status = status
+	return filters, nil
+}
+
+// FilterDispatches applies canonical phase/status semantics without changing session order.
+func FilterDispatches(result ListDispatchesResult, filters DispatchFilters) (ListDispatchesResult, error) {
+	normalized, err := NormalizeDispatchFilters(filters)
+	if err != nil {
+		return ListDispatchesResult{}, err
+	}
+	filtered := make([]DispatchSummary, 0, len(result.Dispatches))
+	for _, dispatch := range result.Dispatches {
+		if normalized.Phase != "" && dispatch.Phase != normalized.Phase {
+			continue
+		}
+		if normalized.Status != "" && dispatch.Status != normalized.Status {
+			continue
+		}
+		filtered = append(filtered, dispatch)
+	}
+	result.Dispatches = filtered
+	return result, nil
+}
+
+// QueryDispatches is the canonical filtered Dispatch read used by every
+// transport. Keeping the read and filter request together prevents callers
+// from independently interpreting an unfiltered session response.
+func QueryDispatches(
+	ctx context.Context,
+	service Service,
+	sessionID string,
+	filters DispatchFilters,
+) (ListDispatchesResult, error) {
+	result, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		return ListDispatchesResult{}, err
+	}
+	return FilterDispatches(result, filters)
+}
+
+func isCanonicalDispatchStatus(status DispatchStatus) bool {
+	switch status {
+	case DispatchStatusQueued, DispatchStatusRunning, DispatchStatusCompleted,
+		DispatchStatusFailed, DispatchStatusCanceled, DispatchStatusTimedOut,
+		DispatchStatusSkipped, DispatchStatusInterrupted:
+		return true
+	default:
+		return false
+	}
+}
+
 // ArtifactRetrievalRef is a safe API-relative artifact retrieval reference.
 type ArtifactRetrievalRef struct {
 	Href   string
@@ -495,11 +559,54 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 		return r.applySessionLifecycleControl(envelope)
 	case "SESSION_COMPLETED":
 		return r.applySessionCompleted(envelope)
+	case "ORCHESTRATOR_PHASE_CHANGED", "JAVASCRIPT_PHASE_CHANGE":
+		return r.applyPhaseChanged(envelope)
+	case "ORCHESTRATOR_CHECKPOINT_WRITTEN", "JAVASCRIPT_CHECKPOINT_REF":
+		return r.applyCheckpointWritten(envelope)
 	case "ARTIFACT_CREATED":
 		return r.applyArtifactCreated(envelope)
 	default:
 		return nil
 	}
+}
+
+func (r *sessionProjectionReducer) applyPhaseChanged(envelope canonicalFactoryEvent) error {
+	phase := strings.TrimSpace(stringValuePtr(envelope.Context.PhaseName))
+	if phase == "" {
+		phase = strings.TrimSpace(stringValuePtr(envelope.Context.PhaseID))
+	}
+	if phase == "" {
+		return nil
+	}
+	r.session.Phase = phase
+	for _, summary := range r.session.PhaseSummaries {
+		if summary.Phase == phase {
+			return nil
+		}
+	}
+	r.session.PhaseSummaries = append(r.session.PhaseSummaries, PhaseSummary{Phase: phase})
+	if r.session.Progress == nil {
+		r.session.Progress = &ProgressCounts{}
+	}
+	r.session.Progress.PhaseCount = len(r.session.PhaseSummaries)
+	return nil
+}
+
+func (r *sessionProjectionReducer) applyCheckpointWritten(envelope canonicalFactoryEvent) error {
+	checkpointID := strings.TrimSpace(stringValuePtr(envelope.Context.CheckpointID))
+	if checkpointID == "" {
+		return nil
+	}
+	var payload struct {
+		Label string `json:"label"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal ORCHESTRATOR_CHECKPOINT_WRITTEN payload: %w", err)
+	}
+	r.session.LatestCheckpoint = &CheckpointRef{
+		ID: checkpointID, Label: strings.TrimSpace(payload.Label), Phase: strings.TrimSpace(r.session.Phase),
+	}
+	return nil
 }
 
 func (r *sessionProjectionReducer) applySessionStarted(envelope canonicalFactoryEvent) error {

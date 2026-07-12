@@ -441,6 +441,8 @@ func newSessionDispatchesCommand(globals *cliGlobalOptions, diagnostics *cliDiag
 	}
 
 	registerDeprecatedPortFlag(cmd)
+	cmd.Flags().StringVar(&cfg.Phase, "phase", "", "filter by exact Dispatch phase")
+	cmd.Flags().StringVar(&cfg.Status, "status", "", "filter by canonical Dispatch status")
 	return cmd
 }
 
@@ -622,18 +624,20 @@ func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command 
 func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workflow",
-		Short: "Validate JavaScript workflow sources for Factory Session execution",
-		Long: "Validate JavaScript or TypeScript workflow sources before starting a Factory Session.\n\n" +
+		Short: "Compatibility commands for Factory Preview and Factory Session behavior",
+		Long: "Compatibility-only workflow spellings for canonical Factory Preview and Factory Session behavior. " +
+			"New integrations should use POST /factories/preview, POST /factory-sessions/{sync|async}, " +
+			"the /factory-sessions/{session_id} inspection routes, or the canonical you session commands where available.\n\n" +
 			"Subcommands:\n" +
-			"  validate   primary CLI path: resolve workflow source and validate it without execution\n" +
-			"  preview    compatibility alias for the Factory preview contract; prefer validate for CLI checks\n" +
-			"  run        start one durable Factory Session synchronously through the mock-backed execution loop\n" +
-			"  start      start one durable Factory Session asynchronously and return inspection links\n" +
-			"  status     read the durable Factory Session lifecycle and progress state\n" +
-			"  result     read the durable Factory Session final or partial result\n" +
-			"  dispatches list durable Factory Session dispatches for inspection\n" +
-			"  artifacts  list durable Factory Session artifacts for inspection\n" +
-			"  events     poll ordered durable Factory Session events with optional reconnect cursors",
+			"  validate   compatibility validation; successor: POST /factories/preview\n" +
+			"  preview    compatibility preview; successor: POST /factories/preview\n" +
+			"  run        compatibility sync start; successor: POST /factory-sessions/sync\n" +
+			"  start      compatibility async start; successor: POST /factory-sessions/async\n" +
+			"  status     compatibility read; successor: GET /factory-sessions/{session_id}\n" +
+			"  result     compatibility result read; successor: GET /factory-sessions/{session_id}/results\n" +
+			"  dispatches compatibility dispatch read; successor: you session dispatches or the session API\n" +
+			"  artifacts  compatibility artifact read; successor: the Factory Session artifacts API\n" +
+			"  events     compatibility event read; successor: the Factory Session events API",
 	}
 	cmd.AddCommand(
 		newWorkflowValidateCommand(globals),
@@ -847,6 +851,8 @@ func newWorkflowDispatchesCommand(globals *cliGlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&dispatchesCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed dispatch reads")
+	cmd.Flags().StringVar(&dispatchesCfg.Phase, "phase", "", "filter by exact Dispatch phase")
+	cmd.Flags().StringVar(&dispatchesCfg.Status, "status", "", "filter by canonical Dispatch status")
 	addWorkflowExecutionBackendFlags(cmd, &dispatchesCfg.ExecutionBackendConfig, nil)
 	return cmd
 }

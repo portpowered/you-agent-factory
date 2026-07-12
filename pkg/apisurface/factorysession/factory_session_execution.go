@@ -144,12 +144,19 @@ func (api *DurableAPI) ReadDurableFactorySessionEvents(ctx context.Context, sess
 	return FactoryEventStreamFromReadResult(result), nil
 }
 
-func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+func (api *DurableAPI) ListDurableFactorySessionDispatches(ctx context.Context, sessionID string, params factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error) {
 	execution, err := api.executionService()
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
-	result, err := execution.ListDispatches(ctx, sessionID)
+	filters := factorysessionexecution.DispatchFilters{}
+	if params.Phase != nil {
+		filters.Phase = string(*params.Phase)
+	}
+	if params.Status != nil {
+		filters.Status = factorysessionexecution.DispatchStatus(*params.Status)
+	}
+	result, err := factorysessionexecution.QueryDispatches(ctx, execution, sessionID, filters)
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}

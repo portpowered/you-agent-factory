@@ -17,6 +17,30 @@ properties:
     type: integer
     minimum: 0
     description: Dispatches currently running or awaiting completion.
+  queuedDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches waiting to start.
+  runningDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches currently running.
+  canceledDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches canceled before completion.
+  timedOutDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches that exceeded their execution deadline.
+  skippedDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches skipped by orchestration policy.
+  interruptedDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches interrupted after starting.
   phaseCount:
     type: integer
     minimum: 0

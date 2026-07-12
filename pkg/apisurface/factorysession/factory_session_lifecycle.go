@@ -115,6 +115,15 @@ func applyOptionalSessionReadPolicyFields(
 	if summaries := phaseSummariesToAPI(result.PhaseSummaries); summaries != nil {
 		response.PhaseSummaries = summaries
 	}
+	if checkpoint := result.LatestCheckpoint; checkpoint != nil {
+		response.LatestCheckpoint = &factoryapi.FactorySessionCheckpointRef{Id: checkpoint.ID}
+		if label := strings.TrimSpace(checkpoint.Label); label != "" {
+			response.LatestCheckpoint.Label = &label
+		}
+		if phase := strings.TrimSpace(checkpoint.Phase); phase != "" {
+			response.LatestCheckpoint.Phase = &phase
+		}
+	}
 	if progress := progressCountsToAPI(result.Progress); progress != nil {
 		response.Progress = progress
 	}
@@ -221,34 +230,28 @@ func progressCountsToAPI(counts *factorysessionexecution.ProgressCounts) *factor
 		return nil
 	}
 	out := &factoryapi.FactorySessionDurableProgressCounts{}
-	if counts.TotalDispatches > 0 {
-		value := counts.TotalDispatches
-		out.TotalDispatches = &value
-	}
-	if counts.CompletedDispatches > 0 {
-		value := counts.CompletedDispatches
-		out.CompletedDispatches = &value
-	}
-	if counts.FailedDispatches > 0 {
-		value := counts.FailedDispatches
-		out.FailedDispatches = &value
-	}
-	if counts.InFlightDispatches > 0 {
-		value := counts.InFlightDispatches
-		out.InFlightDispatches = &value
-	}
-	if counts.PhaseCount > 0 {
-		value := counts.PhaseCount
-		out.PhaseCount = &value
-	}
-	if out.TotalDispatches == nil &&
-		out.CompletedDispatches == nil &&
-		out.FailedDispatches == nil &&
-		out.InFlightDispatches == nil &&
-		out.PhaseCount == nil {
+	setProgressCount(&out.TotalDispatches, counts.TotalDispatches)
+	setProgressCount(&out.CompletedDispatches, counts.CompletedDispatches)
+	setProgressCount(&out.FailedDispatches, counts.FailedDispatches)
+	setProgressCount(&out.InFlightDispatches, counts.InFlightDispatches)
+	setProgressCount(&out.QueuedDispatches, counts.QueuedDispatches)
+	setProgressCount(&out.RunningDispatches, counts.RunningDispatches)
+	setProgressCount(&out.CanceledDispatches, counts.CanceledDispatches)
+	setProgressCount(&out.TimedOutDispatches, counts.TimedOutDispatches)
+	setProgressCount(&out.SkippedDispatches, counts.SkippedDispatches)
+	setProgressCount(&out.InterruptedDispatches, counts.InterruptedDispatches)
+	setProgressCount(&out.PhaseCount, counts.PhaseCount)
+	if *out == (factoryapi.FactorySessionDurableProgressCounts{}) {
 		return nil
 	}
 	return out
+}
+
+func setProgressCount(target **int, count int) {
+	if count > 0 {
+		value := count
+		*target = &value
+	}
 }
 
 func resultSummaryToAPI(summary *factorysessionexecution.ResultSummary) *factoryapi.FactorySessionDurableResultSummary {

@@ -22,7 +22,7 @@ const childWorkflow = `return (async function () {
   const child = await agent.run({
     prompt: "summarize workflows",
     label: "summarize-findings",
-    outputSchema: { type: "object", properties: { text: { type: "string" } } },
+    modelProvider: "codex",
   });
   return { child: child };
 })();`

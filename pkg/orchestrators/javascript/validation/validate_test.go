@@ -1,6 +1,7 @@
 package workflowvalidation_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -213,6 +214,71 @@ func TestValidate_RejectsInvalidPrimitiveCallShapes(t *testing.T) {
 				t.Fatalf("issues = %#v, want code %q", result.Issues, tc.code)
 			}
 		})
+	}
+}
+
+func TestValidate_AcceptsEverySupportedAgentRunField(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source: `agent.run({
+  prompt: "review",
+  label: "reviewer",
+  preset: "careful",
+  modelProvider: "codex",
+  model: "gpt-test",
+  reasoningEffort: "high",
+});`,
+		SourceRef: "inline",
+	})
+	if result.HasIssues() {
+		t.Fatalf("validation issues = %#v, want canonical agent.run fields accepted", result.Issues)
+	}
+}
+
+func TestValidate_RejectsInvalidSupportedAgentRunFieldValues(t *testing.T) {
+	for _, field := range []string{"prompt", "label", "preset", "modelProvider", "model", "reasoningEffort"} {
+		t.Run(field, func(t *testing.T) {
+			source := fmt.Sprintf(`agent.run({ prompt: "review", %s: 42 });`, field)
+			if field == "prompt" {
+				source = `agent.run({ prompt: 42 });`
+			}
+			result := workflowvalidation.Validate(workflowvalidation.Request{
+				Source:    source,
+				SourceRef: "inline",
+			})
+			if !result.HasIssues() || !strings.Contains(result.Issues[0].Message, field) {
+				t.Fatalf("validation issues = %#v, want field-specific shape issue", result.Issues)
+			}
+		})
+	}
+}
+
+func TestValidate_RejectsUnsupportedAgentRunFieldsWithoutExposingValues(t *testing.T) {
+	unsupported := []string{
+		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",
+		"schema", "outputSchema", "concurrency", "maxAgents", "duration", "timeout", "timeoutMs",
+	}
+	for _, field := range unsupported {
+		t.Run(field, func(t *testing.T) {
+			source := fmt.Sprintf(`agent.run({ prompt: "prompt-secret", %s: "value-secret" });`, field)
+			result := workflowvalidation.Validate(workflowvalidation.Request{Source: source, SourceRef: "inline"})
+			want := `agent.run() does not support field "` + field + `"`
+			if len(result.Issues) != 1 || result.Issues[0].Code != workflowvalidation.CodeUnsupportedPrimitive || result.Issues[0].Message != want {
+				t.Fatalf("validation issues = %#v, want one field-specific unsupported-primitive issue", result.Issues)
+			}
+			if strings.Contains(result.Issues[0].Message, "value-secret") || strings.Contains(result.Issues[0].Message, "prompt-secret") {
+				t.Fatalf("validation message = %q, want redacted diagnostic", result.Issues[0].Message)
+			}
+		})
+	}
+}
+
+func TestValidate_RejectsQuotedUnsupportedAgentRunField(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:    `agent.run({ prompt: "review", "outputSchema": "secret" });`,
+		SourceRef: "inline",
+	})
+	if len(result.Issues) != 1 || result.Issues[0].Message != `agent.run() does not support field "outputSchema"` {
+		t.Fatalf("validation issues = %#v, want quoted field rejection", result.Issues)
 	}
 }
 

@@ -1,1 +1,2 @@
 pkg/cli/baseline/testdata/** text eol=lf
+contracts/testdata/baseline/** text eol=lf

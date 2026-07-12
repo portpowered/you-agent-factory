@@ -561,6 +561,7 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, durableReadModelProperties, "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
 	assertPropertyRef(t, durableReadModelProperties, "resolvedSource", "#/components/schemas/FactorySessionResolvedSourceIdentity")
 	assertArrayItemRef(t, durableReadModelProperties, "phaseSummaries", "#/components/schemas/FactorySessionDurablePhaseSummary")
+	assertPropertyRef(t, durableReadModelProperties, "latestCheckpoint", "#/components/schemas/FactorySessionCheckpointRef")
 	assertPropertyRef(t, durableReadModelProperties, "progress", "#/components/schemas/FactorySessionDurableProgressCounts")
 	assertPropertyRef(t, durableReadModelProperties, "budgets", "#/components/schemas/FactorySessionBudgets")
 	assertPropertyRef(t, durableReadModelProperties, "usage", "#/components/schemas/FactorySessionUsage")
@@ -573,7 +574,7 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, durableReadModelProperties, "effectivePolicy", "#/components/schemas/FactorySessionEffectivePolicy")
 	assertSchemaPropertiesPresent(t, durableReadModelProperties, "FactorySessionDurableReadModel",
 		"sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash",
-		"requestedPolicy", "effectivePolicy", "effectivePolicyHash", "phase", "phaseSummaries", "progress", "budgets", "usage",
+		"requestedPolicy", "effectivePolicy", "effectivePolicyHash", "phase", "phaseSummaries", "latestCheckpoint", "progress", "budgets", "usage",
 		"artifactRefs", "resultSummary", "failureDetail", "partialResultAvailable", "lifecycle", "staleLease", "links")
 
 	durableSummary := schemaObject(t, schemas, "FactorySessionDurableSummary")

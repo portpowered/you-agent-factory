@@ -12,7 +12,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
@@ -47,6 +49,55 @@ func TestInjectCLIRunner_KeepsDashboardSuppressedRunsInactive(t *testing.T) {
 	if _, legacy := runner.(*service.FactoryService); !legacy {
 		t.Fatalf("dashboard-suppressed runner type = %T, want compatibility service runner", runner)
 	}
+}
+
+func TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchMode(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	workFile := filepath.Join(dir, "initial-work.json")
+	if err := os.WriteFile(workFile, []byte(`{"requests":[]}`), 0o600); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{
+		Dir:                                     dir,
+		WorkFile:                                workFile,
+		RuntimeMode:                             interfaces.RuntimeModeBatch,
+		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+		Logger:                                  zap.NewNop(),
+	}
+
+	runner, err := compose.InjectCLIRunner(ctx, cfg)
+	if err != nil {
+		t.Fatalf("InjectCLIRunner: %v", err)
+	}
+	if _, bootstrap := runner.(*service.InvocationBootstrap); bootstrap {
+		t.Fatal("dashboard-suppressed quiet batch must not route through InvocationBootstrap")
+	}
+	svc, ok := runner.(*service.FactoryService)
+	if !ok {
+		t.Fatalf("runner type = %T, want *service.FactoryService", runner)
+	}
+	directBuilt, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if directBuilt.ComposeCollaboratorSnapshot() != svc.ComposeCollaboratorSnapshot() {
+		t.Fatalf(
+			"compose snapshot mismatch: direct=%+v inject=%+v",
+			directBuilt.ComposeCollaboratorSnapshot(),
+			svc.ComposeCollaboratorSnapshot(),
+		)
+	}
+	var _ engineStateSnapshotRunner = svc
+}
+
+type engineStateSnapshotRunner interface {
+	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
 
 func TestInjectFactoryService_RejectsMissingFactoryDir(t *testing.T) {
