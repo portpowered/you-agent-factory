@@ -14,8 +14,92 @@ import (
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
+
+func TestPersistedRuntimeSessionState_MixedTypedHistoryRoundTripsAndReplays(t *testing.T) {
+	const sessionID = "dur-sess-1234567890abcdef1234567890abcdef"
+	canonical := json.RawMessage(`{
+		"schemaVersion":"agent-factory.event.v1",
+		"id":"session-started/dur-sess-1234567890abcdef1234567890abcdef",
+		"type":"SESSION_STARTED",
+		"context":{"sequence":1,"tick":0,"eventTime":"2026-07-12T07:30:00Z","sessionId":"dur-sess-1234567890abcdef1234567890abcdef","orchestratorKind":"petri"},
+		"payload":{"startedAt":"2026-07-12T07:30:00Z"}
+	}`)
+	checkpoint := workflowruntime.RuntimeRecord{
+		Sequence: 2,
+		Kind:     workflowruntime.RecordKindCheckpoint,
+		Checkpoint: &workflowruntime.CheckpointRecord{
+			ID: "checkpoint-1", Label: "approval",
+			State: map[string]any{"position": "review"},
+		},
+	}
+	mutation := interfaces.TokenMutationRecord{
+		DispatchID: "dispatch-1", TransitionID: "review", Type: interfaces.MutationMove,
+		TokenID: "token-1", FromPlace: "review:pending", ToPlace: "review:approved",
+		Reason: "transition fired",
+	}
+	snapshot := fse.PersistedRuntimeSessionState{Records: []fse.DurableSessionRecord{
+		{Kind: fse.DurableRecordKindCanonicalFactoryEvent, CanonicalEvent: canonical},
+		{Kind: fse.DurableRecordKindJavaScriptRuntime, JavaScriptRecord: &checkpoint},
+		{Kind: fse.DurableRecordKindPetriTokenMutation, PetriMutation: &mutation},
+	}}
+
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal mixed snapshot: %v", err)
+	}
+	store, err := runtimepersist.NewDirectoryStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewDirectoryStore: %v", err)
+	}
+	if err := store.Save(sessionID, encoded); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	persisted, err := store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	var replayed fse.PersistedRuntimeSessionState
+	if err := json.Unmarshal(persisted, &replayed); err != nil {
+		t.Fatalf("decode mixed persisted history: %v", err)
+	}
+	if len(replayed.Records) != 3 {
+		t.Fatalf("record count = %d, want 3", len(replayed.Records))
+	}
+	session, _, err := fse.ReplaySessionProjection([]json.RawMessage{replayed.Records[0].CanonicalEvent})
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.SessionID != sessionID || session.Status != fse.LifecycleStatusRunning {
+		t.Fatalf("replayed session = %#v, want running %s", session, sessionID)
+	}
+	if got := replayed.Records[1].JavaScriptRecord; got == nil || got.Checkpoint == nil || got.Checkpoint.State["position"] != "review" {
+		t.Fatalf("replayed checkpoint = %#v", got)
+	}
+	if got := replayed.Records[2].PetriMutation; got == nil || got.Type != interfaces.MutationMove || got.TransitionID != "review" || got.ToPlace != "review:approved" {
+		t.Fatalf("replayed Petri mutation = %#v", got)
+	}
+}
+
+func TestPersistedRuntimeSessionState_MixedTypedHistoryRejectsUnknownAndMalformedRecords(t *testing.T) {
+	tests := map[string]string{
+		"unknown kind":        `{"Records":[{"kind":"future_orchestrator","canonicalEvent":{"type":"SESSION_STARTED"}}]}`,
+		"missing payload":     `{"Records":[{"kind":"petri_token_mutation"}]}`,
+		"cross-kind payload":  `{"Records":[{"kind":"petri_token_mutation","javascriptRecord":{"sequence":1,"kind":"phase","phase":{"name":"run"}},"petriMutation":{"type":"move"}}]}`,
+		"malformed canonical": `{"Records":[{"kind":"canonical_factory_event","canonicalEvent":{"payload":{}}}]}`,
+	}
+	for name, encoded := range tests {
+		t.Run(name, func(t *testing.T) {
+			var snapshot fse.PersistedRuntimeSessionState
+			if err := json.Unmarshal([]byte(encoded), &snapshot); err == nil {
+				t.Fatal("json.Unmarshal succeeded, want explicit compatibility error")
+			}
+		})
+	}
+}
 
 func TestJavaScriptRuntimeService_ResumeInterruptedSession_ReconstructsFromCheckpointSummary(t *testing.T) {
 	harness := startInterruptedResumableSession(t, "req-runtime-resume-interrupted-001")

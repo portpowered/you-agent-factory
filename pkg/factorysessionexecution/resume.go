@@ -739,10 +739,13 @@ type PersistedRuntimeSessionState struct {
 	Artifacts                 []ArtifactSummary
 	Events                    []json.RawMessage
 	RuntimeRecords            []workflowruntime.RuntimeRecord
-	CheckpointSummary         *jsstore.CheckpointSummary
-	StartRequest              *StartRequest
-	ResolvedSource            ResolvedSource
-	SourceContent             string
+	// Records is the tagged, lossless durable history. Events and RuntimeRecords
+	// remain populated for compatibility with snapshots written before this union.
+	Records           []DurableSessionRecord
+	CheckpointSummary *jsstore.CheckpointSummary
+	StartRequest      *StartRequest
+	ResolvedSource    ResolvedSource
+	SourceContent     string
 }
 
 func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
@@ -752,6 +755,7 @@ func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRunti
 		Dispatches:        cloneDispatchSummaries(state.dispatches),
 		Artifacts:         cloneArtifactSummaries(state.artifacts),
 		RuntimeRecords:    cloneRuntimeRecords(state.runtimeRecords),
+		Records:           durableRecordsFromRuntimeState(state),
 		CheckpointSummary: cloneCheckpointSummary(state.checkpointSummary),
 		StartRequest:      cloneStartRequestPtr(state.startRequest),
 		ResolvedSource:    state.resolvedSource,

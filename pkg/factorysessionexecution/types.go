@@ -3,10 +3,96 @@ package factorysessionexecution
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
+
+// DurableRecordKind identifies one record in the persisted Factory Session
+// history without erasing orchestrator-specific replay semantics.
+type DurableRecordKind string
+
+const (
+	DurableRecordKindCanonicalFactoryEvent DurableRecordKind = "canonical_factory_event"
+	DurableRecordKindJavaScriptRuntime     DurableRecordKind = "javascript_runtime"
+	DurableRecordKindPetriTokenMutation    DurableRecordKind = "petri_token_mutation"
+)
+
+// DurableSessionRecord is the tagged persistence union for canonical events
+// and explicitly orchestration-owned records. Exactly one payload must match Kind.
+type DurableSessionRecord struct {
+	Kind             DurableRecordKind               `json:"kind"`
+	CanonicalEvent   json.RawMessage                 `json:"canonicalEvent,omitempty"`
+	JavaScriptRecord *workflowruntime.RuntimeRecord  `json:"javascriptRecord,omitempty"`
+	PetriMutation    *interfaces.TokenMutationRecord `json:"petriMutation,omitempty"`
+}
+
+// UnmarshalJSON rejects unknown and mismatched records so older runtimes never
+// silently discard newly introduced replay facts.
+func (r *DurableSessionRecord) UnmarshalJSON(data []byte) error {
+	type durableSessionRecordJSON DurableSessionRecord
+	var decoded durableSessionRecordJSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return fmt.Errorf("decode durable session record: %w", err)
+	}
+	record := DurableSessionRecord(decoded)
+	if err := validateDurableSessionRecord(record); err != nil {
+		return err
+	}
+	*r = record
+	return nil
+}
+
+func validateDurableSessionRecord(record DurableSessionRecord) error {
+	payloads := map[DurableRecordKind]bool{
+		DurableRecordKindCanonicalFactoryEvent: len(record.CanonicalEvent) > 0,
+		DurableRecordKindJavaScriptRuntime:     record.JavaScriptRecord != nil,
+		DurableRecordKindPetriTokenMutation:    record.PetriMutation != nil,
+	}
+	present, known := payloads[record.Kind]
+	if !known {
+		return fmt.Errorf("decode durable session record: unsupported kind %q", record.Kind)
+	}
+	if !present {
+		return fmt.Errorf("decode durable session record kind %q: matching payload is required", record.Kind)
+	}
+	for kind, hasPayload := range payloads {
+		if hasPayload && kind != record.Kind {
+			return fmt.Errorf("decode durable session record kind %q: unexpected %s payload", record.Kind, kind)
+		}
+	}
+	if record.Kind == DurableRecordKindCanonicalFactoryEvent {
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(record.CanonicalEvent, &envelope); err != nil {
+			return fmt.Errorf("decode durable canonical Factory Event: %w", err)
+		}
+		if strings.TrimSpace(envelope.Type) == "" {
+			return errors.New("decode durable canonical Factory Event: type is required")
+		}
+	}
+	return nil
+}
+
+func durableRecordsFromRuntimeState(state runtimeSessionState) []DurableSessionRecord {
+	records := make([]DurableSessionRecord, 0, len(state.events)+len(state.runtimeRecords))
+	for _, event := range state.events {
+		records = append(records, DurableSessionRecord{
+			Kind: DurableRecordKindCanonicalFactoryEvent, CanonicalEvent: append(json.RawMessage(nil), event...),
+		})
+	}
+	for _, runtimeRecord := range state.runtimeRecords {
+		cloned := cloneRuntimeRecord(runtimeRecord)
+		records = append(records, DurableSessionRecord{
+			Kind: DurableRecordKindJavaScriptRuntime, JavaScriptRecord: &cloned,
+		})
+	}
+	return records
+}
 
 // SyncOutcome reports how a sync start wait ended.
 type SyncOutcome string
@@ -27,12 +113,12 @@ type InlineWorkflowSource struct {
 
 // Source is the normalized durable execution source selector.
 type Source struct {
-	Kind            workflowsource.Kind
-	FactoryID       string
-	FactoryInline   json.RawMessage
-	WorkflowFile    string
-	WorkflowName    string
-	InlineWorkflow  *InlineWorkflowSource
+	Kind           workflowsource.Kind
+	FactoryID      string
+	FactoryInline  json.RawMessage
+	WorkflowFile   string
+	WorkflowName   string
+	InlineWorkflow *InlineWorkflowSource
 }
 
 // OrchestratorOverride is an optional orchestrator override on a start request.
@@ -90,10 +176,10 @@ type ResolvedSource struct {
 
 // InspectionLinks are API-relative links for polling and inspecting one session.
 type InspectionLinks struct {
-	Session  string
-	Status   string
-	Events   string
-	Results  string
+	Session    string
+	Status     string
+	Events     string
+	Results    string
 	Dispatches string
 	Artifacts  string
 }
