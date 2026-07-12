@@ -511,7 +511,8 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logger, err := logging.BuildLogger(diagnostics.verboseEnabled(), diagnostics.debug)
+			policy := diagnostics.resolvePolicy(false)
+			logger, err := policy.BuildLogger()
 			if err != nil {
 				return err
 			}
