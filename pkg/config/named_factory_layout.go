@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -61,64 +60,16 @@ func namedFactoryStagingPrefix(name string) string {
 // NamedFactoryNameToLayoutSegment maps a canonical named-factory display name into the single on-disk directory segment used under a factory root.
 func NamedFactoryNameToLayoutSegment(name string) (string, error) {
 	trimmed := strings.TrimSpace(name)
-	if strings.HasPrefix(trimmed, scopedNamedFactoryPrefix) {
-		if err := validateScopedNamedFactoryName(trimmed); err != nil {
-			return "", wrapInvalidNamedFactoryName(trimmed, err)
-		}
-		segment := encodeScopedNamedFactoryLayoutSegment(trimmed)
-		if _, err := safeFactoryLayoutSegment("factory", segment); err != nil {
-			return "", wrapInvalidNamedFactoryName(trimmed, err)
-		}
-		return segment, nil
-	}
-	if segment, err := safeFactoryLayoutSegment("factory", trimmed); err != nil {
+	segment, err := namedfactorypath.LegacyLayoutSegment(trimmed)
+	if err != nil {
 		return "", wrapInvalidNamedFactoryName(trimmed, err)
-	} else {
-		return segment, nil
 	}
-}
-
-func encodeScopedNamedFactoryLayoutSegment(name string) string {
-	return strings.NewReplacer("%", "%25", "/", "%2F").Replace(name)
+	return segment, nil
 }
 
 // NamedFactoryLayoutSegmentToName maps an on-disk named-factory directory segment back to the canonical display name shown by list and API callers.
 func NamedFactoryLayoutSegmentToName(segment string) (string, error) {
-	safeSegment, err := safeFactoryLayoutSegment("factory", segment)
-	if err != nil {
-		return "", err
-	}
-	if !strings.HasPrefix(safeSegment, scopedNamedFactoryPrefix) {
-		return safeSegment, nil
-	}
-
-	name, err := url.PathUnescape(safeSegment)
-	if err != nil {
-		return "", fmt.Errorf("decode factory layout segment %q: %w", segment, err)
-	}
-	encoded, err := NamedFactoryNameToLayoutSegment(name)
-	if err != nil {
-		return "", err
-	}
-	if encoded != safeSegment {
-		return "", fmt.Errorf("factory layout segment %q is not canonical for %q", segment, name)
-	}
-	return name, nil
-}
-
-func validateScopedNamedFactoryName(name string) error {
-	parts := strings.Split(name, "/")
-	if len(parts) != 2 || parts[0] == scopedNamedFactoryPrefix || parts[1] == "" {
-		return fmt.Errorf("factory name %q must be scoped as @scope/name", name)
-	}
-	scope := strings.TrimPrefix(parts[0], scopedNamedFactoryPrefix)
-	if _, err := safeFactoryLayoutSegment("factory scope", scope); err != nil {
-		return err
-	}
-	if _, err := safeFactoryLayoutSegment("factory", parts[1]); err != nil {
-		return err
-	}
-	return nil
+	return namedfactorypath.LegacyLayoutSegmentToName(segment)
 }
 
 // GlobalNamedFactoryRootForHome builds the customer-owned global named-factory
