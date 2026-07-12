@@ -43,6 +43,7 @@ func TestCancelFactorySession_RuntimeBackedDurableSessionReturnsTypedLifecycleCo
 	if response.Links == nil || response.Links.Results == nil || *response.Links.Results == "" {
 		t.Fatalf("links = %#v, want results inspection link", response.Links)
 	}
+	waitForDurableSessionStatus(t, server.URL, started.SessionID, factoryapi.FactorySessionDurableLifecycleStatusCanceled)
 }
 
 func TestTerminateFactorySession_RuntimeBackedDurableSessionReturnsTypedLifecycleControl(t *testing.T) {

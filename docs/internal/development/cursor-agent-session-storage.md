@@ -6,7 +6,7 @@ Infinite-you loads Cursor provider-session detail from **cursor-agent CLI storag
 
 | Backend | Required for v1 | Notes |
 | --- | --- | --- |
-| cursor-agent CLI storage (`store.db` under chats roots) | **Yes** | Linux probes `~/.config/cursor/chats`, then `~/.cursor/chats`; macOS probes `~/.cursor/chats`, then `~/.config/cursor/chats`; when neither exists, discovery leaves the root empty |
+| cursor-agent CLI storage (`store.db` under chats roots) | **Yes** | Linux probes `~/.config/cursor/chats`, then `~/.cursor/chats`; macOS and Windows probe `~/.cursor/chats`, then `~/.config/cursor/chats`; when neither exists, discovery leaves the root empty |
 | Cursor desktop `globalStorage` (`state.vscdb`) | No | Documented as optional/future |
 
 ## Layout

@@ -89,6 +89,33 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 	}
 }
 
+func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) {
+	consumed := []interfaces.Token{
+		{
+			History: interfaces.TokenHistory{
+				TotalVisits: map[string]int{"process": 3, "review": 2},
+			},
+		},
+		{
+			History: interfaces.TokenHistory{
+				TotalVisits: map[string]int{"process": 3, "review": 1},
+			},
+		},
+	}
+
+	history := buildHistory(consumed, &interfaces.WorkResult{
+		TransitionID: "review",
+		Outcome:      interfaces.OutcomeContinue,
+	})
+
+	if got := history.TotalVisits["process"]; got != 3 {
+		t.Fatalf("TotalVisits[process] = %d, want 3", got)
+	}
+	if got := history.TotalVisits["review"]; got != 3 {
+		t.Fatalf("TotalVisits[review] = %d, want 3", got)
+	}
+}
+
 func TestBuildHistory_WhenDispatchLookupMissing_UsesOnlyCurrentResult(t *testing.T) {
 	history := buildHistory(nil, &interfaces.WorkResult{
 		DispatchID:   "dispatch-missing",

@@ -256,10 +256,12 @@ function CurrentActivityGraphSurfaceContent({
         saveControls={model.saveControls}
         saveDisabledReason={model.status.saveBlockedReason}
       />
-      <CurrentActivityGraphEditorNoticePanel
-        locale={locale}
-        sections={editorNoticeSections}
-      />
+      {editorControls.isEditing ? (
+        <CurrentActivityGraphEditorNoticePanel
+          locale={locale}
+          sections={editorNoticeSections}
+        />
+      ) : null}
     </div>
   );
 }

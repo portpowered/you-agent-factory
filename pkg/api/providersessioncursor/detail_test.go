@@ -43,6 +43,25 @@ func TestLoadDetails_ReadsReadableSessionFromConfiguredRoot(t *testing.T) {
 	}
 }
 
+func TestLoadDetails_ReadsUUIDShapedSessionFromConfiguredRoot(t *testing.T) {
+	root, sessionID := writeUUIDShapedCursorAgentStorageFixture(t)
+
+	resp, err := LoadDetails(cursorstorage.AgentStorageRoot(root), sessionID)
+	if err != nil {
+		t.Fatalf("LoadDetails: %v", err)
+	}
+	if resp.ProviderSession.Id != sessionID || string(resp.ProviderSession.Provider) != "cursor" {
+		t.Fatalf("provider session = %#v, want cursor session_id %s", resp.ProviderSession, sessionID)
+	}
+	wantRelativePath := "d2191e81bfe68d31807c1e354ea83571/" + sessionID + "/store.db"
+	if resp.Source.RelativePath != wantRelativePath {
+		t.Fatalf("source relative path = %q, want %q", resp.Source.RelativePath, wantRelativePath)
+	}
+	if len(resp.Transcript) != 1 || resp.Transcript[0].Text == nil || *resp.Transcript[0].Text != "Hello from API fixture" {
+		t.Fatalf("transcript = %#v, want readable UUID session transcript", resp.Transcript)
+	}
+}
+
 func TestLoadDetails_UnavailableContentHasNoPlaintextTranscript(t *testing.T) {
 	root, sessionID := writeUnavailableCursorAgentStorageFixture(t)
 
@@ -65,6 +84,21 @@ func TestLoadDetails_NotFoundIsDistinguishable(t *testing.T) {
 	}
 }
 
+func TestLoadDetails_ReturnsNotFoundForEmptyRoot(t *testing.T) {
+	_, err := LoadDetails(cursorstorage.AgentStorageRoot(""), "missing-session")
+	if !errors.Is(err, ErrProviderSessionNotFound) {
+		t.Fatalf("err = %v, want ErrProviderSessionNotFound", err)
+	}
+}
+
+func TestLoadDetails_ReturnsNotFoundForMissingRootDirectory(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	_, err := LoadDetails(cursorstorage.AgentStorageRoot(missingRoot), "missing-session")
+	if !errors.Is(err, ErrProviderSessionNotFound) {
+		t.Fatalf("err = %v, want ErrProviderSessionNotFound", err)
+	}
+}
+
 func TestLoadDetails_RejectsPathLikeIdentifiers(t *testing.T) {
 	for _, id := range []string{"../secret", "/tmp/store.db", "session.with.dot"} {
 		t.Run(id, func(t *testing.T) {
@@ -80,7 +114,19 @@ func writeReadableCursorAgentStorageFixture(t *testing.T) (root string, sessionI
 	t.Helper()
 	root = t.TempDir()
 	sessionID = "cursor-api-readable"
-	dbPath := filepath.Join(root, "workspace-hash", sessionID, "store.db")
+	return writeReadableCursorAgentStorageFixtureAt(t, root, "workspace-hash", sessionID)
+}
+
+func writeUUIDShapedCursorAgentStorageFixture(t *testing.T) (root string, sessionID string) {
+	t.Helper()
+	root = t.TempDir()
+	sessionID = "ed332681-38eb-485f-b3d3-d8b6df3a450b"
+	return writeReadableCursorAgentStorageFixtureAt(t, root, "d2191e81bfe68d31807c1e354ea83571", sessionID)
+}
+
+func writeReadableCursorAgentStorageFixtureAt(t *testing.T, root, workspaceHash, sessionID string) (string, string) {
+	t.Helper()
+	dbPath := filepath.Join(root, workspaceHash, sessionID, "store.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -106,7 +152,7 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 	if _, err := db.Exec(
 		`INSERT INTO meta (key, value) VALUES (?, ?)`,
 		"0",
-		`{"createdAt":1000,"agentId":"cursor-api-readable","name":"API fixture session"}`,
+		`{"createdAt":1000,"agentId":"`+sessionID+`","name":"API fixture session"}`,
 	); err != nil {
 		t.Fatalf("insert meta: %v", err)
 	}

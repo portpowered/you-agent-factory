@@ -721,6 +721,12 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 	t.Parallel()
 
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "stream"), []byte("stdout-chunk\n"), []byte("stderr-chunk\n"), 0)
+	command := scriptPath
+	var args []string
+	if runtime.GOOS != "windows" {
+		command = "/bin/sh"
+		args = []string{scriptPath}
+	}
 
 	var publishedMu sync.Mutex
 	var published []InferenceProgressFragment
@@ -731,7 +737,8 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 	}, nil)
 
 	result, err := runner.Run(context.Background(), CommandRequest{
-		Command:    scriptPath,
+		Command:    command,
+		Args:       args,
 		DispatchID: "dispatch-stream-1",
 	})
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/childcontract"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
@@ -59,6 +60,8 @@ type ChildExecutor interface {
 // highest-precedence source that supplies it. It performs no IO or mutation.
 func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent, config WorkerSettingsConfig) (ChildExecutionRequest, error) {
 	explicitPreset := strings.TrimSpace(req.Preset)
+	explicitProvider := strings.TrimSpace(req.ModelProvider)
+	explicitEffort := strings.TrimSpace(req.ReasoningEffort)
 	factoryPreset := ""
 	if agent, ok := agents[strings.TrimSpace(req.AgentID)]; ok {
 		factoryPreset = strings.TrimSpace(agent.Preset)
@@ -71,7 +74,7 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 	if selectedPreset != "" {
 		var ok bool
 		preset, ok = config.Presets[selectedPreset]
-		if !ok {
+		if !ok && source == "factory agent" {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() references unknown operator worker preset %q from %s", selectedPreset, source)
 		}
 	}
@@ -83,13 +86,17 @@ func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]int
 		if !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective modelProvider %q", req.ModelProvider)
 		}
-		req.ModelProvider = provider
+		if explicitProvider == "" {
+			req.ModelProvider = provider
+		}
 	}
 	if effort, ok := interfaces.CanonicalizeReasoningEffort(req.ReasoningEffort); req.ReasoningEffort != "" {
 		if !ok {
 			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective reasoningEffort %q", req.ReasoningEffort)
 		}
-		req.ReasoningEffort = effort
+		if explicitEffort == "" {
+			req.ReasoningEffort = effort
+		}
 	}
 	return req, nil
 }
@@ -236,122 +243,23 @@ func fakeChildOutput(req ChildExecutionRequest, dispatchID, providerSessionRef, 
 }
 
 func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubject string, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent) (ChildExecutionRequest, error) {
-	prompt := stringField(spec, "prompt")
-	if prompt == "" {
-		return ChildExecutionRequest{}, fmt.Errorf(`agent.run() requires a string "prompt" property`)
-	}
-	outputSchema, err := outputSchemaFromSpec(spec)
+	// Factory agent definitions remain runtime configuration; they do not widen
+	// the intentionally small per-child argument contract.
+	_ = agents
+	normalized, err := childcontract.Normalize(spec)
 	if err != nil {
 		return ChildExecutionRequest{}, err
-	}
-	writableRoots, err := stringSliceField(spec, "writableRoots")
-	if err != nil {
-		return ChildExecutionRequest{}, err
-	}
-	allowNetwork, err := boolField(spec, "allowNetwork")
-	if err != nil {
-		return ChildExecutionRequest{}, err
-	}
-	if !allowNetwork {
-		allowNetwork, err = boolField(spec, "network")
-		if err != nil {
-			return ChildExecutionRequest{}, err
-		}
-	}
-	concurrency, err := intField(spec, "concurrency")
-	if err != nil {
-		return ChildExecutionRequest{}, err
-	}
-	agentID := strings.TrimSpace(stringField(spec, "agentId"))
-	preset := strings.TrimSpace(stringField(spec, "preset"))
-	if agentID != "" {
-		if _, ok := agents[agentID]; !ok {
-			return ChildExecutionRequest{}, fmt.Errorf(`agent.run() references unknown factory agent %q`, agentID)
-		}
 	}
 	return ChildExecutionRequest{
-		Prompt:          prompt,
-		Label:           stringField(spec, "label"),
-		AgentID:         agentID,
-		Preset:          preset,
-		ModelProvider:   stringField(spec, "modelProvider"),
-		Model:           stringField(spec, "model"),
-		ReasoningEffort: stringField(spec, "reasoningEffort"),
-		Command:         stringField(spec, "command"),
-		Sandbox:         stringField(spec, "sandbox"),
-		WritableRoots:   writableRoots,
-		AllowNetwork:    allowNetwork,
-		Concurrency:     concurrency,
-		OutputSchema:    outputSchema,
+		Prompt:          normalized.Prompt,
+		Label:           normalized.Label,
+		Preset:          normalized.Preset,
+		ModelProvider:   normalized.ModelProvider,
+		Model:           normalized.Model,
+		ReasoningEffort: normalized.ReasoningEffort,
 		WorkflowName:    workflowName,
 		ArgsSubject:     argsSubject,
 	}, nil
-}
-
-func stringSliceField(spec map[string]any, key string) ([]string, error) {
-	value, ok := spec[key]
-	if !ok || value == nil {
-		return nil, nil
-	}
-	switch typed := value.(type) {
-	case []string:
-		return append([]string(nil), typed...), nil
-	case []any:
-		out := make([]string, 0, len(typed))
-		for _, item := range typed {
-			text, ok := item.(string)
-			if !ok {
-				return nil, fmt.Errorf(`agent.run() requires %q to be an array of strings`, key)
-			}
-			out = append(out, text)
-		}
-		return out, nil
-	default:
-		return nil, fmt.Errorf(`agent.run() requires %q to be an array of strings`, key)
-	}
-}
-
-func boolField(spec map[string]any, key string) (bool, error) {
-	value, ok := spec[key]
-	if !ok || value == nil {
-		return false, nil
-	}
-	allowed, ok := value.(bool)
-	if !ok {
-		return false, fmt.Errorf(`agent.run() requires %q to be a boolean`, key)
-	}
-	return allowed, nil
-}
-
-func intField(spec map[string]any, key string) (int, error) {
-	value, ok := spec[key]
-	if !ok || value == nil {
-		return 0, nil
-	}
-	switch typed := value.(type) {
-	case int:
-		return typed, nil
-	case int32:
-		return int(typed), nil
-	case int64:
-		return int(typed), nil
-	case float32:
-		return int(typed), nil
-	case float64:
-		return int(typed), nil
-	default:
-		return 0, fmt.Errorf(`agent.run() requires %q to be a number`, key)
-	}
-}
-
-func outputSchemaFromSpec(spec map[string]any) (map[string]any, error) {
-	if schema, ok := spec["outputSchema"]; ok && schema != nil {
-		return exportJSONMap(schema)
-	}
-	if schema, ok := spec["schema"]; ok && schema != nil {
-		return exportJSONMap(schema)
-	}
-	return nil, nil
 }
 
 func schemaDigest(schema map[string]any) string {

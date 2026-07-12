@@ -668,7 +668,7 @@ func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.
 	}
 }
 
-func TestWorkflowCommand_LongHelpSteersUsersToValidateBeforePreview(t *testing.T) {
+func TestWorkflowCommand_LongHelpPresentsCanonicalFactorySessionSuccessorsFirst(t *testing.T) {
 	root := NewRootCommand()
 	workflowCmd, _, err := root.Find([]string{"workflow"})
 	if err != nil {
@@ -684,9 +684,12 @@ func TestWorkflowCommand_LongHelpSteersUsersToValidateBeforePreview(t *testing.T
 	}
 
 	for _, want := range []string{
-		"Factory Session",
-		"validate   primary CLI path",
-		"preview    compatibility alias",
+		"Compatibility-only workflow spellings",
+		"POST /factories/preview",
+		"POST /factory-sessions/{sync|async}",
+		"canonical you session commands",
+		"run        compatibility sync start; successor: POST /factory-sessions/sync",
+		"status     compatibility read; successor: GET /factory-sessions/{session_id}",
 	} {
 		if !strings.Contains(workflowCmd.Long, want) {
 			t.Fatalf("workflow long help missing %q:\n%s", want, workflowCmd.Long)
@@ -698,8 +701,8 @@ func TestWorkflowCommand_LongHelpSteersUsersToValidateBeforePreview(t *testing.T
 	if !strings.Contains(previewCmd.Long, "workflow validate") {
 		t.Fatalf("preview long help should steer to validate:\n%s", previewCmd.Long)
 	}
-	if strings.Contains(validateCmd.Long, "compatibility") {
-		t.Fatalf("validate long help should not be labeled compatibility:\n%s", validateCmd.Long)
+	if !strings.Contains(validateCmd.Long, "shared workflow validation contract") {
+		t.Fatalf("validate long help should preserve its validation behavior:\n%s", validateCmd.Long)
 	}
 }
 
@@ -744,15 +747,17 @@ func TestWorkflowValidateHumanOutputUsesFactorySessionTerminology(t *testing.T) 
 	writeTerminologyWorkflow(t, projectRoot, "review.js", validTerminologyWorkflowSource)
 
 	var output bytes.Buffer
-	if err := workflow.Validate(workflow.ValidateConfig{
-		SourceConfig: workflow.SourceConfig{
-			Dir:         projectRoot,
-			SourceKind:  string(workflowsource.KindWorkflowName),
-			SourceValue: "review",
-		},
-		Output: &output,
-	}); err != nil {
-		t.Fatalf("Validate: %v", err)
+	root := NewRootCommand()
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"workflow", "validate",
+		"--kind", "WORKFLOW_NAME",
+		"--value", "review",
+		"--dir", projectRoot,
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute documented workflow validation command: %v", err)
 	}
 
 	text := output.String()

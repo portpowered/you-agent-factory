@@ -54,12 +54,6 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(() => dashboardSnapshotState),
 }));
 
-vi.mock("../components/dashboard-session-lifecycle-banner", () => ({
-  DashboardSessionLifecycleBanner: () => (
-    <section data-testid="dashboard-session-lifecycle-banner-probe" />
-  ),
-}));
-
 describe("dashboard public barrel composition", () => {
   beforeEach(() => {
     resetDashboardSessionStore();
@@ -99,7 +93,17 @@ describe("dashboard public barrel composition", () => {
       isInitialLoading: false,
       preflightRecovery: null,
       preflightStatus: "success",
-      snapshot: {} as never,
+      snapshot: {
+        factory_state: "RUNNING",
+        runtime: {
+          session: {
+            bracket: {
+              result_status: "IN_PROGRESS",
+              started_at: "2026-06-09T12:00:00Z",
+            },
+          },
+        },
+      } as never,
       streamState: {
         message: "Factory event stream connected.",
         status: "live",
@@ -111,6 +115,9 @@ describe("dashboard public barrel composition", () => {
     expect(screen.getByRole("main").className).toBe(
       EXPECTED_DASHBOARD_SHELL_CLASS,
     );
+    expect(
+      screen.queryByTestId("dashboard-session-lifecycle-banner"),
+    ).toBeNull();
     expect(screen.getByText("Dashboard header session-review en")).toBeTruthy();
     expect(screen.getByText("Dashboard bento en")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog en")).toBeTruthy();

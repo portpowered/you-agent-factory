@@ -16,27 +16,28 @@ import (
 type Topic string
 
 const (
-	TopicAgents             Topic = "agents"
-	TopicAuthoringFactories Topic = "authoring-factories"
-	TopicConfig             Topic = "config"
-	TopicMockWorkers        Topic = "mock-workers"
-	TopicRecordReplay       Topic = "record-replay"
-	TopicGuards             Topic = "guards"
-	TopicRelationships      Topic = "relationships"
-	TopicWork               Topic = "work"
-	TopicSessions           Topic = "sessions"
-	TopicWorkstations       Topic = "workstations"
-	TopicWorkers            Topic = "workers"
-	TopicResources          Topic = "resources"
-	TopicModels             Topic = "models"
-	TopicMCPHosts           Topic = "mcp-hosts"
-	TopicOrchestrators      Topic = "orchestrators"
-	TopicMCP                Topic = "mcp"
-	TopicPackagedFusion     Topic = "packaged-fusion"
-	TopicPackagedGoal       Topic = "packaged-goal"
-	TopicPackagedTTS        Topic = "packaged-tts"
-	TopicBatchInputs        Topic = "batch-inputs"
-	TopicTemplates          Topic = "templates"
+	TopicAgents              Topic = "agents"
+	TopicAuthoringFactories  Topic = "authoring-factories"
+	TopicConfig              Topic = "config"
+	TopicMockWorkers         Topic = "mock-workers"
+	TopicRecordReplay        Topic = "record-replay"
+	TopicGuards              Topic = "guards"
+	TopicRelationships       Topic = "relationships"
+	TopicWork                Topic = "work"
+	TopicSessions            Topic = "sessions"
+	TopicWorkstations        Topic = "workstations"
+	TopicWorkers             Topic = "workers"
+	TopicResources           Topic = "resources"
+	TopicModels              Topic = "models"
+	TopicMCPHosts            Topic = "mcp-hosts"
+	TopicOrchestrators       Topic = "orchestrators"
+	TopicJavaScriptWorkflows Topic = "javascript-workflows"
+	TopicMCP                 Topic = "mcp"
+	TopicPackagedFusion      Topic = "packaged-fusion"
+	TopicPackagedGoal        Topic = "packaged-goal"
+	TopicPackagedTTS         Topic = "packaged-tts"
+	TopicBatchInputs         Topic = "batch-inputs"
+	TopicTemplates           Topic = "templates"
 )
 
 const (
@@ -45,27 +46,28 @@ const (
 )
 
 const (
-	referenceAgentsPath             = "agents.md"
-	referenceAuthoringFactoriesPath = "authoring-factories.md"
-	referenceConfigPath             = "config.md"
-	referenceMockWorkersPath        = "mock-workers.md"
-	referenceRecordReplayPath       = "record-replay.md"
-	referenceGuardsPath             = "guards.md"
-	referenceRelationshipsPath      = "relationships.md"
-	referenceWorkPath               = "work.md"
-	referenceSessionsPath           = "sessions.md"
-	referenceWorkstationsPath       = "workstations.md"
-	referenceWorkersPath            = "workers.md"
-	referenceResourcesPath          = "resources.md"
-	referenceModelsPath             = "models.md"
-	referenceMCPHostsPath           = "mcp-hosts.md"
-	referenceOrchestratorsPath      = "orchestrators.md"
-	referenceMCPPath                = "mcp.md"
-	referencePackagedFusionPath     = "packaged-fusion.md"
-	referencePackagedGoalPath       = "packaged-goal.md"
-	referencePackagedTTSPath        = "packaged-tts.md"
-	referenceBatchInputsPath        = "batch-inputs.md"
-	referenceTemplatesPath          = "templates.md"
+	referenceAgentsPath              = "agents.md"
+	referenceAuthoringFactoriesPath  = "authoring-factories.md"
+	referenceConfigPath              = "config.md"
+	referenceMockWorkersPath         = "mock-workers.md"
+	referenceRecordReplayPath        = "record-replay.md"
+	referenceGuardsPath              = "guards.md"
+	referenceRelationshipsPath       = "relationships.md"
+	referenceWorkPath                = "work.md"
+	referenceSessionsPath            = "sessions.md"
+	referenceWorkstationsPath        = "workstations.md"
+	referenceWorkersPath             = "workers.md"
+	referenceResourcesPath           = "resources.md"
+	referenceModelsPath              = "models.md"
+	referenceMCPHostsPath            = "mcp-hosts.md"
+	referenceOrchestratorsPath       = "orchestrators.md"
+	referenceJavaScriptWorkflowsPath = "javascript-workflows.md"
+	referenceMCPPath                 = "mcp.md"
+	referencePackagedFusionPath      = "packaged-fusion.md"
+	referencePackagedGoalPath        = "packaged-goal.md"
+	referencePackagedTTSPath         = "packaged-tts.md"
+	referenceBatchInputsPath         = "batch-inputs.md"
+	referenceTemplatesPath           = "templates.md"
 )
 
 type topicDocument struct {
@@ -88,7 +90,8 @@ var topicDocuments = []topicDocument{
 	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicMCPHosts, description: "Dynamic workflow MCP host setup: you mcp serve, stdio transport, tool catalog, and practical host examples.", path: referenceMCPHostsPath, displayOrder: 36},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
-	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 38},
+	{topic: TopicJavaScriptWorkflows, description: "Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.", path: referenceJavaScriptWorkflowsPath, displayOrder: 38},
+	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 39},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},

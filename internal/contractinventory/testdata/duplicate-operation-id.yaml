@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Duplicate operationId fixture
+  version: 1.0.0
+paths:
+  /alpha:
+    get:
+      operationId: sharedId
+      responses:
+        "200":
+          description: OK
+  /beta:
+    post:
+      operationId: sharedId
+      responses:
+        "201":
+          description: Created

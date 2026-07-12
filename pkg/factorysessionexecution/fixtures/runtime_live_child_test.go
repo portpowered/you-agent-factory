@@ -76,7 +76,7 @@ func assertSharedLiveChildDispatchContract(t *testing.T, dispatch fse.DispatchSu
 		ModelProvider:   "CODEX",
 		Model:           "gpt-test",
 		ReasoningEffort: "medium",
-		RunnerID:        "review",
+		RunnerID:        "",
 		Provider:        "mock",
 		ProviderSession: fse.ProviderSessionRef{
 			Provider: "mock",
