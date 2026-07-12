@@ -164,19 +164,8 @@ func DefaultProjectNamedFactoryRoot(cwd string) (string, error) {
 // ListNamedFactories discovers persisted named factories by scanning rootDir for
 // subdirectories that contain a valid factory.json layout.
 func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
-	if strings.TrimSpace(rootDir) == "" {
-		return nil, fmt.Errorf("factory root is required")
-	}
-
-	info, err := os.Stat(rootDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("factory root %s does not exist: %w", rootDir, err)
-		}
-		return nil, fmt.Errorf("stat factory root %s: %w", rootDir, err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("factory root %s is not a directory", rootDir)
+	if err := validateNamedFactoryListRoot(rootDir); err != nil {
+		return nil, err
 	}
 
 	currentName, err := readCurrentFactoryPointerForList(rootDir)
@@ -189,67 +178,121 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 		return nil, fmt.Errorf("read factory root %s: %w", rootDir, err)
 	}
 
-	entries := make([]NamedFactoryListEntry, 0, len(children))
-	seen := make(map[string]struct{}, len(children))
-	appendEntry := func(displayName, factoryDir string) {
-		if displayName == "" || factoryDir == "" {
-			return
-		}
-		if _, ok := seen[displayName]; ok {
-			return
-		}
-		seen[displayName] = struct{}{}
-		entries = append(entries, NamedFactoryListEntry{
-			Name:       displayName,
-			FactoryDir: factoryDir,
-			Current:    currentName != "" && displayName == currentName,
-		})
-	}
-
+	collector := newNamedFactoryListCollector(currentName, len(children))
 	for _, child := range children {
-		if !child.IsDir() {
-			continue
-		}
-		name := child.Name()
-		if name == interfaces.InputsDir || name == interfaces.WorkersDir || name == interfaces.WorkstationsDir {
-			continue
-		}
-		factoryDir := filepath.Join(rootDir, name)
-		if err := requireFactoryConfig(factoryDir); err == nil {
-			displayName, err := NamedFactoryLayoutSegmentToName(name)
-			if err != nil {
-				continue
-			}
-			appendEntry(displayName, factoryDir)
-			continue
-		}
-		if !strings.HasPrefix(name, scopedNamedFactoryPrefix) {
-			continue
-		}
-		scopeChildren, err := os.ReadDir(factoryDir)
-		if err != nil {
-			continue
-		}
-		for _, scopedChild := range scopeChildren {
-			if !scopedChild.IsDir() {
-				continue
-			}
-			scopedFactoryDir := filepath.Join(factoryDir, scopedChild.Name())
-			if err := requireFactoryConfig(scopedFactoryDir); err != nil {
-				continue
-			}
-			displayName := name + "/" + scopedChild.Name()
-			if _, err := canonicalNamedFactoryName(displayName); err != nil {
-				continue
-			}
-			appendEntry(displayName, scopedFactoryDir)
-		}
+		collectNamedFactoryFromRootChild(rootDir, child, collector)
 	}
 
+	entries := collector.entries()
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
 	return entries, nil
+}
+
+func validateNamedFactoryListRoot(rootDir string) error {
+	if strings.TrimSpace(rootDir) == "" {
+		return fmt.Errorf("factory root is required")
+	}
+	info, err := os.Stat(rootDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("factory root %s does not exist: %w", rootDir, err)
+		}
+		return fmt.Errorf("stat factory root %s: %w", rootDir, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("factory root %s is not a directory", rootDir)
+	}
+	return nil
+}
+
+func isReservedNamedFactoryListDir(name string) bool {
+	return name == interfaces.InputsDir || name == interfaces.WorkersDir || name == interfaces.WorkstationsDir
+}
+
+type namedFactoryListCollector struct {
+	currentName string
+	seen        map[string]struct{}
+	items       []NamedFactoryListEntry
+}
+
+func newNamedFactoryListCollector(currentName string, capacity int) *namedFactoryListCollector {
+	return &namedFactoryListCollector{
+		currentName: currentName,
+		seen:        make(map[string]struct{}, capacity),
+		items:       make([]NamedFactoryListEntry, 0, capacity),
+	}
+}
+
+func (c *namedFactoryListCollector) append(displayName, factoryDir string) {
+	if displayName == "" || factoryDir == "" {
+		return
+	}
+	if _, ok := c.seen[displayName]; ok {
+		return
+	}
+	c.seen[displayName] = struct{}{}
+	c.items = append(c.items, NamedFactoryListEntry{
+		Name:       displayName,
+		FactoryDir: factoryDir,
+		Current:    c.currentName != "" && displayName == c.currentName,
+	})
+}
+
+func (c *namedFactoryListCollector) entries() []NamedFactoryListEntry {
+	return c.items
+}
+
+func collectNamedFactoryFromRootChild(rootDir string, child os.DirEntry, collector *namedFactoryListCollector) {
+	if !child.IsDir() {
+		return
+	}
+	name := child.Name()
+	if isReservedNamedFactoryListDir(name) {
+		return
+	}
+	factoryDir := filepath.Join(rootDir, name)
+	if collectLegacyNamedFactoryListEntry(factoryDir, name, collector) {
+		return
+	}
+	collectHierarchicalScopedNamedFactories(factoryDir, name, collector)
+}
+
+func collectLegacyNamedFactoryListEntry(factoryDir, segment string, collector *namedFactoryListCollector) bool {
+	if err := requireFactoryConfig(factoryDir); err != nil {
+		return false
+	}
+	displayName, err := NamedFactoryLayoutSegmentToName(segment)
+	if err != nil {
+		return true
+	}
+	collector.append(displayName, factoryDir)
+	return true
+}
+
+func collectHierarchicalScopedNamedFactories(scopeDir, scopeDirName string, collector *namedFactoryListCollector) {
+	if !strings.HasPrefix(scopeDirName, scopedNamedFactoryPrefix) {
+		return
+	}
+	scopeChildren, err := os.ReadDir(scopeDir)
+	if err != nil {
+		return
+	}
+	for _, scopedChild := range scopeChildren {
+		if !scopedChild.IsDir() {
+			continue
+		}
+		scopedFactoryDir := filepath.Join(scopeDir, scopedChild.Name())
+		if err := requireFactoryConfig(scopedFactoryDir); err != nil {
+			continue
+		}
+		displayName := scopeDirName + "/" + scopedChild.Name()
+		if _, err := canonicalNamedFactoryName(displayName); err != nil {
+			continue
+		}
+		collector.append(displayName, scopedFactoryDir)
+	}
 }
 
 func readCurrentFactoryPointerForList(rootDir string) (string, error) {
