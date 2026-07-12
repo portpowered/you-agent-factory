@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -13,15 +14,155 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
+
+func TestNew_ProviderBoundPetriDispatchPreservesPublicContractOnReplay(t *testing.T) {
+	net := buildSimpleNet()
+	history := factoryevents.NewFactoryEventHistory(net, time.Now)
+	provider := workerprovider.NewRecordingProvider(
+		providerBoundaryFake{},
+		history.RecordInferenceEvent,
+	)
+	f, err := New(
+		factory.WithNet(net),
+		factory.WithInlineDispatch(),
+		factory.WithFactoryEventHistory(history),
+		factory.WithWorkerExecutor("mock", providerBoundaryExecutor{provider: provider}),
+		factory.WithLogger(logging.NoopLogger{}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+		WorkID: "work-provider-contract", WorkTypeID: "task", TraceID: "trace-provider-contract",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	if err := tickableFactory(t, f).Tick(context.Background()); err != nil {
+		t.Fatalf("Tick: %v", err)
+	}
+
+	liveEvents := runtimeGeneratedEvents(t, f)
+	live := publicPetriProviderContract(t, liveEvents)
+	loaded := roundTripSafeBoundaryArtifact(t, liveEvents)
+	replayed := publicPetriProviderContract(t, loaded.Events)
+	if !reflect.DeepEqual(replayed, live) {
+		t.Fatalf("replayed public Petri provider contract = %#v, want live %#v", replayed, live)
+	}
+}
+
+type providerBoundaryFake struct{}
+
+func (providerBoundaryFake) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	return interfaces.InferenceResponse{
+		Content: "provider contract output",
+		ProviderSession: &interfaces.ProviderSessionMetadata{
+			Provider: "mock", Kind: "session_id", ID: "petri-provider-session-1",
+		},
+		Diagnostics: &interfaces.WorkDiagnostics{Provider: &interfaces.ProviderDiagnostic{
+			Provider: "mock",
+			Model:    "fixture-model",
+			ResponseMetadata: map[string]string{
+				"provider_session_id": "petri-provider-session-1",
+			},
+		}},
+	}, nil
+}
+
+type providerBoundaryExecutor struct {
+	provider workerprovider.Provider
+}
+
+func (e providerBoundaryExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	response, err := e.provider.Infer(ctx, interfaces.ProviderInferenceRequest{
+		Dispatch:      dispatch,
+		WorkerType:    dispatch.WorkerType,
+		UserMessage:   "deterministic provider contract prompt",
+		Model:         "fixture-model",
+		ModelProvider: "mock",
+	})
+	if err != nil {
+		return interfaces.WorkResult{}, err
+	}
+	return interfaces.WorkResult{
+		DispatchID:      dispatch.DispatchID,
+		TransitionID:    dispatch.TransitionID,
+		Outcome:         interfaces.OutcomeAccepted,
+		Output:          response.Content,
+		ProviderSession: response.ProviderSession,
+		Diagnostics:     response.Diagnostics,
+	}, nil
+}
+
+type petriPublicProviderContract struct {
+	DispatchID      string
+	Provider        string
+	Model           string
+	ProviderSession interfaces.ProviderSessionMetadata
+}
+
+func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent) petriPublicProviderContract {
+	t.Helper()
+	world := reconstructWorldStateAtFinalTick(t, events)
+	view := projections.BuildFactoryWorldView(world)
+	if len(view.Runtime.Session.DispatchHistory) != 1 {
+		t.Fatalf("public dispatch history = %#v, want one provider-bound dispatch", view.Runtime.Session.DispatchHistory)
+	}
+	dispatch := view.Runtime.Session.DispatchHistory[0]
+	if dispatch.DispatchID == "" {
+		t.Fatal("public dispatch id = empty, want provider-bound dispatch identity")
+	}
+	attempts := view.Runtime.InferenceAttemptsByDispatchID[dispatch.DispatchID]
+	if len(attempts) != 1 {
+		t.Fatalf("public inference attempts for %q = %#v, want one", dispatch.DispatchID, attempts)
+	}
+	var attempt interfaces.FactoryWorldInferenceAttempt
+	for _, candidate := range attempts {
+		attempt = candidate
+	}
+	if attempt.Attempt == 0 || attempt.Diagnostics == nil || attempt.Diagnostics.Provider == nil {
+		t.Fatalf("public inference attempt = %#v, want attempt and safe provider metadata", attempt)
+	}
+	if attempt.Diagnostics.Provider.Provider != "mock" || attempt.Diagnostics.Provider.Model != "fixture-model" {
+		t.Fatalf("public inference provider/model = %q/%q, want mock/fixture-model",
+			attempt.Diagnostics.Provider.Provider, attempt.Diagnostics.Provider.Model)
+	}
+	if len(view.Runtime.Session.ProviderSessions) != 1 {
+		t.Fatalf("public provider sessions = %#v, want one", view.Runtime.Session.ProviderSessions)
+	}
+	session := view.Runtime.Session.ProviderSessions[0]
+	if session.Diagnostics == nil || session.Diagnostics.Provider == nil {
+		t.Fatalf("public provider session = %#v, want identity and safe metadata", session)
+	}
+	wantSession := interfaces.ProviderSessionMetadata{
+		Provider: "mock",
+		Kind:     "session_id",
+		ID:       "petri-provider-session-1",
+	}
+	if session.ProviderSession != wantSession {
+		t.Fatalf("public provider session identity = %#v, want %#v", session.ProviderSession, wantSession)
+	}
+	return petriPublicProviderContract{
+		DispatchID:      dispatch.DispatchID,
+		Provider:        attempt.Diagnostics.Provider.Provider,
+		Model:           attempt.Diagnostics.Provider.Model,
+		ProviderSession: session.ProviderSession,
+	}
+}
 
 func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *testing.T) {
 	f := newSafeBoundaryRuntime(t)
 	submitSafeBoundaryRequests(t, f)
 	tickUntilDispatchResponses(t, tickableFactory(t, f), f, 3)
+	liveSnapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
 
 	events := runtimeGeneratedEvents(t, f)
 	assertDispatchResponseCount(t, events, 3)
@@ -31,9 +172,43 @@ func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *t
 	assertThinDispatchResponsesOmitRetiredProviderAttemptFields(t, loaded.Events)
 
 	worldState := reconstructWorldStateAtFinalTick(t, loaded.Events)
+	assertExecutedPetriDispatchContractSurvivesReplay(t, liveSnapshot.DispatchHistory, worldState)
 	assertSafeBoundaryWorldState(t, worldState)
 	assertSafeBoundaryRequestViews(t, worldState)
 	assertSafeBoundaryDoesNotLeakJSON(t, projections.BuildFactoryWorldView(worldState))
+}
+
+type petriDispatchContract struct {
+	DispatchID   string
+	TransitionID string
+	Outcome      interfaces.WorkOutcome
+}
+
+func assertExecutedPetriDispatchContractSurvivesReplay(
+	t *testing.T,
+	live []interfaces.CompletedDispatch,
+	replayed interfaces.FactoryWorldState,
+) {
+	t.Helper()
+	if len(live) != len(replayed.CompletedDispatches) || len(live) == 0 {
+		t.Fatalf("live/replayed dispatches = %d/%d, want equal non-zero counts", len(live), len(replayed.CompletedDispatches))
+	}
+	for index := range live {
+		completion := replayed.CompletedDispatches[index]
+		liveContract := petriDispatchContract{
+			DispatchID:   live[index].DispatchID,
+			TransitionID: live[index].TransitionID,
+			Outcome:      live[index].Outcome,
+		}
+		replayedContract := petriDispatchContract{
+			DispatchID:   completion.DispatchID,
+			TransitionID: completion.TransitionID,
+			Outcome:      interfaces.WorkOutcome(completion.Result.Outcome),
+		}
+		if !reflect.DeepEqual(replayedContract, liveContract) {
+			t.Fatalf("replayed Petri dispatch[%d] = %#v, want live %#v", index, replayedContract, liveContract)
+		}
+	}
 }
 
 func TestFactoryEventHistory_RecordsOrderedEventsWithStableIDs(t *testing.T) {

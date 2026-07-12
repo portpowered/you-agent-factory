@@ -2,6 +2,7 @@ package fixtures_test
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +29,7 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
 		Provider:          provider,
+		Persistence:       runtimePersistence(projectRoot),
 	})
 
 	completed, err := service.StartSync(context.Background(), fse.StartRequest{
@@ -47,7 +49,57 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 		t.Fatalf("StartSync: %v", err)
 	}
 
+	_, live, _ := loadLiveChildDispatchReads(t, service, completed)
 	assertLiveChildDispatchInspection(t, service, completed, provider.callCount)
+	assertSharedLiveChildDispatchContract(t, live)
+
+	reloaded := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: fse.ChildExecutorModeLive,
+		Provider:          provider,
+		Persistence:       runtimePersistence(projectRoot),
+	})
+	_, replayed, _ := loadLiveChildDispatchReads(t, reloaded, completed)
+	assertSharedLiveChildDispatchContract(t, replayed)
+	if !reflect.DeepEqual(sharedDispatchContract(live), sharedDispatchContract(replayed)) {
+		t.Fatalf("replayed shared dispatch = %#v, want live %#v", sharedDispatchContract(replayed), sharedDispatchContract(live))
+	}
+}
+
+func assertSharedLiveChildDispatchContract(t *testing.T, dispatch fse.DispatchSummary) {
+	t.Helper()
+	want := sharedDispatchProjection{
+		ID:       "dispatch-1",
+		Model:    "gpt-test",
+		Provider: "mock",
+		ProviderSession: fse.ProviderSessionRef{
+			Provider: "mock",
+			Kind:     "session_id",
+			ID:       "live-provider-session-1",
+		},
+	}
+	if got := sharedDispatchContract(dispatch); !reflect.DeepEqual(got, want) {
+		t.Fatalf("shared dispatch contract = %#v, want %#v", got, want)
+	}
+}
+
+type sharedDispatchProjection struct {
+	ID              string
+	Model           string
+	Provider        string
+	ProviderSession fse.ProviderSessionRef
+}
+
+func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjection {
+	projection := sharedDispatchProjection{
+		ID:       dispatch.ID,
+		Model:    dispatch.Model,
+		Provider: dispatch.Provider,
+	}
+	if len(dispatch.ProviderSessionRefs) == 1 {
+		projection.ProviderSession = dispatch.ProviderSessionRefs[0]
+	}
+	return projection
 }
 
 type fixtureMockProvider struct {
@@ -466,8 +518,13 @@ func assertLiveChildDispatchSummary(
 	if dispatch.Provider != "mock" {
 		t.Fatalf("dispatch provider = %q, want mock", dispatch.Provider)
 	}
-	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0].ID != "live-provider-session-1" {
+	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0] != (fse.ProviderSessionRef{
+		Provider: "mock", Kind: "session_id", ID: "live-provider-session-1",
+	}) {
 		t.Fatalf("providerSessionRefs = %#v", dispatch.ProviderSessionRefs)
+	}
+	if dispatch.Model != "gpt-test" {
+		t.Fatalf("dispatch model = %q, want gpt-test", dispatch.Model)
 	}
 	if providerCallCount != 1 {
 		t.Fatalf("provider call count = %d, want 1", providerCallCount)
@@ -915,4 +972,3 @@ func dispatchExecutionMode(t *testing.T, service fse.Service, sessionID, dispatc
 	}
 	return detail.JavaScript.ExecutionMode
 }
-
