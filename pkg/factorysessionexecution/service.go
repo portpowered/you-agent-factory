@@ -47,6 +47,63 @@ type Service interface {
 	ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error)
 }
 
+// recordCanonicalTerminalState is the sole publication boundary for terminal
+// JavaScript session facts. It validates and persists the complete canonical
+// event projection before making that projection visible to live readers.
+// The caller must hold s.mu.
+func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeSessionState, candidate runtimeSessionState) error {
+	events, err := MapCanonicalRuntimeSessionEvents(
+		candidate.session,
+		candidate.result,
+		runtimeDispatchEventInputFromState(&candidate),
+	)
+	if err != nil {
+		return err
+	}
+	candidate.events = mergePreservedDispatchInterruptedEvents(
+		events,
+		extractDispatchInterruptedEvents(candidate.events),
+	)
+	if err := s.persistTerminalSessionState(candidate); err != nil {
+		return err
+	}
+	applyRuntimeSessionFields(target, candidate)
+	target.runtimeRecords = cloneRuntimeRecords(candidate.runtimeRecords)
+	target.checkpointSummary = cloneCheckpointSummary(candidate.checkpointSummary)
+	target.startRequest = cloneStartRequestPtr(candidate.startRequest)
+	target.resolvedSource = candidate.resolvedSource
+	target.sourceContent = candidate.sourceContent
+	target.runCancel = candidate.runCancel
+	return nil
+}
+
+func safelyStartedAt(lifecycle *LifecycleTimestamps, fallback time.Time) *time.Time {
+	if lifecycle != nil && lifecycle.StartedAt != nil {
+		startedAt := lifecycle.StartedAt.UTC()
+		return &startedAt
+	}
+	startedAt := fallback.UTC()
+	return &startedAt
+}
+
+func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
+	state *runtimeSessionState,
+	terminal runtimeSessionState,
+	outcome workflowruntime.Outcome,
+	startedAt time.Time,
+) {
+	finishedAt := s.now()
+	applyTerminalRuntimeProjection(state, terminal, outcome)
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	if state.session.Lifecycle.StartedAt == nil {
+		state.session.Lifecycle.StartedAt = &startedAt
+	}
+	state.session.Lifecycle.FinishedAt = &finishedAt
+	state.result.SessionStatus = state.session.Status
+}
+
 // InspectionLinksForSession builds API-relative inspection links for one durable session.
 func InspectionLinksForSession(sessionID string, includeEvents bool) InspectionLinks {
 	base := fmt.Sprintf("/factory-sessions/%s", sessionID)
