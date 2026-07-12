@@ -293,6 +293,69 @@ func registeredCLIProviderProbeCommands() []string {
 	}
 }
 
+func assertCLIProviderDiscoverySelected(t *testing.T, got CLIProviderDiscovery, wantSelected *CLIProviderIdentity) {
+	t.Helper()
+
+	if wantSelected == nil {
+		if got.Selected != nil {
+			t.Fatalf("selected = %#v, want nil", got.Selected)
+		}
+		return
+	}
+	if got.Selected == nil {
+		t.Fatalf("selected = nil, want %q", *wantSelected)
+	}
+	if got.Selected.Identity != *wantSelected {
+		t.Fatalf("selected identity = %q, want %q", got.Selected.Identity, *wantSelected)
+	}
+}
+
+func assertCLIProviderDiscoveryUnavailable(
+	t *testing.T,
+	availability []CLIProviderAvailability,
+	wantUnavailable []CLIProviderIdentity,
+) {
+	t.Helper()
+
+	if len(availability) != len(RegisteredCLIProviders()) {
+		t.Fatalf("availability len = %d, want %d", len(availability), len(RegisteredCLIProviders()))
+	}
+
+	unavailable := make(map[CLIProviderIdentity]struct{})
+	for _, item := range availability {
+		if item.Available {
+			continue
+		}
+		if item.UnavailableReason != string(interfaces.WorkFailureTypeMissingExecutable) {
+			t.Fatalf("identity %q unavailable reason = %q, want %q",
+				item.Registration.Identity,
+				item.UnavailableReason,
+				interfaces.WorkFailureTypeMissingExecutable,
+			)
+		}
+		unavailable[item.Registration.Identity] = struct{}{}
+	}
+
+	for _, identity := range wantUnavailable {
+		if _, ok := unavailable[identity]; !ok {
+			t.Fatalf("identity %q not classified unavailable", identity)
+		}
+	}
+}
+
+func assertProbedCLIProviderCommands(t *testing.T, probedCommands, wantProbeCommands []string) {
+	t.Helper()
+
+	if len(probedCommands) != len(wantProbeCommands) {
+		t.Fatalf("lookPath commands = %#v, want %#v", probedCommands, wantProbeCommands)
+	}
+	for i, wantCommand := range wantProbeCommands {
+		if probedCommands[i] != wantCommand {
+			t.Fatalf("lookPath command[%d] = %q, want %q", i, probedCommands[i], wantCommand)
+		}
+	}
+}
+
 func assertCLIProviderDiscovery(t *testing.T, tc cliProviderDiscoveryCase) {
 	t.Helper()
 
@@ -306,54 +369,14 @@ func assertCLIProviderDiscovery(t *testing.T, tc cliProviderDiscoveryCase) {
 	}
 
 	got := DiscoverRegisteredCLIProvider()
-
-	if tc.wantSelected == nil {
-		if got.Selected != nil {
-			t.Fatalf("selected = %#v, want nil", got.Selected)
-		}
-	} else if got.Selected == nil {
-		t.Fatalf("selected = nil, want %q", *tc.wantSelected)
-	} else if got.Selected.Identity != *tc.wantSelected {
-		t.Fatalf("selected identity = %q, want %q", got.Selected.Identity, *tc.wantSelected)
-	}
-
-	if len(got.Availability) != len(RegisteredCLIProviders()) {
-		t.Fatalf("availability len = %d, want %d", len(got.Availability), len(RegisteredCLIProviders()))
-	}
-
-	unavailable := make(map[CLIProviderIdentity]struct{})
-	for _, availability := range got.Availability {
-		if availability.Available {
-			continue
-		}
-		if availability.UnavailableReason != string(interfaces.WorkFailureTypeMissingExecutable) {
-			t.Fatalf("identity %q unavailable reason = %q, want %q",
-				availability.Registration.Identity,
-				availability.UnavailableReason,
-				interfaces.WorkFailureTypeMissingExecutable,
-			)
-		}
-		unavailable[availability.Registration.Identity] = struct{}{}
-	}
-
-	for _, identity := range tc.wantUnavailable {
-		if _, ok := unavailable[identity]; !ok {
-			t.Fatalf("identity %q not classified unavailable", identity)
-		}
-	}
+	assertCLIProviderDiscoverySelected(t, got, tc.wantSelected)
+	assertCLIProviderDiscoveryUnavailable(t, got.Availability, tc.wantUnavailable)
 
 	wantProbeCommands := tc.wantProbeCommands
 	if wantProbeCommands == nil {
 		wantProbeCommands = registeredCLIProviderProbeCommands()
 	}
-	if len(probedCommands) != len(wantProbeCommands) {
-		t.Fatalf("lookPath commands = %#v, want %#v", probedCommands, wantProbeCommands)
-	}
-	for i, wantCommand := range wantProbeCommands {
-		if probedCommands[i] != wantCommand {
-			t.Fatalf("lookPath command[%d] = %q, want %q", i, probedCommands[i], wantCommand)
-		}
-	}
+	assertProbedCLIProviderCommands(t, probedCommands, wantProbeCommands)
 }
 
 func TestDiscoverRegisteredCLIProvider_FakePATHDiscoveryTables(t *testing.T) {
