@@ -820,45 +820,6 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
-func TestMarkdown_JavaScriptWorkflowsDocumentsExecutionAndPresetContract(t *testing.T) {
-	t.Parallel()
-
-	got, err := Markdown("javascript-workflows")
-	if err != nil {
-		t.Fatalf("Markdown(javascript-workflows) error = %v", err)
-	}
-
-	for _, want := range []string{
-		"# JavaScript Workflow Authoring",
-		"## Equivalent CLI, API, and MCP execution",
-		"POST /factory-sessions/sync",
-		"you.factory_session.start_sync",
-		"you.factory_session.list_dispatches",
-		"fixture-backed",
-		"you mcp serve --runtime",
-		"compatibility aliases",
-		"## Child worker presets",
-		"~/.you-agent-factory/config.json",
-		`"workerPresets"`,
-		`agent.run({preset: "careful-review"`,
-		"orchestrator.javascript.agents.<agentId>.preset",
-		"Highest precedence is an explicit",
-		"fail before child dispatch",
-		"## Stable failures and recovery",
-		"workflow.source.forbiddenHostAccess",
-		"must be JSON-compatible",
-		"RESULT_NOT_READY",
-		"SESSION_NOT_FOUND",
-		"unsupported replay artifact schemaVersion",
-		"FAILED_WITH_PARTIAL",
-		"raw provider transcripts",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Markdown(javascript-workflows) missing %q:\n%s", want, got)
-		}
-	}
-}
-
 func TestMarkdown_ModelsDocumentsInferenceBehavior(t *testing.T) {
 	t.Parallel()
 

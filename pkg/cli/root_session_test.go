@@ -744,15 +744,17 @@ func TestWorkflowValidateHumanOutputUsesFactorySessionTerminology(t *testing.T) 
 	writeTerminologyWorkflow(t, projectRoot, "review.js", validTerminologyWorkflowSource)
 
 	var output bytes.Buffer
-	if err := workflow.Validate(workflow.ValidateConfig{
-		SourceConfig: workflow.SourceConfig{
-			Dir:         projectRoot,
-			SourceKind:  string(workflowsource.KindWorkflowName),
-			SourceValue: "review",
-		},
-		Output: &output,
-	}); err != nil {
-		t.Fatalf("Validate: %v", err)
+	root := NewRootCommand()
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"workflow", "validate",
+		"--kind", "WORKFLOW_NAME",
+		"--value", "review",
+		"--dir", projectRoot,
+	})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute documented workflow validation command: %v", err)
 	}
 
 	text := output.String()

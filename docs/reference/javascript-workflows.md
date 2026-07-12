@@ -108,7 +108,7 @@ result availability have the same meaning on every surface.
 
 | Operation | CLI | REST API | MCP |
 |-----------|-----|----------|-----|
-| Validate or resolve source without starting a session | `you workflow validate --workflow review` | `POST /factories/preview` | `you.factory_session.validate_source` |
+| Validate or resolve source without starting a session | `you workflow validate --kind WORKFLOW_NAME --value review` | `POST /factories/preview` | `you.factory_session.validate_source` |
 | Start and wait | `you --json workflow run --request-id req-review-1 --workflow review` | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
 | Start for polling | `you --json workflow start --request-id req-review-1 --workflow review` | `POST /factory-sessions/async` | `you.factory_session.start_async` |
 | Read status or final/partial result | `you --json workflow status SESSION_ID`; `you --json workflow result SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
