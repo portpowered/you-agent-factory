@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
@@ -183,7 +184,18 @@ func TestFailureBaseline_QuietLeak_RunFactoryQuietSuppressesTerminalOnInvocation
 	assertGoalQuietTerminalMute(t, stdout.String(), stderr.String())
 }
 
-func TestFailureBaseline_NoServer_ModelsInvokeCommandReportsUnreachableEndpoint(t *testing.T) {
+func TestFailureBaseline_NoServer_ModelsInvokeCommandUsesBootstrapInsteadOfUnreachableEndpoint(t *testing.T) {
+	originalInvokeModel := invokeModel
+	defer func() {
+		invokeModel = originalInvokeModel
+	}()
+
+	var got modelscli.InvokeConfig
+	invokeModel = func(cfg modelscli.InvokeConfig) error {
+		got = cfg
+		return nil
+	}
+
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
@@ -196,13 +208,11 @@ func TestFailureBaseline_NoServer_ModelsInvokeCommandReportsUnreachableEndpoint(
 		"--server", goalFailureBaselineUnreachableServer,
 	})
 
-	err := root.Execute()
-	if err == nil {
-		t.Fatal("expected unreachable error")
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute models invoke: %v", err)
 	}
-	want := "models endpoint not reachable at http://127.0.0.1:1/models/OMNIVOICE_Q4_K_M/invocations"
-	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("error = %q, want %q", err.Error(), want)
+	if got.Logger == nil {
+		t.Fatal("expected invoke to receive a logger for bootstrap invoke")
 	}
 }
 

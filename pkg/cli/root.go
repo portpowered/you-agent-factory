@@ -129,7 +129,7 @@ func NewRootCommand() *cobra.Command {
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newMCPCommand(),
-		newModelsCommand(globals, diagnostics),
+		newModelsCommand(globals, diagnostics, operatorDefaults),
 		newRunCommand(globals, diagnostics, operatorDefaults),
 		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(globals, diagnostics),
@@ -443,19 +443,19 @@ func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 	return cmd
 }
 
-func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
 	modelsCmd := &cobra.Command{
 		Use:   "models",
 		Short: "Inspect discovered models from a running service",
 		Long: "Inspect discovered models from a running infinite-you service.\n\n" +
 			"Use list to discover model identifiers, inspect to view one model's readiness and capabilities, " +
-			"invoke to call a discovered model directly through the same /models contract exposed by the API, " +
+			"invoke to call a discovered model directly through the shared in-process bootstrap, " +
 			"and pull to populate the managed local-model cache for supported local assets.",
 	}
 	modelsCmd.AddCommand(
 		newModelsListCommand(globals, diagnostics),
 		newModelsInspectCommand(globals, diagnostics),
-		newModelsInvokeCommand(globals, diagnostics),
+		newModelsInvokeCommand(globals, diagnostics, operatorDefaults),
 		newModelsPullCommand(globals, diagnostics),
 	)
 	return modelsCmd
@@ -503,7 +503,7 @@ func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 	return cmd
 }
 
-func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
 	cfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
 	cmd := &cobra.Command{
 		Use:     "invoke <model-name>",
@@ -511,9 +511,19 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			logger, err := logging.BuildLogger(diagnostics.verboseEnabled(), diagnostics.debug)
+			if err != nil {
+				return err
+			}
+			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+			if err != nil {
+				return err
+			}
 			cfg.Server = globals.server
 			cfg.ModelName = args[0]
 			cfg.JSON = globals.json
+			cfg.OperatorDefaults = resolvedOperatorDefaults
+			cfg.Logger = logger
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()

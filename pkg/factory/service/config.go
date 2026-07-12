@@ -54,6 +54,8 @@ type Config struct {
 	CommandRunnerOverride                   workers.CommandRunner
 	LocalModelRuntimeOverride               localmodels.Runtime
 	LocalModelHooks                         localmodels.Hooks
+	ModelAssetsOverride                     localmodels.AssetPuller
+	ModelHostOverride                       modelhost.Host
 	ExtraOptions                            []factory.FactoryOption
 	InvocationMetricsRecorder               InvocationMetricsRecorder
 	Logger                                  *zap.Logger
@@ -168,6 +170,8 @@ type HostConfigInput struct {
 	CommandRunnerOverride                   workers.CommandRunner
 	LocalModelRuntimeOverride               localmodels.Runtime
 	LocalModelHooks                         localmodels.Hooks
+	ModelAssetsOverride                     localmodels.AssetPuller
+	ModelHostOverride                       modelhost.Host
 	ExtraOptions                            []factory.FactoryOption
 	InvocationMetricsRecorder               InvocationMetricsRecorder
 	Logger                                  *zap.Logger
@@ -198,6 +202,8 @@ func ConfigFromHostInput(input HostConfigInput) Config {
 		CommandRunnerOverride:                   input.CommandRunnerOverride,
 		LocalModelRuntimeOverride:               input.LocalModelRuntimeOverride,
 		LocalModelHooks:                         input.LocalModelHooks,
+		ModelAssetsOverride:                     input.ModelAssetsOverride,
+		ModelHostOverride:                       input.ModelHostOverride,
 		ExtraOptions:                            input.ExtraOptions,
 		InvocationMetricsRecorder:               input.InvocationMetricsRecorder,
 		Logger:                                  input.Logger,
