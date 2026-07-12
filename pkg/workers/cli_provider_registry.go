@@ -155,3 +155,27 @@ func ProbeRegisteredCLIProviderAvailability() []CLIProviderAvailability {
 	}
 	return results
 }
+
+// CLIProviderDiscovery reports ranked availability probes and the first
+// available registered provider in preference order, if any.
+type CLIProviderDiscovery struct {
+	Selected     *CLIProviderRegistration
+	Availability []CLIProviderAvailability
+}
+
+// DiscoverRegisteredCLIProvider probes every registered CLI provider in rank
+// order and selects the first available registration. When no command is on
+// PATH, Selected is nil and every probe is classified unavailable.
+func DiscoverRegisteredCLIProvider() CLIProviderDiscovery {
+	availability := ProbeRegisteredCLIProviderAvailability()
+	discovery := CLIProviderDiscovery{Availability: availability}
+	for i := range availability {
+		if !availability[i].Available {
+			continue
+		}
+		selected := availability[i].Registration
+		discovery.Selected = &selected
+		break
+	}
+	return discovery
+}
