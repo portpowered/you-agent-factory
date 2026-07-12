@@ -1,0 +1,34 @@
+{
+  "planned_removals": [
+    {
+      "surface": "run_flag",
+      "name": "workflow",
+      "rationale": "Remove you run --workflow; workflow selection uses dedicated workflow commands."
+    },
+    {
+      "surface": "command",
+      "command_path": "you factory save",
+      "rationale": "Remove you factory save from the production CLI."
+    }
+  ],
+  "planned_moves": [
+    {
+      "surface": "command",
+      "from_command_path": "you config expand",
+      "to_command_path": "you factory config expand",
+      "rationale": "Relocate you config expand under you factory config."
+    },
+    {
+      "surface": "command",
+      "from_command_path": "you config flatten",
+      "to_command_path": "you factory config flatten",
+      "rationale": "Relocate you config flatten under you factory config."
+    },
+    {
+      "surface": "command",
+      "from_command_path": "you factory validate",
+      "to_command_path": "you factory config validate",
+      "rationale": "Reparent you factory validate under you factory config. you config validate is not registered today; this entry covers the planned validate relocation from the systematic CLI plan."
+    }
+  ]
+}
