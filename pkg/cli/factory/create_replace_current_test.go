@@ -3,6 +3,7 @@ package factory
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -123,5 +124,34 @@ func TestReplaceCurrent_UsesSessionScopedPath(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "Session: session-beta\n") {
 		t.Fatalf("output = %q, want session-beta label", got)
+	}
+}
+
+func TestReplaceCurrent_SurfacesUnexpectedHTTPErrorBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(factoryapi.Factory{Name: "beta"}); err != nil {
+				t.Fatalf("encode GET response: %v", err)
+			}
+		case http.MethodPut:
+			w.WriteHeader(http.StatusBadGateway)
+			if _, err := w.Write([]byte("upstream unavailable")); err != nil {
+				t.Fatalf("write PUT response: %v", err)
+			}
+		default:
+			t.Fatalf("method = %s", r.Method)
+		}
+	}))
+	defer srv.Close()
+
+	err := ReplaceCurrent(ReplaceCurrentConfig{Server: serverBase(t, srv), Output: io.Discard})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	want := "replace current factory failed (502): upstream unavailable"
+	if err.Error() != want {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 }
