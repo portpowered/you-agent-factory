@@ -114,6 +114,9 @@ func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent)
 		t.Fatalf("public dispatch history = %#v, want one provider-bound dispatch", view.Runtime.Session.DispatchHistory)
 	}
 	dispatch := view.Runtime.Session.DispatchHistory[0]
+	if dispatch.DispatchID == "" {
+		t.Fatal("public dispatch id = empty, want provider-bound dispatch identity")
+	}
 	attempts := view.Runtime.InferenceAttemptsByDispatchID[dispatch.DispatchID]
 	if len(attempts) != 1 {
 		t.Fatalf("public inference attempts for %q = %#v, want one", dispatch.DispatchID, attempts)
@@ -125,12 +128,24 @@ func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent)
 	if attempt.Attempt == 0 || attempt.Diagnostics == nil || attempt.Diagnostics.Provider == nil {
 		t.Fatalf("public inference attempt = %#v, want attempt and safe provider metadata", attempt)
 	}
+	if attempt.Diagnostics.Provider.Provider != "mock" || attempt.Diagnostics.Provider.Model != "fixture-model" {
+		t.Fatalf("public inference provider/model = %q/%q, want mock/fixture-model",
+			attempt.Diagnostics.Provider.Provider, attempt.Diagnostics.Provider.Model)
+	}
 	if len(view.Runtime.Session.ProviderSessions) != 1 {
 		t.Fatalf("public provider sessions = %#v, want one", view.Runtime.Session.ProviderSessions)
 	}
 	session := view.Runtime.Session.ProviderSessions[0]
-	if session.Diagnostics == nil || session.Diagnostics.Provider == nil || session.ProviderSession.ID == "" {
+	if session.Diagnostics == nil || session.Diagnostics.Provider == nil {
 		t.Fatalf("public provider session = %#v, want identity and safe metadata", session)
+	}
+	wantSession := interfaces.ProviderSessionMetadata{
+		Provider: "mock",
+		Kind:     "session_id",
+		ID:       "petri-provider-session-1",
+	}
+	if session.ProviderSession != wantSession {
+		t.Fatalf("public provider session identity = %#v, want %#v", session.ProviderSession, wantSession)
 	}
 	return petriPublicProviderContract{
 		DispatchID:      dispatch.DispatchID,
