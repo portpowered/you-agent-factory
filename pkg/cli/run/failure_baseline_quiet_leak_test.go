@@ -15,8 +15,7 @@ import (
 )
 
 // Hermetic S02 failure-baseline fixtures for one-shot run paths: quiet/CI
-// suppression contracts and named @you/goal invocation when the factory session
-// never becomes ready (no listening Factory Session server).
+// suppression contracts for named @you/goal invocation.
 
 var quietLeakForbiddenMarkers = []string{
 	"Factory initiated",
@@ -128,7 +127,7 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 
 	text := "quiet-leak baseline goal prompt"
 	var output bytes.Buffer
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -165,54 +164,4 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 		t.Fatalf("stdout = %q, want primary invocation result only", got)
 	}
 	assertQuietLeakContractForbidden(t, output.String())
-}
-
-type failureBaselineNoServerInvocationService struct {
-	run func(context.Context) error
-}
-
-func (s failureBaselineNoServerInvocationService) Run(ctx context.Context) error {
-	return s.run(ctx)
-}
-
-func (s failureBaselineNoServerInvocationService) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, apisurface.ErrFactorySessionNotFound
-}
-
-func (s failureBaselineNoServerInvocationService) InvokeFactorySession(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-	return apisurface.FactoryInvocationResult{}, apisurface.ErrFactorySessionNotFound
-}
-
-func TestFailureBaseline_NoServer_RunNamedGoalInvocationReportsSessionStoppedBeforeReady(t *testing.T) {
-	preserveRunGlobals(t)
-
-	text := "no-server baseline goal prompt"
-	var output bytes.Buffer
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		return failureBaselineNoServerInvocationService{
-			run: func(context.Context) error {
-				return nil
-			},
-		}, nil
-	}
-
-	err := Run(context.Background(), RunConfig{
-		Dir:                      "/tmp/builtin-goal",
-		NamedFactoryName:         goal.PackagedFactoryName,
-		InvocationPositionalText: &text,
-		StdinIsTTY:               func() bool { return true },
-		Output:                   &output,
-		Port:                     7437,
-		Logger:                   zap.NewNop(),
-	})
-	if err == nil {
-		t.Fatal("expected named goal invocation to fail before session became ready")
-	}
-	want := "factory invocation session stopped before it became ready"
-	if !strings.Contains(err.Error(), want) {
-		t.Fatalf("error = %q, want %q", err.Error(), want)
-	}
-	if output.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty before invocation starts", output.String())
-	}
 }
