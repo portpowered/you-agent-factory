@@ -171,6 +171,12 @@ primary-result behavior.
   compaction/backlog/stream-gap text and token-usage chatter while JSON mode
   keeps `compaction` / `stream_gap` records. Internal stream listing for
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
+  Provider-neutral `FactoryResponseEvent` vocabulary lives in
+  `pkg/factorysessions/responseevents` (distinct from internal
+  `pkg/factorysessions/responsestream` fragment kinds). Package docs in
+  `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
+  decisions without implementing transports; `responseevents/boundary_test.go`
+  enforces isolation from CLI, HTTP, subprocess, and provider imports.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
   late CLI pollers can still subscribe and drain retained progress until the
   completed-dispatch retention window expires; `runResponseStreamAttachment` in
