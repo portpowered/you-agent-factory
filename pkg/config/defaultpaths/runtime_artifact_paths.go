@@ -3,6 +3,7 @@ package defaultpaths
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -34,7 +35,27 @@ func RuntimeArtifactFilename(at time.Time, kind RuntimeArtifactKind, suffix stri
 // RuntimeArtifactPath builds root/YYYY/MM/DD/<time>-<kind>[ -<suffix>].<ext>
 // using the supplied UTC-normalized start time.
 func RuntimeArtifactPath(rootDir string, at time.Time, kind RuntimeArtifactKind, suffix string) string {
-	return filepath.Join(calendarDatedDir(rootDir, at), RuntimeArtifactFilename(at, kind, suffix))
+	return RuntimeArtifactPathWithCollision(rootDir, at, kind, suffix, 0)
+}
+
+// RuntimeArtifactPathWithCollision builds a runtime artifact path and, when
+// collisionIndex is greater than zero, appends a numeric uniqueness segment
+// after the optional suffix while preserving the time-kind prefix.
+func RuntimeArtifactPathWithCollision(rootDir string, at time.Time, kind RuntimeArtifactKind, suffix string, collisionIndex int) string {
+	return filepath.Join(calendarDatedDir(rootDir, at), RuntimeArtifactFilename(at, kind, RuntimeArtifactSuffixWithCollision(suffix, collisionIndex)))
+}
+
+// RuntimeArtifactSuffixWithCollision returns suffix unchanged for the base path
+// and appends -N for collisionIndex N > 0.
+func RuntimeArtifactSuffixWithCollision(suffix string, collisionIndex int) string {
+	if collisionIndex <= 0 {
+		return suffix
+	}
+	collision := strconv.Itoa(collisionIndex)
+	if strings.TrimSpace(suffix) == "" {
+		return collision
+	}
+	return suffix + "-" + collision
 }
 
 // RuntimeArtifactPathComponents joins sanitized path components for use as the

@@ -226,9 +226,14 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 		runtimeLogDir = dir
 	}
 	startTimeUTC := time.Now().UTC()
-	path := runtimeLogPath(runtimeLogDir, runtimeInstanceID, startTimeUTC, uuid.NewString())
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("create runtime log dir %s: %w", filepath.Dir(path), err)
+	path, err := reserveAvailableRuntimeArtifactPath(
+		runtimeLogDir,
+		startTimeUTC,
+		defaultpaths.RuntimeArtifactKindLog,
+		defaultpaths.RuntimeArtifactPathComponents(runtimeInstanceID, uuid.NewString()),
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	runtimeLogConfig := normalizeRuntimeLogConfig(config)
@@ -261,12 +266,6 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 		config:       runtimeLogConfig,
 	}, nil
 }
-
-func runtimeLogPath(rootDir, runtimeInstanceID string, startTime time.Time, uniqueID string) string {
-	suffix := defaultpaths.RuntimeArtifactPathComponents(runtimeInstanceID, uniqueID)
-	return defaultpaths.RuntimeArtifactPath(rootDir, startTime, defaultpaths.RuntimeArtifactKindLog, suffix)
-}
-
 func normalizeRuntimeLogConfig(config RuntimeLogConfig) RuntimeLogConfig {
 	if config.MaxSize <= 0 {
 		config.MaxSize = DefaultRuntimeLogConfig().MaxSize

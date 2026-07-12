@@ -91,3 +91,39 @@ func TestRuntimeArtifactPathComponentsSanitizesValues(t *testing.T) {
 		t.Fatalf("RuntimeArtifactPathComponents() = %q, want %q", got, want)
 	}
 }
+
+func TestRuntimeArtifactPathWithCollisionPreservesTimeKindPrefix(t *testing.T) {
+	t.Parallel()
+
+	rootDir := filepath.Join("tmp", "runtime-artifacts")
+	at := time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC)
+	suffix := RuntimeArtifactPathComponents("runtime-one", "collision-token")
+
+	basePath := RuntimeArtifactPathWithCollision(rootDir, at, RuntimeArtifactKindLog, suffix, 0)
+	collisionPath := RuntimeArtifactPathWithCollision(rootDir, at, RuntimeArtifactKindLog, suffix, 1)
+
+	if basePath == collisionPath {
+		t.Fatalf("collision path must differ from base path: %q", basePath)
+	}
+
+	baseRel, err := filepath.Rel(rootDir, basePath)
+	if err != nil {
+		t.Fatalf("Rel(basePath): %v", err)
+	}
+	collisionRel, err := filepath.Rel(rootDir, collisionPath)
+	if err != nil {
+		t.Fatalf("Rel(collisionPath): %v", err)
+	}
+
+	baseParts := strings.Split(baseRel, string(os.PathSeparator))
+	collisionParts := strings.Split(collisionRel, string(os.PathSeparator))
+	if len(baseParts) != 4 || len(collisionParts) != 4 {
+		t.Fatalf("relative paths = %q and %q, want four YYYY/MM/DD/filename segments", baseRel, collisionRel)
+	}
+	if baseParts[0] != collisionParts[0] || baseParts[1] != collisionParts[1] || baseParts[2] != collisionParts[2] {
+		t.Fatalf("dated directories = %q vs %q, want shared YYYY/MM/DD prefix", baseRel, collisionRel)
+	}
+	if !strings.HasPrefix(collisionParts[3], "044503.000000000-runtime-log-runtime-one-collision-token-") || !strings.HasSuffix(collisionParts[3], "-1.log") {
+		t.Fatalf("collision filename = %q, want time-kind prefix with -1 uniqueness suffix", collisionParts[3])
+	}
+}

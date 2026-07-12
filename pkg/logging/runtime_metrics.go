@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -73,9 +72,14 @@ func BuildRuntimeMetricsSink(
 	}
 
 	startTimeUTC := time.Now().UTC()
-	path := runtimeMetricsPath(metricsDir, sessionID, runtimeInstanceID, startTimeUTC, uuid.NewString())
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("create runtime metrics dir %s: %w", filepath.Dir(path), err)
+	path, err := reserveAvailableRuntimeArtifactPath(
+		metricsDir,
+		startTimeUTC,
+		defaultpaths.RuntimeArtifactKindMetrics,
+		defaultpaths.RuntimeArtifactPathComponents(sessionID, runtimeInstanceID, uuid.NewString()),
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	metricsConfig := normalizeRuntimeMetricsConfig(config)
@@ -250,12 +254,6 @@ func (w *runtimeMetricsWriter) Close() error {
 	w.closed = true
 	return w.writer.Close()
 }
-
-func runtimeMetricsPath(rootDir, sessionID, runtimeInstanceID string, startTime time.Time, uniqueID string) string {
-	suffix := defaultpaths.RuntimeArtifactPathComponents(sessionID, runtimeInstanceID, uniqueID)
-	return defaultpaths.RuntimeArtifactPath(rootDir, startTime, defaultpaths.RuntimeArtifactKindMetrics, suffix)
-}
-
 func normalizeRuntimeMetricsConfig(config RuntimeMetricsConfig) RuntimeMetricsConfig {
 	return RuntimeMetricsConfig(normalizeRuntimeLogConfig(RuntimeLogConfig(config)))
 }
