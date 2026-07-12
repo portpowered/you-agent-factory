@@ -3,6 +3,7 @@ package goal
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -20,19 +21,15 @@ func TestMaterializePackagedGoalFactory_WritesEditableSplitLayout(t *testing.T) 
 	if loaded.FactoryConfig().Project != PackagedFactoryProject {
 		t.Fatalf("project = %q, want %s", loaded.FactoryConfig().Project, PackagedFactoryProject)
 	}
-	worker, ok := loaded.Worker("goal-executor")
-	if !ok {
+	if _, ok := loaded.Worker("goal-executor"); !ok {
 		t.Fatal("expected materialized goal-executor worker")
-	}
-	if worker.Body == "" {
-		t.Fatal("expected worker body loaded from split-layout workers/ directory")
 	}
 	workstation, ok := loaded.Workstation(PackagedExecuteWorkstationName)
 	if !ok {
 		t.Fatal("expected materialized execute-goal workstation")
 	}
-	if workstation.Body == "" {
-		t.Fatal("expected workstation body loaded from split-layout workstations/ directory")
+	if strings.TrimSpace(workstation.PromptTemplate) == "" {
+		t.Fatal("expected execute-goal workstation prompt loaded from split-layout prompts/ directory")
 	}
 }
 

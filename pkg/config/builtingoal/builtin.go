@@ -46,7 +46,9 @@ var AuthoredRolePrompts = map[string]string{
 }
 
 // BuiltInGoalFactoryJSON is the canonical runnable @you/goal packaged factory payload
-// assembled from authored factory.json and role prompt files.
+// assembled deterministically from embedded factory.json topology and authored prompt
+// files under prompts/. factory.json must not inline prompt bodies; assembly injects
+// role prompts from the embedded authored assets only.
 var BuiltInGoalFactoryJSON = mustAssembleBuiltInGoalFactoryJSON()
 
 // AuthoredRolePrompt returns the authored prompt content for a goal role.
