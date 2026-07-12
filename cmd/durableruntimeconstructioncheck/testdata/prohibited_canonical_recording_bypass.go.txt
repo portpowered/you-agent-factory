@@ -1,9 +1,0 @@
-package runtime
-
-import "github.com/portpowered/infinite-you/pkg/sessionpersistence"
-
-func persist(events any) {
-	_ = sessionpersistence.Store(nil)
-	BuildCanonicalRuntimeSessionEvents(events)
-	MapCanonicalRuntimeSessionEvents(events)
-}

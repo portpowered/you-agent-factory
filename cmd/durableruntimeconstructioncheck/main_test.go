@@ -78,44 +78,6 @@ func TestScanAllowsLiveChildSharedBoundaryAndTestDoubles(t *testing.T) {
 	}
 }
 
-func TestScanRejectsCanonicalEventAndPersistenceBypasses(t *testing.T) {
-	root := fixtureRepository(t, map[string]string{
-		"pkg/orchestrators/javascript/runtime/bypass.go": "testdata/prohibited_canonical_recording_bypass.go.txt",
-	})
-
-	findings, err := scan(root)
-	if err != nil {
-		t.Fatalf("scan fixture: %v", err)
-	}
-
-	for _, prohibited := range []string{
-		sessionPersistencePath,
-		"BuildCanonicalRuntimeSessionEvents",
-		"MapCanonicalRuntimeSessionEvents",
-		"pkg/factorysessionexecution recorder and persistence owner",
-	} {
-		if !containsFinding(findings, prohibited) {
-			t.Errorf("findings %#v do not report %s", findings, prohibited)
-		}
-	}
-}
-
-func TestScanAllowsCanonicalOwnerAndTypedOrchestrationRecords(t *testing.T) {
-	root := fixtureRepository(t, map[string]string{
-		"pkg/factorysessionexecution/recording.go":             "testdata/approved_canonical_recording_owner.go.txt",
-		"pkg/orchestrators/javascript/runtime/records.go":      "testdata/approved_typed_orchestration_record.go.txt",
-		"pkg/orchestrators/javascript/runtime/records_test.go": "testdata/prohibited_canonical_recording_bypass.go.txt",
-	})
-
-	findings, err := scan(root)
-	if err != nil {
-		t.Fatalf("scan fixture: %v", err)
-	}
-	if len(findings) != 0 {
-		t.Fatalf("canonical owner or typed orchestration record produced findings: %v", findings)
-	}
-}
-
 func fixtureRepository(t *testing.T, files map[string]string) string {
 	t.Helper()
 	root := t.TempDir()

@@ -769,6 +769,15 @@ func TestMapCanonicalRuntimeSessionEvents_EquivalentOrchestratorsHaveSharedPubli
 		Provider:            "mock",
 		ProviderSessionRefs: []fse.ProviderSessionRef{{Provider: "mock", Kind: "session_id", ID: "provider-session-1"}},
 		OutputArtifactIDs:   []string{"artifact-1"},
+	}}, Artifacts: []fse.ArtifactSummary{{
+		ID:          "artifact-1",
+		Kind:        "worker-output",
+		Visibility:  "session",
+		Label:       "shared output",
+		ContentHash: "sha256:shared-output",
+		SizeBytes:   42,
+		CreatedAt:   timePtr(startedAt.Add(500 * time.Millisecond)),
+		DispatchID:  "dispatch-1",
 	}}}
 
 	petri := base
