@@ -10,14 +10,29 @@ import (
 
 // Request carries explicit runtime inputs for one simple workflow execution.
 type Request struct {
-	Source    string
-	SourceRef string
-	SessionID string
-	Args      json.RawMessage
-	Metadata  map[string]string
-	Policy    workflowpolicy.EffectivePolicy
-	Resume    *ResumeContext
-	Agents    map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	Source         string
+	SourceRef      string
+	SessionID      string
+	Args           json.RawMessage
+	Metadata       map[string]string
+	Policy         workflowpolicy.EffectivePolicy
+	Resume         *ResumeContext
+	Agents         map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	WorkerSettings WorkerSettingsConfig
+}
+
+// WorkerSettingsConfig supplies validated operator-owned child worker settings.
+type WorkerSettingsConfig struct {
+	Presets              map[string]WorkerPreset
+	DefaultModelProvider string
+	DefaultModel         string
+}
+
+// WorkerPreset is one validated reusable operator preset.
+type WorkerPreset struct {
+	ModelProvider   string
+	Model           string
+	ReasoningEffort string
 }
 
 // ChildRecordSink reserves child dispatch identity and appends typed runtime records.

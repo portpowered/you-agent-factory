@@ -250,6 +250,7 @@ type ServiceConfig struct {
 	Persistence       PersistenceChoice
 	Clock             factory.Clock
 	WorkerPresetIDs   map[string]struct{}
+	WorkerSettings    workflowruntime.WorkerSettingsConfig
 }
 
 // PersistenceChoice makes durable snapshot ownership explicit at composition.
@@ -355,6 +356,7 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 			Persistence:       persistence,
 			Clock:             config.Clock,
 			WorkerPresetIDs:   config.WorkerPresetIDs,
+			WorkerSettings:    config.WorkerSettings,
 		}), nil
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")

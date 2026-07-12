@@ -22,6 +22,7 @@ type runtimeGlobals struct {
 	records               *recordCollector
 	childExecutor         ChildExecutor
 	agents                map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	workerSettings        WorkerSettingsConfig
 	onArtifact            func(kind string, content json.RawMessage) error
 	resumeCheckpointState map[string]any
 	finalValue            goja.Value

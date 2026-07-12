@@ -30,7 +30,6 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	if issue := validatePreExecution(req); issue != nil {
 		return preExecutionFailure(req, *issue), nil
 	}
-
 	policy := req.Policy
 	if policy.Mode == "" {
 		policy = workflowpolicy.DefaultEffectivePolicy()
@@ -41,14 +40,15 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	sessionID := strings.TrimSpace(req.SessionID)
 	childExecutor := childExecutorForRequest(sessionID, records, hooks, req.Resume, policy)
 	globals := &runtimeGlobals{
-		vm:            vm,
-		policy:        policy,
-		sessionID:     sessionID,
-		ctx:           ctx,
-		records:       records,
-		childExecutor: childExecutor,
-		agents:        req.Agents,
-		onArtifact:    hooks.OnArtifact,
+		vm:             vm,
+		policy:         policy,
+		sessionID:      sessionID,
+		ctx:            ctx,
+		records:        records,
+		childExecutor:  childExecutor,
+		agents:         req.Agents,
+		workerSettings: req.WorkerSettings,
+		onArtifact:     hooks.OnArtifact,
 	}
 	globals.bindResumeCheckpointState(req.Resume)
 	if err := globals.bindWorkflowAPI(); err != nil {

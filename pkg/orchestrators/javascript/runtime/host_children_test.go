@@ -3,6 +3,7 @@ package workflowruntime_test
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,52 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
+func TestResolveChildWorkerSettings_FieldByFieldPrecedence(t *testing.T) {
+	agents := map[string]interfaces.FactoryOrchestratorJavaScriptAgent{"reviewer": {Preset: "factory"}}
+	config := workflowruntime.WorkerSettingsConfig{
+		Presets: map[string]workflowruntime.WorkerPreset{
+			"child":   {ModelProvider: "claude", Model: "child-model", ReasoningEffort: "HIGH"},
+			"factory": {ModelProvider: "codex", Model: "factory-model", ReasoningEffort: "low"},
+		}, DefaultModelProvider: "gemini", DefaultModel: "scalar-model",
+	}
+	tests := []struct {
+		name      string
+		req, want workflowruntime.ChildExecutionRequest
+	}{
+		{"explicit fields", workflowruntime.ChildExecutionRequest{ModelProvider: "kiro-cli", Model: "explicit-model", ReasoningEffort: "minimal"}, workflowruntime.ChildExecutionRequest{ModelProvider: "KIRO", Model: "explicit-model", ReasoningEffort: "minimal"}},
+		{"child preset", workflowruntime.ChildExecutionRequest{Preset: "child"}, workflowruntime.ChildExecutionRequest{Preset: "child", ModelProvider: "CLAUDE", Model: "child-model", ReasoningEffort: "high"}},
+		{"factory preset", workflowruntime.ChildExecutionRequest{AgentID: "reviewer"}, workflowruntime.ChildExecutionRequest{AgentID: "reviewer", Preset: "factory", ModelProvider: "CODEX", Model: "factory-model", ReasoningEffort: "low"}},
+		{"mixed fields", workflowruntime.ChildExecutionRequest{AgentID: "reviewer", Preset: "child", Model: "explicit-model"}, workflowruntime.ChildExecutionRequest{AgentID: "reviewer", Preset: "child", ModelProvider: "CLAUDE", Model: "explicit-model", ReasoningEffort: "high"}},
+		{"scalar defaults", workflowruntime.ChildExecutionRequest{}, workflowruntime.ChildExecutionRequest{ModelProvider: "GEMINI", Model: "scalar-model"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := workflowruntime.ResolveChildWorkerSettings(tc.req, agents, config)
+			if err != nil {
+				t.Fatalf("ResolveChildWorkerSettings() error = %v", err)
+			}
+			if got.AgentID != tc.want.AgentID || got.Preset != tc.want.Preset || got.ModelProvider != tc.want.ModelProvider || got.Model != tc.want.Model || got.ReasoningEffort != tc.want.ReasoningEffort {
+				t.Fatalf("selection = %#v, want %#v", got, tc.want)
+			}
+			again, err := workflowruntime.ResolveChildWorkerSettings(tc.req, agents, config)
+			if err != nil || !reflect.DeepEqual(again, got) {
+				t.Fatalf("repeated selection = %#v, %v; want %#v", again, err, got)
+			}
+		})
+	}
+}
+
+func TestResolveChildWorkerSettings_UnknownPresetNamesSource(t *testing.T) {
+	_, err := workflowruntime.ResolveChildWorkerSettings(workflowruntime.ChildExecutionRequest{Preset: "missing"}, nil, workflowruntime.WorkerSettingsConfig{})
+	if err == nil || !strings.Contains(err.Error(), `"missing" from agent.run`) {
+		t.Fatalf("error = %v", err)
+	}
+	_, err = workflowruntime.ResolveChildWorkerSettings(workflowruntime.ChildExecutionRequest{AgentID: "reviewer"}, map[string]interfaces.FactoryOrchestratorJavaScriptAgent{"reviewer": {Preset: "missing"}}, workflowruntime.WorkerSettingsConfig{})
+	if err == nil || !strings.Contains(err.Error(), `"missing" from factory agent`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestAgentRun_InheritsFactoryNamedAgentPreset(t *testing.T) {
 	req := workflowruntime.Request{
 		Source:    `return (async function () { return agent.run({agentId: "reviewer", prompt: "review"}); })();`,
@@ -21,6 +68,9 @@ func TestAgentRun_InheritsFactoryNamedAgentPreset(t *testing.T) {
 		Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
 			"reviewer": {Preset: "careful-review"},
 		},
+		WorkerSettings: workflowruntime.WorkerSettingsConfig{Presets: map[string]workflowruntime.WorkerPreset{
+			"careful-review": {ModelProvider: "CODEX"},
+		}},
 	}
 	var captured workflowruntime.ChildExecutionRequest
 	outcome, err := workflowruntime.Run(context.Background(), req, workflowruntime.Hooks{

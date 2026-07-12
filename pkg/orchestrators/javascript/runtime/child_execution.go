@@ -17,6 +17,7 @@ type ChildExecutionRequest struct {
 	Label            string
 	AgentID          string
 	Preset           string
+	ModelProvider    string
 	Model            string
 	ReasoningEffort  string
 	Command          string
@@ -52,6 +53,54 @@ type ChildExecutionResult struct {
 // ChildExecutor executes one child-agent request and appends dispatch-like records.
 type ChildExecutor interface {
 	Execute(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error)
+}
+
+// ResolveChildWorkerSettings deterministically fills each worker field from the
+// highest-precedence source that supplies it. It performs no IO or mutation.
+func ResolveChildWorkerSettings(req ChildExecutionRequest, agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent, config WorkerSettingsConfig) (ChildExecutionRequest, error) {
+	explicitPreset := strings.TrimSpace(req.Preset)
+	factoryPreset := ""
+	if agent, ok := agents[strings.TrimSpace(req.AgentID)]; ok {
+		factoryPreset = strings.TrimSpace(agent.Preset)
+	}
+	selectedPreset, source := explicitPreset, "agent.run"
+	if selectedPreset == "" {
+		selectedPreset, source = factoryPreset, "factory agent"
+	}
+	preset := WorkerPreset{}
+	if selectedPreset != "" {
+		var ok bool
+		preset, ok = config.Presets[selectedPreset]
+		if !ok {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() references unknown operator worker preset %q from %s", selectedPreset, source)
+		}
+	}
+	req.Preset = selectedPreset
+	req.ModelProvider = firstWorkerValue(req.ModelProvider, preset.ModelProvider, config.DefaultModelProvider)
+	req.Model = firstWorkerValue(req.Model, preset.Model, config.DefaultModel)
+	req.ReasoningEffort = firstWorkerValue(req.ReasoningEffort, preset.ReasoningEffort)
+	if provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(req.ModelProvider); req.ModelProvider != "" {
+		if !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective modelProvider %q", req.ModelProvider)
+		}
+		req.ModelProvider = provider
+	}
+	if effort, ok := interfaces.CanonicalizeReasoningEffort(req.ReasoningEffort); req.ReasoningEffort != "" {
+		if !ok {
+			return ChildExecutionRequest{}, fmt.Errorf("agent.run() has unsupported effective reasoningEffort %q", req.ReasoningEffort)
+		}
+		req.ReasoningEffort = effort
+	}
+	return req, nil
+}
+
+func firstWorkerValue(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // FakeChildExecutor provides deterministic fake child execution for workflow tests.
@@ -212,12 +261,8 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 	agentID := strings.TrimSpace(stringField(spec, "agentId"))
 	preset := strings.TrimSpace(stringField(spec, "preset"))
 	if agentID != "" {
-		agent, ok := agents[agentID]
-		if !ok {
+		if _, ok := agents[agentID]; !ok {
 			return ChildExecutionRequest{}, fmt.Errorf(`agent.run() references unknown factory agent %q`, agentID)
-		}
-		if preset == "" {
-			preset = strings.TrimSpace(agent.Preset)
 		}
 	}
 	return ChildExecutionRequest{
@@ -225,6 +270,7 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		Label:           stringField(spec, "label"),
 		AgentID:         agentID,
 		Preset:          preset,
+		ModelProvider:   stringField(spec, "modelProvider"),
 		Model:           stringField(spec, "model"),
 		ReasoningEffort: stringField(spec, "reasoningEffort"),
 		Command:         stringField(spec, "command"),

@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
@@ -185,8 +186,10 @@ func composeDurableExecution(
 		return nil, fmt.Errorf("compose durable session worker presets: %w", err)
 	}
 	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
+	workerPresets := make(map[string]workflowruntime.WorkerPreset, len(operatorConfig.WorkerPresets))
 	for _, preset := range operatorConfig.WorkerPresets {
 		workerPresetIDs[preset.ID] = struct{}{}
+		workerPresets[preset.ID] = workflowruntime.WorkerPreset{ModelProvider: preset.ModelProvider, Model: preset.Model, ReasoningEffort: preset.ReasoningEffort}
 	}
 	return factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
@@ -197,6 +200,7 @@ func composeDurableExecution(
 			Persistence:      persistence,
 			Clock:            clock,
 			WorkerPresetIDs:  workerPresetIDs,
+			WorkerSettings:   workflowruntime.WorkerSettingsConfig{Presets: workerPresets, DefaultModelProvider: operatorConfig.Defaults.WorkerModelProvider, DefaultModel: operatorConfig.Defaults.WorkerModel},
 		},
 	)
 }

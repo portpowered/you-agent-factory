@@ -33,6 +33,18 @@ type PreparedStart struct {
 	TupleHash       string
 }
 
+func normalizeStartTuple(req StartRequest) (StartRequest, string, error) {
+	normalized, err := NormalizeStartRequest(req)
+	if err != nil {
+		return StartRequest{}, "", err
+	}
+	tupleHash, err := IdempotencyTupleHash(normalized)
+	if err != nil {
+		return StartRequest{}, "", err
+	}
+	return normalized, tupleHash, nil
+}
+
 // PrepareStart normalizes one durable start request, resolves workflow source,
 // validates source/args/policy/wait inputs, and projects effective policy before
 // runtime execution begins.
