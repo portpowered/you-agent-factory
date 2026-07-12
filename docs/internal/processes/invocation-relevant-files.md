@@ -268,6 +268,11 @@ primary-result behavior.
   `defaultBuildInvocationBootstrap` invoke requests/results and comparing them
   to the shared API text-input resolver plus `apisurface.InvocationResponseFromResult`
   projection for packaged `@you/goal` primary-result selection.
+- Consolidated no-server named integration and invocation-equivalence proof for
+  reviewers lives in `pkg/cli/run/no_server_named_invocation_integration_test.go`
+  (`TestNoServerNamedInvocationIntegrationAndEquivalenceProof`), combining
+  hermetic `@you/goal` success without a TCP listener with shared input-resolution
+  and primary-result equivalence on the real bootstrap path.
 - CLI/API invocation parity for packaged `@you/goal` lives in
   `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
   comparing live session invocation API responses with real CLI `--json` output
