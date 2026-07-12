@@ -7,6 +7,139 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+type cliProviderExplicitPrecedenceCase struct {
+	name               string
+	input              CLIProviderSelectionInput
+	presentCommands    map[string]bool
+	wantSource         CLIProviderSelectionSource
+	wantIdentity       CLIProviderIdentity
+	wantFailure        bool
+	wantFailureCode    CLIProviderSelectionFailureCode
+}
+
+func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCase {
+	allPresent := map[string]bool{
+		string(interfaces.ModelProviderCodex):    true,
+		string(interfaces.ModelProviderClaude):   true,
+		string(interfaces.ModelProviderCursor):   true,
+		string(interfaces.ModelProviderOpenCode): true,
+		string(interfaces.ModelProviderGemini):   true,
+		string(interfaces.ModelProviderKiro):     true,
+	}
+	return []cliProviderExplicitPrecedenceCase{
+		{
+			name: "explicit beats factory default",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: string(interfaces.ModelProviderClaude),
+				FactoryDefault:     string(interfaces.ModelProviderCodex),
+			},
+			presentCommands: allPresent,
+			wantSource:      CLIProviderSelectionSourceExplicitInvocation,
+			wantIdentity:    CLIProviderIdentityClaude,
+		},
+		{
+			name: "explicit beats system default",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: string(interfaces.ModelProviderGemini),
+				SystemDefault:      string(interfaces.ModelProviderCodex),
+			},
+			presentCommands: allPresent,
+			wantSource:      CLIProviderSelectionSourceExplicitInvocation,
+			wantIdentity:    CLIProviderIdentityGemini,
+		},
+		{
+			name: "explicit beats discovery even when lower-ranked and absent on PATH",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: string(interfaces.ModelProviderKiro),
+				FactoryDefault:     string(interfaces.ModelProviderCodex),
+				SystemDefault:      string(interfaces.ModelProviderClaude),
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCodex): true,
+			},
+			wantSource:   CLIProviderSelectionSourceExplicitInvocation,
+			wantIdentity: CLIProviderIdentityKiro,
+		},
+		{
+			name: "unsupported explicit DEFAULT falls through to factory without deprecated model default injection",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: interfaces.WorkerModelProviderDefault,
+				FactoryDefault:     string(interfaces.ModelProviderCursor),
+			},
+			presentCommands: allPresent,
+			wantSource:      CLIProviderSelectionSourceFactoryDefault,
+			wantIdentity:    CLIProviderIdentityCursor,
+		},
+		{
+			name: "unsupported explicit deprecated openai alias falls through to system default",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: "openai",
+				SystemDefault:      string(interfaces.ModelProviderGemini),
+			},
+			presentCommands: allPresent,
+			wantSource:      CLIProviderSelectionSourceSystemDefault,
+			wantIdentity:    CLIProviderIdentityGemini,
+		},
+		{
+			name: "empty explicit falls through to discovery",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: "   ",
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderGemini): true,
+			},
+			wantSource:   CLIProviderSelectionSourceDiscovery,
+			wantIdentity: CLIProviderIdentityGemini,
+		},
+		{
+			name: "unknown explicit falls through to discovery without inventing a provider",
+			input: CLIProviderSelectionInput{
+				ExplicitInvocation: "legacy-model-default",
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderOpenCode): true,
+			},
+			wantSource:   CLIProviderSelectionSourceDiscovery,
+			wantIdentity: CLIProviderIdentityOpenCode,
+		},
+	}
+}
+
+func assertCLIProviderExplicitPrecedence(t *testing.T, tc cliProviderExplicitPrecedenceCase) {
+	t.Helper()
+
+	discovery := fakeCLIProviderDiscoveryView(tc.presentCommands)
+	result := SelectCLIProvider(tc.input, discovery)
+
+	if tc.wantFailure {
+		if result.OK() {
+			t.Fatalf("result = %#v, want failure", result)
+		}
+		if result.Failure == nil || result.Failure.Code != tc.wantFailureCode {
+			t.Fatalf("failure = %#v, want code %q", result.Failure, tc.wantFailureCode)
+		}
+		return
+	}
+
+	if !result.OK() {
+		t.Fatalf("result = %#v, want success", result)
+	}
+	if result.Source != tc.wantSource {
+		t.Fatalf("source = %q, want %q", result.Source, tc.wantSource)
+	}
+	if result.Selected == nil || result.Selected.Identity != tc.wantIdentity {
+		t.Fatalf("selected = %#v, want identity %q", result.Selected, tc.wantIdentity)
+	}
+}
+
+func TestSelectCLIProvider_ExplicitInvocationPrecedenceTables(t *testing.T) {
+	for _, tc := range fakeCLIProviderExplicitPrecedenceCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			assertCLIProviderExplicitPrecedence(t, tc)
+		})
+	}
+}
+
 func TestSelectCLIProvider_AcceptsLayeredPrecedenceInputs(t *testing.T) {
 	discovery := fakeCLIProviderDiscoveryView(map[string]bool{
 		string(interfaces.ModelProviderGemini): true,
