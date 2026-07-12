@@ -220,7 +220,7 @@ func TestMakeLintPathFailsForOversizedOwnedPackage(t *testing.T) {
 		"  package files: 16",
 		"  limit: 15",
 		"[agent-factory:pkg-file-count] found 1 package file-count violation(s)",
-		"*** [pkg-file-count]",
+		"pkg-file-count] Error",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("make lint output = %q, want substring %q", got, want)

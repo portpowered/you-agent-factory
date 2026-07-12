@@ -225,9 +225,7 @@ artifact-contract-closeout:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:
-	@for target in $(LINT_TARGETS); do \
-		$(MAKE) $$target || exit $$?; \
-	done
+	$(MAKE) $(LINT_TARGETS)
 
 backend-size:
 	$(GO) run ./cmd/backendsizecheck

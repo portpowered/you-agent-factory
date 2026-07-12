@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -914,6 +915,13 @@ func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) erro
 	}
 
 	if err := os.Rename(targetDir, backupDir); err != nil {
+		if runtime.GOOS == "windows" {
+			if replaceErr := replaceWatchedDirectoryContents(targetDir, stagingDir, backupDir); replaceErr == nil {
+				return nil
+			} else {
+				return fmt.Errorf("backup existing factory %q: %w; Windows in-place replacement failed: %v", segment, err, replaceErr)
+			}
+		}
 		return fmt.Errorf("backup existing factory %q: %w", segment, err)
 	}
 	committed := false
@@ -932,4 +940,3 @@ func replaceNamedFactoryDir(rootDir, segment, stagingDir, targetDir string) erro
 	committed = true
 	return nil
 }
-

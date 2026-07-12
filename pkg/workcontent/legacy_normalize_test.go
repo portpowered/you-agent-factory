@@ -1,6 +1,7 @@
 package workcontent_test
 
 import (
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,6 +15,11 @@ func TestFilesystemPathToContentURL(t *testing.T) {
 
 	dir := t.TempDir()
 	absPath := filepath.Join(dir, "img.png")
+	absURLPath := filepath.ToSlash(absPath)
+	if volume := filepath.VolumeName(absPath); volume != "" && !strings.HasPrefix(absURLPath, "/") {
+		absURLPath = "/" + absURLPath
+	}
+	wantAbsoluteURL := (&url.URL{Scheme: "file", Path: absURLPath}).String()
 
 	tests := []struct {
 		name    string
@@ -21,7 +27,7 @@ func TestFilesystemPathToContentURL(t *testing.T) {
 		wantURL string
 	}{
 		{name: "relative", path: "fixtures/ui.png", wantURL: "file://fixtures/ui.png"},
-		{name: "absolute", path: absPath, wantURL: "file://" + absPath},
+		{name: "absolute", path: absPath, wantURL: wantAbsoluteURL},
 	}
 	for _, tc := range tests {
 		tc := tc

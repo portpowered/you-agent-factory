@@ -9,7 +9,10 @@ import (
 
 func TestResolveDispatchContentURL_AbsoluteFileURLUnchanged(t *testing.T) {
 	absPath := filepath.Join(t.TempDir(), "img.png")
-	rawURL := "file://" + absPath
+	rawURL, err := workcontent.FilesystemPathToContentURL(absPath)
+	if err != nil {
+		t.Fatalf("file URL: %v", err)
+	}
 
 	got, err := workcontent.ResolveDispatchContentURL("/tmp/workspace", rawURL)
 	if err != nil {
@@ -28,7 +31,10 @@ func TestResolveDispatchContentURL_RelativeFileURLJoinsWorkingDirectory(t *testi
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	want := "file://" + filepath.Join(workspace, "fixtures", "ui.png")
+	want, err := workcontent.FilesystemPathToContentURL(filepath.Join(workspace, "fixtures", "ui.png"))
+	if err != nil {
+		t.Fatalf("want file URL: %v", err)
+	}
 	if got != want {
 		t.Fatalf("url = %q, want %q", got, want)
 	}

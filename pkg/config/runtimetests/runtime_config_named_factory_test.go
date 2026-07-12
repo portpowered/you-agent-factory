@@ -169,6 +169,7 @@ func TestDefaultNamedFactoryRoots(t *testing.T) {
 
 	testHomeDir := t.TempDir()
 	t.Setenv("HOME", testHomeDir)
+	t.Setenv("USERPROFILE", testHomeDir)
 	defaultGlobalRoot, err := DefaultGlobalNamedFactoryRoot()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)

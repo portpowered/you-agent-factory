@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -69,8 +70,8 @@ func newSessionScopedMockFactory(
 		Net: sessionScopedStateNet(),
 		FactoryEventStream: &interfaces.FactoryEventStream{
 			StreamGenerationID: "stream-gen-" + factoryName,
-			History: []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
-			Events:  make(chan factoryapi.FactoryEvent),
+			History:            []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
+			Events:             make(chan factoryapi.FactoryEvent),
 		},
 		CurrentFactory: &factoryapi.Factory{Name: factoryName, Id: factoryID},
 	}
@@ -1061,6 +1062,9 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRoot(t 
 		t.Fatalf("create session dir: %v", err)
 	}
 	if err := os.Symlink(outsideSessionPath, filepath.Join(sessionDir, "rollout-sess-outside.jsonl")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink capability unavailable: %v", err)
+		}
 		t.Fatalf("create provider session symlink: %v", err)
 	}
 
@@ -1081,6 +1085,9 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEve
 	}
 	sessionDir := filepath.Join(root, "2026", "05", "18")
 	if err := os.Symlink(outsideSessionPath, filepath.Join(sessionDir, "rollout-2026-05-20T17-35-24-sess-shared.jsonl")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink capability unavailable: %v", err)
+		}
 		t.Fatalf("create provider session symlink: %v", err)
 	}
 

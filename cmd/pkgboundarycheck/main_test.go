@@ -274,7 +274,7 @@ func TestMakePkgBoundaryTargetFailsForUnapprovedRootPackageFamily(t *testing.T) 
 		"outside the approved package-family allowlist",
 		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
 		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
-		"*** [pkg-boundary]",
+		"pkg-boundary] Error",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("make pkg-boundary output = %q, want substring %q", got, want)
@@ -301,7 +301,7 @@ func TestMakeLintPathFailsForUnapprovedRootPackageFamily(t *testing.T) {
 		"outside the approved package-family allowlist",
 		"move the code under an approved owner or deliberately update the allowlist with ownership rationale",
 		"[agent-factory:pkg-boundary] found 1 package-boundary violation(s)",
-		"*** [pkg-boundary]",
+		"pkg-boundary] Error",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("make lint output = %q, want substring %q", got, want)

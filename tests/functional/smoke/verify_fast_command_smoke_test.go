@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -74,13 +75,13 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
-		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
-		"verify":                             "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
-		"test-backend-functional":            "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
-		"ui-test":                            "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
+		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify":                               "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
+		"test-backend-functional":              "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
+		"ui-test":                              "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
@@ -127,10 +128,10 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n\t@exit 23\n",
-		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
@@ -220,10 +221,10 @@ func TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript(t *test
 func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
-		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify")
@@ -653,15 +654,15 @@ func TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand(t *testin
 func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
-		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
-		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
-		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
-		"verify-pr":                 "@printf '%s\\n' 'stub:verify-pr'\n",
+		"verify-build-contracts":        "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":         "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"test-ui-coverage":              "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"ui-integration-test":           "@printf '%s\\n' 'stub:ui-integration-test'\n",
+		"test-backend-verification":     "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify-pr":                     "@printf '%s\\n' 'stub:verify-pr'\n",
 		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
 		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n",
-		"pr-inference-approval":     "@printf '%s\\n' 'unexpected:pr-inference-approval'\n\t@exit 99\n",
+		"pr-inference-approval":         "@printf '%s\\n' 'unexpected:pr-inference-approval'\n\t@exit 99\n",
 	})
 
 	for _, target := range []string{"verify-pr", "verify-extended", "long-tests"} {
@@ -677,8 +678,10 @@ func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t 
 
 func writeVerifyFastWrapperMakefile(t *testing.T, repoRoot string, overrides map[string]string) string {
 	t.Helper()
+	requirePOSIXShell(t)
 
 	var body strings.Builder
+	body.WriteString("SHELL := sh\n")
 	body.WriteString(fmt.Sprintf("include %s\n\n", filepath.Join(repoRoot, "Makefile")))
 	for target, recipe := range overrides {
 		body.WriteString(fmt.Sprintf("%s:\n", target))
@@ -694,7 +697,7 @@ func writeVerifyFastWrapperMakefile(t *testing.T, repoRoot string, overrides map
 	if err := os.WriteFile(path, []byte(body.String()), 0o644); err != nil {
 		t.Fatalf("write wrapper makefile: %v", err)
 	}
-	return path
+	return filepath.ToSlash(path)
 }
 
 func runMakefileTarget(repoRoot, makefilePath, target string) (string, error) {
@@ -709,7 +712,8 @@ func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...st
 
 	makeArgs := []string{
 		"-f", makefilePath,
-		fmt.Sprintf("MAKE=%s -f %s", makePath, makefilePath),
+		"SHELL=sh",
+		fmt.Sprintf("MAKE=%s -f %s", filepath.ToSlash(makePath), filepath.ToSlash(makefilePath)),
 	}
 	makeArgs = append(makeArgs, args...)
 	makeArgs = append(makeArgs, target)
@@ -727,27 +731,41 @@ func runMakefileTargetWithArgs(repoRoot, makefilePath, target string, args ...st
 
 func writeMakeEchoScript(t *testing.T, label string) string {
 	t.Helper()
+	requirePOSIXShell(t)
 
 	path := filepath.Join(t.TempDir(), label)
 	body := fmt.Sprintf("#!/bin/sh\nprintf '%%s:' %q\nprintf '%%s\\n' \"$*\"\n", label)
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("write echo script: %v", err)
 	}
-	return path
+	return filepath.ToSlash(path)
 }
 
 func writeExecutableScript(t *testing.T, label string, body string) string {
 	t.Helper()
+	requirePOSIXShell(t)
 
 	path := filepath.Join(t.TempDir(), label)
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("write executable script: %v", err)
 	}
-	return path
+	return filepath.ToSlash(path)
+}
+
+func requirePOSIXShell(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skipf("POSIX shell smoke test requires sh: %v", err)
+	}
 }
 
 func runScript(repoRoot string, scriptPath string, env ...string) (string, error) {
-	cmd := exec.Command(scriptPath)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("sh", filepath.ToSlash(scriptPath))
+	} else {
+		cmd = exec.Command(scriptPath)
+	}
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), env...)
 

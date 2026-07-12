@@ -388,13 +388,11 @@ func assertInferenceExitFailure(t *testing.T, tc exitFailureInferenceTestCase) {
 }
 
 func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvents(t *testing.T) {
-	scriptPath := filepath.Join(t.TempDir(), "codex")
-	script := "#!/bin/sh\n" +
-		"printf '%s\\n' '{\"event\":\"session.created\",\"session_id\":\"sess-codex-1\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.output_text.delta\",\"delta\":\"hello from delta\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello final\"}]}]}}'\n" +
-		"printf '%s\\n' 'planning update' 1>&2\n"
-	writeExecutableTestScript(t, scriptPath, script)
+	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
+		"{\"event\":\"session.created\",\"session_id\":\"sess-codex-1\"}\n"+
+			"{\"type\":\"response.output_text.delta\",\"delta\":\"hello from delta\"}\n"+
+			"{\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello final\"}]}]}}\n",
+	), []byte("planning update\n"), 0)
 
 	var published []InferenceProgressFragment
 	var publishedMu sync.Mutex
@@ -436,18 +434,26 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 	}
 }
 
+func TestIsCodexCommand_AcceptsNativeExecutableShapes(t *testing.T) {
+	for _, command := range []string{"codex", "codex.exe", `C:\tools\codex.cmd`, "/usr/local/bin/codex"} {
+		if !isCodexCommand(command) {
+			t.Fatalf("isCodexCommand(%q) = false, want true", command)
+		}
+	}
+	if isCodexCommand("codex-helper.exe") {
+		t.Fatal("codex-helper.exe must not be classified as the Codex provider command")
+	}
+}
+
 func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEventsToBoundedDiagnostics(t *testing.T) {
-	scriptPath := filepath.Join(t.TempDir(), "codex")
-	script := "#!/bin/sh\n" +
-		"printf '%s\\n' '{\"event\":\"session.created\",\"session_id\":\"sess-codex-2\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.mystery\",\"message\":\"secret-token-123 should never be retained\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.progress\"' \n" +
-		"printf 'event: response.output_text.delta\\n'\n" +
-		"printf '\\n'\n" +
-		"printf 'event: response.output_text.delta\\n'\n" +
-		"printf 'data: {\"delta\":\"hello after malformed frames\"}\\n'\n" +
-		"printf '\\n'\n"
-	writeExecutableTestScript(t, scriptPath, script)
+	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
+		"{\"event\":\"session.created\",\"session_id\":\"sess-codex-2\"}\n"+
+			"{\"type\":\"response.mystery\",\"message\":\"secret-token-123 should never be retained\"}\n"+
+			"{\"type\":\"response.progress\"\n"+
+			"event: response.output_text.delta\n\n"+
+			"event: response.output_text.delta\n"+
+			"data: {\"delta\":\"hello after malformed frames\"}\n\n",
+	), nil, 0)
 
 	var published []InferenceProgressFragment
 	var publishedMu sync.Mutex
@@ -495,15 +501,14 @@ func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation
 	failurePayload := strings.Repeat("e", codexRetainedProgressBytes+17)
 	cancelPayload := strings.Repeat("c", codexRetainedProgressBytes+9)
 
-	scriptPath := filepath.Join(t.TempDir(), "codex")
-	script := "#!/bin/sh\n" +
-		"printf '%s\\n' '{\"event\":\"session.created\",\"session_id\":\"sess-codex-3\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.progress\",\"message\":\"" + progressPayload + "\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.output_text.delta\",\"delta\":\"" + deltaPayload + "\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"" + finalPayload + "\"}]}]}}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.failed\",\"error\":\"" + failurePayload + "\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"response.canceled\",\"status\":\"" + cancelPayload + "\"}'\n"
-	writeExecutableTestScript(t, scriptPath, script)
+	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
+		"{\"event\":\"session.created\",\"session_id\":\"sess-codex-3\"}\n"+
+			"{\"type\":\"response.progress\",\"message\":\""+progressPayload+"\"}\n"+
+			"{\"type\":\"response.output_text.delta\",\"delta\":\""+deltaPayload+"\"}\n"+
+			"{\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\""+finalPayload+"\"}]}]}}\n"+
+			"{\"type\":\"response.failed\",\"error\":\""+failurePayload+"\"}\n"+
+			"{\"type\":\"response.canceled\",\"status\":\""+cancelPayload+"\"}\n",
+	), nil, 0)
 
 	var published []InferenceProgressFragment
 	var publishedMu sync.Mutex

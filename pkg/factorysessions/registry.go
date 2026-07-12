@@ -149,6 +149,7 @@ func LogicalSessionKeyID(session *LiveSession) string {
 	if folderPath == "." {
 		folderPath = ""
 	}
+	folderPath = filepath.ToSlash(folderPath)
 	targetKind := strings.TrimSpace(string(session.Target.Kind))
 	targetName := strings.TrimSpace(session.Target.Name)
 	if targetKind == "" {
