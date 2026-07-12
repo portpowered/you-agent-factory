@@ -817,13 +817,6 @@ func replaySharedProjection(t *testing.T, events []json.RawMessage) (fse.Session
 	return session, result
 }
 
-func artifactIDsFromRefs(refs []fse.ArtifactRefSummary) []string {
-	ids := make([]string, 0, len(refs))
-	for _, ref := range refs {
-		ids = append(ids, ref.ID)
-	}
-	return ids
-}
 
 func TestMapCanonicalRuntimeSessionEvents_RejectsMalformedFactsWithoutPartialEvents(t *testing.T) {
 	session := fse.SessionReadResult{
