@@ -665,6 +665,124 @@ func TestHumanResponseStreamRenderer_SuppressesTokenUsageProgress(t *testing.T) 
 	}
 }
 
+func assertHumanResponseStreamExcludesInternalMarkers(t *testing.T, got string) {
+	t.Helper()
+
+	for _, marker := range []string{
+		"[you:progress]",
+		"stream truncated",
+		"stream coalesced",
+		"stream compacted",
+		"earlier events omitted",
+		"terminal output backlog",
+		"earlier progress unavailable",
+		"input_tokens",
+		"output_tokens",
+		"total_tokens",
+		"token_count",
+		"cache_read_tokens",
+	} {
+		if strings.Contains(got, marker) {
+			t.Fatalf("human output must not include internal marker %q:\n%s", marker, got)
+		}
+	}
+}
+
+func responseStreamDiagnosticStressReadResult() responsestream.ReadResult {
+	return responsestream.ReadResult{
+		BehindRetainedWindow: true,
+		Compaction: &responsestream.CompactionSummary{
+			Reason:               responsestream.CompactionReasonCoalesced,
+			DroppedSequenceCount: 2,
+		},
+		Events: []responsestream.Event{
+			{
+				Sequence:   1,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "stream coalesced (2 earlier events omitted)",
+			},
+			{
+				Sequence:          2,
+				Kind:              responsestream.EventKindProgressFragment,
+				Type:              responsestream.EventTypeProgress,
+				DispatchID:        "dispatch-1",
+				ExternalEventType: "token_count",
+				Payload:           "input_tokens=120 output_tokens=34 total_tokens=154",
+				Metadata: map[string]string{
+					"input_tokens":  "120",
+					"output_tokens": "34",
+				},
+			},
+			{
+				Sequence:   3,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "terminal output backlog (progress dropped)",
+			},
+			{
+				Sequence:   4,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "reviewing plan",
+			},
+		},
+	}
+}
+
+func TestHumanResponseStreamRenderer_ExcludesAllInternalMarkersGolden(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onStreamSegment(responseStreamDiagnosticStressReadResult())
+	renderer.stopProgressRendering()
+
+	got := output.String()
+	assertHumanResponseStreamExcludesInternalMarkers(t, got)
+	if !strings.Contains(got, "reviewing plan") {
+		t.Fatalf("readable progress must still render:\n%s", got)
+	}
+}
+
+func TestResponseStreamRenderer_JSONFidelityAndHumanGoldenNegatives(t *testing.T) {
+	t.Parallel()
+
+	segment := responseStreamDiagnosticStressReadResult()
+
+	var humanOutput strings.Builder
+	humanRenderer := newHumanResponseStreamRenderer(&humanOutput)
+	humanRenderer.onStreamSegment(segment)
+	humanRenderer.stopProgressRendering()
+	humanGot := humanOutput.String()
+	assertHumanResponseStreamExcludesInternalMarkers(t, humanGot)
+	if !strings.Contains(humanGot, "reviewing plan") {
+		t.Fatalf("human output missing readable progress:\n%s", humanGot)
+	}
+
+	var jsonOutput strings.Builder
+	jsonRenderer := newJSONResponseStreamRenderer(&jsonOutput)
+	jsonRenderer.onStreamSegment(segment)
+	jsonRenderer.stopProgressRendering()
+	jsonGot := jsonOutput.String()
+	for _, want := range []string{
+		`"recordType":"stream_gap"`,
+		`"reason":"behind_retained_window"`,
+		`"recordType":"compaction"`,
+		`"reason":"COALESCED"`,
+		`"recordType":"progress"`,
+		`"payload":"input_tokens=120 output_tokens=34 total_tokens=154"`,
+		`"payload":"reviewing plan"`,
+	} {
+		if !strings.Contains(jsonGot, want) {
+			t.Fatalf("JSON output missing %q:\n%s", want, jsonGot)
+		}
+	}
+}
+
 func TestHumanResponseStreamRenderer_NoHeaderWithoutProgress(t *testing.T) {
 	t.Parallel()
 
@@ -930,6 +1048,38 @@ func TestJSONResponseStreamRenderer_SurfacesCompactionAndStreamGapRecords(t *tes
 	}
 	if compaction.RecordType != responseStreamJSONRecordCompaction || compaction.DroppedSequenceCount != 3 {
 		t.Fatalf("compaction = %#v", compaction)
+	}
+}
+
+func TestJSONResponseStreamRenderer_EmitsTokenUsageProgressRecord(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newJSONResponseStreamRenderer(&output)
+	renderer.onStreamSegment(responsestream.ReadResult{
+		Events: []responsestream.Event{
+			{
+				Sequence:          1,
+				Kind:              responsestream.EventKindProgressFragment,
+				Type:              responsestream.EventTypeProgress,
+				DispatchID:        "dispatch-1",
+				ExternalEventType: "token_count",
+				Payload:           "input_tokens=120 output_tokens=34 total_tokens=154",
+				Metadata: map[string]string{
+					"input_tokens":  "120",
+					"output_tokens": "34",
+				},
+			},
+		},
+	})
+
+	renderer.stopProgressRendering()
+	got := output.String()
+	if !strings.Contains(got, `"recordType":"progress"`) {
+		t.Fatalf("expected progress record:\n%s", got)
+	}
+	if !strings.Contains(got, `"payload":"input_tokens=120 output_tokens=34 total_tokens=154"`) {
+		t.Fatalf("token usage payload must remain in JSON diagnostics:\n%s", got)
 	}
 }
 
