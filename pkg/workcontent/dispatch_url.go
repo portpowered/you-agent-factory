@@ -16,6 +16,9 @@ func fileContentURLPath(parsed *url.URL) string {
 		return parsed.Host + parsed.Path
 	}
 	if path := parsed.Path; path != "" {
+		if len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+			return path[1:]
+		}
 		return path
 	}
 	return parsed.Opaque

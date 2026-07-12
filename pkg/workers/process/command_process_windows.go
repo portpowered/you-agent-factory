@@ -79,7 +79,10 @@ func terminateCommandJobGroup(job windows.Handle, grace time.Duration, logCtx co
 		return nil
 	}
 	supervisorID := int(job)
-	if commandJobActiveProcesses(job) == 0 {
+	// Windows can briefly report zero active processes for a newly assigned job
+	// even while its process is running. Cancellation must still terminate the
+	// job; otherwise the runner waits for the command to exit on its own.
+	if logCtx.reason != commandProcessCleanupReasonCancel && commandJobActiveProcesses(job) == 0 {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, supervisorID, nil, "job has no active processes")
 		return nil
 	}
@@ -99,7 +102,7 @@ func terminateCommandJobGroup(job windows.Handle, grace time.Duration, logCtx co
 	}
 
 	logCtx.logForceKill(supervisorID)
-	if commandJobActiveProcesses(job) == 0 {
+	if logCtx.reason != commandProcessCleanupReasonCancel && commandJobActiveProcesses(job) == 0 {
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, supervisorID, nil, "job members exited before force kill")
 		return nil
 	}

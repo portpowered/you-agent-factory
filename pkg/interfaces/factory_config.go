@@ -703,14 +703,20 @@ type FactoryOrchestratorPetriConfig struct{}
 
 // FactoryOrchestratorJavaScriptConfig carries JavaScript workflow source identity and policy.
 type FactoryOrchestratorJavaScriptConfig struct {
-	Dialect       string                                     `json:"dialect,omitempty"`
-	SourceRef     string                                     `json:"sourceRef,omitempty"`
-	InlineSource  *FactoryOrchestratorJavaScriptInlineSource `json:"inlineSource,omitempty"`
-	SourceHash    string                                     `json:"sourceHash,omitempty"`
-	Entrypoint    string                                     `json:"entrypoint,omitempty"`
-	Metadata      map[string]string                          `json:"metadata,omitempty"`
-	ArgsSchema    json.RawMessage                            `json:"argsSchema,omitempty"`
-	DefaultPolicy json.RawMessage                            `json:"defaultPolicy,omitempty"`
+	Dialect       string                                        `json:"dialect,omitempty"`
+	SourceRef     string                                        `json:"sourceRef,omitempty"`
+	InlineSource  *FactoryOrchestratorJavaScriptInlineSource    `json:"inlineSource,omitempty"`
+	SourceHash    string                                        `json:"sourceHash,omitempty"`
+	Entrypoint    string                                        `json:"entrypoint,omitempty"`
+	Metadata      map[string]string                             `json:"metadata,omitempty"`
+	ArgsSchema    json.RawMessage                               `json:"argsSchema,omitempty"`
+	DefaultPolicy json.RawMessage                               `json:"defaultPolicy,omitempty"`
+	Agents        map[string]FactoryOrchestratorJavaScriptAgent `json:"agents,omitempty"`
+}
+
+// FactoryOrchestratorJavaScriptAgent declares stable defaults for a named child role.
+type FactoryOrchestratorJavaScriptAgent struct {
+	Preset string `json:"preset"`
 }
 
 // FactoryOrchestratorJavaScriptInlineSource carries inline workflow source text.

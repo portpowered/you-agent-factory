@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 )
 
@@ -71,7 +72,11 @@ func resolveURLMaterializationFixture(t *testing.T, tc materialize.URLMaterializ
 		if err := os.WriteFile(localPath, []byte(tc.FileContent), 0o644); err != nil {
 			t.Fatalf("write local file: %v", err)
 		}
-		return "file://" + localPath, nil, localPath
+		contentURL, err := workcontent.FilesystemPathToContentURL(localPath)
+		if err != nil {
+			t.Fatalf("local file URL: %v", err)
+		}
+		return contentURL, nil, localPath
 	case "httptest_server":
 		body := tc.ResponseBody
 		statusCode := tc.StatusCode

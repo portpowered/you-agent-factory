@@ -888,6 +888,10 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 	}
 
 	factoryDir := filepath.Join(rootDir, segment)
+	return resolveNamedFactoryDirAtTarget(rootDir, canonicalName, factoryDir)
+}
+
+func resolveNamedFactoryDirAtTarget(rootDir, canonicalName, factoryDir string) (string, error) {
 	if err := requireFactoryConfig(factoryDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			if info, statErr := os.Stat(factoryDir); statErr == nil && info.IsDir() {

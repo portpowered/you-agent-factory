@@ -245,7 +245,10 @@ type DispatchSummary struct {
 	Retryable             *bool
 	FailureClassification string
 	RunnerID              string
+	PresetID              string
+	ModelProvider         string
 	Model                 string
+	ReasoningEffort       string
 	Provider              string
 	ProviderSessionRefs   []ProviderSessionRef
 	OutputArtifactIDs     []string

@@ -319,6 +319,44 @@ After a successful resume, inspect progress with `you session show`,
 `SESSION_LIFECYCLE_CONTROL` events record pause and resume for replay and
 historical status reads.
 
+### Canonical resume and result facts
+
+Resume never creates a replacement Factory Session. Keep using the
+`sessionId` returned by the original start request for lifecycle, result,
+dispatch, checkpoint, and artifact reads. A successful resume returns that same
+identifier, and terminal or already-running requests return a typed no-op or
+rejection without changing results or dispatches.
+
+Use typed fields instead of parsing status messages:
+
+| Fact | REST | CLI | MCP | Dashboard |
+|------|------|-----|-----|-----------|
+| Session identity and lifecycle | `GET /factory-sessions/{session_id}` | `you --json session show <session-id>` | `you.factory_session.get` | Factory Session detail header and lifecycle status |
+| Result availability | `GET /factory-sessions/{session_id}/result` | durable workflow `status` and `result` JSON | `you.factory_session.get_result` | Explicit not-ready, partial, failed-with-partial, or final result state |
+| Latest approved checkpoint | session runtime checkpoint reference and canonical checkpoint events | session JSON and event inspection | Factory Session get and event tools | replay timeline checkpoint reference |
+| Artifact lineage | `artifactRefs` and `/factory-sessions/{session_id}/artifacts` | result JSON artifact refs | result and artifact inspection tools | session-owned artifact drilldown links |
+
+Result availability has stable typed meanings across those surfaces:
+
+- `NOT_READY` means no customer result is available yet.
+- `PARTIAL` means useful output and any referenced artifacts are available while
+  the session can still continue.
+- `FINAL` means the terminal result is available.
+- `FAILED_WITH_PARTIAL` means execution terminated unsuccessfully but preserved
+  useful output and artifact references.
+
+Paused, interrupted, and terminal reads retain their checkpoint and artifact
+references across reconnect and replay until a newer canonical event changes
+the projection. Artifact references are session-scoped API paths; clients
+should follow those references rather than constructing host filesystem paths.
+
+Resume failures are also typed. `INVALID_RESUME_STATE` identifies a missing,
+malformed, or non-approved checkpoint; `TERMINAL_SESSION` preserves an already
+terminal session; `NO_OP` preserves an already-running session. Missing
+sessions and unreachable services remain distinct not-found and transport
+failures. None of these outcomes authorizes clients to switch to a new session
+identifier.
+
 ### Maintainer verification
 
 After editing this reference topic, run `make docs-reference-smoke` from the

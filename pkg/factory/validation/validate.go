@@ -304,6 +304,17 @@ func javascriptOrchestratorConfigTargets(cfg *interfaces.FactoryConfig) []Target
 			))
 		}
 	}
+	for id, agent := range jsCfg.Agents {
+		trimmedID := strings.TrimSpace(id)
+		trimmedPreset := strings.TrimSpace(agent.Preset)
+		if trimmedID == "" || trimmedPreset == "" {
+			targets = append(targets, orchestratorTarget(
+				CodeOrchestratorJavaScriptInvalidAgent,
+				"javascript.agents."+id,
+				fmt.Sprintf("orchestrator.javascript.agents agent id %q and preset %q must be non-empty", id, agent.Preset),
+			))
+		}
+	}
 	targets = append(targets, javascriptWorkflowConfigAndInlineTargets(jsCfg)...)
 	targets = append(targets, javascriptWorkflowPolicyTargets(jsCfg)...)
 	return targets

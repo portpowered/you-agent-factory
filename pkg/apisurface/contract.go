@@ -556,7 +556,9 @@ func publicFailureReason(reason string) factoryapi.WorkFailureType {
 		factoryapi.WorkFailureTypeThrottled,
 		factoryapi.WorkFailureTypeInternalServerError,
 		factoryapi.WorkFailureTypeTimeout,
-		factoryapi.WorkFailureTypeMisconfigured:
+		factoryapi.WorkFailureTypeMisconfigured,
+		factoryapi.WorkFailureTypeMissingExecutable,
+		factoryapi.WorkFailureTypeCommandLineTooLong:
 		return candidate
 	default:
 		return factoryapi.WorkFailureTypeUnknown

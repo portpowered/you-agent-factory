@@ -269,7 +269,7 @@ you factory save my-team-review --from ./factory.json
 
 By default persisted project factories live under `./factory`, and
 `you run --named <name>` resolves that project-local root before checking the
-global shared root at `~/.you-agent-factory/factories`.
+global shared root at `~/.you-agent-factory/you-agent-factories`.
 
 ```bash
 you run --named my-team-review
@@ -296,7 +296,7 @@ primary result, supported headless operator-interaction scope, and
 metadata result, materialization path, and edit-after-materialize behavior.
 
 On the first invocation the CLI materializes the built-in into
-`~/.you-agent-factory/factories`, then loads later runs from that on-disk copy.
+`~/.you-agent-factory/you-agent-factories`, then loads later runs from that on-disk copy.
 That keeps the built-in editable: if you modify the materialized
 `workers/*/AGENTS.md`, `workstations/*/AGENTS.md`, or other split-layout files,
 the next `you run --named @you/tts` invocation uses your edited version.
@@ -308,7 +308,7 @@ factories:
 
 ```bash
 you factory list
-you factory list --dir ~/.you-agent-factory/factories
+you factory list --dir ~/.you-agent-factory/you-agent-factories
 ```
 
 ### 4. Submit work

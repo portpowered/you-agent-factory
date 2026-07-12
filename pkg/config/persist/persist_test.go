@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -134,12 +135,59 @@ func TestReadWriteCurrentFactoryPointer_RoundTrip(t *testing.T) {
 }
 
 func TestNamedFactoryHelpers_MatchConfigPackage(t *testing.T) {
+	assertNamedFactoryPathSegmentsHelpersMatchConfig(t)
 	assertNamedFactorySegmentHelpersMatchConfig(t)
 	assertNamedFactoryRootHelpersMatchConfig(t)
 }
 
+func assertNamedFactoryPathSegmentsHelpersMatchConfig(t *testing.T) {
+	t.Helper()
+
+	facadeSegments, err := persist.NamedFactoryPathSegments("@you/goal")
+	if err != nil {
+		t.Fatalf("persist.NamedFactoryPathSegments: %v", err)
+	}
+	configSegments, err := config.NamedFactoryPathSegments("@you/goal")
+	if err != nil {
+		t.Fatalf("config.NamedFactoryPathSegments: %v", err)
+	}
+	if len(facadeSegments) != len(configSegments) {
+		t.Fatalf("path segments = %#v vs %#v", facadeSegments, configSegments)
+	}
+	for i := range facadeSegments {
+		if facadeSegments[i] != configSegments[i] {
+			t.Fatalf("path segment[%d] = %q vs %q", i, facadeSegments[i], configSegments[i])
+		}
+	}
+
+	facadeRoundTrip, err := persist.NamedFactoryNameFromPathSegments(facadeSegments)
+	if err != nil {
+		t.Fatalf("persist.NamedFactoryNameFromPathSegments: %v", err)
+	}
+	configRoundTrip, err := config.NamedFactoryNameFromPathSegments(configSegments)
+	if err != nil {
+		t.Fatalf("config.NamedFactoryNameFromPathSegments: %v", err)
+	}
+	if facadeRoundTrip != configRoundTrip || facadeRoundTrip != "@you/goal" {
+		t.Fatalf("round-trip name = %q vs %q, want @you/goal", facadeRoundTrip, configRoundTrip)
+	}
+}
+
 func assertNamedFactorySegmentHelpersMatchConfig(t *testing.T) {
 	t.Helper()
+
+	rootDir := t.TempDir()
+	facadeDir, err := persist.MapNamedFactoryDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("persist.MapNamedFactoryDir: %v", err)
+	}
+	configDir, err := config.MapNamedFactoryDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("config.MapNamedFactoryDir: %v", err)
+	}
+	if facadeDir != configDir {
+		t.Fatalf("mapped dir = %q vs %q", facadeDir, configDir)
+	}
 
 	facadeSegment, err := persist.NamedFactoryNameToLayoutSegment("@you/tts")
 	if err != nil {
@@ -181,8 +229,12 @@ func assertNamedFactoryRootHelpersMatchConfig(t *testing.T) {
 	if facadeGlobalRoot != configGlobalRoot {
 		t.Fatalf("global root = %q vs %q", facadeGlobalRoot, configGlobalRoot)
 	}
+	if want := defaultpaths.NamedFactoriesRoot(homeDir); configGlobalRoot != want {
+		t.Fatalf("config global root = %q, want defaultpaths.NamedFactoriesRoot = %q", configGlobalRoot, want)
+	}
 
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	facadeDefaultGlobalRoot, err := persist.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
 		t.Fatalf("persist.DefaultGlobalNamedFactoryRoot: %v", err)
@@ -193,6 +245,9 @@ func assertNamedFactoryRootHelpersMatchConfig(t *testing.T) {
 	}
 	if facadeDefaultGlobalRoot != configDefaultGlobalRoot {
 		t.Fatalf("default global root = %q vs %q", facadeDefaultGlobalRoot, configDefaultGlobalRoot)
+	}
+	if want := defaultpaths.NamedFactoriesRoot(homeDir); configDefaultGlobalRoot != want {
+		t.Fatalf("default global root = %q, want defaultpaths.NamedFactoriesRoot = %q", configDefaultGlobalRoot, want)
 	}
 
 	cwd := filepath.Join("repo", "app")
