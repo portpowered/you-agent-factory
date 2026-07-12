@@ -13,6 +13,7 @@ import {
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,
 } from "../../../timeline/public";
+import { isDefaultToRuntimeSessionAliasRemap } from "../dashboard-session-lifecycle";
 import {
   resolveDashboardSyncPreflight,
   shouldClearCheckpointAfterPreflight,
@@ -53,16 +54,11 @@ export type DashboardCheckpointPreflightResolution =
       requestedSessionId: string;
     }
   | {
+      clearRequestedSessionCheckpoint: true;
       error: Error;
       kind: "error";
       requestedSessionId: string;
     };
-
-const defaultDependencies: ResolutionDependencies = {
-  getSyncPreflight: getFactorySessionSyncPreflight,
-  peekCheckpoint: peekPersistedTimelineCheckpoint,
-  readCheckpoint: readTimelineCheckpoint,
-};
 
 function errorOutcome(
   requestedSessionId: string,
@@ -72,7 +68,12 @@ function errorOutcome(
     failure instanceof Error && failure.message.trim() !== ""
       ? failure.message
       : "The dashboard could not validate the selected session.";
-  return { error: new Error(message), kind: "error", requestedSessionId };
+  return {
+    clearRequestedSessionCheckpoint: true,
+    error: new Error(message),
+    kind: "error",
+    requestedSessionId,
+  };
 }
 
 function storedIdentityMatchesResolved(
@@ -88,7 +89,7 @@ function storedIdentityMatchesResolved(
 }
 
 export async function resolveDashboardCheckpointPreflight({
-  dependencies = defaultDependencies,
+  dependencies,
   indexedDB,
   requestedSessionId,
   signal,
@@ -98,8 +99,13 @@ export async function resolveDashboardCheckpointPreflight({
   requestedSessionId: string;
   signal?: AbortSignal;
 }): Promise<DashboardCheckpointPreflightResolution> {
+  const resolutionDependencies = dependencies ?? {
+    getSyncPreflight: getFactorySessionSyncPreflight,
+    peekCheckpoint: peekPersistedTimelineCheckpoint,
+    readCheckpoint: readTimelineCheckpoint,
+  };
   try {
-    const stored = await dependencies.peekCheckpoint(
+    const stored = await resolutionDependencies.peekCheckpoint(
       indexedDB,
       requestedSessionId,
       { signal },
@@ -108,7 +114,7 @@ export async function resolveDashboardCheckpointPreflight({
     const reconnectCursor = reconnectCursorFromCheckpoint(
       stored?.checkpoint ?? null,
     );
-    const response = await dependencies.getSyncPreflight(
+    const response = await resolutionDependencies.getSyncPreflight(
       requestedSessionId,
       reconnectCursor,
       {
@@ -121,7 +127,7 @@ export async function resolveDashboardCheckpointPreflight({
     );
     signal?.throwIfAborted();
     return resolveResponse({
-      dependencies,
+      dependencies: resolutionDependencies,
       indexedDB,
       response,
       signal,
@@ -165,7 +171,13 @@ async function resolveResponse({
         stored.streamIdentity,
         resolution.streamIdentity,
       ));
-  if (resolution.resolvedSessionId !== resolution.requestedSessionId) {
+  if (
+    resolution.resolvedSessionId !== resolution.requestedSessionId &&
+    !isDefaultToRuntimeSessionAliasRemap(
+      resolution.requestedSessionId,
+      resolution.resolvedSessionId,
+    )
+  ) {
     return {
       clearRequestedSessionCheckpoint: true,
       kind: "remap",
