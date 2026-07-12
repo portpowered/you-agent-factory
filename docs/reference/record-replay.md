@@ -67,23 +67,23 @@ These flag pairs are rejected for the same invocation:
 A flag validation failure happens before a new Factory Session starts, so there
 is no new session, Dispatch, FactoryArtifact, or FactoryEvent to inspect.
 
-## JavaScript Recording Contract
+## JavaScript Recording Overview
 
-A JavaScript workflow is recorded as the same canonical `FactorySession`
-history used by other orchestrators. The replay artifact is an event envelope,
-not a JavaScript VM snapshot. When the corresponding fact exists, the durable
-history can include:
+A JavaScript workflow is recorded from the canonical `FactorySession` public
+history. Its portable replay artifact is a versioned event envelope, not a
+JavaScript VM snapshot. When the corresponding fact exists, the envelope can
+include:
 
 - the Factory Session id and JavaScript orchestrator identity;
-- the workflow source reference and source digest, effective policy digest, and
-  argument-schema digest recorded at session start;
-- ordered lifecycle, phase, checkpoint-reference, Dispatch, artifact, result,
-  and terminal `FactoryEvent` summaries;
-- checkpoint labels, resumability status, snapshot digests, and
-  `FactoryArtifact` references;
-- final, partial, or failed result availability and bounded failure detail; and
-- artifact audit mode, capture metadata, and redaction counts where those facts
-  were emitted by the run.
+- the workflow source reference and source digest, arguments digest, and
+  effective policy digest;
+- ordered lifecycle, checkpoint-reference, artifact, result, and terminal
+  `FactoryEvent` summaries;
+- a public checkpoint reference, label, bounded summary, timestamp, and
+  `FactoryArtifact` reference;
+- final, partial, failed, or unavailable result facts and bounded failure
+  detail; and
+- explicit omission flags plus a bounded redacted-secret count.
 
 These are high-level replay facts. A recording does **not** promise raw VM
 state, goja/runtime phase internals, raw checkpoint state bodies, a private
@@ -116,13 +116,37 @@ terminal/partial status, safe failure detail, and the checkpoint or artifact
 references emitted before termination. Older recordings expose only the facts
 their events actually contain.
 
-Replay never dispatches live child work. It applies recorded Dispatch request
-and response facts and therefore does not contact model providers, rerun script
-workers, or resume a JavaScript VM. To continue from checkpoint application
-state, use the supported Factory Session resume path; to reproduce fresh live
-work, start a new Factory Session.
+Replay never dispatches live child work and the portable envelope does not
+contain a child-dispatch list. Replay therefore does not contact model
+providers, rerun script workers, or resume a JavaScript VM. A replayed paused
+session is historical and cannot be resumed. To continue from checkpoint
+application state, use the original live Factory Session while it is available;
+to reproduce fresh live work, start a new Factory Session.
 
 ## Example Commands
+
+Run a JavaScript factory and use the default recording path:
+
+```bash
+you run --factory ./workflow.js
+```
+
+The CLI prints `Recording saved: <path>` when the run shuts down. To choose the
+portable recording path explicitly instead:
+
+```bash
+you run --record ./recordings/workflow-run.json --factory ./workflow.js
+```
+
+Replay that JavaScript Factory Session without starting live child work:
+
+```bash
+you run --replay ./recordings/workflow-run.json --factory ./workflow.js
+```
+
+The workflow source selects the factory shape; replayed status, events,
+artifacts, checkpoints, and result availability come from the recording. Replay
+does not invoke a provider, dispatch a child, or execute the JavaScript source.
 
 Record to an explicit path you control:
 
@@ -160,14 +184,73 @@ you run --dir ./examples/write-code-review \
 [`docs/examples/README.md`](../examples/README.md) documents how the example
 files fit together.
 
+## Inspect a Replayed JavaScript Factory Session
+
+Use the Factory Session id reported by the replay with the public durable
+inspection commands:
+
+```bash
+you workflow status <session-id>
+you workflow events <session-id>
+you workflow artifacts <session-id>
+you workflow result <session-id> --mode partial
+you workflow result <session-id> --mode final
+```
+
+These reads expose the recorded public status, ordered `FactoryEvent`
+summaries, `FactoryArtifact` summaries, and partial or final result
+availability. A paused recording remains historical: it cannot be resumed or
+treated as a live Factory Session. Use live durable-session inspection when you
+need child-dispatch details or resumable checkpoint state.
+
+## JavaScript Recording Contract
+
+A portable JavaScript recording is a versioned, high-level Factory Session
+envelope. Its field groups are:
+
+| Field group | What it records |
+|-------------|-----------------|
+| `recordingKind`, `schemaVersion`, `replayCompatibilityVersion` | Contract identity, envelope shape, and replay compatibility |
+| `session` | Factory Session id, recorded lifecycle status, and `JAVASCRIPT` orchestrator kind |
+| `source` | Source reference and content hash; source contents are not embedded |
+| `argumentsDigest`, `policyHash` | Digests for identity and consistency checks, not raw arguments or policy secrets |
+| `artifacts` | Public artifact identity, kind, visibility, label, content hash, size, and creation time |
+| `events` | Canonical event id, type, sequence, timestamp, and bounded artifact or checkpoint references |
+| `checkpoint` | Optional public checkpoint reference and summary, never the checkpoint state body |
+| `result` | Recorded public partial/final result, availability or safe failure summary, and integrity references |
+| `redaction` | Applied omission flags and a bounded count of redacted secrets |
+
+Replay validates the recording kind, schema and compatibility versions,
+identity, hashes and digests, event ordering, and summary references before it
+projects any public state. Unsupported compatibility versions fail with
+supported-version or migration guidance. Malformed or inconsistent recordings
+fail closed instead of returning a partially trusted Factory Session.
+
+### Privacy and portability limits
+
+JavaScript recordings deliberately omit raw JavaScript runtime state, raw
+checkpoint bodies, provider transcripts, and child-dispatch lists. Redaction
+metadata reports those omissions without copying removed values into the
+recording. Secret counts are bounded to 1,000,000 (values at or above that
+limit are reported as 1,000,000), not a list of secret names or contents.
+
+Artifact and event entries are inspection summaries. A hash or digest proves
+consistency with referenced public data; it does not make omitted source,
+artifact content, checkpoint state, provider output, or child-dispatch history
+recoverable. Keep recordings private even with these omissions because public
+results, labels, and event summaries can still contain customer information.
+
 ## Sensitivity and Retention
 
-Replay artifacts are sensitive because they can contain prompts, payloads,
-stdout, stderr, result summaries, and diagnostic metadata. Redaction metadata
-describes redaction that occurred; it is not a guarantee that every
-customer-authored payload is safe to disclose. Treat the whole artifact as
-sensitive, avoid putting secrets in workflow arguments or artifacts, and review
-an explicitly recorded file before sharing it.
+Replay artifacts remain sensitive. The portable JavaScript envelope omits raw
+runtime output and provider transcripts, but its public results, artifact
+labels, checkpoint summaries, event summaries, and safe diagnostics can still
+contain customer information. Legacy non-JavaScript replay artifacts may also
+contain prompts, payloads, stdout, stderr, and diagnostic metadata. Redaction
+metadata describes the omissions that were applied; it is not a guarantee that
+every customer-authored public value is safe to disclose. Treat the whole
+artifact as sensitive, avoid putting secrets in workflow arguments or
+artifacts, and review an explicitly recorded file before sharing it.
 
 The first version does not delete old artifacts automatically. Manage retention
 in your own home directory or CI workspace. Do not commit generated replay

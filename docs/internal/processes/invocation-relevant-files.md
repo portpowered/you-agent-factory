@@ -184,6 +184,13 @@ primary-result behavior.
   through `outputMu`; after a drain timeout it abandons further progress writes
   and `writeFinalInvocationResult` acquires the same lock so final
   primary-result/outcome output cannot interleave with an in-flight progress write.
+- `you run --replay` format detection belongs at service composition before legacy
+  `ReplayArtifact` config loading. Privacy-bounded JavaScript Factory Session
+  recordings compose `recordingreplay.Service` as an inspection-only durable read
+  owner and skip Petri/runtime/provider construction; legacy artifacts continue
+  through `pkg/replay`. Production-path tests must exercise `FactoryService.Run`
+  plus public session, event, artifact, and result reads with fail-on-use live
+  dependencies.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with

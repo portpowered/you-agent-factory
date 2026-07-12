@@ -17,8 +17,13 @@ type DurableLifecycleHost interface {
 // ErrDurableSessionLifecycleRouting reports that session identity does not route to durable execution.
 var ErrDurableSessionLifecycleRouting = errors.New("durable factory session lifecycle routing required")
 
-func requireDurableSessionID(sessionID string) error {
+func requireDurableSessionID(host DurableLifecycleHost, sessionID string) error {
 	if !IsDurableExecutionSessionID(sessionID) {
+		if host != nil {
+			if replay, ok := host.DurableExecution().(interface{ IsNonLiveReplay() bool }); ok && replay.IsNonLiveReplay() {
+				return nil
+			}
+		}
 		return fmt.Errorf("%w: %s", ErrDurableSessionLifecycleRouting, strings.TrimSpace(sessionID))
 	}
 	return nil
@@ -38,7 +43,7 @@ func PauseDurableFactorySession(
 	sessionID string,
 	control factorysessionexecution.ControlRequest,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	if err := requireDurableSessionID(sessionID); err != nil {
+	if err := requireDurableSessionID(host, sessionID); err != nil {
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 	execution, err := durableExecutionService(host)
@@ -55,7 +60,7 @@ func ResumeDurableFactorySession(
 	sessionID string,
 	control factorysessionexecution.ControlRequest,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	if err := requireDurableSessionID(sessionID); err != nil {
+	if err := requireDurableSessionID(host, sessionID); err != nil {
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 	execution, err := durableExecutionService(host)
@@ -72,7 +77,7 @@ func CancelDurableFactorySession(
 	sessionID string,
 	control factorysessionexecution.ControlRequest,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	if err := requireDurableSessionID(sessionID); err != nil {
+	if err := requireDurableSessionID(host, sessionID); err != nil {
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 	execution, err := durableExecutionService(host)
@@ -89,7 +94,7 @@ func TerminateDurableFactorySession(
 	sessionID string,
 	control factorysessionexecution.ControlRequest,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	if err := requireDurableSessionID(sessionID); err != nil {
+	if err := requireDurableSessionID(host, sessionID); err != nil {
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 	execution, err := durableExecutionService(host)
@@ -106,7 +111,7 @@ func ApproveDurableFactorySession(
 	sessionID string,
 	approve factorysessionexecution.ApproveRequest,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	if err := requireDurableSessionID(sessionID); err != nil {
+	if err := requireDurableSessionID(host, sessionID); err != nil {
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 	execution, err := durableExecutionService(host)
@@ -123,7 +128,7 @@ func RetryDurableFactorySessionDispatch(
 	sessionID string,
 	retry factorysessionexecution.RetryDispatchRequest,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	if err := requireDurableSessionID(sessionID); err != nil {
+	if err := requireDurableSessionID(host, sessionID); err != nil {
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 	execution, err := durableExecutionService(host)
@@ -140,7 +145,7 @@ func InterruptDurableFactorySessionDispatch(
 	sessionID string,
 	interrupt factorysessionexecution.InterruptDispatchRequest,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	if err := requireDurableSessionID(sessionID); err != nil {
+	if err := requireDurableSessionID(host, sessionID); err != nil {
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 	execution, err := durableExecutionService(host)
