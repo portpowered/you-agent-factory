@@ -162,6 +162,45 @@ func TestFailureBaseline_AbsentDefault_RunCommandRejectsUnresolvedDefaultProvide
 	}
 }
 
+func TestFailureBaseline_AbsentDefault_RunNamedGoalLeavesOperatorDefaultsEmptyWithoutConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+	restore := withNamedPackagedFactoryRunRoot(t)
+	defer restore()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--no-record",
+		"--quiet",
+		"absent-default baseline probe",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named %s: %v", goal.PackagedFactoryName, err)
+	}
+	if got.NamedFactoryName != goal.PackagedFactoryName {
+		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, goal.PackagedFactoryName)
+	}
+	if got.OperatorDefaults.WorkerModelProvider != "" {
+		t.Fatalf("operator provider = %q, want empty without configured defaults", got.OperatorDefaults.WorkerModelProvider)
+	}
+	if got.OperatorDefaults.WorkerModel != "" {
+		t.Fatalf("operator model = %q, want empty without configured defaults", got.OperatorDefaults.WorkerModel)
+	}
+}
+
 func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraphReferences(t *testing.T) {
 	dir := t.TempDir()
 	factoryPath := filepath.Join(dir, "factory.json")
