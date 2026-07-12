@@ -210,7 +210,7 @@ func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request
 	s.writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.ListFactorySessionDispatchesParams) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
 		return
@@ -220,8 +220,12 @@ func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	response, err := reader.ListDurableFactorySessionDispatches(r.Context(), string(sessionID))
+	response, err := reader.ListDurableFactorySessionDispatches(r.Context(), string(sessionID), params)
 	if err != nil {
+		if status, errResp, handled := factorysession.ExecutionErrorResponse(err); handled {
+			s.writeJSON(w, status, errResp)
+			return
+		}
 		if s.writeDurableSessionReadError(w, err) {
 			return
 		}
@@ -618,6 +622,7 @@ type durableSessionDispatchReader interface {
 	ListDurableFactorySessionDispatches(
 		ctx context.Context,
 		sessionID string,
+		params factoryapi.ListFactorySessionDispatchesParams,
 	) (factoryapi.ListFactorySessionDispatchesResponse, error)
 	GetDurableFactorySessionDispatch(
 		ctx context.Context,

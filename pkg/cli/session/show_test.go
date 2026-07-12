@@ -459,6 +459,19 @@ func TestDispatches_RejectsNonDurableSessionID(t *testing.T) {
 	}
 }
 
+func TestDispatchesEndpoint_ForwardsCanonicalFilters(t *testing.T) {
+	endpoint, err := dispatchesEndpoint(DispatchesConfig{
+		Server: "http://127.0.0.1:3456", SessionID: "dur-sess-filter-001",
+		Phase: "build", Status: "FAILED",
+	})
+	if err != nil {
+		t.Fatalf("dispatchesEndpoint: %v", err)
+	}
+	if endpoint.Query().Get("phase") != "build" || endpoint.Query().Get("status") != "FAILED" {
+		t.Fatalf("query = %q, want phase=build and status=FAILED", endpoint.RawQuery)
+	}
+}
+
 type ioDiscard struct{}
 
 func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }

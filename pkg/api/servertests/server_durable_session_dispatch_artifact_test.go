@@ -128,6 +128,33 @@ func TestGetFactorySessionDispatch_RuntimeBackedReturnsTypedDetail(t *testing.T)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
+	filteredResp, err := http.Get(server.URL + "/factory-sessions/" + completed.SessionID + "/dispatches?phase=unknown")
+	if err != nil {
+		t.Fatalf("GET filtered dispatches: %v", err)
+	}
+	var filtered factoryapi.ListFactorySessionDispatchesResponse
+	if filteredResp.StatusCode != http.StatusOK {
+		filteredResp.Body.Close()
+		t.Fatalf("filtered status = %d, want 200", filteredResp.StatusCode)
+	}
+	if err := json.NewDecoder(filteredResp.Body).Decode(&filtered); err != nil {
+		filteredResp.Body.Close()
+		t.Fatalf("decode filtered dispatches: %v", err)
+	}
+	filteredResp.Body.Close()
+	if filtered.Dispatches == nil || len(filtered.Dispatches) != 0 {
+		t.Fatalf("filtered dispatches = %#v, want non-nil empty collection", filtered.Dispatches)
+	}
+
+	invalidResp, err := http.Get(server.URL + "/factory-sessions/" + completed.SessionID + "/dispatches?status=BROKEN")
+	if err != nil {
+		t.Fatalf("GET invalid status dispatches: %v", err)
+	}
+	invalidResp.Body.Close()
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid status = %d, want 400", invalidResp.StatusCode)
+	}
+
 	resp, err := http.Get(server.URL + "/factory-sessions/" + completed.SessionID + "/dispatches/dispatch-1")
 	if err != nil {
 		t.Fatalf("GET /factory-sessions/{session_id}/dispatches/{dispatch_id}: %v", err)

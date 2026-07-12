@@ -100,7 +100,7 @@ type DurableSessionListingAPI interface {
 // artifact, and event replay seam for dynamic workflow inspection.
 type DurableSessionProjectionAPI interface {
 	GetDurableFactorySessionResult(ctx context.Context, sessionID string, params factoryapi.GetFactorySessionResultsParams) (factoryapi.FactorySessionResult, error)
-	ListDurableFactorySessionDispatches(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	ListDurableFactorySessionDispatches(ctx context.Context, sessionID string, params factoryapi.ListFactorySessionDispatchesParams) (factoryapi.ListFactorySessionDispatchesResponse, error)
 	GetDurableFactorySessionDispatch(ctx context.Context, sessionID, dispatchID string) (factoryapi.FactoryDispatch, error)
 	ListDurableFactorySessionArtifacts(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error)
 	GetDurableFactorySessionArtifact(ctx context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error)

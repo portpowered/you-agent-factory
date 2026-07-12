@@ -14,12 +14,14 @@ import (
 
 // DispatchesConfig holds CLI inputs for one durable Factory Session dispatch list read.
 type DispatchesConfig struct {
-	SessionID          string
+	SessionID string
 	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
 	FixtureCatalogPath string
+	Phase              string
+	Status             string
 }
 
 // RunDispatches loads one durable Factory Session dispatch list through the shared
@@ -48,6 +50,12 @@ func RunDispatches(ctx context.Context, cfg DispatchesConfig) error {
 		return writeRunError(cfg.Output, cfg.JSON, err)
 	}
 
+	listed, err = factorysessionexecution.FilterDispatches(listed, factorysessionexecution.DispatchFilters{
+		Phase: cfg.Phase, Status: factorysessionexecution.DispatchStatus(cfg.Status),
+	})
+	if err != nil {
+		return writeRunError(cfg.Output, cfg.JSON, err)
+	}
 	mapped := factorysession.ListDispatchesResponseToAPI(listed)
 	if cfg.JSON {
 		encoded, marshalErr := json.Marshal(mapped)
@@ -134,7 +142,7 @@ func formatStringSlice(values *[]string) string {
 
 // ArtifactsConfig holds CLI inputs for one durable Factory Session artifact list read.
 type ArtifactsConfig struct {
-	SessionID          string
+	SessionID string
 	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
@@ -217,9 +225,9 @@ func renderArtifactsHuman(output io.Writer, result factoryapi.ListFactorySession
 
 // EventsConfig holds CLI inputs for one durable Factory Session event poll read.
 type EventsConfig struct {
-	SessionID          string
-	AfterEventID       string
-	AfterSequence      *int
+	SessionID     string
+	AfterEventID  string
+	AfterSequence *int
 	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer

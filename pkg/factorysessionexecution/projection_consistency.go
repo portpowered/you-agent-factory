@@ -272,6 +272,54 @@ type ListDispatchesResult struct {
 	Dispatches []DispatchSummary
 }
 
+// DispatchFilters narrows a canonical Dispatch read by phase and status.
+type DispatchFilters struct {
+	Phase  string
+	Status DispatchStatus
+}
+
+// NormalizeDispatchFilters validates and canonicalizes transport-provided filters.
+func NormalizeDispatchFilters(filters DispatchFilters) (DispatchFilters, error) {
+	filters.Phase = strings.TrimSpace(filters.Phase)
+	status := DispatchStatus(strings.ToUpper(strings.TrimSpace(string(filters.Status))))
+	if status != "" && !isCanonicalDispatchStatus(status) {
+		return DispatchFilters{}, NewValidationError("status", "status must be QUEUED, RUNNING, COMPLETED, FAILED, CANCELED, TIMED_OUT, SKIPPED, or INTERRUPTED")
+	}
+	filters.Status = status
+	return filters, nil
+}
+
+// FilterDispatches applies canonical phase/status semantics without changing session order.
+func FilterDispatches(result ListDispatchesResult, filters DispatchFilters) (ListDispatchesResult, error) {
+	normalized, err := NormalizeDispatchFilters(filters)
+	if err != nil {
+		return ListDispatchesResult{}, err
+	}
+	filtered := make([]DispatchSummary, 0, len(result.Dispatches))
+	for _, dispatch := range result.Dispatches {
+		if normalized.Phase != "" && dispatch.Phase != normalized.Phase {
+			continue
+		}
+		if normalized.Status != "" && dispatch.Status != normalized.Status {
+			continue
+		}
+		filtered = append(filtered, dispatch)
+	}
+	result.Dispatches = filtered
+	return result, nil
+}
+
+func isCanonicalDispatchStatus(status DispatchStatus) bool {
+	switch status {
+	case DispatchStatusQueued, DispatchStatusRunning, DispatchStatusCompleted,
+		DispatchStatusFailed, DispatchStatusCanceled, DispatchStatusTimedOut,
+		DispatchStatusSkipped, DispatchStatusInterrupted:
+		return true
+	default:
+		return false
+	}
+}
+
 // ArtifactRetrievalRef is a safe API-relative artifact retrieval reference.
 type ArtifactRetrievalRef struct {
 	Href   string

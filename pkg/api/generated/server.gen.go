@@ -5709,6 +5709,12 @@ type BackendScopeId = string
 // DispatchID defines model for DispatchID.
 type DispatchID = string
 
+// FactoryDispatchPhase defines model for FactoryDispatchPhase.
+type FactoryDispatchPhase = string
+
+// FactoryDispatchStatusFilter Canonical dispatch lifecycle status shared across orchestrators.
+type FactoryDispatchStatusFilter = FactoryDispatchStatus
+
 // FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
 type FactorySessionResultIncludeArtifacts = bool
 
@@ -5793,6 +5799,15 @@ type GetEventsParams struct {
 type ListFactorySessionsParams struct {
 	// Scope Optional session list scope. Defaults to live for backward-compatible live workspace session listing.
 	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// ListFactorySessionDispatchesParams defines parameters for ListFactorySessionDispatches.
+type ListFactorySessionDispatchesParams struct {
+	// Phase Exact canonical phase identifier. Unknown phases return an empty collection.
+	Phase *FactoryDispatchPhase `form:"phase,omitempty" json:"phase,omitempty"`
+
+	// Status Canonical Dispatch lifecycle status.
+	Status *FactoryDispatchStatusFilter `form:"status,omitempty" json:"status,omitempty"`
 }
 
 // GetEventsBySessionIdParams defines parameters for GetEventsBySessionId.
@@ -7329,7 +7344,7 @@ type ServerInterface interface {
 	CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// List durable factory session dispatches
 	// (GET /factory-sessions/{session_id}/dispatches)
-	ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ListFactorySessionDispatchesParams)
 	// Get one durable factory session dispatch
 	// (GET /factory-sessions/{session_id}/dispatches/{dispatch_id})
 	GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionId SessionID, dispatchId DispatchID)
@@ -7725,8 +7740,27 @@ func (siw *ServerInterfaceWrapper) ListFactorySessionDispatches(w http.ResponseW
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFactorySessionDispatchesParams
+
+	// ------------- Optional query parameter "phase" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "phase", r.URL.Query(), &params.Phase)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "phase", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListFactorySessionDispatches(w, r, sessionId)
+		siw.Handler.ListFactorySessionDispatches(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

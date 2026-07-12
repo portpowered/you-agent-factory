@@ -714,6 +714,8 @@ paths:
       description: Returns dispatch summaries for one factory session with dispatch id, status, dispatch kind, phase, label, attempt, runner/model metadata when available, provider-session correlation refs, usage, warnings, output artifact ids, and failure details. Petri and JavaScript dispatches share the neutral summary shape; orchestrator-specific detail is available on GET /factory-sessions/{session_id}/dispatches/{dispatch_id}.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/FactoryDispatchPhase'
+        - $ref: '#/components/parameters/FactoryDispatchStatusFilter'
       responses:
         '200':
           description: Dispatch summaries for the targeted session.
@@ -721,6 +723,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListFactorySessionDispatchesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -1374,6 +1378,21 @@ components:
       description: Stable factory-session dispatch identifier.
       schema:
         type: string
+    FactoryDispatchPhase:
+      name: phase
+      in: query
+      required: false
+      description: Exact canonical phase identifier. Unknown phases return an empty collection.
+      schema:
+        type: string
+        minLength: 1
+    FactoryDispatchStatusFilter:
+      name: status
+      in: query
+      required: false
+      description: Canonical Dispatch lifecycle status.
+      schema:
+        $ref: '#/components/schemas/FactoryDispatchStatus'
     ArtifactID:
       name: artifact_id
       in: path

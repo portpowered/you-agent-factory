@@ -739,6 +739,31 @@ func TestFakeService_ConstructorsAndHelpers(t *testing.T) {
 	}
 }
 
+func TestFilterDispatches_PhaseStatusAndValidation(t *testing.T) {
+	input := ListDispatchesResult{SessionID: "dur-sess-filter-001", Dispatches: []DispatchSummary{
+		{ID: "one", Phase: "plan", Status: DispatchStatusCompleted},
+		{ID: "two", Phase: "build", Status: DispatchStatusFailed},
+		{ID: "three", Phase: "build", Status: DispatchStatusCompleted},
+	}}
+
+	filtered, err := FilterDispatches(input, DispatchFilters{Phase: "build", Status: " completed "})
+	if err != nil {
+		t.Fatalf("FilterDispatches: %v", err)
+	}
+	if len(filtered.Dispatches) != 1 || filtered.Dispatches[0].ID != "three" {
+		t.Fatalf("filtered dispatches = %#v, want dispatch three", filtered.Dispatches)
+	}
+	empty, err := FilterDispatches(input, DispatchFilters{Phase: "unknown"})
+	if err != nil || len(empty.Dispatches) != 0 || empty.Dispatches == nil {
+		t.Fatalf("unknown phase = %#v, %v; want non-nil empty list", empty.Dispatches, err)
+	}
+	if _, err := FilterDispatches(input, DispatchFilters{Status: "BROKEN"}); err == nil {
+		t.Fatal("invalid status error = nil, want ValidationError")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "status" {
+		t.Fatalf("invalid status error = %#v, want status ValidationError", err)
+	}
+}
+
 func TestNormalizeResultRequest_DefaultsAndValidation(t *testing.T) {
 	normalized, err := NormalizeResultRequest(ResultRequest{})
 	if err != nil {

@@ -28,6 +28,8 @@ type DispatchesConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	Phase       string
+	Status      string
 }
 
 // Dispatches requests one durable Factory Session dispatch list from a running host via HTTP.
@@ -96,6 +98,14 @@ func dispatchesEndpoint(cfg DispatchesConfig) (url.URL, error) {
 	if err != nil {
 		return url.URL{}, fmt.Errorf("parse session dispatches endpoint: %w", err)
 	}
+	query := endpoint.Query()
+	if phase := strings.TrimSpace(cfg.Phase); phase != "" {
+		query.Set("phase", phase)
+	}
+	if status := strings.TrimSpace(cfg.Status); status != "" {
+		query.Set("status", status)
+	}
+	endpoint.RawQuery = query.Encode()
 	return *endpoint, nil
 }
 

@@ -61,6 +61,23 @@ func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummari
 	}
 }
 
+func TestMockClient_ListDispatches_FiltersAndRejectsInvalidStatus(t *testing.T) {
+	client := newFixtureMCPClient(t)
+	row := publishedScenario(t, fixtures.FixturePurposeDispatchInspection)
+	if _, err := client.StartSync(syncSuccessExecutionRequest()); err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	empty, err := client.ListDispatches(mcpfactorysession.ListDispatchesInput{SessionID: row.SessionID, Phase: "unknown"})
+	if err != nil || empty.Error != nil || empty.Result == nil || len(empty.Result.Dispatches) != 0 {
+		t.Fatalf("unknown phase response = %#v, %v", empty, err)
+	}
+	invalid, err := client.ListDispatches(mcpfactorysession.ListDispatchesInput{SessionID: row.SessionID, Status: "BROKEN"})
+	if err != nil || invalid.Error == nil || invalid.Result != nil || invalid.Error.Code != "BAD_REQUEST" {
+		t.Fatalf("invalid status response = %#v, %v", invalid, err)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this MCP artifact inspection test keeps fixture summaries and golden-hash assertions together on one mock-client seam.
 func TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries(t *testing.T) {
 	client := newFixtureMCPClient(t)

@@ -126,6 +126,8 @@ func getSessionTool() ToolDefinition {
 			"phase, progress, and result summary. Maps to GET /factory-sessions/{session_id}.",
 		InputSchema: objectSchema(map[string]any{
 			"sessionId": stringProperty("Stable durable Factory Session identifier."),
+			"phase":     stringProperty("Exact canonical phase identifier."),
+			"status":    stringProperty("Canonical Dispatch lifecycle status."),
 		}, "sessionId"),
 		OutputSchema: toolResponseSchema(factorySessionDurableReadModelSchema()),
 		SuccessStableFields: []string{

@@ -5010,6 +5010,10 @@ export interface components {
     FactorySessionResultIncludeArtifacts: boolean;
     /** @description Stable factory-session dispatch identifier. */
     DispatchID: string;
+    /** @description Exact canonical phase identifier. Unknown phases return an empty collection. */
+    FactoryDispatchPhase: string;
+    /** @description Canonical Dispatch lifecycle status. */
+    FactoryDispatchStatusFilter: components["schemas"]["FactoryDispatchStatus"];
     /** @description Stable factory-session artifact identifier. */
     ArtifactID: string;
     /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
@@ -5770,7 +5774,12 @@ export interface operations {
   };
   listFactorySessionDispatches: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Exact canonical phase identifier. Unknown phases return an empty collection. */
+        phase?: components["parameters"]["FactoryDispatchPhase"];
+        /** @description Canonical Dispatch lifecycle status. */
+        status?: components["parameters"]["FactoryDispatchStatusFilter"];
+      };
       header?: never;
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
@@ -5789,6 +5798,7 @@ export interface operations {
           "application/json": components["schemas"]["ListFactorySessionDispatchesResponse"];
         };
       };
+      400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };
