@@ -9,8 +9,10 @@ Use this map when changing the public REST contract.
   `operations[]` with `operationId`, `method`, `path`, optional `xDocId`,
   `hasSummary`, `hasDescription`, `requestMediaTypes`, and `responses[]`).
 - `cmd/restoperationinventory` writes that inventory from `api/openapi.yaml` for
-  baseline generation; checked-in baselines belong under
-  `contracts/testdata/baseline/rest-operations.json` once parity tests land.
+  baseline generation; the checked-in baseline lives at
+  `contracts/testdata/baseline/rest-operations.json`.
+- `internal/contractinventory/baseline_test.go` proves repository parity and
+  byte-identical repeated extraction from `api/openapi.yaml`.
 - Inventory extraction must not modify authored OpenAPI, generated clients, or
   `pkg/api` handlers; parity and identity-validation tests belong beside the
   extractor package.

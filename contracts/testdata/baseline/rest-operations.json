@@ -1,0 +1,1471 @@
+{
+  "formatVersion": "rest-operations/v1",
+  "operations": [
+    {
+      "operationId": "getEvents",
+      "method": "GET",
+      "path": "/events",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "text/event-stream"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "previewFactory",
+      "method": "POST",
+      "path": "/factories/preview",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "listFactorySessions",
+      "method": "GET",
+      "path": "/factory-sessions",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "openFactorySession",
+      "method": "POST",
+      "path": "/factory-sessions",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "startDurableFactorySessionAsync",
+      "method": "POST",
+      "path": "/factory-sessions/async",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "startDurableFactorySessionSync",
+      "method": "POST",
+      "path": "/factory-sessions/sync",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "closeFactorySession",
+      "method": "DELETE",
+      "path": "/factory-sessions/{session_id}",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "204",
+          "mediaTypes": []
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getFactorySession",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "approveFactorySession",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/approve",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "listFactorySessionArtifacts",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/artifacts",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getFactorySessionArtifact",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/artifacts/{artifact_id}",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "cancelFactorySession",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/cancel",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "listFactorySessionDispatches",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/dispatches",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getFactorySessionDispatch",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/dispatches/{dispatch_id}",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getEventsBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/events",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json",
+            "text/event-stream"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getCurrentFactoryBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/factory",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "saveCurrentFactoryBySessionId",
+      "method": "PUT",
+      "path": "/factory-sessions/{session_id}/factory",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getCurrentFactoryWorkstationPromptTemplateContractBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "validateCurrentFactoryWorkstationPromptTemplateBySessionId",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "interruptFactorySessionDispatch",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/interrupt-dispatch",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "invokeFactorySessionBySessionId",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/invocations",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getFactorySessionPartialResult",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/partial-result",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "pauseFactorySession",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/pause",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getFactorySessionResult",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/result",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getFactorySessionResults",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/results",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "resumeFactorySession",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/resume",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "retryFactorySessionDispatch",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/retry-dispatch",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getStatusBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/status",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getFactorySessionSyncPreflightBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/sync-preflight",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "terminateFactorySession",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/terminate",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "202",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "listWorkBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/work",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "submitWorkBySessionId",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/work",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "201",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "upsertWorkRequestBySessionId",
+      "method": "PUT",
+      "path": "/factory-sessions/{session_id}/work-requests/{request_id}",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "201",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "stageSubmitWorkFileBySessionId",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/work/staged-files",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "201",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getWorkBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/work/{id}",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "moveWorkBySessionId",
+      "method": "POST",
+      "path": "/factory-sessions/{session_id}/work/{id}/move",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "409",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "validateFactory",
+      "method": "POST",
+      "path": "/factory-validations",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "listModels",
+      "method": "GET",
+      "path": "/models",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getModel",
+      "method": "GET",
+      "path": "/models/{model_name}",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "invokeModel",
+      "method": "POST",
+      "path": "/models/{model_name}/invocations",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json",
+            "application/octet-stream"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "pullModel",
+      "method": "POST",
+      "path": "/models/{model_name}/pull",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getProviderSessionDetails",
+      "method": "GET",
+      "path": "/provider-sessions/detail",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "getStatus",
+      "method": "GET",
+      "path": "/status",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
+      "operationId": "previewWorkflow",
+      "method": "POST",
+      "path": "/workflow-previews",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [
+        "application/json"
+      ],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    }
+  ]
+}
