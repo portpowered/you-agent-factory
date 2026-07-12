@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -103,10 +104,18 @@ func assertDocumentedCancel(t *testing.T, client *mcpfactorysession.Client, sess
 
 func assertClientSessionStatus(t *testing.T, client *mcpfactorysession.Client, sessionID string, want factoryapi.FactorySessionDurableLifecycleStatus) {
 	t.Helper()
-	response, err := client.GetSession(mcpfactorysession.GetSessionInput{SessionID: sessionID})
-	if err != nil || response.Error != nil || response.Result == nil || response.Result.Status != want {
-		t.Fatalf("GetSession: response=%#v err=%v, want %s", response, err, want)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		response, err := client.GetSession(mcpfactorysession.GetSessionInput{SessionID: sessionID})
+		if err != nil || response.Error != nil || response.Result == nil {
+			t.Fatalf("GetSession: response=%#v err=%v, want %s", response, err, want)
+		}
+		if response.Result.Status == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
+	t.Fatalf("GetSession did not reach %s within 5s", want)
 }
 
 func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummaries(t *testing.T) {
