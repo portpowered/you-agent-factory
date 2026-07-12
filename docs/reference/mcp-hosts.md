@@ -116,18 +116,19 @@ tools in new configuration.
 
 The following abbreviated host conversation uses `you mcp serve --runtime` and
 one illustrative dynamic workflow. The host sends each object as the
-`arguments` value of an MCP `tools/call`. The responses show representative
-stable fields only: timestamps, progress counts, event ids, artifact ids, and
-workflow payloads vary by execution and are not fixed contract values.
+`arguments` value of an MCP `tools/call`. The responses are abridged projections
+that show real wire-field names and values; other contract fields are omitted.
+Timestamps, progress counts, event ids, artifact ids, hashes, and workflow
+payloads vary by execution and are not fixed contract values.
 
 First validate the source before creating runtime work:
 
 ```text
 host -> you.factory_session.validate_source
-{"kind":"INLINE_WORKFLOW","inlineSource":"export default async function ({ final }) { return final({ answer: 'ready' }) }"}
+{"sourceKind":"INLINE_WORKFLOW","projectRoot":"/absolute/path/to/project","inlineSource":"var spin = 0; while (true) { spin += 1; }"}
 
 you ->
-{"result":{"valid":true,"diagnostics":[]}}
+{"result":{"valid":true,"sourceValidationIssues":[]}}
 ```
 
 Then start it asynchronously with a caller-supplied request id. Live dynamic
@@ -136,10 +137,10 @@ mode only resolves deterministic catalog scenarios.
 
 ```text
 host -> you.factory_session.start_async
-{"source":{"kind":"INLINE_WORKFLOW","inlineWorkflow":{"inlineSource":{"encoding":"utf-8","inline":"export default async function ({ final }) { return final({ answer: 'ready' }) }"}}},"requestId":"req-host-demo-001"}
+{"source":{"kind":"INLINE_WORKFLOW","inlineWorkflow":{"inlineSource":{"encoding":"utf-8","inline":"var spin = 0; while (true) { spin += 1; }"}}},"requestId":"req-host-demo-001"}
 
 you ->
-{"result":{"sessionId":"fs-host-demo-01","requestId":"req-host-demo-001","status":"RUNNING"}}
+{"result":{"sessionId":"fs-host-demo-01","status":"RUNNING","orchestratorKind":"JAVASCRIPT","resolvedSource":{"kind":"INLINE_WORKFLOW"}}}
 ```
 
 Retain `fs-host-demo-01`. Every post-start call below addresses that same
@@ -169,23 +170,24 @@ host -> you.factory_session.list_dispatches
 {"sessionId":"fs-host-demo-01"}
 
 you ->
-{"result":{"sessionId":"fs-host-demo-01","dispatches":[{"id":"dispatch-host-demo-01","status":"RUNNING"}]}}
+{"result":{"sessionId":"fs-host-demo-01","dispatches":[]}}
 
 host -> you.factory_session.list_artifacts
 {"sessionId":"fs-host-demo-01"}
 
 you ->
-{"result":{"sessionId":"fs-host-demo-01","artifacts":[{"id":"artifact-checkpoint-01","kind":"CHECKPOINT","visibility":"INTERNAL_CHECKPOINT"}]}}
+{"result":{"sessionId":"fs-host-demo-01","artifacts":[]}}
 
 host -> you.factory_session.read_events
 {"sessionId":"fs-host-demo-01"}
 
 you ->
-{"result":{"sessionId":"fs-host-demo-01","events":[{"id":"event-host-demo-07","type":"FactoryEventTypeDispatchQueued","context":{"sessionSequence":7,"dispatchId":"dispatch-host-demo-01"}}]}}
+{"result":{"sessionId":"fs-host-demo-01","events":[{"id":"event-host-demo-07","type":"SESSION_STARTED","context":{"sessionId":"fs-host-demo-01","sessionSequence":7}}]}}
 ```
 
-For a workflow that is still running, this is a valid control-and-observe
-sequence. Wait for each accepted operation to become visible before sending the
+The deliberately non-terminating loop keeps this runtime-backed example
+controllable until the host stops it. This is a valid control-and-observe
+sequence; wait for each accepted operation to become visible before sending the
 next operation:
 
 ```text
@@ -206,15 +208,25 @@ host -> you.factory_session.control
 
 you ->
 {"result":{"sessionId":"fs-host-demo-01","operation":"RESUME","outcome":"ACCEPTED","status":"RUNNING"}}
+
+host -> you.factory_session.control
+{"sessionId":"fs-host-demo-01","operation":"CANCEL","requestId":"req-cancel-host-demo-01","reason":"example complete"}
+
+you ->
+{"result":{"sessionId":"fs-host-demo-01","operation":"CANCEL","outcome":"ACCEPTED","status":"CANCELED"}}
 ```
 
-Continue polling the same id. Completion is confirmed when
+Continue polling the same id after each accepted control. Terminal completion
+is confirmed when
 `you.factory_session.get` reports a terminal status and
 `you.factory_session.get_result` returns a terminal result. The final
 `you.factory_session.list_dispatches` view should show terminal Dispatch
-statuses, `you.factory_session.list_artifacts` should expose any final
-`FactoryArtifact` references, and `you.factory_session.read_events` should
-contain ordered `FactoryEvent` facts for the lifecycle controls and completion.
+statuses when the workflow created child work,
+`you.factory_session.list_artifacts` should expose any final `FactoryArtifact`
+references, and `you.factory_session.read_events` should contain ordered
+`SESSION_LIFECYCLE_CONTROL` `FactoryEvent` facts for pause, resume, cancel, and
+completion. Empty Dispatch and FactoryArtifact lists are expected for this
+child-free loop.
 These facts, rather than the illustrative ids or timestamps above, confirm the
 outcome.
 
