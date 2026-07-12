@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-retry-001",
+  "sequence": 45,
+  "recordedAt": "2026-07-13T12:00:03Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "ERROR",
+  "phase": "UPDATED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "error.retryable",
+    "delivery": "SYNTHESIZED",
+    "representation": "NOTIFICATION",
+    "fidelity": "NORMALIZED"
+  },
+  "payload": {
+    "code": "rate_limited",
+    "message": "Provider rate limit exceeded; retrying",
+    "retryable": true,
+    "retryAfterSeconds": 30,
+    "retryAttempt": 2
+  },
+  "dispatchId": "dispatch-001",
+  "turnId": "turn-001"
+}
