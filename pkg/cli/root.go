@@ -188,29 +188,28 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"  query    show the current active factory from a running service\n" +
 			"  list     list persisted named factories under a factory root\n" +
 			"  config   inspect and transform factory configuration\n" +
-			"  save     create a named factory from factory.json or persist the live current factory\n" +
 			"  create   create a named factory from factory.json\n" +
 			"  update   replace an existing named factory from factory.json\n" +
 			"  replace-current  persist the live current factory from a running service\n" +
 			"  delete   remove an unused named factory from disk\n\n" +
 			"Use query against a running service. Use config validate, flatten, and expand for " +
-			"factory configuration inspection and transformation. Use list, save, update, and delete " +
-			"for on-disk named factories under --dir (default factory/). Live save with no name " +
-			"argument uses global --server and --session like query.",
+			"factory configuration inspection and transformation. Use list, create, update, and delete " +
+			"for on-disk named factories under --dir (default factory/). Use replace-current with " +
+			"global --server and --session like query to persist the live current factory.",
 		Example: "  # Show the active factory from the running service.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
-			"  # Validate a factory config before saving it.\n" +
+			"  # Validate a factory config before creating or updating it.\n" +
 			"  " + cliBinaryName + " factory config validate ./factory.json\n\n" +
 			"  # List persisted named factories and which one is current.\n" +
 			"  " + cliBinaryName + " factory list\n\n" +
-			"  # Save a new named factory from a config file.\n" +
-			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
+			"  # Create a new named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory create staging --from ./factory.json --set-current\n\n" +
 			"  # Replace an existing named factory definition.\n" +
 			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
 			"  # Delete an unused named factory.\n" +
 			"  " + cliBinaryName + " factory delete staging\n\n" +
 			"  # Persist the live current factory back to durable storage.\n" +
-			"  " + cliBinaryName + " factory save",
+			"  " + cliBinaryName + " factory replace-current",
 	}
 	factoryCmd.AddCommand(
 		newFactoryQueryCommand(globals, diagnostics),
@@ -234,7 +233,7 @@ func newFactoryConfigCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 			"  validate validate a factory.json payload or factory directory\n" +
 			"  flatten  write canonical single-file factory config to stdout\n" +
 			"  expand   write split factory config layout beside the input file\n\n" +
-			"Use validate before save or update. Use flatten and expand to move between " +
+			"Use validate before create or update. Use flatten and expand to move between " +
 			"single-file and split-layout factory directories.",
 		Example: "  # Validate a single-file factory config.\n" +
 			"  " + cliBinaryName + " factory config validate ./factory.json\n\n" +
@@ -377,19 +376,19 @@ func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 
 	cmd := &cobra.Command{
 		Use:   "save [name]",
-		Short: "Save a named factory from disk or persist the live current factory",
-		Long: "Save factory definitions from disk or persist the live current factory from a running service.\n\n" +
-			"With a name argument, the command validates a factory.json payload and materializes a new " +
-			"named factory layout under the selected factory root. Without a name, the command reads the " +
-			"session current factory from the running service and persists it with PUT.",
-		Example: "  # Save a new named factory from a config file.\n" +
-			"  " + cliBinaryName + " factory save staging --from ./factory.json\n\n" +
-			"  # Save and select the new factory as current.\n" +
-			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
+		Short: "Deprecated: use factory create or factory replace-current",
+		Long: "Deprecated: use factory create for named-factory create and factory replace-current for live current-factory persist.\n\n" +
+			"With a name argument, this command validates a factory.json payload and materializes a new " +
+			"named factory layout under the selected factory root. Without a name, it reads the session " +
+			"current factory from the running service and persists it with PUT.",
+		Example: "  # Create a new named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory create staging --from ./factory.json\n\n" +
+			"  # Create and select the new factory as current.\n" +
+			"  " + cliBinaryName + " factory create staging --from ./factory.json --set-current\n\n" +
 			"  # Persist the live current factory from the running service.\n" +
-			"  " + cliBinaryName + " factory save\n\n" +
+			"  " + cliBinaryName + " factory replace-current\n\n" +
 			"  # Persist the live current factory for one session as JSON.\n" +
-			"  " + cliBinaryName + " --json factory save --session session-beta",
+			"  " + cliBinaryName + " --json factory replace-current --session session-beta",
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		PreRunE:      rejectDeprecatedPortFlag,

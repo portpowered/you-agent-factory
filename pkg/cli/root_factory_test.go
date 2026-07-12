@@ -339,7 +339,6 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"list",
 		"config",
 		"create",
-		"save",
 		"update",
 		"replace-current",
 		"delete",
@@ -347,10 +346,10 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"you factory query",
 		"you factory config validate",
 		"you factory list",
-		"you factory save staging --from ./factory.json",
+		"you factory create staging --from ./factory.json",
 		"you factory update staging --from ./factory.json",
 		"you factory delete staging",
-		"you factory save",
+		"you factory replace-current",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory help missing %q:\n%s", want, help)

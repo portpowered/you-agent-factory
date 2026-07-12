@@ -208,7 +208,7 @@ defaults at runtime.
 - Inline runtime fields in `factory.json` are still supported for portable
   single-file configs, but the split layout is the recommended authoring path.
 - **Live saves** (dashboard graph editor, `PUT /factory-sessions/{id}/factory`,
-  import replace-current, `you factory save <name>`, and named-factory upsert)
+  import replace-current, `you factory create <name>`, and named-factory upsert)
   always persist the split layout: a thin `factory.json` plus
   `workers/<name>/`, `workstations/<name>/`, bundled files, and default
   `inputs/` channels when definitions exist. Runtime `body` and
@@ -466,7 +466,7 @@ Recoverable layout cases include:
 ### Save-time pruning and `layoutOutcomes`
 
 Save paths (`PrepareFactoryLayoutPayload`, editable `PUT`, named-factory upsert,
-`you factory save`) prune stale layout references against the pending topology
+`you factory create`) prune stale layout references against the pending topology
 before persist:
 
 - Remove `layout.nodes[]` entries whose ids are absent from the pending node
@@ -800,7 +800,7 @@ contract.
 | Dashboard graph editor save | Split layout under the session factory root |
 | `PUT /factory-sessions/{id}/factory` | Same split layout as dashboard save |
 | Import replace-current / create-named | Same split layout for equivalent content |
-| `you factory save <name>` | Split layout under the named factory directory |
+| `you factory create <name>` | Split layout under the named factory directory |
 | `config flatten` / PNG portable export | Opt-in single-file `factory.json` with inlined runtime and bundled content |
 
 `GET` current-factory responses may still return a fully inlined `Factory` for
@@ -1061,7 +1061,7 @@ reusing the OpenAPI pre-check profiles.
 |-------------|--------------|---------------------|----------------------------|
 | `POST /factory-validations` | Validate-only; no persist | `ProfileTopology` — structural checks on the mapped config (duplicates, dangling references, outcome routes, work-type completion) | Yes |
 | Editable save pre-check (`factorysave.validateEditableFactoryTopology`) | Before `PUT` / graph save writes split layout | `ProfilePrePersist` — `LoadFromCanonicalJSON` normalization (bundled files, blocking load) then full `Validate()` | Yes |
-| `you factory save` / `update --from` | Before `configpersist` writes named factory | `ProfilePrePersist` (same as editable save) | Yes |
+| `you factory create` / `update --from` | Before `configpersist` writes named factory | `ProfilePrePersist` (same as editable save) | Yes |
 | Persist post-write (`LoadRuntimeConfig` on staged split layout) | After files are materialized on disk, before commit | Disk-backed load: merge `workers/` / `workstations/` AGENTS.md, materialize bundled files, `validateBlockingFactoryLoad`, runtime definition maps | No — intentional second gate |
 | `you run --factory` prompt submission | Before writing temporary prompt work file | `factoryrun.ValidateFactoryForPromptRun` — structural `Validate()` plus exactly one `handlingBehavior: ["DEFAULT"]` work type | No — v1 intentional subset (see below) |
 | Runtime session / engine startup | When activating or loading a factory directory | `configload.LoadRuntimeConfigFromFactoryDir` (same core as `LoadRuntimeConfig`) | No |
