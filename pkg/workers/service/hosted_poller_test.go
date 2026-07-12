@@ -202,8 +202,11 @@ func TestStartPollersForRuntime_StartsScriptAndHostedPollers(t *testing.T) {
 	})
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	var sidecars sync.WaitGroup
+	t.Cleanup(func() {
+		cancel()
+		sidecars.Wait()
+	})
 	svc.StartPollersForRuntime(sidecarCtx, &sidecars, factoryCfg, loaded, submitted.submit)
 
 	waitForPollerSubmission(t, submitted, 2, 2*time.Second)
