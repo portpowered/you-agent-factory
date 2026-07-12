@@ -345,6 +345,28 @@ describe("CurrentActivityGraphSurface", () => {
     expect(screen.queryByTestId("graph-viewport")).toBeNull();
   });
 
+  it("hides editor alerts outside edit mode even when notice conditions exist", () => {
+    render(
+      <CurrentActivityGraphSurface
+        viewModel={createViewModelStub({ editorMode: false }) as never}
+        imports={{} as never}
+        selection={null}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.queryByText("Editor alerts")).toBeNull();
+    expect(screen.queryByText("Removal blocked")).toBeNull();
+    expect(screen.queryByText("Connection blocked")).toBeNull();
+    expect(screen.queryByText("Topology edits are blocked")).toBeNull();
+    expect(
+      screen.queryByText("A newer factory definition is available"),
+    ).toBeNull();
+    expect(
+      screen.queryByTestId("graph-viewport"),
+    ).toBeTruthy();
+  });
+
   it("renders shared-surface notices and forwards viewport editor actions", () => {
     const viewModel = createViewModelStub();
 
