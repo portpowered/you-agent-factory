@@ -3,7 +3,12 @@ package run
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -254,4 +259,200 @@ func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *
 			}
 		})
 	}
+}
+
+func TestFailureBaseline_NormalModeSuppressesRawStructuredTerminalLogs(t *testing.T) {
+	dir, workFile := writeDashboardRunFixture(t)
+
+	policy := terminalpolicy.Resolve(terminalpolicy.Options{})
+	logger, err := policy.BuildLogger()
+	if err != nil {
+		t.Fatalf("BuildLogger: %v", err)
+	}
+
+	var startupOut bytes.Buffer
+	stdout, stderr, runErr := runWithCapturedTerminal(t, RunConfig{
+		Dir:                     dir,
+		Port:                    0,
+		WorkFile:                workFile,
+		MockWorkersEnabled:      true,
+		TerminalPolicy:          policy,
+		Logger:                  logger,
+		StartupOutput:           policy.HumanTerminalWriter(&startupOut),
+		DisableDefaultRecording: true,
+	})
+	if runErr != nil {
+		t.Fatalf("Run: %v", runErr)
+	}
+
+	if !strings.Contains(startupOut.String(), "Factory initiated") {
+		t.Fatalf("startup output = %q, want human-facing startup lines in normal mode", startupOut.String())
+	}
+	assertNoRawStructuredTerminalLogs(t, stdout)
+	assertNoRawStructuredTerminalLogs(t, stderr)
+}
+
+func TestFailureBaseline_QuietPreservesRuntimeFileDiagnosticsWhileTerminalStaysMute(t *testing.T) {
+	dir, workFile := writeDashboardRunFixture(t)
+	logDir := t.TempDir()
+	runtimeInstanceID := "quiet-file-diagnostics"
+
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	buildFactoryService = func(ctx context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		cfg.RuntimeInstanceID = runtimeInstanceID
+		return service.BuildFactoryService(ctx, cfg)
+	}
+
+	policy := terminalpolicy.Resolve(terminalpolicy.Options{Quiet: true})
+	logger, err := policy.BuildLogger()
+	if err != nil {
+		t.Fatalf("BuildLogger: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	runErr := Run(context.Background(), RunConfig{
+		Dir:                        dir,
+		WorkFile:                   workFile,
+		MockWorkersEnabled:         true,
+		SuppressDashboardRendering: true,
+		DisableDefaultRecording:    true,
+		RuntimeLogDir:              logDir,
+		TerminalPolicy:             policy,
+		Logger:                     logger,
+		Output:                     &stdout,
+		Port:                       0,
+	})
+	if runErr != nil {
+		t.Fatalf("Run: %v", runErr)
+	}
+
+	if stdout.String() != "" {
+		t.Fatalf("stdout = %q, want empty quiet terminal output", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty quiet terminal output", stderr.String())
+	}
+	assertQuietLeakContractForbidden(t, stdout.String()+stderr.String())
+
+	logPath := requireQuietRuntimeLogPath(t, logDir, runtimeInstanceID)
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read runtime log %s: %v", logPath, err)
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		t.Fatalf("runtime log %s is empty, want diagnostic content under quiet", logPath)
+	}
+	if !strings.Contains(string(data), "factory started") {
+		t.Fatalf("runtime log %s missing factory started record:\n%s", logPath, data)
+	}
+}
+
+func assertNoRawStructuredTerminalLogs(t *testing.T, output string) {
+	t.Helper()
+
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if looksLikeStructuredLogLine(line) {
+			t.Fatalf("terminal output contains raw structured log line %q", line)
+		}
+	}
+}
+
+func looksLikeStructuredLogLine(line string) bool {
+	var record map[string]any
+	if err := json.Unmarshal([]byte(line), &record); err != nil {
+		return false
+	}
+	_, hasLevel := record["level"]
+	_, hasMsg := record["msg"]
+	_, hasTS := record["ts"]
+	_, hasTimestamp := record["timestamp"]
+	return hasLevel && hasMsg && (hasTS || hasTimestamp)
+}
+
+func runWithCapturedTerminal(t *testing.T, cfg RunConfig) (stdout, stderr string, err error) {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+
+	stdoutRead, stdoutWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	stderrRead, stderrWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stderr: %v", err)
+	}
+
+	os.Stdout = stdoutWrite
+	os.Stderr = stderrWrite
+
+	stdoutCh := make(chan []byte, 1)
+	stderrCh := make(chan []byte, 1)
+	go readPipeIntoChannel(stdoutRead, stdoutCh)
+	go readPipeIntoChannel(stderrRead, stderrCh)
+
+	runErr := Run(context.Background(), cfg)
+
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	if err := stdoutWrite.Close(); err != nil {
+		t.Fatalf("close captured stdout writer: %v", err)
+	}
+	if err := stderrWrite.Close(); err != nil {
+		t.Fatalf("close captured stderr writer: %v", err)
+	}
+
+	return string(<-stdoutCh), string(<-stderrCh), runErr
+}
+
+func readPipeIntoChannel(readPipe *os.File, out chan<- []byte) {
+	data, _ := io.ReadAll(readPipe)
+	_ = readPipe.Close()
+	out <- data
+}
+
+func requireQuietRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
+	t.Helper()
+
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*-"+runtimeInstanceID+"-*.log"))
+	if err != nil {
+		t.Fatalf("glob runtime log path: %v", err)
+	}
+	if len(matches) != 1 {
+		logFiles := collectQuietRuntimeLogFiles(t, logDir)
+		t.Fatalf("runtime log paths for %q under %s = %v, all log files = %v, want exactly one", runtimeInstanceID, logDir, matches, logFiles)
+	}
+	return matches[0]
+}
+
+func collectQuietRuntimeLogFiles(t *testing.T, dir string) []string {
+	t.Helper()
+
+	var logFiles []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) == ".log" {
+			logFiles = append(logFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir(%s): %v", dir, err)
+	}
+	return logFiles
 }

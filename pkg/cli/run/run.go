@@ -813,17 +813,18 @@ func openDashboardWhenServerReady(ctx context.Context, cfg RunConfig, dashboardR
 		url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
 		select {
 		case <-dashboardReady:
-			if err := dashboardOpener(ctx, url); err != nil {
-				fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\n", err)
-				fmt.Fprintf(cfg.StartupOutput, "Open the dashboard at %s\n", url)
-				return
-			}
-			fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
 		case <-timer.C:
-			fmt.Fprintln(cfg.StartupOutput, "Dashboard auto-open unavailable: dashboard server did not become ready")
-			fmt.Fprintf(cfg.StartupOutput, "Open the dashboard at %s\n", url)
+			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: dashboard server did not become ready\nOpen the dashboard at %s\n", url)
+			return
 		case <-ctx.Done():
+			return
 		}
+
+		if err := dashboardOpener(ctx, url); err != nil {
+			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
+			return
+		}
+		fmt.Fprintf(cfg.StartupOutput, "Opening dashboard: %s\n", url)
 	}()
 
 	return func() {
