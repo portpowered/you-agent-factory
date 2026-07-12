@@ -39,21 +39,11 @@ type PackagedFactoryInitResult struct {
 
 // Init runs the canonical system initializer for the configured home directory.
 func Init(cfg InitConfig) error {
-	if cfg.Output == nil {
-		cfg.Output = os.Stdout
-	}
-	if cfg.Diagnostics == nil {
-		cfg.Diagnostics = os.Stderr
-	}
+	cfg = normalizeInitConfig(cfg)
 
-	homeDir := strings.TrimSpace(cfg.HomeDir)
-	if homeDir == "" {
-		resolved, err := os.UserHomeDir()
-		if err != nil {
-			clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config init failed phase=resolve-home")
-			return fmt.Errorf("resolve home directory: %w", err)
-		}
-		homeDir = resolved
+	homeDir, err := resolveInitHomeDir(cfg)
+	if err != nil {
+		return err
 	}
 
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config init request homeDir=%s", homeDir)
@@ -65,51 +55,10 @@ func Init(cfg InitConfig) error {
 	}
 
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(InitResult{
-			HomeDir:             result.HomeDir,
-			ConfigPath:          result.ConfigPath,
-			NamedFactoriesRoot:  result.NamedFactoriesRoot,
-			SystemConfigOutcome: string(result.SystemConfigOutcome),
-			PackagedFactories:   packagedFactoryInitResults(result.PackagedFactories),
-		})
+		return writeInitJSONResult(cfg, result)
 	}
-
-	switch result.SystemConfigOutcome {
-	case configinit.SystemConfigCreated:
-		if _, err := fmt.Fprintf(cfg.Output, "Created system config at %s\n", result.ConfigPath); err != nil {
-			return err
-		}
-	case configinit.SystemConfigSkipped:
-		if _, err := fmt.Fprintf(cfg.Output, "System config already present at %s\n", result.ConfigPath); err != nil {
-			return err
-		}
-	default:
-		if _, err := fmt.Fprintf(cfg.Output, "Config init completed for %s\n", result.ConfigPath); err != nil {
-			return err
-		}
-	}
-
-	for _, factory := range result.PackagedFactories {
-		switch factory.Outcome {
-		case configinit.PackagedFactoryCreated:
-			if _, err := fmt.Fprintf(
-				cfg.Output,
-				"Created packaged factory %s at %s\n",
-				factory.Name,
-				factory.FactoryDir,
-			); err != nil {
-				return err
-			}
-		case configinit.PackagedFactorySkipped:
-			if _, err := fmt.Fprintf(
-				cfg.Output,
-				"Packaged factory %s already present at %s\n",
-				factory.Name,
-				factory.FactoryDir,
-			); err != nil {
-				return err
-			}
-		}
+	if err := writeInitTextResult(cfg, result); err != nil {
+		return err
 	}
 
 	clidiag.Printf(
@@ -120,6 +69,78 @@ func Init(cfg InitConfig) error {
 		result.ConfigPath,
 		result.SystemConfigOutcome,
 	)
+	return nil
+}
+
+func normalizeInitConfig(cfg InitConfig) InitConfig {
+	if cfg.Output == nil {
+		cfg.Output = os.Stdout
+	}
+	if cfg.Diagnostics == nil {
+		cfg.Diagnostics = os.Stderr
+	}
+	return cfg
+}
+
+func resolveInitHomeDir(cfg InitConfig) (string, error) {
+	homeDir := strings.TrimSpace(cfg.HomeDir)
+	if homeDir != "" {
+		return homeDir, nil
+	}
+	resolved, err := os.UserHomeDir()
+	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config init failed phase=resolve-home")
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+	return resolved, nil
+}
+
+func writeInitJSONResult(cfg InitConfig, result configinit.Result) error {
+	return json.NewEncoder(cfg.Output).Encode(InitResult{
+		HomeDir:             result.HomeDir,
+		ConfigPath:          result.ConfigPath,
+		NamedFactoriesRoot:  result.NamedFactoriesRoot,
+		SystemConfigOutcome: string(result.SystemConfigOutcome),
+		PackagedFactories:   packagedFactoryInitResults(result.PackagedFactories),
+	})
+}
+
+func writeInitTextResult(cfg InitConfig, result configinit.Result) error {
+	if err := writeSystemConfigOutcome(cfg.Output, result); err != nil {
+		return err
+	}
+	return writePackagedFactoryOutcomes(cfg.Output, result.PackagedFactories)
+}
+
+func writeSystemConfigOutcome(output io.Writer, result configinit.Result) error {
+	var message string
+	switch result.SystemConfigOutcome {
+	case configinit.SystemConfigCreated:
+		message = fmt.Sprintf("Created system config at %s\n", result.ConfigPath)
+	case configinit.SystemConfigSkipped:
+		message = fmt.Sprintf("System config already present at %s\n", result.ConfigPath)
+	default:
+		message = fmt.Sprintf("Config init completed for %s\n", result.ConfigPath)
+	}
+	_, err := fmt.Fprint(output, message)
+	return err
+}
+
+func writePackagedFactoryOutcomes(output io.Writer, factories []configinit.PackagedFactoryResult) error {
+	for _, factory := range factories {
+		var message string
+		switch factory.Outcome {
+		case configinit.PackagedFactoryCreated:
+			message = fmt.Sprintf("Created packaged factory %s at %s\n", factory.Name, factory.FactoryDir)
+		case configinit.PackagedFactorySkipped:
+			message = fmt.Sprintf("Packaged factory %s already present at %s\n", factory.Name, factory.FactoryDir)
+		default:
+			continue
+		}
+		if _, err := fmt.Fprint(output, message); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

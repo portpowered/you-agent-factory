@@ -118,43 +118,9 @@ func TestInit_FreshHomeMaterializesPackagedDefaultFactories(t *testing.T) {
 	}
 
 	for i, factory := range result.PackagedFactories {
-		if factory.Name != wantNames[i] {
-			t.Fatalf("packagedFactories[%d].Name = %q, want %q", i, factory.Name, wantNames[i])
-		}
-		if factory.Outcome != PackagedFactoryCreated {
-			t.Fatalf("packagedFactories[%d].Outcome = %q, want %q", i, factory.Outcome, PackagedFactoryCreated)
-		}
-
-		wantDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, factory.Name)
-		if err != nil {
-			t.Fatalf("MapNamedFactoryDir(%q): %v", factory.Name, err)
-		}
-		if factory.FactoryDir != wantDir {
-			t.Fatalf("packagedFactories[%d].FactoryDir = %q, want %q", i, factory.FactoryDir, wantDir)
-		}
-
-		resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, namedFactoriesRoot, factory.Name)
-		if err != nil {
-			t.Fatalf("ResolveNamedFactoryAcrossRoots(%q): %v", factory.Name, err)
-		}
-		if resolution.FactoryDir != wantDir {
-			t.Fatalf("ResolveNamedFactoryAcrossRoots(%q).FactoryDir = %q, want %q", factory.Name, resolution.FactoryDir, wantDir)
-		}
-		if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil); err != nil {
-			t.Fatalf("LoadRuntimeConfigFromFactoryDir(%q): %v", factory.Name, err)
-		}
+		assertFreshMaterializedPackagedFactory(t, projectRoot, namedFactoriesRoot, factory, wantNames[i], i)
 	}
-
-	encodedSegment, err := factoryconfig.NamedFactoryNameToLayoutSegment("@you/goal")
-	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
-	}
-	encodedDir := filepath.Join(namedFactoriesRoot, encodedSegment)
-	if _, err := os.Stat(encodedDir); err == nil {
-		t.Fatalf("expected fresh init not to create encoded factory dir %q", encodedDir)
-	} else if !os.IsNotExist(err) {
-		t.Fatalf("Stat(encodedDir): %v", err)
-	}
+	assertNoEncodedGoalFactoryDir(t, namedFactoriesRoot)
 }
 
 func TestInit_DoubleRunIsSuccessfulNoOp(t *testing.T) {
@@ -261,72 +227,19 @@ func TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting(t *testing.T
 		t.Fatalf("first Init() error = %v", err)
 	}
 
-	var goalDir string
-	for _, factory := range first.PackagedFactories {
-		if factory.Name == "@you/goal" {
-			goalDir = factory.FactoryDir
-			break
-		}
-	}
-	if goalDir == "" {
-		t.Fatal("expected @you/goal in packaged factory results")
-	}
+	goalDir := goalFactoryDir(t, first.PackagedFactories)
+	workerPath, editedBody := writeEditedGoalWorker(t, goalDir)
 
-	workerPath := filepath.Join(goalDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
-	editedBody := "customer edited goal worker body for partial rerun\n"
-	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
-		t.Fatalf("WriteFile(edited worker): %v", err)
-	}
-
-	ttsDir, err := factoryconfig.MapNamedFactoryDir(defaultpaths.NamedFactoriesRoot(homeDir), "@you/tts")
-	if err != nil {
-		t.Fatalf("MapNamedFactoryDir(@you/tts): %v", err)
-	}
-	if err := os.RemoveAll(ttsDir); err != nil {
-		t.Fatalf("RemoveAll(ttsDir): %v", err)
-	}
+	ttsDir := removeMaterializedFactory(t, homeDir, "@you/tts")
 
 	second, err := Init(homeDir)
 	if err != nil {
 		t.Fatalf("second Init() error = %v", err)
 	}
 
-	var ttsOutcome PackagedFactoryOutcome
-	for _, factory := range second.PackagedFactories {
-		switch factory.Name {
-		case "@you/goal":
-			if factory.Outcome != PackagedFactorySkipped {
-				t.Fatalf("@you/goal outcome = %q, want %q", factory.Outcome, PackagedFactorySkipped)
-			}
-		case "@you/tts":
-			ttsOutcome = factory.Outcome
-			if factory.Outcome != PackagedFactoryCreated {
-				t.Fatalf("@you/tts outcome = %q, want %q", factory.Outcome, PackagedFactoryCreated)
-			}
-		default:
-			if factory.Outcome != PackagedFactorySkipped {
-				t.Fatalf("%s outcome = %q, want %q", factory.Name, factory.Outcome, PackagedFactorySkipped)
-			}
-		}
-	}
-	if ttsOutcome != PackagedFactoryCreated {
-		t.Fatalf("missing @you/tts outcome in second init results")
-	}
-
-	got, err := os.ReadFile(workerPath)
-	if err != nil {
-		t.Fatalf("ReadFile(edited worker after partial rerun): %v", err)
-	}
-	if string(got) != editedBody {
-		t.Fatalf("edited goal worker changed during partial rerun:\n%s", string(got))
-	}
-
-	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(ttsDir, nil); err != nil {
-		t.Fatalf("LoadRuntimeConfigFromFactoryDir(recreated @you/tts): %v", err)
-	}
-	if strings.Contains(ttsDir, "%2F") {
-		t.Fatalf("recreated factory used encoded path %q", ttsDir)
-	}
+	assertPartialRerunOutcomes(t, second.PackagedFactories)
+	assertFileContentsUnchanged(t, workerPath, editedBody)
+	assertRecreatedFactoryLoadable(t, ttsDir)
 }
 
 func TestInit_LeavesLegacyEncodedDirectoryUntouched(t *testing.T) {
@@ -377,6 +290,143 @@ func TestInit_LeavesLegacyEncodedDirectoryUntouched(t *testing.T) {
 	}
 	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(wantGoalDir, nil); err != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir(hierarchical @you/goal): %v", err)
+	}
+}
+
+func assertFreshMaterializedPackagedFactory(
+	t *testing.T,
+	projectRoot string,
+	namedFactoriesRoot string,
+	factory PackagedFactoryResult,
+	wantName string,
+	index int,
+) {
+	t.Helper()
+
+	if factory.Name != wantName {
+		t.Fatalf("packagedFactories[%d].Name = %q, want %q", index, factory.Name, wantName)
+	}
+	if factory.Outcome != PackagedFactoryCreated {
+		t.Fatalf("packagedFactories[%d].Outcome = %q, want %q", index, factory.Outcome, PackagedFactoryCreated)
+	}
+
+	wantDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, factory.Name)
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(%q): %v", factory.Name, err)
+	}
+	if factory.FactoryDir != wantDir {
+		t.Fatalf("packagedFactories[%d].FactoryDir = %q, want %q", index, factory.FactoryDir, wantDir)
+	}
+
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, namedFactoriesRoot, factory.Name)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(%q): %v", factory.Name, err)
+	}
+	if resolution.FactoryDir != wantDir {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(%q).FactoryDir = %q, want %q", factory.Name, resolution.FactoryDir, wantDir)
+	}
+	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil); err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(%q): %v", factory.Name, err)
+	}
+}
+
+func assertNoEncodedGoalFactoryDir(t *testing.T, namedFactoriesRoot string) {
+	t.Helper()
+
+	encodedSegment, err := factoryconfig.NamedFactoryNameToLayoutSegment("@you/goal")
+	if err != nil {
+		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
+	}
+	encodedDir := filepath.Join(namedFactoriesRoot, encodedSegment)
+	if _, err := os.Stat(encodedDir); err == nil {
+		t.Fatalf("expected fresh init not to create encoded factory dir %q", encodedDir)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("Stat(encodedDir): %v", err)
+	}
+}
+
+func goalFactoryDir(t *testing.T, factories []PackagedFactoryResult) string {
+	t.Helper()
+
+	for _, factory := range factories {
+		if factory.Name == "@you/goal" {
+			return factory.FactoryDir
+		}
+	}
+	t.Fatal("expected @you/goal in packaged factory results")
+	return ""
+}
+
+func writeEditedGoalWorker(t *testing.T, goalDir string) (string, string) {
+	t.Helper()
+
+	workerPath := filepath.Join(goalDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
+	editedBody := "customer edited goal worker body for partial rerun\n"
+	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(edited worker): %v", err)
+	}
+	return workerPath, editedBody
+}
+
+func removeMaterializedFactory(t *testing.T, homeDir string, factoryName string) string {
+	t.Helper()
+
+	factoryDir, err := factoryconfig.MapNamedFactoryDir(defaultpaths.NamedFactoriesRoot(homeDir), factoryName)
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(%s): %v", factoryName, err)
+	}
+	if err := os.RemoveAll(factoryDir); err != nil {
+		t.Fatalf("RemoveAll(%s): %v", factoryName, err)
+	}
+	return factoryDir
+}
+
+func assertPartialRerunOutcomes(t *testing.T, factories []PackagedFactoryResult) {
+	t.Helper()
+
+	var ttsOutcome PackagedFactoryOutcome
+	for _, factory := range factories {
+		switch factory.Name {
+		case "@you/goal":
+			if factory.Outcome != PackagedFactorySkipped {
+				t.Fatalf("@you/goal outcome = %q, want %q", factory.Outcome, PackagedFactorySkipped)
+			}
+		case "@you/tts":
+			ttsOutcome = factory.Outcome
+			if factory.Outcome != PackagedFactoryCreated {
+				t.Fatalf("@you/tts outcome = %q, want %q", factory.Outcome, PackagedFactoryCreated)
+			}
+		default:
+			if factory.Outcome != PackagedFactorySkipped {
+				t.Fatalf("%s outcome = %q, want %q", factory.Name, factory.Outcome, PackagedFactorySkipped)
+			}
+		}
+	}
+	if ttsOutcome != PackagedFactoryCreated {
+		t.Fatalf("missing @you/tts outcome in second init results")
+	}
+}
+
+func assertFileContentsUnchanged(t *testing.T, path string, want string) {
+	t.Helper()
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(got) != want {
+		t.Fatalf("file %s changed:\n%s", path, string(got))
+	}
+}
+
+func assertRecreatedFactoryLoadable(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil); err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(%s): %v", factoryDir, err)
+	}
+	if strings.Contains(factoryDir, "%2F") {
+		t.Fatalf("recreated factory used encoded path %q", factoryDir)
 	}
 }
 
