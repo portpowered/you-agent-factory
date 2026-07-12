@@ -1,4 +1,7 @@
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  DEFAULT_FACTORY_SESSION_ID,
+  isDefaultFactorySessionID,
+} from "../../../api/session-routing";
 import {
   identityMismatchDiagnostic,
   recordSessionPersistenceInvalidation,
@@ -29,6 +32,16 @@ interface TimelineCheckpointEnvelope {
   schemaVersion: number;
   storageKey: string;
   streamIdentity: TimelineCheckpointStreamIdentity;
+}
+
+function normalizeConcreteFactorySessionID(
+  factorySessionID: string | null | undefined,
+): string | null {
+  const normalizedFactorySessionID = factorySessionID?.trim() ?? "";
+  if (isDefaultFactorySessionID(normalizedFactorySessionID)) {
+    return null;
+  }
+  return normalizedFactorySessionID;
 }
 
 function matchesStoredCheckpointFactorySessionID(
@@ -135,7 +148,7 @@ export async function peekPersistedTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   sessionID: string | null,
 ): Promise<PersistedTimelineCheckpointPeek | null> {
-  const normalizedSessionID = sessionID?.trim();
+  const normalizedSessionID = normalizeConcreteFactorySessionID(sessionID);
   if (!indexedDB || !normalizedSessionID) {
     return null;
   }
@@ -170,7 +183,7 @@ export async function clearTimelineCheckpointsForSession(
   sessionID: string | null,
   options: { signal?: AbortSignal } = {},
 ): Promise<void> {
-  const normalizedSessionID = sessionID?.trim();
+  const normalizedSessionID = normalizeConcreteFactorySessionID(sessionID);
   if (!indexedDB || !normalizedSessionID) {
     return;
   }
@@ -343,8 +356,9 @@ export async function findStoredCheckpointEnvelopeByFactorySessionID(
   indexedDB: IndexedDBLike | undefined,
   factorySessionID: string,
 ): Promise<TimelineCheckpointEnvelope | null> {
-  const normalizedFactorySessionID = factorySessionID.trim();
-  if (!indexedDB || normalizedFactorySessionID === "") {
+  const normalizedFactorySessionID =
+    normalizeConcreteFactorySessionID(factorySessionID);
+  if (!indexedDB || !normalizedFactorySessionID) {
     return null;
   }
 
