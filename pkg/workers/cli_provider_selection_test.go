@@ -140,6 +140,109 @@ func TestSelectCLIProvider_ExplicitInvocationPrecedenceTables(t *testing.T) {
 	}
 }
 
+type cliProviderConfiguredDefaultPrecedenceCase struct {
+	name            string
+	input           CLIProviderSelectionInput
+	presentCommands map[string]bool
+	wantSource      CLIProviderSelectionSource
+	wantIdentity    CLIProviderIdentity
+}
+
+func fakeCLIProviderConfiguredDefaultPrecedenceCases() []cliProviderConfiguredDefaultPrecedenceCase {
+	allPresent := map[string]bool{
+		string(interfaces.ModelProviderCodex):    true,
+		string(interfaces.ModelProviderClaude):   true,
+		string(interfaces.ModelProviderCursor):   true,
+		string(interfaces.ModelProviderOpenCode): true,
+		string(interfaces.ModelProviderGemini):   true,
+		string(interfaces.ModelProviderKiro):     true,
+	}
+	return []cliProviderConfiguredDefaultPrecedenceCase{
+		{
+			name: "factory default beats system default",
+			input: CLIProviderSelectionInput{
+				FactoryDefault: string(interfaces.ModelProviderCursor),
+				SystemDefault:  string(interfaces.ModelProviderCodex),
+			},
+			presentCommands: allPresent,
+			wantSource:      CLIProviderSelectionSourceFactoryDefault,
+			wantIdentity:    CLIProviderIdentityCursor,
+		},
+		{
+			name: "factory default beats discovery even when absent on PATH",
+			input: CLIProviderSelectionInput{
+				FactoryDefault: string(interfaces.ModelProviderKiro),
+				SystemDefault:  string(interfaces.ModelProviderClaude),
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCodex): true,
+			},
+			wantSource:   CLIProviderSelectionSourceFactoryDefault,
+			wantIdentity: CLIProviderIdentityKiro,
+		},
+		{
+			name: "system default beats discovery",
+			input: CLIProviderSelectionInput{
+				SystemDefault: string(interfaces.ModelProviderGemini),
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCodex): true,
+			},
+			wantSource:   CLIProviderSelectionSourceSystemDefault,
+			wantIdentity: CLIProviderIdentityGemini,
+		},
+		{
+			name: "system default beats discovery without consulting lower-ranked available providers",
+			input: CLIProviderSelectionInput{
+				SystemDefault: string(interfaces.ModelProviderOpenCode),
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCodex):  true,
+				string(interfaces.ModelProviderGemini): true,
+			},
+			wantSource:   CLIProviderSelectionSourceSystemDefault,
+			wantIdentity: CLIProviderIdentityOpenCode,
+		},
+		{
+			name: "empty factory falls through to system default over discovery",
+			input: CLIProviderSelectionInput{
+				FactoryDefault: "   ",
+				SystemDefault:  string(interfaces.ModelProviderClaude),
+			},
+			presentCommands: map[string]bool{
+				string(interfaces.ModelProviderCodex): true,
+			},
+			wantSource:   CLIProviderSelectionSourceSystemDefault,
+			wantIdentity: CLIProviderIdentityClaude,
+		},
+	}
+}
+
+func assertCLIProviderConfiguredDefaultPrecedence(t *testing.T, tc cliProviderConfiguredDefaultPrecedenceCase) {
+	t.Helper()
+
+	discovery := fakeCLIProviderDiscoveryView(tc.presentCommands)
+	result := SelectCLIProvider(tc.input, discovery)
+
+	if !result.OK() {
+		t.Fatalf("result = %#v, want success", result)
+	}
+	if result.Source != tc.wantSource {
+		t.Fatalf("source = %q, want %q", result.Source, tc.wantSource)
+	}
+	if result.Selected == nil || result.Selected.Identity != tc.wantIdentity {
+		t.Fatalf("selected = %#v, want identity %q", result.Selected, tc.wantIdentity)
+	}
+}
+
+func TestSelectCLIProvider_FactoryAndSystemDefaultPrecedenceTables(t *testing.T) {
+	for _, tc := range fakeCLIProviderConfiguredDefaultPrecedenceCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			assertCLIProviderConfiguredDefaultPrecedence(t, tc)
+		})
+	}
+}
+
 func TestSelectCLIProvider_AcceptsLayeredPrecedenceInputs(t *testing.T) {
 	discovery := fakeCLIProviderDiscoveryView(map[string]bool{
 		string(interfaces.ModelProviderGemini): true,
