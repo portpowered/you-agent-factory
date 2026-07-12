@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -54,6 +55,8 @@ var listFactories = factorycli.List
 var validateFactory = factorycli.Validate
 var saveFactoryFromFile = factorycli.SaveFromFile
 var saveFactoryCurrent = factorycli.SaveCurrent
+var createFactoryFromFile = factorycli.CreateFromFile
+var replaceFactoryCurrent = factorycli.ReplaceCurrent
 var updateFactoryFromFile = factorycli.UpdateFromFile
 var deleteFactory = factorycli.Delete
 var listModels = modelscli.List
@@ -186,7 +189,9 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"  list     list persisted named factories under a factory root\n" +
 			"  config   inspect and transform factory configuration\n" +
 			"  save     create a named factory from factory.json or persist the live current factory\n" +
+			"  create   create a named factory from factory.json\n" +
 			"  update   replace an existing named factory from factory.json\n" +
+			"  replace-current  persist the live current factory from a running service\n" +
 			"  delete   remove an unused named factory from disk\n\n" +
 			"Use query against a running service. Use config validate, flatten, and expand for " +
 			"factory configuration inspection and transformation. Use list, save, update, and delete " +
@@ -211,8 +216,10 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 		newFactoryQueryCommand(globals, diagnostics),
 		newFactoryListCommand(globals, diagnostics),
 		newFactoryConfigCommand(globals, diagnostics),
+		newFactoryCreateCommand(globals, diagnostics),
 		newFactorySaveCommand(globals, diagnostics),
 		newFactoryUpdateFromFileCommand(globals, diagnostics),
+		newFactoryReplaceCurrentCommand(globals, diagnostics),
 		newFactoryDeleteCommand(globals, diagnostics),
 	)
 	return factoryCmd
@@ -299,6 +306,68 @@ func newFactoryUpdateFromFileCommand(globals *cliGlobalOptions, _ *cliDiagnostic
 	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
 	_ = cmd.MarkFlagRequired("from")
+	return cmd
+}
+
+func newFactoryCreateCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.CreateFromFileConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "create <name>",
+		Short: "Create a named factory from a config file",
+		Long: "Create a new named factory from an existing factory.json file.\n\n" +
+			"The command validates the payload, materializes a new named factory layout under " +
+			"the selected factory root, and refuses to overwrite an existing factory name.",
+		Example: "  # Create a new named factory from a config file.\n" +
+			"  " + cliBinaryName + " factory create staging --from ./factory.json\n\n" +
+			"  # Create and select the new factory as current.\n" +
+			"  " + cliBinaryName + " factory create staging --from ./factory.json --set-current\n\n" +
+			"  # Emit structured confirmation for scripting.\n" +
+			"  " + cliBinaryName + " --json factory create staging --from ./factory.json",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Name = args[0]
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			return createFactoryFromFile(cfg)
+		},
+	}
+
+	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
+	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	cmd.Flags().BoolVar(&cfg.SetCurrent, "set-current", false, "update .current-factory to the created name")
+	_ = cmd.MarkFlagRequired("from")
+	return cmd
+}
+
+func newFactoryReplaceCurrentCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.ReplaceCurrentConfig{Server: globals.server}
+
+	cmd := &cobra.Command{
+		Use:   "replace-current",
+		Short: "Persist the live current factory from a running service",
+		Long: "Read the session current factory from a running service and persist it with PUT.\n\n" +
+			"The command uses global --server and --session like factory query.",
+		Example: "  # Persist the live current factory from the running service.\n" +
+			"  " + cliBinaryName + " factory replace-current\n\n" +
+			"  # Persist the live current factory for one session as JSON.\n" +
+			"  " + cliBinaryName + " --json factory replace-current --session session-beta",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		PreRunE:      rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			return replaceFactoryCurrent(cfg)
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
 }
 

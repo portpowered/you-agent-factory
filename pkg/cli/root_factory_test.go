@@ -310,8 +310,10 @@ func TestFactoryCommand_RegistersSubcommands(t *testing.T) {
 		{"factory", "config", "validate"},
 		{"factory", "config", "flatten"},
 		{"factory", "config", "expand"},
+		{"factory", "create"},
 		{"factory", "save"},
 		{"factory", "update"},
+		{"factory", "replace-current"},
 		{"factory", "delete"},
 	} {
 		if _, _, err := root.Find(path); err != nil {
@@ -336,8 +338,10 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"query",
 		"list",
 		"config",
+		"create",
 		"save",
 		"update",
+		"replace-current",
 		"delete",
 		"global --server",
 		"you factory query",

@@ -30,14 +30,14 @@ func SaveFromFile(cfg SaveFromFileConfig) error {
 	}
 
 	result, err := persistFromFile(persistFromFileConfig{
-		Mode:       persistFromFileModeSave,
+		Mode:       persistFromFileModeCreate,
 		Name:       cfg.Name,
 		From:       cfg.From,
 		Dir:        cfg.Dir,
 		SetCurrent: cfg.SetCurrent,
 	})
 	if err != nil {
-		return renderPersistFromFileError(persistFromFileModeSave, err)
+		return renderPersistFromFileError(persistFromFileModeCreate, err)
 	}
 
 	saveResult := SaveFromFileResult{
