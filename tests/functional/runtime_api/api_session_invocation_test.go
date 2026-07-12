@@ -41,8 +41,8 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("primaryResult[0] as text part: %v", err)
 	}
-	if part.Text != "invoke this" {
-		t.Fatalf("primaryResult text = %q, want %q", part.Text, "invoke this")
+	if part.Text != "primary result COMPLETE" {
+		t.Fatalf("primaryResult text = %q, want %q", part.Text, "primary result COMPLETE")
 	}
 
 	submitted := observedLogs.FilterMessage("factory session invocation submitted").All()
