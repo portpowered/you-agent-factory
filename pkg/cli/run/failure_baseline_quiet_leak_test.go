@@ -188,3 +188,70 @@ func TestFailureBaseline_QuietLeak_OneShotBatchQuietSuppressesTerminalOnOperatio
 	}
 	assertQuietLeakContractForbidden(t, stdout.String()+stderr.String())
 }
+
+func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *testing.T) {
+	preserveRunGlobals(t)
+
+	secretPrompt := "SECRET_INVOCATION_PROMPT_do-not-log-712407"
+	modes := []struct {
+		name   string
+		policy terminalpolicy.Policy
+	}{
+		{name: "quiet", policy: terminalpolicy.Resolve(terminalpolicy.Options{Quiet: true})},
+		{name: "normal", policy: terminalpolicy.Resolve(terminalpolicy.Options{})},
+		{name: "verbose", policy: terminalpolicy.Resolve(terminalpolicy.Options{Verbose: true})},
+	}
+
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+				return stubInvocationService{
+					run: func(ctx context.Context) error {
+						<-ctx.Done()
+						return nil
+					},
+					invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+						return apisurface.FactoryInvocationResult{
+							Status: factoryapi.InvocationTerminalStatusCompleted,
+							PrimaryResult: []interfaces.WorkContentPart{{
+								Type: interfaces.WorkContentPartTypeText,
+								Text: "policy-safe primary result",
+							}},
+						}, nil
+					},
+				}, nil
+			}
+
+			logger, err := mode.policy.BuildLogger()
+			if err != nil {
+				t.Fatalf("BuildLogger: %v", err)
+			}
+
+			var stdout, stderr, diagnostics bytes.Buffer
+			err = Run(context.Background(), RunConfig{
+				Dir:                        "/tmp/builtin-goal",
+				NamedFactoryName:           goal.PackagedFactoryName,
+				InvocationPositionalText:   &secretPrompt,
+				StdinIsTTY:                 func() bool { return true },
+				SuppressDashboardRendering: mode.policy.Mode() == terminalpolicy.ModeQuiet,
+				TerminalPolicy:             mode.policy,
+				Verbose:                    mode.policy.VerboseEnabled(),
+				Diagnostics:                mode.policy.DiagnosticsWriter(&diagnostics),
+				Output:                     &stdout,
+				Port:                       7437,
+				Logger:                     logger,
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+
+			capture := stdout.String() + stderr.String() + diagnostics.String()
+			if strings.Contains(capture, secretPrompt) {
+				t.Fatalf("terminal or diagnostics leaked invocation prompt in %s mode:\n%s", mode.name, capture)
+			}
+			if got := stdout.String(); got != "policy-safe primary result" {
+				t.Fatalf("stdout = %q, want primary result only", got)
+			}
+		})
+	}
+}

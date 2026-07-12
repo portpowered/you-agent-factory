@@ -103,8 +103,9 @@ func (p Policy) HumanTerminalWriter(stdout io.Writer) io.Writer {
 	return stdout
 }
 
-// BuildLogger creates the zap logger for this policy. Quiet mode discards all
-// logger output so operational failures stay terminal-silent.
+// BuildLogger creates the zap logger for this policy. Quiet mode discards
+// terminal logger output while still allowing BuildRuntimeLogger to tee
+// structured runtime records into rolling file sinks.
 func (p Policy) BuildLogger() (*zap.Logger, error) {
 	if p.Mode() == ModeQuiet {
 		return zap.NewNop(), nil
