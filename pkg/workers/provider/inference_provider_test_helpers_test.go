@@ -813,8 +813,6 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 }
 
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
-	t.Parallel()
-
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "nostream"), []byte("stdout-fallback\n"), []byte("stderr-fallback\n"), 7)
 
 	runner := NewInferenceProgressPublishingCommandRunner(nil, nil)
