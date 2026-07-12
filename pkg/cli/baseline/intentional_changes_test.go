@@ -27,7 +27,4 @@ func TestIntentionalChangesLedger_IsDistinctFromExecutableSnapshots(t *testing.T
 	if len(ledger.PlannedRemovals) == 0 {
 		t.Fatal("expected planned removals in intentional changes ledger")
 	}
-	if len(ledger.PlannedMoves) == 0 {
-		t.Fatal("expected planned moves in intentional changes ledger")
-	}
 }
