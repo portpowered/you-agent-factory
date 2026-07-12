@@ -1,8 +1,10 @@
 package configinit
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+const legacyEncodedGoalMarkerFile = "legacy-encoded-sentinel.txt"
 
 func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	t.Parallel()
@@ -322,5 +326,112 @@ func TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting(t *testing.T
 	}
 	if strings.Contains(ttsDir, "%2F") {
 		t.Fatalf("recreated factory used encoded path %q", ttsDir)
+	}
+}
+
+func TestInit_LeavesLegacyEncodedDirectoryUntouched(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(namedFactoriesRoot): %v", err)
+	}
+
+	encodedDir := seedLegacyEncodedGoalFactory(t, namedFactoriesRoot)
+	beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
+
+	result, err := Init(homeDir)
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	assertDirectorySnapshotUnchanged(t, encodedDir, beforeSnapshot)
+
+	wantGoalDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(@you/goal): %v", err)
+	}
+	if wantGoalDir == encodedDir {
+		t.Fatalf("hierarchical goal dir must not resolve to legacy encoded dir %q", encodedDir)
+	}
+	if strings.Contains(wantGoalDir, "%2F") {
+		t.Fatalf("hierarchical goal dir must not use encoded path %q", wantGoalDir)
+	}
+
+	var goalResult *PackagedFactoryResult
+	for i := range result.PackagedFactories {
+		if result.PackagedFactories[i].Name == "@you/goal" {
+			goalResult = &result.PackagedFactories[i]
+			break
+		}
+	}
+	if goalResult == nil {
+		t.Fatal("expected @you/goal in packaged factory results")
+	}
+	if goalResult.FactoryDir != wantGoalDir {
+		t.Fatalf("@you/goal factory dir = %q, want hierarchical %q", goalResult.FactoryDir, wantGoalDir)
+	}
+	if goalResult.Outcome != PackagedFactoryCreated {
+		t.Fatalf("@you/goal outcome = %q, want %q", goalResult.Outcome, PackagedFactoryCreated)
+	}
+	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(wantGoalDir, nil); err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(hierarchical @you/goal): %v", err)
+	}
+}
+
+func seedLegacyEncodedGoalFactory(t *testing.T, factoriesRoot string) string {
+	t.Helper()
+
+	encodedSegment, err := factoryconfig.NamedFactoryNameToLayoutSegment("@you/goal")
+	if err != nil {
+		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
+	}
+	encodedDir := filepath.Join(factoriesRoot, encodedSegment)
+	if err := os.MkdirAll(encodedDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(encoded legacy dir): %v", err)
+	}
+
+	markerPath := filepath.Join(encodedDir, legacyEncodedGoalMarkerFile)
+	if err := os.WriteFile(markerPath, []byte("do-not-touch-legacy-encoded-goal\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(legacy marker): %v", err)
+	}
+	return encodedDir
+}
+
+func snapshotDirectoryContents(t *testing.T, root string) map[string][]byte {
+	t.Helper()
+
+	snapshot := make(map[string][]byte)
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		snapshot[filepath.ToSlash(rel)] = data
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("snapshotDirectoryContents(%s): %v", root, err)
+	}
+	return snapshot
+}
+
+func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string][]byte) {
+	t.Helper()
+
+	after := snapshotDirectoryContents(t, root)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("directory %s changed after init:\nbefore=%#v\nafter=%#v", root, before, after)
 	}
 }
