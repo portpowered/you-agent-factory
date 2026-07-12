@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -181,8 +182,12 @@ func assertNamedFactoryRootHelpersMatchConfig(t *testing.T) {
 	if facadeGlobalRoot != configGlobalRoot {
 		t.Fatalf("global root = %q vs %q", facadeGlobalRoot, configGlobalRoot)
 	}
+	if want := defaultpaths.NamedFactoriesRoot(homeDir); configGlobalRoot != want {
+		t.Fatalf("config global root = %q, want defaultpaths.NamedFactoriesRoot = %q", configGlobalRoot, want)
+	}
 
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	facadeDefaultGlobalRoot, err := persist.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
 		t.Fatalf("persist.DefaultGlobalNamedFactoryRoot: %v", err)
@@ -193,6 +198,9 @@ func assertNamedFactoryRootHelpersMatchConfig(t *testing.T) {
 	}
 	if facadeDefaultGlobalRoot != configDefaultGlobalRoot {
 		t.Fatalf("default global root = %q vs %q", facadeDefaultGlobalRoot, configDefaultGlobalRoot)
+	}
+	if want := defaultpaths.NamedFactoriesRoot(homeDir); configDefaultGlobalRoot != want {
+		t.Fatalf("default global root = %q, want defaultpaths.NamedFactoriesRoot = %q", configDefaultGlobalRoot, want)
 	}
 
 	cwd := filepath.Join("repo", "app")

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -724,8 +725,7 @@ type NamedFactoryListEntry struct {
 }
 
 const (
-	defaultNamedFactoryHomeDir     = ".you-agent-factory"
-	defaultGlobalNamedFactoryDir   = "factories"
+	defaultNamedFactoryHomeDir = ".you-agent-factory"
 	defaultProjectNamedFactoryRoot = "factory"
 	scopedNamedFactoryPrefix       = "@"
 )
@@ -800,7 +800,7 @@ func GlobalNamedFactoryRootForHome(homeDir string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("user home directory is required")
 	}
-	return filepath.Join(trimmed, defaultNamedFactoryHomeDir, defaultGlobalNamedFactoryDir), nil
+	return defaultpaths.NamedFactoriesRoot(trimmed), nil
 }
 
 // GlobalWorkflowRootForHome builds the customer-owned global workflow lookup root

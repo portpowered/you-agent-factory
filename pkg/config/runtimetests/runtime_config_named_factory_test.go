@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -159,12 +160,13 @@ func TestNamedFactoryNameLayoutSegment_RejectsInvalidNames(t *testing.T) {
 
 func TestDefaultNamedFactoryRoots(t *testing.T) {
 	homeDir := filepath.Join("home", "customer")
+	wantRoot := defaultpaths.NamedFactoriesRoot(homeDir)
 	globalRoot, err := GlobalNamedFactoryRootForHome(homeDir)
 	if err != nil {
 		t.Fatalf("GlobalNamedFactoryRootForHome: %v", err)
 	}
-	if want := filepath.Join(homeDir, ".you-agent-factory", "factories"); globalRoot != want {
-		t.Fatalf("global root = %q, want %q", globalRoot, want)
+	if globalRoot != wantRoot {
+		t.Fatalf("global root = %q, want defaultpaths.NamedFactoriesRoot = %q", globalRoot, wantRoot)
 	}
 
 	testHomeDir := t.TempDir()
@@ -174,7 +176,7 @@ func TestDefaultNamedFactoryRoots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
 	}
-	if want := filepath.Join(testHomeDir, ".you-agent-factory", "factories"); defaultGlobalRoot != want {
+	if want := defaultpaths.NamedFactoriesRoot(testHomeDir); defaultGlobalRoot != want {
 		t.Fatalf("default global root = %q, want %q", defaultGlobalRoot, want)
 	}
 
