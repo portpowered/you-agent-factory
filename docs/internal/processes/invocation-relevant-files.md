@@ -366,6 +366,17 @@ primary-result behavior.
   `writePackagedSubagentMockWorkers` when extending subagent stream verification.
   Story-003 subagent stream integration evidence is recorded in
   `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`.
+- API/CLI response-stream terminal parity smoke coverage lives in
+  `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`,
+  proving live session `POST /factory-sessions/{session_id}/invocations`
+  `InvocationResponse` outcomes match CLI JSON response-stream terminal
+  `primary_result` records for the same successful `@you/goal` and
+  `@you/subagent` fixtures. Reuse `materializeNamedGoalFactoryForRoutingSmoke`,
+  `materializeNamedSubagentFactoryForSmoke`, `startNamedGoalRoutingAPIServer`,
+  `postNamedGoalRoutingInvocationOnServer`, and the goal/subagent response-stream
+  CLI helpers when extending API/CLI stream parity verification. Story-004 gate
+  evidence and upstream canonical-event exclusions are recorded in
+  `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
