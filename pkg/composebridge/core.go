@@ -3,15 +3,19 @@ package composebridge
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
@@ -166,6 +170,27 @@ func composeDurableExecution(
 	if err != nil {
 		return nil, fmt.Errorf("compose durable session persistence: %w", err)
 	}
+	configPath := strings.TrimSpace(cfg.SystemConfigPath)
+	if configPath == "" {
+		homeDir := strings.TrimSpace(cfg.SystemConfigHomeDir)
+		if homeDir == "" {
+			homeDir, err = os.UserHomeDir()
+			if err != nil {
+				return nil, fmt.Errorf("resolve operator config home: %w", err)
+			}
+		}
+		configPath = defaultpaths.OperatorConfigPath(homeDir)
+	}
+	operatorConfig, err := operatorconfig.LoadFileConfig(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("compose durable session worker presets: %w", err)
+	}
+	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
+	workerPresets := make(map[string]workflowruntime.WorkerPreset, len(operatorConfig.WorkerPresets))
+	for _, preset := range operatorConfig.WorkerPresets {
+		workerPresetIDs[preset.ID] = struct{}{}
+		workerPresets[preset.ID] = workflowruntime.WorkerPreset{ModelProvider: preset.ModelProvider, Model: preset.Model, ReasoningEffort: preset.ReasoningEffort}
+	}
 	return factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
 		factorysessionexecution.ServiceConfig{
@@ -174,6 +199,8 @@ func composeDurableExecution(
 			ProviderExecutor: providerexecution.NewExecutor(cfg.ProviderOverride),
 			Persistence:      persistence,
 			Clock:            clock,
+			WorkerPresetIDs:  workerPresetIDs,
+			WorkerSettings:   workflowruntime.WorkerSettingsConfig{Presets: workerPresets, DefaultModelProvider: operatorConfig.Defaults.WorkerModelProvider, DefaultModel: operatorConfig.Defaults.WorkerModel},
 		},
 	)
 }

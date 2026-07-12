@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	. "github.com/portpowered/infinite-you/pkg/config"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -49,7 +49,8 @@ func TestFactoryConfigFromOpenAPIJSON_RoundTripsJavaScriptOrchestratorFactory(t 
 				"entrypoint":"main",
 				"metadata":{"team":"platform"},
 				"argsSchema":{"type":"object","properties":{"topic":{"type":"string"}}},
-				"defaultPolicy":{"maxAgents":3}
+				"defaultPolicy":{"maxAgents":3},
+				"agents":{"reviewer":{"preset":"careful-review"}}
 			}
 		}
 	}`)
@@ -64,13 +65,16 @@ func TestFactoryConfigFromOpenAPIJSON_RoundTripsJavaScriptOrchestratorFactory(t 
 	if cfg.Orchestrator.JavaScript == nil || cfg.Orchestrator.JavaScript.SourceRef != "factory/workflows/review.js" {
 		t.Fatalf("javascript source ref = %#v", cfg.Orchestrator.JavaScript)
 	}
+	if got := cfg.Orchestrator.JavaScript.Agents["reviewer"].Preset; got != "careful-review" {
+		t.Fatalf("reviewer preset = %q, want careful-review", got)
+	}
 
 	public := FactoryConfigToOpenAPI(cfg)
 	encoded, err := json.Marshal(public)
 	if err != nil {
 		t.Fatalf("marshal public factory: %v", err)
 	}
-	if !containsAll(encoded, `"kind":"JAVASCRIPT"`, `"sourceRef":"factory/workflows/review.js"`, `"argsSchema"`, `"defaultPolicy"`) {
+	if !containsAll(encoded, `"kind":"JAVASCRIPT"`, `"sourceRef":"factory/workflows/review.js"`, `"argsSchema"`, `"defaultPolicy"`, `"agents":{"reviewer":{"preset":"careful-review"}}`) {
 		t.Fatalf("public factory JSON missing JavaScript orchestrator fields: %s", encoded)
 	}
 }

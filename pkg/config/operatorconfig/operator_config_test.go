@@ -95,6 +95,72 @@ func TestParseFileDefaults_AcceptsWorkerModelDefaults(t *testing.T) {
 	}
 }
 
+func TestParseFileConfig_ValidatesAndCanonicalizesWorkerPresets(t *testing.T) {
+	cfg, err := ParseFileConfig([]byte(`{
+		"workerPresets": [{
+			"id": " research ",
+			"modelProvider": "openai",
+			"model": " gpt-5.4 ",
+			"reasoningEffort": " HIGH "
+		}]
+	}`))
+	if err != nil {
+		t.Fatalf("ParseFileConfig() error = %v", err)
+	}
+	want := WorkerPreset{ID: "research", ModelProvider: "CODEX", Model: "gpt-5.4", ReasoningEffort: "high"}
+	if len(cfg.WorkerPresets) != 1 || cfg.WorkerPresets[0] != want {
+		t.Fatalf("worker presets = %#v, want %#v", cfg.WorkerPresets, []WorkerPreset{want})
+	}
+}
+
+func TestParseFileConfig_MissingWorkerPresetsIsBackwardCompatible(t *testing.T) {
+	cfg, err := ParseFileConfig([]byte(`{"defaults":{"workerModel":"existing-model"}}`))
+	if err != nil {
+		t.Fatalf("ParseFileConfig() error = %v", err)
+	}
+	if cfg.Defaults.WorkerModel != "existing-model" || len(cfg.WorkerPresets) != 0 {
+		t.Fatalf("config = %#v, want existing defaults and no presets", cfg)
+	}
+}
+
+func TestParseFileConfig_RejectsInvalidWorkerPresets(t *testing.T) {
+	tests := []struct {
+		name string
+		json string
+		want []string
+	}{
+		{name: "empty id", json: `{"workerPresets":[{"id":"  ","modelProvider":"codex"}]}`, want: []string{`workerPresets[0].id`, `"  "`, "non-empty"}},
+		{name: "duplicate id", json: `{"workerPresets":[{"id":"build","modelProvider":"codex"},{"id":" build ","modelProvider":"claude"}]}`, want: []string{`workerPresets[1].id`, `"build"`, "duplicated"}},
+		{name: "missing provider", json: `{"workerPresets":[{"id":"build"}]}`, want: []string{`workerPresets[0]`, `"build"`, "modelProvider"}},
+		{name: "symbolic provider", json: `{"workerPresets":[{"id":"build","modelProvider":"DEFAULT"}]}`, want: []string{`"build"`, `"DEFAULT"`, "unsupported modelProvider"}},
+		{name: "unsupported provider", json: `{"workerPresets":[{"id":"build","modelProvider":"other"}]}`, want: []string{`"build"`, `"other"`, "unsupported modelProvider"}},
+		{name: "unsupported reasoning", json: `{"workerPresets":[{"id":"build","modelProvider":"codex","reasoningEffort":"extreme"}]}`, want: []string{`"build"`, `"extreme"`, "unsupported reasoningEffort"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseFileConfig([]byte(tt.json))
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+			for _, fragment := range tt.want {
+				if !strings.Contains(err.Error(), fragment) {
+					t.Fatalf("error = %q, want fragment %q", err, fragment)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadFileDefaults_RejectsMalformedWorkerPresets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"workerPresets":[{"id":"bad","modelProvider":"unknown"}]}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, err := LoadFileDefaults(path); err == nil || !strings.Contains(err.Error(), path) {
+		t.Fatalf("LoadFileDefaults() error = %v, want validation error naming %q", err, path)
+	}
+}
+
 func TestDefaultConfigPathUsesCanonicalDefaultPathsPolicy(t *testing.T) {
 	t.Parallel()
 

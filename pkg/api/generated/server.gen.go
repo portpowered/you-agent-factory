@@ -1005,8 +1005,14 @@ type DispatchQueuedEventPayload struct {
 	// Model Selected model identifier when applicable.
 	Model *string `json:"model,omitempty"`
 
+	// ModelProvider Resolved canonical model-provider identifier when applicable.
+	ModelProvider *string `json:"modelProvider,omitempty"`
+
 	// ParentDispatchId Parent dispatch identifier when this dispatch was spawned from another dispatch.
 	ParentDispatchId *string `json:"parentDispatchId,omitempty"`
+
+	// PresetId Resolved operator worker preset identifier when one was selected.
+	PresetId *string `json:"presetId,omitempty"`
 
 	// PromptDigest Stable digest of rendered prompt material.
 	PromptDigest *string `json:"promptDigest,omitempty"`
@@ -1016,6 +1022,9 @@ type DispatchQueuedEventPayload struct {
 
 	// QueuePosition Queue position when known.
 	QueuePosition *int `json:"queuePosition,omitempty"`
+
+	// ReasoningEffort Resolved canonical reasoning effort when applicable.
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
 
 	// RetryOfDispatchId Prior dispatch identifier when this dispatch is a retry.
 	RetryOfDispatchId *string `json:"retryOfDispatchId,omitempty"`
@@ -1297,12 +1306,18 @@ type FactoryDispatch struct {
 	// Model Selected model identifier when applicable.
 	Model *string `json:"model,omitempty"`
 
+	// ModelProvider Resolved canonical model-provider identifier when applicable.
+	ModelProvider *string `json:"modelProvider,omitempty"`
+
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind         `json:"orchestratorKind"`
 	Petri            *FactoryDispatchPetriProjection `json:"petri,omitempty"`
 
 	// Phase JavaScript workflow phase when the dispatch was created or observed.
 	Phase *string `json:"phase,omitempty"`
+
+	// PresetId Resolved operator worker preset identifier when one was selected.
+	PresetId *string `json:"presetId,omitempty"`
 
 	// PromptDigest Stable digest of rendered prompt material.
 	PromptDigest *string `json:"promptDigest,omitempty"`
@@ -1312,6 +1327,9 @@ type FactoryDispatch struct {
 
 	// ProviderSessionRefs Provider-session correlation refs for model-backed dispatches.
 	ProviderSessionRefs *[]LoadableProviderSessionRef `json:"providerSessionRefs,omitempty"`
+
+	// ReasoningEffort Resolved canonical reasoning effort when applicable.
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
 
 	// RelatedWorkIds Related work identifiers consumed or produced by the dispatch.
 	RelatedWorkIds *[]string `json:"relatedWorkIds,omitempty"`
@@ -1739,8 +1757,17 @@ type FactoryOrchestrator struct {
 	Petri *FactoryOrchestratorPetriConfig `json:"petri,omitempty"`
 }
 
+// FactoryOrchestratorJavaScriptAgent Default worker selection for one named JavaScript child-agent role.
+type FactoryOrchestratorJavaScriptAgent struct {
+	// Preset Operator worker preset inherited by child calls using this agent id.
+	Preset string `json:"preset"`
+}
+
 // FactoryOrchestratorJavaScriptConfig JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
 type FactoryOrchestratorJavaScriptConfig struct {
+	// Agents Named child-agent roles and their operator worker preset defaults.
+	Agents *map[string]FactoryOrchestratorJavaScriptAgent `json:"agents,omitempty"`
+
 	// ArgsSchema JSON Schema object describing workflow invocation arguments.
 	ArgsSchema *map[string]interface{} `json:"argsSchema,omitempty"`
 
@@ -1990,17 +2017,26 @@ type FactorySessionDispatchSummary struct {
 	// Model Selected model identifier when applicable.
 	Model *string `json:"model,omitempty"`
 
+	// ModelProvider Resolved canonical model-provider identifier when applicable.
+	ModelProvider *string `json:"modelProvider,omitempty"`
+
 	// OutputArtifactIds Artifact identifiers produced by the dispatch.
 	OutputArtifactIds *[]string `json:"outputArtifactIds,omitempty"`
 
 	// Phase Workflow phase when the dispatch was created or observed.
 	Phase *string `json:"phase,omitempty"`
 
+	// PresetId Resolved operator worker preset identifier when one was selected.
+	PresetId *string `json:"presetId,omitempty"`
+
 	// Provider Selected provider identifier when applicable.
 	Provider *string `json:"provider,omitempty"`
 
 	// ProviderSessionRefs Provider-session correlation refs for model-backed dispatches.
 	ProviderSessionRefs *[]LoadableProviderSessionRef `json:"providerSessionRefs,omitempty"`
+
+	// ReasoningEffort Resolved canonical reasoning effort when applicable.
+	ReasoningEffort *string `json:"reasoningEffort,omitempty"`
 
 	// Retryable Whether the provider failure that produced the current failed state was retryable.
 	Retryable *bool `json:"retryable,omitempty"`

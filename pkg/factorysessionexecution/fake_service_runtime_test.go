@@ -1384,6 +1384,18 @@ func TestPrepareStartAndPersistenceHelpers(t *testing.T) {
 	}
 }
 
+func TestValidateNamedAgentPresetsRejectsUnknownPresetBeforeStart(t *testing.T) {
+	err := validateNamedAgentPresets(
+		map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+			"reviewer": {Preset: "missing-preset"},
+		},
+		map[string]struct{}{"known-preset": {}},
+	)
+	if err == nil || !strings.Contains(err.Error(), `factory agent "reviewer" references unknown operator worker preset "missing-preset"`) {
+		t.Fatalf("validateNamedAgentPresets() error = %v", err)
+	}
+}
+
 func TestJavaScriptRuntimeService_ProjectRootAloneDoesNotEnablePersistence(t *testing.T) {
 	projectRoot := writeSimpleFinalWorkflowProject(t)
 	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{ProjectRoot: projectRoot})

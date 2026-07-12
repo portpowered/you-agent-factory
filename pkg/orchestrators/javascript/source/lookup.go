@@ -22,6 +22,7 @@ type lookupCandidate struct {
 	sourceRef string
 	filePath  string
 	content   string
+	agents    map[string]interfaces.FactoryOrchestratorJavaScriptAgent
 }
 
 func lookupWorkflowByName(ctx Context, name string, allowFactoryLookup bool) (Resolution, bool) {
@@ -148,6 +149,7 @@ func factoryWorkflowCandidate(factoryName, factoryDir string, jsCfg *interfaces.
 			stage:     LookupStageNamedJavaScript,
 			sourceRef: fmt.Sprintf("factory:%s:inline", factoryName),
 			content:   content,
+			agents:    jsCfg.Agents,
 		}, true
 	}
 
@@ -165,6 +167,7 @@ func factoryWorkflowCandidate(factoryName, factoryDir string, jsCfg *interfaces.
 		sourceRef: fmt.Sprintf("factory:%s:%s", factoryName, filepath.ToSlash(sourceRef)),
 		filePath:  filepath.Join(factoryDir, filepath.FromSlash(sourceRef)),
 		content:   content,
+		agents:    jsCfg.Agents,
 	}, true
 }
 
@@ -375,6 +378,7 @@ func resolutionFromCandidate(requestKind Kind, requestValue string, candidate lo
 		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
 		Dialect:          dialectForLoaded(loaded),
 		Content:          content,
+		Agents:           candidate.agents,
 		Found:            true,
 	}
 }

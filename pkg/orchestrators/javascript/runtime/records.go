@@ -132,6 +132,8 @@ type ChildDispatchRecord struct {
 	Status                string                     `json:"status"`
 	Label                 string                     `json:"label,omitempty"`
 	PromptDigest          string                     `json:"promptDigest,omitempty"`
+	Preset                string                     `json:"preset,omitempty"`
+	ModelProvider         string                     `json:"modelProvider,omitempty"`
 	Model                 string                     `json:"model,omitempty"`
 	ReasoningEffort       string                     `json:"reasoningEffort,omitempty"`
 	Command               string                     `json:"command,omitempty"`

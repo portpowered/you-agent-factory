@@ -40,6 +40,20 @@ type Defaults struct {
 	WorkerModel         string
 }
 
+// WorkerPreset is a reusable, file-only child-worker configuration.
+type WorkerPreset struct {
+	ID              string `json:"id"`
+	ModelProvider   string `json:"modelProvider"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+}
+
+// FileConfig is the validated operator-owned configuration read from disk.
+type FileConfig struct {
+	Defaults      Defaults
+	WorkerPresets []WorkerPreset
+}
+
 // ResolvedDefaults holds effective operator defaults after precedence and
 // symbolic DEFAULT resolution.
 type ResolvedDefaults struct {
@@ -72,40 +86,84 @@ func DefaultConfigPath(homeDir string) string {
 // LoadFileDefaults reads operator defaults from path. A missing file returns
 // empty defaults without error. Malformed JSON fails with an error naming path.
 func LoadFileDefaults(path string) (Defaults, error) {
+	cfg, err := LoadFileConfig(path)
+	return cfg.Defaults, err
+}
+
+// LoadFileConfig reads and validates the operator-owned configuration. A
+// missing file returns an empty configuration without error.
+func LoadFileConfig(path string) (FileConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Defaults{}, nil
+			return FileConfig{}, nil
 		}
-		return Defaults{}, fmt.Errorf("read operator config %s: %w", path, err)
+		return FileConfig{}, fmt.Errorf("read operator config %s: %w", path, err)
 	}
-	defaults, err := ParseFileDefaults(data)
+	cfg, err := ParseFileConfig(data)
 	if err != nil {
-		return Defaults{}, fmt.Errorf("parse operator config %s: %w", path, err)
+		return FileConfig{}, fmt.Errorf("parse operator config %s: %w", path, err)
 	}
-	return defaults, nil
+	return cfg, nil
 }
 
 // ParseFileDefaults validates operator config JSON bytes.
 func ParseFileDefaults(data []byte) (Defaults, error) {
+	cfg, err := ParseFileConfig(data)
+	return cfg.Defaults, err
+}
+
+// ParseFileConfig validates operator config JSON bytes, including file-only
+// worker presets.
+func ParseFileConfig(data []byte) (FileConfig, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
 	var cfg struct {
-		BackendScopeID string   `json:"backendScopeID"`
-		Defaults       Defaults `json:"defaults"`
+		BackendScopeID string         `json:"backendScopeID"`
+		Defaults       Defaults       `json:"defaults"`
+		WorkerPresets  []WorkerPreset `json:"workerPresets"`
 	}
 	if err := decoder.Decode(&cfg); err != nil {
-		return Defaults{}, fmt.Errorf("decode operator config JSON: %w", err)
+		return FileConfig{}, fmt.Errorf("decode operator config JSON: %w", err)
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		return Defaults{}, fmt.Errorf("decode operator config JSON: unexpected trailing JSON")
+		return FileConfig{}, fmt.Errorf("decode operator config JSON: unexpected trailing JSON")
 	}
-	return Defaults{
+	presets, err := validateWorkerPresets(cfg.WorkerPresets)
+	if err != nil {
+		return FileConfig{}, err
+	}
+	return FileConfig{Defaults: Defaults{
 		WorkerModelProvider: strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
 		WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
-	}, nil
+	}, WorkerPresets: presets}, nil
+}
+
+func validateWorkerPresets(presets []WorkerPreset) ([]WorkerPreset, error) {
+	validated := make([]WorkerPreset, len(presets))
+	seen := make(map[string]struct{}, len(presets))
+	for i, preset := range presets {
+		id := strings.TrimSpace(preset.ID)
+		if id == "" {
+			return nil, fmt.Errorf("workerPresets[%d].id %q must be non-empty", i, preset.ID)
+		}
+		if _, exists := seen[id]; exists {
+			return nil, fmt.Errorf("workerPresets[%d].id %q is duplicated", i, id)
+		}
+		seen[id] = struct{}{}
+		provider, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(preset.ModelProvider)
+		if strings.TrimSpace(preset.ModelProvider) == "" || !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
+			return nil, fmt.Errorf("workerPresets[%d] %q has unsupported modelProvider %q: %s", i, id, preset.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary())
+		}
+		effort, ok := interfaces.CanonicalizeReasoningEffort(preset.ReasoningEffort)
+		if !ok {
+			return nil, fmt.Errorf("workerPresets[%d] %q has unsupported reasoningEffort %q: accepted values are minimal, low, medium, high", i, id, preset.ReasoningEffort)
+		}
+		validated[i] = WorkerPreset{ID: id, ModelProvider: provider, Model: strings.TrimSpace(preset.Model), ReasoningEffort: effort}
+	}
+	return validated, nil
 }
 
 // ResolveFromHome loads file defaults from homeDir, reads process environment
