@@ -474,7 +474,7 @@ func runFactoryConfigCommand(t *testing.T, subcommand string, target string) []b
 	cmd := cli.NewRootCommand()
 	cmd.SetOut(&out)
 	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"config", subcommand, target})
+	cmd.SetArgs([]string{"factory", "config", subcommand, target})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("execute config %s: %v", subcommand, err)
 	}

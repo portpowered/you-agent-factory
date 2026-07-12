@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -92,6 +94,184 @@ func TestFactoryConfigCommand_DirectFactoryValidateDoesNotRun(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "you factory config validate") {
 		t.Fatalf("factory validate should fall back to factory help, got:\n%s", out.String())
+	}
+}
+
+func TestFactoryConfigCommand_ValidatePreservesSuccessAndFailureAtNewPath(t *testing.T) {
+	dir := t.TempDir()
+	validPath := writeRootFactoryConfigFixture(t, dir, "valid.json", rootFactoryConfigValidJSON())
+	invalidPath := writeRootFactoryConfigFixture(t, dir, "invalid.json", rootFactoryConfigIncompatibleTaxonomyJSON())
+	missingPath := filepath.Join(dir, "missing-factory.json")
+
+	cases := []struct {
+		name       string
+		args       []string
+		wantErr    bool
+		errSubstr  string
+		outSubstrs []string
+	}{
+		{
+			name:       "valid fixture",
+			args:       []string{"factory", "config", "validate", validPath},
+			wantErr:    false,
+			outSubstrs: []string{"Factory validation passed."},
+		},
+		{
+			name:       "incompatible taxonomy",
+			args:       []string{"factory", "config", "validate", invalidPath},
+			wantErr:    true,
+			errSubstr:  "factory validation found blocking issues",
+			outSubstrs: []string{"Factory validation failed.", "workstation-worker-behavior-compatibility"},
+		},
+		{
+			name:      "missing path",
+			args:      []string{"factory", "config", "validate", missingPath},
+			wantErr:   true,
+			errSubstr: "find factory config source",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			root := NewRootCommand()
+			root.SetOut(&out)
+			root.SetErr(io.Discard)
+			root.SetArgs(tc.args)
+
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected command to fail")
+				}
+				if tc.errSubstr != "" && !strings.Contains(err.Error(), tc.errSubstr) {
+					t.Fatalf("error = %v, want substring %q", err, tc.errSubstr)
+				}
+			} else if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			for _, want := range tc.outSubstrs {
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("output = %q, want substring %q", out.String(), want)
+				}
+			}
+		})
+	}
+}
+
+func TestFactoryConfigCommand_FlattenPreservesSuccessAndFailureAtNewPath(t *testing.T) {
+	dir := t.TempDir()
+	validPath := writeRootFactoryConfigFixture(t, dir, "factory.json", rootFactoryConfigValidJSON())
+	invalidPath := writeRootFactoryConfigFixture(t, dir, "invalid.json", "{")
+	missingPath := filepath.Join(dir, "missing-factory.json")
+
+	cases := []struct {
+		name      string
+		args      []string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name:    "valid fixture",
+			args:    []string{"factory", "config", "flatten", validPath},
+			wantErr: false,
+		},
+		{
+			name:      "invalid json",
+			args:      []string{"factory", "config", "flatten", invalidPath},
+			wantErr:   true,
+			errSubstr: "parse",
+		},
+		{
+			name:      "missing path",
+			args:      []string{"factory", "config", "flatten", missingPath},
+			wantErr:   true,
+			errSubstr: "find factory config source",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			root := NewRootCommand()
+			root.SetOut(&out)
+			root.SetErr(io.Discard)
+			root.SetArgs(tc.args)
+
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected command to fail")
+				}
+				if tc.errSubstr != "" && !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(tc.errSubstr)) {
+					t.Fatalf("error = %v, want substring %q", err, tc.errSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
+				t.Fatalf("unmarshal flattened output: %v\n%s", err, out.String())
+			}
+			if payload["name"] != "root-factory-config-valid" {
+				t.Fatalf("flattened name = %v, want root-factory-config-valid", payload["name"])
+			}
+		})
+	}
+}
+
+func TestFactoryConfigCommand_ExpandPreservesSuccessAndFailureAtNewPath(t *testing.T) {
+	dir := t.TempDir()
+	validPath := writeRootFactoryConfigFixture(t, dir, "factory.json", rootFactoryConfigValidJSON())
+	missingPath := filepath.Join(dir, "missing-factory.json")
+
+	cases := []struct {
+		name       string
+		args       []string
+		wantErr    bool
+		errSubstr  string
+		outSubstrs []string
+	}{
+		{
+			name:       "valid fixture",
+			args:       []string{"factory", "config", "expand", validPath},
+			wantErr:    false,
+			outSubstrs: []string{"Expanded factory config into"},
+		},
+		{
+			name:      "missing path",
+			args:      []string{"factory", "config", "expand", missingPath},
+			wantErr:   true,
+			errSubstr: "find factory config source",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			root := NewRootCommand()
+			root.SetOut(&out)
+			root.SetErr(io.Discard)
+			root.SetArgs(tc.args)
+
+			err := root.Execute()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected command to fail")
+				}
+				if tc.errSubstr != "" && !strings.Contains(err.Error(), tc.errSubstr) {
+					t.Fatalf("error = %v, want substring %q", err, tc.errSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			for _, want := range tc.outSubstrs {
+				if !strings.Contains(out.String(), want) {
+					t.Fatalf("output = %q, want substring %q", out.String(), want)
+				}
+			}
+		})
 	}
 }
 
@@ -268,6 +448,77 @@ func TestFactoryQueryCommand_ServerFlagReachesHTTPTestServer(t *testing.T) {
 	if got.Server != strings.TrimSuffix(srv.URL, "/") {
 		t.Fatalf("server = %q, want %q", got.Server, strings.TrimSuffix(srv.URL, "/"))
 	}
+}
+
+func writeRootFactoryConfigFixture(t *testing.T, dir, name, body string) string {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+	return path
+}
+
+func rootFactoryConfigValidJSON() string {
+	return `{
+  "name": "root-factory-config-valid",
+  "workTypes": [{
+    "name": "task",
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "done", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [{
+    "name": "legacy",
+    "type": "MODEL_WORKER",
+    "operations": [{
+      "name": "TTS",
+      "inputs": [{"name": "text", "contentTypes": ["TEXT"]}],
+      "outputs": [{"name": "audio", "contentTypes": ["AUDIO"]}]
+    }]
+  }],
+  "workstations": [{
+    "name": "legacy-run",
+    "type": "MODEL_INVOKE",
+    "operation": "TTS",
+    "worker": "legacy",
+    "inputs": [{"workType": "task", "state": "init"}],
+    "outputs": [{"workType": "task", "state": "done"}]
+  }]
+}`
+}
+
+func rootFactoryConfigIncompatibleTaxonomyJSON() string {
+	return `{
+  "name": "root-factory-config-invalid",
+  "workTypes": [{
+    "name": "task",
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "done", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [{
+    "name": "infer",
+    "type": "INFERENCE_WORKER",
+    "operations": [{
+      "name": "TTS",
+      "inputs": [{"name": "text", "contentTypes": ["TEXT"]}],
+      "outputs": [{"name": "audio", "contentTypes": ["AUDIO"]}]
+    }]
+  }],
+  "workstations": [{
+    "name": "agent-with-infer",
+    "type": "AGENT_RUN",
+    "worker": "infer",
+    "inputs": [{"workType": "task", "state": "init"}],
+    "outputs": [{"workType": "task", "state": "done"}]
+  }]
+}`
 }
 
 func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
