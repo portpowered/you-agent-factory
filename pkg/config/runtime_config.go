@@ -9,9 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
-	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -959,46 +957,4 @@ func replaceNamedFactoryDir(rootDir, canonicalName, stagingDir, targetDir string
 	}
 	committed = true
 	return nil
-}
-
-// AsBlockingFactoryLoadError returns structured blocking findings when err wraps
-// a BlockingFactoryLoadError from materialization, upgrade, or factory load.
-func AsBlockingFactoryLoadError(err error) (*blockingload.BlockingFactoryLoadError, bool) {
-	return blockingload.AsBlockingFactoryLoadError(err)
-}
-
-// BlockingFactoryLoadFindings returns config findings derived from structured
-// blocking-load validation errors.
-func BlockingFactoryLoadFindings(err error) []Finding {
-	loadErr, ok := blockingload.AsBlockingFactoryLoadError(err)
-	if !ok {
-		return nil
-	}
-	return canonicalTargetsToFindings(loadErr.Targets)
-}
-
-// FactoryConfigValidateRecoveryCommand returns the single recovery command
-// operators should run after a materialization or upgrade validation failure.
-func FactoryConfigValidateRecoveryCommand(factoryPath string) string {
-	return blockingload.FactoryConfigValidateRecoveryCommand(factoryPath)
-}
-
-// MaybeFormatBlockingFactoryLoadOperatorError wraps err with operator diagnostics
-// when it carries structured blocking findings and is not already wrapped.
-func MaybeFormatBlockingFactoryLoadOperatorError(err error, factoryPath string) error {
-	return blockingload.MaybeFormatBlockingFactoryLoadOperatorError(err, factoryPath)
-}
-
-// MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory applies operator
-// diagnostics for named-factory resolution failures.
-func MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(
-	err error,
-	projectRoot, globalRoot, name string,
-) error {
-	return blockingload.MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(err, projectRoot, globalRoot, name)
-}
-
-// NamedFactoryDirPath returns the on-disk directory for a persisted named factory.
-func NamedFactoryDirPath(rootDir, name string) (string, error) {
-	return namedfactorypath.MapDir(strings.TrimSpace(rootDir), name)
 }
