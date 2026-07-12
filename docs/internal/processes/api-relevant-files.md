@@ -13,8 +13,9 @@ Use this map when changing the public REST contract.
   `contracts/testdata/baseline/rest-operations.json`.
 - `internal/contractinventory/baseline_test.go` proves repository parity and
   byte-identical repeated extraction from `api/openapi.yaml`.
-- `internal/contractinventory/preservation_test.go` asserts this inventory lane
-  does not modify authored OpenAPI, generated clients, or `pkg/api` surfaces.
+- Story 004 preservation is proven behaviorally via focused extractor tests and
+  `make api-smoke`; this inventory lane must not modify authored OpenAPI,
+  generated clients, or `pkg/api` handlers.
 
 ## Compatibility Alias Inventory
 

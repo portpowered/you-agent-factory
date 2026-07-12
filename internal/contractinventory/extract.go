@@ -1,7 +1,6 @@
 package contractinventory
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -218,12 +217,4 @@ func sortedCopy(values []string) []string {
 	copied := slices.Clone(values)
 	slices.Sort(copied)
 	return copied
-}
-
-// ValidateLoadedDocument validates doc when callers need loader diagnostics.
-func ValidateLoadedDocument(doc *openapi3.T) error {
-	if doc == nil {
-		return fmt.Errorf("openapi document is nil")
-	}
-	return doc.Validate(context.Background())
 }
