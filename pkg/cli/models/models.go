@@ -691,9 +691,11 @@ func modelsEndpoint(server, path string) (url.URL, error) {
 
 func mustGeneratedTextContentPart(text string) factoryapi.WorkContentPart {
 	var part factoryapi.WorkContentPart
+	slot := "text"
 	_ = part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
 		Type: factoryapi.WorkContentPartTypeTextUpper,
 		Text: text,
+		Slot: &slot,
 	})
 	return part
 }

@@ -454,6 +454,8 @@ func hostConfigFromService(cfg *FactoryServiceConfig) factoryservice.Config {
 		ProviderCommandRunnerOverride:           cfg.ProviderCommandRunnerOverride,
 		CommandRunnerOverride:                   cfg.CommandRunnerOverride,
 		LocalModelRuntimeOverride:               cfg.LocalModelRuntimeOverride,
+		ModelAssetsOverride:                     cfg.ModelAssets,
+		ModelHostOverride:                       cfg.ModelHostOverride,
 		LocalModelHooks:                         localModelHooks(),
 		ExtraOptions:                            cfg.ExtraOptions,
 		InvocationMetricsRecorder:               invocationMetricsAdapter{recorder: cfg.InvocationMetricsRecorder},

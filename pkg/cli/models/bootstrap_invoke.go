@@ -155,8 +155,16 @@ func buildModelsInvokeBootstrapServiceConfig(cfg bootstrapInvokeConfig) *service
 		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
 		RuntimeMetricsConfig: logging.DefaultRuntimeMetricsConfig(),
 	}
-	return service.NormalizeInvocationBootstrapConfig(svcCfg)
+	normalized := service.NormalizeInvocationBootstrapConfig(svcCfg)
+	if augmentModelsInvokeBootstrapServiceConfig != nil {
+		augmentModelsInvokeBootstrapServiceConfig(normalized)
+	}
+	return normalized
 }
+
+// augmentModelsInvokeBootstrapServiceConfig optionally adjusts bootstrap service
+// config during tests that exercise real in-process bootstrap wiring.
+var augmentModelsInvokeBootstrapServiceConfig func(*service.FactoryServiceConfig)
 
 func runBootstrapModelInvocation(
 	ctx context.Context,
