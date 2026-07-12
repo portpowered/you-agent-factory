@@ -1,7 +1,7 @@
 import {
+  durableResultSurfacesFromResultsResponse,
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
-  durableResultSurfacesFromResultsResponse,
   getFactorySession,
   getFactorySessionDurableResults,
   getFactorySessionPartialResult,
@@ -20,12 +20,17 @@ export async function loadFactorySessionDetailData(
   sessionID: string,
 ): Promise<FactorySessionDetailData> {
   const normalized = await getFactorySession(sessionID);
-  const { durableLifecycleStatus, durableProgress, resultSummary, session } =
-    normalized;
+  const {
+    durableLifecycleStatus,
+    durableProgress,
+    durableReadModel,
+    resultSummary,
+    session,
+  } = normalized;
   let { partialResult, result } = normalized;
 
   if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
-    return { durableLifecycleStatus, session };
+    return { durableLifecycleStatus, durableReadModel, session };
   }
 
   const durableJavaScript = isDurableJavaScriptSession(
@@ -58,23 +63,19 @@ export async function loadFactorySessionDetailData(
     durablePartialResult,
   ] = await Promise.all([
     fetchDispatches
-      ? listFactorySessionDispatches(sessionID).catch(() => undefined)
+      ? listFactorySessionDispatches(sessionID)
       : Promise.resolve(undefined),
     durableJavaScript
       ? Promise.resolve(undefined)
-      : getFactorySessionResult(sessionID).catch(() => undefined),
+      : getFactorySessionResult(sessionID),
     durableJavaScript
       ? Promise.resolve(undefined)
-      : getFactorySessionPartialResult(sessionID).catch(() => undefined),
+      : getFactorySessionPartialResult(sessionID),
     supplementalReads.fetchFinalResults
-      ? getFactorySessionDurableResults(sessionID, "final").catch(
-          () => undefined,
-        )
+      ? getFactorySessionDurableResults(sessionID, "final")
       : Promise.resolve(undefined),
     supplementalReads.fetchPartialResults
-      ? getFactorySessionDurableResults(sessionID, "partial").catch(
-          () => undefined,
-        )
+      ? getFactorySessionDurableResults(sessionID, "partial")
       : Promise.resolve(undefined),
   ]);
 
@@ -105,6 +106,7 @@ export async function loadFactorySessionDetailData(
   return {
     dispatches,
     durableLifecycleStatus,
+    durableReadModel,
     partialResult,
     result,
     session,

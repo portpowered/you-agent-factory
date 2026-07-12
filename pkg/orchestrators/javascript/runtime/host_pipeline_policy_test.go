@@ -5,9 +5,73 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
+
+// Parallel child execution assertions live in this existing policy test file so
+// the runtime package stays within both the per-file and package file-count
+// maintainability limits.
+func assertParallelResultOrder(t *testing.T, sessionID string, outcome workflowruntime.Outcome, wantLabels []string) {
+	t.Helper()
+	results, ok := projectPrimaryJSON(t, sessionID, outcome.Value)["results"].([]any)
+	if !ok || len(results) != len(wantLabels) {
+		t.Fatalf("projected results = %#v, want %d entries", results, len(wantLabels))
+	}
+	for i, wantLabel := range wantLabels {
+		child, ok := results[i].(map[string]any)
+		if !ok || child["label"] != wantLabel || child["status"] != workflowruntime.ChildDispatchStatusCompleted {
+			t.Fatalf("results[%d] = %#v, want completed child %q", i, results[i], wantLabel)
+		}
+	}
+}
+
+func peakConcurrentChildRunning(records []workflowruntime.RuntimeRecord) int {
+	running, peak := 0, 0
+	for _, record := range records {
+		if record.Kind != workflowruntime.RecordKindChildDispatch || record.ChildDispatch == nil {
+			continue
+		}
+		switch record.ChildDispatch.Status {
+		case workflowruntime.ChildDispatchStatusRunning:
+			running++
+			if running > peak {
+				peak = running
+			}
+		case workflowruntime.ChildDispatchStatusCompleted, workflowruntime.ChildDispatchStatusFailed:
+			running--
+		}
+	}
+	return peak
+}
+
+func childCompletionOrder(records []workflowruntime.RuntimeRecord) []string {
+	var order []string
+	for _, record := range records {
+		if record.Kind == workflowruntime.RecordKindChildDispatch && record.ChildDispatch != nil && record.ChildDispatch.Status == workflowruntime.ChildDispatchStatusCompleted && record.ChildDispatch.Label != "" {
+			order = append(order, record.ChildDispatch.Label)
+		}
+	}
+	return order
+}
+
+func hasChildDispatchStatus(records []workflowruntime.RuntimeRecord, status string) bool {
+	for _, record := range records {
+		if record.Kind == workflowruntime.RecordKindChildDispatch && record.ChildDispatch != nil && record.ChildDispatch.Status == status {
+			return true
+		}
+	}
+	return false
+}
+
+func completedForLabel(records []workflowruntime.RuntimeRecord, label string) bool {
+	for _, record := range records {
+		if record.Kind == workflowruntime.RecordKindChildDispatch && record.ChildDispatch != nil && record.ChildDispatch.Label == label && record.ChildDispatch.Status == workflowruntime.ChildDispatchStatusCompleted {
+			return true
+		}
+	}
+	return false
+}
 
 func TestRun_PipelineStagedFakeChildren_PreservesItemStageOrder(t *testing.T) {
 	source := readFixture(t, "pipeline-staged-fake-children.workflow.js")
@@ -234,6 +298,7 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		fixture string
 		policy  workflowpolicy.EffectivePolicy
 		want    string
+		code    string
 	}{
 		{
 			fixture: "agent-run-policy-denied-model.workflow.js",
@@ -243,7 +308,8 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		{
 			fixture: "agent-run-policy-denied-command.workflow.js",
 			policy:  basePolicy,
-			want:    `policy denied: command "deploy" is not listed in allowedCommands`,
+			want:    `agent.run() does not support field "command"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-reasoning.workflow.js",
@@ -253,22 +319,26 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		{
 			fixture: "agent-run-policy-denied-sandbox.workflow.js",
 			policy:  basePolicy,
-			want:    `policy denied: sandbox "workspace-write" is not allowed when policy.mode is READ_ONLY`,
+			want:    `agent.run() does not support field "sandbox"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-writable-roots.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: writableRoots are not allowed by effective policy",
+			want:    `agent.run() does not support field "writableRoots"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-network.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: network access is not allowed by effective policy",
+			want:    `agent.run() does not support field "network"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 		{
 			fixture: "agent-run-policy-denied-concurrency.workflow.js",
 			policy:  basePolicy,
-			want:    "policy denied: requested concurrency 4 exceeds policy concurrency 2",
+			want:    `agent.run() does not support field "concurrency"`,
+			code:    workflowruntime.CodePreExecutionInvalid,
 		},
 	}
 
@@ -276,8 +346,12 @@ func TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics(t *testing.T) {
 		t.Run(tc.fixture, func(t *testing.T) {
 			req := policyDeniedRequest(t, tc.fixture, tc.policy)
 			outcome := runExecutionFailure(t, req)
-			if outcome.Failure.Code != workflowruntime.CodeScriptError {
-				t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeScriptError)
+			wantCode := tc.code
+			if wantCode == "" {
+				wantCode = workflowruntime.CodeScriptError
+			}
+			if outcome.Failure.Code != wantCode {
+				t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, wantCode)
 			}
 			if !strings.Contains(outcome.Failure.Message, tc.want) {
 				t.Fatalf("failure message = %q, want substring %q", outcome.Failure.Message, tc.want)

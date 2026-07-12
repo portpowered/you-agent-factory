@@ -1,0 +1,41 @@
+openapi: 3.0.3
+info:
+  title: Stable Ordering Fixture
+  version: 1.0.0
+paths:
+  /beta:
+    get:
+      operationId: betaGet
+      responses:
+        '200':
+          description: ok
+  /alpha:
+    post:
+      operationId: alphaPost
+      summary: Alpha summary
+      description: Alpha description
+      x-doc-id: alpha-post-doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: created
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      operationId: alphaGet
+      responses:
+        '200':
+          description: ok
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: object

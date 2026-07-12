@@ -128,6 +128,8 @@ func TestGetFactorySessionDispatch_RuntimeBackedReturnsTypedDetail(t *testing.T)
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
+	assertRuntimeDispatchFilters(t, server.URL, completed.SessionID)
+
 	resp, err := http.Get(server.URL + "/factory-sessions/" + completed.SessionID + "/dispatches/dispatch-1")
 	if err != nil {
 		t.Fatalf("GET /factory-sessions/{session_id}/dispatches/{dispatch_id}: %v", err)
@@ -152,6 +154,36 @@ func TestGetFactorySessionDispatch_RuntimeBackedReturnsTypedDetail(t *testing.T)
 	}
 	if response.Label == nil || *response.Label != "summarize-findings" {
 		t.Fatalf("label = %#v, want summarize-findings", response.Label)
+	}
+}
+
+func assertRuntimeDispatchFilters(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
+	filteredResp, err := http.Get(serverURL + "/factory-sessions/" + sessionID + "/dispatches?phase=unknown")
+	if err != nil {
+		t.Fatalf("GET filtered dispatches: %v", err)
+	}
+	var filtered factoryapi.ListFactorySessionDispatchesResponse
+	if filteredResp.StatusCode != http.StatusOK {
+		filteredResp.Body.Close()
+		t.Fatalf("filtered status = %d, want 200", filteredResp.StatusCode)
+	}
+	if err := json.NewDecoder(filteredResp.Body).Decode(&filtered); err != nil {
+		filteredResp.Body.Close()
+		t.Fatalf("decode filtered dispatches: %v", err)
+	}
+	filteredResp.Body.Close()
+	if filtered.Dispatches == nil || len(filtered.Dispatches) != 0 {
+		t.Fatalf("filtered dispatches = %#v, want non-nil empty collection", filtered.Dispatches)
+	}
+
+	invalidResp, err := http.Get(serverURL + "/factory-sessions/" + sessionID + "/dispatches?status=BROKEN")
+	if err != nil {
+		t.Fatalf("GET invalid status dispatches: %v", err)
+	}
+	invalidResp.Body.Close()
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid status = %d, want 400", invalidResp.StatusCode)
 	}
 }
 

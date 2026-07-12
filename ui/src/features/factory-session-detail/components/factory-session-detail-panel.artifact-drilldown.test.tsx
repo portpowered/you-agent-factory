@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
+import { installCanonicalSupplementalReadDefaults } from "./test-support/factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel artifact drilldown", () => {
   beforeEach(() => {
@@ -469,6 +470,7 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
 });
 
 function renderWithQueryClient(children: ReactNode) {
+  installCanonicalSupplementalReadDefaults();
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {

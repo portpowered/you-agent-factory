@@ -1997,6 +1997,18 @@ type FactorySessionBudgets struct {
 	MaxAgents *int `json:"maxAgents,omitempty"`
 }
 
+// FactorySessionCheckpointRef defines model for FactorySessionCheckpointRef.
+type FactorySessionCheckpointRef struct {
+	// Id Stable checkpoint identifier used for later inspection or resume.
+	Id string `json:"id"`
+
+	// Label Customer-visible checkpoint label when supplied by the orchestrator.
+	Label *string `json:"label,omitempty"`
+
+	// Phase Phase active when the checkpoint was written.
+	Phase *string `json:"phase,omitempty"`
+}
+
 // FactorySessionDispatchSummary Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
 type FactorySessionDispatchSummary struct {
 	// Attempt One-based attempt number for retried dispatches.
@@ -2129,6 +2141,9 @@ type FactorySessionDurablePhaseSummary struct {
 
 // FactorySessionDurableProgressCounts defines model for FactorySessionDurableProgressCounts.
 type FactorySessionDurableProgressCounts struct {
+	// CanceledDispatches Dispatches canceled before completion.
+	CanceledDispatches *int `json:"canceledDispatches,omitempty"`
+
 	// CompletedDispatches Dispatches that reached a terminal success state.
 	CompletedDispatches *int `json:"completedDispatches,omitempty"`
 
@@ -2138,8 +2153,23 @@ type FactorySessionDurableProgressCounts struct {
 	// InFlightDispatches Dispatches currently running or awaiting completion.
 	InFlightDispatches *int `json:"inFlightDispatches,omitempty"`
 
+	// InterruptedDispatches Dispatches interrupted after starting.
+	InterruptedDispatches *int `json:"interruptedDispatches,omitempty"`
+
 	// PhaseCount Number of workflow phases represented in phase summaries.
 	PhaseCount *int `json:"phaseCount,omitempty"`
+
+	// QueuedDispatches Dispatches waiting to start.
+	QueuedDispatches *int `json:"queuedDispatches,omitempty"`
+
+	// RunningDispatches Dispatches currently running.
+	RunningDispatches *int `json:"runningDispatches,omitempty"`
+
+	// SkippedDispatches Dispatches skipped by orchestration policy.
+	SkippedDispatches *int `json:"skippedDispatches,omitempty"`
+
+	// TimedOutDispatches Dispatches that exceeded their execution deadline.
+	TimedOutDispatches *int `json:"timedOutDispatches,omitempty"`
 
 	// TotalDispatches Total durable dispatches recorded for the session.
 	TotalDispatches *int `json:"totalDispatches,omitempty"`
@@ -2162,6 +2192,7 @@ type FactorySessionDurableReadModel struct {
 	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
 	EffectivePolicyHash *string                                   `json:"effectivePolicyHash,omitempty"`
 	FailureDetail       *FailureDetail                            `json:"failureDetail,omitempty"`
+	LatestCheckpoint    *FactorySessionCheckpointRef              `json:"latestCheckpoint,omitempty"`
 	Lifecycle           *FactorySessionDurableLifecycleTimestamps `json:"lifecycle,omitempty"`
 
 	// Links Relative links for polling and inspecting one durable factory session.
@@ -5734,6 +5765,12 @@ type BackendScopeId = string
 // DispatchID defines model for DispatchID.
 type DispatchID = string
 
+// FactoryDispatchPhase defines model for FactoryDispatchPhase.
+type FactoryDispatchPhase = string
+
+// FactoryDispatchStatusFilter Canonical dispatch lifecycle status shared across orchestrators.
+type FactoryDispatchStatusFilter = FactoryDispatchStatus
+
 // FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
 type FactorySessionResultIncludeArtifacts = bool
 
@@ -5818,6 +5855,15 @@ type GetEventsParams struct {
 type ListFactorySessionsParams struct {
 	// Scope Optional session list scope. Defaults to live for backward-compatible live workspace session listing.
 	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// ListFactorySessionDispatchesParams defines parameters for ListFactorySessionDispatches.
+type ListFactorySessionDispatchesParams struct {
+	// Phase Exact canonical phase identifier. Unknown phases return an empty collection.
+	Phase *FactoryDispatchPhase `form:"phase,omitempty" json:"phase,omitempty"`
+
+	// Status Canonical Dispatch lifecycle status.
+	Status *FactoryDispatchStatusFilter `form:"status,omitempty" json:"status,omitempty"`
 }
 
 // GetEventsBySessionIdParams defines parameters for GetEventsBySessionId.
@@ -7354,7 +7400,7 @@ type ServerInterface interface {
 	CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// List durable factory session dispatches
 	// (GET /factory-sessions/{session_id}/dispatches)
-	ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ListFactorySessionDispatchesParams)
 	// Get one durable factory session dispatch
 	// (GET /factory-sessions/{session_id}/dispatches/{dispatch_id})
 	GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionId SessionID, dispatchId DispatchID)
@@ -7750,8 +7796,27 @@ func (siw *ServerInterfaceWrapper) ListFactorySessionDispatches(w http.ResponseW
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFactorySessionDispatchesParams
+
+	// ------------- Optional query parameter "phase" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "phase", r.URL.Query(), &params.Phase)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "phase", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListFactorySessionDispatches(w, r, sessionId)
+		siw.Handler.ListFactorySessionDispatches(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

@@ -245,7 +245,7 @@ func TestRun_FactoryInvocationResponseStreamFallsBackWhenStreamAttachmentUnavail
 
 	text := "goal completed"
 	var output strings.Builder
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -287,7 +287,7 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 	var output strings.Builder
 	attachable := newRecordingResponseStreamAttachable()
 	attachable.ensureDispatch("dispatch-goal-1")
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -409,7 +409,7 @@ func runFactoryInvocationShortLivedDispatchCase(
 	}
 	lateAttachable, _ := attachable.(*lateDiscoveryResponseStreamAttachable)
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -481,7 +481,7 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 	var output strings.Builder
 	attachable := newRecordingResponseStreamAttachable()
 	attachable.ensureDispatch("dispatch-goal-1")
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -695,7 +695,7 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 	result := tc.result
 	attachable := newRecordingResponseStreamAttachable()
 	attachable.ensureDispatch("dispatch-goal-1")
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -868,7 +868,7 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 	eventsFlooded := make(chan struct{}, 1)
 	attachable := newRecordingResponseStreamAttachable()
 	attachable.ensureDispatch("dispatch-goal-1")
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {

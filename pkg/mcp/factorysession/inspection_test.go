@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -12,6 +13,133 @@ import (
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
+
+func TestMockClient_RuntimeService_DocumentedHostConversationUsesRegisteredTools(t *testing.T) {
+	client := newRuntimeMCPClient(t)
+	assertDocumentedSourceValid(t, client.Client)
+	started := assertRuntimeAsyncStartRunning(t, client, runtimeBusyLoopAsyncRequest("req-host-demo-001"))
+	sessionID := started.Result.SessionId
+	assertRuntimeSessionStatus(t, client, sessionID, factoryapi.FactorySessionDurableLifecycleStatusRunning)
+	assertRuntimeNotReadyResult(t, client, sessionID)
+	assertDocumentedInspectionReads(t, client.Client, sessionID)
+	assertDocumentedPauseResume(t, client.Client, sessionID)
+	assertDocumentedLifecycleEvents(t, client.Client, sessionID)
+	assertDocumentedCancel(t, client.Client, sessionID)
+}
+
+func assertDocumentedSourceValid(t *testing.T, client *mcpfactorysession.Client) {
+	t.Helper()
+	inlineSource, projectRoot := runtimeBusyLoopWorkflowSource, t.TempDir()
+	raw, err := client.CallTool(mcpfactorysession.ToolValidateSource, mustJSON(t, factoryapi.FactoryPreviewRequest{SourceKind: factoryapi.INLINEWORKFLOW, InlineSource: &inlineSource, ProjectRoot: &projectRoot}))
+	if err != nil {
+		t.Fatalf("ValidateSource: %v", err)
+	}
+	var response mcpfactorysession.ToolResponse[factoryapi.FactoryPreviewResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode ValidateSource: %v", err)
+	}
+	if response.Error != nil || response.Result == nil || !response.Result.Valid || response.Result.SourceValidationIssues == nil {
+		t.Fatalf("validation = %#v, want valid source with sourceValidationIssues", response)
+	}
+}
+
+func assertDocumentedInspectionReads(t *testing.T, client *mcpfactorysession.Client, sessionID string) {
+	t.Helper()
+	dispatches, dispatchErr := client.ListDispatches(mcpfactorysession.ListDispatchesInput{SessionID: sessionID})
+	artifacts, artifactErr := client.ListArtifacts(mcpfactorysession.ListArtifactsInput{SessionID: sessionID})
+	events, eventErr := client.ReadEvents(mcpfactorysession.ReadEventsInput{SessionID: sessionID})
+	if dispatchErr != nil || dispatches.Error != nil || dispatches.Result == nil {
+		t.Fatalf("ListDispatches: response=%#v err=%v", dispatches, dispatchErr)
+	}
+	if artifactErr != nil || artifacts.Error != nil || artifacts.Result == nil {
+		t.Fatalf("ListArtifacts: response=%#v err=%v", artifacts, artifactErr)
+	}
+	if eventErr != nil || events.Error != nil || events.Result == nil || len(events.Result.Events) == 0 {
+		t.Fatalf("ReadEvents: response=%#v err=%v", events, eventErr)
+	}
+}
+
+func assertDocumentedPauseResume(t *testing.T, client *mcpfactorysession.Client, sessionID string) {
+	t.Helper()
+	pauseID, pauseReason := "req-pause-host-demo-01", "host maintenance"
+	paused, err := client.Control(mcpfactorysession.ControlInput{SessionID: sessionID, Operation: factoryapi.FactorySessionLifecycleControlKindPause, RequestID: &pauseID, Reason: &pauseReason})
+	if err != nil || paused.Error != nil || paused.Result == nil || paused.Result.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause: response=%#v err=%v", paused, err)
+	}
+	assertClientSessionStatus(t, client, sessionID, factoryapi.FactorySessionDurableLifecycleStatusPaused)
+	resumeID := "req-resume-host-demo-01"
+	resumed, err := client.Control(mcpfactorysession.ControlInput{SessionID: sessionID, Operation: factoryapi.FactorySessionLifecycleControlKindResume, RequestID: &resumeID})
+	if err != nil || resumed.Error != nil || resumed.Result == nil || resumed.Result.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume: response=%#v err=%v", resumed, err)
+	}
+	assertClientSessionStatus(t, client, sessionID, factoryapi.FactorySessionDurableLifecycleStatusRunning)
+}
+
+func assertDocumentedLifecycleEvents(t *testing.T, client *mcpfactorysession.Client, sessionID string) {
+	t.Helper()
+	raw, err := client.CallTool(
+		mcpfactorysession.ToolReadEvents,
+		mustJSON(t, mcpfactorysession.ReadEventsInput{SessionID: sessionID}),
+	)
+	if err != nil {
+		t.Fatalf("ReadEvents after controls: %v", err)
+	}
+	var response mcpfactorysession.ToolResponse[mcpfactorysession.ReadEventsResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("decode ReadEvents after controls: %v", err)
+	}
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("ReadEvents after controls: response=%#v err=%v", response, err)
+	}
+	controls := 0
+	for _, event := range response.Result.Events {
+		if event.Type == factoryapi.FactoryEventTypeSessionLifecycleControl {
+			serialized, err := json.Marshal(event)
+			if err != nil {
+				t.Fatalf("marshal lifecycle event: %v", err)
+			}
+			var wireEvent struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(serialized, &wireEvent); err != nil {
+				t.Fatalf("decode lifecycle event wire value: %v", err)
+			}
+			if wireEvent.Type != "SESSION_LIFECYCLE_CONTROL" {
+				t.Fatalf("serialized lifecycle event type = %q, want SESSION_LIFECYCLE_CONTROL", wireEvent.Type)
+			}
+			controls++
+		}
+	}
+	if controls < 2 {
+		t.Fatalf("SESSION_LIFECYCLE_CONTROL events = %d, want pause and resume", controls)
+	}
+}
+
+func assertDocumentedCancel(t *testing.T, client *mcpfactorysession.Client, sessionID string) {
+	t.Helper()
+	requestID, reason := "req-cancel-host-demo-01", "example complete"
+	response, err := client.Control(mcpfactorysession.ControlInput{SessionID: sessionID, Operation: factoryapi.FactorySessionLifecycleControlKindCancel, RequestID: &requestID, Reason: &reason})
+	if err != nil || response.Error != nil || response.Result == nil || response.Result.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("cancel: response=%#v err=%v", response, err)
+	}
+	assertClientSessionStatus(t, client, sessionID, factoryapi.FactorySessionDurableLifecycleStatusCanceled)
+}
+
+func assertClientSessionStatus(t *testing.T, client *mcpfactorysession.Client, sessionID string, want factoryapi.FactorySessionDurableLifecycleStatus) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		response, err := client.GetSession(mcpfactorysession.GetSessionInput{SessionID: sessionID})
+		if err != nil || response.Error != nil || response.Result == nil {
+			t.Fatalf("GetSession: response=%#v err=%v, want %s", response, err, want)
+		}
+		if response.Result.Status == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("GetSession did not reach %s within 5s", want)
+}
 
 func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummaries(t *testing.T) {
 	client := newFixtureMCPClient(t)
@@ -58,6 +186,27 @@ func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummari
 	}
 	if wantHash != "sha256:a32d5d0f136dcfef8061746c8f270702163c92a04e3c9f75eb9248e19bebd34a" {
 		t.Fatalf("golden hash drift = %q", wantHash)
+	}
+}
+
+func TestMockClient_ListDispatches_FiltersAndRejectsInvalidStatus(t *testing.T) {
+	client := newFixtureMCPClient(t)
+	row := publishedScenario(t, fixtures.FixturePurposeDispatchInspection)
+	if _, err := client.StartSync(syncSuccessExecutionRequest()); err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	empty, err := client.ListDispatches(mcpfactorysession.ListDispatchesInput{
+		SessionID: row.SessionID,
+		Phase:     "unknown",
+		Status:    "COMPLETED",
+	})
+	if err != nil || empty.Error != nil || empty.Result == nil || len(empty.Result.Dispatches) != 0 {
+		t.Fatalf("unknown phase response = %#v, %v", empty, err)
+	}
+	invalid, err := client.ListDispatches(mcpfactorysession.ListDispatchesInput{SessionID: row.SessionID, Status: "BROKEN"})
+	if err != nil || invalid.Error == nil || invalid.Result != nil || invalid.Error.Code != "BAD_REQUEST" {
+		t.Fatalf("invalid status response = %#v, %v", invalid, err)
 	}
 }
 

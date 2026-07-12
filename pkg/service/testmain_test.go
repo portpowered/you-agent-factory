@@ -41,6 +41,9 @@ import (
 	"time"
 )
 
+// recordModeServiceRunTimeout allows full runtime startup under Windows CI load.
+const recordModeServiceRunTimeout = 5 * time.Second
+
 func TestMain(m *testing.M) {
 	rootDir, err := os.MkdirTemp("", "pkg-service-test-env-*")
 	if err != nil {
@@ -641,7 +644,7 @@ func TestBuildFactoryService_RecordModeWritesInitialArtifact(t *testing.T) {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), recordModeServiceRunTimeout)
 	defer cancel()
 	if err := svc.Run(ctx); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -684,7 +687,7 @@ func TestBuildFactoryService_RecordModeResolvesGeneratedDefaultSessionPathAndCre
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), recordModeServiceRunTimeout)
 	defer cancel()
 	if err := svc.Run(ctx); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -733,7 +736,7 @@ func TestBuildFactoryService_RecordModeRecordsSubmittedWorkAtEngineTick(t *testi
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), recordModeServiceRunTimeout)
 	defer cancel()
 	if err := svc.Run(ctx); err != nil {
 		t.Fatalf("Run: %v", err)

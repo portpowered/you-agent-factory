@@ -86,6 +86,15 @@ func SessionReadResultFromAPI(response factoryapi.FactorySessionDurableReadModel
 	if response.PhaseSummaries != nil {
 		result.PhaseSummaries = phaseSummariesFromAPI(*response.PhaseSummaries)
 	}
+	if response.LatestCheckpoint != nil {
+		result.LatestCheckpoint = &factorysessionexecution.CheckpointRef{ID: response.LatestCheckpoint.Id}
+		if response.LatestCheckpoint.Label != nil {
+			result.LatestCheckpoint.Label = strings.TrimSpace(*response.LatestCheckpoint.Label)
+		}
+		if response.LatestCheckpoint.Phase != nil {
+			result.LatestCheckpoint.Phase = strings.TrimSpace(*response.LatestCheckpoint.Phase)
+		}
+	}
 	if response.Progress != nil {
 		result.Progress = progressCountsFromAPI(*response.Progress)
 	}
@@ -607,10 +616,23 @@ func progressCountsFromAPI(counts factoryapi.FactorySessionDurableProgressCounts
 	if counts.InFlightDispatches != nil {
 		out.InFlightDispatches = int(*counts.InFlightDispatches)
 	}
+	out.QueuedDispatches = intValueFromPointer(counts.QueuedDispatches)
+	out.RunningDispatches = intValueFromPointer(counts.RunningDispatches)
+	out.CanceledDispatches = intValueFromPointer(counts.CanceledDispatches)
+	out.TimedOutDispatches = intValueFromPointer(counts.TimedOutDispatches)
+	out.SkippedDispatches = intValueFromPointer(counts.SkippedDispatches)
+	out.InterruptedDispatches = intValueFromPointer(counts.InterruptedDispatches)
 	if counts.PhaseCount != nil {
 		out.PhaseCount = int(*counts.PhaseCount)
 	}
 	return out
+}
+
+func intValueFromPointer(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func failureSummaryFromAPI(failure factoryapi.FailureDetail) *factorysessionexecution.FailureSummary {

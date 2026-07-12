@@ -79,7 +79,7 @@ describe("normalizeFactorySessionGetResponse", () => {
   });
 
   it("maps durable JavaScript session reads into shared FactorySession runtime shape", () => {
-    const normalized = normalizeFactorySessionGetResponse({
+    const durableRead = {
       budgets: { maxAgents: 3 },
       dialect: "you-workflow-v1",
       lifecycle: {
@@ -107,9 +107,11 @@ describe("normalizeFactorySessionGetResponse", () => {
       sourceHash: "sha256:js-workflow-release-train",
       status: "RUNNING",
       usage: { resources: [] },
-    });
+    } as const;
+    const normalized = normalizeFactorySessionGetResponse(durableRead);
 
     expect(normalized.durableLifecycleStatus).toBe("RUNNING");
+    expect(normalized.durableReadModel).toBe(durableRead);
     expect(normalized.session.id).toBe("dur-sess-js-run-n-001");
     expect(normalized.session.runtime.orchestratorKind).toBe(
       FactoryOrchestratorKind.JAVASCRIPT,

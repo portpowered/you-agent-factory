@@ -553,6 +553,8 @@ func renderDurableShowResult(output io.Writer, session factoryapi.FactorySession
 		{label: "Factory session", value: session.SessionId},
 		{label: "Lifecycle status", value: string(session.Status)},
 		{label: "Orchestrator kind", value: string(session.OrchestratorKind)},
+		{label: "Source", value: formatDurableSource(session)},
+		{label: "Duration", value: formatDurableDuration(session.Lifecycle)},
 	}
 	if session.Dialect != nil {
 		rows = append(rows, struct {
@@ -560,23 +562,18 @@ func renderDurableShowResult(output io.Writer, session factoryapi.FactorySession
 			value string
 		}{label: "Workflow dialect", value: strings.TrimSpace(*session.Dialect)})
 	}
-	if session.Phase != nil {
-		rows = append(rows, struct {
-			label string
-			value string
-		}{label: "Phase", value: strings.TrimSpace(*session.Phase)})
-	}
-	if summary := formatDurableProgressSummary(session.Progress); summary != "" {
-		rows = append(rows, struct {
-			label string
-			value string
-		}{label: "Progress", value: summary})
-	}
+	rows = append(rows,
+		struct{ label, value string }{label: "Current phase", value: formatOptionalString(session.Phase)},
+		struct{ label, value string }{label: "Dispatch counts", value: formatDurableProgressSummary(session.Progress)},
+		struct{ label, value string }{label: "Latest checkpoint", value: formatDurableCheckpoint(session.LatestCheckpoint)},
+		struct{ label, value string }{label: "Effective policy", value: formatDurablePolicy(session)},
+		struct{ label, value string }{label: "Budget", value: formatDurableBudget(session.Budgets)},
+		struct{ label, value string }{label: "Usage", value: formatDurableUsage(session.Usage)},
+		struct{ label, value string }{label: "Artifacts", value: formatDurableArtifacts(session.ArtifactRefs)},
+		struct{ label, value string }{label: "Result availability", value: formatDurableResult(session)},
+	)
 	if session.ResultSummary != nil {
-		rows = append(rows, struct {
-			label string
-			value string
-		}{label: "Result status", value: string(session.ResultSummary.ResultStatus)})
+		rows = append(rows, struct{ label, value string }{label: "Result status", value: string(session.ResultSummary.ResultStatus)})
 	}
 
 	for _, row := range rows {
@@ -587,12 +584,12 @@ func renderDurableShowResult(output io.Writer, session factoryapi.FactorySession
 	if err := writeDurableLifecycleFields(output, session.Lifecycle); err != nil {
 		return err
 	}
-	return nil
+	return writeDurablePhaseSummaries(output, session.PhaseSummaries)
 }
 
 func formatDurableProgressSummary(progress *factoryapi.FactorySessionDurableProgressCounts) string {
 	if progress == nil {
-		return ""
+		return "unavailable"
 	}
 	parts := make([]string, 0, 4)
 	if progress.TotalDispatches != nil {
@@ -608,9 +605,136 @@ func formatDurableProgressSummary(progress *factoryapi.FactorySessionDurableProg
 		parts = append(parts, fmt.Sprintf("failed=%d", *progress.FailedDispatches))
 	}
 	if len(parts) == 0 {
-		return ""
+		return "unavailable"
 	}
 	return strings.Join(parts, ", ")
+}
+
+func formatOptionalString(value *string) string {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return "unavailable"
+	}
+	return strings.TrimSpace(*value)
+}
+
+func formatDurableSource(session factoryapi.FactorySessionDurableReadModel) string {
+	parts := []string{string(session.ResolvedSource.Kind)}
+	if session.ResolvedSource.SourceRef != nil {
+		parts = append(parts, "ref="+strings.TrimSpace(*session.ResolvedSource.SourceRef))
+	}
+	if session.SourceHash != nil {
+		parts = append(parts, "hash="+strings.TrimSpace(*session.SourceHash))
+	}
+	return strings.Join(parts, " ")
+}
+
+func formatDurableDuration(lifecycle *factoryapi.FactorySessionDurableLifecycleTimestamps) string {
+	if lifecycle == nil || lifecycle.StartedAt == nil || lifecycle.FinishedAt == nil {
+		return "unavailable"
+	}
+	return lifecycle.FinishedAt.Sub(*lifecycle.StartedAt).Round(time.Millisecond).String()
+}
+
+func formatDurableCheckpoint(checkpoint *factoryapi.FactorySessionCheckpointRef) string {
+	if checkpoint == nil {
+		return "none"
+	}
+	parts := []string{checkpoint.Id}
+	if checkpoint.Label != nil && strings.TrimSpace(*checkpoint.Label) != "" {
+		parts = append(parts, "label="+strings.TrimSpace(*checkpoint.Label))
+	}
+	if checkpoint.Phase != nil && strings.TrimSpace(*checkpoint.Phase) != "" {
+		parts = append(parts, "phase="+strings.TrimSpace(*checkpoint.Phase))
+	}
+	return strings.Join(parts, " ")
+}
+
+func formatDurablePolicy(session factoryapi.FactorySessionDurableReadModel) string {
+	if session.EffectivePolicy == nil && session.EffectivePolicyHash == nil {
+		return "unavailable"
+	}
+	if session.EffectivePolicyHash != nil {
+		return "hash=" + strings.TrimSpace(*session.EffectivePolicyHash)
+	}
+	if session.EffectivePolicy.PolicyHash != nil {
+		return "hash=" + strings.TrimSpace(*session.EffectivePolicy.PolicyHash)
+	}
+	return "available"
+}
+
+func formatDurableBudget(budgets *factoryapi.FactorySessionBudgets) string {
+	if budgets == nil || budgets.MaxAgents == nil {
+		return "unavailable"
+	}
+	return fmt.Sprintf("max agents=%d", *budgets.MaxAgents)
+}
+
+func formatDurableUsage(usage *factoryapi.FactorySessionUsage) string {
+	if usage == nil {
+		return "unavailable"
+	}
+	if len(usage.Resources) == 0 {
+		return "none"
+	}
+	parts := make([]string, 0, len(usage.Resources))
+	for _, resource := range usage.Resources {
+		parts = append(parts, fmt.Sprintf("%s=%d/%d", resource.Name, resource.Total-resource.Available, resource.Total))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatDurableArtifacts(artifacts *[]factoryapi.FactoryArtifactRef) string {
+	if artifacts == nil || len(*artifacts) == 0 {
+		return "none"
+	}
+	ids := make([]string, 0, len(*artifacts))
+	for _, artifact := range *artifacts {
+		ids = append(ids, fmt.Sprintf("%s (%s)", artifact.Id, artifact.Kind))
+	}
+	return strings.Join(ids, ", ")
+}
+
+func formatDurableResult(session factoryapi.FactorySessionDurableReadModel) string {
+	if session.ResultSummary == nil {
+		if session.PartialResultAvailable != nil && *session.PartialResultAvailable {
+			return "PARTIAL"
+		}
+		return "unavailable"
+	}
+	value := string(session.ResultSummary.ResultStatus)
+	if session.ResultSummary.Summary != nil && strings.TrimSpace(*session.ResultSummary.Summary) != "" {
+		value += " — " + strings.TrimSpace(*session.ResultSummary.Summary)
+	}
+	return value
+}
+
+func writeDurablePhaseSummaries(output io.Writer, summaries *[]factoryapi.FactorySessionDurablePhaseSummary) error {
+	if summaries == nil || len(*summaries) == 0 {
+		_, err := fmt.Fprintln(output, "Phase summaries:\tnone")
+		return err
+	}
+	if _, err := fmt.Fprintln(output, "Phase summaries:"); err != nil {
+		return err
+	}
+	for _, summary := range *summaries {
+		counts := []string{}
+		if summary.DispatchCount != nil {
+			counts = append(counts, fmt.Sprintf("total=%d", *summary.DispatchCount))
+		}
+		if summary.CompletedDispatchCount != nil {
+			counts = append(counts, fmt.Sprintf("completed=%d", *summary.CompletedDispatchCount))
+		}
+		if summary.FailedDispatchCount != nil {
+			counts = append(counts, fmt.Sprintf("failed=%d", *summary.FailedDispatchCount))
+		}
+		if len(counts) == 0 {
+			counts = append(counts, "counts unavailable")
+		}
+		if _, err := fmt.Fprintf(output, "- %s %s\n", summary.Phase, strings.Join(counts, ", ")); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func writeDurableLifecycleFields(

@@ -1,0 +1,6 @@
+name: status
+in: query
+required: false
+description: Canonical Dispatch lifecycle status.
+schema:
+  $ref: '../schemas/data-models/FactoryDispatchStatus.yaml'

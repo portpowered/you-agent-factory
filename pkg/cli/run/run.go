@@ -371,6 +371,10 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	}
 
 	reservedAPIServer, err := reserveAPIServerListener(cfg.Port, cfg.AutoPort)
+	if invocationMode {
+		reservedAPIServer = nil
+		err = nil
+	}
 	if err != nil {
 		return err
 	}
@@ -387,7 +391,7 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 
 	if invocationMode {
-		return runFactoryInvocation(ctx, cfg, *invocationRequest, logger, mockWorkersConfig, reservedAPIServer)
+		return runFactoryInvocation(ctx, cfg, *invocationRequest, logger, mockWorkersConfig)
 	}
 
 	dashboardReady := make(chan struct{})

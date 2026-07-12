@@ -14,7 +14,7 @@ func InjectCLITransport(ctx context.Context, cfg *initializer.Config) (*initiali
 }
 
 // InjectCLIRunner transfers dashboard-enabled process composition to the
-// initializer. Dashboard-suppressed invocation paths retain their existing
+// initializer. Dashboard-suppressed non-invocation paths retain their existing
 // service compatibility runner while that broader migration remains separate.
 func InjectCLIRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (initializer.LocalRuntimeRunner, error) {
 	if cfg == nil || cfg.SimpleDashboardRenderer == nil {

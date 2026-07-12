@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -437,6 +438,12 @@ func assertReplayedSessionMatchesLive(t *testing.T, live, replayed fse.SessionRe
 	}
 	if replayed.Policy.EffectiveHash != live.Policy.EffectiveHash {
 		t.Fatalf("policyHash = %q, want %q", replayed.Policy.EffectiveHash, live.Policy.EffectiveHash)
+	}
+	if !reflect.DeepEqual(replayed.PhaseSummaries, live.PhaseSummaries) {
+		t.Fatalf("phase summaries = %#v, want %#v", replayed.PhaseSummaries, live.PhaseSummaries)
+	}
+	if !reflect.DeepEqual(replayed.LatestCheckpoint, live.LatestCheckpoint) {
+		t.Fatalf("latest checkpoint = %#v, want %#v", replayed.LatestCheckpoint, live.LatestCheckpoint)
 	}
 	if replayed.Links.Session != live.Links.Session {
 		t.Fatalf("session link = %q, want %q", replayed.Links.Session, live.Links.Session)
