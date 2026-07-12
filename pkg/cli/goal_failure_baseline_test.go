@@ -428,8 +428,8 @@ func TestFailureBaseline_NamedPath_RunNamedGoalSurfacesPercentEncodedFactoryDir(
 	if got.Dir == "" {
 		t.Fatal("expected resolved factory directory on run config")
 	}
-	if !strings.Contains(got.Dir, "@you%2Fgoal") {
-		t.Fatalf("run dir = %q, want customer-visible @you%%2Fgoal segment", got.Dir)
+	if !strings.Contains(got.Dir, filepath.Join("@you", "goal")) {
+		t.Fatalf("run dir = %q, want hierarchical @you/goal layout", got.Dir)
 	}
 	if got.NamedFactoryResolution == nil {
 		t.Fatal("expected named-factory resolution metadata")
@@ -437,11 +437,11 @@ func TestFailureBaseline_NamedPath_RunNamedGoalSurfacesPercentEncodedFactoryDir(
 	if got.Dir != got.NamedFactoryResolution.FactoryDir {
 		t.Fatalf("run dir = %q, want resolved factory dir %q", got.Dir, got.NamedFactoryResolution.FactoryDir)
 	}
-	if !strings.Contains(got.NamedFactoryResolution.FactoryDir, "@you%2Fgoal") {
-		t.Fatalf("resolution factory dir = %q, want @you%%2Fgoal segment", got.NamedFactoryResolution.FactoryDir)
+	if !strings.Contains(got.NamedFactoryResolution.FactoryDir, filepath.Join("@you", "goal")) {
+		t.Fatalf("resolution factory dir = %q, want hierarchical @you/goal layout", got.NamedFactoryResolution.FactoryDir)
 	}
-	if filepath.Base(got.Dir) != "@you%2Fgoal" {
-		t.Fatalf("run dir base = %q, want @you%%2Fgoal layout segment", filepath.Base(got.Dir))
+	if filepath.Base(got.Dir) != "goal" {
+		t.Fatalf("run dir base = %q, want goal hierarchical leaf", filepath.Base(got.Dir))
 	}
 	if !strings.Contains(got.Dir, filepath.Join(".you-agent-factory", "you-agent-factories")) {
 		t.Fatalf("run dir = %q, want global named-factory root layout", got.Dir)

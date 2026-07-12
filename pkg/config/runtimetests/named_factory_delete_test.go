@@ -72,7 +72,7 @@ func TestDeleteNamedFactory_RejectsCurrentScopedFactory(t *testing.T) {
 	if !errors.Is(err, ErrNamedFactoryIsCurrent) {
 		t.Fatalf("error = %v, want ErrNamedFactoryIsCurrent", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(rootDir, "@you%2Ftts")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(rootDir, "@you", "tts")); statErr != nil {
 		t.Fatalf("scoped factory should remain on disk: %v", statErr)
 	}
 }
