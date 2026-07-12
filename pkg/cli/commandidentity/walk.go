@@ -1,27 +1,61 @@
 package commandidentity
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 // Walk inventories every reachable command in root without mutating the tree.
+// Commands are sorted by full path. Duplicate full paths fail the walk.
 // Function pointers are not serialized; only handler-presence evidence is recorded.
-func Walk(root *cobra.Command) Inventory {
+func Walk(root *cobra.Command) (Inventory, error) {
+	before := captureCommandTreeState(root)
+
+	records := collectCommandRecords(root)
+	if err := ensureUniqueCommandPaths(records); err != nil {
+		return Inventory{}, err
+	}
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].Path < records[j].Path
+	})
+
+	after := captureCommandTreeState(root)
+	if err := commandTreeStatesEqual(before, after); err != nil {
+		return Inventory{}, fmt.Errorf("command tree mutated during walk: %w", err)
+	}
+
 	return Inventory{
 		FormatVersion: FormatVersion,
 		RootPath:      root.CommandPath(),
-		Commands:      collectCommandRecords(root),
-	}
+		Commands:      records,
+	}, nil
 }
 
 func collectCommandRecords(cmd *cobra.Command) []CommandRecord {
 	records := []CommandRecord{recordCommand(cmd)}
-	for _, child := range cmd.Commands() {
+
+	children := cmd.Commands()
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].CommandPath() < children[j].CommandPath()
+	})
+	for _, child := range children {
 		records = append(records, collectCommandRecords(child)...)
 	}
 	return records
+}
+
+func ensureUniqueCommandPaths(records []CommandRecord) error {
+	seen := make(map[string]struct{}, len(records))
+	for _, record := range records {
+		if _, exists := seen[record.Path]; exists {
+			return fmt.Errorf("duplicate command path %q", record.Path)
+		}
+		seen[record.Path] = struct{}{}
+	}
+	return nil
 }
 
 func recordCommand(cmd *cobra.Command) CommandRecord {

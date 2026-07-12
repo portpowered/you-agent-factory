@@ -1,6 +1,7 @@
 package commandidentity_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -13,7 +14,10 @@ import (
 func TestWalk_SyntheticTreeRecordsCommandIdentityFields(t *testing.T) {
 	root := newSyntheticCommandTree()
 
-	inventory := commandidentity.Walk(root)
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
 
 	if inventory.FormatVersion != commandidentity.FormatVersion {
 		t.Fatalf("FormatVersion = %q, want %q", inventory.FormatVersion, commandidentity.FormatVersion)
@@ -178,7 +182,12 @@ func TestWalk_SyntheticTreeRecordsCommandIdentityFields(t *testing.T) {
 func TestWalk_DoesNotSerializeFunctionPointers(t *testing.T) {
 	root := newSyntheticCommandTree()
 
-	raw, err := json.Marshal(commandidentity.Walk(root))
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
+
+	raw, err := json.Marshal(inventory)
 	if err != nil {
 		t.Fatalf("marshal inventory: %v", err)
 	}
@@ -187,6 +196,87 @@ func TestWalk_DoesNotSerializeFunctionPointers(t *testing.T) {
 	if strings.Contains(encoded, "0x") {
 		t.Fatalf("inventory JSON must not serialize function pointers: %s", encoded)
 	}
+}
+
+func TestWalk_CommandsSortedByFullPath(t *testing.T) {
+	root := newSyntheticCommandTree()
+
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("Walk() error = %v", err)
+	}
+
+	for i := 1; i < len(inventory.Commands); i++ {
+		prev := inventory.Commands[i-1].Path
+		curr := inventory.Commands[i].Path
+		if prev > curr {
+			t.Fatalf("commands not sorted by path at index %d: %q > %q", i, prev, curr)
+		}
+	}
+}
+
+func TestWalk_DuplicatePathFails(t *testing.T) {
+	root := newDuplicatePathCommandTree()
+
+	_, err := commandidentity.Walk(root)
+	if err == nil {
+		t.Fatal("Walk() error = nil, want duplicate path failure")
+	}
+	if got := err.Error(); !strings.Contains(got, `duplicate command path "dup same"`) {
+		t.Fatalf("Walk() error = %q, want duplicate path diagnostic naming dup same", got)
+	}
+}
+
+func TestWalk_DoesNotMutateCommandTree(t *testing.T) {
+	root := newSyntheticCommandTree()
+	before, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("first Walk() error = %v", err)
+	}
+
+	after, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("second Walk() error = %v", err)
+	}
+
+	if !reflect.DeepEqual(before.Commands, after.Commands) {
+		t.Fatal("repeated walks changed emitted command records; walker mutated the tree or inventory shape")
+	}
+}
+
+func TestWalk_ProducesIdenticalJSONOnRepeat(t *testing.T) {
+	root := newSyntheticCommandTree()
+
+	first, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("first Walk() error = %v", err)
+	}
+	firstJSON, err := commandidentity.MarshalInventory(first)
+	if err != nil {
+		t.Fatalf("first MarshalInventory() error = %v", err)
+	}
+
+	second, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("second Walk() error = %v", err)
+	}
+	secondJSON, err := commandidentity.MarshalInventory(second)
+	if err != nil {
+		t.Fatalf("second MarshalInventory() error = %v", err)
+	}
+
+	if !bytes.Equal(firstJSON, secondJSON) {
+		t.Fatalf("repeated walks produced different JSON:\nfirst=%s\nsecond=%s", firstJSON, secondJSON)
+	}
+}
+
+func newDuplicatePathCommandTree() *cobra.Command {
+	root := &cobra.Command{Use: "dup"}
+	root.AddCommand(
+		&cobra.Command{Use: "same", Short: "first"},
+		&cobra.Command{Use: "same", Short: "second"},
+	)
+	return root
 }
 
 func newSyntheticCommandTree() *cobra.Command {
