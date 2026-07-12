@@ -185,6 +185,32 @@ func TestOwningPersistence_ReplaceCurrentPersistsWithoutSave(t *testing.T) {
 	}
 }
 
+func TestOwningPersistence_CreateNamedFactoryLeavesUnrelatedFactoriesIntact(t *testing.T) {
+	rootDir := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	from := writeFactoryConfigFile(t, rootDir, "gamma", saveTestNamedFactoryPayload(t, "gamma"))
+
+	if err := CreateFromFile(CreateFromFileConfig{
+		Name:   "gamma",
+		From:   from,
+		Dir:    rootDir,
+		Output: ioDiscard(t),
+	}); err != nil {
+		t.Fatalf("CreateFromFile: %v", err)
+	}
+
+	alphaPath := filepath.Join(rootDir, "alpha", interfaces.FactoryConfigFile)
+	data, err := os.ReadFile(alphaPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", alphaPath, err)
+	}
+	if !strings.Contains(string(data), "execute-alpha") {
+		t.Fatalf("alpha factory config = %q, want original alpha workstation body preserved", string(data))
+	}
+}
+
 func TestOwningPersistence_ReplaceCurrentRejectsStaleVersionWithoutWriting(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

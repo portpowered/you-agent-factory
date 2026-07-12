@@ -53,8 +53,6 @@ var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var validateFactory = factorycli.Validate
-var saveFactoryFromFile = factorycli.SaveFromFile
-var saveFactoryCurrent = factorycli.SaveCurrent
 var createFactoryFromFile = factorycli.CreateFromFile
 var replaceFactoryCurrent = factorycli.ReplaceCurrent
 var updateFactoryFromFile = factorycli.UpdateFromFile
@@ -216,7 +214,6 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 		newFactoryListCommand(globals, diagnostics),
 		newFactoryConfigCommand(globals, diagnostics),
 		newFactoryCreateCommand(globals, diagnostics),
-		newFactorySaveCommand(globals, diagnostics),
 		newFactoryUpdateFromFileCommand(globals, diagnostics),
 		newFactoryReplaceCurrentCommand(globals, diagnostics),
 		newFactoryDeleteCommand(globals, diagnostics),
@@ -367,52 +364,6 @@ func newFactoryReplaceCurrentCommand(globals *cliGlobalOptions, diagnostics *cli
 
 	registerDeprecatedPortFlag(cmd)
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	return cmd
-}
-
-func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	fileCfg := factorycli.SaveFromFileConfig{Dir: defaultcmd.FactoryDir}
-	liveCfg := factorycli.SaveCurrentConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "save [name]",
-		Short: "Deprecated: use factory create or factory replace-current",
-		Long: "Deprecated: use factory create for named-factory create and factory replace-current for live current-factory persist.\n\n" +
-			"With a name argument, this command validates a factory.json payload and materializes a new " +
-			"named factory layout under the selected factory root. Without a name, it reads the session " +
-			"current factory from the running service and persists it with PUT.",
-		Example: "  # Create a new named factory from a config file.\n" +
-			"  " + cliBinaryName + " factory create staging --from ./factory.json\n\n" +
-			"  # Create and select the new factory as current.\n" +
-			"  " + cliBinaryName + " factory create staging --from ./factory.json --set-current\n\n" +
-			"  # Persist the live current factory from the running service.\n" +
-			"  " + cliBinaryName + " factory replace-current\n\n" +
-			"  # Persist the live current factory for one session as JSON.\n" +
-			"  " + cliBinaryName + " --json factory replace-current --session session-beta",
-		Args:         cobra.MaximumNArgs(1),
-		SilenceUsage: true,
-		PreRunE:      rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				liveCfg.Server = globals.server
-				liveCfg.JSON = globals.json
-				liveCfg.Output = cmd.OutOrStdout()
-				liveCfg.Diagnostics = diagnostics.writer(cmd)
-				liveCfg.Verbose = diagnostics.verboseEnabled()
-				return saveFactoryCurrent(liveCfg)
-			}
-			fileCfg.Name = args[0]
-			fileCfg.JSON = globals.json
-			fileCfg.Output = cmd.OutOrStdout()
-			return saveFactoryFromFile(fileCfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&fileCfg.From, "from", "", "path to an existing factory.json payload (required with <name>)")
-	cmd.Flags().StringVar(&fileCfg.Dir, "dir", fileCfg.Dir, "factory root directory containing named factories")
-	cmd.Flags().BoolVar(&fileCfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&liveCfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
 }
 

@@ -10,7 +10,6 @@ you factory delete	delete <name>	you factory
 you factory list	list	you factory
 you factory query	query	you factory
 you factory replace-current	replace-current	you factory
-you factory save	save [name]	you factory
 you factory update	update <name>	you factory
 you init	init	you
 you mcp	mcp	you

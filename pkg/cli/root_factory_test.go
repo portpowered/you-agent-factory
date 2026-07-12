@@ -24,6 +24,98 @@ var removedFactoryConfigCommandPaths = []string{
 	"you factory validate",
 }
 
+var removedFactorySaveCommandPaths = []string{
+	"you factory save",
+}
+
+func TestFactorySaveCommand_NotRegistered(t *testing.T) {
+	root := NewRootCommand()
+
+	factoryCmd, _, err := root.Find([]string{"factory"})
+	if err != nil {
+		t.Fatalf("find factory: %v", err)
+	}
+	for _, child := range factoryCmd.Commands() {
+		if child.Name() == "save" {
+			t.Fatalf("factory must not register save as a direct child")
+		}
+	}
+}
+
+func TestFactorySaveCommand_DoesNotInvokeOwningPersistence(t *testing.T) {
+	originalCreate := createFactoryFromFile
+	originalReplace := replaceFactoryCurrent
+	defer func() {
+		createFactoryFromFile = originalCreate
+		replaceFactoryCurrent = originalReplace
+	}()
+
+	createCalled := false
+	replaceCalled := false
+	createFactoryFromFile = func(factorycli.CreateFromFileConfig) error {
+		createCalled = true
+		return nil
+	}
+	replaceFactoryCurrent = func(factorycli.ReplaceCurrentConfig) error {
+		replaceCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "save", "staging", "--from", "./factory.json"})
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected removed factory save with --from to fail")
+	}
+	if createCalled {
+		t.Fatal("removed factory save must not invoke create persistence")
+	}
+	if replaceCalled {
+		t.Fatal("removed factory save must not invoke replace-current persistence")
+	}
+
+	root = NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "save"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory save: %v", err)
+	}
+	if createCalled {
+		t.Fatal("nameless factory save must not invoke create persistence")
+	}
+	if replaceCalled {
+		t.Fatal("nameless factory save must not invoke replace-current persistence")
+	}
+}
+
+func TestFactorySaveCommand_NoHiddenOrDeprecatedWrappers(t *testing.T) {
+	root := NewRootCommand()
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("walk command tree: %v", err)
+	}
+
+	removed := make(map[string]struct{}, len(removedFactorySaveCommandPaths))
+	for _, path := range removedFactorySaveCommandPaths {
+		removed[path] = struct{}{}
+	}
+
+	for _, record := range inventory.Commands {
+		if _, stillRegistered := removed[record.Path]; stillRegistered {
+			t.Fatalf("removed path %q is still registered", record.Path)
+		}
+		if record.Visibility == "hidden" || record.Lifecycle == "deprecated" {
+			for path := range removed {
+				if record.Path == path {
+					t.Fatalf("%s command %q reintroduces removed path", record.Visibility, record.Path)
+				}
+			}
+		}
+	}
+}
+
 func TestFactoryConfigCommand_OldPathsNotRegistered(t *testing.T) {
 	root := NewRootCommand()
 	for _, path := range [][]string{
@@ -311,7 +403,6 @@ func TestFactoryCommand_RegistersSubcommands(t *testing.T) {
 		{"factory", "config", "flatten"},
 		{"factory", "config", "expand"},
 		{"factory", "create"},
-		{"factory", "save"},
 		{"factory", "update"},
 		{"factory", "replace-current"},
 		{"factory", "delete"},
@@ -360,6 +451,9 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	}
 	if strings.Contains(help, "you factory validate") {
 		t.Fatalf("factory help must not advertise direct you factory validate:\n%s", help)
+	}
+	if strings.Contains(help, "you factory save") {
+		t.Fatalf("factory help must not advertise removed you factory save:\n%s", help)
 	}
 }
 

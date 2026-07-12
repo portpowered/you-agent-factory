@@ -28,11 +28,6 @@ var replaceCurrentOwningLabels = replaceCurrentLabels{
 	failureLabel: "replace current factory",
 }
 
-var replaceCurrentLegacySaveLabels = replaceCurrentLabels{
-	logLabel:     "factory save",
-	failureLabel: "save current factory",
-}
-
 type replaceCurrentLabels struct {
 	logLabel     string
 	failureLabel string
