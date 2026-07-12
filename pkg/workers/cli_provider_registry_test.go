@@ -186,6 +186,9 @@ func assertCLIProviderProbeAvailability(t *testing.T, tc cliProviderProbeCase) {
 	}
 
 	got := ProbeCLIProviderAvailability(registration)
+	if got.Registration != registration {
+		t.Fatalf("registration = %#v, want %#v (provider/command diagnostic)", got.Registration, registration)
+	}
 	if got.Available != tc.wantAvailable {
 		t.Fatalf("available = %v, want %v", got.Available, tc.wantAvailable)
 	}
