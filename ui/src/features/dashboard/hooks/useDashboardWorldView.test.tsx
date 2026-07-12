@@ -33,25 +33,20 @@ describe("useDashboardWorldView", () => {
     useFactoryTimelineStore.getState().reset();
   });
 
-  it("projects the selected tick snapshot and shell flags without opening a stream", () => {
+  it("projects the selected tick snapshot and stream state without inferring shell readiness", () => {
     const { result } = renderHook(() => useDashboardWorldView(), {
       wrapper: createWrapper(),
     });
 
     expect(result.current.selectedTick).toBe(0);
     expect(result.current.snapshot?.tick_count).toBe(0);
-    expect(result.current.hasEvents).toBe(false);
-    expect(result.current.isInitialLoading).toBe(true);
-    expect(result.current.error).toBeNull();
     expect(result.current.streamState.status).toBe("connecting");
   });
 
-  it("moves from loading to error when stream state goes offline before events", () => {
+  it("projects offline stream state without consulting timeline ticks or events", () => {
     const { result } = renderHook(() => useDashboardWorldView(), {
       wrapper: createWrapper(),
     });
-
-    expect(result.current.isInitialLoading).toBe(true);
 
     act(() => {
       useDashboardStreamStore.setState({
@@ -63,10 +58,9 @@ describe("useDashboardWorldView", () => {
       });
     });
 
-    expect(result.current.isInitialLoading).toBe(false);
-    expect(result.current.error?.message).toBe(
+    expect(result.current.streamState.message).toBe(
       "Factory event stream disconnected. Showing last event state.",
     );
-    expect(result.current.hasEvents).toBe(false);
+    expect(result.current.streamState.status).toBe("offline");
   });
 });

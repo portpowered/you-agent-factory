@@ -54,7 +54,7 @@ const betaFactorySession: FactorySessionSummary = {
 describe("App dashboard session stream loading", () => {
   registerAppDashboardTestLifecycle();
 
-  it("shows the loading shell before the first streamed event, then clears after the first message", async () => {
+  it("shows the loading shell until an empty cold replay opens, then renders the known-empty dashboard", async () => {
     const messages = getHeaderControlsMessages("en");
 
     resetTimelineForInitialStreamLoad();
@@ -73,10 +73,9 @@ describe("App dashboard session stream loading", () => {
     });
     expect(screen.queryByRole("slider", { name: "Timeline tick" })).toBeNull();
 
-    await emitTimelineMessagesAct(
-      requireEventStream(MockEventSource.instances),
-      [selectedTickTimelineEvents[0]],
-    );
+    act(() => {
+      requireEventStream(MockEventSource.instances).open();
+    });
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -85,12 +84,12 @@ describe("App dashboard session stream loading", () => {
       expect(
         screen.queryByRole("heading", { name: messages.loadingDashboardTitle }),
       ).toBeNull();
-      expect(slider.value).toBe("1");
+      expect(slider.value).toBe("0");
     });
     await settleAppShellDashboardEffects();
   });
 
-  it.fails("renders a restored tick-zero checkpoint after preflight and a quiet stream open", async () => {
+  it("renders a restored tick-zero checkpoint after preflight and a quiet stream open", async () => {
     const messages = getHeaderControlsMessages("en");
     const fixture = createQuietCheckpointReloadFixture(0);
     await fixture.installCheckpoint();

@@ -268,6 +268,7 @@ describe("useDashboardSnapshot composer", () => {
 
     act(() => {
       replayHarness.emitSnapshot(REFRESHED_SNAPSHOT);
+      replayHarness.getLastStream().emitOpen();
     });
 
     await waitFor(() => {
