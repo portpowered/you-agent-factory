@@ -247,13 +247,17 @@ export function useDashboardSnapshot({
         : checkpointHydrated && preflightReady
           ? "success"
           : "loading";
+  const hasReusableCheckpoint =
+    persistedCheckpoint != null ||
+    currentReplayCheckpoint != null ||
+    snapshot != null;
 
   const synchronizationShellState = useMemo(
     () =>
       deriveDashboardSynchronizationShellState({
         checkpoint: !checkpointHydrated
           ? { status: "pending" }
-          : persistedCheckpoint
+          : hasReusableCheckpoint
             ? { status: "reusable" }
             : { status: "absent" },
         connectivity:
@@ -280,7 +284,7 @@ export function useDashboardSnapshot({
       }),
     [
       checkpointHydrated,
-      persistedCheckpoint,
+      hasReusableCheckpoint,
       preflightError,
       preflightReady,
       rawSessionID,

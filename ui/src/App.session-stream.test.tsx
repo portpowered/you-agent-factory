@@ -22,7 +22,6 @@ import {
   MockEventSource,
   registerAppDashboardTestLifecycle,
   renderApp,
-  renderAppWithDashboardShell,
   settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
 import { selectedTickTimelineEvents } from "./testing/app-shell-timeline-test-utils";
@@ -165,9 +164,12 @@ describe("App dashboard session stream tab switch", () => {
     await waitFor(() => {
       expect(MockEventSource.instances.length).toBeGreaterThan(0);
     });
+    const defaultStream = requireEventStream(MockEventSource.instances);
+    act(() => {
+      defaultStream.open();
+    });
     await screen.findByRole("tab", { name: "beta" });
 
-    const defaultStream = requireEventStream(MockEventSource.instances);
     expect(defaultStream.url).toBe(
       `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
@@ -197,6 +199,7 @@ describe("App dashboard session stream tab switch", () => {
     expect(betaStream.url).toBe("/factory-sessions/session-beta/events");
 
     act(() => {
+      betaStream.open();
       betaStream.emit("snapshot", betaSnapshot);
     });
 
@@ -219,10 +222,19 @@ describe("App dashboard session stream pause", () => {
     const messages = getHeaderControlsMessages("en");
     const betaSnapshot = buildBetaSessionSnapshot();
 
-    await renderAppWithDashboardShell({
+    renderApp({
       factorySessions: [rootFactorySession, betaFactorySession],
       snapshot: semanticWorkflowDashboardSnapshot,
     });
+
+    await waitFor(() => {
+      expect(MockEventSource.instances.length).toBeGreaterThan(0);
+    });
+    act(() => {
+      requireEventStream(MockEventSource.instances).open();
+    });
+    await screen.findByRole("heading", { name: "U" });
+    await settleAppShellDashboardEffects();
 
     await screen.findByRole("tab", { name: "beta" });
     fireEvent.click(screen.getByRole("tab", { name: "beta" }));
@@ -236,6 +248,7 @@ describe("App dashboard session stream pause", () => {
     const liveStream = requireEventStream(MockEventSource.instances);
 
     act(() => {
+      liveStream.open();
       liveStream.emit("snapshot", betaSnapshot);
     });
 
@@ -291,6 +304,9 @@ describe("App dashboard session stream refresh", () => {
     });
 
     const initialStream = requireEventStream(MockEventSource.instances);
+    act(() => {
+      initialStream.open();
+    });
     await emitTimelineMessagesAct(initialStream, [
       selectedTickTimelineEvents[0],
     ]);
@@ -327,6 +343,9 @@ describe("App dashboard session stream refresh", () => {
       `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/events`,
     );
 
+    act(() => {
+      refreshedStream.open();
+    });
     await emitTimelineMessagesAct(refreshedStream, [
       selectedTickTimelineEvents[0],
     ]);
