@@ -1,0 +1,88 @@
+package recording
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestBuildRetainsCanonicalSummariesAndOmitsRuntimeDetails(t *testing.T) {
+	t.Parallel()
+	createdAt := time.Date(2026, 7, 12, 16, 0, 1, 0, time.UTC)
+	facts := CanonicalFacts{
+		SessionID: "session-js-002", Status: "COMPLETED", OrchestratorKind: "JAVASCRIPT",
+		SourceRef: "workflow/audit.js", SourceHash: digest('1'), PolicyHash: digest('2'),
+		Arguments: map[string]any{"region": "west", "token": "argument-is-digested-not-retained"},
+		Artifacts: []CanonicalArtifact{{ID: "artifact-1", Kind: "RESULT", Visibility: "PUBLIC", Label: "Result", ContentHash: digest('3'), SizeBytes: 42, CreatedAt: createdAt, SecretsRedacted: 3}},
+		Events: []json.RawMessage{
+			json.RawMessage(`{"id":"event-1","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T16:00:00Z"},"payload":{"checkpointBody":{"secret":"checkpoint"},"childDispatches":[{"id":"dispatch-secret"}]}}`),
+			json.RawMessage(`{"id":"event-2","type":"SESSION_COMPLETED","context":{"sequence":1,"eventTime":"2026-07-12T16:00:02Z"},"payload":{"artifactIds":["artifact-1"],"providerTranscript":"provider-secret"}}`),
+		},
+	}
+
+	value, err := Build(facts)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if value.ArgumentsDigest == "" || strings.Contains(value.ArgumentsDigest, "argument-is-digested") {
+		t.Fatalf("argumentsDigest = %q", value.ArgumentsDigest)
+	}
+	if value.Redaction.SecretsRedacted != 3 || len(value.Artifacts) != 1 || len(value.Events) != 2 {
+		t.Fatalf("recording summaries = %#v", value)
+	}
+	if len(value.Events[1].ArtifactIDs) != 1 || value.Events[1].ArtifactIDs[0] != "artifact-1" {
+		t.Fatalf("event artifact references = %#v", value.Events[1].ArtifactIDs)
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	for _, prohibited := range []string{"argument-is-digested-not-retained", `"secret":"checkpoint"`, "dispatch-secret", "provider-secret"} {
+		if strings.Contains(string(encoded), prohibited) {
+			t.Fatalf("portable recording leaked %q: %s", prohibited, encoded)
+		}
+	}
+}
+
+func TestWriteFailureLeavesNoCompleteRecording(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "destination-is-directory")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	value, err := Build(minimalCanonicalFacts())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if err := Write(path, value); err == nil {
+		t.Fatal("Write succeeded, want publish failure")
+	}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".tmp") {
+			t.Fatalf("temporary recording remained after failure: %s", entry.Name())
+		}
+	}
+}
+
+func TestBuildRejectsMalformedCanonicalEvent(t *testing.T) {
+	t.Parallel()
+	facts := minimalCanonicalFacts()
+	facts.Events = []json.RawMessage{json.RawMessage(`{"id":"event-1"}`)}
+	_, err := Build(facts)
+	if err == nil || !strings.Contains(err.Error(), "canonical event 0") {
+		t.Fatalf("Build error = %v", err)
+	}
+}
+
+func minimalCanonicalFacts() CanonicalFacts {
+	return CanonicalFacts{SessionID: "session-js-002", Status: "COMPLETED", OrchestratorKind: "JAVASCRIPT", SourceRef: "workflow/audit.js", SourceHash: digest('1'), PolicyHash: digest('2')}
+}
+
+func digest(character byte) string { return "sha256:" + strings.Repeat(string(character), 64) }

@@ -1,13 +1,63 @@
 package factorysessionexecution
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+// RecordingError correlates a safe export failure without changing the live session.
+type RecordingError struct {
+	SessionID, Path string
+	Err             error
+}
+
+func (e *RecordingError) Error() string {
+	return fmt.Sprintf("record Factory Session %q to %q: %v", e.SessionID, e.Path, e.Err)
+}
+func (e *RecordingError) Unwrap() error { return e.Err }
+
+// WriteRecording snapshots canonical public facts and writes their portable form.
+func (s *JavaScriptRuntimeService) WriteRecording(ctx context.Context, sessionID, path string) error {
+	if err := ctx.Err(); err != nil {
+		return &RecordingError{sessionID, path, err}
+	}
+	s.mu.RLock()
+	state, found := s.sessions[sessionID]
+	if !found {
+		s.mu.RUnlock()
+		return &RecordingError{sessionID, path, ErrSessionNotFound}
+	}
+	snapshot := cloneRuntimeSessionState(state)
+	s.mu.RUnlock()
+	facts := recording.CanonicalFacts{SessionID: snapshot.session.SessionID, Status: string(snapshot.session.Status), OrchestratorKind: snapshot.session.OrchestratorKind, SourceRef: snapshot.session.ResolvedSource.SourceRef, SourceHash: snapshot.session.SourceHash, PolicyHash: snapshot.session.Policy.EffectiveHash, Events: snapshot.events}
+	if snapshot.startRequest != nil {
+		facts.Arguments = snapshot.startRequest.Args
+	}
+	for _, artifact := range snapshot.artifacts {
+		createdAt, secrets := time.Time{}, int64(0)
+		if artifact.CreatedAt != nil {
+			createdAt = *artifact.CreatedAt
+		}
+		if artifact.RedactionCounts != nil {
+			secrets = int64(artifact.RedactionCounts.Secrets)
+		}
+		facts.Artifacts = append(facts.Artifacts, recording.CanonicalArtifact{ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility, Label: artifact.Label, ContentHash: artifact.ContentHash, SizeBytes: artifact.SizeBytes, CreatedAt: createdAt, SecretsRedacted: secrets})
+	}
+	value, err := recording.Build(facts)
+	if err == nil {
+		err = recording.Write(path, value)
+	}
+	if err != nil {
+		return &RecordingError{sessionID, path, err}
+	}
+	return nil
+}
 
 // projectPetriRunningSessionState initializes the canonical read model owned by
 // Factory Session execution before the first typed Petri mutation is recorded.

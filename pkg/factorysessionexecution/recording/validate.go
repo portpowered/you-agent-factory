@@ -92,7 +92,7 @@ func validateSession(r Recording) error {
 	if strings.TrimSpace(r.Session.ID) == "" {
 		return diagnostic(CodeInvalidIdentity, "session", "session.id", "is required")
 	}
-	if !slices.Contains([]string{"RUNNING", "PAUSED", "COMPLETED", "FAILED", "CANCELED", "TERMINATED", "INTERRUPTED"}, r.Session.Status) {
+	if !slices.Contains([]string{"QUEUED", "AWAITING_APPROVAL", "RUNNING", "PAUSED", "RESUMING", "SUCCEEDED", "COMPLETED", "FAILED", "CANCELING", "CANCELED", "TIMED_OUT", "TERMINATED", "INTERRUPTED"}, r.Session.Status) {
 		return diagnostic(CodeInvalidSummary, "session", "session.status", "is not a supported Factory Session status")
 	}
 	if r.Session.OrchestratorKind != "JAVASCRIPT" {
