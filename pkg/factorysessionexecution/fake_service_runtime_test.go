@@ -3181,3 +3181,38 @@ func waitForResumeCoverageDispatchStatus(
 	}
 	t.Fatalf("dispatch %s did not reach status %s within %s", dispatchID, want, timeout)
 }
+
+func TestJavaScriptRuntimeServiceWriteRecordingUsesCanonicalSnapshotAndCorrelatesFailure(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-1234567890abcdef1234567890abcdef"
+	observedAt := time.Date(2026, 7, 12, 16, 30, 0, 0, time.UTC)
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	service.sessions[sessionID] = &runtimeSessionState{
+		session:        SessionReadResult{SessionID: sessionID, Status: LifecycleStatusSucceeded, OrchestratorKind: interfaces.OrchestratorKindJavaScript, ResolvedSource: ResolvedSource{SourceRef: "workflow/audit.js"}, SourceHash: "sha256:" + strings.Repeat("1", 64), Policy: PolicyProjection{EffectiveHash: "sha256:" + strings.Repeat("2", 64)}},
+		startRequest:   &StartRequest{Args: map[string]any{"customer": "north"}},
+		artifacts:      []ArtifactSummary{{ID: "artifact-1", Kind: "RESULT", Visibility: "PUBLIC", ContentHash: "sha256:" + strings.Repeat("3", 64), SizeBytes: 2, CreatedAt: &observedAt}},
+		events:         []json.RawMessage{json.RawMessage(`{"id":"event-1","type":"SESSION_COMPLETED","context":{"sequence":0,"eventTime":"2026-07-12T16:30:00Z"},"payload":{"artifactIds":["artifact-1"]}}`)},
+		runtimeRecords: []workflowruntime.RuntimeRecord{{Kind: workflowruntime.RecordKindCheckpoint, Checkpoint: &workflowruntime.CheckpointRecord{ID: "checkpoint-secret", State: map[string]any{"secret": "raw-state"}}}},
+	}
+	path := filepath.Join(t.TempDir(), "session.recording.json")
+	if err := service.WriteRecording(context.Background(), sessionID, path); err != nil {
+		t.Fatalf("WriteRecording: %v", err)
+	}
+	encoded, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if strings.Contains(string(encoded), "checkpoint-secret") || strings.Contains(string(encoded), "raw-state") {
+		t.Fatalf("recording leaked runtime state: %s", encoded)
+	}
+	badPath := filepath.Join(t.TempDir(), "missing", "\x00invalid")
+	err = service.WriteRecording(context.Background(), sessionID, badPath)
+	var recordingErr *RecordingError
+	if !errors.As(err, &recordingErr) || recordingErr.SessionID != sessionID || recordingErr.Path != badPath {
+		t.Fatalf("WriteRecording failure = %#v", err)
+	}
+	read, readErr := service.GetSession(context.Background(), sessionID)
+	if readErr != nil || read.Status != LifecycleStatusSucceeded {
+		t.Fatalf("live session changed after recording failure: read=%#v err=%v", read, readErr)
+	}
+}

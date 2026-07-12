@@ -61,12 +61,16 @@ func RecordingsDatedDir(rootDir string, at time.Time) string {
 
 // RuntimeLogsDatedDir returns the dated subdirectory used for runtime logs.
 func RuntimeLogsDatedDir(rootDir string, at time.Time) string {
-	return filepath.Join(rootDir, at.UTC().Format(recordingsMonthFmt), at.UTC().Format(recordingsDateFmt))
+	return calendarDatedDir(rootDir, at)
 }
 
 // RuntimeMetricsDatedDir returns the dated subdirectory used for runtime
 // metrics.
 func RuntimeMetricsDatedDir(rootDir string, at time.Time) string {
+	return calendarDatedDir(rootDir, at)
+}
+
+func calendarDatedDir(rootDir string, at time.Time) string {
 	at = at.UTC()
 	return filepath.Join(rootDir, at.Format(runtimeMetricsYear), at.Format(runtimeMetricsMonth), at.Format(runtimeMetricsDay))
 }

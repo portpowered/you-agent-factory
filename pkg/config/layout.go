@@ -15,6 +15,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/config/builtinsubagent"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -873,9 +874,10 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/fusion": BuiltInFusionFactoryJSON,
-	"@you/goal":   BuiltInGoalFactoryJSON,
-	"@you/tts":    BuiltInTTSFactoryJSON,
+	"@you/fusion":    BuiltInFusionFactoryJSON,
+	"@you/goal":      BuiltInGoalFactoryJSON,
+	"@you/subagent":  BuiltInSubagentFactoryJSON,
+	"@you/tts":       BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
@@ -955,11 +957,11 @@ func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*Name
 }
 
 func canonicalNamedFactoryName(name string) (string, error) {
-	segment, err := NamedFactoryNameToLayoutSegment(name)
+	segments, err := NamedFactoryPathSegments(name)
 	if err != nil {
 		return "", err
 	}
-	return NamedFactoryLayoutSegmentToName(segment)
+	return NamedFactoryNameFromPathSegments(segments)
 }
 
 const legacyPromptWorkIDTemplateMarker = "{{ .WorkID }}"
@@ -970,7 +972,7 @@ func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	if err == nil {
 		upgradedDir, upgradeErr := upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, name, factoryDir)
 		if upgradeErr != nil {
-			return "", false, upgradeErr
+			return "", false, MaybeFormatBlockingFactoryLoadOperatorError(upgradeErr, factoryDir)
 		}
 		return upgradedDir, true, nil
 	}
@@ -987,7 +989,10 @@ func upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, canonicalName, fact
 	}
 	upgradePaths, err := materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir)
 	if err != nil {
-		return "", fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err)
+		return "", MaybeFormatBlockingFactoryLoadOperatorError(
+			fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err),
+			factoryDir,
+		)
 	}
 	if len(upgradePaths) == 0 {
 		return factoryDir, nil
@@ -1065,18 +1070,17 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		return "", false, nil
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
+	targetDir, err := MapNamedFactoryDir(globalRoot, canonicalName)
 	if err != nil {
 		return "", false, err
 	}
-	targetDir := filepath.Join(globalRoot, segment)
 	if _, err := os.Stat(targetDir); err == nil {
 		if err := requireFactoryConfig(targetDir); err != nil {
 			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
 		}
 		upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, targetDir)
 		if err != nil {
-			return "", false, err
+			return "", false, MaybeFormatBlockingFactoryLoadOperatorError(err, targetDir)
 		}
 		return upgradedDir, true, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -1085,12 +1089,22 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 
 	factoryDir, err := PersistNamedFactory(globalRoot, canonicalName, payload)
 	if err != nil {
-		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err)
+		factoryPath := factoryDir
+		if strings.TrimSpace(factoryPath) == "" {
+			factoryPath = targetDir
+		}
+		return "", false, MaybeFormatBlockingFactoryLoadOperatorError(
+			fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err),
+			factoryPath,
+		)
 	}
 	return factoryDir, true, nil
 }
 
 var BuiltInGoalFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
+
+// BuiltInSubagentFactoryJSON is the canonical runnable @you/subagent packaged factory payload.
+var BuiltInSubagentFactoryJSON = builtinsubagent.BuiltInSubagentFactoryJSON
 
 // BuiltInFusionFactoryJSON is the canonical runnable @you/fusion packaged factory payload.
 var BuiltInFusionFactoryJSON = []byte(`{

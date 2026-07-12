@@ -1,7 +1,4 @@
-import {
-  DEFAULT_FACTORY_SESSION_ID,
-  isDefaultFactorySessionID,
-} from "../../../api/session-routing";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   identityMismatchDiagnostic,
   recordSessionPersistenceInvalidation,
@@ -41,13 +38,8 @@ function matchesStoredCheckpointFactorySessionID(
   const requestedSessionID = factorySessionID.trim();
   const storedFactorySessionID =
     envelope.streamIdentity?.factorySessionID?.trim() ?? "";
-  if (storedFactorySessionID === requestedSessionID) {
-    return true;
-  }
   return (
-    isDefaultFactorySessionID(requestedSessionID) &&
-    storedFactorySessionID !== "" &&
-    !isDefaultFactorySessionID(storedFactorySessionID)
+    requestedSessionID !== "" && storedFactorySessionID === requestedSessionID
   );
 }
 
@@ -142,6 +134,7 @@ async function listIndexedCheckpoints(
 export async function peekPersistedTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   sessionID: string | null,
+  options: { signal?: AbortSignal } = {},
 ): Promise<PersistedTimelineCheckpointPeek | null> {
   const normalizedSessionID = sessionID?.trim();
   if (!indexedDB || !normalizedSessionID) {
@@ -149,7 +142,10 @@ export async function peekPersistedTimelineCheckpoint(
   }
 
   try {
-    const envelopes = await listIndexedCheckpoints(indexedDB);
+    const envelopes = await listIndexedCheckpoints(indexedDB, options.signal);
+    if (options.signal?.aborted) {
+      return null;
+    }
     const envelope = envelopes.find((candidate) =>
       matchesStoredCheckpointFactorySessionID(candidate, normalizedSessionID),
     );

@@ -1,12 +1,9 @@
+import { factoryAPIURL } from "../baseUrl";
 import type { FactoryEventReconnectCursor } from "../events";
 import type { components } from "../generated/openapi";
 import { factorySessionScopedPath } from "../session-routing";
-import { factoryAPIURL } from "../baseUrl";
 import { isAPIRecord, readAPIResponseBody } from "../transport";
-import {
-  buildFactorySessionsAPIError,
-  FactorySessionsAPIError,
-} from "./api";
+import { buildFactorySessionsAPIError, FactorySessionsAPIError } from "./api";
 
 export type FactorySessionSyncPreflightResponse =
   components["schemas"]["FactorySessionSyncPreflightResponse"];
@@ -25,6 +22,7 @@ export interface GetFactorySessionSyncPreflightOptions
   extends FactorySessionSyncPreflightIdentityHints {
   fetch?: typeof globalThis.fetch;
   logicalResolve?: FactorySessionLogicalResolveHint;
+  signal?: AbortSignal;
 }
 
 export async function getFactorySessionSyncPreflight(
@@ -52,9 +50,13 @@ export async function getFactorySessionSyncPreflight(
       ),
       {
         method: "GET",
+        ...(options.signal ? { signal: options.signal } : {}),
       },
     );
   } catch (error) {
+    if (options.signal?.aborted) {
+      throw error;
+    }
     throw new FactorySessionsAPIError(
       "The dashboard could not reach the factory sessions API.",
       {

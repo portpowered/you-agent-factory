@@ -36,6 +36,82 @@ describe("useDashboardSessionStore", () => {
     ]);
   });
 
+  it("atomically replaces a transient selector in selection and tab order", () => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+      sessionTabOrder: [DEFAULT_FACTORY_SESSION_ID, "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .resolveSessionIdentity(
+        DEFAULT_FACTORY_SESSION_ID,
+        "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+        ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+      );
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      selectedSessionID: "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+      sessionTabOrder: ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+    });
+  });
+
+  it("does not replace a newer selection when delayed discovery completes", () => {
+    useDashboardSessionStore.setState({
+      selectedSessionID: "session-beta",
+      sessionTabOrder: [DEFAULT_FACTORY_SESSION_ID, "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .resolveSessionIdentity(
+        DEFAULT_FACTORY_SESSION_ID,
+        "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+        ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+      );
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      selectedSessionID: "session-beta",
+      sessionTabOrder: ["a1b2c3d4-e5f6-4789-a012-3456789abcde", "session-beta"],
+    });
+  });
+
+  it("atomically remaps a replaced live session without changing sibling tabs", () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: ["session-stale", "session-beta"],
+      selectedSessionID: "session-stale",
+      sessionTabOrder: ["session-stale", "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .remapSelectedSessionIdentity("session-replacement");
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      pausedSessionIDs: ["session-beta"],
+      selectedSessionID: "session-replacement",
+      sessionTabOrder: ["session-replacement", "session-beta"],
+    });
+  });
+
+  it("does not duplicate a replacement identity already present in tab metadata", () => {
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: ["session-stale", "session-replacement"],
+      selectedSessionID: "session-stale",
+      sessionTabOrder: ["session-stale", "session-replacement", "session-beta"],
+    });
+
+    useDashboardSessionStore
+      .getState()
+      .remapSelectedSessionIdentity("session-replacement");
+
+    expect(useDashboardSessionStore.getState()).toMatchObject({
+      pausedSessionIDs: ["session-replacement"],
+      selectedSessionID: "session-replacement",
+      sessionTabOrder: ["session-replacement", "session-beta"],
+    });
+  });
+
   it("clears the selected session when set to null", () => {
     useDashboardSessionStore.getState().setSelectedSessionID(null);
     expect(useDashboardSessionStore.getState().selectedSessionID).toBeNull();

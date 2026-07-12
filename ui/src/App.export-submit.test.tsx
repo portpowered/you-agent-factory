@@ -15,6 +15,7 @@ import {
   installExportDownloadProbe,
   toArrayBuffer,
 } from "./testing/app-shell-export-test-utils";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   baselineSnapshot,
   chainRenderAppFetchMock,
@@ -65,7 +66,8 @@ describe("App shell export submission flows", () => {
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
         method === "GET" &&
-        path === "/factory-sessions/~default/factory"
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`
       ) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
@@ -162,7 +164,8 @@ describe("App shell export submission flows", () => {
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
         method === "GET" &&
-        path === "/factory-sessions/~default/factory"
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`
       ) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
@@ -245,7 +248,8 @@ describe("App shell export submission flows", () => {
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
         method === "GET" &&
-        path === "/factory-sessions/~default/factory"
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`
       ) {
         return jsonResponse(currentFactoryWithBundledFilesAPIResponse);
       }

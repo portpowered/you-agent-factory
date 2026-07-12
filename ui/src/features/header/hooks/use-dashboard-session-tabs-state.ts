@@ -9,6 +9,7 @@ import {
   listFactorySessions,
   openFactorySession,
 } from "../../../api/factory-sessions";
+import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   classifyFactorySessionFolderValidationError,
@@ -19,8 +20,6 @@ import {
   orderFactorySessions,
   selectedFactorySessionTarget,
 } from "../lib/dashboard-session-tabs-utils";
-
-export const FACTORY_SESSIONS_QUERY_KEY = ["factory-sessions"] as const;
 
 export type DashboardSessionTabsState = ReturnType<
   typeof useDashboardSessionTabsState

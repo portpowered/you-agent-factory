@@ -98,12 +98,50 @@ primary-result behavior.
   it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
   restarts; values starting with `local-` that are not valid `local-<uuid>` fail
   startup with a config error instead of being silently replaced.
+- Canonical `you config init` system bootstrap belongs in
+  `pkg/config/configinit` (`Init`, `SystemConfigOutcome`) and
+  `pkg/cli/configinit` (`Init`, `InitConfig`) with command wiring in
+  `pkg/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
+  Fresh homes create `~/.you-agent-factory/config.json` through
+  `pkg/config/systemconfig.EnsureLocalBackendScope`; existing config files are
+  validated with `operatorconfig.LoadFileConfig` and left byte-identical on
+  re-run. Packaged defaults materialize through
+  `factoryconfig.EnsureBuiltInNamedFactories`, which skips existing factory
+  directories without rewriting user-edited files and can still create missing
+  catalog entries on later runs. Isolated-home rerun coverage lives in
+  `pkg/config/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
+  `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
+  `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
+  `pkg/cli/configinit/init_test.go` / `pkg/cli/root_config_init_test.go`. Keep
+  `you factory config` factory.json tooling separate from this top-level
+  operator/system initializer. Post-install bootstrap is invoked from
+  `scripts/install.sh` and `scripts/install.ps1` via the installed binary's
+  `config init` subcommand; installer smoke coverage lives in
+  `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
+  / `scripts/release/smoke-install.ps1`.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`, `InjectCLIRunner`), and `cmd/factory/main.go` (`buildCLIRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `InjectCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Compose regression coverage for quiet batch work-file preservation lives in `cmd/factory/compose/compose_test.go` (`TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchMode`). Focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/service/invocation_bootstrap_test.go`, `pkg/service/invocation_bootstrap_ownership_test.go`, and consolidated startup parity plus cross-transport composition evidence in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
+- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`, `InjectCLIRunner`), and `cmd/factory/main.go` (`buildCLIRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `InjectCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Compose regression coverage for quiet batch work-file preservation lives in `cmd/factory/compose/compose_test.go` (`TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchMode`). Focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/service/invocation_bootstrap_test.go`, `pkg/service/invocation_bootstrap_ownership_test.go`, and consolidated startup parity plus cross-transport composition evidence in `pkg/initializer/startup_compatibility_test.go`.   Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
+- `you models invoke` reuses the same `service.BuildInvocationBootstrap` /
+  `service.NormalizeInvocationBootstrapConfig` path as one-shot factory
+  invocation, wired from `pkg/cli/models/bootstrap_invoke.go`. The CLI must call
+  `FactoryService.InvokeModel` through the bootstrap-owned service rather than
+  posting to `/models/{model_name}/invocations`; keep managed readiness/lifecycle
+  error mapping aligned with `pkg/api/handlers_models.go` via
+  `mapBootstrapModelInvokeError`. Return classified `InferenceFailure` and
+  `ManagedRuntimeInvocationError` values without re-wrapping so readiness causes
+  stay `errors.Is`-able;   non-ready bootstrap invoke coverage lives in
+  `pkg/cli/models/non_ready_invoke_test.go` (stub bootstrap lifecycle vocabulary) and
+  `pkg/cli/models/bootstrap_lifecycle_invoke_test.go` (offline MISSING/LOADING/FAILED
+  integration through the real bootstrap). Ready offline invoke coverage lives in
+  `pkg/cli/models/offline_ready_invoke_test.go`; bootstrap routing and failure-baseline
+  contracts live in `pkg/cli/models/bootstrap_invoke_test.go` and
+  `pkg/cli/models/failure_baseline_no_server_test.go`. Factory root resolution for invoke belongs in
+  `pkg/cli/models` (`resolveModelsInvokeFactoryDir`), with operator defaults and
+  logger passed from `pkg/cli/root.go` `newModelsInvokeCommand`.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
@@ -127,8 +165,11 @@ primary-result behavior.
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
-  `primary_result` NDJSON record. Internal stream listing for
-  CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
+  `primary_result` NDJSON record. Human-only suppression helpers:
+  `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
+  `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop
+  compaction/backlog/stream-gap text and token-usage chatter while JSON mode
+  keeps `compaction` / `stream_gap` records. Internal stream listing for
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
   late CLI pollers can still subscribe and drain retained progress until the
@@ -143,6 +184,13 @@ primary-result behavior.
   through `outputMu`; after a drain timeout it abandons further progress writes
   and `writeFinalInvocationResult` acquires the same lock so final
   primary-result/outcome output cannot interleave with an in-flight progress write.
+- `you run --replay` format detection belongs at service composition before legacy
+  `ReplayArtifact` config loading. Privacy-bounded JavaScript Factory Session
+  recordings compose `recordingreplay.Service` as an inspection-only durable read
+  owner and skip Petri/runtime/provider construction; legacy artifacts continue
+  through `pkg/replay`. Production-path tests must exercise `FactoryService.Run`
+  plus public session, event, artifact, and result reads with fail-on-use live
+  dependencies.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
@@ -203,6 +251,26 @@ primary-result behavior.
   directory so customer edits survive later `you run --named` reuse.
   `@you/fusion` factory JSON (`BuiltInFusionFactoryJSON`) is also registered from
   `builtInNamedFactoryCatalog`.
+- `pkg/config/builtinsubagent/` owns the authored `@you/subagent` one-pass factory
+  scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
+  exported from `pkg/config/layout.go`. The topology uses exactly one `AGENT_WORKER`
+  with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
+  `${input}` from the invocation signature into the workstation prompt body.
+  `@you/subagent` is registered in `builtInNamedFactoryCatalog` so first named
+  resolution materializes the split-layout factory under the global named-factory root.
+- `pkg/packagedfactories/subagent/` owns packaged subagent factory metadata constants,
+  topology validation coverage, materialization/edit-safe identity tests, response
+  shaping helpers for terminal `task:complete` work content, and primary-result
+  selection tests for the one-pass built-in factory JSON.
+- Hermetic no-server named `@you/subagent` package proof lives in
+  `pkg/cli/run/run_invocation_test.go`
+  (`TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer`,
+  `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,
+  `TestRun_NamedSubagentNoServerBootstrap_SuccessJSONMatchesAPIProjection`,
+  `TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof`), using the
+  real shared bootstrap path with mock workers and a TCP probe port to assert no
+  factory API/dashboard listener is bound and exactly one agent-response
+  `primaryResult` is returned.
 - `pkg/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
   for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
   Keep usage lines, parameter descriptions, defaults, accepted values, output

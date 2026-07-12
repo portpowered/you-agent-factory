@@ -20,6 +20,4 @@ contract without an intentional ledger update.
 
 | From | To | Rationale |
 | --- | --- | --- |
-| `you config expand` | `you factory config expand` | Relocate config expand under factory config. |
-| `you config flatten` | `you factory config flatten` | Relocate config flatten under factory config. |
-| `you factory validate` | `you factory config validate` | Reparent factory validate under factory config. `you config validate` is not registered today; this entry covers the planned validate relocation from the systematic CLI plan. |
+| _none_ | _none_ | Factory config validate, flatten, and expand now live under `you factory config`. |

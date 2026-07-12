@@ -1,15 +1,17 @@
 you	you	
 you config	config	you
-you config expand	expand <factory.json>	you config
-you config flatten	flatten <factory-path>	you config
+you config init	init	you config
 you docs	docs [topic]	you
 you factory	factory	you
+you factory config	config	you factory
+you factory config expand	expand <factory.json>	you factory config
+you factory config flatten	flatten <factory-path>	you factory config
+you factory config validate	validate <factory-path>	you factory config
 you factory delete	delete <name>	you factory
 you factory list	list	you factory
 you factory query	query	you factory
 you factory save	save [name]	you factory
 you factory update	update <name>	you factory
-you factory validate	validate <factory-path>	you factory
 you init	init	you
 you mcp	mcp	you
 you mcp serve	serve	you mcp

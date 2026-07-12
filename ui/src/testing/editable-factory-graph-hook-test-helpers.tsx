@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 
 import * as factoryDocumentSaveHooks from "../features/current-factory-definition/public";
-import { DashboardSessionProvider } from "../features/dashboard/session/dashboard-session-provider";
 import { useEditableFactoryGraph } from "../features/factory-graph-editor/hooks/use-editable-factory-graph";
 import type { UseEditableFactoryGraphOptions } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
+import { DashboardSessionStoreTestProvider } from "./dashboard-session-test-provider";
 import {
   type MockFactoryDocumentSaveReturn,
   mockFactoryDocumentSave,
@@ -40,7 +40,9 @@ export function createEditableFactoryGraphHookWrapper(
   }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   }

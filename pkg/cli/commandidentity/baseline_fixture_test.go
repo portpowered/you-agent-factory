@@ -42,3 +42,24 @@ func TestWalk_ProductionInventoryMatchesCommittedBaseline(t *testing.T) {
 		len(got),
 	)
 }
+
+func TestWriteProductionInventoryBaseline(t *testing.T) {
+	if os.Getenv("UPDATE_CLI_BASELINES") != "1" {
+		t.Skip("set UPDATE_CLI_BASELINES=1 to rewrite fixtures")
+	}
+
+	root := cli.NewRootCommand()
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("Walk(production root) error = %v", err)
+	}
+	got, err := commandidentity.MarshalInventory(inventory)
+	if err != nil {
+		t.Fatalf("MarshalInventory() error = %v", err)
+	}
+
+	fixturePath := testutil.MustRepoPath(t, cliCommandsBaselineFixture)
+	if err := os.WriteFile(fixturePath, got, 0o644); err != nil {
+		t.Fatalf("write baseline fixture %s: %v", fixturePath, err)
+	}
+}

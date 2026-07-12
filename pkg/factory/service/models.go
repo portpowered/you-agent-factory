@@ -30,14 +30,20 @@ func NewLocalModelDomain(cfg Config) LocalModelDomain {
 	}
 	modelResources := localmodels.NewResourceLimiter(hooks)
 	modelAssets := localmodels.NewAssetPuller(cfg.ModelCacheDir)
+	if cfg.ModelAssetsOverride != nil {
+		modelAssets = cfg.ModelAssetsOverride
+	}
 	localModelRuntime := cfg.LocalModelRuntimeOverride
 	if localModelRuntime == nil {
 		localModelRuntime = localmodels.NewOmniVoiceRuntime(nil)
 	}
-	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(modelAssets), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-		Diagnostics:    ModelHostDiagnostics(cfg),
-	})
+	host := cfg.ModelHostOverride
+	if host == nil {
+		host = modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(modelAssets), modelhost.Options{
+			SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+			Diagnostics:    ModelHostDiagnostics(cfg),
+		})
+	}
 	domain := LocalModelDomain{
 		Resources: modelResources,
 		Assets:    modelAssets,

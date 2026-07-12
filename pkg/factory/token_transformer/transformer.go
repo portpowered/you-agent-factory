@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // Transformer centralizes token conversions for factory submit, routing, and spawn flows.
@@ -53,6 +54,7 @@ type OutputTokenInput struct {
 	Output              string
 	WorkPropagationMode interfaces.WorkPropagationMode
 	WorkstationName     string
+	WorkstationType     string
 	Outcome             interfaces.WorkOutcome
 	TransitionID        string
 	Error               string
@@ -177,11 +179,12 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 	}
 
 	if color.DataType != interfaces.DataTypeResource {
+		place := t.places[arc.PlaceID]
 		targetTypeID := ""
-		if place := t.places[arc.PlaceID]; place != nil {
+		if place != nil {
 			targetTypeID = place.TypeID
 		}
-		if err := applyOutputPayloadPropagation(&color, in, targetTypeID); err != nil {
+		if err := applyOutputPayloadPropagation(&color, in, targetTypeID, place, t.workTypes); err != nil {
 			return nil, err
 		}
 	}
@@ -203,7 +206,13 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 	return token, nil
 }
 
-func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenInput, targetTypeID string) error {
+func applyOutputPayloadPropagation(
+	color *interfaces.TokenColor,
+	in OutputTokenInput,
+	targetTypeID string,
+	place *petri.Place,
+	workTypes map[string]*state.WorkType,
+) error {
 	if color == nil {
 		return nil
 	}
@@ -216,11 +225,68 @@ func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenI
 	case interfaces.WorkPropagationModePreserveInput:
 		return ApplyPreservedInputToColor(color, in.InputColors, targetTypeID, in.WorkstationName)
 	default:
+		if shouldPreserveRequestWorkPayloadOnOutcome(in, place, workTypes, color.WorkTypeID) {
+			return nil
+		}
 		if in.Output != "" {
 			color.Payload = []byte(in.Output)
 		}
+		if shouldShapeWorkContentFromWorkerOutput(in, place, workTypes, color.WorkTypeID) {
+			if err := applyWorkerOutputContent(color, in.Output); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
+}
+
+func shouldPreserveRequestWorkPayloadOnOutcome(
+	in OutputTokenInput,
+	place *petri.Place,
+	workTypes map[string]*state.WorkType,
+	workTypeID string,
+) bool {
+	switch in.Outcome {
+	case interfaces.OutcomeFailed:
+		return true
+	case interfaces.OutcomeRejected:
+		return isRejectedFailurePlace(place, workTypes, workTypeID)
+	default:
+		return false
+	}
+}
+
+func shouldShapeWorkContentFromWorkerOutput(
+	in OutputTokenInput,
+	place *petri.Place,
+	workTypes map[string]*state.WorkType,
+	workTypeID string,
+) bool {
+	if in.WorkstationType == interfaces.WorkstationTypeClassify {
+		return false
+	}
+	switch in.Outcome {
+	case interfaces.OutcomeAccepted, interfaces.OutcomeContinue:
+		return true
+	case interfaces.OutcomeRejected:
+		return !isRejectedFailurePlace(place, workTypes, workTypeID)
+	default:
+		return false
+	}
+}
+
+func applyWorkerOutputContent(color *interfaces.TokenColor, output string) error {
+	if color == nil {
+		return nil
+	}
+	content, err := workcontent.ContentFromWorkerOutput(output)
+	if err != nil {
+		return fmt.Errorf("shape workstation response content: %w", err)
+	}
+	if len(content) > 0 {
+		color.Content = interfaces.CloneWorkContentParts(content)
+	}
+	return nil
 }
 
 func applyOutputInvocationArguments(color *interfaces.TokenColor, inputColors []interfaces.TokenColor) {

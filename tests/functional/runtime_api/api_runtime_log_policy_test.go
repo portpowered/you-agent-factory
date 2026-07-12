@@ -83,7 +83,8 @@ func TestFunctionalAPIServer_CanOptIntoRuntimeFileLogging(t *testing.T) {
 	if diagnostics.Path == "" {
 		t.Fatal("RuntimeLogDiagnostics().Path = empty, want runtime log path when file logging is enabled")
 	}
-	if filepath.Dir(filepath.Dir(filepath.Dir(diagnostics.Path))) != logDir {
+	rel, err := filepath.Rel(logDir, diagnostics.Path)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		t.Fatalf("runtime log path = %q, want path under %q", diagnostics.Path, logDir)
 	}
 

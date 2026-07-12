@@ -4,8 +4,14 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../../testing/dashboard-session-test-provider";
 import { createReplayHarness } from "../../../../testing/replay-harness";
-import { DashboardSessionProvider } from "../../session/dashboard-session-provider";
+import { useFactoryTimelineStore } from "../../../timeline/state/factoryTimelineStore";
+import { useDashboardSessionStore } from "../../state/dashboardSessionStore";
+import {
+  createDefaultDashboardStreamState,
+  useDashboardStreamStore,
+} from "../../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./useFactoryEventStream";
 import {
   CANONICAL_SELECTED_TICK_EVENTS,
@@ -13,12 +19,6 @@ import {
   SEEDED_SNAPSHOT,
   timelineSnapshot,
 } from "./useFactoryEventStream.fixtures";
-import { useDashboardSessionStore } from "../../state/dashboardSessionStore";
-import {
-  createDefaultDashboardStreamState,
-  useDashboardStreamStore,
-} from "../../state/dashboardStreamStore";
-import { useFactoryTimelineStore } from "../../../timeline/state/factoryTimelineStore";
 
 const replayHarness = createReplayHarness();
 
@@ -145,7 +145,9 @@ function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };

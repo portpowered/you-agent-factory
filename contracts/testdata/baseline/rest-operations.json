@@ -410,6 +410,12 @@
           ]
         },
         {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
           "status": "404",
           "mediaTypes": [
             "application/json"

@@ -729,6 +729,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			Output:              in.result.output,
 			WorkPropagationMode: workPropagationMode,
 			WorkstationName:     workstationName,
+			WorkstationType:     workstationType(in.workstation),
 			Outcome:             in.result.outcome,
 			TransitionID:        in.result.transitionID,
 			Error:               in.result.err,
@@ -750,6 +751,9 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			if err := applyPackagedGoalInvocationSummary(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
 				return nil, err
 			}
+			if err := applyPackagedSubagentInvocationResponse(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
+				return nil, err
+			}
 			if newToken.Color.DataType != interfaces.DataTypeResource {
 				if workOutputIndex < len(in.result.recordedOutputWork) {
 					applyRecordedOutputWorkIdentity(newToken, in.result.recordedOutputWork[workOutputIndex])
@@ -766,6 +770,13 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 		}
 	}
 	return mutations, nil
+}
+
+func workstationType(workstation *interfaces.FactoryWorkstationConfig) string {
+	if workstation == nil {
+		return ""
+	}
+	return strings.TrimSpace(workstation.Type)
 }
 
 func mutationRepeatCountForArc(

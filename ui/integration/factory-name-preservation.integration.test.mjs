@@ -8,9 +8,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
-  defaultFactorySessionID,
   expectNoBrowserErrors,
   openBrowserPage,
+  resolvedDefaultFactorySessionID,
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
@@ -73,7 +73,9 @@ describe.sequential("factory name preservation browser integration", () => {
           })
           .toBe(1);
 
-        expect(saveRequests[0]?.sessionID).toBe(defaultFactorySessionID);
+        expect(saveRequests[0]?.sessionID).toBe(
+          resolvedDefaultFactorySessionID,
+        );
         expect(saveRequests[0]?.mode).toBe("REPLACE_CURRENT");
         expect(saveRequests[0]?.body?.name).toBe(canonicalSessionFactoryName);
 
@@ -163,7 +165,7 @@ describe.sequential("factory name preservation browser integration", () => {
         });
 
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
-          defaultFactorySessionID,
+          resolvedDefaultFactorySessionID,
         );
         expect(sessionFactoryPutRequests[0]?.mode).toBe("REPLACE_CURRENT");
         expect(sessionFactoryPutRequests[0]?.body?.name).toBe(
@@ -283,7 +285,7 @@ describe.sequential("factory name preservation browser integration", () => {
         });
 
         expect(sessionFactoryPutRequests[0]?.sessionID).toBe(
-          defaultFactorySessionID,
+          resolvedDefaultFactorySessionID,
         );
         expect(sessionFactoryPutRequests[0]?.mode).toBe(
           "UPSERT_NAMED_AND_ACTIVATE",

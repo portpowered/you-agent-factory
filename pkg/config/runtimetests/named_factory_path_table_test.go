@@ -97,6 +97,21 @@ func TestCrossPlatformNamedFactoryPathTable_MapHierarchicalContract(t *testing.T
 			if strings.Contains(mappedDir, "%2F") {
 				t.Fatalf("mapper dir %q must not use percent-encoded scoped leaf names", mappedDir)
 			}
+
+			factoryDir, err := PersistNamedFactory(rootDir, tc.name, namedFactoryPayload(t, "hierarchical"))
+			if err != nil {
+				t.Fatalf("PersistNamedFactory(%q): %v", tc.name, err)
+			}
+			if factoryDir != wantDir {
+				t.Fatalf("PersistNamedFactory(%q) = %q, want %q", tc.name, factoryDir, wantDir)
+			}
+			resolvedDir, err := ResolveNamedFactoryDir(rootDir, tc.name)
+			if err != nil {
+				t.Fatalf("ResolveNamedFactoryDir(%q): %v", tc.name, err)
+			}
+			if resolvedDir != wantDir {
+				t.Fatalf("ResolveNamedFactoryDir(%q) = %q, want %q", tc.name, resolvedDir, wantDir)
+			}
 		})
 	}
 }

@@ -32,6 +32,12 @@ try {
     }
 
     & $binaryPath --help | Out-Null
+
+    $configPath = Join-Path $tempHome ".you-agent-factory" "config.json"
+    if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+        throw "post-install config init did not create operator config at $configPath"
+    }
+
     Write-Output "hosted install smoke passed for $binaryPath via $InstallScriptUrl"
 } finally {
     if (Test-Path -LiteralPath $tempHome) {

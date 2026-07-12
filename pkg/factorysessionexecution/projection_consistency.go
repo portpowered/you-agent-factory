@@ -7,46 +7,96 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
-func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
-	content := workcontent.GeneratedPtrFromParts(parts)
-	if content == nil {
-		return nil
-	}
-	encoded, err := json.Marshal(content)
-	if err != nil {
-		return nil
-	}
-	return encoded
+// RecordingError correlates a safe export failure without changing the live session.
+type RecordingError struct {
+	SessionID, Path string
+	Err             error
 }
 
-func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
-	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
-			if text := strings.TrimSpace(part.Text); text != "" {
-				return text
+func (e *RecordingError) Error() string {
+	return fmt.Sprintf("record Factory Session %q to %q: %v", e.SessionID, e.Path, e.Err)
+}
+func (e *RecordingError) Unwrap() error { return e.Err }
+
+// WriteRecording snapshots canonical public facts and writes their portable form.
+func (s *JavaScriptRuntimeService) WriteRecording(ctx context.Context, sessionID, path string) error {
+	if err := ctx.Err(); err != nil {
+		return &RecordingError{sessionID, path, err}
+	}
+	s.mu.RLock()
+	state, found := s.sessions[sessionID]
+	if !found {
+		s.mu.RUnlock()
+		return &RecordingError{sessionID, path, ErrSessionNotFound}
+	}
+	snapshot := cloneRuntimeSessionState(state)
+	s.mu.RUnlock()
+	facts := recording.CanonicalFacts{SessionID: snapshot.session.SessionID, Status: string(snapshot.session.Status), OrchestratorKind: snapshot.session.OrchestratorKind, SourceRef: snapshot.session.ResolvedSource.SourceRef, SourceHash: snapshot.session.SourceHash, PolicyHash: snapshot.session.Policy.EffectiveHash, Events: snapshot.events}
+	facts.Result = canonicalRecordingResult(snapshot.session.Status, snapshot.result)
+	if checkpoint := snapshot.checkpointSummary; checkpoint != nil {
+		facts.Checkpoint = &recording.CanonicalCheckpoint{ID: checkpoint.CheckpointID, Label: checkpoint.Label, Summary: checkpoint.Phase, Timestamp: checkpoint.CreatedAt}
+	}
+	if snapshot.startRequest != nil {
+		facts.Arguments = snapshot.startRequest.Args
+	}
+	for _, artifact := range snapshot.artifacts {
+		createdAt, secrets := time.Time{}, int64(0)
+		if artifact.CreatedAt != nil {
+			createdAt = *artifact.CreatedAt
+		}
+		if artifact.RedactionCounts != nil {
+			secrets = int64(artifact.RedactionCounts.Secrets)
+		}
+		facts.Artifacts = append(facts.Artifacts, recording.CanonicalArtifact{ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility, Label: artifact.Label, ContentHash: artifact.ContentHash, SizeBytes: artifact.SizeBytes, CreatedAt: createdAt, SecretsRedacted: secrets})
+		if facts.Checkpoint != nil && facts.Checkpoint.ArtifactID == "" {
+			for _, checkpointArtifactID := range snapshot.checkpointSummary.ArtifactIDs {
+				if checkpointArtifactID == artifact.ID {
+					facts.Checkpoint.ArtifactID = artifact.ID
+					break
+				}
 			}
 		}
 	}
-	return ""
+	value, err := recording.Build(facts)
+	if err == nil {
+		err = recording.Write(path, value)
+	}
+	if err != nil {
+		return &RecordingError{sessionID, path, err}
+	}
+	return nil
 }
 
-func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.FactorySessionArtifactState {
-	if len(artifacts) == 0 {
-		return nil
+func canonicalRecordingResult(sessionStatus LifecycleStatus, result ResultReadResult) *recording.CanonicalResult {
+	projected := &recording.CanonicalResult{
+		Status: string(result.ResultStatus), Mode: string(result.Mode),
+		PrimaryResult: append(json.RawMessage(nil), result.PrimaryResult...),
+		ArtifactIDs:   append([]string(nil), result.ArtifactIDs...),
 	}
-	states := make([]interfaces.FactorySessionArtifactState, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		states = append(states, interfaces.FactorySessionArtifactState{
-			ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility,
-			Label: artifact.Label, ContentHash: artifact.ContentHash,
-			SizeBytes: artifact.SizeBytes, AuditMode: artifact.AuditMode,
-		})
+	if projected.Mode == "" {
+		projected.Mode = string(ResultModeFinal)
 	}
-	return states
+	if projected.Status == "" {
+		switch sessionStatus {
+		case LifecycleStatusSucceeded:
+			projected.Status = string(ResultStatusFinal)
+		case LifecycleStatusFailed:
+			projected.Status = string(ResultStatusUnavailable)
+		default:
+			projected.Status = string(ResultStatusNotReady)
+		}
+	}
+	if result.Failure != nil {
+		projected.Failure = &recording.FailureSummary{Reason: result.Failure.Reason, Message: result.Failure.Message, PartialResultAvailable: result.Failure.PartialResultAvailable}
+	}
+	if result.Availability != nil {
+		projected.Availability = &recording.AvailabilityDetail{Reason: result.Availability.Reason, Message: result.Availability.Message, Retryable: result.Availability.Retryable}
+	}
+	return projected
 }
 
 // projectPetriRunningSessionState initializes the canonical read model owned by
