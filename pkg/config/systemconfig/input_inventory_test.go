@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/config/globalconfiginventory"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -234,6 +235,7 @@ func TestProjectInputInventory_MatchesCommittedBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read baseline fixture %s: %v", fixturePath, err)
 	}
+	want = globalconfiginventory.NormalizeFixtureBytes(want)
 	if bytes.Equal(got, want) {
 		return
 	}

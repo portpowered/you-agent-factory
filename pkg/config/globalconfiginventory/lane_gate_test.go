@@ -56,6 +56,7 @@ func TestProductionLoaderSources_UnchangedForInventoryLane(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read production loader source %s: %v", path, err)
 			}
+			data = globalconfiginventory.NormalizeSourceBytes(data)
 
 			sum := sha256.Sum256(data)
 			got := hex.EncodeToString(sum[:])
