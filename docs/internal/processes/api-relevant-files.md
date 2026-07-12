@@ -2,6 +2,19 @@
 
 Use this map when changing the public REST contract.
 
+## REST operation identity inventory
+
+- `internal/contractinventory` owns the pure read-only extractor that turns bundled
+  OpenAPI YAML into canonical `rest-operations/v1` JSON (`formatVersion`,
+  `operations[]` with `operationId`, `method`, `path`, optional `xDocId`,
+  `hasSummary`, `hasDescription`, `requestMediaTypes`, and `responses[]`).
+- `cmd/restoperationinventory` writes that inventory from `api/openapi.yaml` for
+  baseline generation; checked-in baselines belong under
+  `contracts/testdata/baseline/rest-operations.json` once parity tests land.
+- Inventory extraction must not modify authored OpenAPI, generated clients, or
+  `pkg/api` handlers; parity and identity-validation tests belong beside the
+  extractor package.
+
 ## Compatibility Alias Inventory
 
 This inventory is the maintainer source of truth for retained public aliases.
