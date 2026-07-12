@@ -184,6 +184,32 @@ records, session-owned `FactoryArtifact` summaries, and ordered `FactoryEvent`
 history through normal Factory Session surfaces. These observations are not a
 promise to expose raw JavaScript engine state or provider transcripts.
 
+## Stable failures and recovery
+
+Treat validation diagnostics, result availability, and terminal failure facts
+as the supported contract. Human-readable messages can add safe context, but
+automation should prefer the stable code or status when one is listed. A
+failure never makes raw provider transcripts, checkpoint bodies, or JavaScript
+VM internals part of the inspection contract.
+
+| Failure | Observable surface and stable signal | What remains inspectable | Recovery |
+|---------|--------------------------------------|--------------------------|----------|
+| Invalid source or primitive arguments | Validation/preview returns a `workflow.source.*` diagnostic such as `workflow.source.syntaxError` or `workflow.source.unsupportedPrimitive`; execution does not start. | No new `FactorySession`, `Dispatch`, `FactoryArtifact`, or `FactoryEvent`. | Correct the reported source location or primitive signature, then validate again. |
+| Unsupported host access | Validation/preview returns `workflow.source.forbiddenHostAccess`. | No new session facts, because rejection precedes execution. | Replace filesystem, shell, process, import, or network access with a supported primitive or an explicitly permitted child request. |
+| Unknown or policy-denied preset/child selection | Source resolution reports the unknown preset and selection source, or execution reports a bounded `policy denied` diagnostic before that child is dispatched. | The parent `FactorySession` and facts emitted before the denial remain inspectable; a rejected pre-dispatch child has no successful `Dispatch`. | Select a configured preset or change the requested child settings/effective operator policy. |
+| Child execution failure | The child `Dispatch` is failed and the session result/status reports a failed or partial terminal outcome with safe failure detail. | The `FactorySession`, failed `Dispatch`, prior artifacts, and ordered events remain inspectable. | Inspect the dispatch failure class/detail, correct the child request or provider condition, and start or resume through a supported path. |
+| Non-JSON checkpoint, artifact, log fields, or final value | Execution fails with a bounded `must be JSON-compatible` diagnostic. | The session, earlier dispatches/artifacts/events, and any approved checkpoint references remain inspectable; the rejected value is not promised as an artifact. | Convert the value to JSON data without functions, cycles, or host objects. |
+| Result not ready | Result reads return `resultStatus: NOT_READY` with availability reason `RESULT_NOT_READY`; this is retryable while the session is running. | Status, partial result when present, dispatches, artifacts, and events remain inspectable. | Poll status/events and retry the result read after progress or a terminal transition. |
+| Factory Session not found | CLI reports `SESSION_NOT_FOUND`; REST uses `NOT_FOUND`; MCP returns its Factory Session not-found error envelope. | Nothing is inspectable for that identifier. | Reuse the exact `sessionId` returned by start and confirm the same runtime/storage scope. |
+| Recording flag conflict | `--record` with `--replay`, or `--no-record` with `--record`, is rejected before execution. | No new session or session-owned facts. | Choose one recording mode; see `you docs record-replay`. |
+| Missing, malformed, or incompatible replay | Replay load fails before reconstruction; unsupported artifacts report `unsupported replay artifact schemaVersion`. | No reconstructed session is created from the rejected file; the file itself remains unchanged. | Use an artifact with the supported schema, regenerate it with a compatible `you` version, or run live to create a new recording. |
+
+A successful final result has `resultStatus: FINAL`. A running session can be
+`NOT_READY`; an interrupted or failed terminal session can expose `PARTIAL`,
+`FAILED_WITH_PARTIAL`, `UNAVAILABLE`, or bounded failure detail depending on
+what was durably emitted. Do not interpret partial data as a successful final.
+Use the session lifecycle status together with result status and availability.
+
 ## Related topics
 
 - `you docs orchestrators` — canonical Factory Session terminology

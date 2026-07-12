@@ -844,6 +844,14 @@ func TestMarkdown_JavaScriptWorkflowsDocumentsExecutionAndPresetContract(t *test
 		"orchestrator.javascript.agents.<agentId>.preset",
 		"Highest precedence is an explicit",
 		"fail before child dispatch",
+		"## Stable failures and recovery",
+		"workflow.source.forbiddenHostAccess",
+		"must be JSON-compatible",
+		"RESULT_NOT_READY",
+		"SESSION_NOT_FOUND",
+		"unsupported replay artifact schemaVersion",
+		"FAILED_WITH_PARTIAL",
+		"raw provider transcripts",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(javascript-workflows) missing %q:\n%s", want, got)
