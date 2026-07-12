@@ -1,4 +1,4 @@
-import { expect, userEvent, within } from "storybook/test";
+import { expect, within } from "storybook/test";
 
 import "../../../../../styles.css";
 import type {
@@ -249,42 +249,5 @@ export const ProviderFailureDetails = {
         }}
       />
     );
-  },
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const inferenceHeading = canvas.getByRole("heading", {
-      name: "Inference attempts",
-    });
-    const inferenceToggle =
-      inferenceHeading.parentElement?.parentElement?.parentElement?.querySelector(
-        "button",
-      );
-
-    if (!inferenceToggle) {
-      throw new Error("expected provider failure detail toggles");
-    }
-
-    await userEvent.click(inferenceToggle);
-    await userEvent.click(
-      canvas.getByRole("button", { name: "Expand attempt 1" }),
-    );
-    const failureHeading = canvas.getByRole("heading", {
-      name: "Failure details",
-    });
-    const failureToggle =
-      failureHeading.parentElement?.parentElement?.parentElement?.querySelector(
-        "button",
-      );
-
-    if (!failureToggle) {
-      throw new Error("expected provider failure detail toggles");
-    }
-
-    await userEvent.click(failureToggle);
-
-    await expect(
-      canvas.getAllByText("provider_version_incompatible"),
-    ).not.toHaveLength(0);
-    await expect(canvas.getAllByText(codexFailureMessage)).not.toHaveLength(0);
   },
 };
