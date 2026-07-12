@@ -764,6 +764,24 @@ func TestFilterDispatches_PhaseStatusAndValidation(t *testing.T) {
 	}
 }
 
+func TestProgressCountsFromDispatches_GroupsEveryCanonicalStatus(t *testing.T) {
+	dispatches := []DispatchSummary{
+		{Status: DispatchStatusQueued}, {Status: DispatchStatusRunning},
+		{Status: DispatchStatusCompleted}, {Status: DispatchStatusFailed},
+		{Status: DispatchStatusCanceled}, {Status: DispatchStatusTimedOut},
+		{Status: DispatchStatusSkipped}, {Status: DispatchStatusInterrupted},
+	}
+
+	got := progressCountsFromDispatches(dispatches, 3)
+	if got.TotalDispatches != 8 || got.PhaseCount != 3 || got.InFlightDispatches != 2 ||
+		got.CompletedDispatches != 1 || got.FailedDispatches != 1 ||
+		got.QueuedDispatches != 1 || got.RunningDispatches != 1 ||
+		got.CanceledDispatches != 1 || got.TimedOutDispatches != 1 ||
+		got.SkippedDispatches != 1 || got.InterruptedDispatches != 1 {
+		t.Fatalf("progress counts = %#v, want one per canonical status", got)
+	}
+}
+
 func TestNormalizeResultRequest_DefaultsAndValidation(t *testing.T) {
 	normalized, err := NormalizeResultRequest(ResultRequest{})
 	if err != nil {

@@ -62,6 +62,7 @@ export interface FactorySessionDetailMessages
   dispatchSelectionHint: string;
   dispatchStatusLabel: string;
   dispatchesHeading: string;
+  dispatchCountsLabel: string;
   durableLifecycleStatusLabels: Record<
     components["schemas"]["FactorySessionDurableLifecycleStatus"],
     string
@@ -293,6 +294,7 @@ const factorySessionDetailMessagesByLocale = {
       "Select a dispatch to inspect bounded durable detail.",
     dispatchStatusLabel: "Dispatch status",
     dispatchesHeading: "Dispatches",
+    dispatchCountsLabel: "Dispatch counts by status",
     durableLifecycleStatusLabels: englishDurableLifecycleStatusLabels,
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
     executionModeLabel: "Execution mode",
@@ -404,6 +406,7 @@ const factorySessionDetailMessagesByLocale = {
     dispatchSelectionHint: "选择一个调度以检查受限的持久化详情。",
     dispatchStatusLabel: "调度状态",
     dispatchesHeading: "调度",
+    dispatchCountsLabel: "按状态统计的调度数",
     durableLifecycleStatusLabels: chineseDurableLifecycleStatusLabels,
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     executionModeLabel: "执行模式",

@@ -741,8 +741,20 @@ func progressCountsFromDispatches(dispatches []DispatchSummary, phaseCount int) 
 			progress.CompletedDispatches++
 		case DispatchStatusFailed:
 			progress.FailedDispatches++
-		case DispatchStatusQueued, DispatchStatusRunning:
+		case DispatchStatusQueued:
+			progress.QueuedDispatches++
 			progress.InFlightDispatches++
+		case DispatchStatusRunning:
+			progress.RunningDispatches++
+			progress.InFlightDispatches++
+		case DispatchStatusCanceled:
+			progress.CanceledDispatches++
+		case DispatchStatusTimedOut:
+			progress.TimedOutDispatches++
+		case DispatchStatusSkipped:
+			progress.SkippedDispatches++
+		case DispatchStatusInterrupted:
+			progress.InterruptedDispatches++
 		}
 	}
 	return progress

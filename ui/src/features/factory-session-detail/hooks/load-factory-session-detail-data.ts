@@ -63,23 +63,19 @@ export async function loadFactorySessionDetailData(
     durablePartialResult,
   ] = await Promise.all([
     fetchDispatches
-      ? listFactorySessionDispatches(sessionID).catch(() => undefined)
+      ? listFactorySessionDispatches(sessionID)
       : Promise.resolve(undefined),
     durableJavaScript
       ? Promise.resolve(undefined)
-      : getFactorySessionResult(sessionID).catch(() => undefined),
+      : getFactorySessionResult(sessionID),
     durableJavaScript
       ? Promise.resolve(undefined)
-      : getFactorySessionPartialResult(sessionID).catch(() => undefined),
+      : getFactorySessionPartialResult(sessionID),
     supplementalReads.fetchFinalResults
-      ? getFactorySessionDurableResults(sessionID, "final").catch(
-          () => undefined,
-        )
+      ? getFactorySessionDurableResults(sessionID, "final")
       : Promise.resolve(undefined),
     supplementalReads.fetchPartialResults
-      ? getFactorySessionDurableResults(sessionID, "partial").catch(
-          () => undefined,
-        )
+      ? getFactorySessionDurableResults(sessionID, "partial")
       : Promise.resolve(undefined),
   ]);
 

@@ -2103,6 +2103,9 @@ type FactorySessionDurablePhaseSummary struct {
 
 // FactorySessionDurableProgressCounts defines model for FactorySessionDurableProgressCounts.
 type FactorySessionDurableProgressCounts struct {
+	// CanceledDispatches Dispatches canceled before completion.
+	CanceledDispatches *int `json:"canceledDispatches,omitempty"`
+
 	// CompletedDispatches Dispatches that reached a terminal success state.
 	CompletedDispatches *int `json:"completedDispatches,omitempty"`
 
@@ -2112,8 +2115,23 @@ type FactorySessionDurableProgressCounts struct {
 	// InFlightDispatches Dispatches currently running or awaiting completion.
 	InFlightDispatches *int `json:"inFlightDispatches,omitempty"`
 
+	// InterruptedDispatches Dispatches interrupted after starting.
+	InterruptedDispatches *int `json:"interruptedDispatches,omitempty"`
+
 	// PhaseCount Number of workflow phases represented in phase summaries.
 	PhaseCount *int `json:"phaseCount,omitempty"`
+
+	// QueuedDispatches Dispatches waiting to start.
+	QueuedDispatches *int `json:"queuedDispatches,omitempty"`
+
+	// RunningDispatches Dispatches currently running.
+	RunningDispatches *int `json:"runningDispatches,omitempty"`
+
+	// SkippedDispatches Dispatches skipped by orchestration policy.
+	SkippedDispatches *int `json:"skippedDispatches,omitempty"`
+
+	// TimedOutDispatches Dispatches that exceeded their execution deadline.
+	TimedOutDispatches *int `json:"timedOutDispatches,omitempty"`
 
 	// TotalDispatches Total durable dispatches recorded for the session.
 	TotalDispatches *int `json:"totalDispatches,omitempty"`

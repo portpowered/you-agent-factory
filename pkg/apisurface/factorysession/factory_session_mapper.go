@@ -598,10 +598,23 @@ func progressCountsFromAPI(counts factoryapi.FactorySessionDurableProgressCounts
 	if counts.InFlightDispatches != nil {
 		out.InFlightDispatches = int(*counts.InFlightDispatches)
 	}
+	out.QueuedDispatches = intValueFromPointer(counts.QueuedDispatches)
+	out.RunningDispatches = intValueFromPointer(counts.RunningDispatches)
+	out.CanceledDispatches = intValueFromPointer(counts.CanceledDispatches)
+	out.TimedOutDispatches = intValueFromPointer(counts.TimedOutDispatches)
+	out.SkippedDispatches = intValueFromPointer(counts.SkippedDispatches)
+	out.InterruptedDispatches = intValueFromPointer(counts.InterruptedDispatches)
 	if counts.PhaseCount != nil {
 		out.PhaseCount = int(*counts.PhaseCount)
 	}
 	return out
+}
+
+func intValueFromPointer(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func failureSummaryFromAPI(failure factoryapi.FailureDetail) *factorysessionexecution.FailureSummary {

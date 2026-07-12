@@ -212,6 +212,13 @@ function DurableIntrospectionSummary({
           label={messages.resultAvailabilityLabel}
           value={resultAvailability}
         />
+        <Metric
+          label={messages.dispatchCountsLabel}
+          value={formatRecordSummary(
+            durable.progress,
+            messages.unavailableValue,
+          )}
+        />
       </div>
       <PhaseSummaryList durable={durable} locale={locale} />
     </section>

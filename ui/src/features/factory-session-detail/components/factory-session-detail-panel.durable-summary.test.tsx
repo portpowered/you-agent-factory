@@ -53,6 +53,12 @@ describe("FactorySessionDetailPanel durable summary", () => {
             completedDispatches: 1,
             failedDispatches: 0,
             inFlightDispatches: 1,
+            queuedDispatches: 1,
+            runningDispatches: 1,
+            canceledDispatches: 1,
+            timedOutDispatches: 1,
+            skippedDispatches: 1,
+            interruptedDispatches: 1,
             totalDispatches: 3,
           },
           resolvedSource: {
@@ -97,6 +103,9 @@ describe("FactorySessionDetailPanel durable summary", () => {
     expect(screen.getByText(/maxAgents: 4/)).toBeTruthy();
     expect(screen.getByText(/inputTokens: 120/)).toBeTruthy();
     expect(screen.getByText("partial")).toBeTruthy();
+    expect(screen.getByText("Dispatch counts by status")).toBeTruthy();
+    expect(screen.getByText(/queuedDispatches: 1/)).toBeTruthy();
+    expect(screen.getByText(/interruptedDispatches: 1/)).toBeTruthy();
     expect(screen.queryAllByText("Idle")).toHaveLength(0);
 
     const fetchUrls = vi
@@ -173,5 +182,34 @@ describe("FactorySessionDetailPanel durable summary", () => {
     expect(fetchUrls.some((url) => url.includes("/results?mode=partial"))).toBe(
       false,
     );
+  });
+
+  it("shows an explicit error when a supplemental Dispatch request fails", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/dur-sess-js-error-001")) {
+        return jsonResponse({
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          progress: { queuedDispatches: 1, totalDispatches: 1 },
+          sessionId: "dur-sess-js-error-001",
+          status: "RUNNING",
+        });
+      }
+      if (url.endsWith("/dispatches")) {
+        return jsonResponse({ message: "dispatch transport failed" }, 503);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-js-error-001" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain(
+        "dispatch transport failed",
+      );
+    });
+    expect(screen.queryByText("JavaScript workflow")).toBeNull();
   });
 });

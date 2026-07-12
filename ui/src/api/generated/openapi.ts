@@ -2253,6 +2253,18 @@ export interface components {
       failedDispatches?: number;
       /** @description Dispatches currently running or awaiting completion. */
       inFlightDispatches?: number;
+      /** @description Dispatches waiting to start. */
+      queuedDispatches?: number;
+      /** @description Dispatches currently running. */
+      runningDispatches?: number;
+      /** @description Dispatches canceled before completion. */
+      canceledDispatches?: number;
+      /** @description Dispatches that exceeded their execution deadline. */
+      timedOutDispatches?: number;
+      /** @description Dispatches skipped by orchestration policy. */
+      skippedDispatches?: number;
+      /** @description Dispatches interrupted after starting. */
+      interruptedDispatches?: number;
       /** @description Number of workflow phases represented in phase summaries. */
       phaseCount?: number;
     };

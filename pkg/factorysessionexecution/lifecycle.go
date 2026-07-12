@@ -770,11 +770,17 @@ func cloneDispatchSummary(dispatch DispatchSummary) DispatchSummary {
 
 // ProgressCounts summarizes durable dispatch progress for one session.
 type ProgressCounts struct {
-	TotalDispatches     int
-	CompletedDispatches int
-	FailedDispatches    int
-	InFlightDispatches  int
-	PhaseCount          int
+	TotalDispatches       int
+	CompletedDispatches   int
+	FailedDispatches      int
+	InFlightDispatches    int
+	QueuedDispatches      int
+	RunningDispatches     int
+	CanceledDispatches    int
+	TimedOutDispatches    int
+	SkippedDispatches     int
+	InterruptedDispatches int
+	PhaseCount            int
 }
 
 // ResultSummary exposes customer-visible result readiness for one session read.

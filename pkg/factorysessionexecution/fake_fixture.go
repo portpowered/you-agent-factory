@@ -524,11 +524,17 @@ func resolvedSourceFromFixtureMap(source map[string]any) ResolvedSource {
 
 func progressCountsFromFixtureMap(progress map[string]any) *ProgressCounts {
 	return &ProgressCounts{
-		TotalDispatches:     fixtureIntValue(progress, "totalDispatches"),
-		CompletedDispatches: fixtureIntValue(progress, "completedDispatches"),
-		FailedDispatches:    fixtureIntValue(progress, "failedDispatches"),
-		InFlightDispatches:  fixtureIntValue(progress, "inFlightDispatches"),
-		PhaseCount:          fixtureIntValue(progress, "phaseCount"),
+		TotalDispatches:       fixtureIntValue(progress, "totalDispatches"),
+		CompletedDispatches:   fixtureIntValue(progress, "completedDispatches"),
+		FailedDispatches:      fixtureIntValue(progress, "failedDispatches"),
+		InFlightDispatches:    fixtureIntValue(progress, "inFlightDispatches"),
+		QueuedDispatches:      fixtureIntValue(progress, "queuedDispatches"),
+		RunningDispatches:     fixtureIntValue(progress, "runningDispatches"),
+		CanceledDispatches:    fixtureIntValue(progress, "canceledDispatches"),
+		TimedOutDispatches:    fixtureIntValue(progress, "timedOutDispatches"),
+		SkippedDispatches:     fixtureIntValue(progress, "skippedDispatches"),
+		InterruptedDispatches: fixtureIntValue(progress, "interruptedDispatches"),
+		PhaseCount:            fixtureIntValue(progress, "phaseCount"),
 	}
 }
 
