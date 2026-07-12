@@ -1,0 +1,10 @@
+package runtime
+
+type RuntimeRecord struct {
+	Kind       string
+	Checkpoint *CheckpointRecord
+}
+
+type CheckpointRecord struct {
+	Sequence int64
+}

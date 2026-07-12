@@ -245,6 +245,30 @@ and related lifecycle controls. Replay and status reads use those events togethe
 with loop-state changes so current and historical session lifecycle state stay
 aligned with live control operations.
 
+### Canonical Factory Session recording ownership
+
+`pkg/factorysessionexecution` is the sole production owner for recording and
+persisting canonical Factory Session events. Orchestrators report runtime facts
+and explicitly typed orchestration records to that owner; they do not append a
+parallel public history, persist canonical events directly, or mutate canonical
+session, Dispatch, Provider Session, artifact, lifecycle, or result projections.
+The recorder validates a complete event candidate, persists the accepted ordered
+snapshot, and only then publishes the corresponding live projection. Replay
+reduces that same accepted canonical event meaning, so persisted and live read
+models share one source of truth.
+
+JavaScript checkpoints remain tagged JavaScript runtime records with their
+checkpoint and resume semantics. Petri marking and transition records remain
+internal Petri records. Either record may cause a separate canonical event when
+it independently represents a public Factory Session fact, but neither is
+retyped merely to make orchestration histories look alike.
+
+`make durable-runtime-construction-check` enforces this boundary. It rejects
+canonical event construction outside `pkg/factorysessionexecution` and direct
+JavaScript-orchestrator imports of session persistence, with diagnostics that
+direct the caller back to the Factory Session recorder. Tests and typed
+orchestration-record definitions remain permitted.
+
 # Front End
 
 The frontend is an embedded React application that consumes the backend event stream and derives a customer-facing world view from it. The UI emphasizes composable dashboards and visualizations rather than owning the authoritative system state.

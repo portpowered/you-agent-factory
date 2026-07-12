@@ -1,0 +1,6 @@
+package factorysessionexecution
+
+func record(events any) {
+	BuildCanonicalRuntimeSessionEvents(events)
+	MapCanonicalRuntimeSessionEvents(events)
+}
