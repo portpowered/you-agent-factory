@@ -974,6 +974,60 @@ func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
 	}
 }
 
+func TestGetProviderSessionDetails_CursorNotFoundWithUnavailableRoot(t *testing.T) {
+	srv := newTestServerWithUnavailableCursorRoot(t)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_CursorNotFoundWithMissingRootDirectory(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	srv := newTestServerWithCursorRoot(missingRoot)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnosticWhenRootUnconfigured(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	missingRoot := filepath.Join(t.TempDir(), "cursor-root-unavailable")
+	srv := NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: missingRoot})
+
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+
+	entries := logs.FilterMessage("cursor provider session lookup not found").AllUntimed()
+	if len(entries) != 1 {
+		t.Fatalf("cursor not-found diagnostic count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["provider"] != "cursor" {
+		t.Fatalf("provider field = %#v, want cursor", fields["provider"])
+	}
+	if fields["lookup_kind"] != "session_id" {
+		t.Fatalf("lookup_kind field = %#v, want session_id", fields["lookup_kind"])
+	}
+	if fields["requested_id"] != "missing-session" {
+		t.Fatalf("requested_id field = %#v, want missing-session", fields["requested_id"])
+	}
+	if fields["root_configured"] != false {
+		t.Fatalf("root_configured field = %#v, want false", fields["root_configured"])
+	}
+	if _, ok := fields["searched_root"]; ok {
+		t.Fatalf("searched_root field = %#v, want omitted when root unconfigured", fields["searched_root"])
+	}
+}
+
 func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing.T) {
 	root := t.TempDir()
 	writeNamedProviderSessionFixture(t, root, "rollout-backup-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)

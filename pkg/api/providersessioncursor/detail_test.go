@@ -84,6 +84,21 @@ func TestLoadDetails_NotFoundIsDistinguishable(t *testing.T) {
 	}
 }
 
+func TestLoadDetails_ReturnsNotFoundForEmptyRoot(t *testing.T) {
+	_, err := LoadDetails(cursorstorage.AgentStorageRoot(""), "missing-session")
+	if !errors.Is(err, ErrProviderSessionNotFound) {
+		t.Fatalf("err = %v, want ErrProviderSessionNotFound", err)
+	}
+}
+
+func TestLoadDetails_ReturnsNotFoundForMissingRootDirectory(t *testing.T) {
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	_, err := LoadDetails(cursorstorage.AgentStorageRoot(missingRoot), "missing-session")
+	if !errors.Is(err, ErrProviderSessionNotFound) {
+		t.Fatalf("err = %v, want ErrProviderSessionNotFound", err)
+	}
+}
+
 func TestLoadDetails_RejectsPathLikeIdentifiers(t *testing.T) {
 	for _, id := range []string{"../secret", "/tmp/store.db", "session.with.dot"} {
 		t.Run(id, func(t *testing.T) {

@@ -66,6 +66,12 @@ func newTestServerWithCodexRoot(root string) *Server {
 	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
 }
 
+func newTestServerWithUnavailableCursorRoot(t *testing.T) *Server {
+	t.Helper()
+	missingRoot := filepath.Join(t.TempDir(), "cursor-root-unavailable")
+	return newTestServerWithCursorRoot(missingRoot)
+}
+
 func newTestServerWithCursorRoot(root string) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{

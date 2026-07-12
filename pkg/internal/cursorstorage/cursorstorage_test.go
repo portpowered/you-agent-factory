@@ -2,6 +2,7 @@ package cursorstorage
 
 import (
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,6 +29,25 @@ func TestValidateSessionID_RejectsPathLikeIdentifiers(t *testing.T) {
 	}
 	if err := ValidateSessionID("ed332681-38eb-485f-b3d3-d8b6df3a450b"); err != nil {
 		t.Fatalf("ValidateSessionID(UUID session_id) = %v, want nil", err)
+	}
+}
+
+func TestResolveStoreDB_ReturnsNotFoundForEmptyRoot(t *testing.T) {
+	t.Parallel()
+
+	_, err := ResolveStoreDB(AgentStorageRoot(""), "missing-session")
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("err = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestResolveStoreDB_ReturnsNotFoundForMissingRootDirectory(t *testing.T) {
+	t.Parallel()
+
+	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
+	_, err := ResolveStoreDB(AgentStorageRoot(missingRoot), "missing-session")
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("err = %v, want ErrSessionNotFound", err)
 	}
 }
 
