@@ -74,6 +74,7 @@ func buildModelCatalogService(t *testing.T, cfg map[string]any) *service.Factory
 
 	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:               dir,
+		ModelCacheDir:     t.TempDir(),
 		MockWorkersConfig: factoryconfig.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 	})

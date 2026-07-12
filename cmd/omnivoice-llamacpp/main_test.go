@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -74,8 +75,17 @@ func TestRunInvokeCallsRealBackendAndReturnsAudioContent(t *testing.T) {
 	if len(audio) <= 44 || string(audio[:4]) != "RIFF" || string(audio[8:12]) != "WAVE" {
 		t.Fatalf("wav header = %q / %q, want RIFF/WAVE with body", string(audio[:4]), string(audio[8:12]))
 	}
-	if !bytes.Contains(stdout.Bytes(), []byte(`"type":"AUDIO"`)) || !bytes.Contains(stdout.Bytes(), []byte(outputPath)) {
-		t.Fatalf("stdout = %q, want audio content payload", stdout.String())
+	var response struct {
+		Content []struct {
+			Type string `json:"type"`
+			File string `json:"file"`
+		} `json:"content"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatalf("decode stdout: %v", err)
+	}
+	if len(response.Content) != 1 || response.Content[0].Type != "AUDIO" || response.Content[0].File != outputPath {
+		t.Fatalf("stdout = %q, want audio content payload for %q", stdout.String(), outputPath)
 	}
 	if gotCommand != os.Getenv(omniVoiceTTSCommandEnv) {
 		t.Fatalf("backend command = %q, want %q", gotCommand, os.Getenv(omniVoiceTTSCommandEnv))

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -348,7 +349,15 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 	if imagePart.File != nil && string(*imagePart.File) != "" {
 		imagePath = string(*imagePart.File)
 	} else if strings.HasPrefix(imagePath, "file://") {
-		imagePath = strings.TrimPrefix(imagePath, "file://")
+		parsed, parseErr := url.Parse(imagePath)
+		if parseErr != nil {
+			t.Fatalf("parse staged image URL: %v", parseErr)
+		}
+		imagePath = parsed.Path
+		if runtime.GOOS == "windows" && len(imagePath) >= 3 && imagePath[0] == '/' && imagePath[2] == ':' {
+			imagePath = imagePath[1:]
+		}
+		imagePath = filepath.FromSlash(imagePath)
 	}
 	imageContent, err := os.ReadFile(imagePath)
 	if err != nil {

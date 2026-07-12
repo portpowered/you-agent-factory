@@ -178,8 +178,17 @@ func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) f
 	if response.RunnerId != nil {
 		summary.RunnerID = strings.TrimSpace(*response.RunnerId)
 	}
+	if response.PresetId != nil {
+		summary.PresetID = strings.TrimSpace(*response.PresetId)
+	}
+	if response.ModelProvider != nil {
+		summary.ModelProvider = strings.TrimSpace(*response.ModelProvider)
+	}
 	if response.Model != nil {
 		summary.Model = strings.TrimSpace(*response.Model)
+	}
+	if response.ReasoningEffort != nil {
+		summary.ReasoningEffort = strings.TrimSpace(*response.ReasoningEffort)
 	}
 	if response.Provider != nil {
 		summary.Provider = strings.TrimSpace(*response.Provider)
@@ -224,8 +233,17 @@ func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionex
 	if response.RunnerId != nil {
 		summary.RunnerID = strings.TrimSpace(*response.RunnerId)
 	}
+	if response.PresetId != nil {
+		summary.PresetID = strings.TrimSpace(*response.PresetId)
+	}
+	if response.ModelProvider != nil {
+		summary.ModelProvider = strings.TrimSpace(*response.ModelProvider)
+	}
 	if response.Model != nil {
 		summary.Model = strings.TrimSpace(*response.Model)
+	}
+	if response.ReasoningEffort != nil {
+		summary.ReasoningEffort = strings.TrimSpace(*response.ReasoningEffort)
 	}
 	if response.Provider != nil {
 		summary.Provider = strings.TrimSpace(*response.Provider)

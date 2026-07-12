@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 )
 
@@ -21,7 +22,10 @@ func TestMaterializeContentURL_LocalFileOK(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rawURL := "file://" + path
+	rawURL, err := workcontent.FilesystemPathToContentURL(path)
+	if err != nil {
+		t.Fatalf("file URL: %v", err)
+	}
 	got, cleanup, err := materialize.MaterializeContentURL(context.Background(), rawURL, nil)
 	if err != nil {
 		t.Fatalf("materialize: %v", err)
@@ -36,7 +40,10 @@ func TestMaterializeContentURL_LocalFileOK(t *testing.T) {
 }
 
 func TestMaterializeContentURL_LocalMissing(t *testing.T) {
-	rawURL := "file://" + filepath.Join(t.TempDir(), "missing.png")
+	rawURL, err := workcontent.FilesystemPathToContentURL(filepath.Join(t.TempDir(), "missing.png"))
+	if err != nil {
+		t.Fatalf("file URL: %v", err)
+	}
 	_, cleanup, err := materialize.MaterializeContentURL(context.Background(), rawURL, nil)
 	defer cleanup()
 	if err == nil {
@@ -177,7 +184,10 @@ func TestDispatchCache_ReusesURLAndCleansUpOnRelease(t *testing.T) {
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rawURL := "file://" + path
+	rawURL, err := workcontent.FilesystemPathToContentURL(path)
+	if err != nil {
+		t.Fatalf("file URL: %v", err)
+	}
 
 	cache := materialize.NewDispatchCache()
 	p1, cleanup1, err := cache.MaterializeContentURL(context.Background(), rawURL, nil)

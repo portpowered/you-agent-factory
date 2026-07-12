@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -375,6 +376,72 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 	}
 }
 
+func TestCursorProviderBehavior_BuildArgs_WindowsLongPromptUsesArgumentFile(t *testing.T) {
+	tempDir := t.TempDir()
+	buildCtx := &ProviderBuildContext{operatingSystem: "windows", tempDir: tempDir}
+	prompt := strings.Repeat("long cursor instruction ", cursorWindowsPromptArgumentLimit)
+	req := interfaces.ProviderInferenceRequest{
+		ModelProvider:    string(interfaces.ModelProviderCursor),
+		SystemPrompt:     "system guidance",
+		UserMessage:      prompt,
+		Model:            "composer-2.5",
+		SessionID:        "cursor-session-123",
+		WorkingDirectory: `C:\workspace`,
+		Worktree:         "feature-worktree",
+	}
+
+	args, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(context.Background(), req, true, buildCtx)
+	if err != nil {
+		t.Fatalf("BuildArgs returned error: %v", err)
+	}
+	wantPrefix := []string{"-f", "-p", "--model", "composer-2.5", "--resume", "cursor-session-123", "--workspace", `C:\workspace`, "--worktree", "feature-worktree", "--output-format", "stream-json", "--stream-partial-output"}
+	if len(args) != len(wantPrefix)+1 {
+		t.Fatalf("args = %#v, want prefix plus prompt-file argument", args)
+	}
+	assertStringSlicesEqual(t, wantPrefix, args[:len(wantPrefix)])
+	promptArg := args[len(args)-1]
+	if !strings.HasPrefix(promptArg, "@") {
+		t.Fatalf("prompt argument = %q, want @file reference", promptArg)
+	}
+	promptPath := strings.TrimPrefix(promptArg, "@")
+	gotPrompt, err := os.ReadFile(promptPath)
+	if err != nil {
+		t.Fatalf("read prompt file: %v", err)
+	}
+	wantPrompt := buildKiroPrompt(req)
+	if string(gotPrompt) != wantPrompt {
+		t.Fatalf("prompt file content differs: got %d bytes, want %d", len(gotPrompt), len(wantPrompt))
+	}
+	buildCtx.release()
+	if _, err := os.Stat(promptPath); !os.IsNotExist(err) {
+		t.Fatalf("prompt file still exists after release: %v", err)
+	}
+}
+
+func TestCursorProviderBehavior_BuildArgs_DoesNotWrapShortOrNonWindowsPrompts(t *testing.T) {
+	testCases := []struct {
+		name            string
+		operatingSystem string
+		prompt          string
+	}{
+		{name: "ShortWindowsPrompt", operatingSystem: "windows", prompt: "inspect the repository"},
+		{name: "LongLinuxPrompt", operatingSystem: "linux", prompt: strings.Repeat("x", cursorWindowsPromptArgumentLimit+1)},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			args, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderCursor), UserMessage: tc.prompt,
+			}, false, &ProviderBuildContext{operatingSystem: tc.operatingSystem, tempDir: t.TempDir()})
+			if err != nil {
+				t.Fatalf("BuildArgs returned error: %v", err)
+			}
+			if got := args[len(args)-1]; got != tc.prompt {
+				t.Fatalf("prompt argument = %q, want positional prompt", got)
+			}
+		})
+	}
+}
+
 func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
 	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
@@ -488,6 +555,16 @@ func TestNonCodexProviderBehavior_BuildCommandRequest(t *testing.T) {
 				t.Fatal("expected command request input tokens to be cloned")
 			}
 		})
+	}
+}
+
+func TestFailureBaseline_AbsentDefault_BuildCommandRequestUsesEmptyProviderCommandWhenModelProviderUnset(t *testing.T) {
+	req := interfaces.ProviderInferenceRequest{
+		UserMessage: "plan the goal",
+	}
+	request := providerBehaviorFor("", logging.NoopLogger{}).BuildCommandRequest(req, []string{"-p", "plan the goal"})
+	if request.Command != "" {
+		t.Fatalf("command = %q, want empty provider command when modelProvider is unset", request.Command)
 	}
 }
 

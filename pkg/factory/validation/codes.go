@@ -71,6 +71,7 @@ const (
 	CodeOrchestratorJavaScriptMissingSource                      = "factory.orchestrator.javascriptMissingSource"
 	CodeOrchestratorJavaScriptConflictingSource                  = "factory.orchestrator.javascriptConflictingSource"
 	CodeOrchestratorJavaScriptInvalidInlineEncoding              = "factory.orchestrator.javascriptInvalidInlineEncoding"
+	CodeOrchestratorJavaScriptInvalidAgent                       = "factory.orchestrator.javascriptInvalidAgent"
 	CodeWorkerWorkstationBehaviorCompatibility                   = "workstation-worker-behavior-compatibility"
 	CodePollerRunWorkstationKindMismatch                         = "workstation-poller-run-kind-mismatch"
 )

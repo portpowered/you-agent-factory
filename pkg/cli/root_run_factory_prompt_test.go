@@ -102,6 +102,7 @@ func TestRunCommand_NamedFactoryHelpRendersInvocationSignature(t *testing.T) {
 		}
 	}()
 	t.Setenv("HOME", homeDirectory)
+	t.Setenv("USERPROFILE", homeDirectory)
 
 	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(workingDirectory)
 	if err != nil {
@@ -167,6 +168,7 @@ func TestRunCommand_NamedFlagResolvesFactoryRootBeforeRun(t *testing.T) {
 		}
 	}()
 	t.Setenv("HOME", homeDirectory)
+	t.Setenv("USERPROFILE", homeDirectory)
 
 	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
@@ -221,6 +223,7 @@ func TestRunCommand_NamedFlagPrefersProjectFactoryOverGlobal(t *testing.T) {
 		}
 	}()
 	t.Setenv("HOME", homeDirectory)
+	t.Setenv("USERPROFILE", homeDirectory)
 
 	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
@@ -410,6 +413,7 @@ func setupNamedFactoryInvocationTest(t *testing.T) func() {
 		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
 	}
 	t.Setenv("HOME", homeDirectory)
+	t.Setenv("USERPROFILE", homeDirectory)
 
 	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
 	if err != nil {

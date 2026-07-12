@@ -551,6 +551,7 @@
       "executorProvider": "SCRIPT_WRAP",
       "id": "processor",
       "modelProvider": "CURSOR",
+      "model": "composer-2.5",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",

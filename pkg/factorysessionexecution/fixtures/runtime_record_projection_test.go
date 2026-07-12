@@ -110,6 +110,12 @@ func newJavaScriptRuntimeServiceWithFixture(t *testing.T, fixtureName, workflowN
 	})
 }
 
+func presetWorkerSettings() workflowruntime.WorkerSettingsConfig {
+	return workflowruntime.WorkerSettingsConfig{Presets: map[string]workflowruntime.WorkerPreset{
+		"careful-review": {ModelProvider: "codex", Model: "gpt-test", ReasoningEffort: "medium"},
+	}}
+}
+
 func setupRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
 	t.Helper()
 	projectRoot := t.TempDir()

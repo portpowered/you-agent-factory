@@ -249,6 +249,8 @@ type ServiceConfig struct {
 	FakeOptions       []FakeServiceOption
 	Persistence       PersistenceChoice
 	Clock             factory.Clock
+	WorkerPresetIDs   map[string]struct{}
+	WorkerSettings    workflowruntime.WorkerSettingsConfig
 }
 
 // PersistenceChoice makes durable snapshot ownership explicit at composition.
@@ -353,6 +355,8 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 			ProviderExecutor:  executor,
 			Persistence:       persistence,
 			Clock:             config.Clock,
+			WorkerPresetIDs:   config.WorkerPresetIDs,
+			WorkerSettings:    config.WorkerSettings,
 		}), nil
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")
@@ -524,7 +528,10 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		Retryable:             cloneBoolPtr(child.Retryable),
 		FailureClassification: strings.TrimSpace(string(child.FailureClassification)),
 		RunnerID:              strings.TrimSpace(child.RunnerID),
+		PresetID:              strings.TrimSpace(child.Preset),
+		ModelProvider:         strings.TrimSpace(child.ModelProvider),
 		Model:                 strings.TrimSpace(child.Model),
+		ReasoningEffort:       strings.TrimSpace(child.ReasoningEffort),
 	}
 	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
 		summary.JavaScript = &javascript

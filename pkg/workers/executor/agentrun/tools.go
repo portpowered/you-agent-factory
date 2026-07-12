@@ -143,7 +143,7 @@ func isSafeRelativePathForDiagnostics(path string) bool {
 	if trimmed == "" {
 		return false
 	}
-	if filepath.IsAbs(trimmed) {
+	if isAnyPlatformAbsolutePath(trimmed) {
 		return false
 	}
 	cleaned := filepath.Clean(trimmed)
@@ -153,14 +153,25 @@ func isSafeRelativePathForDiagnostics(path string) bool {
 	return true
 }
 
+func isAnyPlatformAbsolutePath(path string) bool {
+	if filepath.IsAbs(path) || strings.HasPrefix(path, "/") || strings.HasPrefix(path, `\\`) {
+		return true
+	}
+	return len(path) >= 3 && path[1] == ':' && (path[2] == '/' || path[2] == '\\') &&
+		((path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z'))
+}
+
 func toolFailureReason(err error) string {
+	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "write_file failed creating parent directories") {
+		return "operation_failed"
+	}
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return "not_found"
 	case errors.Is(err, fs.ErrPermission):
 		return "permission_denied"
 	}
-	message := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(message, "tool path is required"):
 		return "path_required"
@@ -238,9 +249,9 @@ func toolDefinitionsForPolicy(policy string) []messages.ToolDefinition {
 
 // PolicyToolExecutor enforces agent tool policy and records safe diagnostics.
 type PolicyToolExecutor struct {
-	policy    string
+	policy     string
 	workingDir string
-	recorder  *ToolDiagnosticRecorder
+	recorder   *ToolDiagnosticRecorder
 }
 
 func NewPolicyToolExecutor(policy, workingDir string, recorder *ToolDiagnosticRecorder) *PolicyToolExecutor {
@@ -370,7 +381,7 @@ func (executor *PolicyToolExecutor) resolveBoundedPath(relativePath string) (str
 	if trimmed == "" {
 		return "", errors.New("tool path is required")
 	}
-	if filepath.IsAbs(trimmed) {
+	if isAnyPlatformAbsolutePath(trimmed) {
 		return "", errors.New("tool path must be relative to the agent working directory")
 	}
 	base := executor.workingDir

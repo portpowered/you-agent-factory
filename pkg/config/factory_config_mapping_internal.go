@@ -1194,6 +1194,12 @@ func orchestratorJavaScriptInternalFromAPI(value factoryapi.FactoryOrchestratorJ
 		}
 		cfg.DefaultPolicy = raw
 	}
+	if value.Agents != nil {
+		cfg.Agents = make(map[string]interfaces.FactoryOrchestratorJavaScriptAgent, len(*value.Agents))
+		for id, agent := range *value.Agents {
+			cfg.Agents[id] = interfaces.FactoryOrchestratorJavaScriptAgent{Preset: agent.Preset}
+		}
+	}
 	return cfg, nil
 }
 
@@ -1267,6 +1273,13 @@ func orchestratorJavaScriptAPIFromInternal(cfg *interfaces.FactoryOrchestratorJa
 			result.DefaultPolicy = &defaultPolicy
 		}
 	}
+	if len(cfg.Agents) > 0 {
+		agents := make(map[string]factoryapi.FactoryOrchestratorJavaScriptAgent, len(cfg.Agents))
+		for id, agent := range cfg.Agents {
+			agents[id] = factoryapi.FactoryOrchestratorJavaScriptAgent{Preset: agent.Preset}
+		}
+		result.Agents = &agents
+	}
 	return result
 }
 
@@ -1313,6 +1326,12 @@ func cloneFactoryOrchestratorConfig(cfg *interfaces.FactoryOrchestratorConfig) *
 		}
 		if len(cfg.JavaScript.DefaultPolicy) > 0 {
 			js.DefaultPolicy = append(json.RawMessage(nil), cfg.JavaScript.DefaultPolicy...)
+		}
+		if len(cfg.JavaScript.Agents) > 0 {
+			js.Agents = make(map[string]interfaces.FactoryOrchestratorJavaScriptAgent, len(cfg.JavaScript.Agents))
+			for id, agent := range cfg.JavaScript.Agents {
+				js.Agents[id] = agent
+			}
 		}
 		cloned.JavaScript = &js
 	}

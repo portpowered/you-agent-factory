@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam.
+// pkgmaintcheck:ignore-file-lines checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam.
 package factorysessionexecution
 
 import (
@@ -164,6 +166,9 @@ func validateResumeSessionState(sessionID string, state runtimeSessionState) err
 	if err := validateCheckpointSummaryForResume(state.checkpointSummary, sessionID); err != nil {
 		return err
 	}
+	if err := validateDurableResumeFacts(sessionID, state); err != nil {
+		return err
+	}
 	if state.startRequest == nil || strings.TrimSpace(state.sourceContent) == "" {
 		return &ResumeError{
 			Outcome:   ResumeOutcomeInvalidState,
@@ -173,6 +178,72 @@ func validateResumeSessionState(sessionID string, state runtimeSessionState) err
 		}
 	}
 	return nil
+}
+
+// validateDurableResumeFacts reconciles the checkpoint skip-list with the
+// durable dispatch, artifact, and canonical event history before execution can
+// contact a child provider.
+// pkgmaintcheck:ignore-cyclomatic-complexity each branch rejects one independently corrupted durable resume fact before provider IO.
+func validateDurableResumeFacts(sessionID string, state runtimeSessionState) error {
+	derived := jsstore.LatestCheckpointSummaryFromRecords(jsstore.CheckpointSummaryInput{
+		SessionID: sessionID, Records: state.runtimeRecords,
+	})
+	if derived == nil || derived.CheckpointID != state.checkpointSummary.CheckpointID {
+		return invalidDurableResumeFact(sessionID, "checkpointSummary.checkpointId", "persisted checkpoint does not match durable runtime history")
+	}
+	completed := stringSet(derived.CompletedDispatchIDs)
+	for _, dispatchID := range state.checkpointSummary.CompletedDispatchIDs {
+		if _, ok := completed[dispatchID]; !ok {
+			return invalidDurableResumeFact(sessionID, "checkpointSummary.completedDispatchIds", "persisted checkpoint references a dispatch that is not durably completed")
+		}
+	}
+
+	artifacts := stringSet(derived.ArtifactIDs)
+	for _, artifactID := range state.checkpointSummary.ArtifactIDs {
+		if _, ok := artifacts[artifactID]; !ok {
+			return invalidDurableResumeFact(sessionID, "checkpointSummary.artifactIds", "persisted checkpoint references an artifact that is not durable")
+		}
+	}
+
+	if len(state.events) == 0 {
+		return invalidDurableResumeFact(sessionID, "events", "persisted canonical event history is required for resume")
+	}
+	lastSequence := 0
+	lastType := ""
+	for _, raw := range state.events {
+		var event canonicalFactoryEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			return invalidDurableResumeFact(sessionID, "events", "persisted canonical event history is malformed")
+		}
+		if event.Context.Sequence <= lastSequence {
+			return invalidDurableResumeFact(sessionID, "events.sequence", fmt.Sprintf("persisted canonical event cursor regressed from %d (%s) to %d (%s)", lastSequence, lastType, event.Context.Sequence, event.Type))
+		}
+		lastSequence = event.Context.Sequence
+		lastType = event.Type
+		if eventSessionID := stringValuePtr(event.Context.SessionID); eventSessionID != "" && eventSessionID != sessionID {
+			return invalidDurableResumeFact(sessionID, "events.sessionId", "persisted canonical event belongs to a different Factory Session")
+		}
+	}
+	replayed, _, err := ReplaySessionProjection(state.events)
+	if err != nil || replayed.SessionID != sessionID || replayed.Status != state.session.Status {
+		return invalidDurableResumeFact(sessionID, "events", "persisted canonical event projection does not match the durable session")
+	}
+	return nil
+}
+
+func stringSet(values []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		set[value] = struct{}{}
+	}
+	return set
+}
+
+func invalidDurableResumeFact(sessionID, field, message string) error {
+	return &ResumeError{
+		Outcome: ResumeOutcomeInvalidState, Field: field,
+		SessionID: sessionID, Message: message,
+	}
 }
 
 func validateCheckpointSummaryForResume(summary *jsstore.CheckpointSummary, sessionID string) error {
@@ -214,6 +285,14 @@ func validateCheckpointSummaryForResume(summary *jsstore.CheckpointSummary, sess
 			Field:     "checkpointSummary.sessionId",
 			SessionID: sessionID,
 			Message:   "persisted checkpoint summary sessionId does not match the interrupted session",
+		}
+	}
+	if strings.TrimSpace(summary.ResumeStrategy) != jsstore.ResumeStrategyReplayCompletedThenContinue {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.resumeStrategy",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is not approved for resume",
 		}
 	}
 	return nil
@@ -833,6 +912,9 @@ func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionSt
 
 func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
 	if len(state.petriMutations) > 0 {
+		return true
+	}
+	if state.session.Status == LifecycleStatusPaused {
 		return true
 	}
 	if IsTerminalLifecycleStatus(state.session.Status) {

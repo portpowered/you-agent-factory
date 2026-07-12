@@ -28,11 +28,12 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	executor := NewProviderChildExecutor("session-live-child", providerexecution.NewProviderExecutor(provider), collectorSink)
 
 	result, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{
-		Prompt:       "summarize workflows",
-		Label:        "summarize-findings",
-		Model:        "gpt-test",
-		WorkflowName: "agent-run-fake-child",
-		ArgsSubject:  "workflows",
+		Prompt:        "summarize workflows",
+		Label:         "summarize-findings",
+		ModelProvider: "CODEX",
+		Model:         "gpt-test",
+		WorkflowName:  "agent-run-fake-child",
+		ArgsSubject:   "workflows",
 		OutputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -58,6 +59,9 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	if provider.callCount != 1 {
 		t.Fatalf("provider call count = %d, want 1", provider.callCount)
 	}
+	if provider.lastReq.ModelProvider != "CODEX" || provider.lastReq.Model != "gpt-test" {
+		t.Fatalf("provider worker settings = (%q, %q), want (CODEX, gpt-test)", provider.lastReq.ModelProvider, provider.lastReq.Model)
+	}
 	if got := collectorSink.statusTransitions("dispatch-1"); len(got) != 3 {
 		t.Fatalf("recorded status transitions = %#v, want queued/running/completed", got)
 	}
@@ -73,6 +77,7 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 type unitMockProvider struct {
 	response  interfaces.InferenceResponse
 	callCount int
+	lastReq   interfaces.ProviderInferenceRequest
 	mu        sync.Mutex
 }
 
@@ -80,10 +85,11 @@ func newUnitMockProvider(response interfaces.InferenceResponse) *unitMockProvide
 	return &unitMockProvider{response: response}
 }
 
-func (m *unitMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *unitMockProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.callCount++
+	m.lastReq = req
 	return m.response, nil
 }
 
