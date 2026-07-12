@@ -208,8 +208,11 @@ primary-result behavior.
   exported from `pkg/config/layout.go`. The topology uses exactly one `AGENT_WORKER`
   with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
   `${input}` from the invocation signature into the workstation prompt body.
-- `pkg/packagedfactories/subagent/` owns packaged subagent factory metadata constants
-  and topology validation coverage for the one-pass built-in factory JSON.
+  `@you/subagent` is registered in `builtInNamedFactoryCatalog` so first named
+  resolution materializes the split-layout factory under the global named-factory root.
+- `pkg/packagedfactories/subagent/` owns packaged subagent factory metadata constants,
+  topology validation coverage, and materialization/edit-safe identity tests for the
+  one-pass built-in factory JSON.
 - `pkg/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
   for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
   Keep usage lines, parameter descriptions, defaults, accepted values, output

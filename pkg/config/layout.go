@@ -874,9 +874,10 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/fusion": BuiltInFusionFactoryJSON,
-	"@you/goal":   BuiltInGoalFactoryJSON,
-	"@you/tts":    BuiltInTTSFactoryJSON,
+	"@you/fusion":    BuiltInFusionFactoryJSON,
+	"@you/goal":      BuiltInGoalFactoryJSON,
+	"@you/subagent":  BuiltInSubagentFactoryJSON,
+	"@you/tts":       BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
