@@ -44,6 +44,21 @@ func TestRegisteredCLIProviders_IncludeEverySupportedProvider(t *testing.T) {
 	}
 }
 
+func TestRegisteredCLIProviders_PreferenceRanksAreUnique(t *testing.T) {
+	seen := make(map[int]CLIProviderIdentity)
+	for _, registration := range RegisteredCLIProviders() {
+		if previous, ok := seen[registration.PreferenceRank]; ok {
+			t.Fatalf(
+				"duplicate preference rank %d: %q and %q",
+				registration.PreferenceRank,
+				previous,
+				registration.Identity,
+			)
+		}
+		seen[registration.PreferenceRank] = registration.Identity
+	}
+}
+
 func TestRegisteredCLIProviders_PreferenceRankOrder(t *testing.T) {
 	wantOrder := []CLIProviderIdentity{
 		CLIProviderIdentityCodex,
@@ -394,6 +409,50 @@ func TestDiscoverRegisteredCLIProvider_FakePATHDiscoveryTables(t *testing.T) {
 
 func ptrCLIProviderIdentity(id CLIProviderIdentity) *CLIProviderIdentity {
 	return &id
+}
+
+func TestProbeRegisteredCLIProviderAvailability_FakePATHReturnsRankOrder(t *testing.T) {
+	originalLookPath := lookPath
+	defer func() {
+		lookPath = originalLookPath
+	}()
+
+	presentCommands := map[string]bool{
+		string(interfaces.ModelProviderCodex):    true,
+		string(interfaces.ModelProviderClaude):   true,
+		string(interfaces.ModelProviderCursor):   true,
+		string(interfaces.ModelProviderOpenCode): true,
+		string(interfaces.ModelProviderGemini):   true,
+		string(interfaces.ModelProviderKiro):     true,
+	}
+	lookPath = func(file string) (string, error) {
+		if presentCommands[file] {
+			return "/fake/bin/" + file, nil
+		}
+		return "", exec.ErrNotFound
+	}
+
+	wantOrder := []CLIProviderIdentity{
+		CLIProviderIdentityCodex,
+		CLIProviderIdentityClaude,
+		CLIProviderIdentityCursor,
+		CLIProviderIdentityOpenCode,
+		CLIProviderIdentityGemini,
+		CLIProviderIdentityKiro,
+	}
+
+	got := ProbeRegisteredCLIProviderAvailability()
+	if len(got) != len(wantOrder) {
+		t.Fatalf("availability len = %d, want %d", len(got), len(wantOrder))
+	}
+	for i, wantIdentity := range wantOrder {
+		if got[i].Registration.Identity != wantIdentity {
+			t.Fatalf("availability[%d] identity = %q, want %q", i, got[i].Registration.Identity, wantIdentity)
+		}
+		if !got[i].Available {
+			t.Fatalf("availability[%d] identity %q not available on Fake-PATH", i, wantIdentity)
+		}
+	}
 }
 
 func TestProbeCLIProviderAvailability_IsDeterministicForFixedFakePATH(t *testing.T) {

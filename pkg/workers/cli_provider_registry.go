@@ -30,12 +30,20 @@ const (
 
 // CLIProviderRegistration describes one supported agent CLI provider in the
 // deterministic discovery catalog.
+//
+// PreferenceRank establishes a total order for discovery: lower rank means higher
+// preference. Ranks are fixed at registration time and do not depend on PATH
+// enumeration or host filesystem ordering.
 type CLIProviderRegistration struct {
 	Identity       CLIProviderIdentity
 	Command        string
 	PreferenceRank int
 }
 
+// registeredCLIProviders is the canonical CLI provider catalog. Preference ranks
+// are assigned in discovery priority order:
+//
+//	Codex (10) → Claude (20) → Cursor (30) → OpenCode (40) → Gemini (50) → Kiro (60)
 var registeredCLIProviders = []CLIProviderRegistration{
 	{
 		Identity:       CLIProviderIdentityCodex,
