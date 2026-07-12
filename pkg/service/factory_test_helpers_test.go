@@ -5,9 +5,12 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -16,16 +19,19 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
 )
 
 func minimalFactoryConfig() map[string]any {
@@ -1228,4 +1234,268 @@ func waitForSessionInFlight(t *testing.T, session *liveFactorySession, wait time
 	}
 	snap := sessionEngineSnapshot(t, session)
 	t.Fatalf("timed out waiting for in-flight dispatch on session %s inFlight=%d dispatches=%d", session.ID, snap.InFlightCount, len(snap.Dispatches))
+}
+
+func TestNormalizeInvocationBootstrapConfig_ForcesNoServerShape(t *testing.T) {
+	t.Parallel()
+
+	ready := make(chan struct{})
+	starter := func(context.Context, apisurface.APISurface, int, *zap.Logger) error {
+		close(ready)
+		return nil
+	}
+	renderer := func(SimpleDashboardRenderInput) {}
+
+	cfg := &FactoryServiceConfig{
+		Port:                    7437,
+		RuntimeMode:             interfaces.RuntimeModeBatch,
+		WorkFile:                "/tmp/work.json",
+		APIServerStarter:        starter,
+		APIServerReady:          ready,
+		SimpleDashboardRenderer: renderer,
+	}
+
+	got := NormalizeInvocationBootstrapConfig(cfg)
+	if got.Port != 0 {
+		t.Fatalf("Port = %d, want 0", got.Port)
+	}
+	if got.APIServerStarter != nil {
+		t.Fatal("APIServerStarter = non-nil, want nil")
+	}
+	if got.APIServerReady != nil {
+		t.Fatal("APIServerReady = non-nil, want nil")
+	}
+	if got.SimpleDashboardRenderer != nil {
+		t.Fatal("SimpleDashboardRenderer = non-nil, want nil")
+	}
+	if got.RuntimeMode != interfaces.RuntimeModeService {
+		t.Fatalf("RuntimeMode = %q, want %q", got.RuntimeMode, interfaces.RuntimeModeService)
+	}
+	if got.WorkFile != "" {
+		t.Fatalf("WorkFile = %q, want empty", got.WorkFile)
+	}
+}
+
+func TestBuildInvocationBootstrap_LeavesNoFactoryAPIServerListener(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	writeInvocationBootstrapWorkerAgentsMD(t, dir, "worker-a")
+	writeInvocationBootstrapWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	probePort := reserveInvocationBootstrapProbePort(t)
+	apiReady := make(chan struct{})
+	starterInvoked := make(chan struct{}, 1)
+	cfg := &FactoryServiceConfig{
+		Dir:               dir,
+		Port:              probePort,
+		RuntimeMode:       interfaces.RuntimeModeBatch,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		APIServerReady:    apiReady,
+		APIServerStarter: func(ctx context.Context, _ apisurface.APISurface, port int, _ *zap.Logger) error {
+			starterInvoked <- struct{}{}
+			listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+			if err != nil {
+				return err
+			}
+			close(apiReady)
+			<-ctx.Done()
+			return listener.Close()
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bootstrap, err := BuildInvocationBootstrap(ctx, cfg)
+	if err != nil {
+		t.Fatalf("BuildInvocationBootstrap: %v", err)
+	}
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- bootstrap.Run(ctx)
+	}()
+
+	waitForInvocationBootstrapSessionReady(t, ctx, bootstrap, runErrCh)
+	assertFactoryAPIServerPortFree(t, probePort)
+
+	select {
+	case <-starterInvoked:
+		t.Fatal("APIServerStarter invoked, want no-server bootstrap to skip HTTP listener startup")
+	default:
+	}
+
+	cancel()
+	if err := <-runErrCh; err != nil && err != context.Canceled {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestInvocationBootstrap_CloseFactorySessionReleasesLiveSession(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	writeInvocationBootstrapWorkerAgentsMD(t, dir, "worker-a")
+	writeInvocationBootstrapWorkstationAgentsMD(t, dir, "process")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	bootstrap, err := BuildInvocationBootstrap(ctx, &FactoryServiceConfig{
+		Dir:               dir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildInvocationBootstrap: %v", err)
+	}
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- bootstrap.Run(ctx)
+	}()
+
+	waitForInvocationBootstrapSessionReady(t, ctx, bootstrap, runErrCh)
+
+	if _, err := bootstrap.Service.GetFactorySession(ctx, factorysessions.DefaultSessionID); err != nil {
+		t.Fatalf("GetFactorySession before close: %v", err)
+	}
+	if err := bootstrap.CloseFactorySession(ctx, factorysessions.DefaultSessionID); err != nil {
+		t.Fatalf("CloseFactorySession: %v", err)
+	}
+	if _, err := bootstrap.Service.GetFactorySession(ctx, factorysessions.DefaultSessionID); !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("GetFactorySession after close = %v, want %v", err, apisurface.ErrFactorySessionNotFound)
+	}
+
+	cancel()
+	if err := <-runErrCh; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.T) {
+	t.Parallel()
+
+	requestID := "request-1"
+	request := factoryapi.InvocationRequest{RequestId: &requestID, Args: &map[string]any{"input": "hello"}}
+	wantResult := invocations.FactoryInvocationResult{
+		RequestID: "result-request",
+		TraceID:   "trace-1",
+		Status:    factoryapi.InvocationTerminalStatusCompleted,
+	}
+	wantErr := errors.New("owner failure")
+	invoker := &forwardingSessionInvoker{result: wantResult, err: wantErr}
+	svc := &FactoryService{sessionInvoker: invoker}
+	bootstrap := &InvocationBootstrap{Service: svc}
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("forwarding"), "preserved")
+
+	got, err := bootstrap.InvokeFactorySession(ctx, "session-1", request)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want owner error %v", err, wantErr)
+	}
+	if !reflect.DeepEqual(got, wantResult) {
+		t.Fatalf("result = %#v, want %#v", got, wantResult)
+	}
+	if invoker.ctx != ctx || invoker.sessionID != "session-1" {
+		t.Fatalf("forwarded ctx/session = %#v/%q", invoker.ctx, invoker.sessionID)
+	}
+	if invoker.request.RequestId == nil || *invoker.request.RequestId != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
+		t.Fatalf("forwarded request = %#v", invoker.request)
+	}
+}
+
+func reserveInvocationBootstrapProbePort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Close listener: %v", err)
+	}
+	return port
+}
+
+func waitForInvocationBootstrapSessionReady(
+	t *testing.T,
+	ctx context.Context,
+	bootstrap *InvocationBootstrap,
+	runErrCh <-chan error,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := bootstrap.GetCurrentFactoryForSession(ctx, factorysessions.DefaultSessionID); err == nil {
+			return
+		} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			t.Fatalf("GetCurrentFactoryForSession: %v", err)
+		}
+
+		select {
+		case err := <-runErrCh:
+			if err == nil || err == context.Canceled {
+				t.Fatal("bootstrap runtime stopped before session became ready")
+			}
+			t.Fatalf("bootstrap runtime failed before session became ready: %v", err)
+		case <-ctx.Done():
+			t.Fatalf("context canceled before session became ready: %v", ctx.Err())
+		default:
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for bootstrap session readiness")
+}
+
+func assertFactoryAPIServerPortFree(t *testing.T, port int) {
+	t.Helper()
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		t.Fatalf("tcp %s accepted a connection, want no factory API/dashboard listener", addr)
+	}
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("tcp %s still held by bootstrap listener: %v", addr, err)
+	}
+	if err := listener.Close(); err != nil {
+		t.Fatalf("Close probe listener: %v", err)
+	}
+}
+
+func writeInvocationBootstrapWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {
+	t.Helper()
+	workerDir := filepath.Join(factoryDir, "workers", workerName)
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatalf("create worker dir: %v", err)
+	}
+	content := "---\ntype: MODEL_WORKER\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n"
+	if err := os.WriteFile(filepath.Join(workerDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write worker AGENTS.md: %v", err)
+	}
+}
+
+func writeInvocationBootstrapWorkstationAgentsMD(t *testing.T, factoryDir, workstationName string) {
+	t.Helper()
+	workstationDir := filepath.Join(factoryDir, "workstations", workstationName)
+	if err := os.MkdirAll(workstationDir, 0o755); err != nil {
+		t.Fatalf("create workstation dir: %v", err)
+	}
+	content := "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"
+	if err := os.WriteFile(filepath.Join(workstationDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
+	}
 }

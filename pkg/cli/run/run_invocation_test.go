@@ -1565,3 +1565,46 @@ func (r *capturingInvocationMetricsRecorder) assertContainsMetricNames(t *testin
 		}
 	}
 }
+
+// TestNoServerNamedInvocationIntegrationAndEquivalenceProof is the consolidated
+// package integration and invocation-equivalence proof for hermetic named
+// one-shot invocation on the shared no-server bootstrap path. It fails if named
+// runs regress to requiring a listening HTTP server or drift from shared CLI/API
+// input-resolution and primary-result contracts.
+func TestNoServerNamedInvocationIntegrationAndEquivalenceProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("consolidated package integration and invocation-equivalence proof for no-server named invocation")
+	}
+
+	t.Run("hermetic named success without listener", func(t *testing.T) {
+		preserveRunGlobals(t)
+
+		goalText := "consolidated no-server named integration proof"
+		probePort := reserveNoServerInvocationProbePort(t)
+		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+		cfg.Port = probePort
+		cfg.AutoPort = true
+		var output bytes.Buffer
+		cfg.Output = &output
+
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+
+		if err := Run(ctx, cfg); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if got := output.String(); got != "mock worker accepted" {
+			t.Fatalf("stdout = %q, want invocationReturn primary result mock worker accepted", got)
+		}
+		assertNoServerInvocationProbePortFree(t, probePort)
+	})
+
+	t.Run("shared input resolution and primary-result equivalence", func(t *testing.T) {
+		goalText := "consolidated no-server equivalence proof"
+		capture, output := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
+			cfg.JSONOutput = true
+		})
+		assertCapturedRequestMatchesLogicalAPIText(t, capture, goalText)
+		assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
+	})
+}
