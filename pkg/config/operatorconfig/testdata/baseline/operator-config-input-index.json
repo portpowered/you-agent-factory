@@ -1,0 +1,399 @@
+{
+  "formatVersion": "operator-config-input/v1",
+  "unknownFieldPolicy": "ParseFileConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
+  "precedenceChain": "file \u003c env \u003c flag",
+  "cases": [
+    {
+      "id": "valid-defaults-only",
+      "category": "parse-defaults",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "accept",
+      "fixture": "valid/defaults-only.json",
+      "description": "defaults.workerModelProvider and defaults.workerModel parse from file",
+      "expectedFileConfig": {
+        "defaults": {
+          "workerModelProvider": "codex",
+          "workerModel": "gpt-5-codex"
+        }
+      }
+    },
+    {
+      "id": "valid-backend-scope-sibling",
+      "category": "parse-defaults",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "accept",
+      "fixture": "valid/backend-scope-sibling.json",
+      "description": "operatorconfig tolerates sibling backendScopeID without returning it on FileConfig",
+      "expectedFileConfig": {
+        "defaults": {
+          "workerModelProvider": "claude",
+          "workerModel": "claude-sonnet"
+        }
+      }
+    },
+    {
+      "id": "valid-worker-presets-canonicalized",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "accept",
+      "fixture": "valid/worker-presets-canonicalized.json",
+      "description": "workerPresets ids, providers, models, and reasoningEffort are trimmed and canonicalized",
+      "expectedFileConfig": {
+        "defaults": {},
+        "workerPresets": [
+          {
+            "id": "research",
+            "modelProvider": "CODEX",
+            "model": "gpt-5.4",
+            "reasoningEffort": "high"
+          }
+        ]
+      }
+    },
+    {
+      "id": "valid-worker-presets-missing",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "accept",
+      "fixture": "valid/worker-presets-missing.json",
+      "description": "missing workerPresets array is backward compatible",
+      "expectedFileConfig": {
+        "defaults": {
+          "workerModel": "existing-model"
+        }
+      }
+    },
+    {
+      "id": "invalid-malformed-json",
+      "category": "parse-defaults",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/malformed-json.json",
+      "description": "malformed JSON fails parse",
+      "errorFragments": [
+        "decode operator config JSON"
+      ]
+    },
+    {
+      "id": "invalid-unknown-top-level",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/unknown-top-level.json",
+      "description": "unknown top-level keys are rejected under strict decode",
+      "errorFragments": [
+        "unknown field"
+      ]
+    },
+    {
+      "id": "invalid-unknown-nested-defaults",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/unknown-nested-defaults.json",
+      "description": "unknown nested defaults keys are rejected under strict decode",
+      "errorFragments": [
+        "unknown field"
+      ]
+    },
+    {
+      "id": "invalid-trailing-json",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/trailing-json.json",
+      "description": "trailing JSON values after the root object are rejected",
+      "errorFragments": [
+        "unexpected trailing JSON"
+      ]
+    },
+    {
+      "id": "invalid-preset-empty-id",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/preset-empty-id.json",
+      "description": "workerPresets[].id must be non-empty after trim",
+      "errorFragments": [
+        "workerPresets[0].id",
+        "non-empty"
+      ]
+    },
+    {
+      "id": "invalid-preset-duplicate-id",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/preset-duplicate-id.json",
+      "description": "duplicate workerPresets[].id values are rejected",
+      "errorFragments": [
+        "workerPresets[1].id",
+        "duplicated"
+      ]
+    },
+    {
+      "id": "invalid-preset-missing-provider",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/preset-missing-provider.json",
+      "description": "workerPresets[].modelProvider is required",
+      "errorFragments": [
+        "workerPresets[0]",
+        "modelProvider"
+      ]
+    },
+    {
+      "id": "invalid-preset-symbolic-provider",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/preset-symbolic-provider.json",
+      "description": "symbolic DEFAULT provider is rejected in worker presets",
+      "errorFragments": [
+        "\"build\"",
+        "\"DEFAULT\"",
+        "unsupported modelProvider"
+      ]
+    },
+    {
+      "id": "invalid-preset-unsupported-provider",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/preset-unsupported-provider.json",
+      "description": "unsupported workerPresets[].modelProvider values are rejected",
+      "errorFragments": [
+        "\"build\"",
+        "\"other\"",
+        "unsupported modelProvider"
+      ]
+    },
+    {
+      "id": "invalid-preset-unsupported-reasoning",
+      "category": "parse-worker-presets",
+      "entrypoint": "ParseFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/preset-unsupported-reasoning.json",
+      "description": "unsupported workerPresets[].reasoningEffort values are rejected",
+      "errorFragments": [
+        "\"build\"",
+        "\"extreme\"",
+        "unsupported reasoningEffort"
+      ]
+    },
+    {
+      "id": "valid-missing-file",
+      "category": "load-file",
+      "entrypoint": "LoadFileConfig",
+      "outcome": "accept",
+      "description": "missing config file returns empty FileConfig without error",
+      "expectedFileConfig": {
+        "defaults": {}
+      }
+    },
+    {
+      "id": "valid-load-defaults",
+      "category": "load-file",
+      "entrypoint": "LoadFileConfig",
+      "outcome": "accept",
+      "fixture": "valid/load-defaults.json",
+      "description": "LoadFileConfig reads and validates defaults from disk",
+      "expectedFileConfig": {
+        "defaults": {
+          "workerModelProvider": "claude",
+          "workerModel": "claude-sonnet"
+        }
+      }
+    },
+    {
+      "id": "invalid-load-malformed",
+      "category": "load-file",
+      "entrypoint": "LoadFileConfig",
+      "outcome": "reject",
+      "fixture": "invalid/load-malformed.json",
+      "description": "malformed on-disk config fails with path in error",
+      "errorFragments": [
+        "parse operator config"
+      ]
+    },
+    {
+      "id": "resolve-flag-wins-both",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "accept",
+      "description": "flag layer wins independently for provider and model when both are set",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "claude",
+          "workerModel": "file-model"
+        },
+        "env": {
+          "YOU_DEFAULT_WORKER_MODEL": "env-model",
+          "YOU_DEFAULT_WORKER_MODEL_PROVIDER": "codex"
+        },
+        "flag": {
+          "workerModelProvider": "gemini",
+          "workerModel": "flag-model"
+        }
+      },
+      "precedenceWinners": {
+        "workerModelProviderSource": "flag",
+        "workerModelSource": "flag"
+      },
+      "expectedResolved": {
+        "workerModelProvider": "GEMINI",
+        "workerModel": "flag-model"
+      }
+    },
+    {
+      "id": "resolve-env-wins-both",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "accept",
+      "description": "env layer wins for both fields when flags are unset",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "claude",
+          "workerModel": "file-model"
+        },
+        "env": {
+          "YOU_DEFAULT_WORKER_MODEL": "env-model",
+          "YOU_DEFAULT_WORKER_MODEL_PROVIDER": "codex"
+        },
+        "flag": {}
+      },
+      "precedenceWinners": {
+        "workerModelProviderSource": "env",
+        "workerModelSource": "env"
+      },
+      "expectedResolved": {
+        "workerModelProvider": "CODEX",
+        "workerModel": "env-model"
+      }
+    },
+    {
+      "id": "resolve-mixed-independent",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "accept",
+      "description": "provider and model precedence are independent per field",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "claude",
+          "workerModel": "file-model"
+        },
+        "env": {
+          "YOU_DEFAULT_WORKER_MODEL": "env-model",
+          "YOU_DEFAULT_WORKER_MODEL_PROVIDER": "codex"
+        },
+        "flag": {
+          "workerModelProvider": "gemini"
+        }
+      },
+      "precedenceWinners": {
+        "workerModelProviderSource": "flag",
+        "workerModelSource": "env"
+      },
+      "expectedResolved": {
+        "workerModelProvider": "GEMINI",
+        "workerModel": "env-model"
+      }
+    },
+    {
+      "id": "resolve-file-only",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "accept",
+      "description": "file layer supplies both fields when env and flag are unset",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "codex",
+          "workerModel": "file-model"
+        },
+        "flag": {}
+      },
+      "precedenceWinners": {
+        "workerModelProviderSource": "file",
+        "workerModelSource": "file"
+      },
+      "expectedResolved": {
+        "workerModelProvider": "CODEX",
+        "workerModel": "file-model"
+      }
+    },
+    {
+      "id": "resolve-symbolic-default-from-file",
+      "category": "resolve-symbolic-default",
+      "entrypoint": "Resolve",
+      "outcome": "accept",
+      "description": "symbolic DEFAULT provider resolves through lower-precedence concrete provider",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "codex"
+        },
+        "flag": {
+          "workerModelProvider": "DEFAULT"
+        }
+      },
+      "precedenceWinners": {
+        "workerModelProviderSource": "flag"
+      },
+      "expectedResolved": {
+        "workerModelProvider": "CODEX"
+      }
+    },
+    {
+      "id": "resolve-symbolic-default-unresolved",
+      "category": "resolve-symbolic-default",
+      "entrypoint": "Resolve",
+      "outcome": "reject",
+      "description": "symbolic DEFAULT without a concrete lower-precedence provider fails resolve",
+      "resolveLayers": {
+        "fileDefaults": {},
+        "flag": {
+          "workerModelProvider": "DEFAULT"
+        }
+      },
+      "errorFragments": [
+        "concrete provider"
+      ]
+    },
+    {
+      "id": "resolve-provider-alias",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "accept",
+      "description": "provider aliases are canonicalized during resolve",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "kiro-cli"
+        },
+        "flag": {}
+      },
+      "precedenceWinners": {
+        "workerModelProviderSource": "file"
+      },
+      "expectedResolved": {
+        "workerModelProvider": "KIRO"
+      }
+    },
+    {
+      "id": "resolve-unsupported-provider",
+      "category": "resolve-precedence",
+      "entrypoint": "Resolve",
+      "outcome": "reject",
+      "description": "unsupported provider values fail resolve with accepted provider summary",
+      "resolveLayers": {
+        "fileDefaults": {
+          "workerModelProvider": "not-a-provider"
+        },
+        "flag": {}
+      },
+      "errorFragments": [
+        "unsupported worker model provider",
+        "accepted canonical providers"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "workerPresets": [
+    {
+      "id": "build",
+      "modelProvider": "codex",
+      "reasoningEffort": "extreme"
+    }
+  ]
+}

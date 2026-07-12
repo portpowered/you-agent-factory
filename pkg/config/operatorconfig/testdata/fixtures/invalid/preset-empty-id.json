@@ -1,0 +1,8 @@
+{
+  "workerPresets": [
+    {
+      "id": "  ",
+      "modelProvider": "codex"
+    }
+  ]
+}
