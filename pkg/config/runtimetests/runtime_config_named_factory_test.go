@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -108,6 +109,35 @@ func assertScopedNamedFactoryList(t *testing.T, rootDir string) {
 	}
 }
 
+func TestMapNamedFactoryDir_HierarchicalScopedLayout(t *testing.T) {
+	rootDir := t.TempDir()
+
+	got, err := MapNamedFactoryDir(rootDir, "@you/goal")
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(@you/goal): %v", err)
+	}
+	want := filepath.Join(rootDir, "@you", "goal")
+	if got != want {
+		t.Fatalf("MapNamedFactoryDir(@you/goal) = %q, want %q", got, want)
+	}
+
+	segments, err := NamedFactoryPathSegments("@you/goal")
+	if err != nil {
+		t.Fatalf("NamedFactoryPathSegments(@you/goal): %v", err)
+	}
+	if len(segments) != 2 || segments[0] != "@you" || segments[1] != "goal" {
+		t.Fatalf("segments = %#v, want [@you goal]", segments)
+	}
+
+	roundTrip, err := NamedFactoryNameFromPathSegments(segments)
+	if err != nil {
+		t.Fatalf("NamedFactoryNameFromPathSegments: %v", err)
+	}
+	if roundTrip != "@you/goal" {
+		t.Fatalf("round trip = %q, want @you/goal", roundTrip)
+	}
+}
+
 func TestNamedFactoryNameLayoutSegment_RoundTrip(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -159,12 +189,13 @@ func TestNamedFactoryNameLayoutSegment_RejectsInvalidNames(t *testing.T) {
 
 func TestDefaultNamedFactoryRoots(t *testing.T) {
 	homeDir := filepath.Join("home", "customer")
+	wantRoot := defaultpaths.NamedFactoriesRoot(homeDir)
 	globalRoot, err := GlobalNamedFactoryRootForHome(homeDir)
 	if err != nil {
 		t.Fatalf("GlobalNamedFactoryRootForHome: %v", err)
 	}
-	if want := filepath.Join(homeDir, ".you-agent-factory", "factories"); globalRoot != want {
-		t.Fatalf("global root = %q, want %q", globalRoot, want)
+	if globalRoot != wantRoot {
+		t.Fatalf("global root = %q, want defaultpaths.NamedFactoriesRoot = %q", globalRoot, wantRoot)
 	}
 
 	testHomeDir := t.TempDir()
@@ -174,7 +205,7 @@ func TestDefaultNamedFactoryRoots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
 	}
-	if want := filepath.Join(testHomeDir, ".you-agent-factory", "factories"); defaultGlobalRoot != want {
+	if want := defaultpaths.NamedFactoriesRoot(testHomeDir); defaultGlobalRoot != want {
 		t.Fatalf("default global root = %q, want %q", defaultGlobalRoot, want)
 	}
 

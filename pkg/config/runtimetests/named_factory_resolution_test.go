@@ -384,6 +384,7 @@ func TestResolveNamedFactoryAcrossRoots_ReportsCorruptGlobalEditableGoalTarget(t
 	}
 }
 
+
 func TestResolveNamedFactoryAcrossRoots_UpgradesLegacyMaterializedBuiltInGoalPromptTemplate(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()

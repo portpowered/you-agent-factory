@@ -1235,7 +1235,7 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.
 	if _, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", projectPayload); err != nil {
 		t.Fatalf("PersistNamedFactory(project alpha): %v", err)
 	}
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
 	globalPayload := []byte(`{
 	  "name": "global-alpha",
 	  "id": "global-alpha",
@@ -1507,7 +1507,7 @@ func setupNamedGoalCLIEnv(t *testing.T) namedGoalCLIEnv {
 }
 
 func materializedGoalDir(homeDir string) string {
-	return filepath.Join(homeDir, ".you-agent-factory", "factories", "@you%2Fgoal")
+	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you%2Fgoal")
 }
 
 func executeNamedGoalRun(t *testing.T, root *cobra.Command) {
