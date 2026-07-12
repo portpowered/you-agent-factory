@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -712,6 +713,101 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 	testJavaScriptRuntimeSyncCompletedSession(t, service, started.SessionID)
 	testJavaScriptRuntimeSyncCompletedResult(t, service, started.SessionID)
 	testJavaScriptRuntimeSyncCompletedEvents(t, service, started.SessionID)
+}
+
+func TestJavaScriptRuntimeService_StartSync_PersistenceFailureDoesNotPublishSuccess(t *testing.T) {
+	store := &runtimeRecordingStore{saveErr: errors.New("append unavailable")}
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+	})
+
+	started, err := service.StartSync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-sync-persist-failure-001",
+		simpleFinalWorkflowSource,
+		nil,
+		nil,
+	))
+	if err == nil || !strings.Contains(err.Error(), "append unavailable") {
+		t.Fatalf("StartSync result = %#v, error = %v, want persistence failure", started, err)
+	}
+
+	store.mu.Lock()
+	saveCalls := store.saveCalls
+	store.mu.Unlock()
+	if saveCalls != 1 {
+		t.Fatalf("persistence save calls = %d, want exactly one", saveCalls)
+	}
+	service.mu.RLock()
+	defer service.mu.RUnlock()
+	for _, state := range service.sessions {
+		if state.session.Status == LifecycleStatusSucceeded || state.result.ResultStatus == ResultStatusFinal {
+			t.Fatalf("unpersisted success became live: session=%#v result=%#v", state.session, state.result)
+		}
+	}
+}
+
+func TestJavaScriptRuntimeService_StartAsync_PersistenceFailurePublishesFailureNotSuccess(t *testing.T) {
+	store := &runtimeRecordingStore{saveErr: errors.New("append unavailable")}
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Persistence: store,
+	})
+
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-async-persist-failure-001",
+		simpleFinalWorkflowSource,
+		nil,
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	failed := waitUntilSessionStatus(t, service, started.SessionID, LifecycleStatusFailed, 2*time.Second)
+	if failed.Failure == nil || !strings.Contains(failed.Failure.Message, "append unavailable") {
+		t.Fatalf("failure = %#v, want explicit persistence failure", failed.Failure)
+	}
+	result, err := service.GetResult(context.Background(), started.SessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus == ResultStatusFinal {
+		t.Fatalf("unpersisted terminal result status = %q, want unavailable", result.ResultStatus)
+	}
+
+	store.mu.Lock()
+	saveCalls := store.saveCalls
+	store.mu.Unlock()
+	if saveCalls != 1 {
+		t.Fatalf("persistence save calls = %d, want exactly one", saveCalls)
+	}
+}
+
+type runtimeRecordingStore struct {
+	mu        sync.Mutex
+	saveCalls int
+	saveErr   error
+	payload   []byte
+}
+
+func (s *runtimeRecordingStore) Save(_ string, encoded []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.saveCalls++
+	if s.saveErr != nil {
+		return s.saveErr
+	}
+	s.payload = append([]byte(nil), encoded...)
+	return nil
+}
+
+func (s *runtimeRecordingStore) Load(string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.payload) == 0 {
+		return nil, os.ErrNotExist
+	}
+	return append([]byte(nil), s.payload...), nil
 }
 
 func TestJavaScriptRuntimeService_StartAsync_RunningCancelAndReads(t *testing.T) {

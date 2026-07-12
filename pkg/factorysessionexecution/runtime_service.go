@@ -387,13 +387,14 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		return SyncStartResult{}, err
 	}
 	s.mu.Lock()
-	applyRuntimeSessionFields(reserved.state, terminal)
-	reserved.state.runCancel = nil
-	persistState := cloneRuntimeSessionState(reserved.state)
-	s.mu.Unlock()
-	if err := s.persistTerminalSessionState(persistState); err != nil {
+	candidate := cloneRuntimeSessionState(reserved.state)
+	applyRuntimeSessionFields(&candidate, terminal)
+	candidate.runCancel = nil
+	if err := s.recordCanonicalTerminalState(reserved.state, candidate); err != nil {
+		s.mu.Unlock()
 		return SyncStartResult{}, err
 	}
+	s.mu.Unlock()
 
 	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
 	if err != nil {
@@ -689,10 +690,61 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 
 func (s *JavaScriptRuntimeService) unlockRuntimeSessionAfterPersistence(state *runtimeSessionState) {
 	persistState := cloneRuntimeSessionState(state)
-	if shouldPersistSessionSnapshot(persistState) {
-		_ = s.persistSessionSnapshot(persistState)
+	if err := s.recordCanonicalTerminalState(state, persistState); err != nil {
+		failureOutcome := workflowruntime.Outcome{Failure: workflowruntime.Failure{
+			Code:    workflowruntime.CodeScriptError,
+			Message: err.Error(),
+		}}
+		failed := projectRuntimeSessionState(
+			state.session.SessionID,
+			StartRequest{},
+			state.resolvedSource,
+			workflowpolicy.Resolution{Hash: state.session.Policy.EffectiveHash},
+			failureOutcome,
+			*safelyStartedAt(state.session.Lifecycle, s.now()),
+		)
+		applyRuntimeSessionFields(state, failed)
 	}
 	s.mu.Unlock()
+}
+
+// recordCanonicalTerminalState is the sole publication boundary for terminal
+// JavaScript session facts. It validates and persists the complete canonical
+// event projection before making that projection visible to live readers.
+// The caller must hold s.mu.
+func (s *JavaScriptRuntimeService) recordCanonicalTerminalState(target *runtimeSessionState, candidate runtimeSessionState) error {
+	events, err := MapCanonicalRuntimeSessionEvents(
+		candidate.session,
+		candidate.result,
+		runtimeDispatchEventInputFromState(&candidate),
+	)
+	if err != nil {
+		return err
+	}
+	candidate.events = mergePreservedDispatchInterruptedEvents(
+		events,
+		extractDispatchInterruptedEvents(candidate.events),
+	)
+	if err := s.persistTerminalSessionState(candidate); err != nil {
+		return err
+	}
+	applyRuntimeSessionFields(target, candidate)
+	target.runtimeRecords = cloneRuntimeRecords(candidate.runtimeRecords)
+	target.checkpointSummary = cloneCheckpointSummary(candidate.checkpointSummary)
+	target.startRequest = cloneStartRequestPtr(candidate.startRequest)
+	target.resolvedSource = candidate.resolvedSource
+	target.sourceContent = candidate.sourceContent
+	target.runCancel = candidate.runCancel
+	return nil
+}
+
+func safelyStartedAt(lifecycle *LifecycleTimestamps, fallback time.Time) *time.Time {
+	if lifecycle != nil && lifecycle.StartedAt != nil {
+		startedAt := lifecycle.StartedAt.UTC()
+		return &startedAt
+	}
+	startedAt := fallback.UTC()
+	return &startedAt
 }
 
 func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
