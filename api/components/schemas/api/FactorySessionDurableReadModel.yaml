@@ -44,6 +44,9 @@ properties:
     items:
       $ref: './FactorySessionDurablePhaseSummary.yaml'
     description: Per-phase dispatch summaries for workflow inspection.
+  latestCheckpoint:
+    $ref: './FactorySessionCheckpointRef.yaml'
+    description: Latest durable checkpoint, absent when no checkpoint has been written.
   progress:
     $ref: './FactorySessionDurableProgressCounts.yaml'
   budgets:

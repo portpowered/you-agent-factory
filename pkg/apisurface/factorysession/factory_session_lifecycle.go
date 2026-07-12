@@ -115,6 +115,15 @@ func applyOptionalSessionReadPolicyFields(
 	if summaries := phaseSummariesToAPI(result.PhaseSummaries); summaries != nil {
 		response.PhaseSummaries = summaries
 	}
+	if checkpoint := result.LatestCheckpoint; checkpoint != nil {
+		response.LatestCheckpoint = &factoryapi.FactorySessionCheckpointRef{Id: checkpoint.ID}
+		if label := strings.TrimSpace(checkpoint.Label); label != "" {
+			response.LatestCheckpoint.Label = &label
+		}
+		if phase := strings.TrimSpace(checkpoint.Phase); phase != "" {
+			response.LatestCheckpoint.Phase = &phase
+		}
+	}
 	if progress := progressCountsToAPI(result.Progress); progress != nil {
 		response.Progress = progress
 	}

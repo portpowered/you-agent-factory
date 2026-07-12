@@ -1732,6 +1732,8 @@ components:
       $ref: './components/schemas/api/FactorySessionGetResponse.yaml'
     FactorySessionDurablePhaseSummary:
       $ref: './components/schemas/api/FactorySessionDurablePhaseSummary.yaml'
+    FactorySessionCheckpointRef:
+      $ref: './components/schemas/api/FactorySessionCheckpointRef.yaml'
     FactorySessionDurableProgressCounts:
       $ref: './components/schemas/api/FactorySessionDurableProgressCounts.yaml'
     FactorySessionDurableActionAvailability:

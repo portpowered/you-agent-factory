@@ -534,6 +534,18 @@ func applyRuntimeExecutionRecordProjection(
 	if recordProjection.Phase != "" {
 		state.session.Phase = recordProjection.Phase
 	}
+	state.session.PhaseSummaries = append([]PhaseSummary(nil), recordProjection.PhaseSummaries...)
+	checkpointPhase := ""
+	for _, record := range records {
+		if record.Kind == workflowruntime.RecordKindPhase && record.Phase != nil {
+			checkpointPhase = strings.TrimSpace(record.Phase.Name)
+		}
+		if record.Kind == workflowruntime.RecordKindCheckpoint && record.Checkpoint != nil {
+			state.session.LatestCheckpoint = &CheckpointRef{
+				ID: strings.TrimSpace(record.Checkpoint.ID), Label: strings.TrimSpace(record.Checkpoint.Label), Phase: checkpointPhase,
+			}
+		}
+	}
 	state.dispatches = cloneDispatchSummaries(recordProjection.Dispatches)
 	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(recordProjection.DispatchJavaScript)
 	state.dispatchStatusTransitions = cloneDispatchStatusTransitions(recordProjection.DispatchStatusTransitions)

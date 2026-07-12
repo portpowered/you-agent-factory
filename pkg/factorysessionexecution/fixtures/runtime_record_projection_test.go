@@ -94,6 +94,9 @@ func TestProjectRuntimeExecutionRecords_ProgressPrimitivesFixture(t *testing.T) 
 	if projection.Phase != "execute" || projection.PhaseCount != 2 {
 		t.Fatalf("phase projection = %#v", projection)
 	}
+	if len(projection.PhaseSummaries) != 2 || projection.PhaseSummaries[0].Phase != "setup" || projection.PhaseSummaries[1].Phase != "execute" {
+		t.Fatalf("phase summaries = %#v, want ordered setup, execute", projection.PhaseSummaries)
+	}
 	if len(projection.Artifacts) != 1 || projection.Artifacts[0].ID != "artifact-1" {
 		t.Fatalf("artifacts = %#v", projection.Artifacts)
 	}
@@ -144,6 +147,12 @@ func assertProgressPrimitivesSessionRead(t *testing.T, read fse.SessionReadResul
 	}
 	if read.Progress.TotalDispatches != 0 {
 		t.Fatalf("totalDispatches = %d, want 0", read.Progress.TotalDispatches)
+	}
+	if len(read.PhaseSummaries) != 2 || read.PhaseSummaries[0].Phase != "setup" || read.PhaseSummaries[1].Phase != "execute" {
+		t.Fatalf("phase summaries = %#v, want ordered setup, execute", read.PhaseSummaries)
+	}
+	if read.LatestCheckpoint == nil || read.LatestCheckpoint.ID == "" || read.LatestCheckpoint.Label != "after-artifact" || read.LatestCheckpoint.Phase != "execute" {
+		t.Fatalf("latest checkpoint = %#v, want after-artifact in execute", read.LatestCheckpoint)
 	}
 	if read.ArtifactCount != 1 {
 		t.Fatalf("artifactCount = %d, want 1", read.ArtifactCount)

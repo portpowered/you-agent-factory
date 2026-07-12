@@ -385,6 +385,7 @@ func (smokeLiveChildProvider) Infer(_ context.Context, _ interfaces.ProviderInfe
 type RuntimeExecutionProjection struct {
 	Phase                     string
 	PhaseCount                int
+	PhaseSummaries            []PhaseSummary
 	Dispatches                []DispatchSummary
 	DispatchJavaScript        map[string]DispatchJavaScriptProjection
 	DispatchStatusTransitions map[string][]DispatchStatus
@@ -455,7 +456,41 @@ func ProjectRuntimeExecutionRecords(
 	projection.DispatchStatusTransitions = dispatchStatusTransitions
 	projection.Artifacts = orderedArtifactSummaries(artifactByID)
 	projection.Progress = progressCountsFromDispatches(projection.Dispatches, projection.PhaseCount)
+	projection.PhaseSummaries = phaseSummariesFromRuntimeRecords(records, projection.Dispatches)
 	return projection
+}
+
+func phaseSummariesFromRuntimeRecords(records []workflowruntime.RuntimeRecord, dispatches []DispatchSummary) []PhaseSummary {
+	ordered := make([]PhaseSummary, 0)
+	indexByPhase := make(map[string]int)
+	for _, record := range records {
+		if record.Kind != workflowruntime.RecordKindPhase || record.Phase == nil {
+			continue
+		}
+		phase := strings.TrimSpace(record.Phase.Name)
+		if phase == "" {
+			continue
+		}
+		if _, exists := indexByPhase[phase]; !exists {
+			indexByPhase[phase] = len(ordered)
+			ordered = append(ordered, PhaseSummary{Phase: phase})
+		}
+	}
+	for _, dispatch := range dispatches {
+		phase := strings.TrimSpace(dispatch.Phase)
+		index, exists := indexByPhase[phase]
+		if !exists || phase == "" {
+			continue
+		}
+		ordered[index].DispatchCount++
+		switch dispatch.Status {
+		case DispatchStatusCompleted:
+			ordered[index].CompletedDispatchCount++
+		case DispatchStatusFailed, DispatchStatusCanceled, DispatchStatusTimedOut, DispatchStatusInterrupted:
+			ordered[index].FailedDispatchCount++
+		}
+	}
+	return ordered
 }
 
 func appendDispatchStatusTransition(

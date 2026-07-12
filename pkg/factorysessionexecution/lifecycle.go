@@ -267,6 +267,14 @@ type PhaseSummary struct {
 	FailedDispatchCount    int
 }
 
+// CheckpointRef identifies the latest durable orchestrator checkpoint without
+// exposing its persisted runtime state.
+type CheckpointRef struct {
+	ID    string
+	Label string
+	Phase string
+}
+
 const (
 	defaultDispatchInterruptionReason     = "Operator interrupted active dispatch"
 	dispatchInterruptionFailureReasonCode = "DISPATCH_INTERRUPTED"
@@ -839,6 +847,7 @@ type SessionReadResult struct {
 	Policy           PolicyProjection
 	Phase            string
 	PhaseSummaries   []PhaseSummary
+	LatestCheckpoint *CheckpointRef
 	Progress         *ProgressCounts
 	Budgets          *SessionBudgets
 	Usage            SessionUsage

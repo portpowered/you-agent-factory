@@ -2203,6 +2203,8 @@ export interface components {
       phase?: string;
       /** @description Per-phase dispatch summaries for workflow inspection. */
       phaseSummaries?: components["schemas"]["FactorySessionDurablePhaseSummary"][];
+      /** @description Latest durable checkpoint, absent when no checkpoint has been written. */
+      latestCheckpoint?: components["schemas"]["FactorySessionCheckpointRef"];
       progress?: components["schemas"]["FactorySessionDurableProgressCounts"];
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage?: components["schemas"]["FactorySessionUsage"];
@@ -2233,6 +2235,14 @@ export interface components {
       completedDispatchCount?: number;
       /** @description Dispatches that failed in this phase. */
       failedDispatchCount?: number;
+    };
+    FactorySessionCheckpointRef: {
+      /** @description Stable checkpoint identifier used for later inspection or resume. */
+      id: string;
+      /** @description Customer-visible checkpoint label when supplied by the orchestrator. */
+      label?: string;
+      /** @description Phase active when the checkpoint was written. */
+      phase?: string;
     };
     FactorySessionDurableProgressCounts: {
       /** @description Total durable dispatches recorded for the session. */

@@ -86,6 +86,15 @@ func SessionReadResultFromAPI(response factoryapi.FactorySessionDurableReadModel
 	if response.PhaseSummaries != nil {
 		result.PhaseSummaries = phaseSummariesFromAPI(*response.PhaseSummaries)
 	}
+	if response.LatestCheckpoint != nil {
+		result.LatestCheckpoint = &factorysessionexecution.CheckpointRef{ID: response.LatestCheckpoint.Id}
+		if response.LatestCheckpoint.Label != nil {
+			result.LatestCheckpoint.Label = strings.TrimSpace(*response.LatestCheckpoint.Label)
+		}
+		if response.LatestCheckpoint.Phase != nil {
+			result.LatestCheckpoint.Phase = strings.TrimSpace(*response.LatestCheckpoint.Phase)
+		}
+	}
 	if response.Progress != nil {
 		result.Progress = progressCountsFromAPI(*response.Progress)
 	}

@@ -791,6 +791,10 @@ func cloneSessionRead(session SessionReadResult) SessionReadResult {
 	}
 	cloned.Usage = cloneSessionUsage(session.Usage)
 	cloned.PhaseSummaries = append([]PhaseSummary(nil), session.PhaseSummaries...)
+	if session.LatestCheckpoint != nil {
+		checkpoint := *session.LatestCheckpoint
+		cloned.LatestCheckpoint = &checkpoint
+	}
 	cloned.ArtifactRefs = append([]ArtifactRefSummary(nil), session.ArtifactRefs...)
 	cloned.Links = session.Links
 	return cloned

@@ -1968,6 +1968,18 @@ type FactorySessionBudgets struct {
 	MaxAgents *int `json:"maxAgents,omitempty"`
 }
 
+// FactorySessionCheckpointRef defines model for FactorySessionCheckpointRef.
+type FactorySessionCheckpointRef struct {
+	// Id Stable checkpoint identifier used for later inspection or resume.
+	Id string `json:"id"`
+
+	// Label Customer-visible checkpoint label when supplied by the orchestrator.
+	Label *string `json:"label,omitempty"`
+
+	// Phase Phase active when the checkpoint was written.
+	Phase *string `json:"phase,omitempty"`
+}
+
 // FactorySessionDispatchSummary Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
 type FactorySessionDispatchSummary struct {
 	// Attempt One-based attempt number for retried dispatches.
@@ -2124,6 +2136,7 @@ type FactorySessionDurableReadModel struct {
 	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
 	EffectivePolicyHash *string                                   `json:"effectivePolicyHash,omitempty"`
 	FailureDetail       *FailureDetail                            `json:"failureDetail,omitempty"`
+	LatestCheckpoint    *FactorySessionCheckpointRef              `json:"latestCheckpoint,omitempty"`
 	Lifecycle           *FactorySessionDurableLifecycleTimestamps `json:"lifecycle,omitempty"`
 
 	// Links Relative links for polling and inspecting one durable factory session.

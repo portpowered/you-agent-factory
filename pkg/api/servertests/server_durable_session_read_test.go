@@ -107,6 +107,44 @@ func TestGetFactorySession_RuntimeBackedReturnsTerminalReadModel(t *testing.T) {
 	}
 }
 
+func TestGetFactorySession_RuntimeBackedReturnsOrderedPhasesAndLatestCheckpoint(t *testing.T) {
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
+	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)
+	server := httptest.NewServer(newAPITestServer(&testutil.MockFactory{DurableExecutionService: service}).Handler())
+	defer server.Close()
+
+	request := runtimeBackedAsyncStartRequest("req-api-runtime-introspection-001")
+	request.Source.Kind = factoryapi.FactorySessionExecutionSourceKindWorkflowName
+	request.Source.WorkflowName = strPtr("progress-primitives")
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	resp, err := http.Post(server.URL+"/factory-sessions/sync", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/sync: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("sync status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+	var started factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&started); err != nil {
+		t.Fatalf("decode sync response: %v", err)
+	}
+
+	read := getDurableFactorySession(t, server.URL, started.SessionId)
+	if read.PhaseSummaries == nil || len(*read.PhaseSummaries) != 2 || (*read.PhaseSummaries)[0].Phase != "setup" || (*read.PhaseSummaries)[1].Phase != "execute" {
+		t.Fatalf("phaseSummaries = %#v, want ordered setup, execute", read.PhaseSummaries)
+	}
+	if read.LatestCheckpoint == nil || read.LatestCheckpoint.Id == "" || read.LatestCheckpoint.Label == nil || *read.LatestCheckpoint.Label != "after-artifact" {
+		t.Fatalf("latestCheckpoint = %#v, want stable after-artifact checkpoint", read.LatestCheckpoint)
+	}
+	if read.LatestCheckpoint.Phase == nil || *read.LatestCheckpoint.Phase != "execute" {
+		t.Fatalf("latestCheckpoint.phase = %#v, want execute", read.LatestCheckpoint.Phase)
+	}
+}
+
 func TestGetFactorySession_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
 	service := newAPIJavaScriptRuntimeService(t, projectRoot, factorysessionexecution.ChildExecutorModeFake, nil)

@@ -973,6 +973,12 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 	if phase := strings.TrimSpace(projection.Phase); phase != "" {
 		state.session.Phase = phase
 	}
+	state.session.PhaseSummaries = append([]PhaseSummary(nil), projection.PhaseSummaries...)
+	if record.Kind == workflowruntime.RecordKindCheckpoint && record.Checkpoint != nil {
+		state.session.LatestCheckpoint = &CheckpointRef{
+			ID: strings.TrimSpace(record.Checkpoint.ID), Label: strings.TrimSpace(record.Checkpoint.Label), Phase: strings.TrimSpace(projection.Phase),
+		}
+	}
 	progress := projection.Progress
 	state.session.Progress = &progress
 	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)

@@ -4480,6 +4480,9 @@ components:
           items:
             $ref: '#/components/schemas/FactorySessionDurablePhaseSummary'
           description: Per-phase dispatch summaries for workflow inspection.
+        latestCheckpoint:
+          $ref: '#/components/schemas/FactorySessionCheckpointRef'
+          description: Latest durable checkpoint, absent when no checkpoint has been written.
         progress:
           $ref: '#/components/schemas/FactorySessionDurableProgressCounts'
         budgets:
@@ -4535,6 +4538,21 @@ components:
           type: integer
           minimum: 0
           description: Dispatches that failed in this phase.
+    FactorySessionCheckpointRef:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Stable checkpoint identifier used for later inspection or resume.
+        label:
+          type: string
+          description: Customer-visible checkpoint label when supplied by the orchestrator.
+        phase:
+          type: string
+          description: Phase active when the checkpoint was written.
     FactorySessionDurableProgressCounts:
       type: object
       additionalProperties: false

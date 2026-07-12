@@ -402,11 +402,54 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 		return r.applySessionLifecycleControl(envelope)
 	case "SESSION_COMPLETED":
 		return r.applySessionCompleted(envelope)
+	case "ORCHESTRATOR_PHASE_CHANGED", "JAVASCRIPT_PHASE_CHANGE":
+		return r.applyPhaseChanged(envelope)
+	case "ORCHESTRATOR_CHECKPOINT_WRITTEN", "JAVASCRIPT_CHECKPOINT_REF":
+		return r.applyCheckpointWritten(envelope)
 	case "ARTIFACT_CREATED":
 		return r.applyArtifactCreated(envelope)
 	default:
 		return nil
 	}
+}
+
+func (r *sessionProjectionReducer) applyPhaseChanged(envelope canonicalFactoryEvent) error {
+	phase := strings.TrimSpace(stringValuePtr(envelope.Context.PhaseName))
+	if phase == "" {
+		phase = strings.TrimSpace(stringValuePtr(envelope.Context.PhaseID))
+	}
+	if phase == "" {
+		return nil
+	}
+	r.session.Phase = phase
+	for _, summary := range r.session.PhaseSummaries {
+		if summary.Phase == phase {
+			return nil
+		}
+	}
+	r.session.PhaseSummaries = append(r.session.PhaseSummaries, PhaseSummary{Phase: phase})
+	if r.session.Progress == nil {
+		r.session.Progress = &ProgressCounts{}
+	}
+	r.session.Progress.PhaseCount = len(r.session.PhaseSummaries)
+	return nil
+}
+
+func (r *sessionProjectionReducer) applyCheckpointWritten(envelope canonicalFactoryEvent) error {
+	checkpointID := strings.TrimSpace(stringValuePtr(envelope.Context.CheckpointID))
+	if checkpointID == "" {
+		return nil
+	}
+	var payload struct {
+		Label string `json:"label"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal ORCHESTRATOR_CHECKPOINT_WRITTEN payload: %w", err)
+	}
+	r.session.LatestCheckpoint = &CheckpointRef{
+		ID: checkpointID, Label: strings.TrimSpace(payload.Label), Phase: strings.TrimSpace(r.session.Phase),
+	}
+	return nil
 }
 
 func (r *sessionProjectionReducer) applySessionStarted(envelope canonicalFactoryEvent) error {
