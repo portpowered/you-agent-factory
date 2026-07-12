@@ -619,10 +619,10 @@ func assertAPIDispatchReconciledLifecycleEvent(
 		t.Fatalf("marshal DISPATCH_RECONCILED payload: %v", err)
 	}
 	var reconciledBody struct {
-		ReconciledStatus     factoryapi.FactoryDispatchStatus         `json:"reconciledStatus"`
+		ReconciledStatus     factoryapi.FactoryDispatchStatus        `json:"reconciledStatus"`
 		ReconciliationSource factoryapi.DispatchReconciliationSource `json:"reconciliationSource"`
 		ArtifactIds          *[]string                               `json:"artifactIds"`
-		FailureDetail        *factoryapi.FailureDetail                `json:"failureDetail"`
+		FailureDetail        *factoryapi.FailureDetail               `json:"failureDetail"`
 	}
 	if err := json.Unmarshal(reconciledPayload, &reconciledBody); err != nil {
 		t.Fatalf("unmarshal DISPATCH_RECONCILED payload: %v", err)
@@ -699,8 +699,8 @@ func assertAPILiveProviderDispatchFailureDetail(
 	if failure.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
 		t.Fatalf("failure reason = %q, want %q", failure.Reason, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if failure.Message != "simulated live child error" {
-		t.Fatalf("failure message = %#v, want simulated live child error", failure.Message)
+	if failure.Message != "Provider rejected the request as invalid." {
+		t.Fatalf("failure message = %#v, want sanitized provider failure", failure.Message)
 	}
 }
 

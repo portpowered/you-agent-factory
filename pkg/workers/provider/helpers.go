@@ -171,6 +171,19 @@ func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) 
 	}
 }
 
+// SafeProviderFailureDetail returns the allowlisted public diagnostic for a
+// normalized provider failure. It intentionally excludes causes and raw
+// provider output so durable projections can persist it safely.
+func SafeProviderFailureDetail(providerErr *ProviderError) *interfaces.FailureDetail {
+	if providerErr == nil {
+		return nil
+	}
+	return &interfaces.FailureDetail{
+		Reason:  providerErr.Type,
+		Message: safeProviderFailureLogMessage("", providerErr),
+	}
+}
+
 func sha256Hex(input []byte) string {
 	digest := sha256.Sum256(input)
 	return hex.EncodeToString(digest[:])

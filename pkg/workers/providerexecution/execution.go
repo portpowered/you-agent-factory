@@ -27,6 +27,7 @@ type ExecutionResult struct {
 	Attempt         int
 	ProviderSession *interfaces.ProviderSessionMetadata
 	FailureMetadata *interfaces.WorkFailureMetadata
+	FailureDecision *interfaces.WorkFailureDecision
 	FailureDetail   *interfaces.FailureDetail
 	Diagnostics     *interfaces.SafeWorkDiagnostics
 }
@@ -82,15 +83,25 @@ func failedExecutionResult(attempt int, err error) ExecutionResult {
 	}
 	providerErr.ProviderSession = canonicalProviderSession(providerErr.ProviderSession)
 	message := safeExecutionFailureMessage(providerErr)
+	failureDetail := &interfaces.FailureDetail{Reason: providerErr.Type, Message: message}
+	switch providerErr.Type {
+	case interfaces.WorkFailureTypePermanentBadRequest, interfaces.WorkFailureTypeInternalServerError:
+		if !containsSensitiveMarker(providerErr.Message) {
+			if safeDetail := workerprovider.SafeProviderFailureDetail(providerErr); safeDetail != nil {
+				failureDetail = safeDetail
+			}
+		}
+	}
 	return ExecutionResult{
 		Attempt:         attempt,
 		ProviderSession: interfaces.CloneProviderSessionMetadata(providerErr.ProviderSession),
 		FailureMetadata: workerprovider.WorkFailureMetadataFromError(providerErr),
-		FailureDetail: &interfaces.FailureDetail{
-			Reason:  providerErr.Type,
-			Message: message,
-		},
-		Diagnostics: interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics),
+		FailureDecision: func() *interfaces.WorkFailureDecision {
+			decision := workerprovider.WorkFailureDecisionFromProviderError(providerErr)
+			return &decision
+		}(),
+		FailureDetail: failureDetail,
+		Diagnostics:   interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics),
 	}
 }
 

@@ -354,6 +354,7 @@ func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureA
 	assertParallelLiveChildFailureInspection(t, service, completed)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime fixture keeps terminal provider failure inspection in one end-to-end scenario.
 func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure(t *testing.T) {
 	provider := newFailingFixtureMockProvider(provider.NewProviderError(
 		interfaces.WorkFailureTypePermanentBadRequest,
@@ -408,8 +409,11 @@ func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatc
 	if dispatchDetail.FailureDetail == nil || dispatchDetail.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("dispatch failureDetail = %#v", dispatchDetail.FailureDetail)
 	}
-	if dispatchDetail.FailureDetail.Message != "simulated live child error" {
+	if dispatchDetail.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("dispatch failure message = %q", dispatchDetail.FailureDetail.Message)
+	}
+	if dispatchDetail.Attempt != 1 || dispatchDetail.Retryable == nil || *dispatchDetail.Retryable || dispatchDetail.FailureClassification != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("dispatch retry diagnostics = %#v", dispatchDetail.DispatchSummary)
 	}
 	if provider.inferCallCount != 1 {
 		t.Fatalf("provider infer call count = %d, want 1", provider.inferCallCount)
@@ -680,6 +684,7 @@ func assertParallelFailureSiblingDispatches(t *testing.T, dispatchByID map[strin
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this assertion verifies the complete failed-dispatch public projection.
 func assertParallelFailureFailedDispatch(
 	t *testing.T,
 	service fse.Service,
@@ -697,8 +702,11 @@ func assertParallelFailureFailedDispatch(
 	if failed.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("failure reason = %q, want %q", failed.FailureDetail.Reason, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if failed.FailureDetail.Message != "simulated child error" {
-		t.Fatalf("failure message = %q, want simulated child error detail", failed.FailureDetail.Message)
+	if failed.FailureDetail.Message != "Provider rejected the request as invalid." {
+		t.Fatalf("failure message = %q, want sanitized provider detail", failed.FailureDetail.Message)
+	}
+	if failed.Attempt != 1 || failed.Retryable == nil || *failed.Retryable || failed.FailureClassification != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("retry diagnostics = %#v", failed)
 	}
 	if len(failed.OutputArtifactIDs) != 0 {
 		t.Fatalf("failed outputArtifactIds = %#v, want none", failed.OutputArtifactIDs)

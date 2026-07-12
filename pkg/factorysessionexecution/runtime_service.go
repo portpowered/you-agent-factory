@@ -884,8 +884,8 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowrunti
 	}
 	provider := s.provider
 	return workflowruntime.Hooks{
-		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
-			return livechild.NewProviderChildExecutor(
+		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink, policy workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return livechild.NewRetryingProviderChildExecutor(
 				sessionID,
 				providerexecution.NewProviderExecutor(provider),
 				runtimeSessionChildRecordSink{
@@ -894,6 +894,7 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowrunti
 						s.applyRunningRuntimeRecord(sessionID, record)
 					},
 				},
+				policy.MaxRetries,
 			)
 		},
 	}

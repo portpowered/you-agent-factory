@@ -412,14 +412,16 @@ func childArtifactFromDispatch(
 
 func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.ChildDispatchRecord) DispatchSummary {
 	summary := DispatchSummary{
-		ID:           child.DispatchID,
-		Status:       DispatchStatus(strings.TrimSpace(child.Status)),
-		DispatchKind: "JAVASCRIPT_AGENT",
-		Phase:        currentPhase,
-		Label:        child.Label,
-		Attempt:      1,
-		RunnerID:     strings.TrimSpace(child.RunnerID),
-		Model:        strings.TrimSpace(child.Model),
+		ID:                    child.DispatchID,
+		Status:                DispatchStatus(strings.TrimSpace(child.Status)),
+		DispatchKind:          "JAVASCRIPT_AGENT",
+		Phase:                 currentPhase,
+		Label:                 child.Label,
+		Attempt:               positiveDispatchAttempt(child.Attempt),
+		Retryable:             cloneBoolPtr(child.Retryable),
+		FailureClassification: strings.TrimSpace(string(child.FailureClassification)),
+		RunnerID:              strings.TrimSpace(child.RunnerID),
+		Model:                 strings.TrimSpace(child.Model),
 	}
 	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
 		summary.JavaScript = &javascript
@@ -444,6 +446,21 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		summary.FailureDetail = dispatchFailureDetailFromChildRecord(child)
 	}
 	return summary
+}
+
+func cloneBoolPtr(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func positiveDispatchAttempt(attempt int) int {
+	if attempt > 0 {
+		return attempt
+	}
+	return 1
 }
 
 func dispatchFailureDetailFromChildRecord(child workflowruntime.ChildDispatchRecord) *DispatchFailureDetail {

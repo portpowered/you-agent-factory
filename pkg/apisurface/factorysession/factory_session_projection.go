@@ -115,6 +115,10 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 		attempt := int32(result.Attempt)
 		response.Attempt = &attempt
 	}
+	response.Retryable, response.FailureClassification = dispatchRetryDiagnosticsToAPI(
+		result.Retryable,
+		result.FailureClassification,
+	)
 	if runnerID := strings.TrimSpace(result.RunnerID); runnerID != "" {
 		response.RunnerId = &runnerID
 	}
@@ -266,6 +270,10 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 		attempt := int32(dispatch.Attempt)
 		response.Attempt = &attempt
 	}
+	response.Retryable, response.FailureClassification = dispatchRetryDiagnosticsToAPI(
+		dispatch.Retryable,
+		dispatch.FailureClassification,
+	)
 	if runnerID := strings.TrimSpace(dispatch.RunnerID); runnerID != "" {
 		response.RunnerId = &runnerID
 	}
@@ -433,6 +441,20 @@ func dispatchFailureToAPI(failure *factorysessionexecution.DispatchFailureDetail
 		return nil
 	}
 	return &factoryapi.FailureDetail{Reason: failureReasonToAPI(reason), Message: message}
+}
+
+func dispatchRetryDiagnosticsToAPI(retryable *bool, classification string) (*bool, *factoryapi.WorkFailureType) {
+	var retryableValue *bool
+	if retryable != nil {
+		value := *retryable
+		retryableValue = &value
+	}
+	classification = strings.TrimSpace(classification)
+	if classification == "" {
+		return retryableValue, nil
+	}
+	value := factoryapi.WorkFailureType(classification)
+	return retryableValue, &value
 }
 
 func dispatchPetriToAPI(petri *factorysessionexecution.DispatchPetriProjection) *factoryapi.FactoryDispatchPetriProjection {
