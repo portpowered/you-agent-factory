@@ -74,10 +74,41 @@ func Validate(r Recording) error {
 	if err := validateEvents(r.Events, r.Artifacts); err != nil {
 		return err
 	}
+	if err := validateCheckpoint(r); err != nil {
+		return err
+	}
 	if err := validateResult(r); err != nil {
 		return err
 	}
 	return validateRedaction(r.Redaction)
+}
+
+func validateCheckpoint(r Recording) error {
+	if r.Checkpoint == nil {
+		return nil
+	}
+	checkpoint := r.Checkpoint
+	if strings.TrimSpace(checkpoint.ID) == "" || checkpoint.Timestamp.IsZero() {
+		return diagnostic(CodeInvalidSummary, "checkpoint", "checkpoint", "id and timestamp are required")
+	}
+	if checkpoint.ArtifactID != "" {
+		found := false
+		for _, artifact := range r.Artifacts {
+			if artifact.ID == checkpoint.ArtifactID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return diagnostic(CodeInvalidSummary, "checkpoint", "checkpoint.artifactId", "references an unknown artifact")
+		}
+	}
+	for _, event := range r.Events {
+		if event.CheckpointID == checkpoint.ID {
+			return nil
+		}
+	}
+	return diagnostic(CodeInvalidSummary, "checkpoint", "checkpoint.id", "is not referenced by a canonical event summary")
 }
 
 func validateResult(r Recording) error {

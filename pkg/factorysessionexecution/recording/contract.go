@@ -17,17 +17,18 @@ var supportedSchemaVersions = []string{"1", CurrentSchemaVersion}
 var supportedReplayCompatibilityVersions = []string{ReplayCompatibilityVersion}
 
 type Recording struct {
-	RecordingKind              string            `json:"recordingKind"`
-	SchemaVersion              string            `json:"schemaVersion"`
-	ReplayCompatibilityVersion string            `json:"replayCompatibilityVersion"`
-	Session                    SessionSummary    `json:"session"`
-	Source                     SourceSummary     `json:"source"`
-	ArgumentsDigest            string            `json:"argumentsDigest"`
-	PolicyHash                 string            `json:"policyHash"`
-	Artifacts                  []ArtifactSummary `json:"artifacts"`
-	Events                     []EventSummary    `json:"events"`
-	Result                     *ResultProjection `json:"result,omitempty"`
-	Redaction                  RedactionMetadata `json:"redaction"`
+	RecordingKind              string             `json:"recordingKind"`
+	SchemaVersion              string             `json:"schemaVersion"`
+	ReplayCompatibilityVersion string             `json:"replayCompatibilityVersion"`
+	Session                    SessionSummary     `json:"session"`
+	Source                     SourceSummary      `json:"source"`
+	ArgumentsDigest            string             `json:"argumentsDigest"`
+	PolicyHash                 string             `json:"policyHash"`
+	Artifacts                  []ArtifactSummary  `json:"artifacts"`
+	Events                     []EventSummary     `json:"events"`
+	Checkpoint                 *CheckpointSummary `json:"checkpoint,omitempty"`
+	Result                     *ResultProjection  `json:"result,omitempty"`
+	Redaction                  RedactionMetadata  `json:"redaction"`
 }
 
 type SessionSummary struct {
@@ -52,11 +53,22 @@ type ArtifactSummary struct {
 }
 
 type EventSummary struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Sequence    int64     `json:"sequence"`
-	Timestamp   time.Time `json:"timestamp"`
-	ArtifactIDs []string  `json:"artifactIds,omitempty"`
+	ID           string    `json:"id"`
+	Type         string    `json:"type"`
+	Sequence     int64     `json:"sequence"`
+	Timestamp    time.Time `json:"timestamp"`
+	ArtifactIDs  []string  `json:"artifactIds,omitempty"`
+	CheckpointID string    `json:"checkpointId,omitempty"`
+}
+
+// CheckpointSummary exposes only the public checkpoint reference used for
+// historical inspection. It never contains checkpoint state or dispatch data.
+type CheckpointSummary struct {
+	ID         string    `json:"id"`
+	Label      string    `json:"label,omitempty"`
+	Summary    string    `json:"summary,omitempty"`
+	Timestamp  time.Time `json:"timestamp"`
+	ArtifactID string    `json:"artifactId,omitempty"`
 }
 
 // ResultProjection contains only the canonical public result read model. The

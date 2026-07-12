@@ -18,7 +18,13 @@ type CanonicalFacts struct {
 	Arguments                           map[string]any
 	Artifacts                           []CanonicalArtifact
 	Events                              []json.RawMessage
+	Checkpoint                          *CanonicalCheckpoint
 	Result                              *CanonicalResult
+}
+
+type CanonicalCheckpoint struct {
+	ID, Label, Summary, ArtifactID string
+	Timestamp                      time.Time
 }
 
 type CanonicalArtifact struct {
@@ -65,6 +71,9 @@ func Build(facts CanonicalFacts) (Recording, error) {
 		Artifacts: artifacts, Events: events,
 		Redaction: RedactionMetadata{RuntimeStateOmitted: true, CheckpointBodiesOmitted: true, ProviderTranscriptsOmitted: true, ChildDispatchesOmitted: true, SecretsRedacted: secretsRedacted},
 	}
+	if facts.Checkpoint != nil {
+		value.Checkpoint = &CheckpointSummary{ID: facts.Checkpoint.ID, Label: facts.Checkpoint.Label, Summary: facts.Checkpoint.Summary, Timestamp: facts.Checkpoint.Timestamp.UTC(), ArtifactID: facts.Checkpoint.ArtifactID}
+	}
 	if facts.Result != nil {
 		value.Result = &ResultProjection{
 			Status: facts.Result.Status, Mode: facts.Result.Mode,
@@ -99,8 +108,9 @@ func eventSummaries(events []json.RawMessage) ([]EventSummary, error) {
 			ID      string `json:"id"`
 			Type    string `json:"type"`
 			Context struct {
-				Sequence  int64     `json:"sequence"`
-				EventTime time.Time `json:"eventTime"`
+				Sequence     int64     `json:"sequence"`
+				EventTime    time.Time `json:"eventTime"`
+				CheckpointID *string   `json:"checkpointId"`
 			} `json:"context"`
 			Payload struct {
 				ArtifactIDs []string `json:"artifactIds"`
@@ -112,7 +122,11 @@ func eventSummaries(events []json.RawMessage) ([]EventSummary, error) {
 		if strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.Type) == "" || event.Context.EventTime.IsZero() {
 			return nil, fmt.Errorf("summarize canonical event %d: id, type, and eventTime are required", index)
 		}
-		summaries = append(summaries, EventSummary{ID: event.ID, Type: event.Type, Sequence: event.Context.Sequence, Timestamp: event.Context.EventTime.UTC(), ArtifactIDs: event.Payload.ArtifactIDs})
+		checkpointID := ""
+		if event.Context.CheckpointID != nil {
+			checkpointID = strings.TrimSpace(*event.Context.CheckpointID)
+		}
+		summaries = append(summaries, EventSummary{ID: event.ID, Type: event.Type, Sequence: event.Context.Sequence, Timestamp: event.Context.EventTime.UTC(), ArtifactIDs: event.Payload.ArtifactIDs, CheckpointID: checkpointID})
 	}
 	return summaries, nil
 }

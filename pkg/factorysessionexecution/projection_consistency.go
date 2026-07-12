@@ -37,6 +37,9 @@ func (s *JavaScriptRuntimeService) WriteRecording(ctx context.Context, sessionID
 	s.mu.RUnlock()
 	facts := recording.CanonicalFacts{SessionID: snapshot.session.SessionID, Status: string(snapshot.session.Status), OrchestratorKind: snapshot.session.OrchestratorKind, SourceRef: snapshot.session.ResolvedSource.SourceRef, SourceHash: snapshot.session.SourceHash, PolicyHash: snapshot.session.Policy.EffectiveHash, Events: snapshot.events}
 	facts.Result = canonicalRecordingResult(snapshot.session.Status, snapshot.result)
+	if checkpoint := snapshot.checkpointSummary; checkpoint != nil {
+		facts.Checkpoint = &recording.CanonicalCheckpoint{ID: checkpoint.CheckpointID, Label: checkpoint.Label, Summary: checkpoint.Phase, Timestamp: checkpoint.CreatedAt}
+	}
 	if snapshot.startRequest != nil {
 		facts.Arguments = snapshot.startRequest.Args
 	}
@@ -49,6 +52,14 @@ func (s *JavaScriptRuntimeService) WriteRecording(ctx context.Context, sessionID
 			secrets = int64(artifact.RedactionCounts.Secrets)
 		}
 		facts.Artifacts = append(facts.Artifacts, recording.CanonicalArtifact{ID: artifact.ID, Kind: artifact.Kind, Visibility: artifact.Visibility, Label: artifact.Label, ContentHash: artifact.ContentHash, SizeBytes: artifact.SizeBytes, CreatedAt: createdAt, SecretsRedacted: secrets})
+		if facts.Checkpoint != nil && facts.Checkpoint.ArtifactID == "" {
+			for _, checkpointArtifactID := range snapshot.checkpointSummary.ArtifactIDs {
+				if checkpointArtifactID == artifact.ID {
+					facts.Checkpoint.ArtifactID = artifact.ID
+					break
+				}
+			}
+		}
 	}
 	value, err := recording.Build(facts)
 	if err == nil {

@@ -69,6 +69,81 @@ func TestReplayRecordingRejectsHashInconsistentResultWithoutPartialProjection(t 
 	}
 }
 
+func TestReplayRecordingRestoresPausedCheckpointWithoutLiveControls(t *testing.T) {
+	t.Parallel()
+	value := buildLifecycleRecording(t, "PAUSED", false)
+
+	got, err := ReplayRecording(value)
+	if err != nil {
+		t.Fatalf("ReplayRecording: %v", err)
+	}
+	if got.Session.Status != fse.LifecycleStatusPaused || got.Session.Lifecycle == nil || got.Session.Lifecycle.PausedAt == nil {
+		t.Fatalf("paused session projection = %#v", got.Session)
+	}
+	if got.Checkpoint == nil || got.Checkpoint.ID != "checkpoint-public-1" || got.Checkpoint.Summary != "Waiting for operator input" {
+		t.Fatalf("checkpoint projection = %#v", got.Checkpoint)
+	}
+	if outcome := got.ApplyLifecycleControl(fse.LifecycleControlResume); outcome.Outcome != "NON_LIVE_REPLAY" {
+		t.Fatalf("replay control outcome = %#v", outcome)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal replay projection: %v", err)
+	}
+	for _, prohibited := range []string{"checkpointState", "completedDispatchIds", "pendingDispatchIds", "dispatch-secret"} {
+		if strings.Contains(string(encoded), prohibited) {
+			t.Fatalf("replay projection leaked %q: %s", prohibited, encoded)
+		}
+	}
+	assertRecordedInspectionParity(t, value, got)
+}
+
+func TestReplayRecordingRestoresResumedHistoryAndFinalAvailability(t *testing.T) {
+	t.Parallel()
+	value := buildLifecycleRecording(t, "SUCCEEDED", true)
+
+	got, err := ReplayRecording(value)
+	if err != nil {
+		t.Fatalf("ReplayRecording: %v", err)
+	}
+	if got.Session.Status != fse.LifecycleStatusSucceeded || got.Session.Lifecycle == nil || got.Session.Lifecycle.PausedAt == nil || got.Session.Lifecycle.ResumedAt == nil {
+		t.Fatalf("resumed session projection = %#v", got.Session)
+	}
+	if !got.Session.Lifecycle.ResumedAt.After(*got.Session.Lifecycle.PausedAt) || got.Result.ResultStatus != fse.ResultStatusFinal {
+		t.Fatalf("resumed lifecycle/result = %#v %#v", got.Session.Lifecycle, got.Result)
+	}
+	assertRecordedInspectionParity(t, value, got)
+}
+
+func buildLifecycleRecording(t *testing.T, status string, resumed bool) recording.Recording {
+	t.Helper()
+	checkpointAt := time.Date(2026, 7, 12, 19, 0, 2, 0, time.UTC)
+	events := []json.RawMessage{
+		json.RawMessage(`{"id":"event-started","type":"SESSION_STARTED","context":{"sequence":0,"eventTime":"2026-07-12T19:00:00Z"},"payload":{}}`),
+		json.RawMessage(`{"id":"event-checkpoint","type":"JAVASCRIPT_CHECKPOINT_REF","context":{"sequence":1,"eventTime":"2026-07-12T19:00:02Z","checkpointId":"checkpoint-public-1"},"payload":{"artifactIds":["artifact-checkpoint"]}}`),
+		json.RawMessage(`{"id":"event-paused","type":"SESSION_PAUSED","context":{"sequence":2,"eventTime":"2026-07-12T19:00:03Z"},"payload":{}}`),
+	}
+	result := &recording.CanonicalResult{Status: "PARTIAL", Mode: "partial", PrimaryResult: json.RawMessage(`{"step":1}`), ArtifactIDs: []string{"artifact-checkpoint"}}
+	if resumed {
+		events = append(events,
+			json.RawMessage(`{"id":"event-resumed","type":"SESSION_RESUMED","context":{"sequence":3,"eventTime":"2026-07-12T19:00:04Z"},"payload":{}}`),
+			json.RawMessage(`{"id":"event-completed","type":"SESSION_COMPLETED","context":{"sequence":4,"eventTime":"2026-07-12T19:00:05Z"},"payload":{"artifactIds":["artifact-checkpoint"]}}`),
+		)
+		result = &recording.CanonicalResult{Status: "FINAL", Mode: "final", PrimaryResult: json.RawMessage(`{"step":2}`), ArtifactIDs: []string{"artifact-checkpoint"}}
+	}
+	value, err := recording.Build(recording.CanonicalFacts{
+		SessionID: "dur-sess-lifecycle-recording", Status: status, OrchestratorKind: "JAVASCRIPT",
+		SourceRef: "workflow/lifecycle.js", SourceHash: recordingTestDigest('4'), PolicyHash: recordingTestDigest('5'),
+		Artifacts: []recording.CanonicalArtifact{{ID: "artifact-checkpoint", Kind: "CHECKPOINT", Visibility: "PUBLIC", ContentHash: recordingTestDigest('6'), SizeBytes: 12, CreatedAt: checkpointAt}},
+		Events:    events, Result: result,
+		Checkpoint: &recording.CanonicalCheckpoint{ID: "checkpoint-public-1", Label: "Approval", Summary: "Waiting for operator input", Timestamp: checkpointAt, ArtifactID: "artifact-checkpoint"},
+	})
+	if err != nil {
+		t.Fatalf("Build lifecycle recording: %v", err)
+	}
+	return value
+}
+
 func buildTerminalRecording(t *testing.T, status string, result *recording.CanonicalResult) recording.Recording {
 	t.Helper()
 	createdAt := time.Date(2026, 7, 12, 18, 0, 1, 0, time.UTC)

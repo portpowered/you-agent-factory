@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
@@ -12,10 +13,26 @@ import (
 // RecordingReplayProjection is the complete public inspection surface restored
 // from a portable recording. It intentionally has no live execution controls.
 type RecordingReplayProjection struct {
-	Session   fse.SessionReadResult
-	Events    fse.EventReadResult
-	Artifacts fse.ListArtifactsResult
-	Result    fse.ResultReadResult
+	Session    fse.SessionReadResult
+	Events     fse.EventReadResult
+	Artifacts  fse.ListArtifactsResult
+	Result     fse.ResultReadResult
+	Checkpoint *CheckpointReadModel
+}
+
+type CheckpointReadModel struct {
+	ID, Label, Summary, ArtifactID string
+	Timestamp                      time.Time
+}
+
+type ControlOutcome struct {
+	Outcome, Detail string
+}
+
+// ApplyLifecycleControl reports the stable non-live outcome for recordings.
+// Historical projections are inspection-only and cannot be resumed or paused.
+func (RecordingReplayProjection) ApplyLifecycleControl(_ fse.LifecycleControlKind) ControlOutcome {
+	return ControlOutcome{Outcome: "NON_LIVE_REPLAY", Detail: "recorded Factory Sessions are historical and do not support live lifecycle controls"}
 }
 
 // ReplayRecording validates and maps a privacy-bounded recording without
@@ -39,10 +56,11 @@ func ReplayRecording(value recording.Recording) (RecordingReplayProjection, erro
 		return RecordingReplayProjection{}, err
 	}
 	return RecordingReplayProjection{
-		Session:   session,
-		Events:    fse.EventReadResult{SessionID: value.Session.ID, Events: events},
-		Artifacts: fse.ListArtifactsResult{SessionID: value.Session.ID, Artifacts: artifacts},
-		Result:    result,
+		Session:    session,
+		Events:     fse.EventReadResult{SessionID: value.Session.ID, Events: events},
+		Artifacts:  fse.ListArtifactsResult{SessionID: value.Session.ID, Artifacts: artifacts},
+		Result:     result,
+		Checkpoint: replayCheckpoint(value.Checkpoint),
 	}, nil
 }
 
@@ -62,11 +80,37 @@ func replaySessionRead(value recording.Recording, result fse.ResultReadResult, a
 		Usage: fse.EmptySessionUsage(), ResultSummary: &fse.ResultSummary{ResultStatus: string(result.ResultStatus)},
 		ArtifactRefs: refs, ArtifactCount: len(refs), Links: fse.InspectionLinksForSession(value.Session.ID, true),
 	}
+	session.Lifecycle = replayLifecycle(value.Events)
 	if result.Failure != nil {
 		failure := *result.Failure
 		session.Failure = &failure
 	}
 	return session
+}
+
+func replayLifecycle(events []recording.EventSummary) *fse.LifecycleTimestamps {
+	lifecycle := &fse.LifecycleTimestamps{}
+	for _, event := range events {
+		timestamp := event.Timestamp
+		switch event.Type {
+		case "SESSION_STARTED":
+			lifecycle.StartedAt = &timestamp
+		case "SESSION_PAUSED":
+			lifecycle.PausedAt = &timestamp
+		case "SESSION_RESUMED":
+			lifecycle.ResumedAt = &timestamp
+		case "SESSION_COMPLETED":
+			lifecycle.FinishedAt = &timestamp
+		}
+	}
+	return lifecycle
+}
+
+func replayCheckpoint(value *recording.CheckpointSummary) *CheckpointReadModel {
+	if value == nil {
+		return nil
+	}
+	return &CheckpointReadModel{ID: value.ID, Label: value.Label, Summary: value.Summary, Timestamp: value.Timestamp.UTC(), ArtifactID: value.ArtifactID}
 }
 
 func replayResultProjection(value recording.Recording, artifacts []fse.ArtifactSummary) fse.ResultReadResult {
