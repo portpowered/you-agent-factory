@@ -42,7 +42,7 @@ const failedDispatchDetailFixture = {
   failureDetail: {
     message:
       "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-    reason: "provider_version_incompatible",
+    reason: "permanent_bad_request",
   },
   id: "dispatch-failed",
   javascript: {
@@ -152,7 +152,7 @@ describe("FactorySessionDetailPanel failure drilldown", () => {
       expect(screen.getByText("Failure detail")).toBeTruthy();
     });
 
-    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("permanent_bad_request")).toBeTruthy();
     expect(
       screen.getByText(
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",

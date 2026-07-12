@@ -94,7 +94,7 @@ describe("FactorySessionDetailPanel failed bridged-child inspection", () => {
       expect(screen.getByText("Failure detail")).toBeTruthy();
     });
 
-    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("permanent_bad_request")).toBeTruthy();
     expect(
       screen.getByText(
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",

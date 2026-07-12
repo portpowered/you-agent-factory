@@ -105,7 +105,7 @@ describe("InferenceAttemptMetadataDetails failure details", () => {
         <InferenceAttemptMetadataDetails
           attempt={inferenceAttempt("dispatch-codex", {
             failure_detail: {
-              reason: "provider_version_incompatible",
+              reason: "permanent_bad_request",
               message:
                 "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
             },
@@ -116,7 +116,7 @@ describe("InferenceAttemptMetadataDetails failure details", () => {
     );
 
     expect(screen.getByText("Failure reason")).toBeTruthy();
-    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("permanent_bad_request")).toBeTruthy();
     expect(
       screen.getByText(
         "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
@@ -135,7 +135,7 @@ describe("InferenceAttemptMetadataDetails failure details", () => {
     );
 
     expect(screen.queryByText("Failure reason")).toBeNull();
-    expect(screen.queryByText("provider_version_incompatible")).toBeNull();
+    expect(screen.queryByText("permanent_bad_request")).toBeNull();
   });
 
   it("localizes a translated historical failure with no message", () => {
@@ -143,14 +143,14 @@ describe("InferenceAttemptMetadataDetails failure details", () => {
       <CurrentSelectionLocaleProvider locale="zh-CN">
         <InferenceAttemptMetadataDetails
           attempt={inferenceAttempt("dispatch-history", {
-            failure_detail: { reason: "legacy_provider_failure" },
+            failure_detail: { reason: "unknown" },
             outcome: "FAILED",
           })}
         />
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.getByText("legacy_provider_failure")).toBeTruthy();
+    expect(screen.getByText("unknown")).toBeTruthy();
     expect(screen.getByText("失败消息")).toBeTruthy();
     expect(screen.getByText("此请求没有可用的失败消息。")).toBeTruthy();
   });

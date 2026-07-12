@@ -15,6 +15,7 @@ type DashboardRunnerOptionalCapability =
   components["schemas"]["FactoryWorldRunnerOptionalCapability"];
 type DashboardRunnerOptionalCapabilityStatus =
   components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
+type WorkFailureType = components["schemas"]["WorkFailureType"];
 
 export type StateCategory = "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
 export type DashboardPlaceKind =
@@ -179,7 +180,7 @@ export interface DashboardInferenceAttempt {
   failure_detail?: {
     errorClass?: string;
     message?: string;
-    reason?: string;
+    reason?: WorkFailureType;
   };
   exit_code?: number;
   inference_request_id: string;
@@ -252,7 +253,10 @@ export interface DashboardRuntimeWorkstationRequestResponse {
   feedback?: string;
   selectedClassificationLabel?: string;
   selected_classification_label?: string;
-  failureDetail?: components["schemas"]["FailureDetail"];
+  failureDetail?: {
+    reason: WorkFailureType;
+    message?: string;
+  };
   scriptResponse?: DashboardScriptResponse;
   script_response?: DashboardScriptResponse;
   agentRunInspection?: DashboardAgentRunInspection;
@@ -425,7 +429,12 @@ export interface DashboardSnapshot {
 }
 
 export interface DashboardStreamState {
-  status: "connecting" | "live" | "offline" | "reconnecting" | "recovery_failed";
+  status:
+    | "connecting"
+    | "live"
+    | "offline"
+    | "reconnecting"
+    | "recovery_failed";
   message: string;
 }
 

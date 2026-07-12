@@ -49,21 +49,19 @@ describe("TerminalWorkSummaryCard", () => {
     const { rerender } = render(
       <TerminalWorkSummaryCard
         failureMessage="Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry."
-        failureReason="provider_version_incompatible"
+        failureReason="permanent_bad_request"
         label="Failed Codex execution"
         status="failed"
       />,
     );
 
-    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("permanent_bad_request")).toBeTruthy();
     expect(
       screen.getByText(
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("provider_version_incompatible").tagName).toBe(
-      "CODE",
-    );
+    expect(screen.getByText("permanent_bad_request").tagName).toBe("CODE");
 
     rerender(
       <TerminalWorkSummaryCard
@@ -72,7 +70,7 @@ describe("TerminalWorkSummaryCard", () => {
       />,
     );
 
-    expect(screen.queryByText("provider_version_incompatible")).toBeNull();
+    expect(screen.queryByText("permanent_bad_request")).toBeNull();
     expect(screen.queryByText(/gpt-5\.6-sol/)).toBeNull();
   });
 });

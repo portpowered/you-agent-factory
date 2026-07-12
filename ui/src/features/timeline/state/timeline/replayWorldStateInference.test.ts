@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
+import { projectSnapshot } from "./projectSnapshot";
 import {
   advanceWorldStateFromCheckpoint,
   reconstructWorldState,
@@ -279,7 +280,7 @@ describe("reconstructWorldState inference failures", () => {
           failureDetail: {
             message:
               "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-            reason: "codex_version_incompatible",
+            reason: "permanent_bad_request",
           },
           inferenceRequestId: inferenceRequestID,
           outcome: "FAILED",
@@ -332,12 +333,12 @@ describe("reconstructWorldState inference failures", () => {
       state.inferenceAttemptsByDispatchID[dispatchID]?.[inferenceRequestID],
     ).toEqual(
       expect.objectContaining({
-        error_class: "codex_version_incompatible",
+        error_class: "permanent_bad_request",
         exit_code: 1,
         failure_detail: {
           message:
             "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-          reason: "codex_version_incompatible",
+          reason: "permanent_bad_request",
         },
         outcome: "FAILED",
       }),
@@ -345,19 +346,49 @@ describe("reconstructWorldState inference failures", () => {
     expect(state.completedDispatches[0]).toMatchObject({
       failureMessage:
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-      failureReason: "codex_version_incompatible",
+      failureReason: "permanent_bad_request",
     });
     expect(state.failedWorkDetailsByWorkID[workID]).toMatchObject({
       failure_message:
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-      failure_reason: "codex_version_incompatible",
+      failure_reason: "permanent_bad_request",
     });
     expect(state.providerSessions[0]).toMatchObject({
       failure_message:
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-      failure_reason: "codex_version_incompatible",
+      failure_reason: "permanent_bad_request",
     });
     expect(liveState).toEqual(state);
+
+    const snapshot = projectSnapshot(state);
+    const expectedFailureDetail = {
+      message:
+        "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
+      reason: "permanent_bad_request",
+    };
+    expect(
+      snapshot.runtime.inference_attempts_by_dispatch_id?.[dispatchID]?.[
+        inferenceRequestID
+      ]?.failure_detail,
+    ).toEqual(expectedFailureDetail);
+    expect(
+      snapshot.runtime.workstation_requests_by_dispatch_id?.[dispatchID]
+        ?.response?.failureDetail,
+    ).toEqual(expectedFailureDetail);
+    expect(snapshot.workstationRequestsByDispatchID[dispatchID]).toMatchObject({
+      failure_message: expectedFailureDetail.message,
+      failure_reason: expectedFailureDetail.reason,
+    });
+    expect(
+      snapshot.runtime.session.failed_work_details_by_work_id?.[workID],
+    ).toMatchObject({
+      failure_message: expectedFailureDetail.message,
+      failure_reason: expectedFailureDetail.reason,
+    });
+    expect(snapshot.runtime.session.provider_sessions?.[0]).toMatchObject({
+      failure_message: expectedFailureDetail.message,
+      failure_reason: expectedFailureDetail.reason,
+    });
   });
 
   it("retains a historical failure reason without synthesizing a message", () => {
@@ -368,7 +399,7 @@ describe("reconstructWorldState inference failures", () => {
       {
         attempt: 1,
         durationMillis: 1,
-        failureDetail: { reason: "legacy_provider_failure" },
+        failureDetail: { reason: "unknown" },
         inferenceRequestId: "missing/inference-request/1",
         outcome: "FAILED",
       },
@@ -385,13 +416,34 @@ describe("reconstructWorldState inference failures", () => {
           { dispatchId: "missing" },
         ),
         response,
+        factoryEvent(
+          "event-dispatch-response-history",
+          5,
+          FACTORY_EVENT_TYPES.dispatchResponse,
+          {
+            durationMillis: 2,
+            outcome: "FAILED",
+            outputWork: [],
+            transitionId: "review",
+          },
+          { dispatchId: "missing" },
+        ),
       ],
-      4,
+      5,
     );
     expect(
       state.inferenceAttemptsByDispatchID.missing?.[
         "missing/inference-request/1"
       ]?.failure_detail,
-    ).toEqual({ reason: "legacy_provider_failure" });
+    ).toEqual({ reason: "unknown" });
+    const snapshot = projectSnapshot(state);
+    expect(
+      snapshot.runtime.workstation_requests_by_dispatch_id?.missing?.response
+        ?.failureDetail,
+    ).toEqual({ reason: "unknown" });
+    expect(snapshot.workstationRequestsByDispatchID.missing).toMatchObject({
+      failure_message: undefined,
+      failure_reason: "unknown",
+    });
   });
 });

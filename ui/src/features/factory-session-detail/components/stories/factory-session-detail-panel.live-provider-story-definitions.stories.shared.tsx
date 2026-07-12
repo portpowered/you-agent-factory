@@ -177,9 +177,7 @@ export const FailedBridgedChildInspection = {
     );
 
     expect(await canvas.findByText("Failure detail")).toBeTruthy();
-    expect(
-      await canvas.findByText("provider_version_incompatible"),
-    ).toBeTruthy();
+    expect(await canvas.findByText("permanent_bad_request")).toBeTruthy();
     expect(
       await canvas.findByText(
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",

@@ -58,7 +58,7 @@ describe("normalize durable inspection helpers", () => {
         failureDetail: {
           message:
             "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-          reason: "provider_version_incompatible",
+          reason: "permanent_bad_request",
         },
         id: "disp-js-fail-002",
         javascript: {

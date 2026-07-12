@@ -103,7 +103,7 @@ export function buildFailedBridgedChildDispatchSummary() {
     failureDetail: {
       message:
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-      reason: "provider_version_incompatible",
+      reason: "permanent_bad_request",
     },
     id: failedBridgedChildDispatchID,
     javascript: {
@@ -143,7 +143,7 @@ export function buildFailedBridgedChildDispatchDetail() {
     failureDetail: {
       message:
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-      reason: "provider_version_incompatible",
+      reason: "permanent_bad_request",
     },
     id: failedBridgedChildDispatchID,
     javascript: {

@@ -161,7 +161,7 @@ describe("DispatchDetailContent", () => {
       failureDetail: {
         message:
           "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
-        reason: "provider_version_incompatible",
+        reason: "permanent_bad_request",
       },
       id: "dispatch-codex-version",
       orchestratorKind: FactoryOrchestratorKind.PETRI,
@@ -171,7 +171,7 @@ describe("DispatchDetailContent", () => {
 
     const { rerender } = render(<DispatchDetailContent data={canonicalData} />);
 
-    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("permanent_bad_request")).toBeTruthy();
     expect(
       screen.getByText(
         "Model gpt-5.6-sol requires a newer Codex version. Upgrade Codex and retry.",
@@ -180,7 +180,7 @@ describe("DispatchDetailContent", () => {
 
     const historicalData = normalizeFactorySessionDispatchDetail({
       dispatchKind: "PETRI_WORKSTATION",
-      failureDetail: { reason: "provider_version_incompatible" },
+      failureDetail: { reason: "permanent_bad_request" },
       id: "dispatch-translated-history",
       orchestratorKind: FactoryOrchestratorKind.PETRI,
       sessionId: "session-translated-history",
@@ -189,7 +189,7 @@ describe("DispatchDetailContent", () => {
 
     rerender(<DispatchDetailContent data={historicalData} />);
 
-    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("permanent_bad_request")).toBeTruthy();
     expect(
       screen.getByText(
         "Failure message is not available for this historical dispatch.",

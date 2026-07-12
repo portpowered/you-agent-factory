@@ -21,6 +21,7 @@ import type {
   FactoryTerminalWork,
   FactoryWorkItem,
 } from "../../../../api/events";
+import type { WorkFailureType } from "../../../../api/generated/openapi";
 import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
 
 export interface ResourceUnit {
@@ -51,7 +52,7 @@ export interface WorldCompletion extends WorldDispatch {
   durationMillis: number;
   endTime: string;
   failureMessage?: string;
-  failureReason?: string;
+  failureReason?: WorkFailureType;
   feedback?: string;
   feedbackTextBlobID?: string;
   selectedClassificationLabel?: string;

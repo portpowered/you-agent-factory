@@ -94,7 +94,9 @@ describe("SelectedWorkDispatchHistorySection", () => {
     expect(title.className).toContain("type-headline-large");
     expect(within(historyCard).getByText("Current dispatch")).toBeTruthy();
     expect(within(historyCard).queryByText("Workstation")).toBeNull();
-    expect(within(historyCard).getByRole("heading", { name: "Summary" })).toBeTruthy();
+    expect(
+      within(historyCard).getByRole("heading", { name: "Summary" }),
+    ).toBeTruthy();
     const header = title.closest("div");
     expect(header?.parentElement?.className).toContain("justify-between");
 
@@ -122,13 +124,13 @@ describe("SelectedWorkDispatchHistorySection failure details", () => {
           fallbackProviderSessions={[]}
           requests={[
             workstationRequest("dispatch-codex", {
-              failure_reason: "provider_version_incompatible",
+              failure_reason: "permanent_bad_request",
               failure_message:
                 "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
               outcome: "FAILED",
             }),
             workstationRequest("dispatch-history", {
-              failure_reason: "legacy_provider_failure",
+              failure_reason: "unknown",
               failure_message: undefined,
               outcome: "FAILED",
             }),
@@ -147,13 +149,13 @@ describe("SelectedWorkDispatchHistorySection failure details", () => {
       fireEvent.click(within(section).getByRole("button", { name: "Expand" }));
     }
 
-    expect(screen.getByText("provider_version_incompatible")).toBeTruthy();
+    expect(screen.getByText("permanent_bad_request")).toBeTruthy();
     expect(
       screen.getByText(
         "Model gpt-5.6-sol requires a newer version of Codex. Please update Codex and retry.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("legacy_provider_failure")).toBeTruthy();
+    expect(screen.getByText("unknown")).toBeTruthy();
     expect(
       screen.getByText("Failure message is not available for this dispatch."),
     ).toBeTruthy();

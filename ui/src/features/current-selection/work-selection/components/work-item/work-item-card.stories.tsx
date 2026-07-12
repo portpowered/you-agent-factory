@@ -228,23 +228,23 @@ export const ProviderFailureDetails = {
           ...dashboardWorkstationRequestFixtures.errored,
           dispatch_id: dispatchID,
           failure_message: codexFailureMessage,
-          failure_reason: "provider_version_incompatible",
+          failure_reason: "permanent_bad_request",
           inference_attempts:
             dashboardWorkstationRequestFixtures.errored.inference_attempts?.map(
               (attempt) => ({
                 ...attempt,
                 dispatch_id: dispatchID,
                 failure_detail: {
-                  errorClass: "provider_version_incompatible",
+                  errorClass: "permanent_bad_request",
                   message: codexFailureMessage,
-                  reason: "provider_version_incompatible",
+                  reason: "permanent_bad_request",
                 },
               }),
             ),
           response_view: {
             ...dashboardWorkstationRequestFixtures.errored.response_view,
             failure_message: codexFailureMessage,
-            failure_reason: "provider_version_incompatible",
+            failure_reason: "permanent_bad_request",
           },
         }}
       />
