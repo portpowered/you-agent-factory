@@ -9,10 +9,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
 
@@ -207,45 +204,6 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesManagedRuntimeVoca
 				t.Fatalf("error = %q, want bootstrap readiness failure instead of transport failure", err.Error())
 			}
 		})
-	}
-}
-
-func TestInvoke_OfflineMissingLocalFixture_ReadinessGatedFailureWithoutHTTPServer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for offline missing local model bootstrap invoke")
-	}
-
-	preserveModelsBootstrapGlobals(t)
-	factoryDir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, factoryDir, nonReadyLocalModelFactoryConfig())
-
-	augmentModelsInvokeBootstrapServiceConfig = func(cfg *service.FactoryServiceConfig) {
-		cfg.ModelCacheDir = t.TempDir()
-		cfg.MockWorkersConfig = factoryconfig.NewEmptyMockWorkersConfig()
-	}
-
-	err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello offline",
-		FactoryDir: factoryDir,
-		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
-		Output:     io.Discard,
-		Logger:     zap.NewNop(),
-	})
-	if err == nil {
-		t.Fatal("expected missing managed runtime invoke failure")
-	}
-	if !errors.Is(err, apisurface.ErrManagedRuntimeMissing) {
-		t.Fatalf("error = %v, want managed runtime missing", err)
-	}
-	failure, ok := apisurface.AsInferenceFailure(err)
-	if !ok || failure.Class != apisurface.InferenceFailureClassMissingModel {
-		t.Fatalf("error = %T, want missing_model InferenceFailure", err)
-	}
-	if strings.Contains(err.Error(), "models endpoint not reachable") {
-		t.Fatalf("error = %q, want bootstrap readiness failure instead of transport failure", err.Error())
 	}
 }
 

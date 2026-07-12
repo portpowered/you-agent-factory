@@ -112,8 +112,13 @@ primary-result behavior.
   error mapping aligned with `pkg/api/handlers_models.go` via
   `mapBootstrapModelInvokeError`. Return classified `InferenceFailure` and
   `ManagedRuntimeInvocationError` values without re-wrapping so readiness causes
-  stay `errors.Is`-able; non-ready bootstrap invoke coverage lives in
-  `pkg/cli/models/non_ready_invoke_test.go`. Factory root resolution for invoke belongs in
+  stay `errors.Is`-able;   non-ready bootstrap invoke coverage lives in
+  `pkg/cli/models/non_ready_invoke_test.go` (stub bootstrap lifecycle vocabulary) and
+  `pkg/cli/models/bootstrap_lifecycle_invoke_test.go` (offline MISSING/LOADING/FAILED
+  integration through the real bootstrap). Ready offline invoke coverage lives in
+  `pkg/cli/models/offline_ready_invoke_test.go`; bootstrap routing and failure-baseline
+  contracts live in `pkg/cli/models/bootstrap_invoke_test.go` and
+  `pkg/cli/models/failure_baseline_no_server_test.go`. Factory root resolution for invoke belongs in
   `pkg/cli/models` (`resolveModelsInvokeFactoryDir`), with operator defaults and
   logger passed from `pkg/cli/root.go` `newModelsInvokeCommand`.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
