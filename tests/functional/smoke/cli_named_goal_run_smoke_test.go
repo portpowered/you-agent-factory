@@ -192,7 +192,7 @@ func TestNamedGoalRun_RealCLIMaterializesFreshFactoryAndPreservesCustomerEditsOn
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	materializedDir := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you%2Fgoal")
+	materializedDir := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
 	if _, err := os.Stat(materializedDir); !os.IsNotExist(err) {
 		t.Fatalf("fresh home should not already contain materialized @you/goal factory: stat %v", err)
 	}
@@ -235,6 +235,11 @@ func TestNamedGoalRun_RealCLIMaterializesFreshFactoryAndPreservesCustomerEditsOn
 		t.Fatalf("first stdout = %q, want only primary result %q", stdout, packagedGoalMockWorkerAcceptedSummary)
 	}
 	assertNamedGoalMaterializedSplitLayout(t, materializedDir)
+	globalFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	encodedGoalDir := filepath.Join(globalFactoriesRoot, "@you%2Fgoal")
+	if _, err := os.Stat(encodedGoalDir); !os.IsNotExist(err) {
+		t.Fatalf("fresh materialization must not create encoded goal leaf at %s: stat %v", encodedGoalDir, err)
+	}
 
 	workerPath := filepath.Join(materializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
 	editedWorkerBody := "customer edited goal executor after first materialization\n"
