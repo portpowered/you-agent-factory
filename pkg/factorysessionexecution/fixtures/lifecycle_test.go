@@ -797,6 +797,41 @@ func TestMapCanonicalRuntimeSessionEvents_EquivalentOrchestratorsHaveSharedPubli
 	if got, want := sharedEventMeaning(t, javascriptEvents), sharedEventMeaning(t, petriEvents); !reflect.DeepEqual(got, want) {
 		t.Fatalf("shared public meaning differs:\nJavaScript: %#v\nPetri: %#v", got, want)
 	}
+
+	petriSession, petriResult, err := fse.ReplaySessionProjection(petriEvents)
+	if err != nil {
+		t.Fatalf("replay Petri canonical history: %v", err)
+	}
+	javascriptSession, javascriptResult, err := fse.ReplaySessionProjection(javascriptEvents)
+	if err != nil {
+		t.Fatalf("replay JavaScript canonical history: %v", err)
+	}
+	javascriptSession.OrchestratorKind = ""
+	javascriptSession.Dialect = ""
+	javascriptSession.ResolvedSource.Dialect = ""
+	petriSession.OrchestratorKind = ""
+	petriSession.Dialect = ""
+	petriSession.ResolvedSource.Dialect = ""
+	if !reflect.DeepEqual(javascriptSession, petriSession) {
+		t.Fatalf("replayed shared session differs:\nJavaScript: %#v\nPetri: %#v", javascriptSession, petriSession)
+	}
+	if !reflect.DeepEqual(javascriptResult, petriResult) {
+		t.Fatalf("replayed shared result differs:\nJavaScript: %#v\nPetri: %#v", javascriptResult, petriResult)
+	}
+	if got, want := artifactIDsFromRefs(javascriptSession.ArtifactRefs), []string{"artifact-1"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("replayed artifact IDs = %#v, want %#v", got, want)
+	}
+	if javascriptResult.ResultStatus != fse.ResultStatusFinal || javascriptResult.SessionStatus != fse.LifecycleStatusSucceeded {
+		t.Fatalf("replayed terminal result = %#v, want FINAL/SUCCEEDED", javascriptResult)
+	}
+}
+
+func artifactIDsFromRefs(refs []fse.ArtifactRefSummary) []string {
+	ids := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ids = append(ids, ref.ID)
+	}
+	return ids
 }
 
 func TestMapCanonicalRuntimeSessionEvents_RejectsMalformedFactsWithoutPartialEvents(t *testing.T) {
