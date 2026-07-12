@@ -107,10 +107,14 @@ func (p Policy) HumanTerminalWriter(stdout io.Writer) io.Writer {
 // terminal logger output while still allowing BuildRuntimeLogger to tee
 // structured runtime records into rolling file sinks.
 func (p Policy) BuildLogger() (*zap.Logger, error) {
-	if p.Mode() == ModeQuiet {
+	switch p.Mode() {
+	case ModeQuiet:
 		return zap.NewNop(), nil
+	case ModeNormal:
+		return logging.BuildTerminalMutedLogger()
+	default:
+		return logging.BuildLogger(p.VerboseEnabled(), p.DebugEnabled())
 	}
-	return logging.BuildLogger(p.VerboseEnabled(), p.DebugEnabled())
 }
 
 // DiagnosticsEnabled chooses whether command diagnostics should emit, honoring

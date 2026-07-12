@@ -2,8 +2,11 @@ package terminalpolicy
 
 import (
 	"bytes"
+	"io"
+	"os"
 	"testing"
 
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -123,5 +126,33 @@ func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
 	}
 	if !verboseLogger.Core().Enabled(zapcore.InfoLevel) {
 		t.Fatal("expected verbose logger to enable info level")
+	}
+}
+
+func TestBuildLogger_NormalModeDoesNotWriteStructuredLogsToStderr(t *testing.T) {
+	oldStderr := os.Stderr
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stderr: %v", err)
+	}
+	os.Stderr = writePipe
+
+	logger, err := Resolve(Options{}).BuildLogger()
+	if err != nil {
+		t.Fatalf("BuildLogger normal: %v", err)
+	}
+	logger.Warn("normal mode structured leak probe", zap.String("probe", "value"))
+
+	if err := writePipe.Close(); err != nil {
+		t.Fatalf("close stderr writer: %v", err)
+	}
+	os.Stderr = oldStderr
+
+	captured, err := io.ReadAll(readPipe)
+	if err != nil {
+		t.Fatalf("read captured stderr: %v", err)
+	}
+	if len(captured) != 0 {
+		t.Fatalf("stderr = %q, want no structured terminal output in normal mode", captured)
 	}
 }

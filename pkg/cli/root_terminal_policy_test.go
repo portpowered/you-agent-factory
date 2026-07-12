@@ -206,3 +206,59 @@ func TestRootCommand_NormalModeSuppressesSubmitDiagnostics(t *testing.T) {
 		t.Fatal("expected normal mode to suppress diagnostics writer")
 	}
 }
+
+func TestRootCommand_NormalModeRunWiresTerminalMutedLogger(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+
+		oldStderr := os.Stderr
+		readPipe, writePipe, err := os.Pipe()
+		if err != nil {
+			t.Fatalf("pipe stderr: %v", err)
+		}
+		os.Stderr = writePipe
+		got.Logger.Warn("normal mode structured leak probe")
+		if err := writePipe.Close(); err != nil {
+			t.Fatalf("close stderr writer: %v", err)
+		}
+		os.Stderr = oldStderr
+
+		captured, err := io.ReadAll(readPipe)
+		if err != nil {
+			t.Fatalf("read captured stderr: %v", err)
+		}
+		if len(captured) != 0 {
+			t.Fatalf("stderr = %q, want no structured terminal output for normal run logger", captured)
+		}
+		return nil
+	}
+
+	dir := t.TempDir()
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--dir", dir,
+		"--no-record",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run: %v", err)
+	}
+	if got.TerminalPolicy.Mode() != terminalpolicy.ModeNormal {
+		t.Fatalf("terminal policy mode = %q, want %q", got.TerminalPolicy.Mode(), terminalpolicy.ModeNormal)
+	}
+	if got.StartupOutput == nil {
+		t.Fatal("expected normal run policy to wire human startup output")
+	}
+	if got.Diagnostics != nil {
+		t.Fatal("expected normal run policy to suppress diagnostics writer")
+	}
+}
