@@ -11,14 +11,7 @@ import (
 )
 
 var workstationRoleByName = map[string]string{
-	"plan-goal":    "planner",
 	"execute-goal": "executor",
-	"check-goal":   "checker",
-	"review-goal":  "summarizer",
-}
-
-var workerRoleByName = map[string]string{
-	"goal-reviewer": "reviewer",
 }
 
 func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
@@ -62,11 +55,9 @@ func assertWorkerBodiesMatchAuthoredPrompts(t *testing.T, cfg *interfaces.Factor
 	for _, worker := range cfg.Workers {
 		workerBodies[worker.Name] = strings.TrimSpace(worker.Body)
 	}
-	for workerName, role := range workerRoleByName {
-		want := strings.TrimSpace(builtingoal.AuthoredRolePrompts[role])
-		if got := workerBodies[workerName]; got != want {
-			t.Fatalf("%s body does not match authored %s prompt", workerName, role)
-		}
+	want := strings.TrimSpace(builtingoal.AuthoredRolePrompts["executor"])
+	if got := workerBodies["goal-executor"]; got != want {
+		t.Fatalf("goal-executor body does not match authored executor prompt")
 	}
 }
 

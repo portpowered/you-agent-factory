@@ -17,68 +17,13 @@ var packagedGoalRolePromptRegressionExpectations = map[string]struct {
 	mustContain    []string
 	mustNotContain []string
 }{
-	"planner": {
-		mustContain: []string{
-			"AGENT_RUN",
-			"AGENT_WORKER",
-			"bounded plan",
-			"## Goal",
-			"## Plan",
-			"## Acceptance checks",
-			"open-ended discussion",
-		},
-		mustNotContain: packagedGoalLegacyPromptAliases,
-	},
 	"executor": {
 		mustContain: []string{
+			"REPEATER",
 			"AGENT_RUN",
 			"AGENT_WORKER",
-			"bounded execution result",
-			"## Completed work",
-			"## Blockers",
-			"## Follow-up for review",
-			"open-ended discussion",
-		},
-		mustNotContain: packagedGoalLegacyPromptAliases,
-	},
-	"checker": {
-		mustContain: []string{
-			"CLASSIFIER_WORKSTATION",
-			"SCRIPT_WORKER",
-			"plain",
-			"structured",
-			"stdout",
-			"open-ended discussion",
-		},
-		mustNotContain: packagedGoalLegacyPromptAliases,
-	},
-	"reviewer": {
-		mustContain: []string{
-			"AGENT_WORKER",
-			"reviewable disposition",
-			"## Disposition",
-			"accepted",
-			"needs_changes",
-			"## Findings",
-			"## Outcome",
-			"## Verification",
-			"## Follow-up",
-			"open-ended discussion",
-		},
-		mustNotContain: packagedGoalLegacyPromptAliases,
-	},
-	"summarizer": {
-		mustContain: []string{
-			"AGENT_RUN",
-			"AGENT_WORKER",
-			"SCRIPT_RUN",
-			"bounded final summary",
-			"## Disposition",
-			"## Findings",
-			"## Outcome",
-			"## What was done",
-			"## Verification",
-			"## Follow-up",
+			"<COMPLETE>",
+			"<CONTINUE>",
 			"open-ended discussion",
 		},
 		mustNotContain: packagedGoalLegacyPromptAliases,
@@ -91,103 +36,56 @@ var packagedGoalBoundedWorkerRolePromptExpectations = []struct {
 	mustNotContain []string
 }{
 	{
-		role: "planner",
-		mustContain: []string{
-			"AGENT_RUN",
-			"AGENT_WORKER",
-			"bounded plan",
-			"## Goal",
-			"## Plan",
-			"## Acceptance checks",
-			"open-ended discussion",
-		},
-		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
-	},
-	{
 		role: "executor",
 		mustContain: []string{
+			"REPEATER",
 			"AGENT_RUN",
 			"AGENT_WORKER",
-			"bounded execution result",
-			"## Completed work",
-			"## Blockers",
-			"## Follow-up for review",
-			"open-ended discussion",
-		},
-		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
-	},
-	{
-		role: "checker",
-		mustContain: []string{
-			"CLASSIFIER_WORKSTATION",
-			"SCRIPT_WORKER",
-			"plain",
-			"structured",
-			"stdout",
-			"open-ended discussion",
-		},
-		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
-	},
-	{
-		role: "reviewer",
-		mustContain: []string{
-			"AGENT_WORKER",
-			"reviewable disposition",
-			"## Disposition",
-			"accepted",
-			"needs_changes",
-			"## Findings",
-			"## Outcome",
-			"## Verification",
-			"## Follow-up",
+			"<COMPLETE>",
+			"<CONTINUE>",
 			"open-ended discussion",
 		},
 		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
 	},
 }
 
-func TestMaterializedPackagedGoalFactory_AuthorBoundedSummarizerPrompt(t *testing.T) {
+func TestMaterializedPackagedGoalFactory_AuthorBoundedExecutorPrompt(t *testing.T) {
 	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
 
-	source, ok := packagedGoalRolePromptSourceByRole("summarizer")
+	source, ok := packagedGoalRolePromptSourceByRole("executor")
 	if !ok {
-		t.Fatal("missing packaged role prompt source for summarizer")
+		t.Fatal("missing packaged role prompt source for executor")
 	}
 
 	promptPath := packagedGoalMaterializedPromptPath(factoryDir, source)
 	promptBytes, err := os.ReadFile(promptPath)
 	if err != nil {
-		t.Fatalf("summarizer prompt file %s: %v", promptPath, err)
+		t.Fatalf("executor prompt file %s: %v", promptPath, err)
 	}
 	prompt := strings.TrimSpace(string(promptBytes))
 	if prompt == "" {
-		t.Fatal("summarizer prompt is empty")
+		t.Fatal("executor prompt is empty")
 	}
 
 	mustContain := []string{
+		"REPEATER",
 		"AGENT_RUN",
 		"AGENT_WORKER",
-		"SCRIPT_RUN",
-		"bounded final summary",
-		"## Disposition",
-		"## Findings",
-		"## Outcome",
-		"## What was done",
-		"## Verification",
-		"## Follow-up",
+		"<COMPLETE>",
+		"<CONTINUE>",
 		"open-ended discussion",
 	}
 	for _, marker := range mustContain {
 		if !strings.Contains(prompt, marker) {
-			t.Fatalf("summarizer prompt missing %q:\n%s", marker, prompt)
+			t.Fatalf("executor prompt missing %q:\n%s", marker, prompt)
 		}
 	}
 	for _, marker := range []string{"MODEL_WORKER", "MODEL_RUN"} {
 		if strings.Contains(prompt, marker) {
-			t.Fatalf("summarizer prompt must not contain legacy marker %q:\n%s", marker, prompt)
+			t.Fatalf("executor prompt must not contain legacy marker %q:\n%s", marker, prompt)
 		}
 	}
 }

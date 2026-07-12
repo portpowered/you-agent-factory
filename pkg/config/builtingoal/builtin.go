@@ -10,39 +10,16 @@ import (
 //go:embed factory.json
 var factoryJSON []byte
 
-//go:embed prompts/planner.md
-var plannerPrompt string
-
 //go:embed prompts/executor.md
 var executorPrompt string
 
-//go:embed prompts/checker.md
-var checkerPrompt string
-
-//go:embed prompts/reviewer.md
-var reviewerPrompt string
-
-//go:embed prompts/summarizer.md
-var summarizerPrompt string
-
-var workerPromptBodies = map[string]string{
-	"goal-reviewer": reviewerPrompt,
-}
-
 var workstationPromptBodies = map[string]string{
-	"plan-goal":    plannerPrompt,
 	"execute-goal": executorPrompt,
-	"check-goal":   checkerPrompt,
-	"review-goal":  summarizerPrompt,
 }
 
 // AuthoredRolePrompts maps each goal role to its authored prompt source file content.
 var AuthoredRolePrompts = map[string]string{
-	"planner":    plannerPrompt,
-	"executor":   executorPrompt,
-	"checker":    checkerPrompt,
-	"reviewer":   reviewerPrompt,
-	"summarizer": summarizerPrompt,
+	"executor": executorPrompt,
 }
 
 // BuiltInGoalFactoryJSON is the canonical runnable @you/goal packaged factory payload
@@ -87,11 +64,9 @@ func assembleBuiltInGoalFactoryJSONFromRoot(root map[string]any) ([]byte, error)
 			return nil, fmt.Errorf("factory.json worker entry must be an object")
 		}
 		name, _ := worker["name"].(string)
-		promptBody, ok := workerPromptBodies[name]
-		if !ok {
-			continue
+		if name == "goal-executor" {
+			worker["body"] = strings.TrimSpace(executorPrompt)
 		}
-		worker["body"] = strings.TrimSpace(promptBody)
 	}
 
 	workstations, ok := root["workstations"].([]any)

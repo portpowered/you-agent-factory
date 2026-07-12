@@ -21,13 +21,6 @@ func TestShouldFormatInvocationSummary_MatchesPackagedInvokeWorkstation(t *testi
 			want: true,
 		},
 		{
-			name: "packaged goal review workstation",
-			workstation: &interfaces.FactoryWorkstationConfig{
-				Name: PackagedReviewWorkstationName,
-				Type: interfaces.WorkstationTypeClassify,
-			},
-		},
-		{
 			name: "other workstation",
 			workstation: &interfaces.FactoryWorkstationConfig{
 				Name: "other-workstation",
