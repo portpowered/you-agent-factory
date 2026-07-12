@@ -30,6 +30,7 @@ type ProjectionContext struct {
 	RuntimeStartedAt       time.Time
 	Enabled                []interfaces.EnabledTransition
 	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
+	JavaScriptSession      *interfaces.FactoryWorldSessionBracketState
 	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord
 	Now                    time.Time
 }

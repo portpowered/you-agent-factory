@@ -25,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -1688,7 +1689,7 @@ func TestPortableCanonicalFactsRetainJavaScriptProjectionInputsCheckpointAndResu
 			OrchestratorKind: factoryapi.JAVASCRIPT, LifecycleControlStatus: &succeeded,
 			SourceRef: &sourceRef, SourceHash: &sourceHash, PolicyHash: &policyHash, Artifacts: &artifacts,
 		},
-	}, javascript)
+	}, javascript, nil)
 
 	if facts.ArgumentsDigest != argsDigest {
 		t.Fatalf("argumentsDigest = %q, want %q", facts.ArgumentsDigest, argsDigest)
@@ -1707,57 +1708,136 @@ func TestPortableCanonicalFactsRetainJavaScriptProjectionInputsCheckpointAndResu
 func TestFactoryService_PortableReplayRestoresTerminalPublicReadsWithoutLiveExecution(t *testing.T) {
 	for _, tc := range []struct {
 		name, status, resultStatus string
-		failure                    *recording.FailureSummary
+		finalStatus                factoryapi.FactorySessionDurableLifecycleStatus
+		failure                    *factoryapi.FailureDetail
 	}{
-		{name: "completed", status: "SUCCEEDED", resultStatus: "FINAL"},
-		{name: "failed", status: "FAILED", resultStatus: "FAILED_WITH_PARTIAL", failure: &recording.FailureSummary{Reason: "WORKFLOW_FAILED", Message: "safe failure", PartialResultAvailable: true}},
+		{name: "completed", status: "SUCCEEDED", resultStatus: "FINAL", finalStatus: factoryapi.FactorySessionDurableLifecycleStatusSucceeded},
+		{name: "failed", status: "FAILED", resultStatus: "FAILED_WITH_PARTIAL", finalStatus: factoryapi.FactorySessionDurableLifecycleStatusFailed, failure: &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeUnknown, Message: "safe failure"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "session.json")
-			value, err := recording.Build(recording.CanonicalFacts{
-				SessionID: "session-replayed", Status: tc.status, OrchestratorKind: "JAVASCRIPT",
-				SourceRef: "workflow.js", SourceHash: "sha256:" + strings.Repeat("a", 64),
-				PolicyHash: "sha256:" + strings.Repeat("b", 64), Arguments: map[string]any{"topic": "safe"},
-				Artifacts: []recording.CanonicalArtifact{{ID: "artifact-result", Kind: "RESULT", Visibility: "PUBLIC", ContentHash: "sha256:" + strings.Repeat("c", 64), SizeBytes: 16, CreatedAt: time.Date(2026, 7, 12, 18, 0, 1, 0, time.UTC)}},
-				Events:    []json.RawMessage{json.RawMessage(`{"id":"event-terminal","type":"SESSION_COMPLETED","context":{"sequence":0,"eventTime":"2026-07-12T18:00:01Z"},"payload":{"artifactIds":["artifact-result"]}}`)},
-				Result:    &recording.CanonicalResult{Status: tc.resultStatus, Mode: map[bool]string{true: "partial", false: "final"}[tc.failure != nil], PrimaryResult: json.RawMessage(`{"answer":"recorded"}`), ArtifactIDs: []string{"artifact-result"}, Failure: tc.failure},
-			})
-			if err != nil {
-				t.Fatalf("Build recording: %v", err)
-			}
-			if err := recording.Write(path, value); err != nil {
-				t.Fatalf("Write recording: %v", err)
-			}
-
-			provider := &countingReplayProvider{}
-			svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{ReplayPath: path, Dir: t.TempDir(), SystemConfigPath: filepath.Join(t.TempDir(), "config.json"), ProviderOverride: provider})
-			if err != nil {
-				t.Fatalf("BuildFactoryService: %v", err)
-			}
-			if err := svc.Run(context.Background()); err != nil {
-				t.Fatalf("Run: %v", err)
-			}
-			session, err := svc.GetDurableFactorySession(context.Background(), "session-replayed")
-			if err != nil || string(session.Status) != tc.status {
-				t.Fatalf("session = %#v, %v", session, err)
-			}
-			result, err := svc.GetDurableFactorySessionResult(context.Background(), "session-replayed", factoryapi.GetFactorySessionResultsParams{})
-			if err != nil || string(result.ResultStatus) != tc.resultStatus {
-				t.Fatalf("result = %#v, %v", result, err)
-			}
-			events, err := svc.ReadDurableFactorySessionEvents(context.Background(), "session-replayed", factoryapi.GetEventsBySessionIdParams{})
-			if err != nil || len(events.History) != 1 {
-				t.Fatalf("events = %#v, %v", events, err)
-			}
-			artifacts, err := svc.ListDurableFactorySessionArtifacts(context.Background(), "session-replayed")
-			if err != nil || len(artifacts.Artifacts) != 1 {
-				t.Fatalf("artifacts = %#v, %v", artifacts, err)
-			}
-			if provider.calls.Load() != 0 {
-				t.Fatalf("live provider calls = %d", provider.calls.Load())
-			}
+			assertTerminalProductionRecordThenReplay(t, tc.status, tc.resultStatus, tc.finalStatus, tc.failure)
 		})
 	}
+}
+
+func assertTerminalProductionRecordThenReplay(t *testing.T, status, resultStatus string, finalStatus factoryapi.FactorySessionDurableLifecycleStatus, failure *factoryapi.FailureDetail) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "session.json")
+	argsDigest := "sha256:" + strings.Repeat("a", 64)
+	history := terminalJavaScriptRecordingHistory(t, finalStatus, resultStatus, argsDigest, failure)
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", terminalJavaScriptRecordingFactoryConfig(), nil, nil)
+	recorder := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir(), RecordPath: path}}
+	bindServiceStartupRuntime(recorder, &factoryRuntimeBundle{
+		RuntimeCfg: runtimeCfg, EventHistory: history,
+		Factory: &aggregateSnapshotFactory{engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{LifecycleControlStatus: string(finalStatus), TickCount: 3}},
+	})
+	if err := recorder.writeJavaScriptFactorySessionRecording(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("write production recording: %v", err)
+	}
+	value := decodeTerminalProductionRecording(t, path, argsDigest)
+	provider := &countingReplayProvider{}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{ReplayPath: path, Dir: t.TempDir(), SystemConfigPath: filepath.Join(t.TempDir(), "config.json"), ProviderOverride: provider})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if err := svc.Run(context.Background()); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	assertTerminalProductionReplayReads(t, svc, provider, value.Session.ID, status, resultStatus, failure)
+}
+
+func decodeTerminalProductionRecording(t *testing.T, path, argsDigest string) recording.Recording {
+	t.Helper()
+	encoded, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open recording: %v", err)
+	}
+	defer encoded.Close()
+	value, err := recording.DecodeAndValidate(encoded)
+	if err != nil || value.ArgumentsDigest != argsDigest {
+		t.Fatalf("recording arguments digest = %q, %v", value.ArgumentsDigest, err)
+	}
+	return value
+}
+
+func assertTerminalProductionReplayReads(t *testing.T, svc *FactoryService, provider *countingReplayProvider, sessionID, status, resultStatus string, failure *factoryapi.FailureDetail) {
+	t.Helper()
+	session, err := svc.GetDurableFactorySession(context.Background(), sessionID)
+	if err != nil || string(session.Status) != status {
+		t.Fatalf("session = %#v, %v", session, err)
+	}
+	result, err := svc.GetDurableFactorySessionResult(context.Background(), sessionID, factoryapi.GetFactorySessionResultsParams{})
+	if err != nil || string(result.ResultStatus) != resultStatus || result.PrimaryResult == nil || len(*result.PrimaryResult) != 1 {
+		t.Fatalf("result = %#v, %v", result, err)
+	}
+	assertTerminalReplayFailure(t, result, failure)
+	events, err := svc.ReadDurableFactorySessionEvents(context.Background(), sessionID, factoryapi.GetEventsBySessionIdParams{})
+	if err != nil || len(events.History) != 4 {
+		t.Fatalf("events = %#v, %v", events, err)
+	}
+	artifacts, err := svc.ListDurableFactorySessionArtifacts(context.Background(), sessionID)
+	if err != nil || len(artifacts.Artifacts) != 1 {
+		t.Fatalf("artifacts = %#v, %v", artifacts, err)
+	}
+	if provider.calls.Load() != 0 {
+		t.Fatalf("live provider calls = %d", provider.calls.Load())
+	}
+}
+
+func assertTerminalReplayFailure(t *testing.T, result factoryapi.FactorySessionResult, failure *factoryapi.FailureDetail) {
+	t.Helper()
+	if failure == nil {
+		return
+	}
+	if result.FailureDetail == nil || result.FailureDetail.Message != failure.Message || result.PartialResultAvailable == nil || !*result.PartialResultAvailable {
+		t.Fatalf("failed result detail = %#v, want safe partial failure", result)
+	}
+}
+
+func terminalJavaScriptRecordingFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{Name: "recorded-workflow", Orchestrator: &interfaces.FactoryOrchestratorConfig{
+		Kind: interfaces.OrchestratorKindJavaScript,
+		JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+			Dialect: "workflow-v1", SourceRef: "workflow.js",
+			SourceHash: "sha256:" + strings.Repeat("b", 64), DefaultPolicy: json.RawMessage(`{}`),
+		},
+	}}
+}
+
+func terminalJavaScriptRecordingHistory(
+	t *testing.T,
+	finalStatus factoryapi.FactorySessionDurableLifecycleStatus,
+	resultStatus string,
+	argsDigest string,
+	failure *factoryapi.FailureDetail,
+) *factoryevents.FactoryEventHistory {
+	t.Helper()
+	eventTime := time.Date(2026, 7, 12, 18, 0, 0, 0, time.UTC)
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime })
+	history.RecordSessionStarted(factoryevents.SessionLifecycleStartInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1",
+		Source: "runtime", FactoryID: "recorded-workflow", SourceRef: "workflow.js",
+		SourceHash: "sha256:" + strings.Repeat("b", 64), PolicyHash: "sha256:" + strings.Repeat("c", 64), ArgsDigest: argsDigest,
+	}, eventTime)
+	artifactHash, artifactSize := "sha256:"+strings.Repeat("d", 64), int64(16)
+	capturedAt := eventTime.Add(time.Second)
+	history.RecordArtifactCreated(factoryevents.ArtifactCreatedInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 1,
+		Artifact: factoryapi.FactoryArtifact{Id: "artifact-result", Kind: factoryapi.FactoryArtifactKindFINALRESULT,
+			Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC, ContentHash: &artifactHash, SizeBytes: &artifactSize,
+			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &capturedAt}},
+		CapturedAt: &capturedAt,
+	}, capturedAt)
+	status := factoryapi.FactoryEventSessionResultStatus(resultStatus)
+	history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 2,
+		ResultStatus: status, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded result"}}, ArtifactIDs: []string{"artifact-result"},
+	}, eventTime.Add(2*time.Second))
+	history.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
+		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 3,
+		FinalStatus: finalStatus, ResultStatus: &status, ArtifactIDs: []string{"artifact-result"}, FailureDetail: failure,
+	}, eventTime.Add(3*time.Second))
+	return history
 }
 
 func TestFactoryService_PortableReplayRestoresPausedAndResumedPublicReadsWithoutLiveExecution(t *testing.T) {

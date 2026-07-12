@@ -859,7 +859,7 @@ func (fs *FactoryService) writeJavaScriptFactorySessionRecording(ctx context.Con
 	if projectionErr != nil {
 		return fs.failPortableRecording(path, sessionID, projectionErr)
 	}
-	facts := portableCanonicalFacts(session, projectionCtx.JavaScript)
+	facts := portableCanonicalFacts(session, projectionCtx.JavaScript, projectionCtx.JavaScriptSession)
 	if live := fs.currentSession(); live != nil {
 		for _, event := range (sessionGatewayHost{FactoryService: fs}).LiveSessionEvents(live) {
 			raw, marshalErr := json.Marshal(event)
@@ -882,6 +882,7 @@ func (fs *FactoryService) writeJavaScriptFactorySessionRecording(ctx context.Con
 func portableCanonicalFacts(
 	session factoryapi.FactorySession,
 	javascript *interfaces.FactorySessionJavaScriptRuntimeState,
+	javascriptSession *interfaces.FactoryWorldSessionBracketState,
 ) recording.CanonicalFacts {
 	status := portableRecordingStatus(session.Runtime)
 	facts := recording.CanonicalFacts{
@@ -890,6 +891,16 @@ func portableCanonicalFacts(
 		PolicyHash: stringPointerValue(session.Runtime.PolicyHash), Result: portableRecordingResult(status),
 	}
 	recording.ApplyJavaScriptProjectionFacts(&facts, javascript)
+	if javascriptSession != nil && strings.TrimSpace(javascriptSession.ArgsDigest) != "" {
+		facts.ArgumentsDigest = strings.TrimSpace(javascriptSession.ArgsDigest)
+	}
+	if facts.Result != nil && javascriptSession != nil && javascriptSession.FailureDetail != nil {
+		failure := javascriptSession.FailureDetail
+		facts.Result.Failure = &recording.FailureSummary{
+			Reason: string(failure.Reason), Message: failure.Message,
+			PartialResultAvailable: facts.Result.Status == "FAILED_WITH_PARTIAL",
+		}
+	}
 	if session.Runtime.Artifacts == nil {
 		return facts
 	}
