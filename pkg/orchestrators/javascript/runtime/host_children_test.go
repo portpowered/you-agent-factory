@@ -558,6 +558,89 @@ func TestRun_ParallelFakeChildren_PreservesInputOrderAndConcurrency(t *testing.T
 	}
 }
 
+func TestRun_ParallelObjectChildren_ResolveWorkerSettings(t *testing.T) {
+	var mu sync.Mutex
+	captured := make(map[string]workflowruntime.ChildExecutionRequest)
+	req := workflowruntime.Request{
+		Source: `return parallel([
+			{label: "child-preset", preset: "child", prompt: "one"},
+			{label: "factory-preset", agentId: "reviewer", prompt: "two"},
+			{label: "scalar-defaults", prompt: "three"}
+		]);`,
+		SessionID: "session-parallel-worker-settings",
+		Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
+			"reviewer": {Preset: "factory"},
+		},
+		WorkerSettings: workflowruntime.WorkerSettingsConfig{
+			Presets: map[string]workflowruntime.WorkerPreset{
+				"child":   {ModelProvider: "claude", Model: "child-model", ReasoningEffort: "high"},
+				"factory": {ModelProvider: "codex", Model: "factory-model", ReasoningEffort: "low"},
+			},
+			DefaultModelProvider: "gemini",
+			DefaultModel:         "default-model",
+		},
+	}
+	outcome, err := workflowruntime.Run(context.Background(), req, workflowruntime.Hooks{
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+				mu.Lock()
+				captured[child.Label] = child
+				mu.Unlock()
+				return workflowruntime.ChildExecutionResult{Status: workflowruntime.ChildDispatchStatusCompleted, Request: child}, nil
+			})
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+	assertWorkerSelection(t, captured["child-preset"], "child", "CLAUDE", "child-model", "high")
+	assertWorkerSelection(t, captured["factory-preset"], "factory", "CODEX", "factory-model", "low")
+	assertWorkerSelection(t, captured["scalar-defaults"], "", "GEMINI", "default-model", "")
+}
+
+func TestRun_ParallelObjectChild_GatesResolvedPresetBeforeExecutor(t *testing.T) {
+	calls := 0
+	policy := policyWithWorkerAllowlists([]string{"allowed-model"}, []string{"high"})
+	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+		Source:    `return (async () => ({results: await parallel([{label: "denied", preset: "careful", prompt: "review"}])}))();`,
+		SessionID: "session-parallel-worker-policy",
+		Policy:    policy,
+		WorkerSettings: workflowruntime.WorkerSettingsConfig{Presets: map[string]workflowruntime.WorkerPreset{
+			"careful": {ModelProvider: "codex", Model: "denied-model", ReasoningEffort: "high"},
+		}},
+	}, workflowruntime.Hooks{
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink, _ workflowpolicy.EffectivePolicy) workflowruntime.ChildExecutor {
+			return childExecutorFunc(func(_ context.Context, child workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+				calls++
+				return workflowruntime.ChildExecutionResult{Status: workflowruntime.ChildDispatchStatusCompleted, Request: child}, nil
+			})
+		},
+	})
+	if err != nil || !outcome.OK {
+		t.Fatalf("Run() outcome=%#v err=%v", outcome, err)
+	}
+	if calls != 0 || len(outcome.Records) != 0 {
+		t.Fatalf("executor calls=%d records=%#v, want no dispatch side effects", calls, outcome.Records)
+	}
+	projected := projectPrimaryJSON(t, "session-parallel-worker-policy", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 1 {
+		t.Fatalf("results = %#v, want one denied child", projected["results"])
+	}
+	denied, ok := results[0].(map[string]any)
+	if !ok || denied["status"] != workflowruntime.ChildDispatchStatusFailed ||
+		!strings.Contains(denied["diagnostic"].(string), `policy denied: model "denied-model"`) {
+		t.Fatalf("denied result = %#v", results[0])
+	}
+}
+
+func assertWorkerSelection(t *testing.T, got workflowruntime.ChildExecutionRequest, preset, provider, model, effort string) {
+	t.Helper()
+	if got.Preset != preset || got.ModelProvider != provider || got.Model != model || got.ReasoningEffort != effort {
+		t.Fatalf("worker selection = %#v, want preset=%q provider=%q model=%q effort=%q", got, preset, provider, model, effort)
+	}
+}
+
 func TestRun_ParallelFakeChildren_DeniesFanoutAboveMaxAgents(t *testing.T) {
 	source := readFixture(t, "parallel-max-agents-denied.workflow.js")
 	policy := workflowpolicy.DefaultEffectivePolicy()

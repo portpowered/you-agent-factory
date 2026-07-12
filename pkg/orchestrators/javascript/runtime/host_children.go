@@ -286,6 +286,11 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 				results[item.index] = failedChildResultValue("", "", err)
 				return
 			}
+			req, err = ResolveChildWorkerSettings(req, g.agents, g.workerSettings)
+			if err != nil {
+				results[item.index] = failedChildResultValue(req.Label, "", err)
+				return
+			}
 			if err := g.denyChildRequest(req); err != nil {
 				results[item.index] = failedChildResultValue(req.Label, "", err)
 				return
