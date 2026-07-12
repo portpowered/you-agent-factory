@@ -704,14 +704,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
-	runPolicy := policy
-	if cfg.SuppressDashboardRendering || cleanInvocation || textInvocation {
-		runPolicy = terminalpolicy.Resolve(terminalpolicy.Options{
-			Quiet:   true,
-			Verbose: policy.VerboseEnabled(),
-			Debug:   policy.DebugEnabled(),
-		})
-	}
+	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)
 	cfg.TerminalPolicy = runPolicy
 	cfg.Verbose = runPolicy.VerboseEnabled()
 	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
@@ -743,6 +736,18 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	}()
 
 	return runCLI(ctx, cfg)
+}
+
+func resolveEffectiveRunPolicy(cmd *cobra.Command, cfg runcli.RunConfig, basePolicy terminalpolicy.Policy) terminalpolicy.Policy {
+	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
+	if cfg.SuppressDashboardRendering || cleanInvocation || textInvocation {
+		return terminalpolicy.Resolve(terminalpolicy.Options{
+			Quiet:   true,
+			Verbose: basePolicy.VerboseEnabled(),
+			Debug:   basePolicy.DebugEnabled(),
+		})
+	}
+	return basePolicy
 }
 
 func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {

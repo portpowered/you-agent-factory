@@ -98,6 +98,14 @@ func TestDiagnosticsEnabled_PrefersResolvedPolicy(t *testing.T) {
 }
 
 func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
+	quietLogger, err := Resolve(Options{Quiet: true}).BuildLogger()
+	if err != nil {
+		t.Fatalf("BuildLogger quiet: %v", err)
+	}
+	if quietLogger.Core().Enabled(zapcore.InfoLevel) {
+		t.Fatal("expected quiet logger to discard info level output")
+	}
+
 	normalLogger, err := Resolve(Options{}).BuildLogger()
 	if err != nil {
 		t.Fatalf("BuildLogger normal: %v", err)

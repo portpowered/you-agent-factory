@@ -3,9 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
@@ -89,6 +91,43 @@ func TestRootCommand_ResolvesQuietRunPolicyForDiagnosticsAndLogger(t *testing.T)
 	}
 	if got.Verbose {
 		t.Fatal("expected quiet run policy to disable verbose runtime logging")
+	}
+}
+
+func TestRootCommand_QuietRunOperationalFailureSuppressesTerminalOutput(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
+		return fmt.Errorf("quiet operational failure baseline")
+	}
+
+	dir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"run",
+		"--dir", dir,
+		"--no-record",
+		"--quiet",
+	})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected operational failure")
+	}
+	if !strings.Contains(err.Error(), "quiet operational failure baseline") {
+		t.Fatalf("error = %q, want failure returned to caller", err.Error())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("stdout = %q, want empty quiet failure terminal output", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty quiet failure terminal output", stderr.String())
 	}
 }
 

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -59,6 +60,123 @@ func assertGoalQuietLeakContractForbidden(t *testing.T, output string) {
 			t.Fatalf("output = %q, want no quiet-leak marker %q", output, forbidden)
 		}
 	}
+}
+
+func assertGoalQuietTerminalMute(t *testing.T, stdout, stderr string) {
+	t.Helper()
+
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty quiet operational-failure terminal output", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty quiet operational-failure terminal output", stderr)
+	}
+	assertGoalQuietLeakContractForbidden(t, stdout+stderr)
+}
+
+func TestFailureBaseline_QuietLeak_InvalidTopologySuppressesTerminalOnOperationalFailure(t *testing.T) {
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, "factory.json")
+	if err := os.WriteFile(factoryPath, []byte(goalFailureBaselineInvalidTopologyJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"run",
+		"--factory", factoryPath,
+		"--no-record",
+		"--quiet",
+		"invalid-topology-baseline",
+	})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected invalid goal topology to fail before invocation")
+	}
+	if !strings.Contains(err.Error(), "invalid graph references") {
+		t.Fatalf("error = %q, want invalid graph references guidance", err.Error())
+	}
+	assertGoalQuietTerminalMute(t, stdout.String(), stderr.String())
+}
+
+func TestFailureBaseline_QuietLeak_RunBatchQuietSuppressesTerminalOnOperationalFailure(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	workPath := filepath.Join(dir, "work.json")
+	if err := os.WriteFile(workPath, []byte(`{"type":"FACTORY_REQUEST_BATCH","works":[]}`), 0o644); err != nil {
+		t.Fatalf("write work file: %v", err)
+	}
+
+	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
+		return fmt.Errorf("operational failure: batch run rejected")
+	}
+
+	var stdout, stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"run",
+		"--dir", dir,
+		"--work", workPath,
+		"--no-record",
+		"--quiet",
+	})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected operational failure")
+	}
+	if !strings.Contains(err.Error(), "operational failure") {
+		t.Fatalf("error = %q, want operational failure returned to caller", err.Error())
+	}
+	assertGoalQuietTerminalMute(t, stdout.String(), stderr.String())
+}
+
+func TestFailureBaseline_QuietLeak_RunFactoryQuietSuppressesTerminalOnInvocationFailure(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	runCLI = func(_ context.Context, _ runcli.RunConfig) error {
+		return &runcli.InvocationError{
+			Code:    runcli.InvocationErrorCodeFailed,
+			Message: "quiet operational failure baseline",
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{
+		"run",
+		"--factory", factoryPath,
+		"--no-record",
+		"--quiet",
+		"quiet operational failure baseline prompt",
+	})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected invocation failure")
+	}
+	if !strings.Contains(err.Error(), runcli.InvocationErrorCodeFailed) {
+		t.Fatalf("error = %q, want stable invocation failure code", err.Error())
+	}
+	assertGoalQuietTerminalMute(t, stdout.String(), stderr.String())
 }
 
 func TestFailureBaseline_NoServer_ModelsInvokeCommandReportsUnreachableEndpoint(t *testing.T) {

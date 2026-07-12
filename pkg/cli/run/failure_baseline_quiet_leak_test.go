@@ -3,11 +3,13 @@ package run
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -144,4 +146,45 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 		t.Fatalf("stdout = %q, want primary invocation result only", got)
 	}
 	assertQuietLeakContractForbidden(t, output.String())
+}
+
+func TestFailureBaseline_QuietLeak_OneShotBatchQuietSuppressesTerminalOnOperationalFailure(t *testing.T) {
+	dir, workFile := writeDashboardRunFixture(t)
+
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return fmt.Errorf("operational failure: mock batch run rejected")
+			},
+		}, nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		Dir:                        dir,
+		WorkFile:                   workFile,
+		MockWorkersEnabled:         true,
+		SuppressDashboardRendering: true,
+		DisableDefaultRecording:    true,
+		TerminalPolicy:             terminalpolicy.Resolve(terminalpolicy.Options{Quiet: true}),
+		Logger:                     zap.NewNop(),
+		Output:                     &stdout,
+	})
+	if err == nil {
+		t.Fatal("expected operational failure")
+	}
+	if !strings.Contains(err.Error(), "operational failure") {
+		t.Fatalf("error = %q, want operational failure returned to caller", err.Error())
+	}
+	if stdout.String() != "" {
+		t.Fatalf("stdout = %q, want empty quiet operational-failure terminal output", stdout.String())
+	}
+	if stderr.String() != "" {
+		t.Fatalf("stderr = %q, want empty quiet operational-failure terminal output", stderr.String())
+	}
+	assertQuietLeakContractForbidden(t, stdout.String()+stderr.String())
 }
