@@ -50,44 +50,52 @@ func TestProjectInstalledBindings_SymbolsSortedByFullPath(t *testing.T) {
 }
 
 func TestProjectInstalledBindings_RecordShapeIncludesIdentitySubset(t *testing.T) {
-	inventory := symbolidentity.ProjectInstalledBindings()
-
-	byPath := make(map[string]symbolidentity.SymbolRecord, len(inventory.Symbols))
-	for _, record := range inventory.Symbols {
-		byPath[record.Path] = record
-	}
+	byPath := recordsByPath(symbolidentity.ProjectInstalledBindings())
 
 	t.Run("args value", func(t *testing.T) {
-		record := byPath["args"]
-		if record.IDCandidate != "args" || record.Name != "args" || record.Kind != "value" {
-			t.Fatalf("args record = %#v, want value identity", record)
-		}
-		if record.Callable || record.Async || record.Parent != "" || len(record.Members) > 0 {
-			t.Fatalf("args record = %#v, want non-callable value without parent or members", record)
-		}
+		assertArgsValueRecord(t, byPath["args"])
 	})
-
 	t.Run("workflow namespace", func(t *testing.T) {
-		record := byPath["workflow"]
-		wantMembers := []string{"artifact", "budget", "checkpoint", "final", "log", "resumeState"}
-		if record.Kind != "namespace" || !slices.Equal(record.Members, wantMembers) {
-			t.Fatalf("workflow record = %#v, want namespace with members %v", record, wantMembers)
-		}
+		assertWorkflowNamespaceRecord(t, byPath["workflow"])
 	})
-
 	t.Run("agent.run async callable", func(t *testing.T) {
-		record := byPath["agent.run"]
-		if record.Kind != "function" || record.Parent != "agent" || !record.Callable || !record.Async {
-			t.Fatalf("agent.run record = %#v, want async callable function under agent", record)
-		}
+		assertAgentRunAsyncCallableRecord(t, byPath["agent.run"])
 	})
-
 	t.Run("phase sync callable", func(t *testing.T) {
-		record := byPath["phase"]
-		if record.Kind != "function" || !record.Callable || record.Async {
-			t.Fatalf("phase record = %#v, want sync callable function", record)
-		}
+		assertPhaseSyncCallableRecord(t, byPath["phase"])
 	})
+}
+
+func assertArgsValueRecord(t *testing.T, record symbolidentity.SymbolRecord) {
+	t.Helper()
+	if record.IDCandidate != "args" || record.Name != "args" || record.Kind != "value" {
+		t.Fatalf("args record = %#v, want value identity", record)
+	}
+	if record.Callable || record.Async || record.Parent != "" || len(record.Members) > 0 {
+		t.Fatalf("args record = %#v, want non-callable value without parent or members", record)
+	}
+}
+
+func assertWorkflowNamespaceRecord(t *testing.T, record symbolidentity.SymbolRecord) {
+	t.Helper()
+	wantMembers := []string{"artifact", "budget", "checkpoint", "final", "log", "resumeState"}
+	if record.Kind != "namespace" || !slices.Equal(record.Members, wantMembers) {
+		t.Fatalf("workflow record = %#v, want namespace with members %v", record, wantMembers)
+	}
+}
+
+func assertAgentRunAsyncCallableRecord(t *testing.T, record symbolidentity.SymbolRecord) {
+	t.Helper()
+	if record.Kind != "function" || record.Parent != "agent" || !record.Callable || !record.Async {
+		t.Fatalf("agent.run record = %#v, want async callable function under agent", record)
+	}
+}
+
+func assertPhaseSyncCallableRecord(t *testing.T, record symbolidentity.SymbolRecord) {
+	t.Helper()
+	if record.Kind != "function" || !record.Callable || record.Async {
+		t.Fatalf("phase record = %#v, want sync callable function", record)
+	}
 }
 
 func TestProjectInstalledBindings_DoesNotSerializeImplementationFields(t *testing.T) {
@@ -141,6 +149,14 @@ func TestProjectInstalledBindings_RepeatRunsAreByteIdentical(t *testing.T) {
 	if !bytes.Equal(first, second) {
 		t.Fatalf("repeat descriptor runs differ:\nfirst  = %s\nsecond = %s", first, second)
 	}
+}
+
+func recordsByPath(inventory symbolidentity.Inventory) map[string]symbolidentity.SymbolRecord {
+	byPath := make(map[string]symbolidentity.SymbolRecord, len(inventory.Symbols))
+	for _, record := range inventory.Symbols {
+		byPath[record.Path] = record
+	}
+	return byPath
 }
 
 func pathsFromInventory(inventory symbolidentity.Inventory) []string {
