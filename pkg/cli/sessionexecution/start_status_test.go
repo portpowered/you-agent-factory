@@ -9,7 +9,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 func TestRunStatus_AsyncRunningFixtureHumanOutput(t *testing.T) {

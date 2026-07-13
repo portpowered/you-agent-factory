@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 // LiveLifecycle supervises live session pause, resume, and close through the runtime host seam.

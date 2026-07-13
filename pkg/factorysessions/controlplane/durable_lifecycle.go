@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 // DurableLifecycleHost exposes durable execution backend access for control-plane routing.

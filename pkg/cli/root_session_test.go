@@ -11,8 +11,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/cli/session"
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 

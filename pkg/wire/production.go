@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"

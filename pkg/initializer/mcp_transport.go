@@ -1,7 +1,7 @@
 package initializer
 
 import (
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 )
 

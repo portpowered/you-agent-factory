@@ -13,7 +13,7 @@ github.com/portpowered/infinite-you/pkg/cli/sessionexecution
 github.com/portpowered/infinite-you/pkg/config/factoryrun
 github.com/portpowered/infinite-you/pkg/config/inboxgitkeep
 github.com/portpowered/infinite-you/pkg/factory/runtime/buffers
-github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist
+github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist
 github.com/portpowered/infinite-you/pkg/factorysessions
 github.com/portpowered/infinite-you/pkg/factorysessions/controlplane
 github.com/portpowered/infinite-you/pkg/factorysessions/dataplane

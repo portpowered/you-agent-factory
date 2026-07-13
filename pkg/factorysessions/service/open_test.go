@@ -8,7 +8,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
@@ -235,8 +235,8 @@ func TestService_OpenFactorySession_RejectsValidateOnlyWithInitNewFactory(t *tes
 	initNewFactory := true
 	_, err := gateway.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
 		FolderPath:     "/tmp",
-		ValidateOnly:     &validateOnly,
-		InitNewFactory:   &initNewFactory,
+		ValidateOnly:   &validateOnly,
+		InitNewFactory: &initNewFactory,
 	})
 	if err == nil || !strings.Contains(err.Error(), "initNewFactory cannot be combined with validateOnly") {
 		t.Fatalf("OpenFactorySession error = %v, want initNewFactory/validateOnly conflict", err)
