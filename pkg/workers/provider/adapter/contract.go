@@ -80,12 +80,14 @@ type Decoder interface {
 	Flush(context.Context, FlushContext) (DecodeResult, error)
 }
 
-// FinalParseContext carries completed subprocess facts to the authoritative
-// final-result parser after decoder buffers have been flushed.
+// FinalParseContext carries completed subprocess and invocation-correlation
+// facts to the authoritative final-result parser after decoder buffers flush.
 type FinalParseContext struct {
 	CommandResult workerprocess.CommandResult
 	CommandError  error
 	FlushReason   FlushReason
+	RunID         string
+	DispatchID    string
 }
 
 // FinalParseResult is the authoritative provider result and any semantic drafts
