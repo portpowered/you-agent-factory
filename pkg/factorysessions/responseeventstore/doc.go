@@ -9,7 +9,7 @@
 // coordinate session lifecycle, but the ordered event buffer itself is
 // session-runtime-local state rather than service-wide mutable configuration.
 //
-// Retention eviction is intentionally out of scope for the initial store lane;
-// published events remain in the retained buffer until a later story introduces
-// compaction policy.
+// Retention applies hard session-wide event-count and serialized-envelope byte
+// limits. It removes the oldest event in the lowest semantic tier first while
+// preserving every retained envelope and its published identity verbatim.
 package responseeventstore
