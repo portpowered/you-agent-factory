@@ -124,6 +124,8 @@ type CapabilityResult struct {
 type FailureContext struct {
 	CommandResult workerprocess.CommandResult
 	CommandError  error
+	DecodeError   error
+	FlushError    error
 	ParseError    error
 	FlushReason   FlushReason
 }
