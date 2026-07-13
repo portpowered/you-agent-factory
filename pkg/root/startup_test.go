@@ -182,15 +182,19 @@ func (builder *recordingGraphBuilder) Build(_ context.Context, request GraphRequ
 }
 
 type recordingInitializer struct {
-	calls int
-	ctx   context.Context
-	input Initialization
-	err   error
+	calls        int
+	ctx          context.Context
+	input        Initialization
+	err          error
+	beforeReturn func(Initialization)
 }
 
 func (initializer *recordingInitializer) Run(ctx context.Context, input Initialization) error {
 	initializer.calls++
 	initializer.ctx = ctx
 	initializer.input = input
+	if initializer.beforeReturn != nil {
+		initializer.beforeReturn(input)
+	}
 	return initializer.err
 }

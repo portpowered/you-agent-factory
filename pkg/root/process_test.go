@@ -15,7 +15,7 @@ import (
 
 func TestRunTranslatesSuccessfulAndFailingProcessOutcomes(t *testing.T) {
 	t.Parallel()
-	environment := rootTestEnvironment()
+	environment := rootTestEnvironment(t)
 
 	var help bytes.Buffer
 	if code := Run(Input{
@@ -40,7 +40,7 @@ func TestRunTranslatesSuccessfulAndFailingProcessOutcomes(t *testing.T) {
 
 func TestRunPreservesConstructionInitializerAndCancellationFailures(t *testing.T) {
 	t.Parallel()
-	environment := rootTestEnvironment()
+	environment := rootTestEnvironment(t)
 
 	constructionErr := errors.New("construction failed")
 	if code := Run(Input{
@@ -69,10 +69,17 @@ func TestProductionRunGraphCompletesConstructionBeforeInitializerFailure(t *test
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	initializerErr := errors.New("initializer failed after construction")
-	initializer := &recordingInitializer{err: initializerErr}
+	initializer := &recordingInitializer{
+		err: initializerErr,
+		beforeReturn: func(input Initialization) {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			_ = input.Graph.Run.Run(ctx)
+		},
+	}
 	code := Run(Input{
 		Args: []string{"you", "run", "--dir", dir, "--quiet", "--no-record"},
-		Env:  rootTestEnvironment(),
+		Env:  rootTestEnvironment(t),
 	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
 
 	if code != ExitFailure {
@@ -98,7 +105,7 @@ func TestProductionGraphConstructionFailuresPreventInitializerStartup(t *testing
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			initializer := &recordingInitializer{}
-			code := Run(Input{Args: test.args, Env: rootTestEnvironment()}, Dependencies{
+			code := Run(Input{Args: test.args, Env: rootTestEnvironment(t)}, Dependencies{
 				GraphBuilder: productionGraphBuilder{}, Initializer: initializer,
 			})
 			if code != ExitFailure {
@@ -118,7 +125,7 @@ func TestProductionMCPGraphUsesSuppliedProcessStreams(t *testing.T) {
 	var output bytes.Buffer
 	code := Run(Input{
 		Args: []string{"you", "mcp", "serve", "--fixture-catalog", fixturePath},
-		Env:  rootTestEnvironment(), Stdin: input, Stdout: &output,
+		Env:  rootTestEnvironment(t), Stdin: input, Stdout: &output,
 	}, Dependencies{})
 	if code != ExitSuccess {
 		t.Fatalf("MCP exit code = %d, want %d", code, ExitSuccess)
@@ -128,13 +135,15 @@ func TestProductionMCPGraphUsesSuppliedProcessStreams(t *testing.T) {
 	}
 }
 
-func rootTestEnvironment() []string {
+func rootTestEnvironment(t *testing.T) []string {
+	t.Helper()
+	home := t.TempDir()
 	switch runtime.GOOS {
 	case "windows":
-		return []string{"USERPROFILE=C:\\tmp"}
+		return []string{"USERPROFILE=" + home}
 	case "plan9":
-		return []string{"home=/tmp"}
+		return []string{"home=" + home}
 	default:
-		return []string{"HOME=/tmp"}
+		return []string{"HOME=" + home}
 	}
 }
