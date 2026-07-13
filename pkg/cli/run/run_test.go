@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
@@ -908,4 +909,28 @@ func TestBuildFactoryService_DefaultMatchesServiceBuilder(t *testing.T) {
 	if err != nil && defaultErr != nil && err.Error() != defaultErr.Error() {
 		t.Fatalf("default builder err = %q, service.BuildFactoryService err = %q", err, defaultErr)
 	}
+}
+
+func TestRuntimeLogDiagnosticsForRunnerMapsRuntimeHostMetadata(t *testing.T) {
+	t.Parallel()
+
+	want := runtimehost.RuntimeLogDiagnostics{
+		Path: "/logs/runtime.jsonl", RootDir: "/logs", StartTimeUTC: time.Unix(10, 0).UTC(),
+		MetricsPath: "/metrics/runtime.jsonl", MetricsRootDir: "/metrics", MetricsStartTimeUTC: time.Unix(20, 0).UTC(),
+	}
+	got := runtimeLogDiagnosticsForRunner(runtimeHostDiagnosticsRunner{diagnostics: want})
+	if got.Path != want.Path || got.RootDir != want.RootDir || !got.StartTimeUTC.Equal(want.StartTimeUTC) ||
+		got.MetricsPath != want.MetricsPath || got.MetricsRootDir != want.MetricsRootDir || !got.MetricsStartTimeUTC.Equal(want.MetricsStartTimeUTC) {
+		t.Fatalf("runtimeLogDiagnosticsForRunner() = %+v, want %+v", got, want)
+	}
+}
+
+type runtimeHostDiagnosticsRunner struct {
+	diagnostics runtimehost.RuntimeLogDiagnostics
+}
+
+func (runtimeHostDiagnosticsRunner) Run(context.Context) error { return nil }
+
+func (r runtimeHostDiagnosticsRunner) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
+	return r.diagnostics
 }

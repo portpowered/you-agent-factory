@@ -1,9 +1,11 @@
 package wire
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
@@ -42,15 +44,37 @@ func TestBuildProcessGraphConstructsRunBeforeLifecycle(t *testing.T) {
 func TestBuildProcessGraphConstructsMCPBeforeLifecycle(t *testing.T) {
 	t.Parallel()
 	fixturePath := testutil.MustRepoPath(t, "pkg/api/testdata/durable-session-contract-fixtures.json")
+	var output bytes.Buffer
 	graph, err := BuildProcessGraph(context.Background(), startupcli.Request{
 		Kind: startupcli.KindMCPServe,
-		MCP:  startupcli.MCPIntent{FixtureCatalogPath: fixturePath},
+		MCP: startupcli.MCPIntent{
+			FixtureCatalogPath: fixturePath,
+			Stdin:              strings.NewReader(""),
+			Stdout:             &output,
+		},
 	}, initializer.ProcessPolicy{Mode: initializer.ProcessModeMCPServe})
 	if err != nil {
 		t.Fatalf("BuildProcessGraph() error = %v", err)
 	}
 	if graph == nil || graph.MCP == nil || graph.Run != nil {
 		t.Fatalf("MCP graph = %+v, want one constructed MCP application", graph)
+	}
+	application, ok := graph.MCP.(*initializer.Application)
+	if !ok {
+		t.Fatalf("MCP application type = %T, want initializer-owned application", graph.MCP)
+	}
+	applicationGraph, ok := application.Graph().(*Graph)
+	if !ok {
+		t.Fatalf("MCP lifecycle graph type = %T, want concrete wire graph", application.Graph())
+	}
+	if applicationGraph.DurableExecution == nil || applicationGraph.Transport.DurableExecution != applicationGraph.DurableExecution {
+		t.Fatal("MCP transport does not retain the graph-owned durable execution service")
+	}
+	if applicationGraph.Lifecycles().MCP != applicationGraph.Transports.MCP {
+		t.Fatal("MCP application does not consume the exact graph transport lifecycle")
+	}
+	if output.Len() != 0 {
+		t.Fatal("MCP graph construction started serving before initializer activation")
 	}
 }
 

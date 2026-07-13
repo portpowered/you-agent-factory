@@ -45,6 +45,9 @@ const DEFAULT_LOGICAL_SESSION_KEY_ID = "lsk-default-folder";
 const DEFAULT_RUNTIME_FACTORY_SESSION_ID =
   "550e8400-e29b-41d4-a716-446655440000";
 const RESOLVED_DEFAULT_SESSION_UUID = DEFAULT_RUNTIME_FACTORY_SESSION_ID;
+const STALE_FACTORY_SESSION_UUID = "66666666-6666-4666-8666-666666666666";
+const BETA_FACTORY_SESSION_UUID = "77777777-7777-4777-8777-777777777777";
+const REMAPPED_FACTORY_SESSION_UUID = "88888888-8888-4888-8888-888888888888";
 
 function defaultStreamIdentity(
   factorySessionID = RESOLVED_DEFAULT_SESSION_UUID,
@@ -436,11 +439,7 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   it("advances replay and materialized outcomes when checkpoint persistence is disabled", async () => {
-    window.history.replaceState(
-      {},
-      "",
-      "/?afDisableTimelineCheckpoint=1",
-    );
+    window.history.replaceState({}, "", "/?afDisableTimelineCheckpoint=1");
     useFactoryTimelineStore.getState().reset();
 
     const { result } = renderHook(() => useDashboardSnapshot(), {
@@ -702,9 +701,11 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   it("remaps a stale factory session id through logical identity without reusing the reconnect cursor", async () => {
-    const remappedSessionID = "session-remapped-002";
-    const staleStreamIdentity = defaultStreamIdentity("session-stale-001");
-    indexedDBRecords.set(checkpointStorageKey("session-stale-001"), {
+    const remappedSessionID = REMAPPED_FACTORY_SESSION_UUID;
+    const staleSessionID = STALE_FACTORY_SESSION_UUID;
+    const betaSessionID = BETA_FACTORY_SESSION_UUID;
+    const staleStreamIdentity = defaultStreamIdentity(staleSessionID);
+    indexedDBRecords.set(checkpointStorageKey(staleSessionID), {
       checkpoint: {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
@@ -713,16 +714,16 @@ describe("useDashboardSnapshot composer", () => {
         selectedTick: 7,
         syncIdentity: {
           backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
-          factorySessionId: "session-stale-001",
+          factorySessionId: staleSessionID,
           logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
-          streamGenerationId: "2026-06-27T00:00:00Z",
+          streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
         },
       },
       schemaVersion: 4,
-      storageKey: checkpointStorageKey("session-stale-001"),
+      storageKey: checkpointStorageKey(staleSessionID),
       streamIdentity: staleStreamIdentity,
     });
-    indexedDBRecords.set(checkpointStorageKey("session-beta"), {
+    indexedDBRecords.set(checkpointStorageKey(betaSessionID), {
       checkpoint: {
         afterEventId: "beta-event-9",
         afterSequence: 9,
@@ -731,20 +732,20 @@ describe("useDashboardSnapshot composer", () => {
         selectedTick: 9,
       },
       schemaVersion: 4,
-      storageKey: checkpointStorageKey("session-beta"),
-      streamIdentity: defaultStreamIdentity("session-beta"),
+      storageKey: checkpointStorageKey(betaSessionID),
+      streamIdentity: defaultStreamIdentity(betaSessionID),
     });
-    queryClient.setQueryData(["session-isolation", "session-stale-001"], {
+    queryClient.setQueryData(["session-isolation", staleSessionID], {
       value: "stale",
     });
-    queryClient.setQueryData(["session-isolation", "session-beta"], {
+    queryClient.setQueryData(["session-isolation", betaSessionID], {
       value: "beta",
     });
     queryClient.setQueryData(FACTORY_SESSIONS_QUERY_KEY, [
       {
         factoryDir: "/workspace/default",
         folderPath: "/workspace/default",
-        id: "session-stale-001",
+        id: staleSessionID,
         isDefault: true,
         project: "default",
         target: { kind: "default" },
@@ -752,16 +753,16 @@ describe("useDashboardSnapshot composer", () => {
       {
         factoryDir: "/workspace/beta",
         folderPath: "/workspace/beta",
-        id: "session-beta",
+        id: betaSessionID,
         isDefault: false,
         project: "beta",
         target: { kind: "named", name: "beta" },
       },
     ]);
     useDashboardSessionStore.setState({
-      pausedSessionIDs: ["session-stale-001", "session-beta"],
-      selectedSessionID: "session-stale-001",
-      sessionTabOrder: ["session-stale-001", "session-beta"],
+      pausedSessionIDs: [staleSessionID, betaSessionID],
+      selectedSessionID: staleSessionID,
+      sessionTabOrder: [staleSessionID, betaSessionID],
     });
     getFactorySessionSyncPreflightSpy.mockImplementation(async (sessionID) =>
       buildSyncPreflightResponse({
@@ -798,30 +799,30 @@ describe("useDashboardSnapshot composer", () => {
     );
     expect(useDashboardSessionStore.getState().sessionTabOrder).toEqual([
       remappedSessionID,
-      "session-beta",
+      betaSessionID,
     ]);
     expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([
-      "session-beta",
+      betaSessionID,
     ]);
-    expect(
-      indexedDBRecords.has(checkpointStorageKey("session-stale-001")),
-    ).toBe(false);
-    expect(indexedDBRecords.has(checkpointStorageKey("session-beta"))).toBe(
+    expect(indexedDBRecords.has(checkpointStorageKey(staleSessionID))).toBe(
+      false,
+    );
+    expect(indexedDBRecords.has(checkpointStorageKey(betaSessionID))).toBe(
       true,
     );
     expect(
-      queryClient.getQueryData(["session-isolation", "session-beta"]),
+      queryClient.getQueryData(["session-isolation", betaSessionID]),
     ).toEqual({ value: "beta" });
     expect(
       queryClient
         .getQueryData<Array<{ id: string }>>(FACTORY_SESSIONS_QUERY_KEY)
         ?.map((session) => session.id),
-    ).toEqual([remappedSessionID, "session-beta"]);
+    ).toEqual([remappedSessionID, betaSessionID]);
   });
 
   it("remaps a stale session using envelope stream identity when checkpoint sync identity is absent", async () => {
-    const remappedSessionID = "session-remapped-002";
-    const staleSessionID = "session-stale-001";
+    const remappedSessionID = REMAPPED_FACTORY_SESSION_UUID;
+    const staleSessionID = STALE_FACTORY_SESSION_UUID;
     const staleStreamIdentity = defaultStreamIdentity(staleSessionID);
     indexedDBRecords.set(checkpointStorageKey(staleSessionID), {
       checkpoint: {

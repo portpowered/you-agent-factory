@@ -4,21 +4,42 @@ package wire
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"go.uber.org/zap"
 )
 
 // BuildCLIRunner constructs the local runtime selected by the process root.
-// Dashboard-enabled runs use the initializer-owned transport graph; remaining
-// compatibility paths retain the established service-backed runner.
+// Construction remains inert; initializer activates and shuts down the graph
+// when the returned application is run.
 func BuildCLIRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (initializer.LocalRuntimeRunner, error) {
-	if cfg == nil || cfg.SimpleDashboardRenderer == nil {
-		return service.BuildFactoryService(ctx, cfg)
+	runtimeCfg := service.RuntimeHostConfigFromFactoryService(cfg)
+	if runtimeCfg != nil {
+		copied := *runtimeCfg
+		runtimeCfg = &copied
+		if runtimeCfg.Logger == nil {
+			runtimeCfg.Logger = zap.NewNop()
+		}
+		runtimeCfg.Clock = factory.EnsureClock(runtimeCfg.Clock)
 	}
-	transport, err := initializer.InitializeCLITransport(ctx, service.RuntimeHostConfigFromFactoryService(cfg))
+	graph, err := Build(ctx, Inputs{
+		Config: runtimeCfg, MCPInput: strings.NewReader(""), MCPOutput: io.Discard,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return transport.Runner(), nil
+	application, err := initializer.NewApplication(initializer.ModeCLI, graph)
+	if err != nil {
+		if cleanupErr := graph.Close(); cleanupErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("close rejected CLI application graph: %w", cleanupErr))
+		}
+		return nil, err
+	}
+	return application, nil
 }

@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
@@ -37,7 +37,7 @@ func TestInjectCLIRunner_ComposesDashboardEnabledRunsOutsideFactoryService(t *te
 	}
 }
 
-func TestInjectCLIRunner_KeepsDashboardSuppressedRunsInactive(t *testing.T) {
+func TestInjectCLIRunner_ConstructsDashboardSuppressedGraphWithoutStartingIt(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -46,8 +46,9 @@ func TestInjectCLIRunner_KeepsDashboardSuppressedRunsInactive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InjectCLIRunner: %v", err)
 	}
-	if _, legacy := runner.(*service.FactoryService); !legacy {
-		t.Fatalf("dashboard-suppressed runner type = %T, want compatibility service runner", runner)
+	application, ok := runner.(*initializer.Application)
+	if !ok || application.Graph() == nil {
+		t.Fatalf("dashboard-suppressed runner type = %T, want graph-backed initializer application", runner)
 	}
 }
 
@@ -57,7 +58,7 @@ func TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchM
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	workFile := filepath.Join(dir, "initial-work.json")
-	if err := os.WriteFile(workFile, []byte(`{"requests":[]}`), 0o600); err != nil {
+	if err := os.WriteFile(workFile, []byte(`{"requestId":"quiet-batch","type":"FACTORY_REQUEST_BATCH","works":[{"name":"quiet-work","workTypeName":"task","payload":"quiet batch"}]}`), 0o600); err != nil {
 		t.Fatalf("write work file: %v", err)
 	}
 
@@ -75,29 +76,19 @@ func TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchM
 	if err != nil {
 		t.Fatalf("InjectCLIRunner: %v", err)
 	}
-	if _, bootstrap := runner.(*service.InvocationBootstrap); bootstrap {
-		t.Fatal("dashboard-suppressed quiet batch must not route through InvocationBootstrap")
+	if application, ok := runner.(*initializer.Application); !ok || application.Graph() == nil {
+		t.Fatalf("runner type = %T, want graph-backed initializer application", runner)
 	}
-	svc, ok := runner.(*service.FactoryService)
-	if !ok {
-		t.Fatalf("runner type = %T, want *service.FactoryService", runner)
+	runDone := make(chan error, 1)
+	go func() { runDone <- runner.Run(ctx) }()
+	select {
+	case err := <-runDone:
+		if err != nil {
+			t.Fatalf("quiet batch Run() error = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("quiet batch did not consume its WorkFile and terminate in batch mode")
 	}
-	directBuilt, err := service.BuildFactoryService(ctx, cfg)
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	if directBuilt.ComposeCollaboratorSnapshot() != svc.ComposeCollaboratorSnapshot() {
-		t.Fatalf(
-			"compose snapshot mismatch: direct=%+v inject=%+v",
-			directBuilt.ComposeCollaboratorSnapshot(),
-			svc.ComposeCollaboratorSnapshot(),
-		)
-	}
-	var _ engineStateSnapshotRunner = svc
-}
-
-type engineStateSnapshotRunner interface {
-	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
 
 func TestInjectFactoryService_RejectsMissingFactoryDir(t *testing.T) {

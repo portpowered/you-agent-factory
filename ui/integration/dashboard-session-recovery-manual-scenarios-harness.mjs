@@ -43,6 +43,7 @@ export function checkpointStorageKey(identity) {
   return [
     identity.backendScopeID,
     identity.factorySessionID,
+    identity.logicalSessionKeyID,
     identity.streamGenerationID,
   ].join("::");
 }
