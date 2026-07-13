@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
@@ -17,14 +18,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// Inputs contains normalized process configuration and the stdio edges
-// required to construct every currently supported transport. Build
-// copies Config before normalization so graph construction does not mutate the
-// caller's configuration object.
+// Inputs contains one explicit domain construction source plus the stdio edges
+// required by the MCP transport. Run modes supply Config; MCP-only mode supplies
+// MCPExecution. Build copies Config before normalization so graph construction
+// does not mutate the caller's configuration object.
 type Inputs struct {
-	Config    *runtimehost.Config
-	MCPInput  io.Reader
-	MCPOutput io.Writer
+	Config       *runtimehost.Config
+	MCPExecution factorysessionexecution.Service
+	MCPInput     io.Reader
+	MCPOutput    io.Writer
 }
 
 // Build eagerly constructs the real runtime core, domain services,
@@ -32,6 +34,9 @@ type Inputs struct {
 func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	if err := validateProductionInputs(ctx, inputs); err != nil {
 		return nil, fmt.Errorf("build production application graph: %w", err)
+	}
+	if inputs.Config == nil {
+		return assembleMCPGraph(inputs)
 	}
 
 	cfg := *inputs.Config
@@ -59,11 +64,13 @@ func validateProductionInputs(ctx context.Context, inputs Inputs) error {
 		return errors.New("context is required")
 	case ctx.Err() != nil:
 		return ctx.Err()
-	case inputs.Config == nil:
-		return errors.New("config is required")
-	case inputs.Config.Logger == nil:
+	case inputs.Config == nil && isNil(inputs.MCPExecution):
+		return errors.New("config or MCP execution service is required")
+	case inputs.Config != nil && !isNil(inputs.MCPExecution):
+		return errors.New("config and MCP execution service are mutually exclusive")
+	case inputs.Config != nil && inputs.Config.Logger == nil:
 		return errors.New("config.logger is required")
-	case isNil(inputs.Config.Clock):
+	case inputs.Config != nil && isNil(inputs.Config.Clock):
 		return errors.New("config.clock is required")
 	case inputs.MCPInput == nil:
 		return errors.New("mcpInput is required")
@@ -72,6 +79,26 @@ func validateProductionInputs(ctx context.Context, inputs Inputs) error {
 	default:
 		return nil
 	}
+}
+
+func assembleMCPGraph(inputs Inputs) (*Graph, error) {
+	mcp, err := mcpserver.New(mcpserver.Options{
+		Client: mcpfactorysession.NewClientWithService(inputs.MCPExecution),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build production application graph: construct MCP transport dependencies: %w", err)
+	}
+	transport := newRunnerLifecycle(func(runCtx context.Context) error {
+		return mcp.ServeStdio(runCtx, inputs.MCPInput, inputs.MCPOutput)
+	})
+	return &Graph{
+		DurableExecution: inputs.MCPExecution,
+		Transport: TransportDependencies{
+			DurableExecution: inputs.MCPExecution,
+		},
+		Transports: TransportLifecycles{MCP: transport},
+		resources:  &resourceSet{},
+	}, nil
 }
 
 func assembleProductionGraph(

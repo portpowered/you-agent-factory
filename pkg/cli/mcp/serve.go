@@ -49,7 +49,7 @@ type ServeApplication struct {
 // BuildServeApplication constructs the MCP service, client, and server without
 // starting stdio processing.
 func BuildServeApplication(cfg ServeConfig) (*ServeApplication, error) {
-	service, err := resolveServeService(cfg)
+	service, err := ResolveServeService(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +68,13 @@ func BuildServeApplication(cfg ServeConfig) (*ServeApplication, error) {
 		stdout = os.Stdout
 	}
 	return &ServeApplication{server: server, stdin: stdin, stdout: stdout}, nil
+}
+
+// ResolveServeService constructs the durable Factory Session execution
+// collaborator selected by MCP command inputs without starting stdio serving.
+// Production composition passes this exact instance into the application graph.
+func ResolveServeService(cfg ServeConfig) (factorysessionexecution.Service, error) {
+	return resolveServeService(cfg)
 }
 
 // Run starts stdio handling for an MCP graph that has already been built.

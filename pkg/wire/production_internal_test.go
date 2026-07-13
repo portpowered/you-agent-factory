@@ -140,7 +140,10 @@ func TestValidateProductionInputsReportsEachMissingEdge(t *testing.T) {
 	}{
 		{name: "nil context", ctx: func() context.Context { return nil }, edit: func(*Inputs) {}, want: "context is required"},
 		{name: "canceled context", ctx: canceledProductionContext, edit: func(*Inputs) {}, want: context.Canceled.Error()},
-		{name: "config", ctx: context.Background, edit: func(inputs *Inputs) { inputs.Config = nil }, want: "config is required"},
+		{name: "construction source", ctx: context.Background, edit: func(inputs *Inputs) { inputs.Config = nil }, want: "config or MCP execution service is required"},
+		{name: "ambiguous construction source", ctx: context.Background, edit: func(inputs *Inputs) {
+			inputs.MCPExecution = &factorysessionexecution.FakeService{}
+		}, want: "config and MCP execution service are mutually exclusive"},
 		{name: "logger", ctx: context.Background, edit: func(inputs *Inputs) { inputs.Config.Logger = nil }, want: "config.logger is required"},
 		{name: "clock", ctx: context.Background, edit: func(inputs *Inputs) { inputs.Config.Clock = (*productionInternalClock)(nil) }, want: "config.clock is required"},
 		{name: "MCP input", ctx: context.Background, edit: func(inputs *Inputs) { inputs.MCPInput = nil }, want: "mcpInput is required"},

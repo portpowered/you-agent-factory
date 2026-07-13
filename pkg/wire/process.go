@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
@@ -46,14 +47,27 @@ func buildProcessGraph(
 		if policy.Mode != initializer.ProcessModeMCPServe || policy.Sidecars != (initializer.SidecarPolicy{}) {
 			return nil, fmt.Errorf("construct MCP graph: incompatible process policy %+v", policy)
 		}
-		application, err := mcpcli.BuildServeApplication(mcpcli.ServeConfig{
+		execution, err := mcpcli.ResolveServeService(mcpcli.ServeConfig{
 			FixtureCatalogPath: request.MCP.FixtureCatalogPath,
 			RuntimeBacked:      request.MCP.RuntimeBacked,
 			ProjectRoot:        request.MCP.ProjectRoot,
-			Stdin:              request.MCP.Stdin,
-			Stdout:             request.MCP.Stdout,
 		})
 		if err != nil {
+			return nil, fmt.Errorf("construct MCP graph: %w", err)
+		}
+		graph, err := Build(ctx, Inputs{
+			MCPExecution: execution,
+			MCPInput:     request.MCP.Stdin,
+			MCPOutput:    request.MCP.Stdout,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("construct MCP graph: %w", err)
+		}
+		application, err := initializer.NewApplication(initializer.ModeMCP, graph)
+		if err != nil {
+			if cleanupErr := graph.Close(); cleanupErr != nil {
+				return nil, errors.Join(err, fmt.Errorf("close rejected MCP application graph: %w", cleanupErr))
+			}
 			return nil, fmt.Errorf("construct MCP graph: %w", err)
 		}
 		return &initializer.ProcessGraph{Policy: policy, MCP: application}, nil
