@@ -88,6 +88,12 @@ describe("materialized timeline checkpoint schema migration", () => {
       },
     },
     {
+      label: "unordered samples",
+      mutate: (envelope: StoredEnvelope) => {
+        requiredState(envelope).samples = [sample(2), sample(1)];
+      },
+    },
+    {
       label: "unsupported nested version",
       mutate: (envelope: StoredEnvelope) => {
         requiredState(envelope).version = 999;

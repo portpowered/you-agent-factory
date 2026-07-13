@@ -1,6 +1,6 @@
 import {
+  isSupportedMaterializedWorkOutcomeState,
   MATERIALIZED_WORK_OUTCOME_RETENTION,
-  MATERIALIZED_WORK_OUTCOME_VERSION,
   type MaterializedWorkOutcomeState,
   retainMaterializedWorkOutcomeState,
 } from "../../../work-outcome/public/materializer";
@@ -86,7 +86,7 @@ function compactText(value: string): string {
 function isMaterializedWorkOutcomeState(
   value: unknown,
 ): value is MaterializedWorkOutcomeState {
-  if (!isRecord(value) || value.version !== MATERIALIZED_WORK_OUTCOME_VERSION) {
+  if (!isSupportedMaterializedWorkOutcomeState(value)) {
     return false;
   }
 
