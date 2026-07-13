@@ -33,15 +33,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 
 	"go.uber.org/zap"
 )
@@ -109,8 +109,8 @@ type hostRunState struct {
 // so that CLI and other entry points remain thin wrappers.
 //
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
-// session registry, pkg/localmodels owns managed model runtime wiring, and
-// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
+// session registry, pkg/models/local owns managed model runtime wiring, and
+// pkg/workers/hosted owns hosted poller supervision invoked from poller_watcher.
 // pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
 type Host struct {
 	runtimeMu        sync.RWMutex

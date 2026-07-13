@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/jonboulle/clockwork"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/hostedworkers/linear"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
 	"go.uber.org/zap"
 )
 
@@ -18,11 +18,11 @@ type Submitter func(context.Context, interfaces.WorkRequest) error
 
 // Config carries hosted-poller runtime dependencies injected by the service root.
 type Config struct {
-	Logger           *zap.Logger
-	Clock            clockwork.Clock
-	HTTPClient       *http.Client
-	SecretResolver   SecretResolver
-	LinearEndpoint   string
+	Logger         *zap.Logger
+	Clock          clockwork.Clock
+	HTTPClient     *http.Client
+	SecretResolver SecretResolver
+	LinearEndpoint string
 }
 
 func (c Config) httpClient() *http.Client {

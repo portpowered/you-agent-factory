@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 )
 
 // CatalogHost is the catalog-backed model host implementation for process-level wiring.

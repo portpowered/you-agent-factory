@@ -9,7 +9,7 @@ import (
 )
 
 func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *testing.T) {
-	summaryContent, err := SummaryContentFromWorkerOutput("Final goal summary.\nCOMPLETE", "COMPLETE")
+	summaryContent, err := SummaryContentFromWorkerOutput("Updated README.md with the completed repository edit.\n<COMPLETE>", "<COMPLETE>")
 	if err != nil {
 		t.Fatalf("SummaryContentFromWorkerOutput: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *
 	if len(selection.PrimaryResult) != 1 || selection.PrimaryResult[0].Type != interfaces.WorkContentPartTypeText {
 		t.Fatalf("primary result = %#v, want one text summary part", selection.PrimaryResult)
 	}
-	if selection.PrimaryResult[0].Text != "Final goal summary." {
+	if selection.PrimaryResult[0].Text != "Updated README.md with the completed repository edit." {
 		t.Fatalf("primary result text = %q, want worker summary", selection.PrimaryResult[0].Text)
 	}
 	if selection.PrimaryResult[0].Text == submitted.Content[0].Text {

@@ -25,7 +25,7 @@ func TestFailureBaseline_InvalidTopology_BuiltInGoalWorkstationRejectsDanglingOu
 		t.Fatalf("findings = %#v, want dangling place reference", findings)
 	}
 	if !containsCanonicalFindingPath(findings, "factory.workstations[0].outputs[0]") {
-		t.Fatalf("findings = %#v, want plan-goal output path", findings)
+		t.Fatalf("findings = %#v, want execute-goal output path", findings)
 	}
 }
 
@@ -33,16 +33,16 @@ func mutateBuiltInGoalPlanWorkstationOutputState(t *testing.T, cfg *interfaces.F
 	t.Helper()
 	for workstationIndex := range cfg.Workstations {
 		workstation := &cfg.Workstations[workstationIndex]
-		if workstation.Name != "plan-goal" {
+		if workstation.Name != "execute-goal" {
 			continue
 		}
 		if len(workstation.Outputs) == 0 {
-			t.Fatal("built-in goal plan-goal workstation outputs not found")
+			t.Fatal("built-in goal execute-goal workstation outputs not found")
 		}
 		workstation.Outputs[0].StateName = stateName
 		return
 	}
-	t.Fatal("built-in goal plan-goal workstation not found")
+	t.Fatal("built-in goal execute-goal workstation not found")
 }
 
 func containsCanonicalFindingCode(findings []factoryconfig.Finding, code string) bool {

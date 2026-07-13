@@ -1,4 +1,4 @@
-package localmodels
+package local
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels/assets"
+	"github.com/portpowered/infinite-you/pkg/models/assets"
 )
 
 // AssetPuller resolves managed local model assets and pull outcomes.
