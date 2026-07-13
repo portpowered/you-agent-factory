@@ -584,6 +584,7 @@ func startOOTBSmokeRun(t *testing.T, dir string, port int, out *bytes.Buffer) (c
 	go func() {
 		errCh <- Run(ctx, RunConfig{
 			Dir:                dir,
+			ExecutionBaseDir:   dir,
 			Bootstrap:          true,
 			Continuously:       true,
 			MockWorkersEnabled: true,
@@ -825,6 +826,9 @@ func writeFile(t *testing.T, path, content string) {
 
 func runWithCapturedStdout(t *testing.T, cfg RunConfig) (string, error) {
 	t.Helper()
+	if cfg.ExecutionBaseDir == "" && cfg.Dir != "" {
+		cfg.ExecutionBaseDir = cfg.Dir
+	}
 
 	oldStdout := os.Stdout
 	readPipe, writePipe, err := os.Pipe()

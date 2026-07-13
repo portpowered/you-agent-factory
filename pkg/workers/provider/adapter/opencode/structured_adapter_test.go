@@ -13,12 +13,60 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
 )
 
 const (
 	privatePrompt = "private prompt"
 	privateSecret = "sk-opencode-secret"
 )
+
+func TestStructuredAdapterSharedConformance(t *testing.T) {
+	session := interfaces.ProviderSessionMetadata{Provider: "opencode", Kind: "session_id", ID: "session-42"}
+	testkit.RunFullStream(t, testkit.FullStreamFixture{
+		NewAdapter: func() adapter.Adapter { return newStructuredAdapter(t) },
+		Request: interfaces.ProviderInferenceRequest{
+			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Model:    "openai/gpt-5", UserMessage: privatePrompt,
+		},
+		ContentAndTools: openCodeObservations(
+			`{"type":"step_start","sessionID":"session-42"}`,
+			`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello "}}`,
+			`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"world"}}`,
+			`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello world","time":{"end":1}}}`,
+			`{"type":"tool_use","sessionID":"session-42","part":{"id":"tool-item-9","callID":"call-9","tool":"weather","state":{"status":"running"}}}`,
+			`{"type":"tool_use","sessionID":"session-42","part":{"id":"tool-item-9","callID":"call-9","tool":"weather","state":{"status":"completed"}}}`,
+		),
+		RetryableFailure: openCodeObservations(
+			`{"type":"error","sessionID":"session-42","error":{"name":"RateLimitError","data":{"status":429}}}`,
+		),
+		UnsafeAndRecovering: openCodeObservations(
+			`{"type":"step_start","sessionID":"session-42"}`,
+			`{"type":`+privatePrompt+`,"token":"`+privateSecret+`"}`,
+			`{"type":"future_shape","prompt":"`+privatePrompt+`","token":"`+privateSecret+`"}`,
+			`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello world","time":{"end":1}}}`,
+		),
+		UnterminatedFinal: []adapter.Observation{
+			{Stream: adapter.OutputStreamStdout, Chunk: []byte("{\"type\":\"step_start\",\"sessionID\":\"session-42\"}\n")},
+			{Stream: adapter.OutputStreamStdout, Chunk: []byte(`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello world","time":{"end":1}}}`)},
+		},
+		FinalResult: workerprocess.CommandResult{Stdout: []byte(`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello world","time":{"end":1}}}`)},
+		Expected: testkit.FullStreamExpected{
+			ProviderSession: session, ProviderRef: "session-42", MessageItemID: "message-7",
+			ToolItemID: "tool-item-9", ToolCallID: "call-9",
+			MessageDeltas: []string{"Hello ", "world"}, FinalContent: "Hello world",
+		},
+		ForbiddenDiagnostic: []string{privatePrompt, privateSecret},
+	})
+}
+
+func openCodeObservations(records ...string) []adapter.Observation {
+	observations := make([]adapter.Observation, 0, len(records))
+	for _, record := range records {
+		observations = append(observations, adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(record + "\n")})
+	}
+	return observations
+}
 
 func TestStructuredAdapterExecutesNegotiatedJSONModeAndEmitsCanonicalLifecycle(t *testing.T) {
 	fixture := readFixture(t, "testdata/structured-success.jsonl")

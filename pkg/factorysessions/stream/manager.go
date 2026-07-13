@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream/compat"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -153,7 +154,7 @@ func (m *Manager) inferenceProgressPublisher(
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
-		if err := publishCanonicalResponseEvents(session, stored); err != nil {
+		if err := publishCanonicalResponseEvents(session, stored, fragment.CanonicalDraft, fragment.SkipCanonical); err != nil {
 			m.host.ObserveResponseStreamDegraded(
 				session,
 				normalizedSessionID,
@@ -167,9 +168,24 @@ func (m *Manager) inferenceProgressPublisher(
 	}
 }
 
-func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event) error {
+func publishCanonicalResponseEvents(
+	session *factorysessions.LiveSession,
+	fragment responsestream.Event,
+	draft *responseevents.Draft,
+	skipCanonical bool,
+) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
+	}
+	if skipCanonical {
+		return nil
+	}
+	if draft != nil {
+		_, err := session.ResponseEvents.Publish(responseEventFromDraft(
+			factorysessions.CanonicalFactorySessionID(session),
+			*draft,
+		))
+		return err
 	}
 	events, err := compat.MapFragment(compat.Context{
 		FactorySessionID: factorysessions.CanonicalFactorySessionID(session),
@@ -183,6 +199,23 @@ func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragme
 		}
 	}
 	return nil
+}
+
+func responseEventFromDraft(factorySessionID string, draft responseevents.Draft) responseevents.FactoryResponseEvent {
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:      responseevents.SchemaVersionV1,
+		FactorySessionID:   factorySessionID,
+		RunID:              draft.RunID,
+		Kind:               draft.Kind,
+		Phase:              draft.Phase,
+		Provenance:         draft.Provenance,
+		Payload:            append([]byte(nil), draft.Payload...),
+		DispatchID:         draft.DispatchID,
+		TurnID:             draft.TurnID,
+		ItemID:             draft.ItemID,
+		ParentItemID:       draft.ParentItemID,
+		ProviderSessionRef: draft.ProviderSessionRef,
+	}
 }
 
 func normalizeSessionID(sessionID string) string {

@@ -55,7 +55,7 @@ func RunFullStream(t *testing.T, fixture FullStreamFixture) {
 	requireFixture(t, fixture)
 
 	t.Run("capabilities", func(t *testing.T) {
-		assertFullStreamContract(t, fixture.NewAdapter(), fixture.Request)
+		assertFullStreamContract(t, fixture.NewAdapter(), fixture.Request, fixture.Expected.ToolOutputDelta != "")
 	})
 	t.Run("ordered content and correlated tools", func(t *testing.T) {
 		verifyContentAndTools(t, fixture)
@@ -109,9 +109,11 @@ func verifyRetryFailure(t *testing.T, fixture FullStreamFixture) {
 	assertRetryDraft(t, drafts, fixture.Expected.RetryAfter)
 	parseErr := parseRetryFailure(t, providerAdapter, fixture.RetryableFailure)
 	failure := providerAdapter.ClassifyFailure(context.Background(), adapter.FailureContext{
-		CommandResult: workerprocess.CommandResult{ExitCode: 75},
-		ParseError:    parseErr,
-		FlushReason:   adapter.FlushReasonTerminated,
+		CommandResult: workerprocess.CommandResult{
+			Stdout: observationsForStream(fixture.RetryableFailure, adapter.OutputStreamStdout), ExitCode: 75,
+		},
+		ParseError:  parseErr,
+		FlushReason: adapter.FlushReasonTerminated,
 	})
 	assertRetryFailure(t, failure, fixture.Expected, fixture.ForbiddenDiagnostic)
 }
@@ -134,8 +136,11 @@ func assertRetryFailure(t *testing.T, result adapter.FailureResult, expected Ful
 	if failure == nil || !failure.Retry.Retryable || failure.Family != interfaces.WorkFailureFamilyThrottle {
 		t.Fatalf("ClassifyFailure() = %#v", result)
 	}
-	if failure.Type != interfaces.WorkFailureTypeThrottled || failure.Retry.RetryAfter == nil || int64(failure.Retry.RetryAfter.Seconds()) != expected.RetryAfter {
+	if failure.Type != interfaces.WorkFailureTypeThrottled {
 		t.Fatalf("normalized retry facts = %#v", failure)
+	}
+	if expected.RetryAfter > 0 && (failure.Retry.RetryAfter == nil || int64(failure.Retry.RetryAfter.Seconds()) != expected.RetryAfter) {
+		t.Fatalf("retry-after facts = %#v", failure)
 	}
 	if failure.ProviderSession == nil || *failure.ProviderSession != expected.ProviderSession {
 		t.Fatalf("failure provider session = %#v", failure.ProviderSession)
@@ -168,7 +173,7 @@ func verifyUnterminatedFlush(t *testing.T, fixture FullStreamFixture) {
 	}
 }
 
-func assertFullStreamContract(t *testing.T, providerAdapter adapter.Adapter, request interfaces.ProviderInferenceRequest) {
+func assertFullStreamContract(t *testing.T, providerAdapter adapter.Adapter, request interfaces.ProviderInferenceRequest, expectToolOutputDeltas bool) {
 	t.Helper()
 	command, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{Request: request})
 	if err != nil {
@@ -182,7 +187,7 @@ func assertFullStreamContract(t *testing.T, providerAdapter adapter.Adapter, req
 		t.Fatalf("Capabilities() error = %v", err)
 	}
 	got := result.Capabilities
-	if !got.NativeStreaming || !got.MessageDeltas || !got.MessageSnapshots || !got.ToolLifecycle || !got.ToolOutputDeltas || !got.StableItemIDs || got.FinalOnly {
+	if !got.NativeStreaming || !got.MessageDeltas || !got.MessageSnapshots || !got.ToolLifecycle || !got.StableItemIDs || got.FinalOnly || got.ToolOutputDeltas != expectToolOutputDeltas {
 		t.Fatalf("full-stream capabilities = %#v", got)
 	}
 }
@@ -241,9 +246,21 @@ func decode(t *testing.T, providerAdapter adapter.Adapter, observations []adapte
 
 func assertContentAndTools(t *testing.T, drafts []responseevents.Draft, expected FullStreamExpected) {
 	t.Helper()
-	assertDraftSequence(t, drafts, expected)
-	assertMessageLifecycle(t, drafts, expected)
-	assertToolLifecycle(t, drafts, expected)
+	semantic := withoutOptionalRunTerminal(drafts)
+	assertDraftSequence(t, semantic, expected)
+	assertMessageLifecycle(t, semantic, expected)
+	assertToolLifecycle(t, semantic, expected)
+}
+
+func withoutOptionalRunTerminal(drafts []responseevents.Draft) []responseevents.Draft {
+	if len(drafts) == 0 {
+		return drafts
+	}
+	last := drafts[len(drafts)-1]
+	if last.Kind == responseevents.KindRun && (last.Phase == responseevents.PhaseCompleted || last.Phase == responseevents.PhaseFailed || last.Phase == responseevents.PhaseCanceled) {
+		return drafts[:len(drafts)-1]
+	}
+	return drafts
 }
 
 func assertDraftSequence(t *testing.T, drafts []responseevents.Draft, expected FullStreamExpected) {
@@ -257,9 +274,17 @@ func assertDraftSequence(t *testing.T, drafts []responseevents.Draft, expected F
 		{responseevents.KindMessage, responseevents.PhaseDelta},
 		{responseevents.KindMessage, responseevents.PhaseCompleted},
 		{responseevents.KindTool, responseevents.PhaseStarted},
-		{responseevents.KindTool, responseevents.PhaseDelta},
-		{responseevents.KindTool, responseevents.PhaseCompleted},
 	}
+	if expected.ToolOutputDelta != "" {
+		wantKinds = append(wantKinds, struct {
+			kind  responseevents.Kind
+			phase responseevents.Phase
+		}{responseevents.KindTool, responseevents.PhaseDelta})
+	}
+	wantKinds = append(wantKinds, struct {
+		kind  responseevents.Kind
+		phase responseevents.Phase
+	}{responseevents.KindTool, responseevents.PhaseCompleted})
 	if len(drafts) != len(wantKinds) {
 		t.Fatalf("draft count = %d, want %d: %#v", len(drafts), len(wantKinds), drafts)
 	}
@@ -272,8 +297,9 @@ func assertDraftSequence(t *testing.T, drafts []responseevents.Draft, expected F
 			t.Fatalf("draft[%d] provider session ref = %q, want %q", index, got.ProviderSessionRef, expected.ProviderRef)
 		}
 	}
-	if drafts[0].Provenance.Delivery != responseevents.DeliverySynthesized || drafts[0].RunID == "" || drafts[0].DispatchID == "" {
-		t.Fatalf("run start is not synthesized and correlated: %#v", drafts[0])
+	delivery := drafts[0].Provenance.Delivery
+	if (delivery != responseevents.DeliverySynthesized && delivery != responseevents.DeliveryNativeStream) || drafts[0].RunID == "" || drafts[0].DispatchID == "" {
+		t.Fatalf("run start is not observable and correlated: %#v", drafts[0])
 	}
 }
 
@@ -293,21 +319,30 @@ func assertMessageLifecycle(t *testing.T, drafts []responseevents.Draft, expecte
 
 func assertToolLifecycle(t *testing.T, drafts []responseevents.Draft, expected FullStreamExpected) {
 	t.Helper()
-	for _, index := range []int{4, 5, 6} {
+	indices := []int{4, len(drafts) - 1}
+	if expected.ToolOutputDelta != "" {
+		indices = []int{4, 5, 6}
+	}
+	for _, index := range indices {
 		if drafts[index].ItemID != expected.ToolItemID {
 			t.Fatalf("tool draft[%d] item = %q, want %q", index, drafts[index].ItemID, expected.ToolItemID)
 		}
 	}
 	var started, completed responseevents.ToolPayload
 	mustDecodePayload(t, drafts[4], &started)
-	mustDecodePayload(t, drafts[6], &completed)
-	var delta responseevents.ToolDeltaPayload
-	mustDecodePayload(t, drafts[5], &delta)
-	if started.ToolCallID != expected.ToolCallID || delta.ToolCallID != expected.ToolCallID || completed.ToolCallID != expected.ToolCallID || delta.OutputDelta != expected.ToolOutputDelta {
-		t.Fatalf("tool lifecycle is not correlated: start=%#v delta=%#v completed=%#v", started, delta, completed)
+	mustDecodePayload(t, drafts[len(drafts)-1], &completed)
+	if started.ToolCallID != expected.ToolCallID || completed.ToolCallID != expected.ToolCallID {
+		t.Fatalf("tool lifecycle is not correlated: start=%#v completed=%#v", started, completed)
 	}
-	if len([]rune(delta.OutputDelta)) > maximumToolDeltaLength {
-		t.Fatalf("tool output delta length = %d, want <= %d", len([]rune(delta.OutputDelta)), maximumToolDeltaLength)
+	if expected.ToolOutputDelta != "" {
+		var delta responseevents.ToolDeltaPayload
+		mustDecodePayload(t, drafts[5], &delta)
+		if delta.ToolCallID != expected.ToolCallID || delta.OutputDelta != expected.ToolOutputDelta {
+			t.Fatalf("tool output delta = %#v", delta)
+		}
+		if len([]rune(delta.OutputDelta)) > maximumToolDeltaLength {
+			t.Fatalf("tool output delta length = %d, want <= %d", len([]rune(delta.OutputDelta)), maximumToolDeltaLength)
+		}
 	}
 }
 
@@ -315,11 +350,14 @@ func assertRetryDraft(t *testing.T, drafts []responseevents.Draft, retryAfter in
 	t.Helper()
 	draft := findDraft(drafts, responseevents.KindError, responseevents.PhaseUpdated)
 	if draft == nil {
+		draft = findDraft(drafts, responseevents.KindError, responseevents.PhaseFailed)
+	}
+	if draft == nil {
 		t.Fatalf("retry drafts = %#v, want ERROR/UPDATED notification", drafts)
 	}
 	var payload responseevents.ErrorPayload
 	mustDecodePayload(t, *draft, &payload)
-	if !payload.Retryable || payload.RetryAfterSeconds == nil || *payload.RetryAfterSeconds != retryAfter {
+	if !payload.Retryable || (retryAfter > 0 && (payload.RetryAfterSeconds == nil || *payload.RetryAfterSeconds != retryAfter)) {
 		t.Fatalf("retry payload = %#v", payload)
 	}
 }

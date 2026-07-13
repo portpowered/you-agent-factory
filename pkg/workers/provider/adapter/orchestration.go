@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -31,6 +31,7 @@ type ExecuteInput struct {
 	Provider Identity
 	Command  CommandContext
 	Decoder  DecoderContext
+	Publish  func(DecodeResult)
 }
 
 // ExecuteResult contains neutral adapter outputs from one subprocess attempt.
@@ -50,6 +51,7 @@ type ExecuteResult struct {
 	ParseError        error
 	FlushReason       FlushReason
 	CapabilityUpdates []CapabilityUpdate
+	Request           workerprocess.CommandRequest
 }
 
 // CapabilityUpdate records an invocation-specific fidelity change selected
@@ -110,10 +112,11 @@ func executeAttempt(ctx context.Context, selected Adapter, runner StreamingComma
 		return ExecuteResult{}, fmt.Errorf("create provider adapter decoder: %w", err)
 	}
 
-	result := ExecuteResult{Capabilities: capabilityResult.Capabilities}
+	result := ExecuteResult{Capabilities: capabilityResult.Capabilities, Request: built.Request}
 	commandResult, commandErr := runner.Run(ctx, built.Request, func(observation Observation) error {
 		decoded, observeErr := decoder.Observe(ctx, observation)
 		result.appendDecoded(decoded)
+		publishDecoded(input.Publish, decoded)
 		if observeErr != nil && result.DecodeError == nil {
 			result.DecodeError = observeErr
 		}
@@ -125,6 +128,7 @@ func executeAttempt(ctx context.Context, selected Adapter, runner StreamingComma
 
 	flushed, flushErr := decoder.Flush(ctx, FlushContext{Reason: flushReason})
 	result.appendDecoded(flushed)
+	publishDecoded(input.Publish, flushed)
 	result.FlushError = flushErr
 
 	final, parseErr := selected.ParseFinal(ctx, FinalParseContext{
@@ -133,12 +137,20 @@ func executeAttempt(ctx context.Context, selected Adapter, runner StreamingComma
 	})
 	result.Response, result.ParseError = final.Response, parseErr
 	result.Drafts = append(result.Drafts, final.Drafts...)
+	publishDecoded(input.Publish, DecodeResult{Drafts: final.Drafts})
 	classified := selected.ClassifyFailure(ctx, FailureContext{
 		CommandResult: commandResult, CommandError: commandErr, DecodeError: result.DecodeError,
 		FlushError: flushErr, ParseError: parseErr, FlushReason: flushReason,
 	})
 	result.Failure = classified.Failure
 	return result, errors.Join(result.DecodeError, flushErr, parseErr)
+}
+
+func publishDecoded(publish func(DecodeResult), decoded DecodeResult) {
+	if publish == nil || (len(decoded.Drafts) == 0 && len(decoded.Diagnostics) == 0) {
+		return
+	}
+	publish(decoded)
 }
 
 func fallbackContext(result ExecuteResult) FallbackContext {

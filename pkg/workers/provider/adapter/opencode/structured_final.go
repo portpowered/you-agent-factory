@@ -183,9 +183,79 @@ func processTerminalError(result workerprocess.CommandResult, commandErr error) 
 	if errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) {
 		return &structuredTerminalError{failureType: interfaces.WorkFailureTypeTimeout, message: "OpenCode request was canceled or timed out.", retryable: true}
 	}
+	if failureType := classifyProcessFailure(result); failureType != interfaces.WorkFailureTypeUnknown {
+		return terminalErrorForType(failureType)
+	}
 	return &structuredTerminalError{
 		failureType: interfaces.WorkFailureTypeUnknown,
 		message:     fmt.Sprintf("OpenCode execution exited with code %d.", result.ExitCode),
+	}
+}
+
+func classifyProcessFailure(result workerprocess.CommandResult) interfaces.WorkFailureType {
+	if result.ExitCode == 124 {
+		return interfaces.WorkFailureTypeTimeout
+	}
+	streams := [][]byte{boundedFailureTail(result.Stderr), boundedFailureTail(result.Stdout)}
+	for _, stream := range streams {
+		for _, line := range splitStructuredLines(stream) {
+			record, err := decodeStructuredRecord(line)
+			if err != nil || record.Type != "error" {
+				continue
+			}
+			if failureType := classifyStructuredError(record.Error.Name, record.Error.Data).failureType; failureType != interfaces.WorkFailureTypeUnknown {
+				return failureType
+			}
+		}
+	}
+	for _, stream := range streams {
+		if failureType := classifyProcessTextFailure(string(stream)); failureType != interfaces.WorkFailureTypeUnknown {
+			return failureType
+		}
+	}
+	return interfaces.WorkFailureTypeUnknown
+}
+
+func boundedFailureTail(output []byte) []byte {
+	const maximumFailureScanBytes = 64 * 1024
+	if len(output) <= maximumFailureScanBytes {
+		return output
+	}
+	return output[len(output)-maximumFailureScanBytes:]
+}
+
+func classifyProcessTextFailure(output string) interfaces.WorkFailureType {
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		normalized := strings.ToLower(trimmed)
+		if !strings.HasPrefix(normalized, "error:") && !strings.HasPrefix(normalized, "api error:") {
+			continue
+		}
+		if failureType := classifyRecognizedProcessText(normalized); failureType != interfaces.WorkFailureTypeUnknown {
+			return failureType
+		}
+	}
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" || strings.Contains(trimmed, "\n") {
+		return interfaces.WorkFailureTypeUnknown
+	}
+	return classifyRecognizedProcessText(strings.ToLower(strings.Join(strings.Fields(trimmed), " ")))
+}
+
+func classifyRecognizedProcessText(normalized string) interfaces.WorkFailureType {
+	switch {
+	case containsSignal(normalized, "deadline exceeded", "request timed out", "timed out", "timeout"):
+		return interfaces.WorkFailureTypeTimeout
+	case containsSignal(normalized, "authentication", "login required", "not authenticated", "unauthorized", "forbidden", "api key"):
+		return interfaces.WorkFailureTypeAuthFailure
+	case containsSignal(normalized, "invalid request", "bad request", "invalid argument", "model not found"):
+		return interfaces.WorkFailureTypePermanentBadRequest
+	case containsSignal(normalized, "rate limit", "too many requests", "usage limit", "at capacity", "status 429"):
+		return interfaces.WorkFailureTypeThrottled
+	case containsSignal(normalized, "internal server error", "server error", "status 500", "status 502", "status 503", "status 504"):
+		return interfaces.WorkFailureTypeInternalServerError
+	default:
+		return interfaces.WorkFailureTypeUnknown
 	}
 }
 

@@ -2,10 +2,12 @@ package stream_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/stream"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -153,6 +155,39 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	}
 	if events[0].DispatchID != "dispatch-1" {
 		t.Fatalf("dispatchId = %q, want dispatch-1", events[0].DispatchID)
+	}
+}
+
+func TestManager_PreservesAdapterCanonicalDraftAndSuppressesDuplicateTerminal(t *testing.T) {
+	t.Parallel()
+	session := factorysessions.NewLiveSession(
+		"sess-adapter", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	manager := stream.NewManager(&streamTestHost{session: session})
+	publisher := manager.InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, _ := json.Marshal(responseevents.MessagePayload{
+		Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "final answer"}},
+	})
+	draft := responseevents.Draft{
+		RunID: "run-1", DispatchID: "dispatch-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
+		Provenance: responseevents.Provenance{
+			Provider: "opencode", NativeEventType: "text", Delivery: responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationSnapshot, Fidelity: responseevents.FidelityNormalized,
+		},
+		Payload: payload, ItemID: "message-1", ProviderSessionRef: "session-1",
+	}
+	publisher(workerprovider.CanonicalDraftFragment(draft))
+	terminal := workerprovider.CompletedFragment("dispatch-1", nil)
+	terminal.SkipCanonical = true
+	publisher(terminal)
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].Kind != responseevents.KindMessage || events[0].Phase != responseevents.PhaseCompleted {
+		t.Fatalf("canonical events = %#v", events)
+	}
+	if events[0].Provenance != draft.Provenance || events[0].ItemID != draft.ItemID || events[0].ProviderSessionRef != draft.ProviderSessionRef {
+		t.Fatalf("adapter semantics were not preserved: %#v", events[0])
 	}
 }
 

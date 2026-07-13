@@ -379,9 +379,8 @@ func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 
 func validateOpenCodeOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
 	unsupported := map[interfaces.RunnerOptionalCapability]string{
-		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the opencode runner in v1",
-		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the opencode runner in v1",
-		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityImageInput: "image input is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:   "worktree selection is not supported by the opencode runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {

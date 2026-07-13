@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"hash"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
@@ -58,6 +60,65 @@ type InferenceProgressFragment struct {
 	ProviderSessionRef *interfaces.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
+	CanonicalDraft     *responseevents.Draft
+	SkipCanonical      bool
+}
+
+// CanonicalDraftFragment carries an adapter-owned semantic draft through the
+// existing live response publisher while retaining a bounded legacy fragment
+// projection for current stream consumers.
+func CanonicalDraftFragment(draft responseevents.Draft) InferenceProgressFragment {
+	cloned := responseevents.CloneDraft(draft)
+	fragment := InferenceProgressFragment{
+		DispatchID:        strings.TrimSpace(draft.DispatchID),
+		Kind:              ProgressFragmentKind,
+		Type:              NormalizedEventTypeProgress,
+		Payload:           canonicalDraftSummary(draft),
+		ExternalEventType: strings.TrimSpace(draft.Provenance.NativeEventType),
+		Metadata:          map[string]string{"runner_id": strings.TrimSpace(draft.Provenance.Provider)},
+		CanonicalDraft:    &cloned,
+	}
+	if draft.ProviderSessionRef != "" {
+		fragment.ProviderSessionRef = &interfaces.ProviderSessionMetadata{
+			Provider: draft.Provenance.Provider, Kind: providerSessionKindSessionID, ID: draft.ProviderSessionRef,
+		}
+	}
+	if draft.Kind == responseevents.KindMessage {
+		fragment.Kind = ResponseFragmentKind
+		fragment.Type, fragment.Payload = canonicalMessageFragment(draft)
+	}
+	return fragment
+}
+
+func canonicalMessageFragment(draft responseevents.Draft) (string, string) {
+	if draft.Phase == responseevents.PhaseDelta {
+		var payload responseevents.MessageDeltaPayload
+		if json.Unmarshal(draft.Payload, &payload) == nil {
+			return NormalizedEventTypeTextDelta, payload.TextDelta
+		}
+		return NormalizedEventTypeTextDelta, ""
+	}
+	var payload responseevents.MessagePayload
+	if json.Unmarshal(draft.Payload, &payload) != nil {
+		return NormalizedEventTypeFinalText, ""
+	}
+	var text strings.Builder
+	for _, block := range payload.ContentBlocks {
+		if block.Kind == responseevents.ContentBlockText {
+			text.WriteString(block.Text)
+		}
+	}
+	return NormalizedEventTypeFinalText, text.String()
+}
+
+func canonicalDraftSummary(draft responseevents.Draft) string {
+	if draft.Kind == responseevents.KindError {
+		var payload responseevents.ErrorPayload
+		if json.Unmarshal(draft.Payload, &payload) == nil {
+			return payload.Message
+		}
+	}
+	return fmt.Sprintf("OpenCode %s %s", strings.ToLower(string(draft.Kind)), strings.ToLower(string(draft.Phase)))
 }
 
 // InferenceProgressPublisher receives provider progress fragments for one live

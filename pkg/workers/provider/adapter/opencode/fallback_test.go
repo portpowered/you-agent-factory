@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
@@ -220,27 +220,42 @@ func TestStructuredFallbackRejectsUnsafeOutcomes(t *testing.T) {
 }
 
 func TestFallbackFailureUsesDirectFinalOnlyTerminalSemantics(t *testing.T) {
-	t.Parallel()
-	resolver := newResolver(t, &fakeIdentifier{installation: installation()}, &fakeDiscoverer{
-		decision: opencode.Decision{Version: "1.2.3", Mode: opencode.ModeStructured},
-	})
-	providerAdapter := mustNegotiatedAdapter(t, resolve(t, resolver), resolver)
-	rejection := []byte("unknown flag: --format")
-	fallbackRunner := &sequenceStreamingRunner{attempts: []streamingAttempt{
-		{result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2}},
-		{result: workerprocess.CommandResult{ExitCode: 9}},
-	}}
-	fallbackResult, _ := executeOpenCode(t, providerAdapter, fallbackRunner)
-	direct := mustNegotiatedAdapter(t, opencode.Decision{Installation: installation(), Version: "0.9.0", Mode: opencode.ModeFinalOnly}, nil)
-	directRunner := &sequenceStreamingRunner{attempts: []streamingAttempt{{result: workerprocess.CommandResult{ExitCode: 9}}}}
-	directResult, _ := executeOpenCode(t, direct, directRunner)
-	if fallbackResult.Failure == nil || directResult.Failure == nil {
-		t.Fatalf("failures = %#v / %#v", fallbackResult.Failure, directResult.Failure)
+	testCases := []struct {
+		name   string
+		result workerprocess.CommandResult
+		want   interfaces.WorkFailureType
+	}{
+		{name: "authentication", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"type":"error","error":{"name":"ProviderAuthError"}}`)}, want: interfaces.WorkFailureTypeAuthFailure},
+		{name: "bad request", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"type":"error","error":{"name":"APIError","data":{"status":400}}}`)}, want: interfaces.WorkFailureTypePermanentBadRequest},
+		{name: "throttle", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte("Error: rate limit exceeded")}, want: interfaces.WorkFailureTypeThrottled},
+		{name: "timeout", result: workerprocess.CommandResult{ExitCode: 124}, want: interfaces.WorkFailureTypeTimeout},
+		{name: "server", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte("API Error: internal server error")}, want: interfaces.WorkFailureTypeInternalServerError},
 	}
-	if fallbackResult.Failure.Family != directResult.Failure.Family ||
-		fallbackResult.Failure.Type != directResult.Failure.Type ||
-		fallbackResult.Failure.Retry != directResult.Failure.Retry {
-		t.Fatalf("terminal semantics differ: %#v / %#v", fallbackResult.Failure, directResult.Failure)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := newResolver(t, &fakeIdentifier{installation: installation()}, &fakeDiscoverer{
+				decision: opencode.Decision{Version: "1.2.3", Mode: opencode.ModeStructured},
+			})
+			providerAdapter := mustNegotiatedAdapter(t, resolve(t, resolver), resolver)
+			rejection := []byte("unknown flag: --format")
+			fallbackResult, _ := executeOpenCode(t, providerAdapter, &sequenceStreamingRunner{attempts: []streamingAttempt{
+				{result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2}},
+				{result: tc.result},
+			}})
+			direct := mustNegotiatedAdapter(t, opencode.Decision{Installation: installation(), Version: "0.9.0", Mode: opencode.ModeFinalOnly}, nil)
+			directResult, _ := executeOpenCode(t, direct, &sequenceStreamingRunner{attempts: []streamingAttempt{{result: tc.result}}})
+			assertTerminalParity(t, fallbackResult.Failure, directResult.Failure, tc.want)
+		})
+	}
+}
+
+func assertTerminalParity(t *testing.T, fallback, direct *adapter.FailureFacts, want interfaces.WorkFailureType) {
+	t.Helper()
+	if fallback == nil || direct == nil || direct.Type != want {
+		t.Fatalf("failures = %#v / %#v, want %s", fallback, direct, want)
+	}
+	if fallback.Family != direct.Family || fallback.Type != direct.Type || fallback.Retry != direct.Retry || fallback.Message != direct.Message {
+		t.Fatalf("terminal semantics differ: %#v / %#v", fallback, direct)
 	}
 }
 

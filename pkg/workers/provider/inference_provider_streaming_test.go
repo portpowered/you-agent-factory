@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,11 +13,156 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+func TestScriptWrapProvider_OpenCodeNegotiatedAdapterPublishesProductionStream(t *testing.T) {
+	privatePrompt := "private production prompt"
+	stdout, err := os.ReadFile("adapter/opencode/testdata/structured-success.jsonl")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	runner := &recordingProviderExec{result: CommandResult{Stdout: stdout}}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeStructured)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: privatePrompt,
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-production"},
+	})
+	if err != nil {
+		t.Fatalf("Infer() error = %v", err)
+	}
+	if response.Content != "Hello world" || response.ProviderSession == nil || response.ProviderSession.ID != "ses_open_42" {
+		t.Fatalf("response = %#v", response)
+	}
+	if runner.request.Command != "opencode" || !reflect.DeepEqual(runner.request.Args, []string{"run", "--format", "json", privatePrompt}) {
+		t.Fatalf("production command = %#v", runner.request)
+	}
+	if len(published) < 2 || published[0].Metadata["selected_mode"] != "structured" || published[0].Metadata["fidelity"] != "normalized" {
+		t.Fatalf("capability publication = %#v", published)
+	}
+	assertPublishedOpenCodeDraft(t, published, responseevents.KindMessage, responseevents.PhaseCompleted)
+	assertPublishedOpenCodeDraft(t, published, responseevents.KindTool, responseevents.PhaseCompleted)
+	assertPublishedOpenCodeDraft(t, published, responseevents.KindUsage, responseevents.PhaseUpdated)
+	for _, fragment := range published {
+		if strings.Contains(fragment.Payload, "private prompt") || strings.Contains(fragment.Payload, "PRIVATE.md") || strings.Contains(fragment.Payload, "private result") {
+			t.Fatalf("published sensitive provider data: %#v", fragment)
+		}
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeProductionProgressRunnerUsesCanonicalAdapterStream(t *testing.T) {
+	stdout, err := os.ReadFile("adapter/opencode/testdata/structured-success.jsonl")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	executable := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "opencode"), stdout, nil, 0)
+	var rawPublished []InferenceProgressFragment
+	progressRunner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
+		rawPublished = append(rawPublished, fragment)
+	}, nil)
+	var canonicalPublished []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(progressRunner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForExecutable(t, opencodeadapter.ModeStructured, executable)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			canonicalPublished = append(canonicalPublished, fragment)
+		}),
+	)
+
+	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private production prompt",
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-production-runner"},
+	})
+	if err != nil {
+		t.Fatalf("Infer() error = %v", err)
+	}
+	if response.Content != "Hello world" {
+		t.Fatalf("response = %#v", response)
+	}
+	if len(rawPublished) != 0 {
+		t.Fatalf("legacy publisher received raw OpenCode output: %#v", rawPublished)
+	}
+	assertPublishedOpenCodeDraft(t, canonicalPublished, responseevents.KindMessage, responseevents.PhaseDelta)
+	assertPublishedOpenCodeDraft(t, canonicalPublished, responseevents.KindMessage, responseevents.PhaseCompleted)
+}
+
+func TestScriptWrapProvider_OpenCodePublishesSafeProductionFallback(t *testing.T) {
+	privatePrompt := "private fallback prompt"
+	rejection := "private rejection: unknown option '--format'"
+	runner := &sequenceProviderRunner{results: []CommandResult{
+		{Stderr: []byte(rejection), ExitCode: 2},
+		{Stdout: []byte("fallback answer")},
+	}}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeStructured)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { published = append(published, fragment) }),
+	)
+
+	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: privatePrompt,
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-fallback"},
+	})
+	if err != nil || response.Content != "fallback answer" {
+		t.Fatalf("Infer() = %#v, %v", response, err)
+	}
+	if len(runner.requests) != 2 ||
+		!reflect.DeepEqual(runner.requests[0].Args, []string{"run", "--format", "json", privatePrompt}) ||
+		!reflect.DeepEqual(runner.requests[1].Args, []string{"run", privatePrompt}) {
+		t.Fatalf("fallback requests = %#v", runner.requests)
+	}
+	var degraded *InferenceProgressFragment
+	for index := range published {
+		if published[index].Metadata["selected_mode"] == "final_only" && published[index].Metadata["downgrade_reason"] == "unsupported_format" {
+			degraded = &published[index]
+		}
+	}
+	if degraded == nil || !strings.Contains(degraded.Payload, "structured_mode_degraded") && degraded.ExternalEventType != "structured_mode_degraded" {
+		t.Fatalf("degradation publication = %#v", published)
+	}
+	if strings.Contains(degraded.Payload, rejection) || strings.Contains(degraded.Payload, privatePrompt) {
+		t.Fatalf("degradation exposed private input: %#v", degraded)
+	}
+}
+
+type sequenceProviderRunner struct {
+	results  []CommandResult
+	requests []CommandRequest
+}
+
+func (r *sequenceProviderRunner) Run(_ context.Context, request CommandRequest) (CommandResult, error) {
+	r.requests = append(r.requests, request)
+	if len(r.results) == 0 {
+		return CommandResult{}, errors.New("unexpected provider invocation")
+	}
+	result := r.results[0]
+	r.results = r.results[1:]
+	return result, nil
+}
+
+func assertPublishedOpenCodeDraft(t *testing.T, fragments []InferenceProgressFragment, kind responseevents.Kind, phase responseevents.Phase) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if fragment.CanonicalDraft != nil && fragment.CanonicalDraft.Kind == kind && fragment.CanonicalDraft.Phase == phase {
+			return
+		}
+	}
+	t.Fatalf("missing canonical draft %s/%s: %#v", kind, phase, fragments)
+}
 
 func TestScriptWrapProvider_CursorDiagnosticsUseInjectedDispatchLogger(t *testing.T) {
 	var injectedOutput bytes.Buffer

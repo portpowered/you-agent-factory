@@ -1353,6 +1353,7 @@ func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConf
 
 	return RunConfig{
 		Dir:                        resolution.FactoryDir,
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           goal.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &goalText,
@@ -1538,6 +1539,7 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 
 	err = Run(ctx, RunConfig{
 		Dir:                        resolution.FactoryDir,
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           goal.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &goalText,
@@ -1725,6 +1727,7 @@ func namedSubagentNoServerInvocationRunConfig(t *testing.T, requestText string) 
 
 	return RunConfig{
 		Dir:                        resolution.FactoryDir,
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           subagent.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &requestText,
@@ -1792,6 +1795,7 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 
 	err = Run(ctx, RunConfig{
 		Dir:                        resolution.FactoryDir,
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           subagent.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &requestText,
