@@ -13,12 +13,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
-	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
-	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
-	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
-	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
@@ -32,6 +26,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"github.com/spf13/cobra"
 )
 

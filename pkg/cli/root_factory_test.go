@@ -13,7 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/commandidentity"
-	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
+	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

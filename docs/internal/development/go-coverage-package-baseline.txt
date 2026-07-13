@@ -4,7 +4,7 @@
 github.com/portpowered/infinite-you/pkg/api
 github.com/portpowered/infinite-you/pkg/api/apitypes
 github.com/portpowered/infinite-you/pkg/apisurface
-github.com/portpowered/infinite-you/pkg/cli/config
+github.com/portpowered/infinite-you/pkg/transports/cli/config
 github.com/portpowered/infinite-you/pkg/cli/mcp
 github.com/portpowered/infinite-you/pkg/cli/models
 github.com/portpowered/infinite-you/pkg/cli/run
@@ -47,7 +47,7 @@ github.com/portpowered/infinite-you/pkg/workers/mockworker
 github.com/portpowered/infinite-you/pkg/apisurface/optional 
 github.com/portpowered/infinite-you/pkg/cli/clidiag 
 github.com/portpowered/infinite-you/pkg/cli/dashboardrender 
-github.com/portpowered/infinite-you/pkg/cli/default 
+github.com/portpowered/infinite-you/pkg/transports/cli/default 
 github.com/portpowered/infinite-you/pkg/config 
 github.com/portpowered/infinite-you/pkg/config/load 
 github.com/portpowered/infinite-you/pkg/config/mockworkers 

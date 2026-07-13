@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	cliworkflowsource "github.com/portpowered/infinite-you/pkg/cli/workflowsource"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	cliworkflowsource "github.com/portpowered/infinite-you/pkg/transports/cli/workflowsource"
 )
 
 const validWorkflowSource = `

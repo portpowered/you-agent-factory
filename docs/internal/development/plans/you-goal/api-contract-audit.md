@@ -534,7 +534,7 @@ contracts. Customer wording lives in `docs/reference/packaged-goal.md`
 | Decision routing | `tests/functional/smoke/cli_named_goal_routing_smoke_test.go` | Accepted, blocked, needs-human, failed, interrupted, rework, and structured unknown decisions surface predictable outcomes |
 | Operator controls, replay, inspection | `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go` | Pause buffers work, resume drains buffered goals in submission order (plan-goal `StartTime` ordering), interrupted inspect summaries stay on shared session/work surfaces, and `SESSION_LIFECYCLE_CONTROL` replay events remain durable |
 | Response-stream boundary | `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go` plus `pkg/api/contracttests/` | CLI `--output response-stream` still returns `primaryResult`; internal `SessionResponseStream` data stays out of public OpenAPI and durable `FactoryEvent` contracts |
-| Customer docs and vocabulary | `docs/reference/packaged-goal.md`, `pkg/cli/docs/docs_packaged_reference_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go` | Packaged goal docs describe shipped invocation, routing, operator controls, and recovery without goal-specific public routes or internal stream contracts |
+| Customer docs and vocabulary | `docs/reference/packaged-goal.md`, `pkg/transports/cli/docs/docs_packaged_reference_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go` | Packaged goal docs describe shipped invocation, routing, operator controls, and recovery without goal-specific public routes or internal stream contracts |
 | Generated artifact alignment | `make api-smoke` and `pkg/api/contracttests/openapi_contract_surface_test.go` | Public generated artifacts remain aligned with the internal-only response-stream boundary |
 
 ### Final verification commands (`you-goal-06-007`, 2026-07-02 UTC)
@@ -547,7 +547,7 @@ All commands ran from the `you-goal-06` worktree unless noted.
 | `make test` | pass | Short Go suite including functional smoke packages |
 | `make api-smoke` | pass | OpenAPI validate/bundle, generated drift check, contract integration smoke |
 | `go test ./tests/functional/smoke/ -run 'TestNamedGoal\|TestDocsCommandSmoke_' -count=1 -timeout 600s` | pass | Focused `@you/goal` functional smoke and packaged-docs CLI smoke |
-| `go test ./pkg/cli/docs/... -count=1` | pass | Packaged reference topic markers |
+| `go test ./pkg/transports/cli/docs/... -count=1` | pass | Packaged reference topic markers |
 | `go test ./pkg/cli -run TestDocsCommand_ -count=1` | pass | `you docs` command coverage |
 | `go test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1` | pass | Functional docs smoke |
 | `make verify-fast` | **narrower** | `make typecheck` and `make test` pass; `make ui-test` fails on pre-existing `factory-graph-layout-performance.test.ts` 500/1000-node budget regressions unrelated to `@you/goal` (no UI graph-editor or layout code changed in this lane) |
@@ -585,7 +585,7 @@ worktrees because `docs-reference-check` shells into `docs/` and invokes a
 sibling `../markdown-linter` path that is not present in this repository layout.
 For final verification, run the in-repo docs proof instead:
 
-- `go test ./pkg/cli/docs/... -count=1`
+- `go test ./pkg/transports/cli/docs/... -count=1`
 - `go test ./pkg/cli -run TestDocsCommand_ -count=1`
 - `go test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1`
 

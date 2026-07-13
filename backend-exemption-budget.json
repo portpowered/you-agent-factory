@@ -267,30 +267,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/config/config_test.go#assertDeterministicExpandedRuntimeConfig",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime-shape helper keeps the expanded config contract readable in one assertion pass."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/config/config_test.go#assertExistingSplitDefinitionsPreserved",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the preserved split-definition contract inline across all authored files."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/init/init_test.go#assertInitScaffoldFilesCanonical",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this scaffold assertion keeps the canonical init output inventory together for reviewer-readable verification."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/init/init_test.go#assertRalphRuntimeConfig",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this scaffold contract helper keeps the generated init runtime config matrix visible in one place."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/cli/mcp/serve_runtime_resume_smoke_test.go#TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: runtime resume smoke keeps interrupted setup, MCP control, and terminal continuity on one documented stdio path."
@@ -750,6 +726,30 @@
       "target": "pkg/service/testmain_test.go#assertReplayArtifactStoresCanonicalEvents",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper intentionally validates the replay artifact event contract in one place."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/config/config_test.go#assertDeterministicExpandedRuntimeConfig",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime-shape helper keeps the expanded config contract readable in one assertion pass."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/config/config_test.go#assertExistingSplitDefinitionsPreserved",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the preserved split-definition contract inline across all authored files."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/init/init_test.go#assertInitScaffoldFilesCanonical",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this scaffold assertion keeps the canonical init output inventory together for reviewer-readable verification."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/init/init_test.go#assertRalphRuntimeConfig",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this scaffold contract helper keeps the generated init runtime config matrix visible in one place."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",

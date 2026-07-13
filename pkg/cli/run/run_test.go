@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -23,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )

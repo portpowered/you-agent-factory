@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 )
 
 // TestInitFactory_DefaultScaffoldFactoryJSONValidatesAgainstOpenAPISchema proves the

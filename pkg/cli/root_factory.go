@@ -3,9 +3,9 @@ package cli
 import (
 	"fmt"
 
-	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
-	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
-	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
+	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	"github.com/spf13/cobra"
 )
 

@@ -64,8 +64,8 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/apisurface/factorysession` | 8 | 6 | directive only |
 | `pkg/cli` | 2 | 1 | directive only |
 | `pkg/cli/cliinputs` | 5 | 3 | directive only |
-| `pkg/cli/config` | 2 | 1 | directive + coverage baseline |
-| `pkg/cli/init` | 2 | 1 | directive only |
+| `pkg/transports/cli/config` | 2 | 1 | directive + coverage baseline |
+| `pkg/transports/cli/init` | 2 | 1 | directive only |
 | `pkg/cli/mcp` | 3 | 3 | directive + coverage baseline |
 | `pkg/cli/run` | 2 | 1 | directive + coverage baseline |
 | `pkg/cli/submit` | 1 | 1 | directive only |
@@ -105,7 +105,7 @@ directive occurrence in the focused scan:
 - `pkg/apisurface/optional`
 - `pkg/cli/clidiag`
 - `pkg/cli/dashboardrender`
-- `pkg/cli/default`
+- `pkg/transports/cli/default`
 - `pkg/cli/models`
 - `pkg/cli/session`
 - `pkg/cli/sessionexecution`
@@ -235,23 +235,23 @@ Owner: `pkg/cli/cliinputs` package maintainers. Status: **directive only**.
 | `pkg/cli/cliinputs/synthetic_args_relationships_test.go:143` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticArgumentRecord` | T | T gate |
 | `pkg/cli/cliinputs/synthetic_flags_test.go:437` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticFlagRecord` | T | T gate |
 
-### `pkg/cli/config`
+### `pkg/transports/cli/config`
 
-Owner: `pkg/cli/config` package maintainers. Status: **directive + coverage baseline**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/cli/config/config_test.go:228` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertDeterministicExpandedRuntimeConfig` | T | T gate |
-| `pkg/cli/config/config_test.go:868` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertExistingSplitDefinitionsPreserved` | T | T gate |
-
-### `pkg/cli/init`
-
-Owner: `pkg/cli/init` package maintainers. Status: **directive only**.
+Owner: `pkg/transports/cli/config` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/cli/init/init_test.go:401` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertRalphRuntimeConfig` | T | T gate |
-| `pkg/cli/init/init_test.go:732` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertInitScaffoldFilesCanonical` | T | T gate |
+| `pkg/transports/cli/config/config_test.go:228` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertDeterministicExpandedRuntimeConfig` | T | T gate |
+| `pkg/transports/cli/config/config_test.go:868` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertExistingSplitDefinitionsPreserved` | T | T gate |
+
+### `pkg/transports/cli/init`
+
+Owner: `pkg/transports/cli/init` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/transports/cli/init/init_test.go:401` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertRalphRuntimeConfig` | T | T gate |
+| `pkg/transports/cli/init/init_test.go:732` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertInitScaffoldFilesCanonical` | T | T gate |
 
 ### `pkg/cli/mcp`
 

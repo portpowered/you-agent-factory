@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/cli"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	"github.com/spf13/cobra"
 )
 

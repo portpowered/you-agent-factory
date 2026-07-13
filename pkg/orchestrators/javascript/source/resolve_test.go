@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	cliworkflowsource "github.com/portpowered/infinite-you/pkg/cli/workflowsource"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	cliworkflowsource "github.com/portpowered/infinite-you/pkg/transports/cli/workflowsource"
 )
 
 const validWorkflowSource = `

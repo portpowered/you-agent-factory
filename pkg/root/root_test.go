@@ -141,6 +141,50 @@ func TestExecuteSequentialHomesControlConfigAndRunPaths(t *testing.T) {
 	}
 }
 
+func TestExecuteSetupAndFactoryAuthoringCommandsThroughProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	factoryDir := filepath.Join(t.TempDir(), "authored-factory")
+	var initOutput bytes.Buffer
+	if err := Execute(Input{
+		Args:    []string{"you", "init", "--dir", factoryDir},
+		Env:     homeEnvironment(home),
+		Stdout:  &initOutput,
+		Context: context.Background(),
+	}); err != nil {
+		t.Fatalf("Execute(init) error = %v", err)
+	}
+	if !strings.Contains(initOutput.String(), "Initialized default factory directory structure") {
+		t.Fatalf("init output = %q", initOutput.String())
+	}
+
+	var validateOutput bytes.Buffer
+	if err := Execute(Input{
+		Args:    []string{"you", "factory", "config", "validate", factoryDir},
+		Env:     homeEnvironment(home),
+		Stdout:  &validateOutput,
+		Context: context.Background(),
+	}); err != nil {
+		t.Fatalf("Execute(factory config validate) error = %v", err)
+	}
+	if !strings.Contains(validateOutput.String(), "Factory validation passed") {
+		t.Fatalf("factory validation output = %q", validateOutput.String())
+	}
+
+	missingPath := filepath.Join(t.TempDir(), "missing-factory")
+	if err := Execute(Input{
+		Args:    []string{"you", "factory", "config", "validate", missingPath},
+		Env:     homeEnvironment(home),
+		Context: context.Background(),
+	}); err == nil || !strings.Contains(err.Error(), "find factory config") {
+		t.Fatalf("Execute(factory config validate missing path) error = %v", err)
+	}
+	if _, err := os.Stat(missingPath); !os.IsNotExist(err) {
+		t.Fatalf("missing factory path Stat error = %v, want not-exist", err)
+	}
+}
+
 func homeEnvironment(home string) []string {
 	if runtime.GOOS == "windows" {
 		return []string{"USERPROFILE=" + home}

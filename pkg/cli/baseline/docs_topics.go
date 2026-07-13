@@ -3,7 +3,7 @@ package baseline
 import (
 	"strings"
 
-	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 )
 
 // SerializeDocsTopicIndex records the production packaged docs topic index in

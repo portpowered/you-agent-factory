@@ -148,7 +148,7 @@ Focused verification:
 make generate-api
 go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
   ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions \
-  ./pkg/mcp/workflow ./pkg/cli/workflow
+  ./pkg/mcp/workflow ./pkg/transports/cli/workflow
 npm --prefix ui run typecheck
 ```
 
@@ -177,7 +177,7 @@ rg -n "/workflow-previews|WorkflowPreview" \
   --glob '!**/generated/**'
 find pkg/orchestrators/javascript -maxdepth 2 -type f | sort
 go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
-  ./pkg/mcp/workflow ./pkg/cli/workflow ./pkg/cli/workflowsource
+  ./pkg/mcp/workflow ./pkg/transports/cli/workflow ./pkg/transports/cli/workflowsource
 npm --prefix ui run typecheck
 ```
 
@@ -457,7 +457,7 @@ packages as the primary preview or JavaScript orchestration owner.
 Focused verification passes:
 
 - `make generate-api` (generated artifacts synchronized)
-- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions ./pkg/mcp/workflow ./pkg/cli/workflow`
+- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions ./pkg/mcp/workflow ./pkg/transports/cli/workflow`
 - `go test ./pkg/factory/projections/projectiontests ./pkg/factory/events ./pkg/factory/validation`
 - `npm --prefix ui run typecheck`
 - Scoped `rg` verification over `api/openapi-main.yaml`, `api/components`, `pkg/api`,

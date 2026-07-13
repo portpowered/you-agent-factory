@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
-	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
-	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
+	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 )
 
 func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {

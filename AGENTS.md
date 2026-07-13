@@ -88,7 +88,10 @@ the standards.
   request/response shaping that is still converging into the transport family.
 - `pkg/transports/mapping/` owns stateless composition of explicit wired
   collaborators into transport-facing application surfaces.
-- `pkg/cli/` contains CLI commands and CLI adapters for shared service logic.
+- `pkg/transports/cli/` owns setup, configuration, documentation,
+  factory-authoring, and workflow validation/preview CLI adapters. Remaining
+  execution, session, model, server, and MCP command packages under `pkg/cli/`
+  are migration-era owners until their transport-family stories land.
 - `pkg/config/` contains factory config loading, persistence, mapping,
   validation entrypoints, built-in factory layout, and runtime config
   projections.

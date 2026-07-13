@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/cli/workflow"
 	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
