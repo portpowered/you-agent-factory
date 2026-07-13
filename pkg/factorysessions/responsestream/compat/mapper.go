@@ -25,8 +25,9 @@ type Context struct {
 }
 
 // MapFragment converts one legacy response-stream event into canonical
-// FactoryResponseEvent values. Progress fragments are supported in this lane;
-// other kinds return ErrUnsupportedFragmentKind until later stories land.
+// FactoryResponseEvent values. Progress and response fragments are supported in
+// this lane; other kinds return ErrUnsupportedFragmentKind until later stories
+// land.
 func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.FactoryResponseEvent, error) {
 	switch fragment.Kind {
 	case responsestream.EventKindProgressFragment:
@@ -38,9 +39,74 @@ func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.F
 			return nil, fmt.Errorf("mapped progress event invalid: %w", err)
 		}
 		return []responseevents.FactoryResponseEvent{event}, nil
+	case responsestream.EventKindResponseFragment:
+		event, err := mapResponseFragment(ctx, fragment)
+		if err != nil {
+			return nil, err
+		}
+		if err := responseevents.ValidateEvent(event); err != nil {
+			return nil, fmt.Errorf("mapped response event invalid: %w", err)
+		}
+		return []responseevents.FactoryResponseEvent{event}, nil
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFragmentKind, fragment.Kind)
 	}
+}
+
+func mapResponseFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {
+	payload, err := json.Marshal(messageDeltaPayloadFromFragment(fragment))
+	if err != nil {
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("marshal message delta payload: %w", err)
+	}
+
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          synthesizedEventID(ctx, fragment),
+		Sequence:         fragment.Sequence,
+		RecordedAt:       fragment.RecordedAt,
+		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
+		RunID:            strings.TrimSpace(ctx.RunID),
+		Kind:             responseevents.KindMessage,
+		Phase:            responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider:        fragmentProvider(fragment),
+			NativeEventType: fragmentNativeEventType(fragment),
+			Delivery:        responseevents.DeliverySynthesized,
+			Representation:  responseevents.RepresentationDelta,
+			Fidelity:        responseFragmentFidelity(fragment),
+		},
+		Payload:            payload,
+		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ItemID:             synthesizedItemID(ctx, fragment),
+		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
+	}, nil
+}
+
+func messageDeltaPayloadFromFragment(fragment responsestream.Event) responseevents.MessageDeltaPayload {
+	return responseevents.MessageDeltaPayload{
+		ContentBlockIndex: 0,
+		ContentBlockKind:  responseevents.ContentBlockText,
+		TextDelta:         fragment.Payload,
+	}
+}
+
+func responseFragmentFidelity(fragment responsestream.Event) responseevents.Fidelity {
+	if fragmentPayloadTruncated(fragment.Metadata) {
+		return responseevents.FidelityLossy
+	}
+	return responseevents.FidelityNormalized
+}
+
+func synthesizedItemID(ctx Context, fragment responsestream.Event) string {
+	material := fmt.Sprintf(
+		"%s|%s|%s|%s",
+		strings.TrimSpace(ctx.FactorySessionID),
+		strings.TrimSpace(ctx.RunID),
+		strings.TrimSpace(fragment.DispatchID),
+		providerSessionRefString(fragment.ProviderSessionRef),
+	)
+	sum := sha256.Sum256([]byte(material))
+	return "item-legacy-" + hex.EncodeToString(sum[:8])
 }
 
 func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {

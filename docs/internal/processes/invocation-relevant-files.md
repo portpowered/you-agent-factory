@@ -177,7 +177,11 @@ primary-result behavior.
   compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
-  later transport lanes adopt mapped canonical events. Package docs in
+  later transport lanes adopt mapped canonical events. Response fragments map to
+  `MESSAGE`/`DELTA` with `MessageDeltaPayload` (`contentBlockIndex` 0,
+  `contentBlockKind` `TEXT`, `textDelta` from fragment payload without parsing
+  provider grammar) and dispatch-scoped `item-legacy-*` IDs from
+  `factorySessionId|runId|dispatchId|providerSessionRef`. Package docs in
   `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`
   enforces isolation from CLI, HTTP, subprocess, and provider imports.
