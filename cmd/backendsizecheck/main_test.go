@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/exemptionbudget"
 )
 
 func TestRunSucceedsWhenOwnedFilesStayWithinLimitsAndExcludedRootsAreIgnored(t *testing.T) {
@@ -155,6 +158,10 @@ func TestRunHonorsExplicitFileAndFunctionIgnoreDirectives(t *testing.T) {
 		"\tprintln(\"line5\")",
 		"}",
 	}, "\n"))
+	writeExemptionBaseline(t, repoRoot,
+		exemptionbudget.Entry{Rule: exemptionbudget.RuleBackendFile, Target: "pkg/api/ignored_file.go", Owner: "api-maintainers", RemovalReason: "Split the legacy integration surface by responsibility."},
+		exemptionbudget.Entry{Rule: exemptionbudget.RuleBackendFunction, Target: "pkg/service/ignored_function.go#IgnoredFunction", Owner: "service-maintainers", RemovalReason: "Extract the integration harness from this function."},
+	)
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -182,6 +189,49 @@ func TestRunHonorsExplicitFileAndFunctionIgnoreDirectives(t *testing.T) {
 	}
 }
 
+func TestRunRejectsAllUnregisteredDirectivesInDeterministicOrder(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/zeta/z.go", "// backendsizecheck:ignore-file split this file.\npackage zeta\n")
+	writeGoFile(t, repoRoot, "cmd/alpha/main.go", strings.Join([]string{
+		"package main",
+		"",
+		"// backendsizecheck:ignore-function extract this function.",
+		"func main() {}",
+	}, "\n"))
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, fileLineLimit: 100, funcLineLimit: 100}, &bytes.Buffer{}, stderr)
+	if err == nil || err.Error() != "[agent-factory:backend-size] found 2 exemption budget violation(s)" {
+		t.Fatalf("run() error = %v, want two budget violations", err)
+	}
+	want := strings.Join([]string{
+		"exemption budget rule=backendsizecheck:ignore-file target=pkg/zeta/z.go is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and removalReason",
+		"exemption budget rule=backendsizecheck:ignore-function target=cmd/alpha/main.go#main is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and removalReason",
+		"",
+	}, "\n")
+	if got := stderr.String(); got != want {
+		t.Fatalf("run() stderr = %q, want deterministic diagnostics %q", got, want)
+	}
+}
+
+func TestRunRejectsInvalidRegistrationMetadata(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/ignored.go", "// backendsizecheck:ignore-file split this file.\npackage service\n")
+	writeExemptionBaseline(t, repoRoot, exemptionbudget.Entry{
+		Rule: exemptionbudget.RuleBackendFile, Target: "pkg/service/ignored.go", RemovalReason: "Split the file by responsibility.",
+	})
+
+	err := run(config{root: repoRoot, fileLineLimit: 100, funcLineLimit: 100}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "rule=backendsizecheck:ignore-file") ||
+		!strings.Contains(err.Error(), "target=pkg/service/ignored.go") || !strings.Contains(err.Error(), "set a non-empty owner") {
+		t.Fatalf("run() error = %v, want rule, target, and owner remediation", err)
+	}
+}
+
 func TestRunRejectsNonPositiveLimits(t *testing.T) {
 	t.Parallel()
 
@@ -205,5 +255,20 @@ func writeGoFile(t *testing.T, repoRoot string, relativePath string, content str
 	}
 	if err := os.WriteFile(absolutePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", relativePath, err)
+	}
+	baselinePath := filepath.Join(repoRoot, exemptionbudget.BaselinePath)
+	if _, err := os.Stat(baselinePath); os.IsNotExist(err) {
+		writeExemptionBaseline(t, repoRoot)
+	}
+}
+
+func writeExemptionBaseline(t *testing.T, repoRoot string, entries ...exemptionbudget.Entry) {
+	t.Helper()
+	data, err := json.Marshal(exemptionbudget.Baseline{Version: exemptionbudget.Version, Entries: entries})
+	if err != nil {
+		t.Fatalf("marshal exemption baseline: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, exemptionbudget.BaselinePath), data, 0o644); err != nil {
+		t.Fatalf("write exemption baseline: %v", err)
 	}
 }

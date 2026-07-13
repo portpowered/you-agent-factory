@@ -17,12 +17,13 @@ import (
 type Scope string
 
 const (
-	ScopeAllOwned Scope = "all-owned"
-	ScopePackage  Scope = "package"
+	ScopeAllOwned    Scope = "all-owned"
+	ScopeBackendSize Scope = "backend-size"
+	ScopePackage     Scope = "package-maintainability"
 )
 
 func Discover(root string, scope Scope) ([]Directive, error) {
-	if scope != ScopeAllOwned && scope != ScopePackage {
+	if scope != ScopeAllOwned && scope != ScopeBackendSize && scope != ScopePackage {
 		return nil, fmt.Errorf("unsupported exemption discovery scope %q", scope)
 	}
 	repoRoot, err := filepath.Abs(root)
@@ -40,7 +41,11 @@ func Discover(root string, scope Scope) ([]Directive, error) {
 		if err != nil {
 			return nil, err
 		}
-		directives = append(directives, found...)
+		for _, directive := range found {
+			if includedRule(directive.Rule, scope) {
+				directives = append(directives, directive)
+			}
+		}
 	}
 	sortDirectives(directives)
 	return directives, nil
@@ -127,10 +132,23 @@ func discoverRoot(repoRoot, scanRoot string) ([]Directive, error) {
 
 func includedRoot(root string, scope Scope) bool {
 	switch scope {
-	case ScopeAllOwned:
+	case ScopeAllOwned, ScopeBackendSize:
 		return root != "vendor"
 	case ScopePackage:
 		return root == "pkg"
+	default:
+		return false
+	}
+}
+
+func includedRule(rule string, scope Scope) bool {
+	switch scope {
+	case ScopeAllOwned:
+		return true
+	case ScopeBackendSize:
+		return rule == RuleBackendFile || rule == RuleBackendFunction
+	case ScopePackage:
+		return rule == RulePackageFileLines || rule == RulePackageFuncLines || rule == RulePackageComplexity
 	default:
 		return false
 	}

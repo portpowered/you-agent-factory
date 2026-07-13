@@ -34,9 +34,9 @@ func TestParseRequiresAccountableSortedEntries(t *testing.T) {
 		with    string
 		want    string
 	}{
-		{name: "blank owner", replace: `"backend-maintainers"`, with: `" "`, want: "backendsizecheck:ignore-file/pkg/service/factory.go has empty owner"},
-		{name: "blank removal reason", replace: `"Split transport wiring from runtime construction."`, with: `""`, want: "backendsizecheck:ignore-file/pkg/service/factory.go has empty removalReason"},
-		{name: "unknown rule", replace: `backendsizecheck:ignore-file`, with: `pkgboundarycheck:ignore-root`, want: "pkgboundarycheck:ignore-root/pkg/service/factory.go has unsupported rule"},
+		{name: "blank owner", replace: `"backend-maintainers"`, with: `" "`, want: "rule=backendsizecheck:ignore-file target=pkg/service/factory.go has empty owner"},
+		{name: "blank removal reason", replace: `"Split transport wiring from runtime construction."`, with: `""`, want: "rule=backendsizecheck:ignore-file target=pkg/service/factory.go has empty removalReason"},
+		{name: "unknown rule", replace: `backendsizecheck:ignore-file`, with: `pkgboundarycheck:ignore-root`, want: "rule=pkgboundarycheck:ignore-root target=pkg/service/factory.go has unsupported rule"},
 		{name: "unknown field", replace: `"owner":`, with: `"ticket": "ABC-1", "owner":`, want: "unknown field"},
 	}
 	for _, test := range tests {

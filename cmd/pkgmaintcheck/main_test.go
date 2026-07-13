@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/exemptionbudget"
 )
 
 func TestRunSucceedsWhenOwnedPkgFilesStayWithinLimitsAndGeneratedRootsAreIgnored(t *testing.T) {
@@ -163,6 +166,13 @@ func TestRunHonorsRuleScopedIgnoreDirectives(t *testing.T) {
 		"\treturn value",
 		"}",
 	}, "\n"))
+	writeExemptionBaseline(t, repoRoot,
+		exemptionbudget.Entry{Rule: exemptionbudget.RulePackageComplexity, Target: "pkg/service/ignored.go#IgnoreComplexity", Owner: "service-maintainers", RemovalReason: "Replace branches with typed handlers."},
+		exemptionbudget.Entry{Rule: exemptionbudget.RulePackageComplexity, Target: "pkg/service/ignored.go#IgnoreLines", Owner: "service-maintainers", RemovalReason: "Replace branches with typed handlers."},
+		exemptionbudget.Entry{Rule: exemptionbudget.RulePackageFileLines, Target: "pkg/service/ignored.go", Owner: "service-maintainers", RemovalReason: "Split the file by responsibility."},
+		exemptionbudget.Entry{Rule: exemptionbudget.RulePackageFuncLines, Target: "pkg/service/ignored.go#IgnoreComplexity", Owner: "service-maintainers", RemovalReason: "Extract the processing stages."},
+		exemptionbudget.Entry{Rule: exemptionbudget.RulePackageFuncLines, Target: "pkg/service/ignored.go#IgnoreLines", Owner: "service-maintainers", RemovalReason: "Extract the processing stages."},
+	)
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -194,6 +204,26 @@ func TestRunHonorsRuleScopedIgnoreDirectives(t *testing.T) {
 	}
 	if got := err.Error(); got != "[agent-factory:pkg-maint] found 2 maintainability violation(s)" {
 		t.Fatalf("run() error = %q, want two violation count", got)
+	}
+}
+
+func TestRunRejectsStalePackageRegistration(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/service.go", "package service\n\nfunc Service() {}\n")
+	writeExemptionBaseline(t, repoRoot, exemptionbudget.Entry{
+		Rule: exemptionbudget.RulePackageFuncLines, Target: "pkg/service/service.go#Removed", Owner: "service-maintainers", RemovalReason: "Extract the processing stages.",
+	})
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, fileLineLimit: 100, functionLineLimit: 100, cyclomaticLimit: 100}, &bytes.Buffer{}, stderr)
+	if err == nil || err.Error() != "[agent-factory:pkg-maint] found 1 exemption budget violation(s)" {
+		t.Fatalf("run() error = %v, want stale budget violation", err)
+	}
+	if got := stderr.String(); !strings.Contains(got, "rule=pkgmaintcheck:ignore-function-lines target=pkg/service/service.go#Removed is stale") ||
+		!strings.Contains(got, "remove its backend-exemption-budget.json entry or restore the directive") {
+		t.Fatalf("run() stderr = %q, want stale registration remediation", got)
 	}
 }
 
@@ -263,5 +293,20 @@ func writeGoFile(t *testing.T, repoRoot string, relativePath string, content str
 	}
 	if err := os.WriteFile(absolutePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("write %s: %v", relativePath, err)
+	}
+	baselinePath := filepath.Join(repoRoot, exemptionbudget.BaselinePath)
+	if _, err := os.Stat(baselinePath); os.IsNotExist(err) {
+		writeExemptionBaseline(t, repoRoot)
+	}
+}
+
+func writeExemptionBaseline(t *testing.T, repoRoot string, entries ...exemptionbudget.Entry) {
+	t.Helper()
+	data, err := json.Marshal(exemptionbudget.Baseline{Version: exemptionbudget.Version, Entries: entries})
+	if err != nil {
+		t.Fatalf("marshal exemption baseline: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, exemptionbudget.BaselinePath), data, 0o644); err != nil {
+		t.Fatalf("write exemption baseline: %v", err)
 	}
 }

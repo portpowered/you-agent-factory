@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -60,6 +62,39 @@ type Difference struct {
 	Target string
 }
 
+func Reconcile(root string, scope Scope) ([]Difference, error) {
+	data, err := os.ReadFile(filepath.Join(root, BaselinePath))
+	if err != nil {
+		return nil, fmt.Errorf("read exemption baseline %s: %w", BaselinePath, err)
+	}
+	baseline, err := Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	directives, err := Discover(root, scope)
+	if err != nil {
+		return nil, err
+	}
+	baseline.Entries = slices.DeleteFunc(baseline.Entries, func(entry Entry) bool {
+		return !includedRule(entry.Rule, scope)
+	})
+	return Compare(directives, baseline), nil
+}
+
+func FormatDifference(difference Difference) string {
+	identity := fmt.Sprintf("rule=%s target=%s", difference.Rule, difference.Target)
+	switch difference.Kind {
+	case DifferenceUnregistered:
+		return fmt.Sprintf("exemption budget %s is unregistered; add a sorted %s entry with a non-empty owner and removalReason", identity, BaselinePath)
+	case DifferenceStale:
+		return fmt.Sprintf("exemption budget %s is stale; remove its %s entry or restore the directive", identity, BaselinePath)
+	case DifferenceDuplicate:
+		return fmt.Sprintf("exemption budget %s is duplicated; keep exactly one directive and one %s entry", identity, BaselinePath)
+	default:
+		return fmt.Sprintf("exemption budget %s has unknown status %q", identity, difference.Kind)
+	}
+}
+
 func Parse(data []byte) (Baseline, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -94,10 +129,10 @@ func Validate(baseline Baseline) error {
 			return fmt.Errorf("exemption baseline entry %d has empty target", index)
 		}
 		if strings.TrimSpace(entry.Owner) == "" {
-			return fmt.Errorf("exemption baseline entry %s has empty owner", identity)
+			return fmt.Errorf("exemption baseline entry %s has empty owner; set a non-empty owner", identity)
 		}
 		if strings.TrimSpace(entry.RemovalReason) == "" {
-			return fmt.Errorf("exemption baseline entry %s has empty removalReason", identity)
+			return fmt.Errorf("exemption baseline entry %s has empty removalReason; describe the concrete refactor or threshold-removal condition", identity)
 		}
 		if index == 0 {
 			continue
@@ -159,9 +194,9 @@ func identityKey(rule, target string) string {
 
 func entryIdentity(rule, target string) string {
 	if strings.TrimSpace(target) == "" {
-		return rule + "/<empty-target>"
+		return fmt.Sprintf("rule=%s target=<empty-target>", rule)
 	}
-	return rule + "/" + target
+	return fmt.Sprintf("rule=%s target=%s", rule, target)
 }
 
 func compareIdentity(left, right Entry) int {
