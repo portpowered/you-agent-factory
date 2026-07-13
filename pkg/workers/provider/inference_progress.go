@@ -61,9 +61,16 @@ type InferenceProgressFragment struct {
 	ProviderSessionRef *interfaces.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
-	// ResponseEventDraft bypasses legacy fragment compatibility mapping. The
-	// Factory Session response-event store assigns publication metadata.
-	ResponseEventDraft *responseevents.Draft
+	CanonicalDraft     any
+}
+
+// CanonicalDraftFragment carries one provider-native canonical response draft
+// to the session-owned publisher without flattening it into a legacy fragment.
+func CanonicalDraftFragment(dispatchID string, draft any) InferenceProgressFragment {
+	return InferenceProgressFragment{
+		DispatchID:     strings.TrimSpace(dispatchID),
+		CanonicalDraft: draft,
+	}
 }
 
 // InferenceProgressPublisher receives provider progress fragments for one live
@@ -117,10 +124,7 @@ func FailedFragment(dispatchID string, providerSession *interfaces.ProviderSessi
 func StructuredResponseEvent(draft responseevents.Draft) InferenceProgressFragment {
 	cloned := draft
 	cloned.Payload = append(json.RawMessage(nil), draft.Payload...)
-	return InferenceProgressFragment{
-		DispatchID:         strings.TrimSpace(draft.DispatchID),
-		ResponseEventDraft: &cloned,
-	}
+	return CanonicalDraftFragment(draft.DispatchID, cloned)
 }
 
 // InferenceProgressPublishingCommandRunner publishes internal response-stream

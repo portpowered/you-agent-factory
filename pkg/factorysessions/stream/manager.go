@@ -139,12 +139,14 @@ func (m *Manager) inferenceProgressPublisher(
 		if session == nil && normalizedSessionID == factorysessions.DefaultSessionID {
 			session = m.host.GetLiveSession(factorysessions.DefaultSessionID)
 		}
-		if fragment.ResponseEventDraft != nil {
-			if err := publishCanonicalResponseEventDraft(session, *fragment.ResponseEventDraft); err != nil {
-				m.host.ObserveResponseStreamDegraded(
-					session, normalizedSessionID, dispatchID,
-					"CANONICAL_EVENT_PUBLISH_FAILED", logger, err,
-				)
+		if fragment.CanonicalDraft != nil {
+			draft, ok := fragment.CanonicalDraft.(responseevents.Draft)
+			if !ok {
+				m.host.ObserveResponseStreamDegraded(session, normalizedSessionID, dispatchID, "CANONICAL_EVENT_PUBLISH_FAILED", logger, fmt.Errorf("canonical response draft has type %T", fragment.CanonicalDraft))
+				return
+			}
+			if err := publishCanonicalDraft(session, draft); err != nil {
+				m.host.ObserveResponseStreamDegraded(session, normalizedSessionID, dispatchID, "CANONICAL_EVENT_PUBLISH_FAILED", logger, err)
 			}
 			return
 		}
@@ -177,18 +179,20 @@ func (m *Manager) inferenceProgressPublisher(
 	}
 }
 
-func publishCanonicalResponseEventDraft(session *factorysessions.LiveSession, draft responseevents.Draft) error {
+func publishCanonicalDraft(session *factorysessions.LiveSession, draft responseevents.Draft) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
 	}
-	event := responseevents.FactoryResponseEvent{
-		RunID: draft.RunID, Kind: draft.Kind, Phase: draft.Phase,
-		Provenance: draft.Provenance, Payload: append([]byte(nil), draft.Payload...),
-		DispatchID: draft.DispatchID, TurnID: draft.TurnID, ItemID: draft.ItemID,
-		ParentItemID: draft.ParentItemID, ProviderSessionRef: draft.ProviderSessionRef,
+	if err := responseevents.ValidateDraft(draft); err != nil {
+		return fmt.Errorf("validate canonical response draft: %w", err)
 	}
-	if _, err := session.ResponseEvents.Publish(event); err != nil {
-		return fmt.Errorf("publish canonical response-event draft: %w", err)
+	_, err := session.ResponseEvents.Publish(responseevents.FactoryResponseEvent{
+		RunID: draft.RunID, Kind: draft.Kind, Phase: draft.Phase, Provenance: draft.Provenance,
+		Payload: append([]byte(nil), draft.Payload...), DispatchID: draft.DispatchID, TurnID: draft.TurnID,
+		ItemID: draft.ItemID, ParentItemID: draft.ParentItemID, ProviderSessionRef: draft.ProviderSessionRef,
+	})
+	if err != nil {
+		return fmt.Errorf("publish canonical response draft: %w", err)
 	}
 	return nil
 }

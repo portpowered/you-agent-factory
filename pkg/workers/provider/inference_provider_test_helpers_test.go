@@ -809,11 +809,15 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 	var diagnostics []InferenceProgressFragment
 	var drafts []responseevents.Draft
 	for _, fragment := range published {
-		if fragment.ResponseEventDraft == nil {
+		if fragment.CanonicalDraft == nil {
 			diagnostics = append(diagnostics, fragment)
 			continue
 		}
-		drafts = append(drafts, *fragment.ResponseEventDraft)
+		draft, ok := fragment.CanonicalDraft.(responseevents.Draft)
+		if !ok {
+			t.Fatalf("canonical draft type = %T, want responseevents.Draft", fragment.CanonicalDraft)
+		}
+		drafts = append(drafts, draft)
 	}
 	if len(diagnostics) != 2 || len(drafts) != 2 {
 		t.Fatalf("published fragments = %#v, want two diagnostics and two structured drafts", published)

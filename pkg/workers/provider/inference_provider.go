@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
@@ -45,14 +45,7 @@ const (
 	providerSessionKindResponseID     = "response_id"
 )
 
-var providerAutomationEnvDefaults = []workerprocess.CommandEnvEntry{
-	{Name: "GIT_EDITOR", Value: "true"},
-	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
-	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
-	{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
-	{Name: "EDITOR", Value: "true"},
-	{Name: "VISUAL", Value: "true"},
-}
+var providerAutomationEnvDefaults = commandenv.AutomationDefaults()
 
 var providerSessionPatterns = []struct {
 	kind    string
@@ -100,6 +93,32 @@ func WithInferenceProgressPublisher(publisher InferenceProgressPublisher) Script
 	}
 }
 
+// ResponseStreamExecutor runs a provider-owned structured response lifecycle
+// without making the core provider package depend on Factory Session types.
+type ResponseStreamExecutor interface {
+	Supports(provider string) bool
+	Execute(context.Context, interfaces.ProviderInferenceRequest, bool, CommandRunner, InferenceProgressPublisher, logging.Logger) ResponseStreamExecutionResult
+}
+
+// ResponseStreamExecutionResult carries the structured execution outcome back
+// to the provider boundary for existing diagnostics and failure publication.
+type ResponseStreamExecutionResult struct {
+	Response       interfaces.InferenceResponse
+	Request        CommandRequest
+	Command        CommandResult
+	FailureType    interfaces.WorkFailureType
+	FailureMessage string
+	FailureSession *interfaces.ProviderSessionMetadata
+	Err            error
+}
+
+// WithResponseStreamExecutor injects structured provider mode selection.
+func WithResponseStreamExecutor(executor ResponseStreamExecutor) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) {
+		p.responseStreamExecutor = executor
+	}
+}
+
 // WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
 func WithMaterializeOptions(opts *materialize.Options) ScriptWrapProviderOption {
 	return func(p *ScriptWrapProvider) {
@@ -120,7 +139,8 @@ type ScriptWrapProvider struct {
 	Logger logging.Logger
 	exec   CommandRunner
 
-	progressPublisher InferenceProgressPublisher
+	progressPublisher      InferenceProgressPublisher
+	responseStreamExecutor ResponseStreamExecutor
 }
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
@@ -166,6 +186,14 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 
 	logger.Info("inferencer: request starting",
 		providerLogFields(req, "model", req.Model)...)
+	if p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider) {
+		if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderClaude)) {
+			if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
+				return providerRequestValidationFailure(req, err, logger)
+			}
+		}
+		return p.executeStructuredResponseStream(ctx, req, logger)
+	}
 
 	behavior := providerBehaviorFor(req.ModelProvider, logger)
 	buildCtx := &ProviderBuildContext{
@@ -175,15 +203,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	defer buildCtx.release()
 	args, err := behavior.BuildArgs(ctx, req, p.SkipPermissions, buildCtx)
 	if err != nil {
-		logger.Error("inferencer: request argument validation failed",
-			providerLogFields(req, "error", err.Error())...)
-		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
-			interfaces.WorkFailureTypePermanentBadRequest,
-			err.Error(),
-			err,
-			nil,
-			workDiagnosticsForInferenceRequest(req),
-		)
+		return providerRequestValidationFailure(req, err, logger)
 	}
 	execReq := behavior.BuildCommandRequest(req, args)
 	logger.Info("provider invocation prepared", providerPreparedLogFields(ctx, req, execReq)...)
@@ -240,6 +260,35 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	}, nil
 }
 
+func (p *ScriptWrapProvider) executeStructuredResponseStream(
+	ctx context.Context,
+	req interfaces.ProviderInferenceRequest,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	started := time.Now()
+	result := p.responseStreamExecutor.Execute(ctx, req, p.SkipPermissions, p.exec, p.progressPublisher, logger)
+	duration := time.Since(started)
+	diagnostics := commandDiagnostics(result.Request, result.Command, duration, false)
+	if result.Err != nil || result.FailureType != "" {
+		failureType := result.FailureType
+		if failureType == "" {
+			failureType = interfaces.WorkFailureTypeUnknown
+		}
+		message := strings.TrimSpace(result.FailureMessage)
+		if message == "" {
+			message = "Provider invocation failed."
+		}
+		providerErr := newProviderErrorWithDiagnostics(failureType, message, result.Err, result.FailureSession, diagnostics)
+		p.publishFailureFragment(req.Dispatch.DispatchID, result.FailureSession, providerErr)
+		return interfaces.InferenceResponse{}, providerErr
+	}
+	result.Response.Diagnostics = diagnostics
+	logger.Info("inferencer: request completed",
+		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(result.Response.Content)), result.Response.ProviderSession)...)
+	p.publishCompletedFragment(req.Dispatch.DispatchID, result.Response.ProviderSession)
+	return result.Response, nil
+}
+
 // ContainsStopToken checks whether the output text contains the given stop token.
 // The check is case-sensitive and looks for the token as a substring.
 // This is extracted as a pure function for independent unit testing.
@@ -253,7 +302,23 @@ func ContainsStopToken(output, stopToken string) bool {
 // buildProviderEnv merges subprocess environment sources with deterministic
 // precedence: process environment, provider env vars, then automation defaults.
 func buildProviderEnv(envVars map[string]string) []string {
-	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(envVars), providerAutomationEnvDefaults)
+	return commandenv.Build(envVars)
+}
+
+func providerRequestValidationFailure(
+	req interfaces.ProviderInferenceRequest,
+	err error,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	logger.Error("inferencer: request argument validation failed",
+		providerLogFields(req, "error", err.Error())...)
+	return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		err.Error(),
+		err,
+		nil,
+		workDiagnosticsForInferenceRequest(req),
+	)
 }
 
 // TODO: right now the stderr/stdout for the print prints out the entire response log for the stdout....
