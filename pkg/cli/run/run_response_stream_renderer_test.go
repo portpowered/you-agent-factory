@@ -719,6 +719,59 @@ func TestRun_FactoryInvocationResponseStreamJSONPreservesSlowWriterOrder(t *test
 	assertSlowWriterCanonicalRecords(t, output.String(), eventCount)
 }
 
+func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocationReturn(t *testing.T) {
+	preserveRunGlobals(t)
+	text := "goal completed"
+	var output strings.Builder
+	attachable := newRecordingResponseEventAttachable()
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		return stubResponseEventInvocationService{
+			stubInvocationService: stubInvocationService{
+				run: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					<-attachable.subscribed
+					if err := attachable.publish(canonicalResponseEventFixture(1, responseevents.KindMessage)); err != nil {
+						return apisurface.FactoryInvocationResult{}, err
+					}
+					return apisurface.FactoryInvocationResult{
+						RequestID: "req-terminal-boundary",
+						TraceID:   "trace-terminal-boundary",
+						Status:    factoryapi.InvocationTerminalStatusCompleted,
+						PrimaryResult: []interfaces.WorkContentPart{
+							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						},
+					}, nil
+				},
+			},
+			attachable: attachable,
+		}, nil
+	}
+	if err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		InvocationOutputMode:     InvocationOutputResponseStream,
+		JSONOutput:               true,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("NDJSON lines = %d, want terminal-boundary event plus final result:\n%s", len(lines), output.String())
+	}
+	if !strings.Contains(lines[0], `"recordType":"response_event"`) {
+		t.Fatalf("first record = %q, want response_event", lines[0])
+	}
+	if !strings.Contains(lines[1], `"recordType":"invocation_result"`) {
+		t.Fatalf("final record = %q, want invocation_result", lines[1])
+	}
+}
+
 func publishCanonicalResponseEventFixtures(attachable *recordingResponseEventAttachable, count int) error {
 	for index := 1; index <= count; index++ {
 		if err := attachable.publish(canonicalResponseEventFixture(int64(index), responseevents.KindMessage)); err != nil {

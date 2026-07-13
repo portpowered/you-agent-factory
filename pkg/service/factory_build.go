@@ -31,6 +31,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
@@ -1638,6 +1639,17 @@ func (b *InvocationBootstrap) InvokeFactorySession(
 		return apisurface.FactoryInvocationResult{}, fmt.Errorf("invocation bootstrap is required")
 	}
 	return b.Service.InvokeFactorySession(ctx, sessionID, request)
+}
+
+// SubscribeSessionResponseEventsFromLatest forwards canonical response-event
+// attachment through the bootstrap-owned FactoryService.
+func (b *InvocationBootstrap) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	if b == nil || b.Service == nil {
+		return nil, fmt.Errorf("invocation bootstrap is required")
+	}
+	return b.Service.SubscribeSessionResponseEventsFromLatest(sessionID)
 }
 
 // CloseFactorySession releases a bootstrap-owned live session through the same

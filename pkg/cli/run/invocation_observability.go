@@ -298,8 +298,10 @@ type responseEventSink interface {
 }
 
 type responseEventAttachment struct {
-	cancel context.CancelFunc
-	done   chan struct{}
+	cancel       context.CancelFunc
+	done         chan struct{}
+	subscription *responseeventstore.Subscription
+	sink         responseEventSink
 }
 
 func startResponseEventAttachment(
@@ -316,10 +318,14 @@ func startResponseEventAttachment(
 		return nil
 	}
 	attachCtx, cancel := context.WithCancel(ctx)
-	attachment := &responseEventAttachment{cancel: cancel, done: make(chan struct{})}
+	attachment := &responseEventAttachment{
+		cancel:       cancel,
+		done:         make(chan struct{}),
+		subscription: subscription,
+		sink:         sink,
+	}
 	go func() {
 		defer close(attachment.done)
-		defer subscription.Detach()
 		consumeResponseEventSubscription(attachCtx, subscription, sink)
 	}()
 	return attachment
@@ -331,6 +337,10 @@ func (a *responseEventAttachment) stop() {
 	}
 	a.cancel()
 	<-a.done
+	if events, err := a.subscription.Drain(); err == nil && len(events) > 0 {
+		a.sink.onResponseEvents(events)
+	}
+	a.subscription.Detach()
 }
 
 func consumeResponseEventSubscription(

@@ -184,6 +184,10 @@ primary-result behavior.
   event, emits only `response_event` records, and sends every event plus the
   final `invocation_result` through one lossless ordered writer. Do not reuse the
   human progress queue's drop or drain-timeout policy for canonical JSON records.
+  Keep `service.InvocationBootstrap.SubscribeSessionResponseEventsFromLatest`
+  as a transparent forward and explicitly drain the retained subscription after
+  stopping its live consumer so an event published at invocation return remains
+  ordered before the terminal record.
   Human-only suppression helpers:
   `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
   `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop

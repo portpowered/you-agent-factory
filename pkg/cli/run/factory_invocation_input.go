@@ -218,6 +218,8 @@ type sessionResponseEventInvocationRunner interface {
 	sessionResponseEventAttachable
 }
 
+var _ sessionResponseEventInvocationRunner = (*service.InvocationBootstrap)(nil)
+
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
 	if strings.TrimSpace(cfg.WorkFile) != "" {
 		return nil, false, nil
