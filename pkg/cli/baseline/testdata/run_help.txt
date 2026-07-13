@@ -47,7 +47,6 @@ Flags:
       --runtime-metrics-max-size-mb int                                              rotate each runtime metrics file after this many megabytes (default 100)
       --with-mock-workers string[="__agent_factory_default_mock_workers_config__"]   enable mock-worker execution with an optional mock-workers JSON config path
       --work string                                                                  path to initial FACTORY_REQUEST_BATCH JSON file to submit
-      --workflow string                                                              workflow ID to run (default: all)
 
 Global Flags:
   -d, --debug                                  emit lower-level command diagnostics where supported (implies --verbose)

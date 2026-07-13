@@ -26,4 +26,3 @@ server		http://localhost:7437	factory API base URI (http:// or https://); HTTP c
 verbose	v	false	emit concise command diagnostics to stderr
 with-mock-workers			enable mock-worker execution with an optional mock-workers JSON config path
 work			path to initial FACTORY_REQUEST_BATCH JSON file to submit
-workflow			workflow ID to run (default: all)

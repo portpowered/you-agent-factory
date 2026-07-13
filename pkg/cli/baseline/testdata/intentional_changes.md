@@ -13,7 +13,7 @@ contract without an intentional ledger update.
 
 | Surface | Identifier | Rationale |
 | --- | --- | --- |
-| `you run` flag | `workflow` | Remove `you run --workflow`; workflow selection uses dedicated workflow commands. |
+| _none_ | _none_ | `you run --workflow` removed; workflow selection uses dedicated workflow commands. |
 
 ## Planned moves
 
