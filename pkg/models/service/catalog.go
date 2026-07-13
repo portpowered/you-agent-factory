@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )

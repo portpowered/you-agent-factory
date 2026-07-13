@@ -124,7 +124,7 @@ primary-result behavior.
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Process startup follows `cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`: `pkg/transports/cli/startup` carries parsed run or MCP inputs, `pkg/root` selects one `initializer.ProcessPolicy`, `pkg/wire/process.go` applies that policy while constructing exactly one typed `initializer.ProcessGraph`, and `pkg/initializer/core.go` validates the graph policy before starting the already-built graph. Do not duplicate or recompute mode/sidecar policy downstream; API, dashboard, runtime mode, worker-scheduler, and watcher enablement must be governed by the root-selected policy carried on the graph. Keep domain construction out of root and do not restore root-local deferred lifecycle closures or process-global builder registration. The normalized root home must likewise remain authoritative: thread it through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, system-config persistence, automatic recording, runtime logging, and runtime metrics rather than consulting ambient process globals after command construction. Run construction is split between `run.BuildApplication` and `Application.Run`; MCP construction in `pkg/transports/cli/mcp` is split between `BuildServeApplication` and `ServeApplication.Run`, so construction failures occur before initializer startup. Initializer-backed local construction uses `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`) and `pkg/wire/cli.go` (`BuildCLIRunner`). Dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `wire.BuildCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/transports/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Boundary coverage lives in `pkg/root/process_test.go`, `pkg/wire/process_test.go`, `pkg/initializer/initialize_test.go`, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`; transport parity coverage remains in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/transports/http/... ./pkg/transports/cli/... ./pkg/transports/mcp/... ./pkg/transports/cli/... ./pkg/initializer/... -short`.
+- Process startup follows `cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`: `pkg/transports/cli/startup` carries parsed run or MCP inputs, `pkg/root` selects one `initializer.ProcessPolicy`, `pkg/wire/process.go` applies that policy while constructing exactly one typed `initializer.ProcessGraph`, and `pkg/initializer/core.go` validates the graph policy before starting the already-built graph. Do not duplicate or recompute mode/sidecar policy downstream; API, dashboard, runtime mode, worker-scheduler, and watcher enablement must be governed by the root-selected policy carried on the graph. Keep domain construction out of root and do not restore root-local deferred lifecycle closures or process-global builder registration. The normalized root home must likewise remain authoritative: thread it through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, system-config persistence, automatic recording, runtime logging, and runtime metrics rather than consulting ambient process globals after command construction. Run construction is split between `run.BuildApplication` and `Application.Run`; MCP construction is split between `mcp.BuildServeApplication` and `ServeApplication.Run`, so construction failures occur before initializer startup. Initializer-backed local construction uses `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`) and `pkg/wire/cli.go` (`BuildCLIRunner`). Dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `wire.BuildCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/transports/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Boundary coverage lives in `pkg/root/process_test.go`, `pkg/wire/process_test.go`, `pkg/initializer/initialize_test.go`, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`; transport parity coverage remains in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/transports/http/... ./pkg/transports/cli/... ./pkg/transports/mcp/... ./pkg/initializer/... -short`.
 - `you models invoke` reuses the same `service.BuildInvocationBootstrap` /
   `service.NormalizeInvocationBootstrapConfig` path as one-shot factory
   invocation, wired from `pkg/transports/cli/models/bootstrap_invoke.go`. The CLI must call
@@ -197,7 +197,31 @@ primary-result behavior.
   presentation fallback.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
-  `pkg/factorysessions/responsestream` fragment kinds). Legacy fragment
+  `pkg/factorysessions/responsestream` fragment kinds).
+
+  Provider-native structured response adapters live in provider-owned
+  subpackages under `pkg/workers/provider/` and implement the neutral lifecycle
+  in `pkg/workers/provider/adapter`. Keep each decoder invocation-local and
+  stateful, return only canonical `responseevents.Draft` values plus bounded
+  diagnostics, and leave event ID, sequence, recorded time, and Factory Session
+  publication to the session owner. Adapter `BuildCommand` selects structured
+  output only for the response-adapter execution path; the established
+  final-only provider command path must remain unchanged until its caller
+  explicitly opts into response streaming. Both command paths must use
+  `pkg/workers/provider/commandenv` so provider variables retain the established
+  non-interactive Git/editor safeguards, and the production mode-selection
+  boundary must preserve provider input validation before starting either
+  runner. Native JSONL fixture tests should
+  fragment reads and flush an unterminated final record so command selection,
+  decoder buffering, and final-result parsing are proven independently.
+  Provider retry and compaction records should publish only bounded typed facts
+  with static safe messages; adapters may classify those facts but must not
+  sleep, rerun commands, choose backoff, or expose raw provider payloads.
+  Preserve optional provider attribution only from an explicit native field on
+  the supported record, and omit malformed or absent attribution instead of
+  inferring it from neighboring stream activity.
+
+  Legacy fragment
   compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
@@ -303,18 +327,14 @@ primary-result behavior.
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
--   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
+- `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
-  routes review mode from `check-goal` (`plain` -> `goal:review`, `structured` ->
-  `goal:structured-review`) so plain classifier and structured envelope lanes are
-  both reachable without competing logical advances from `goal:check`. The built-in
-  `goal-checker` script worker must emit only the lane label on stdout after
-  verification (`plain` by default, opt-in `structured` via
-  `YOU_GOAL_REVIEW_MODE`) because `check-goal` is a `CLASSIFIER_WORKSTATION`.
-  Retry exhaustion is authored separately for `review-goal` and
-  `structured-review-goal`, each with its own guarded loop-breaker from `goal:plan`
-  to `goal:failed`.
+  has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
+  accepted completion routes to `goal:complete`, continue/reject route back to
+  `goal:init`, and worker or workstation failure routes to `goal:failed`.
+  `pkg/config/builtingoal/` owns the authored factory and concise executor prompt;
+  assembly and materialization require only `goal-executor` and `execute-goal`.
   Packaged workstation `body` templates must use canonical `PromptData` roots
   such as `(index .Inputs 0).Payload`; legacy top-level aliases like
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.
@@ -359,42 +379,15 @@ primary-result behavior.
   selects terminal `goal:complete` work content as the primary result.
   `summary.go` shapes terminal `execute-goal` work content from worker output so
   EXPLICIT primary-result selection returns the final summary instead of
-  submitted goal input text; classifier `review-goal` output is a route label
-  and must preserve carried summary content. `primary_result_test.go` covers both
+  submitted goal input text. `primary_result_test.go` covers both
   successful EXPLICIT selection and unresolved failure when `goal:complete` is
   absent from terminal work in scope.
-- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
-  reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
-  Goal routing envelopes with authored `classificationRoutes` map parsed
-  `decision` labels onto `SelectedClassificationLabel` while preserving
-  `Feedback`, optional `Output`, and `RecordedOutputWork`.
-- `pkg/workers/executor/agent.go` routes workstations with
-  `outcomeFormat: decision-envelope` through
-  `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
-  Those workstations with authored
-  `classificationRoutes` use `goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed`.
-- `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
-  reviewer/checker envelope shape, the standard outcome vocabulary, the
-  packaged-goal goal-routing decision vocabulary used when
-  `classificationRoutes` are present, and malformed-input behavior.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
-  invocation summary shaping on `execute-goal` workstations alongside packaged
-  TTS metadata shaping. `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
-  proves each authored `review-goal` classifier label routes to the expected goal place
-  through the mapped runtime net and proves structured `structured-review-goal`
-  envelopes route from parsed decision labels while preserving mapped
-  `WorkResult` fields. The same file also proves malformed JSON and unknown
-  decisions route to `goal:failed` with actionable failure text instead of
-  misrouting to complete, rework, or escalation states.
-- `pkg/packagedfactories/goal/factory_test.go` proves `goal:execute` schedules
-  the `check-goal` review-mode classifier in the mapped runtime net.
-- `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` proves the
-  materialized built-in goal topology dispatches `review-goal` when
-  `check-goal` returns `plain` and `structured-review-goal` when `check-goal`
-  returns `structured`, using the real authored `goal-checker` contract rather
-  than mocked lane-label output. The same file proves repeated structured
-  `needs_changes` rework trips the structured loop-breaker instead of retrying
-  forever.
+  invocation summary shaping on the single `execute-goal` repeater alongside
+  packaged TTS metadata shaping.
+- `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
+  proves the assembled minimal topology repeats continue/reject outcomes through
+  `goal:init` and routes worker failure to `goal:failed` without live providers.
 - Behavioral proof for named goal batch invocation lives in
   `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
@@ -530,6 +523,14 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- Production provider mode selection lives at the `pkg/workers/provider`
+  execution boundary: a configured Factory Session response-stream publisher
+  selects a registered structured adapter, while final-only invocations retain
+  the established provider behavior. Provider-native `responseevents.Draft`
+  values must be published directly by `pkg/factorysessions/stream` so the
+  session store assigns event ID, sequence, recorded time, and Factory Session
+  identity without flattening stable message or tool identity through the
+  legacy fragment compatibility mapper.
 - `docs/reference/run.md` is the customer-facing owner for packaged `@you/goal`
   invocation behavior. Operator-visible blocked, needs-human, paused,
   interrupted, failed, timed-out, and unresolved-primary-result outcomes plus
@@ -547,4 +548,4 @@ primary-result behavior.
   authored fields when the current factory payload also declares that parameter
   in `invocationSignature`, or live session pages will fall back to legacy UI
   flows even when backend runtime validation already accepts the factory.
-- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/modelhost.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `FactoryService` and `runtimehost.Host` only compose or forward the model collaborator. Factory worker execution routes through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.
+- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/models/local/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/models/host/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.

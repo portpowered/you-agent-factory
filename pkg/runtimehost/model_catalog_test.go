@@ -13,8 +13,8 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -92,8 +92,8 @@ func TestRuntimeHostModelServicePreservesCatalogPullObservabilityAndErrors(t *te
 	}}
 	recorder := &runtimeHostPullMetricsRecorder{}
 	logCore, logs := observer.New(zap.InfoLevel)
-	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{ModelPullMetricsRecorder: recorder})
-	host.logger = zap.New(logCore)
+	logger := zap.New(logCore)
+	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{Logger: logger, ModelPullMetricsRecorder: recorder})
 
 	listed, err := host.ListModels(context.Background())
 	if err != nil || len(listed.Results) != 1 || listed.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
@@ -124,8 +124,8 @@ func TestRuntimeHostModelServicePreservesPullFailureSignals(t *testing.T) {
 	logCore, logs := observer.New(zap.WarnLevel)
 	puller := &runtimeHostModelPuller{}
 	modelHost := &runtimeHostModelHost{pullErr: apisurface.ErrManagedRuntimeSourceFetchFailed}
-	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{ModelPullMetricsRecorder: recorder})
-	host.logger = zap.New(logCore)
+	logger := zap.New(logCore)
+	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{Logger: logger, ModelPullMetricsRecorder: recorder})
 
 	_, err := host.PullModel(context.Background(), "voice-model")
 	if !errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed) {
@@ -179,7 +179,7 @@ func runtimeHostModelConfig(t *testing.T) *factoryconfig.LoadedFactoryConfig {
 
 func runtimeHostModelFacade(runtimeCfg *factoryconfig.LoadedFactoryConfig, host modelhost.Host, puller modelAssetPuller, cfg *Config) *Host {
 	facade := &Host{
-		cfg: cfg, policy: CoordinatorPolicyFromConfig(cfg), modelAssets: puller,
+		cfg: cfg, policy: CoordinatorPolicyFromConfig(cfg), modelAssets: puller, logger: cfg.Logger,
 		startupBundle: &factoryRuntimeBundle{RuntimeCfg: runtimeCfg, ModelHost: host, ModelAssets: puller},
 	}
 	facade.modelService = wireModelServiceCollaborator(facade, cfg)

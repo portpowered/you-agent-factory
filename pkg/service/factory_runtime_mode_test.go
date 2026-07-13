@@ -24,8 +24,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -2417,6 +2417,10 @@ func waitForSnapshotMatch(
 	for time.Now().Before(deadline) {
 		snap, err := svc.GetEngineStateSnapshot(context.Background())
 		if err != nil {
+			if strings.Contains(err.Error(), "runtime is not available") {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
 			t.Fatalf("GetEngineStateSnapshot during %s: %v", phase, err)
 		}
 		last = snap

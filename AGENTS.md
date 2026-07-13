@@ -80,17 +80,16 @@ the standards.
 - `examples/` contains example factory directories.
 - `factory/` contains this repository's checked-in factory scaffold and
   factory-local docs.
-- `pkg/transports/http/` contains handwritten HTTP handlers, HTTP boundary and
-  server tests, API contract tests, and generated-only contract/client child
-  packages, plus HTTP compatibility fixture data under `testdata/`.
+- `pkg/transports/http/` contains handwritten HTTP handlers, API boundary and
+  server tests, OpenAPI contract tests, HTTP test data, and generated-only
+  server-contract and client child packages.
 - `pkg/transports/mapping/` contains transport-neutral public contracts,
   request/response shaping, and stateless composition of explicit wired
   collaborators into transport-facing application surfaces.
-- `pkg/transports/cli/` owns setup, configuration, documentation,
-  factory-authoring, workflow validation/preview, execution, Work, Factory
-  Session, model, MCP, server/startup, and dashboard CLI adapters.
-- `pkg/transports/mcp/` owns Factory Session MCP tool translation and the stdio
-  protocol server; it delegates execution to injected application collaborators.
+- `pkg/transports/cli/` contains CLI commands and adapters for shared service
+  logic, including the production root command.
+- `pkg/transports/mcp/` contains Factory Session MCP tools and the stdio
+  protocol server.
 - `pkg/config/` contains factory config loading, persistence, mapping,
   validation entrypoints, built-in factory layout, and runtime config
   projections.
@@ -104,17 +103,17 @@ the standards.
   types used across subsystems.
 - `pkg/invocations/`, `pkg/workcontent/`, `pkg/workquery/`, and
   `pkg/materialize/` contain shared work and invocation helpers.
-- `pkg/localmodels/` contains managed model runtime catalog, readiness,
+- `pkg/models/local/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
+- `pkg/models/host/` contains process-wide model runtime lifecycle, leases,
+  capacity, and diagnostics; `pkg/models/assets/` owns local model assets.
 - `pkg/petri/` contains internal Petri-net primitives.
 - `pkg/service/` coordinates backend service behavior across sessions,
   runtime construction, model catalog, replay, ingestion, and factory save or
   validation flows.
-- `pkg/transports/http/` owns API generation entrypoints and the dedicated
-  generated server-contract and Go-client packages.
-- `pkg/workers/`, `pkg/hostedworkers/`, and `pkg/packagedfactories/` contain
-  worker execution, provider integration, mock workers, worktrees, hosted
-  workers, and packaged factory support.
+- `pkg/workers/` contains worker execution, provider integration, mock workers,
+  worktrees, and hosted workers; `pkg/packagedfactories/` contains packaged
+  factory support.
 - `pkg/orchestrators/javascript/preview`, `pkg/orchestrators/javascript/policy`,
   `pkg/orchestrators/javascript/result`, `pkg/orchestrators/javascript/source`,
   and `pkg/orchestrators/javascript/validation` contain JavaScript workflow

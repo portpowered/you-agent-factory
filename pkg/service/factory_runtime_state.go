@@ -22,7 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"

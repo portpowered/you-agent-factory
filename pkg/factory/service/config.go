@@ -7,9 +7,9 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )

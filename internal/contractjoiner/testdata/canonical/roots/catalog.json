@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "prefixItems": [
+    {"$ref": "../components/shared.json#/$defs/entry"},
+    {"const": "second", "description": "array order stays authored"}
+  ],
+  "$id": "https://schemas.example.test/catalog.json",
+  "properties": {
+    "zeta": {"$ref": "../components/shared.json"},
+    "alpha": {"const": {"nested": {"z": true, "a": false}}},
+    "numeric": {"const": 9007199254740993}
+  }
+}

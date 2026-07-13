@@ -20,7 +20,7 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
   read models live under `pkg/transports/cli/`.
 - `pkg/factory/` owns runtime engine behavior, scheduling, markings, transitions, resources, and engine state snapshots.
 - `pkg/service/` wires the runtime, configuration, API server, replay, logging, and worker construction.
-- `pkg/api/` serves runtime HTTP endpoints and the embedded dashboard shell.
+- `pkg/transports/http/` serves runtime HTTP endpoints and the embedded dashboard shell.
 - `pkg/workers/` owns worker execution contracts, provider calls, script command execution, and work-scoped metadata.
 - `pkg/replay/` owns record/replay artifact construction, side-effect matching, and deterministic replay behavior.
 - `ui/` is the Vite dashboard source. `ui/dist/` is generated local build output, and `make ui-build` refreshes the ignored embed registration that wires those assets into Go builds.
@@ -161,7 +161,7 @@ The classifier is what decides whether the three downstream required test lanes 
 | `docs-only` | `docs/**` plus root-level docs or text files such as `README.md`, `*.md`, `*.mdx`, and `*.txt` | skip `UI Coverage`, skip `UI Browser Integration`, skip `Backend Verification` | No downstream lane rerun is expected; if the change was misclassified, rerun the classifier logic through `go run ./cmd/ciclassify ...` or use the full path with `make verify-pr`. |
 | `ui-only` | `ui/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | run `UI Coverage`, run `UI Browser Integration`, skip `Backend Verification` | `make run-sharded-ui-coverage` and `make ui-integration-test` |
 | `backend-only` | `cmd/**`, `pkg/**`, or `tests/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | skip `UI Coverage`, skip `UI Browser Integration`, run `Backend Verification` | `make test-backend-verification` |
-| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/api/**`, `pkg/transports/mapping/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify-pr` |
+| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/transports/http/**`, `pkg/transports/mapping/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify-pr` |
 
 The workflow publishes this routing decision twice in GitHub Actions: the `Classify PR Impact` job summary shows the overall classification, changed-file count, touched areas, and the full required rerun command, and each downstream lane summary shows its own `run` versus `skip` decision together with the specific local rerun command and the short reason emitted by `cmd/ciclassify`.
 
@@ -393,12 +393,12 @@ the dashboard UI OpenAPI generator to refresh
 make api-smoke
 ```
 
-`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
+`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/transports/http/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
 
 5. Run the focused API and package checks that cover the contract boundary:
 
 ```bash
-go test ./pkg/api -count=1
+go test ./pkg/transports/http -count=1
 make test
 make lint
 ```
@@ -603,7 +603,7 @@ behavior explicit inside the test that needs it.
 - Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/transports/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
 - Multi-session runtime ownership should follow `docs/architecture/session-runtime-ownership.md`: the service is the coordinator and router, while session runtime config, execution base, event history, and active runtime state belong to the addressed live session rather than mutable service-global config.
 - Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
-- Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/api`, `pkg/config`, or `pkg/replay` behavior tests.
+- Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/transports/http`, `pkg/config`, or `pkg/replay` behavior tests.
 - Provider-error and lane-isolation smoke tests should use `pkg/testutil` harness helpers instead of open-coded fixture scaffolding and polling loops.
 - Shared Codex, Cursor-family, and Claude provider-failure fixtures live in `pkg/workers/testdata/provider_error_corpus.json`; extend that corpus and load it through `provider.LoadProviderErrorCorpus()` from `pkg/workers/provider` before adding new inline raw provider payloads to worker or functional tests.
 - Shared provider-error smoke scenarios should assert `CompletedDispatch.FailureMetadata` type and family from the corpus entry they use, so normalization and runtime routing stay aligned through the full worker-pool path instead of only through final token placement.

@@ -57,7 +57,7 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 
 | Owning package | Active directives | Files | Quality-system status |
 | --- | ---: | ---: | --- |
-| `pkg/api` | 7 | 3 | directive + coverage baseline |
+| `pkg/transports/http` | 7 | 3 | directive + coverage baseline |
 | `pkg/transports/http/providersessioncursor` | 1 | 1 | directive only |
 | `pkg/transports/http/servertests` | 1 | 1 | directive only |
 | `pkg/transports/http/workstationprojection` | 3 | 1 | directive only |
@@ -127,14 +127,14 @@ directive occurrence in the focused scan:
 - `pkg/factorysessions/dataplane`
 - `pkg/factorysessions/service`
 - `pkg/factorysessions/stream`
-- `pkg/hostedworkers`
-- `pkg/hostedworkers/linear`
+- `pkg/workers/hosted`
+- `pkg/workers/hosted/linear`
 - `pkg/invocations`
-- `pkg/localmodels`
-- `pkg/localmodels/assets`
+- `pkg/models/local`
+- `pkg/models/assets`
 - `pkg/logging`
 - `pkg/transports/mcp/server`
-- `pkg/modelhost`
+- `pkg/models/host`
 - `pkg/orchestrators/javascript/policy`
 - `pkg/orchestrators/javascript/preview`
 - `pkg/orchestrators/javascript/result`
@@ -623,7 +623,7 @@ as follows:
 | --- | --- |
 | Batch 005 — `create-root-process-owner` | Active head `4516ea35aeff5cdde5e578b9000b8054db6bb834`; changed files: `pkg/transports/cli/root.go`, `pkg/transports/cli/root_run_test.go`, `pkg/transports/cli/root_work.go`, `pkg/config/operatorconfig/environment_resolution.go`, `pkg/root/input.go`, `pkg/root/root.go`, `pkg/root/root_test.go`. |
 | Batch 005 — `create-wire-application-graph` | Active head `8015a87fb4594a1659ab21c6a7720bf324ea7a85`; changed files: `pkg/wire/doc.go`, `pkg/wire/graph.go`, `pkg/wire/graph_test.go`. The dependency-blocked initializer item had no implementation file set yet. |
-| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/transports/http/**`, `pkg/transports/cli/**`, `pkg/transports/mcp/**`, `pkg/transports/mapping/**`, and `pkg/transports/cli/**`. |
+| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/transports/http/**`, `pkg/transports/mapping/**`, `pkg/transports/cli/**`, and `pkg/transports/mcp/**`. |
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factorysessionexecution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |

@@ -354,7 +354,7 @@ Do not place raw JavaScript VM state into the general engine snapshot. Persist c
    - Wires Petri orchestrator factories into factory/session runtime construction.
    - Owns compatibility/defaulting for existing `factory.json` files that do not yet declare `orchestrator.kind`.
 
-12. `pkg/mcp`
+12. `pkg/transports/mcp`
    - Exposes MCP tools/resources/prompts over the same service layer used by CLI/API/UI.
    - Should share normal backend session runtime/server instancing whenever practical.
    - Supports stdio and HTTP/SSE transport if the repo's server architecture supports both cleanly.
@@ -1048,7 +1048,7 @@ Acceptance:
 - `func GeneratedFactoryArtifact(value interfaces.FactoryArtifact) factoryapi.FactoryArtifact`
 - `func FactoryOrchestratorErrorResponse(err error) factoryapi.ErrorResponse`
 
-`pkg/api/factory_session_handlers.go`
+`pkg/transports/http/factory_session_handlers.go`
 
 - `func (s *Server) ListFactories(...)`
 - `func (s *Server) CreateFactory(...)`
@@ -1155,7 +1155,7 @@ Acceptance:
 
 ### MCP Server
 
-`pkg/mcp/server.go`
+`pkg/transports/mcp/server.go`
 
 - `func NewServer(service orchestrators.Service, options ServerOptions) *Server`
 - `func (s *Server) RegisterWorkflowTools() error`
@@ -1164,7 +1164,7 @@ Acceptance:
 - `func (s *Server) ServeStdio(ctx context.Context, in io.Reader, out io.Writer) error`
 - `func (s *Server) ServeHTTP(ctx context.Context, listener net.Listener) error`
 
-`pkg/mcp/workflow_tools.go`
+`pkg/transports/mcp/workflow_tools.go`
 
 - `func workflowListTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowValidateTool(ctx context.Context, args ToolArgs) (ToolResult, error)`

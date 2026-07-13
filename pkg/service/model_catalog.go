@@ -10,15 +10,14 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
-	"go.uber.org/zap"
 )
 
 func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
@@ -89,21 +88,22 @@ func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig)
 		return modelsservice.New(modelsservice.Dependencies{})
 	}
 	return modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig:    fs.currentRuntimeConfig,
-		ModelHost:        fs.modelHost,
-		ModelAssetPuller: fs.modelAssetPuller,
-		Logger:           func() *zap.Logger { return fs.logger },
-		Clock:            fs.modelServiceClock,
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
-			recorder := fs.modelPullMetricsRecorder()
-			if recorder == nil {
-				return nil
-			}
-			return modelPullMetricsHostAdapter{inner: recorder}
-		},
+		RuntimeConfig:           fs.currentRuntimeConfig,
+		ModelHost:               fs.modelHost(),
+		ModelAssetPuller:        fs.modelAssetPuller(),
+		Logger:                  fs.logger,
+		Clock:                   fs.modelServiceClock,
+		ModelPullMetrics:        modelPullMetricsRecorderForService(fs.modelPullMetricsRecorder()),
 		ModelInvocationExecutor: fs.modelInvocationExecutor,
-		FactoryRunnerID:         fs.factoryRunnerID,
+		FactoryRunnerID:         fs.factoryRunnerID(),
 	})
+}
+
+func modelPullMetricsRecorderForService(recorder ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
+	if recorder == nil {
+		return nil
+	}
+	return modelPullMetricsHostAdapter{inner: recorder}
 }
 
 func (fs *FactoryService) modelServiceClock() time.Time {

@@ -265,6 +265,13 @@ func sortDiagnostics(diagnostics []Diagnostic) {
 	})
 }
 
+// SortDiagnostics applies the validator's documented total order in place.
+// Build tooling that aggregates diagnostics from multiple validation runs uses
+// this to preserve one stable error contract.
+func SortDiagnostics(diagnostics []Diagnostic) {
+	sortDiagnostics(diagnostics)
+}
+
 func cloneEntry(entry Entry) Entry {
 	entry.Schemas = append([]Schema(nil), entry.Schemas...)
 	entry.Documents = append([]Document(nil), entry.Documents...)

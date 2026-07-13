@@ -87,11 +87,11 @@ func TestRunRejectsRetiredTransportImports(t *testing.T) {
 		retiredPath    string
 		canonicalOwner string
 	}{
-		{"pkg/factory/runtime/api.go", "github.com/portpowered/infinite-you/pkg/api", "github.com/portpowered/infinite-you/pkg/transports/http"},
-		{"pkg/factory/runtime/mapping.go", "github.com/portpowered/infinite-you/pkg/apisurface/factorysession", "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"},
-		{"pkg/root/cli.go", "github.com/portpowered/infinite-you/pkg/cli", "github.com/portpowered/infinite-you/pkg/transports/cli"},
-		{"pkg/root/mcp.go", "github.com/portpowered/infinite-you/pkg/mcp/server", "github.com/portpowered/infinite-you/pkg/transports/mcp/server"},
-		{"pkg/factory/runtime/client.go", "github.com/portpowered/infinite-you/pkg/generatedclient", "github.com/portpowered/infinite-you/pkg/transports/http/client"},
+		{"pkg/factory/runtime/api.go", "github.com/portpowered/infinite-you/pkg/api", "pkg/transports/http"},
+		{"pkg/factory/runtime/mapping.go", "github.com/portpowered/infinite-you/pkg/apisurface/factorysession", "pkg/transports/mapping"},
+		{"pkg/root/cli.go", "github.com/portpowered/infinite-you/pkg/cli", "pkg/transports/cli"},
+		{"pkg/root/mcp.go", "github.com/portpowered/infinite-you/pkg/mcp/server", "pkg/transports/mcp"},
+		{"pkg/factory/runtime/client.go", "github.com/portpowered/infinite-you/pkg/generatedclient", "pkg/transports/http/client"},
 	}
 	for _, fixture := range imports {
 		writeGoImportFile(t, repoRoot, fixture.filePath, filepath.Base(filepath.Dir(fixture.filePath)), fixture.retiredPath)
@@ -104,10 +104,10 @@ func TestRunRejectsRetiredTransportImports(t *testing.T) {
 	}
 	for _, fixture := range imports {
 		got := stderr.String()
-		if !strings.Contains(got, "prohibited legacy transport import: "+fixture.retiredPath) {
+		if !strings.Contains(got, "prohibited retired package import: "+fixture.retiredPath) {
 			t.Fatalf("run() stderr = %q, want retired import %q", got, fixture.retiredPath)
 		}
-		if !strings.Contains(got, "canonical successor "+fixture.canonicalOwner) {
+		if !strings.Contains(got, "canonical owner: "+fixture.canonicalOwner) {
 			t.Fatalf("run() stderr = %q, want canonical successor %q", got, fixture.canonicalOwner)
 		}
 	}
@@ -160,6 +160,108 @@ func TestRunRejectsDomainPackageImportOfApplicationGraphSubpackage(t *testing.T)
 	}
 	if got := stderr.String(); !strings.Contains(got, "prohibited application composition import: pkg/transports/http") {
 		t.Fatalf("run() stderr = %q, want transport composition import diagnostic", got)
+	}
+}
+
+func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		packagePath    string
+		canonicalOwner string
+	}{
+		{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
+		{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
+		{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	} {
+		t.Run(tt.packagePath, func(t *testing.T) {
+			t.Parallel()
+			repoRoot := t.TempDir()
+			makeDir(t, repoRoot, tt.packagePath)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want retired package root failure")
+			}
+
+			got := stderr.String()
+			for _, want := range []string{
+				"prohibited retired package root: " + tt.packagePath,
+				"canonical owner: " + tt.canonicalOwner,
+				"move the code to " + tt.canonicalOwner + " and delete the retired root",
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+			if strings.Contains(got, "unapproved root package family") {
+				t.Fatalf("run() stderr = %q, want retired-root diagnostic instead of generic root diagnostic", got)
+			}
+		})
+	}
+}
+
+func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		importPath     string
+		retiredRoot    string
+		canonicalOwner string
+	}{
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/modelhost",
+			retiredRoot:    "pkg/modelhost",
+			canonicalOwner: "pkg/models/host",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/localmodels/assets",
+			retiredRoot:    "pkg/localmodels",
+			canonicalOwner: "pkg/models/local or pkg/models/assets",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/hostedworkers/linear",
+			retiredRoot:    "pkg/hostedworkers",
+			canonicalOwner: "pkg/workers/hosted",
+		},
+	} {
+		t.Run(tt.retiredRoot, func(t *testing.T) {
+			t.Parallel()
+			repoRoot := t.TempDir()
+			writeGoImportFile(t, repoRoot, "pkg/factory/retired_import.go", "factory", tt.importPath)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want retired package import failure")
+			}
+
+			got := stderr.String()
+			for _, want := range []string{
+				"prohibited retired package import: " + tt.importPath + " (pkg/factory/retired_import.go)",
+				"canonical owner: " + tt.canonicalOwner,
+				"do not recreate or depend on " + tt.retiredRoot,
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRunAllowsCanonicalModelAndWorkerSubpackages(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/factory/canonical_imports.go", "factory", "github.com/portpowered/infinite-you/pkg/models/host")
+	writeGoImportFile(t, repoRoot, "pkg/models/host/host.go", "modelhost", "github.com/portpowered/infinite-you/pkg/models/local")
+	writeGoImportFile(t, repoRoot, "pkg/workers/service/hosted.go", "service", "github.com/portpowered/infinite-you/pkg/workers/hosted")
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want canonical nested packages allowed; stderr=%q", err, stderr.String())
 	}
 }
 

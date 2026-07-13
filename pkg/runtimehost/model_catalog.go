@@ -11,15 +11,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
-	"go.uber.org/zap"
 )
 
 func (fs *Host) requireModelService() apisurface.ModelAPI {
@@ -90,21 +89,22 @@ func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
 		return modelsservice.New(modelsservice.Dependencies{})
 	}
 	return modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig:    fs.currentRuntimeConfig,
-		ModelHost:        fs.modelHost,
-		ModelAssetPuller: fs.modelAssetPuller,
-		Logger:           func() *zap.Logger { return fs.logger },
-		Clock:            fs.modelServiceClock,
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
-			recorder := fs.modelPullMetricsRecorder()
-			if recorder == nil {
-				return nil
-			}
-			return modelPullMetricsHostAdapter{inner: recorder}
-		},
+		RuntimeConfig:           fs.currentRuntimeConfig,
+		ModelHost:               fs.modelHost(),
+		ModelAssetPuller:        fs.modelAssetPuller(),
+		Logger:                  fs.logger,
+		Clock:                   fs.modelServiceClock,
+		ModelPullMetrics:        modelPullMetricsRecorderForService(fs.modelPullMetricsRecorder()),
 		ModelInvocationExecutor: fs.modelInvocationExecutor,
-		FactoryRunnerID:         fs.factoryRunnerID,
+		FactoryRunnerID:         fs.factoryRunnerID(),
 	})
+}
+
+func modelPullMetricsRecorderForService(recorder ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
+	if recorder == nil {
+		return nil
+	}
+	return modelPullMetricsHostAdapter{inner: recorder}
 }
 
 func (fs *Host) modelServiceClock() time.Time {
@@ -118,6 +118,31 @@ func (fs *Host) modelServiceClock() time.Time {
 // compatibility methods on Host.
 func (fs *Host) ModelService() apisurface.ModelAPI {
 	return fs.requireModelService()
+}
+
+// AttachModelServiceCollaborator assigns the explicitly composed model-domain collaborator.
+func AttachModelServiceCollaborator(shell HostShell, modelAPI apisurface.ModelAPI) *Host {
+	if shell.Host != nil {
+		shell.Host.modelService = modelAPI
+	}
+	return shell.Host
+}
+
+// CurrentModelRuntimeConfig returns the active runtime configuration used by
+// model catalog and invocation operations. The callback remains dynamic so a
+// factory switch is visible without reconstructing the model service.
+func (fs *Host) CurrentModelRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
+	return fs.currentRuntimeConfig()
+}
+
+// BuildModelInvocationExecutor constructs the worker execution collaborator
+// used by one direct model invocation.
+func (fs *Host) BuildModelInvocationExecutor(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	factoryCfg *interfaces.FactoryConfig,
+	workerName string,
+) (workers.WorkstationRequestExecutor, error) {
+	return fs.modelInvocationExecutor(runtimeCfg, factoryCfg, workerName)
 }
 
 func (fs *Host) modelHost() modelhost.Host {

@@ -176,12 +176,6 @@ func requireGeneratedWorkByID(t *testing.T, baseURL, workID string) factoryapi.W
 	return factoryapi.Work{}
 }
 
-func getGeneratedWorkByID(t *testing.T, baseURL, workID string) factoryapi.Work {
-	t.Helper()
-
-	return getGeneratedJSON[factoryapi.Work](t, support.DefaultSessionWorkURL(baseURL, "/work/"+workID))
-}
-
 func assertManualRecoveryWorkStateChangeEvents(t *testing.T, server *functionalAPIServer, parentWorkID, childWorkID string) {
 	t.Helper()
 

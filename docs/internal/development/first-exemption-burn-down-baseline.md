@@ -31,7 +31,7 @@ with both selected paths; every comparison returned zero matches.
 
 Batch 005 uses the two active implementation heads. Batch 006 retains the
 authoritative reservations from the inventory: every detailed directive file
-under `pkg/api/**`, `pkg/transports/mapping/**`, `pkg/transports/cli/**`, `pkg/mcp/**`,
+under `pkg/transports/http/**`, `pkg/transports/mapping/**`, `pkg/transports/cli/**`, `pkg/transports/mcp/**`,
 `pkg/workers/**`, `pkg/factorysessionexecution/**`, `pkg/interfaces/**`,
 `pkg/internal/cursorstorage/**`, and `pkg/replay/**`; its named Work-family
 roots contain no registered directive file. Batch 007 reserves every detailed

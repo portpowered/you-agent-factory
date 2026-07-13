@@ -127,7 +127,7 @@ Scoped active-surface verification (2026-06-11 UTC):
 
 ```bash
 rg -n "workflow-previews|WorkflowPreview|pkg/workflow" \
-  api/openapi-main.yaml api/components pkg/api pkg/transports/mapping pkg/transports/cli pkg/mcp \
+  api/openapi-main.yaml api/components pkg/transports/http pkg/transports/mapping pkg/transports/cli pkg/transports/mcp \
   pkg/factorysessionexecution pkg/factorysessions pkg/orchestrators/javascript ui/src
 ```
 
@@ -148,7 +148,7 @@ Focused verification:
 make generate-api
 go test ./pkg/transports/http/contracttests ./pkg/transports/http/servertests ./pkg/transports/mapping \
   ./pkg/transports/mapping/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions \
-  ./pkg/mcp/workflow ./pkg/transports/cli/workflow
+  ./pkg/transports/mcp/workflow ./pkg/transports/cli/workflow
 npm --prefix ui run typecheck
 ```
 
@@ -170,14 +170,14 @@ Scoped residual import verification (2026-06-11 UTC):
 
 ```bash
 rg -n "github.com/portpowered/infinite-you/pkg/workflow(preview|source|validation|policy|result)" \
-  pkg/api pkg/transports/mapping pkg/transports/cli pkg/mcp pkg/factorysessionexecution pkg/factorysessions \
+  pkg/transports/http pkg/transports/mapping pkg/transports/cli pkg/transports/mcp pkg/factorysessionexecution pkg/factorysessions \
   --glob '!**/generated/**'
 rg -n "/workflow-previews|WorkflowPreview" \
-  api/openapi-main.yaml api/components pkg/api pkg/transports/mapping pkg/transports/cli pkg/mcp ui/src \
+  api/openapi-main.yaml api/components pkg/transports/http pkg/transports/mapping pkg/transports/cli pkg/transports/mcp ui/src \
   --glob '!**/generated/**'
 find pkg/orchestrators/javascript -maxdepth 2 -type f | sort
 go test ./pkg/transports/http/contracttests ./pkg/transports/http/servertests ./pkg/transports/mapping \
-  ./pkg/mcp/workflow ./pkg/transports/cli/workflow ./pkg/transports/cli/workflowsource
+  ./pkg/transports/mcp/workflow ./pkg/transports/cli/workflow ./pkg/transports/cli/workflowsource
 npm --prefix ui run typecheck
 ```
 
@@ -457,11 +457,11 @@ packages as the primary preview or JavaScript orchestration owner.
 Focused verification passes:
 
 - `make generate-api` (generated artifacts synchronized)
-- `go test ./pkg/transports/http/contracttests ./pkg/transports/http/servertests ./pkg/transports/mapping ./pkg/transports/mapping/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions ./pkg/mcp/workflow ./pkg/transports/cli/workflow`
+- `go test ./pkg/transports/http/contracttests ./pkg/transports/http/servertests ./pkg/transports/mapping ./pkg/transports/mapping/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions ./pkg/transports/mcp/workflow ./pkg/transports/cli/workflow`
 - `go test ./pkg/factory/projections/projectiontests ./pkg/factory/events ./pkg/factory/validation`
 - `npm --prefix ui run typecheck`
-- Scoped `rg` verification over `api/openapi-main.yaml`, `api/components`, `pkg/api`,
-  `pkg/transports/mapping`, `pkg/transports/cli`, `pkg/mcp`, `pkg/factorysessionexecution`,
+- Scoped `rg` verification over `api/openapi-main.yaml`, `api/components`, `pkg/transports/http`,
+  `pkg/transports/mapping`, `pkg/transports/cli`, `pkg/transports/mcp`, `pkg/factorysessionexecution`,
   `pkg/factorysessions`, `pkg/orchestrators/javascript`, and `ui/src` reports only
   generated compatibility aliases, deprecated OpenAPI compatibility routes/schemas,
   and explicit obsolete/compatibility tests or UI wrappers.
@@ -597,7 +597,7 @@ on 2026-06-09 shows:
 - Durable API handlers in `pkg/transports/http/handlers_factory.go` still return `501` for
   async/sync start, results, dispatches, artifacts, lifecycle controls, and
   durable events; `scope=persisted|all` returns empty durable rows.
-- `pkg/mcp/workflow/` exposes preview/start-validation through the canonical Factory
+- `pkg/transports/mcp/workflow/` exposes preview/start-validation through the canonical Factory
   preview seam; session/dispatch/artifact MCP tools depend on deferred Batch 002
   skeleton wiring.
 - `ui/src/api/factory-sessions/api.ts` and the current factory-session detail

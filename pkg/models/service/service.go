@@ -4,21 +4,21 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"go.uber.org/zap"
 )
 
 // Dependencies carries runtime inputs for model-domain catalog operations.
 type Dependencies struct {
 	RuntimeConfig           func() *factoryconfig.LoadedFactoryConfig
-	ModelHost               func() modelhost.Host
-	ModelAssetPuller        func() localmodels.AssetPuller
-	Logger                  func() *zap.Logger
+	ModelHost               modelhost.Host
+	ModelAssetPuller        localmodels.AssetPuller
+	Logger                  *zap.Logger
 	Clock                   func() time.Time
-	ModelPullMetrics        func() PullMetricsRecorder
+	ModelPullMetrics        PullMetricsRecorder
 	ModelInvocationExecutor ModelInvocationExecutor
-	FactoryRunnerID         func() string
+	FactoryRunnerID         string
 }
 
 // Service owns direct model catalog, pull, and invocation behavior.
@@ -39,10 +39,10 @@ func (s *Service) runtimeConfig() *factoryconfig.LoadedFactoryConfig {
 }
 
 func (s *Service) modelHost() modelhost.Host {
-	if s == nil || s.deps.ModelHost == nil {
+	if s == nil {
 		return nil
 	}
-	return s.deps.ModelHost()
+	return s.deps.ModelHost
 }
 
 func (s *Service) now() time.Time {

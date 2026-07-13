@@ -9,8 +9,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -25,27 +25,25 @@ func TestService_PullModel_ReportsSuccessfulAlreadyPresentOutcome(t *testing.T) 
 	recorder := &capturingPullMetricsRecorder{}
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &stubPullAssetPuller{
-				result: apisurface.ModelPullResult{
-					ModelName:          "OMNIVOICE_Q4_K_M",
-					Outcome:            "ALREADY_PRESENT",
-					ManagedPullOutcome: "ALREADY_READY",
-					ReadinessState:     "READY",
-					LifecycleState:     "READY",
-					SourceKind:         "MANAGED_RUNTIME",
-					CachePath:          "/tmp/cache",
-					Revision:           "rev1",
-				},
-				inspection: localmodels.RuntimeCacheInspection{
-					Supported: true,
-					Installed: true,
-					CachePath: "/tmp/cache",
-					Revision:  "rev1",
-				},
-			}
+		ModelAssetPuller: &stubPullAssetPuller{
+			result: apisurface.ModelPullResult{
+				ModelName:          "OMNIVOICE_Q4_K_M",
+				Outcome:            "ALREADY_PRESENT",
+				ManagedPullOutcome: "ALREADY_READY",
+				ReadinessState:     "READY",
+				LifecycleState:     "READY",
+				SourceKind:         "MANAGED_RUNTIME",
+				CachePath:          "/tmp/cache",
+				Revision:           "rev1",
+			},
+			inspection: localmodels.RuntimeCacheInspection{
+				Supported: true,
+				Installed: true,
+				CachePath: "/tmp/cache",
+				Revision:  "rev1",
+			},
 		},
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder { return recorder },
+		ModelPullMetrics: recorder,
 	})
 
 	result, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -72,15 +70,13 @@ func TestService_PullModel_ReportsStillLoadingWhenAssetsRemainMissing(t *testing
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &stubPullAssetPuller{
-				result: apisurface.ModelPullResult{ModelName: "OMNIVOICE_Q4_K_M", Outcome: "PULLED"},
-				inspection: localmodels.RuntimeCacheInspection{
-					Supported:     true,
-					Installed:     false,
-					MissingAssets: []string{"model.gguf"},
-				},
-			}
+		ModelAssetPuller: &stubPullAssetPuller{
+			result: apisurface.ModelPullResult{ModelName: "OMNIVOICE_Q4_K_M", Outcome: "PULLED"},
+			inspection: localmodels.RuntimeCacheInspection{
+				Supported:     true,
+				Installed:     false,
+				MissingAssets: []string{"model.gguf"},
+			},
 		},
 	})
 
@@ -99,11 +95,9 @@ func TestService_PullModel_RecordsSourceFailureMetric(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	recorder := &capturingPullMetricsRecorder{}
 	svc := modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &stubPullAssetPuller{err: apisurface.ErrManagedRuntimeSourceFetchFailed}
-		},
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder { return recorder },
+		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: &stubPullAssetPuller{err: apisurface.ErrManagedRuntimeSourceFetchFailed},
+		ModelPullMetrics: recorder,
 	})
 
 	_, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -136,10 +130,8 @@ func TestService_PullModel_ReturnsCanceledWhenContextCanceled(t *testing.T) {
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &cancelBlockingPullAssetPuller{}
-		},
+		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: &cancelBlockingPullAssetPuller{},
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -176,7 +168,7 @@ func TestService_PullModel_ProjectsModelHostResult(t *testing.T) {
 	}}
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return host },
+		ModelHost:     host,
 	})
 
 	result, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -198,11 +190,9 @@ func TestService_PullModel_ClassifiesModelHostTimeout(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	recorder := &capturingPullMetricsRecorder{}
 	svc := modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost: func() modelhost.Host {
-			return &stubPullModelHost{err: context.DeadlineExceeded}
-		},
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder { return recorder },
+		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:        &stubPullModelHost{err: context.DeadlineExceeded},
+		ModelPullMetrics: recorder,
 	})
 
 	result, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -227,7 +217,7 @@ func TestService_PullModel_PropagatesCancellationToModelHost(t *testing.T) {
 	host := &stubPullModelHost{waitForContext: true}
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return host },
+		ModelHost:     host,
 	})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -247,9 +237,7 @@ func TestService_PullModel_MapsUnsupportedModelHostResult(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost: func() modelhost.Host {
-			return &stubPullModelHost{err: modelhost.ErrUnsupportedRuntime}
-		},
+		ModelHost:     &stubPullModelHost{err: modelhost.ErrUnsupportedRuntime},
 	})
 
 	_, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -266,17 +254,15 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	logger := zap.New(core)
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		Logger:        func() *zap.Logger { return logger },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &stubPullAssetPuller{
-				result: apisurface.ModelPullResult{
-					ModelName:          "OMNIVOICE_Q4_K_M",
-					ManagedPullOutcome: "ALREADY_READY",
-					ReadinessState:     "READY",
-					LifecycleState:     "READY",
-					SourceKind:         "MANAGED_RUNTIME",
-				},
-			}
+		Logger:        logger,
+		ModelAssetPuller: &stubPullAssetPuller{
+			result: apisurface.ModelPullResult{
+				ModelName:          "OMNIVOICE_Q4_K_M",
+				ManagedPullOutcome: "ALREADY_READY",
+				ReadinessState:     "READY",
+				LifecycleState:     "READY",
+				SourceKind:         "MANAGED_RUNTIME",
+			},
 		},
 	})
 
@@ -285,11 +271,9 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	}
 
 	svc = modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		Logger:        func() *zap.Logger { return logger },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &stubPullAssetPuller{err: errors.New("pull failed")}
-		},
+		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		Logger:           logger,
+		ModelAssetPuller: &stubPullAssetPuller{err: errors.New("pull failed")},
 	})
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err == nil {
 		t.Fatal("PullModel failure path: nil error, want pull failure")
@@ -318,16 +302,14 @@ func TestService_PullModel_UsesInjectedClockForDuration(t *testing.T) {
 			times = times[1:]
 			return now
 		},
-		Logger: func() *zap.Logger { return zap.New(core) },
-		ModelAssetPuller: func() localmodels.AssetPuller {
-			return &stubPullAssetPuller{result: apisurface.ModelPullResult{
-				ModelName:          "OMNIVOICE_Q4_K_M",
-				ManagedPullOutcome: "ALREADY_READY",
-				ReadinessState:     "READY",
-				LifecycleState:     "READY",
-				SourceKind:         "MANAGED_RUNTIME",
-			}}
-		},
+		Logger: zap.New(core),
+		ModelAssetPuller: &stubPullAssetPuller{result: apisurface.ModelPullResult{
+			ModelName:          "OMNIVOICE_Q4_K_M",
+			ManagedPullOutcome: "ALREADY_READY",
+			ReadinessState:     "READY",
+			LifecycleState:     "READY",
+			SourceKind:         "MANAGED_RUNTIME",
+		}},
 	})
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {

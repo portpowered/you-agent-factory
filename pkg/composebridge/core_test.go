@@ -9,11 +9,11 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"go.uber.org/zap"
 )
 

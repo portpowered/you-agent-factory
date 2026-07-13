@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -78,7 +79,22 @@ func assertCompleteGraph(
 		t.Fatal("production graph did not retain explicit logger and clock identity")
 	}
 	assertProductionDomainServices(t, graph)
+	assertProductionModelService(t, graph)
 	assertProductionTransportIdentity(t, graph)
+}
+
+func assertProductionModelService(t *testing.T, graph *wire.Graph) {
+	t.Helper()
+	if _, ok := graph.Models.(*modelsservice.Service); !ok {
+		t.Fatalf("production model collaborator = %T, want canonical *models/service.Service", graph.Models)
+	}
+	models, err := graph.Models.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("production model collaborator ListModels() error = %v", err)
+	}
+	if models.Results == nil {
+		t.Fatal("production model collaborator returned nil catalog results")
+	}
 }
 
 func assertProductionDomainServices(t *testing.T, graph *wire.Graph) {

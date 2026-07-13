@@ -8,7 +8,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -20,7 +20,7 @@ func TestService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return missingCacheInspectHost{} },
+		ModelHost:     missingCacheInspectHost{},
 	})
 
 	model, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -41,7 +41,7 @@ func TestService_GetModel_PreservesInstalledAssetReadinessFromModelHost(t *testi
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return installedCacheInspectHost{} },
+		ModelHost:     installedCacheInspectHost{},
 	})
 
 	model, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
