@@ -264,7 +264,7 @@ func writeCursorStreamFixture(t *testing.T, stdout []byte) (string, []string) {
 	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
 		t.Fatalf("write Cursor command fixture: %v", err)
 	}
-	return "agent", nil
+	return script, nil
 }
 
 func TestManager_CloseAllPreventsSubscription(t *testing.T) {

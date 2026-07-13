@@ -806,19 +806,27 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 	if len(published) != 4 {
 		t.Fatalf("published fragments = %#v, want 4 ordered fragments; result=%#v", published, result)
 	}
-	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored a malformed JSON record", nil)
-	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored an unknown record type", nil)
-	for index, wantPhase := range []responseevents.Phase{responseevents.PhaseDelta, responseevents.PhaseCompleted} {
-		fragment := published[index+2]
+	var diagnostics []InferenceProgressFragment
+	var drafts []responseevents.Draft
+	for _, fragment := range published {
 		if fragment.ResponseEventDraft == nil {
-			t.Fatalf("published[%d] = %#v, want structured response-event draft", index+2, fragment)
+			diagnostics = append(diagnostics, fragment)
+			continue
 		}
-		draft := *fragment.ResponseEventDraft
+		drafts = append(drafts, *fragment.ResponseEventDraft)
+	}
+	if len(diagnostics) != 2 || len(drafts) != 2 {
+		t.Fatalf("published fragments = %#v, want two diagnostics and two structured drafts", published)
+	}
+	assertInferenceProgressFragment(t, diagnostics[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored a malformed JSON record", nil)
+	assertInferenceProgressFragment(t, diagnostics[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored an unknown record type", nil)
+	for index, wantPhase := range []responseevents.Phase{responseevents.PhaseDelta, responseevents.PhaseCompleted} {
+		draft := drafts[index]
 		if draft.Kind != responseevents.KindMessage || draft.Phase != wantPhase || draft.DispatchID != "dispatch-stream-cursor" {
-			t.Fatalf("published[%d] draft = %#v, want MESSAGE/%s for dispatch", index+2, draft, wantPhase)
+			t.Fatalf("drafts[%d] = %#v, want MESSAGE/%s for dispatch", index, draft, wantPhase)
 		}
 		if draft.ProviderSessionRef != "cursor-session-123" || draft.Provenance.Provider != "cursor" {
-			t.Fatalf("published[%d] correlation = %#v, want Cursor session", index+2, draft)
+			t.Fatalf("drafts[%d] correlation = %#v, want Cursor session", index, draft)
 		}
 	}
 }

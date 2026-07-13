@@ -138,7 +138,7 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 	}
 	dispatchID := strings.TrimSpace(req.DispatchID)
 	var cursorStream *cursorResponseEventStream
-	if strings.TrimSpace(req.Command) == string(interfaces.ModelProviderCursor) {
+	if isCursorCommand(req.Command) {
 		cursorStream = newCursorResponseEventStream(dispatchID, r.Publisher, r.Logger)
 	}
 	normalizer := newCommandOutputNormalizer(req, r.Publisher)
@@ -172,6 +172,13 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		normalizer.Flush()
 	}
 	return result, err
+}
+
+func isCursorCommand(command string) bool {
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(command)))
+	return base == string(interfaces.ModelProviderCursor) ||
+		base == string(interfaces.ModelProviderCursor)+".exe" ||
+		base == string(interfaces.ModelProviderCursor)+".cmd"
 }
 
 type cursorResponseEventStream struct {
