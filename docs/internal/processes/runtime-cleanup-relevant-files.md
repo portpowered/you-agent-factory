@@ -41,6 +41,12 @@ observer, dashboard renderer, or another sidecar behind its `Run` callback.
 before the selected transport, then stop them in the exact reverse order. A
 production-graph test should delegate through the real handles and observe this
 sequence so fake-only initializer coverage cannot hide an empty sidecar graph.
+Mode-specific lifecycle planning must validate every required handle, including
+typed-nil interface values, before activation. Optional handles should be
+omitted from the plan, and graph handles that are not selected for the mode must
+receive no start, wait, or stop calls. The selected foreground transport must be
+joinable so initializer can validate complete lifecycle ownership before any
+component starts.
 
 The production `you mcp serve` branch follows the same ownership path even
 though it does not activate run sidecars. Resolve the selected fixture-backed

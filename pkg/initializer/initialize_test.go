@@ -382,6 +382,123 @@ func TestApplicationRunStartsWaitsAndShutsDownInReverse(t *testing.T) {
 	}
 }
 
+func TestNewApplicationSelectsOnlyTheModeLifecyclePlan(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		mode      initializer.Mode
+		complete  func(*applicationFixture)
+		wantStart []string
+		wantStop  []string
+	}{
+		{
+			name: "API", mode: initializer.ModeAPI,
+			complete:  func(fixture *applicationFixture) { close(fixture.api.done) },
+			wantStart: []string{"runtime", "workers", "dashboard", "api"},
+			wantStop:  []string{"api", "dashboard", "workers", "runtime"},
+		},
+		{
+			name: "CLI", mode: initializer.ModeCLI,
+			complete:  func(fixture *applicationFixture) { close(fixture.cli.done) },
+			wantStart: []string{"runtime", "workers", "dashboard", "cli"},
+			wantStop:  []string{"cli", "dashboard", "workers", "runtime"},
+		},
+		{
+			name: "MCP", mode: initializer.ModeMCP,
+			complete:  func(fixture *applicationFixture) { close(fixture.mcp.done) },
+			wantStart: []string{"mcp"},
+			wantStop:  []string{"mcp"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newApplicationFixture()
+			application, err := initializer.NewApplication(test.mode, fixture.graph)
+			if err != nil {
+				t.Fatalf("NewApplication() error = %v", err)
+			}
+			if application.Graph() != fixture.graph || len(fixture.starts) != 0 {
+				t.Fatalf("selection changed graph identity or started lifecycle: graph %p starts %v", application.Graph(), fixture.starts)
+			}
+
+			done := make(chan error, 1)
+			go func() { done <- application.Run(context.Background()) }()
+			test.complete(fixture)
+			if err := <-done; err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if !reflect.DeepEqual(fixture.starts, test.wantStart) {
+				t.Fatalf("starts = %v, want %v", fixture.starts, test.wantStart)
+			}
+			if !reflect.DeepEqual(fixture.stops, test.wantStop) {
+				t.Fatalf("stops = %v, want %v", fixture.stops, test.wantStop)
+			}
+		})
+	}
+}
+
+func TestNewApplicationRejectsMissingRequiredLifecycleBeforeActivation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		mode    initializer.Mode
+		missing string
+		remove  func(*initializer.ApplicationLifecycles)
+	}{
+		{name: "API runtime", mode: initializer.ModeAPI, missing: "runtime sidecar", remove: func(edges *initializer.ApplicationLifecycles) { edges.Runtime = nil }},
+		{name: "API workers", mode: initializer.ModeAPI, missing: "workers sidecar", remove: func(edges *initializer.ApplicationLifecycles) { edges.Workers = nil }},
+		{name: "API transport", mode: initializer.ModeAPI, missing: "API transport", remove: func(edges *initializer.ApplicationLifecycles) { edges.API = nil }},
+		{name: "CLI runtime", mode: initializer.ModeCLI, missing: "runtime sidecar", remove: func(edges *initializer.ApplicationLifecycles) { edges.Runtime = nil }},
+		{name: "CLI workers", mode: initializer.ModeCLI, missing: "workers sidecar", remove: func(edges *initializer.ApplicationLifecycles) { edges.Workers = nil }},
+		{name: "CLI transport", mode: initializer.ModeCLI, missing: "CLI transport", remove: func(edges *initializer.ApplicationLifecycles) { edges.CLI = nil }},
+		{name: "MCP transport", mode: initializer.ModeMCP, missing: "MCP transport", remove: func(edges *initializer.ApplicationLifecycles) { edges.MCP = nil }},
+		{name: "typed nil transport", mode: initializer.ModeMCP, missing: "MCP transport", remove: func(edges *initializer.ApplicationLifecycles) {
+			var lifecycle *applicationLifecycle
+			edges.MCP = lifecycle
+		}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newApplicationFixture()
+			test.remove(&fixture.graph.lifecycles)
+			application, err := initializer.NewApplication(test.mode, fixture.graph)
+			if application != nil || err == nil {
+				t.Fatalf("NewApplication() = (%v, %v), want validation failure", application, err)
+			}
+			if !strings.Contains(err.Error(), string(test.mode)) || !strings.Contains(err.Error(), test.missing) {
+				t.Fatalf("NewApplication() error = %q, want mode %q and role %q", err, test.mode, test.missing)
+			}
+			if len(fixture.starts) != 0 || len(fixture.stops) != 0 || fixture.graph.closes != 0 {
+				t.Fatalf("rejected plan changed lifecycle state: starts %v stops %v closes %d", fixture.starts, fixture.stops, fixture.graph.closes)
+			}
+		})
+	}
+}
+
+func TestNewApplicationAllowsMissingOptionalDashboard(t *testing.T) {
+	t.Parallel()
+
+	fixture := newApplicationFixture()
+	fixture.graph.lifecycles.Dashboard = nil
+	application, err := initializer.NewApplication(initializer.ModeCLI, fixture.graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- application.Run(context.Background()) }()
+	close(fixture.cli.done)
+	if err := <-done; err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := fixture.starts, []string{"runtime", "workers", "cli"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("starts = %v, want %v", got, want)
+	}
+}
+
 func TestApplicationStartFailureUnwindsActivatedEdges(t *testing.T) {
 	t.Parallel()
 
@@ -419,17 +536,19 @@ func TestApplicationDiagnosticsAndValidation(t *testing.T) {
 	if application != nil || err == nil || !strings.Contains(err.Error(), "not supported") {
 		t.Fatalf("NewApplication(invalid mode) = (%v, %v)", application, err)
 	}
-	application, err = initializer.NewApplication(initializer.ModeMCP, fixture.graph)
+	application, err = initializer.NewApplication(initializer.ModeCLI, fixture.graph)
 	if err != nil {
-		t.Fatalf("NewApplication(MCP) error = %v", err)
+		t.Fatalf("NewApplication(CLI) error = %v", err)
 	}
 	if got := application.RuntimeLogDiagnostics(); got.Path != "runtime.log" {
 		t.Fatalf("RuntimeLogDiagnostics() = %+v, want graph metadata", got)
 	}
-	if err := application.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "not waitable") {
-		t.Fatalf("Run(non-waitable MCP) error = %v", err)
+	fixture.graph.lifecycles.MCP = &applicationLifecycle{name: "mcp", starts: &fixture.starts, stops: &fixture.stops}
+	application, err = initializer.NewApplication(initializer.ModeMCP, fixture.graph)
+	if application != nil || err == nil || !strings.Contains(err.Error(), "mcp") || !strings.Contains(err.Error(), "join") {
+		t.Fatalf("NewApplication(non-waitable MCP) = (%v, %v), want pre-start join validation", application, err)
 	}
-	if err := application.Shutdown(nil); err != nil {
+	if err := nilApplication.Shutdown(nil); err != nil {
 		t.Fatalf("Shutdown(nil context) error = %v", err)
 	}
 }
@@ -438,7 +557,9 @@ type applicationFixture struct {
 	graph  *applicationGraph
 	starts []string
 	stops  []string
+	api    *waitableApplicationLifecycle
 	cli    *waitableApplicationLifecycle
+	mcp    *waitableApplicationLifecycle
 }
 
 func newApplicationFixture() *applicationFixture {
@@ -446,9 +567,11 @@ func newApplicationFixture() *applicationFixture {
 	lifecycle := func(name string) *applicationLifecycle {
 		return &applicationLifecycle{name: name, starts: &fixture.starts, stops: &fixture.stops}
 	}
+	fixture.api = &waitableApplicationLifecycle{applicationLifecycle: lifecycle("api"), done: make(chan struct{})}
 	fixture.cli = &waitableApplicationLifecycle{applicationLifecycle: lifecycle("cli"), done: make(chan struct{})}
+	fixture.mcp = &waitableApplicationLifecycle{applicationLifecycle: lifecycle("mcp"), done: make(chan struct{})}
 	fixture.graph = &applicationGraph{lifecycles: initializer.ApplicationLifecycles{
-		API: lifecycle("api"), CLI: fixture.cli, MCP: lifecycle("mcp"),
+		API: fixture.api, CLI: fixture.cli, MCP: fixture.mcp,
 		Runtime: lifecycle("runtime"), Workers: lifecycle("workers"), Dashboard: lifecycle("dashboard"),
 	}}
 	return fixture

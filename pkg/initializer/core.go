@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -110,7 +111,9 @@ func validateProcessPolicy(policy ProcessPolicy) error {
 }
 
 // Lifecycle is the narrow activation contract supplied by an application
-// graph. Initializer owns invocation and shutdown ordering.
+// graph. Start returns only after the component is ready. Initializer invokes
+// Stop at most once, in reverse start order; Stop must cancel and join any work
+// the component launched before returning.
 type Lifecycle interface {
 	Start(context.Context) error
 	Stop(context.Context) error
@@ -170,7 +173,15 @@ func NewApplication(mode Mode, graph ApplicationGraph) (*Application, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize application: %w", err)
 	}
-	return &Application{graph: graph, selected: selected, primary: selected[len(selected)-1]}, nil
+	primary := selected[len(selected)-1]
+	if _, ok := primary.lifecycle.(waitableLifecycle); !ok {
+		return nil, fmt.Errorf(
+			"initialize application: process mode %q requires %s lifecycle to support join",
+			mode,
+			primary.name,
+		)
+	}
+	return &Application{graph: graph, selected: selected, primary: primary}, nil
 }
 
 // Start activates the selected mode immediately for compatibility callers.
@@ -292,24 +303,50 @@ func (a *Application) shutdown(ctx context.Context) error {
 }
 
 func lifecyclesForMode(mode Mode, lifecycles ApplicationLifecycles) ([]namedLifecycle, error) {
-	var sidecars []namedLifecycle
-	for _, sidecar := range []namedLifecycle{
-		{name: "runtime sidecar", lifecycle: lifecycles.Runtime},
-		{name: "workers sidecar", lifecycle: lifecycles.Workers},
-		{name: "dashboard sidecar", lifecycle: lifecycles.Dashboard},
-	} {
-		if sidecar.lifecycle != nil {
-			sidecars = append(sidecars, sidecar)
-		}
-	}
+	var selected []namedLifecycle
 	switch mode {
 	case ModeAPI:
-		return append(sidecars, namedLifecycle{name: "API transport", lifecycle: lifecycles.API}), nil
+		selected = []namedLifecycle{
+			{name: "runtime sidecar", lifecycle: lifecycles.Runtime},
+			{name: "workers sidecar", lifecycle: lifecycles.Workers},
+			{name: "dashboard sidecar", lifecycle: lifecycles.Dashboard},
+			{name: "API transport", lifecycle: lifecycles.API},
+		}
 	case ModeCLI:
-		return append(sidecars, namedLifecycle{name: "CLI transport", lifecycle: lifecycles.CLI}), nil
+		selected = []namedLifecycle{
+			{name: "runtime sidecar", lifecycle: lifecycles.Runtime},
+			{name: "workers sidecar", lifecycle: lifecycles.Workers},
+			{name: "dashboard sidecar", lifecycle: lifecycles.Dashboard},
+			{name: "CLI transport", lifecycle: lifecycles.CLI},
+		}
 	case ModeMCP:
-		return []namedLifecycle{{name: "MCP transport", lifecycle: lifecycles.MCP}}, nil
+		selected = []namedLifecycle{{name: "MCP transport", lifecycle: lifecycles.MCP}}
 	default:
 		return nil, fmt.Errorf("process mode %q is not supported", mode)
+	}
+
+	plan := make([]namedLifecycle, 0, len(selected))
+	for _, component := range selected {
+		if lifecycleIsNil(component.lifecycle) {
+			if component.name == "dashboard sidecar" {
+				continue
+			}
+			return nil, fmt.Errorf("process mode %q requires %s lifecycle", mode, component.name)
+		}
+		plan = append(plan, component)
+	}
+	return plan, nil
+}
+
+func lifecycleIsNil(lifecycle Lifecycle) bool {
+	if lifecycle == nil {
+		return true
+	}
+	value := reflect.ValueOf(lifecycle)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
 	}
 }
