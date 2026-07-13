@@ -156,6 +156,45 @@ func TestResponseEventDecoder_CorrelatesSafeToolLifecycleFixture(t *testing.T) {
 	}
 }
 
+func TestResponseEventDecoder_RedactsCredentialVariantsInArgumentsAndResults(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		`{"type":"tool_call","subtype":"started","call_id":"call-credentials","tool_call":{"readToolCall":{"args":{"path":"README.md","api.key":"sk-live-secret","nested":{"value":"sk-nested-secret"}}}}}`,
+		`{"type":"tool_call","subtype":"completed","call_id":"call-credentials","tool_call":{"readToolCall":{"result":{"success":{"output":"updated","access.token":"sk-result-secret","nested":[{"value":"ghp_nested_result_secret"}]}}}}}`,
+	}, "\n"))
+	result := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: raw}})
+	if len(result.Drafts) != 2 || len(result.Diagnostics) != 0 {
+		t.Fatalf("result = %#v, want a correlated tool lifecycle", result)
+	}
+
+	var started, completed responseevents.ToolPayload
+	decodeCursorToolPayload(t, result.Drafts[0], &started)
+	decodeCursorToolPayload(t, result.Drafts[1], &completed)
+	for label, summary := range map[string]json.RawMessage{
+		"arguments": started.ArgumentsSummary,
+		"results":   completed.ResultSummary,
+	} {
+		if len(summary) > cursorToolSummaryEncodedLimit {
+			t.Fatalf("%s summary length = %d, want at most %d: %s", label, len(summary), cursorToolSummaryEncodedLimit, summary)
+		}
+		for _, forbidden := range []string{"api.key", "access.token", "sk-live-secret", "sk-nested-secret", "sk-result-secret", "ghp_nested_result_secret"} {
+			if strings.Contains(string(summary), forbidden) {
+				t.Fatalf("%s summary exposed credential material %q: %s", label, forbidden, summary)
+			}
+		}
+		var decoded any
+		if err := json.Unmarshal(summary, &decoded); err != nil {
+			t.Fatalf("decode %s summary: %v", label, err)
+		}
+		if !cursorSummaryContainsValue(decoded, cursorToolRedactedValue) {
+			t.Fatalf("%s summary did not retain a redaction marker: %s", label, summary)
+		}
+	}
+	if !strings.Contains(string(started.ArgumentsSummary), `"path":"README.md"`) ||
+		!strings.Contains(string(completed.ResultSummary), `"output":"updated"`) {
+		t.Fatalf("summaries lost safe context: arguments=%s results=%s", started.ArgumentsSummary, completed.ResultSummary)
+	}
+}
+
 func TestResponseEventDecoder_MapsExplicitToolFailureAndCancellationStatuses(t *testing.T) {
 	raw := []byte(strings.Join([]string{
 		`{"type":"tool_call","subtype":"started","call_id":"call-fail","tool_call":{"writeToolCall":{"args":{"path":"safe.txt"}}}}`,
@@ -431,6 +470,71 @@ func TestCursorSafeToolSummaryIsDeterministicBoundedAndRedacted(t *testing.T) {
 	output, _ := summary["output"].(string)
 	if len(output) > cursorToolSummaryStringLimit+3 || !strings.HasSuffix(output, "...") {
 		t.Fatalf("bounded output = %q", output)
+	}
+}
+
+func TestCursorSafeToolSummaryRedactsSeparatorVariantsAndStandaloneCredentials(t *testing.T) {
+	testCases := []struct {
+		name      string
+		value     map[string]any
+		safeKey   string
+		safeValue string
+		forbidden []string
+	}{
+		{
+			name: "Arguments",
+			value: map[string]any{
+				"path":    "README.md",
+				"api.key": "sk-live-secret",
+				"nested": map[string]any{
+					"value": "sk-nested-secret",
+				},
+			},
+			safeKey:   "path",
+			safeValue: "README.md",
+			forbidden: []string{"api.key", "sk-live-secret", "sk-nested-secret"},
+		},
+		{
+			name: "Results",
+			value: map[string]any{
+				"output":       "updated",
+				"access.token": "sk-result-secret",
+				"nested": []any{
+					map[string]any{"value": "ghp_nested_result_secret"},
+				},
+			},
+			safeKey:   "output",
+			safeValue: "updated",
+			forbidden: []string{"access.token", "sk-result-secret", "ghp_nested_result_secret"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(tc.value)
+			if err != nil {
+				t.Fatal(err)
+			}
+			summary := cursorSafeToolSummary(raw)
+			var decoded map[string]any
+			if err := json.Unmarshal(summary, &decoded); err != nil {
+				t.Fatalf("summary is not valid JSON: %v", err)
+			}
+			if decoded[tc.safeKey] != tc.safeValue {
+				t.Fatalf("summary lost useful safe context: %s", summary)
+			}
+			if !cursorSummaryContainsValue(decoded, cursorToolRedactedValue) {
+				t.Fatalf("summary did not retain a redaction marker: %s", summary)
+			}
+			for _, forbidden := range tc.forbidden {
+				if strings.Contains(string(summary), forbidden) {
+					t.Fatalf("summary exposed credential material %q: %s", forbidden, summary)
+				}
+			}
+			if len(summary) > cursorToolSummaryEncodedLimit {
+				t.Fatalf("encoded summary length = %d, want at most %d: %s", len(summary), cursorToolSummaryEncodedLimit, summary)
+			}
+		})
 	}
 }
 

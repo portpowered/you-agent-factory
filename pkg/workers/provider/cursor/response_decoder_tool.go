@@ -461,8 +461,8 @@ func largestCursorToolSummaryField(summary map[string]any) string {
 }
 
 func cursorSensitiveToolKey(key string) bool {
-	normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "-", "_"), " ", "_"))
-	for _, marker := range []string{"api_key", "apikey", "authorization", "credential", "password", "passwd", "private_key", "prompt", "secret", "token"} {
+	normalized := strings.ToLower(strings.NewReplacer("-", "", "_", "", ".", "", " ", "").Replace(key))
+	for _, marker := range []string{"apikey", "authorization", "credential", "password", "passwd", "privatekey", "prompt", "secret", "token"} {
 		if strings.Contains(normalized, marker) {
 			return true
 		}
@@ -471,10 +471,17 @@ func cursorSensitiveToolKey(key string) bool {
 }
 
 func cursorSensitiveToolValue(value string) bool {
-	normalized := strings.ToLower(value)
+	normalized := strings.ToLower(strings.TrimSpace(value))
 	for _, marker := range []string{"authorization:", "bearer ", "api_key=", "apikey=", "password=", "private key", "secret=", "token="} {
 		if strings.Contains(normalized, marker) {
 			return true
+		}
+	}
+	if strings.IndexAny(normalized, " \t\r\n") == -1 {
+		for _, prefix := range []string{"sk-", "rk-", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "xoxa-", "xoxb-", "xoxp-", "xoxr-", "aiza", "akia", "asia"} {
+			if strings.HasPrefix(normalized, prefix) && len(normalized) > len(prefix) {
+				return true
+			}
 		}
 	}
 	return false
