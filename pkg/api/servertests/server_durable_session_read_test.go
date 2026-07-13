@@ -677,10 +677,26 @@ func removeAPILifecycleProjectState(t *testing.T, projectRoot string) {
 	t.Helper()
 	runtimeStateRoot := filepath.Join(projectRoot, ".you-agent-factory")
 	deadline := time.Now().Add(5 * time.Second)
+	var absentSince time.Time
 	for time.Now().Before(deadline) {
-		if err := os.RemoveAll(runtimeStateRoot); err == nil {
+		_, statErr := os.Stat(runtimeStateRoot)
+		if statErr == nil {
+			absentSince = time.Time{}
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			absentSince = time.Time{}
+		}
+
+		if err := os.RemoveAll(runtimeStateRoot); err != nil {
+			absentSince = time.Time{}
+			time.Sleep(25 * time.Millisecond)
+			continue
+		}
+		if absentSince.IsZero() {
+			absentSince = time.Now()
+		} else if time.Since(absentSince) >= 100*time.Millisecond {
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+	t.Errorf("runtime state directory %q did not remain removed during cleanup", runtimeStateRoot)
 }
