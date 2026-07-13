@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 )
 
 // Mode is the process behavior selected by the root after command parsing.

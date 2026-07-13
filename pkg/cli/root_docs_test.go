@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 

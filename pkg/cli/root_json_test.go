@@ -5,9 +5,9 @@ import (
 	"io"
 	"testing"
 
-	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )

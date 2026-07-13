@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 

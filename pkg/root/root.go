@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/cli"
-	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/spf13/cobra"
 )
 

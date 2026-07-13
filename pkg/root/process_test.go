@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -36,6 +39,47 @@ func TestRunTranslatesSuccessfulAndFailingProcessOutcomes(t *testing.T) {
 	}
 	if count := strings.Count(diagnostics.String(), `unknown command "unknown-command"`); count != 1 {
 		t.Fatalf("invalid command diagnostic count = %d, want 1; stderr = %q", count, diagnostics.String())
+	}
+}
+
+func TestProductionRootPreservesModelListSuccessAndFailure(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		wantCode   int
+		wantOutput string
+	}{
+		{name: "success", statusCode: http.StatusOK, body: `{"results":[]}`, wantCode: ExitSuccess, wantOutput: `"results":[]`},
+		{name: "dependency failure", statusCode: http.StatusServiceUnavailable, body: `{"message":"model catalog unavailable"}`, wantCode: ExitFailure, wantOutput: "model catalog unavailable"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/models" {
+					t.Fatalf("request path = %q, want /models", r.URL.Path)
+				}
+				w.WriteHeader(test.statusCode)
+				_, _ = io.WriteString(w, test.body)
+			}))
+			defer server.Close()
+
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			code := Run(Input{
+				Args: []string{"you", "--server", server.URL, "--json", "models", "list"},
+				Env:  rootTestEnvironment(), Stdout: &stdout, Stderr: &stderr,
+			}, Dependencies{})
+			if code != test.wantCode {
+				t.Fatalf("exit code = %d, want %d; stdout=%q stderr=%q", code, test.wantCode, stdout.String(), stderr.String())
+			}
+			output := stdout.String() + stderr.String()
+			if !strings.Contains(output, test.wantOutput) {
+				t.Fatalf("output = %q, want %q", output, test.wantOutput)
+			}
+		})
 	}
 }
 

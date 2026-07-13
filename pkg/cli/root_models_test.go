@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 )
 
 func TestModelsListCommand_DefaultServerAndJSONFlagMapToConfig(t *testing.T) {

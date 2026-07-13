@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
-	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )

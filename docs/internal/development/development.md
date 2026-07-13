@@ -15,7 +15,9 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 - `cmd/factory/` is the CLI binary entrypoint.
 - `api/` contains the authored OpenAPI sources, bundling configuration, and published contract artifact used by generation and smoke checks.
 - `factory/` contains the checked-in operator workflow surfaces, including starter guidance, workstation prompts, and the live idea or batch inbox directories under `factory/inputs/`.
-- `pkg/cli/` owns Cobra routing, command-specific packages (`run`, `config`, `submit`, `default`, and `init`), and the CLI dashboard read models in `dashboard`.
+- `pkg/cli/` temporarily owns Cobra root routing and the MCP command adapter;
+  command-specific adapters, shared server/startup helpers, and CLI dashboard
+  read models live under `pkg/transports/cli/`.
 - `pkg/factory/` owns runtime engine behavior, scheduling, markings, transitions, resources, and engine state snapshots.
 - `pkg/service/` wires the runtime, configuration, API server, replay, logging, and worker construction.
 - `pkg/api/` serves runtime HTTP endpoints and the embedded dashboard shell.

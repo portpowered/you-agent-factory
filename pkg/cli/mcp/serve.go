@@ -10,11 +10,11 @@ import (
 	"strings"
 	"syscall"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/spf13/cobra"
 )
 

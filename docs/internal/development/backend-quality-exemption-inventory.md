@@ -104,9 +104,9 @@ directive occurrence in the focused scan:
 - `pkg/apisurface`
 - `pkg/apisurface/optional`
 - `pkg/cli/clidiag`
-- `pkg/cli/dashboardrender`
+- `pkg/transports/cli/dashboardrender`
 - `pkg/transports/cli/default`
-- `pkg/cli/models`
+- `pkg/transports/cli/models`
 - `pkg/transports/cli/session`
 - `pkg/transports/cli/sessionexecution`
 - `pkg/config/factoryrun`
