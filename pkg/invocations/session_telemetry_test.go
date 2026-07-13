@@ -10,6 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 const (
@@ -64,20 +65,20 @@ func TestSessionOwnerTelemetry_NormalizationFailurePreservesStableLabels(t *test
 	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
 		Args: &map[string]any{},
 	})
-	var argumentErr *ArgumentError
-	if !errors.As(err, &argumentErr) || argumentErr.Code != ArgumentErrorCodeMissingRequiredInput {
-		t.Fatalf("error = %v, want %s", err, ArgumentErrorCodeMissingRequiredInput)
+	var argumentErr *workinvocation.ArgumentError
+	if !errors.As(err, &argumentErr) || argumentErr.Code != workinvocation.ArgumentErrorCodeMissingRequiredInput {
+		t.Fatalf("error = %v, want %s", err, workinvocation.ArgumentErrorCodeMissingRequiredInput)
 	}
 
 	baseLabels := map[string]string{
 		"input_source":    string(StructuredArgumentsInputSource),
 		"factory_name":    cfg.Name,
 		"factory_project": cfg.Project,
-		"signature_hash":  InvocationSignatureHash(cfg.InvocationSignature),
+		"signature_hash":  workinvocation.InvocationSignatureHash(cfg.InvocationSignature),
 	}
 	assertSingleSessionMetric(t, recording.metrics, InvocationMetricNormalizationAttempts, baseLabels)
 	failureLabels := cloneMetricLabels(baseLabels)
-	failureLabels["error_code"] = string(ArgumentErrorCodeMissingRequiredInput)
+	failureLabels["error_code"] = string(workinvocation.ArgumentErrorCodeMissingRequiredInput)
 	assertSingleSessionMetric(t, recording.metrics, InvocationMetricNormalizationFailure, failureLabels)
 }
 
@@ -153,7 +154,7 @@ func TestSessionOwnerTelemetry_DefaultWorkTypeFailureIsReportedOnce(t *testing.T
 	}
 
 	labels := map[string]string{
-		"input_source":    string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+		"input_source":    string(workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent)),
 		"factory_name":    cfg.Name,
 		"factory_project": cfg.Project,
 	}
@@ -190,7 +191,7 @@ func TestSessionOwnerTelemetry_PackagedSuccessEmitsEachOutcomeOnce(t *testing.T)
 		assertSessionMetricCount(t, recording.metrics, metric, 1)
 	}
 	generalLabels := map[string]string{
-		"input_source": string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+		"input_source": string(workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent)),
 		"factory_name": testPackagedFactory,
 	}
 	assertSingleSessionMetric(t, recording.metrics, InvocationMetricAttempts, generalLabels)
@@ -199,7 +200,7 @@ func TestSessionOwnerTelemetry_PackagedSuccessEmitsEachOutcomeOnce(t *testing.T)
 	resultLabels["result_type"] = "text"
 	assertSingleSessionMetric(t, recording.metrics, InvocationMetricResultType, resultLabels)
 	packagedLabels := map[string]string{
-		"input_source":     string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+		"input_source":     string(workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent)),
 		"packaged_factory": testPackagedFactory,
 	}
 	assertSingleSessionMetric(t, recording.metrics, testPackagedAttempts, packagedLabels)
@@ -246,7 +247,7 @@ func TestSessionOwnerTelemetry_PackagedFailuresPreserveClassificationAndCounts(t
 			}
 			assertSessionMetricCount(t, recording.metrics, testPackagedNotReady, tt.wantNotReady)
 			packagedLabels := map[string]string{
-				"input_source":     string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+				"input_source":     string(workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent)),
 				"packaged_factory": testPackagedFactory,
 			}
 			failureLabels := cloneMetricLabels(packagedLabels)
@@ -283,8 +284,8 @@ func TestSessionOwnerTelemetry_WaitFailuresPreserveCorrelationAndClassification(
 			wantStatus: factoryapi.InvocationTerminalStatusCanceled, wantCode: string(factoryapi.INVOCATIONCANCELED), failureClass: "cancellation",
 		},
 		{
-			name: "primary result failure", observation: classifiedObservation(PrimaryResultErrorCodeBlocked, "blocked"),
-			wantStatus: factoryapi.InvocationTerminalStatusFailed, wantCode: string(PrimaryResultErrorCodeBlocked), failureClass: "blocked",
+			name: "primary result failure", observation: classifiedObservation(workinvocation.PrimaryResultErrorCodeBlocked, "blocked"),
+			wantStatus: factoryapi.InvocationTerminalStatusFailed, wantCode: string(workinvocation.PrimaryResultErrorCodeBlocked), failureClass: "blocked",
 		},
 	}
 	for _, tt := range tests {
@@ -301,7 +302,7 @@ func TestSessionOwnerTelemetry_WaitFailuresPreserveCorrelationAndClassification(
 			})
 			input := sessionWaitInput(nil)
 			input.FactoryConfig = cfg
-			input.InputSource = InputSourceLabel(ArgumentSourceKindCompatibilityContent)
+			input.InputSource = workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent)
 			result, err := owner.waitForResult(context.Background(), "session-1", input)
 			if err != nil {
 				t.Fatalf("waitForResult: %v", err)
@@ -309,7 +310,7 @@ func TestSessionOwnerTelemetry_WaitFailuresPreserveCorrelationAndClassification(
 			assertSessionOwnerEqual(t, "status", result.Status, tt.wantStatus)
 			assertSessionOwnerEqual(t, "error code", result.ErrorCode, tt.wantCode)
 			assertSingleSessionMetric(t, recording.metrics, InvocationMetricFailure, map[string]string{
-				"input_source": string(InputSourceLabel(ArgumentSourceKindCompatibilityContent)),
+				"input_source": string(workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent)),
 				"factory_name": cfg.Name,
 			})
 			failed := singleSessionLog(t, recording.logs, "factory session invocation failed")

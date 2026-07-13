@@ -40,6 +40,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -2279,7 +2280,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	input invocations.SessionInvocationWaitInput,
-) *invocations.PrimaryResultError {
+) *workinvocation.PrimaryResultError {
 	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
 		return nil
 	}
@@ -2308,7 +2309,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) || tokenStateName(token.PlaceID) != wantState {
 				continue
 			}
-			return invocations.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
+			return workinvocation.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
 				ID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
 				DisplayName: token.Color.Name, PlaceID: token.PlaceID,
 			}, sessionID)

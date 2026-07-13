@@ -1,11 +1,9 @@
-package invocations
+package invocation
 
 import (
-	"os"
-	"path/filepath"
+	"fmt"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -17,7 +15,7 @@ func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 		Arguments: map[string]interfaces.InvocationArgument{
 			"input": {Values: []string{"draft"}},
 		},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("InterpolateWorkerConfig: %v", err)
 	}
@@ -32,7 +30,7 @@ func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 func TestInterpolateWorkstationConfig_RejectsMissingEmbeddedParameter(t *testing.T) {
 	_, err := InterpolateWorkstationConfig(interfaces.FactoryWorkstationConfig{
 		PromptTemplate: "Use ${missing} now",
-	}, &interfaces.InvocationArguments{})
+	}, &interfaces.InvocationArguments{}, nil)
 	if err == nil {
 		t.Fatal("InterpolateWorkstationConfig error = nil, want invalid interpolation")
 	}
@@ -46,10 +44,12 @@ func TestInterpolateWorkstationConfig_RejectsMissingEmbeddedParameter(t *testing
 }
 
 func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "prompt.txt")
-	if err := os.WriteFile(path, []byte("from-file"), 0o644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
+	const path = "prompt.txt"
+	readFile := func(got string) ([]byte, error) {
+		if got != path {
+			return nil, fmt.Errorf("path = %q, want %q", got, path)
+		}
+		return []byte("from-file"), nil
 	}
 
 	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{
@@ -58,10 +58,10 @@ func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
 		Arguments: map[string]interfaces.InvocationArgument{
 			"input": {
 				Values:    []string{path},
-				ValueMode: string(factoryapi.FactoryInvocationParameterValueModeFileContents),
+				ValueMode: valueModeFileContents,
 			},
 		},
-	})
+	}, readFile)
 	if err != nil {
 		t.Fatalf("InterpolateWorkerConfig: %v", err)
 	}

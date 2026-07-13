@@ -8,19 +8,19 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 const (
-	ErrorCodeUnsupportedMode   = "SESSION_EXECUTION_UNSUPPORTED_MODE"
-	ErrorCodeSourceConflict    = "SESSION_EXECUTION_SOURCE_CONFLICT"
-	ErrorCodeMissingSource     = "SESSION_EXECUTION_MISSING_SOURCE"
-	ErrorCodeInvalidArgs       = "SESSION_EXECUTION_INVALID_ARGS"
-	ErrorCodeInvalidPolicy     = "SESSION_EXECUTION_INVALID_POLICY"
-	ErrorCodeValidation        = "SESSION_EXECUTION_VALIDATION_FAILED"
-	ErrorCodeRequestIDConflict = "EXECUTION_REQUEST_ID_CONFLICT"
-	ErrorCodeSessionNotFound            = "SESSION_NOT_FOUND"
-	ErrorCodeReconnectCursorNotFound    = "RECONNECT_CURSOR_NOT_FOUND"
+	ErrorCodeUnsupportedMode         = "SESSION_EXECUTION_UNSUPPORTED_MODE"
+	ErrorCodeSourceConflict          = "SESSION_EXECUTION_SOURCE_CONFLICT"
+	ErrorCodeMissingSource           = "SESSION_EXECUTION_MISSING_SOURCE"
+	ErrorCodeInvalidArgs             = "SESSION_EXECUTION_INVALID_ARGS"
+	ErrorCodeInvalidPolicy           = "SESSION_EXECUTION_INVALID_POLICY"
+	ErrorCodeValidation              = "SESSION_EXECUTION_VALIDATION_FAILED"
+	ErrorCodeRequestIDConflict       = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorCodeSessionNotFound         = "SESSION_NOT_FOUND"
+	ErrorCodeReconnectCursorNotFound = "RECONNECT_CURSOR_NOT_FOUND"
 )
 
 // ExecutionError is the stable CLI durable session execution failure contract.

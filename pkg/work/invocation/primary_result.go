@@ -1,4 +1,4 @@
-package invocations
+package invocation
 
 import (
 	"fmt"
@@ -9,8 +9,11 @@ import (
 )
 
 const (
-	invocationReturnPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
-	invocationReturnPolicyExplicit              = "EXPLICIT"
+	ReturnPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
+	ReturnPolicyExplicit              = "EXPLICIT"
+
+	invocationReturnPolicySubmittedWorkTerminal = ReturnPolicySubmittedWorkTerminal
+	invocationReturnPolicyExplicit              = ReturnPolicyExplicit
 )
 
 // PrimaryResultErrorCode is the stable machine-readable failure code for

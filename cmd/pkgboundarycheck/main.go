@@ -83,6 +83,7 @@ const (
 	batch006TransportFamilyMove = "Batch 006 — Transport family move"
 	batch006WorkFamilyMove      = "Batch 006 — Work family move"
 	batch006PlatformFamilyMove  = "Batch 006 — Platform family move"
+	batch007FactorySessionMove  = "Batch 007 — Factory Session invocation ownership convergence"
 	batch007And008ServiceMove   = "Batch 007 — Service and Factory Session ownership convergence; Batch 008 — Legacy composition-root deletion"
 	batch008CompositionDeletion = "Batch 008 — Legacy composition-root deletion"
 )
@@ -92,7 +93,7 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 	{packagePath: "pkg/apisurface", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after boundary mapping and callers move to pkg/transports"},
 	{packagePath: "pkg/cli", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after CLI adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/mcp", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after MCP adapters and callers move to pkg/transports"},
-	{packagePath: "pkg/invocations", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after invocation input and return policy move to pkg/work"},
+	{packagePath: "pkg/invocations", targetOwner: "pkg/factorysessions", workItem: batch007FactorySessionMove, deletionGate: "remove after Factory Session orchestration and remaining helpers move to their narrow owners"},
 	{packagePath: "pkg/logging", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after logging infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/replay", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after replay and artifact infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/sessionpersistence", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after cursor persistence and callers move to pkg/platform"},
@@ -375,6 +376,8 @@ func activeMigrationTarget(workItem string) (string, bool) {
 		return "pkg/work", true
 	case batch006PlatformFamilyMove:
 		return "pkg/platform", true
+	case batch007FactorySessionMove:
+		return "pkg/factorysessions", true
 	case batch007And008ServiceMove, batch008CompositionDeletion:
 		return "pkg/wire", true
 	default:

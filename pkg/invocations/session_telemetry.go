@@ -7,6 +7,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 const (
@@ -83,31 +84,31 @@ func NewSessionInvocationTelemetry(deps SessionInvocationTelemetryDependencies) 
 // packaged-only lifecycle points.
 type SessionInvocationPackagedTelemetry interface {
 	PackagedInvocationActive(string, SessionInvocationWaitInput)
-	PackagedInvocationCompleted(string, SessionInvocationWaitInput, PrimaryResultSelection)
+	PackagedInvocationCompleted(string, SessionInvocationWaitInput, workinvocation.PrimaryResultSelection)
 	PackagedInvocationFailed(string, SessionInvocationWaitInput, SessionInvocationSpecialFailure)
 }
 
-func (t *sessionInvocationTelemetry) NormalizationAttempt(cfg *interfaces.FactoryConfig, source InputSourceLabel) {
+func (t *sessionInvocationTelemetry) NormalizationAttempt(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel) {
 	t.metric(InvocationMetricNormalizationAttempts, invocationMetricLabels(cfg, source))
 }
 
-func (t *sessionInvocationTelemetry) NormalizationFailure(cfg *interfaces.FactoryConfig, source InputSourceLabel, err error) {
+func (t *sessionInvocationTelemetry) NormalizationFailure(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, err error) {
 	t.metric(InvocationMetricNormalizationFailure, mergeMetricLabels(invocationMetricLabels(cfg, source), invocationErrorMetricLabels(err)))
 }
 
-func (t *sessionInvocationTelemetry) NormalizationSuccess(cfg *interfaces.FactoryConfig, source InputSourceLabel) {
+func (t *sessionInvocationTelemetry) NormalizationSuccess(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel) {
 	t.metric(InvocationMetricNormalizationSuccess, invocationMetricLabels(cfg, source))
 }
 
-func (t *sessionInvocationTelemetry) InterpolationFailure(cfg *interfaces.FactoryConfig, source InputSourceLabel, err error) {
+func (t *sessionInvocationTelemetry) InterpolationFailure(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, err error) {
 	t.metric(InvocationMetricInterpolationFailure, mergeMetricLabels(invocationMetricLabels(cfg, source), invocationErrorMetricLabels(err)))
 }
 
-func (t *sessionInvocationTelemetry) SubmissionFailure(cfg *interfaces.FactoryConfig, source InputSourceLabel, _ error) {
+func (t *sessionInvocationTelemetry) SubmissionFailure(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, _ error) {
 	t.metric(InvocationMetricFailure, invocationMetricLabels(cfg, source))
 }
 
-func (t *sessionInvocationTelemetry) InvocationSubmitted(cfg *interfaces.FactoryConfig, source InputSourceLabel) {
+func (t *sessionInvocationTelemetry) InvocationSubmitted(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel) {
 	t.metric(InvocationMetricAttempts, invocationMetricLabels(cfg, source))
 	if policyModeForInvocation(cfg.InvocationReturn) == invocationPolicyModeFallback {
 		t.metric(InvocationMetricFallbackPolicyUsed, invocationMetricLabels(cfg, source))
@@ -117,39 +118,39 @@ func (t *sessionInvocationTelemetry) InvocationSubmitted(cfg *interfaces.Factory
 	}
 }
 
-func (t *sessionInvocationTelemetry) InvocationCompleted(cfg *interfaces.FactoryConfig, source InputSourceLabel, result []interfaces.WorkContentPart) {
+func (t *sessionInvocationTelemetry) InvocationCompleted(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, result []interfaces.WorkContentPart) {
 	t.metric(InvocationMetricSuccess, invocationMetricLabels(cfg, source))
 	t.metric(InvocationMetricResultType, mergeMetricLabels(invocationMetricLabels(cfg, source), map[string]string{
 		"result_type": primaryResultMetricType(result),
 	}))
 }
 
-func (t *sessionInvocationTelemetry) InvocationFailed(cfg *interfaces.FactoryConfig, source InputSourceLabel, errorCode string) {
+func (t *sessionInvocationTelemetry) InvocationFailed(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, errorCode string) {
 	t.metric(InvocationMetricFailure, invocationMetricLabels(cfg, source))
-	if errorCode == string(PrimaryResultErrorCodeUnresolved) {
+	if errorCode == string(workinvocation.PrimaryResultErrorCodeUnresolved) {
 		t.metric(InvocationMetricUnresolvedPrimary, invocationMetricLabels(cfg, source))
 	}
 }
 
 func (t *sessionInvocationTelemetry) LogArgumentFailure(
 	sessionID string,
-	source InputSourceLabel,
+	source workinvocation.InputSourceLabel,
 	cfg *interfaces.FactoryConfig,
-	normalized *NormalizedArguments,
+	normalized *workinvocation.NormalizedArguments,
 	err error,
 	failureClass string,
 ) {
 	fields := invocationLogFields(sessionID, source, invocationReturn(cfg), cfg)
 	fields["status"] = string(factoryapi.InvocationTerminalStatusFailed)
 	fields["failure_class"] = failureClass
-	var argumentErr *ArgumentError
+	var argumentErr *workinvocation.ArgumentError
 	if errors.As(err, &argumentErr) {
 		addArgumentErrorFields(fields, normalized, argumentErr)
 	}
 	t.log("warn", "factory session invocation argument failure", fields, err)
 }
 
-func (t *sessionInvocationTelemetry) LogSubmissionFailure(sessionID string, source InputSourceLabel, cfg *interfaces.FactoryConfig, err error) {
+func (t *sessionInvocationTelemetry) LogSubmissionFailure(sessionID string, source workinvocation.InputSourceLabel, cfg *interfaces.FactoryConfig, err error) {
 	fields := invocationLogFields(sessionID, source, invocationReturn(cfg), nil)
 	fields["status"] = string(factoryapi.InvocationTerminalStatusFailed)
 	fields["error_code"] = string(factoryapi.INVOCATIONRUNTIMEFAILURE)
@@ -159,7 +160,7 @@ func (t *sessionInvocationTelemetry) LogSubmissionFailure(sessionID string, sour
 
 func (t *sessionInvocationTelemetry) LogInvocationSubmitted(
 	sessionID string,
-	source InputSourceLabel,
+	source workinvocation.InputSourceLabel,
 	cfg *interfaces.FactoryConfig,
 	result interfaces.WorkRequestSubmitResult,
 ) {
@@ -174,7 +175,7 @@ func (t *sessionInvocationTelemetry) LogInvocationSubmitted(
 	t.log("info", "factory session invocation submitted", fields, nil)
 }
 
-func (t *sessionInvocationTelemetry) LogInvocationCompleted(sessionID string, input SessionInvocationWaitInput, selection PrimaryResultSelection) {
+func (t *sessionInvocationTelemetry) LogInvocationCompleted(sessionID string, input SessionInvocationWaitInput, selection workinvocation.PrimaryResultSelection) {
 	fields := invocationLogFields(sessionID, input.InputSource, input.InvocationReturn, input.FactoryConfig)
 	fields["request_id"], fields["trace_id"] = input.RequestID, input.TraceID
 	fields["status"] = string(factoryapi.InvocationTerminalStatusCompleted)
@@ -202,7 +203,7 @@ func (t *sessionInvocationTelemetry) PackagedInvocationActive(sessionID string, 
 	t.log("info", "packaged tts invocation loading", fields, nil)
 }
 
-func (t *sessionInvocationTelemetry) PackagedInvocationCompleted(sessionID string, input SessionInvocationWaitInput, selection PrimaryResultSelection) {
+func (t *sessionInvocationTelemetry) PackagedInvocationCompleted(sessionID string, input SessionInvocationWaitInput, selection workinvocation.PrimaryResultSelection) {
 	packaged := t.packaged(input.FactoryConfig)
 	if packaged == nil {
 		return
@@ -254,7 +255,7 @@ func (t *sessionInvocationTelemetry) packaged(cfg *interfaces.FactoryConfig) *Pa
 	return t.deps.Packaged
 }
 
-func (t *sessionInvocationTelemetry) packagedMetric(name string, source InputSourceLabel, extra map[string]string) {
+func (t *sessionInvocationTelemetry) packagedMetric(name string, source workinvocation.InputSourceLabel, extra map[string]string) {
 	packaged := t.deps.Packaged
 	t.metric(name, mergeMetricLabels(map[string]string{
 		"input_source": string(source), "packaged_factory": packaged.FactoryName,
@@ -263,7 +264,7 @@ func (t *sessionInvocationTelemetry) packagedMetric(name string, source InputSou
 
 func (t *sessionInvocationTelemetry) packagedLogFields(
 	sessionID string,
-	source InputSourceLabel,
+	source workinvocation.InputSourceLabel,
 	policy *interfaces.InvocationReturnConfig,
 	cfg *interfaces.FactoryConfig,
 	packaged *PackagedInvocationTelemetry,
@@ -273,7 +274,7 @@ func (t *sessionInvocationTelemetry) packagedLogFields(
 	return fields
 }
 
-func addArgumentErrorFields(fields map[string]any, normalized *NormalizedArguments, argumentErr *ArgumentError) {
+func addArgumentErrorFields(fields map[string]any, normalized *workinvocation.NormalizedArguments, argumentErr *workinvocation.ArgumentError) {
 	if code := strings.TrimSpace(string(argumentErr.Code)); code != "" {
 		fields["error_code"] = code
 	}
@@ -293,7 +294,7 @@ func addArgumentErrorFields(fields map[string]any, normalized *NormalizedArgumen
 	}
 }
 
-func invocationLogFields(sessionID string, source InputSourceLabel, policy *interfaces.InvocationReturnConfig, cfg *interfaces.FactoryConfig) map[string]any {
+func invocationLogFields(sessionID string, source workinvocation.InputSourceLabel, policy *interfaces.InvocationReturnConfig, cfg *interfaces.FactoryConfig) map[string]any {
 	fields := map[string]any{
 		"session_id": sessionID, "input_source": string(source),
 		"invocation_return_policy":      invocationPolicyName(policy),
@@ -306,7 +307,7 @@ func invocationLogFields(sessionID string, source InputSourceLabel, policy *inte
 	return fields
 }
 
-func invocationMetricLabels(cfg *interfaces.FactoryConfig, source InputSourceLabel) map[string]string {
+func invocationMetricLabels(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel) map[string]string {
 	return mergeMetricLabels(map[string]string{"input_source": string(source)}, invocationFactoryLabels(cfg))
 }
 
@@ -321,21 +322,21 @@ func invocationFactoryLabels(cfg *interfaces.FactoryConfig) map[string]string {
 	if value := strings.TrimSpace(cfg.Project); value != "" {
 		labels["factory_project"] = value
 	}
-	if value := InvocationSignatureHash(cfg.InvocationSignature); value != "" {
+	if value := workinvocation.InvocationSignatureHash(cfg.InvocationSignature); value != "" {
 		labels["signature_hash"] = value
 	}
 	return labels
 }
 
 func invocationErrorMetricLabels(err error) map[string]string {
-	var argumentErr *ArgumentError
+	var argumentErr *workinvocation.ArgumentError
 	if errors.As(err, &argumentErr) && strings.TrimSpace(string(argumentErr.Code)) != "" {
 		return map[string]string{"error_code": string(argumentErr.Code)}
 	}
 	return nil
 }
 
-func invocationArgumentSourceKinds(normalized *NormalizedArguments, parameter string) string {
+func invocationArgumentSourceKinds(normalized *workinvocation.NormalizedArguments, parameter string) string {
 	argument := invocationNormalizedArgument(normalized, parameter)
 	if argument == nil {
 		return ""
@@ -354,7 +355,7 @@ func invocationArgumentSourceKinds(normalized *NormalizedArguments, parameter st
 	return strings.Join(kinds, ",")
 }
 
-func invocationArgumentRedactionState(normalized *NormalizedArguments, parameter string) (bool, int) {
+func invocationArgumentRedactionState(normalized *workinvocation.NormalizedArguments, parameter string) (bool, int) {
 	argument := invocationNormalizedArgument(normalized, parameter)
 	if argument == nil {
 		return false, 0
@@ -366,7 +367,7 @@ func invocationArgumentRedactionState(normalized *NormalizedArguments, parameter
 	return redacted, len(argument.Values)
 }
 
-func invocationNormalizedArgument(normalized *NormalizedArguments, parameter string) *NormalizedArgument {
+func invocationNormalizedArgument(normalized *workinvocation.NormalizedArguments, parameter string) *workinvocation.NormalizedArgument {
 	if normalized == nil || strings.TrimSpace(parameter) == "" {
 		return nil
 	}

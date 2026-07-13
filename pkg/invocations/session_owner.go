@@ -4,17 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 // StructuredArgumentsInputSource identifies invocation input resolved from the
 // structured API argument carrier rather than compatibility content.
-const StructuredArgumentsInputSource InputSourceLabel = "signature_args"
+const StructuredArgumentsInputSource workinvocation.InputSourceLabel = "signature_args"
 
 // FactoryInvocationResult carries the runtime-owned outcome of one session invocation.
 type FactoryInvocationResult struct {
@@ -40,7 +42,7 @@ type SessionInvoker interface {
 type SessionInvocationWaitInput struct {
 	RequestID        string
 	TraceID          string
-	InputSource      InputSourceLabel
+	InputSource      workinvocation.InputSourceLabel
 	InvocationReturn *interfaces.InvocationReturnConfig
 	FactoryConfig    *interfaces.FactoryConfig
 	TimeoutMillis    *int64
@@ -49,18 +51,18 @@ type SessionInvocationWaitInput struct {
 // SessionInvocationTelemetry owns metric and safe-log emissions coordinated by
 // SessionOwner.
 type SessionInvocationTelemetry interface {
-	NormalizationAttempt(*interfaces.FactoryConfig, InputSourceLabel)
-	NormalizationFailure(*interfaces.FactoryConfig, InputSourceLabel, error)
-	NormalizationSuccess(*interfaces.FactoryConfig, InputSourceLabel)
-	InterpolationFailure(*interfaces.FactoryConfig, InputSourceLabel, error)
-	SubmissionFailure(*interfaces.FactoryConfig, InputSourceLabel, error)
-	InvocationSubmitted(*interfaces.FactoryConfig, InputSourceLabel)
-	InvocationCompleted(*interfaces.FactoryConfig, InputSourceLabel, []interfaces.WorkContentPart)
-	InvocationFailed(*interfaces.FactoryConfig, InputSourceLabel, string)
-	LogArgumentFailure(string, InputSourceLabel, *interfaces.FactoryConfig, *NormalizedArguments, error, string)
-	LogSubmissionFailure(string, InputSourceLabel, *interfaces.FactoryConfig, error)
-	LogInvocationSubmitted(string, InputSourceLabel, *interfaces.FactoryConfig, interfaces.WorkRequestSubmitResult)
-	LogInvocationCompleted(string, SessionInvocationWaitInput, PrimaryResultSelection)
+	NormalizationAttempt(*interfaces.FactoryConfig, workinvocation.InputSourceLabel)
+	NormalizationFailure(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, error)
+	NormalizationSuccess(*interfaces.FactoryConfig, workinvocation.InputSourceLabel)
+	InterpolationFailure(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, error)
+	SubmissionFailure(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, error)
+	InvocationSubmitted(*interfaces.FactoryConfig, workinvocation.InputSourceLabel)
+	InvocationCompleted(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, []interfaces.WorkContentPart)
+	InvocationFailed(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, string)
+	LogArgumentFailure(string, workinvocation.InputSourceLabel, *interfaces.FactoryConfig, *workinvocation.NormalizedArguments, error, string)
+	LogSubmissionFailure(string, workinvocation.InputSourceLabel, *interfaces.FactoryConfig, error)
+	LogInvocationSubmitted(string, workinvocation.InputSourceLabel, *interfaces.FactoryConfig, interfaces.WorkRequestSubmitResult)
+	LogInvocationCompleted(string, SessionInvocationWaitInput, workinvocation.PrimaryResultSelection)
 	LogInvocationFailed(string, SessionInvocationWaitInput, FactoryInvocationResult, string)
 }
 
@@ -112,7 +114,7 @@ func (o *SessionOwner) InvokeFactorySession(
 		return FactoryInvocationResult{}, err
 	}
 	o.normalizationSuccess(factoryCfg, resolved.Source)
-	if err := ValidateInvocationInterpolation(factoryCfg, RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments)); err != nil {
+	if err := workinvocation.ValidateInvocationInterpolation(factoryCfg, workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), os.ReadFile); err != nil {
 		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
 		return FactoryInvocationResult{}, normalizeSessionInvocationError(err)
 	}
@@ -130,7 +132,7 @@ func (o *SessionOwner) InvokeFactorySession(
 		RequestID:           strings.TrimSpace(stringValue(request.RequestId)),
 		WorkTypeID:          workTypeName,
 		Content:             resolved.Content,
-		InvocationArguments: RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
+		InvocationArguments: workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
 	})
 	if err != nil {
 		if o.deps.Telemetry != nil {
@@ -155,9 +157,9 @@ func (o *SessionOwner) InvokeFactorySession(
 
 // ResolvedSessionInvocationInput is the normalized input carried into Work submission.
 type ResolvedSessionInvocationInput struct {
-	Source              InputSourceLabel
+	Source              workinvocation.InputSourceLabel
 	Content             []interfaces.WorkContentPart
-	NormalizedArguments *NormalizedArguments
+	NormalizedArguments *workinvocation.NormalizedArguments
 }
 
 // ResolveSessionInvocationInput applies the shared compatibility-content and
@@ -185,7 +187,7 @@ func resolveCompatibilitySessionInvocationInput(content []interfaces.WorkContent
 	if len(content) == 0 {
 		return ResolvedSessionInvocationInput{}, &interfaces.RequestValidationError{Message: "content is required when args are omitted"}
 	}
-	normalized, err := NormalizeArguments(NormalizeArgumentsInput{CompatibilityContent: content})
+	normalized, err := workinvocation.NormalizeArguments(workinvocation.NormalizeArgumentsInput{CompatibilityContent: content})
 	if err != nil {
 		return ResolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
 	}
@@ -201,17 +203,17 @@ func resolveCompatibilitySessionInvocationInput(content []interfaces.WorkContent
 
 func resolveStructuredSessionInvocationInput(
 	signature *interfaces.InvocationSignatureConfig,
-	directArgs []NamedArgumentInput,
+	directArgs []workinvocation.NamedArgumentInput,
 	content []interfaces.WorkContentPart,
 ) (ResolvedSessionInvocationInput, error) {
 	if signature == nil {
-		return ResolvedSessionInvocationInput{}, &ArgumentError{
-			Code:     ArgumentErrorCodeInvalidActiveSignature,
+		return ResolvedSessionInvocationInput{}, &workinvocation.ArgumentError{
+			Code:     workinvocation.ArgumentErrorCodeInvalidActiveSignature,
 			Message:  "named arguments require a factory invocationSignature",
 			Argument: firstStructuredArgumentKey(directArgs),
 		}
 	}
-	normalized, err := NormalizeArguments(NormalizeArgumentsInput{
+	normalized, err := workinvocation.NormalizeArguments(workinvocation.NormalizeArgumentsInput{
 		Signature:            signature,
 		DirectArgs:           directArgs,
 		CompatibilityContent: content,
@@ -239,18 +241,18 @@ func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest)
 	return contentcontract.PartsFromGenerated(request.Content), nil
 }
 
-func sessionInvocationStructuredArgs(request factoryapi.InvocationRequest) ([]NamedArgumentInput, error) {
+func sessionInvocationStructuredArgs(request factoryapi.InvocationRequest) ([]workinvocation.NamedArgumentInput, error) {
 	if request.Args == nil {
 		return nil, nil
 	}
-	directArgs, err := NamedArgumentInputsFromAnyMap(*request.Args)
+	directArgs, err := workinvocation.NamedArgumentInputsFromAnyMap(*request.Args)
 	if err != nil {
 		return nil, &interfaces.RequestValidationError{Message: err.Error()}
 	}
 	return directArgs, nil
 }
 
-func firstStructuredArgumentKey(arguments []NamedArgumentInput) string {
+func firstStructuredArgumentKey(arguments []workinvocation.NamedArgumentInput) string {
 	if len(arguments) == 0 {
 		return ""
 	}
@@ -258,7 +260,7 @@ func firstStructuredArgumentKey(arguments []NamedArgumentInput) string {
 }
 
 func normalizeSessionInvocationError(err error) error {
-	var validationErr *TextContentValidationError
+	var validationErr *workinvocation.TextContentValidationError
 	if errors.As(err, &validationErr) {
 		return &interfaces.RequestValidationError{Message: validationErr.Message}
 	}
@@ -266,27 +268,27 @@ func normalizeSessionInvocationError(err error) error {
 }
 
 // SessionInvocationSourceHint reports a low-cardinality source before full normalization.
-func SessionInvocationSourceHint(request factoryapi.InvocationRequest) InputSourceLabel {
+func SessionInvocationSourceHint(request factoryapi.InvocationRequest) workinvocation.InputSourceLabel {
 	if request.Args != nil {
 		return StructuredArgumentsInputSource
 	}
-	return InputSourceLabel(ArgumentSourceKindCompatibilityContent)
+	return workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent)
 }
 
-func (o *SessionOwner) normalizationAttempt(cfg *interfaces.FactoryConfig, source InputSourceLabel) {
+func (o *SessionOwner) normalizationAttempt(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel) {
 	if o.deps.Telemetry != nil {
 		o.deps.Telemetry.NormalizationAttempt(cfg, source)
 	}
 }
 
-func (o *SessionOwner) normalizationFailure(sessionID string, cfg *interfaces.FactoryConfig, source InputSourceLabel, err error) {
+func (o *SessionOwner) normalizationFailure(sessionID string, cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, err error) {
 	if o.deps.Telemetry != nil {
 		o.deps.Telemetry.NormalizationFailure(cfg, source, err)
 		o.deps.Telemetry.LogArgumentFailure(sessionID, source, cfg, nil, err, "normalization_failure")
 	}
 }
 
-func (o *SessionOwner) normalizationSuccess(cfg *interfaces.FactoryConfig, source InputSourceLabel) {
+func (o *SessionOwner) normalizationSuccess(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel) {
 	if o.deps.Telemetry != nil {
 		o.deps.Telemetry.NormalizationSuccess(cfg, source)
 	}

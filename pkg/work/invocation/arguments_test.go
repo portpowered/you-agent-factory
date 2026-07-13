@@ -1,4 +1,4 @@
-package invocations
+package invocation
 
 import (
 	"errors"
@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -15,9 +14,9 @@ func TestNormalizeArguments_SignatureCanonicalizesNamedKeysAndDefaults(t *testin
 	got, err := NormalizeArguments(NormalizeArgumentsInput{
 		Signature: signatureConfig(
 			positionalParameter("input", 1, true),
-			namedParameter("output", "out", nil, false, string(factoryapi.FactoryInvocationParameterTypeHintPath), "report.txt"),
+			namedParameter("output", "out", nil, false, typeHintPath, "report.txt"),
 			namedParameter("mode", "", []string{"m"}, false, "", "fast"),
-			stdinParameter("confirm", string(factoryapi.FactoryInvocationParameterTypeHintBooleanString)),
+			stdinParameter("confirm", typeHintBooleanString),
 		),
 		PositionalArgs: []string{"hello"},
 		NamedArgs: []NamedArgumentInput{
@@ -47,7 +46,7 @@ func TestNormalizeArguments_SignatureAcceptsStructuredArgsForPositionalAndStdinB
 	stdinParameter := interfaces.InvocationParameterConfig{
 		Name: "prompt",
 		Bindings: []interfaces.InvocationParameterBindingConfig{{
-			Kind: string(factoryapi.FactoryInvocationParameterBindingKindStdin),
+			Kind: bindingKindStdin,
 		}},
 	}
 	got, err := NormalizeArguments(NormalizeArgumentsInput{
@@ -77,20 +76,20 @@ func TestNormalizeArguments_SignatureAcceptsStructuredArgsForPositionalAndStdinB
 func TestNormalizeArguments_SignatureSupportsRepeatedUnknownCollectionAndSensitiveRedaction(t *testing.T) {
 	got, err := NormalizeArguments(NormalizeArgumentsInput{
 		Signature: &interfaces.InvocationSignatureConfig{
-			UnknownNamedArgumentPolicy: string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect),
+			UnknownNamedArgumentPolicy: unknownNamedCollect,
 			Parameters: []interfaces.InvocationParameterConfig{
 				{
 					Name:          "tag",
-					ValueMode:     string(factoryapi.FactoryInvocationParameterValueModeRepeated),
-					Bindings:      []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)}},
+					ValueMode:     valueModeRepeated,
+					Bindings:      []interfaces.InvocationParameterBindingConfig{{Kind: bindingKindNamed}},
 					Aliases:       []string{"t"},
 					Sensitive:     true,
 					DefaultValues: []string{},
 				},
 				{
 					Name:      "extras",
-					ValueMode: string(factoryapi.FactoryInvocationParameterValueModeRepeated),
-					Bindings:  []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamedRest)}},
+					ValueMode: valueModeRepeated,
+					Bindings:  []interfaces.InvocationParameterBindingConfig{{Kind: bindingKindNamedRest}},
 				},
 			},
 		},
@@ -135,8 +134,8 @@ func TestNormalizeArguments_SignatureRejectsSourceConflict(t *testing.T) {
 				Name:         "output",
 				ExternalName: "output",
 				Bindings: []interfaces.InvocationParameterBindingConfig{
-					{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 1},
-					{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)},
+					{Kind: bindingKindPositional, Position: 1},
+					{Kind: bindingKindNamed},
 				},
 			}},
 		},
@@ -157,7 +156,7 @@ func TestNormalizeArguments_SignatureRejectsMissingRequiredInput(t *testing.T) {
 
 func TestNormalizeArguments_SignatureRejectsStringValidationMismatch(t *testing.T) {
 	_, err := NormalizeArguments(NormalizeArgumentsInput{
-		Signature: signatureConfig(namedParameter("count", "", nil, false, string(factoryapi.FactoryInvocationParameterTypeHintNumberString), "")),
+		Signature: signatureConfig(namedParameter("count", "", nil, false, typeHintNumberString, "")),
 		NamedArgs: []NamedArgumentInput{{Key: "count", Values: []string{"nope"}}},
 	})
 
@@ -247,7 +246,7 @@ func positionalParameter(name string, position int, required bool) interfaces.In
 		Name:     name,
 		Required: required,
 		Bindings: []interfaces.InvocationParameterBindingConfig{{
-			Kind:     string(factoryapi.FactoryInvocationParameterBindingKindPositional),
+			Kind:     bindingKindPositional,
 			Position: position,
 		}},
 	}
@@ -262,7 +261,7 @@ func namedParameter(name, externalName string, aliases []string, required bool, 
 		TypeHint:     typeHint,
 		DefaultValue: defaultValue,
 		Bindings: []interfaces.InvocationParameterBindingConfig{{
-			Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+			Kind: bindingKindNamed,
 		}},
 	}
 	return parameter
@@ -272,7 +271,7 @@ func stdinParameter(name, typeHint string) interfaces.InvocationParameterConfig 
 	return interfaces.InvocationParameterConfig{
 		Name:     name,
 		TypeHint: typeHint,
-		Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindStdin)}},
+		Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: bindingKindStdin}},
 	}
 }
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *testing.T) {

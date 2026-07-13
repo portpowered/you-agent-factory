@@ -3,8 +3,13 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
-- `pkg/invocations/` contains the shared invocation contract logic used by CLI
-  and API adapters plus the canonical Factory Session invocation owner.
+- `pkg/work/invocation/` owns pure invocation input, argument normalization,
+  interpolation, return-policy selection, and stable policy errors used by CLI,
+  API, workers, and Factory Session orchestration. It consumes domain-owned
+  values and has no generated transport or live-session dependency.
+- `pkg/invocations/` temporarily contains the canonical stateful Factory
+  Session invocation owner plus inference and permission helpers awaiting their
+  narrow-owner migrations.
 - `pkg/invocations/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
@@ -17,16 +22,18 @@ primary-result behavior.
   packaged-factory classification as explicit collaborators; service and
   runtime-host facades should only adapt those dependencies and forward
   `InvokeFactorySession` unchanged.
-- `pkg/invocations/arguments.go` owns signature-backed invocation argument
+- `pkg/work/invocation/arguments.go` owns signature-backed invocation argument
   normalization for positional, named, stdin, defaulted, repeated, variadic,
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
-- `pkg/invocations/interpolation.go` owns runtime `${parameter}` interpolation
+- `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch
   interpolation validation. Keep file-contents substitution, omitted-exact-field
   behavior, and interpolation error codes there instead of duplicating
-  string-replacement rules in service or worker executors. The same package also
+  string-replacement rules in service or worker executors. FILE_CONTENTS reads
+  enter through the explicit `FileReader` collaborator supplied by those IO
+  boundaries. The same package also
   owns replay-safe invocation diagnostics such as `InvocationSignatureHash` and
   `InvocationDiagnostic`; execution layers should reuse that summary instead of
   inventing transport- or worker-specific argument telemetry.
@@ -42,7 +49,7 @@ primary-result behavior.
   interpolation, validate that it references a declared signature parameter
   rather than forcing the authored placeholder through concrete provider
   validation during session startup.
-- `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
+- `pkg/work/invocation/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
   polling logic. The same package also classifies missing-primary-result waits
@@ -75,10 +82,11 @@ primary-result behavior.
   `InvokeFactorySession` methods must remain transparent forwards to
   `invocations.SessionInvoker`; model-catalog files must not own Factory
   Session invocation behavior. Metric names, label policy, log shaping, and
-  emission sequencing must not be reimplemented in these adapters; request
-  normalization, interpolation validation, submission sequencing, polling,
-  timeout/cancellation, primary-result selection, and general terminal
-  classification belong only to `pkg/invocations`.
+  emission sequencing must not be reimplemented in these adapters. Submission
+  sequencing, polling, and timeout/cancellation temporarily belong to
+  `pkg/invocations`; normalization, interpolation, primary-result selection,
+  and general terminal classification belong to `pkg/work/invocation` and are
+  delegated to by the stateful owner.
 - API structured args use the direct structured-argument carrier rather than
   being reinterpreted as CLI named flags, so canonical parameter-name keys
   still work for positional-only or stdin-bound parameters. Treat `args: {}` as
@@ -144,7 +152,7 @@ primary-result behavior.
   `pkg/cli/models` (`resolveModelsInvokeFactoryDir`), with operator defaults and
   logger passed from `pkg/cli/root.go` `newModelsInvokeCommand`.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
-  shared `pkg/invocations` contract, then runs the local service in
+  shared `pkg/work/invocation` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
   logged and counted there before the service runtime exists. `you run
@@ -287,9 +295,9 @@ primary-result behavior.
   known run and inherited flags while leaving unknown `--factory-arg` tokens
   intact for signature-backed parsing; keep factory-argument normalization
   itself in `pkg/cli/run/factory_invocation_signature_input.go` plus
-  `pkg/invocations/arguments.go` rather than re-implementing binding logic in
+  `pkg/work/invocation/arguments.go` rather than re-implementing binding logic in
   Cobra parsing.
-- `pkg/invocations/input.go` owns logical empty-text detection via
+- `pkg/work/invocation/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.
 - `pkg/cli/root.go` owns the customer-facing `you run --factory` help text for

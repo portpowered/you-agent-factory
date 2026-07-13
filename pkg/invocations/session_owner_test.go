@@ -8,6 +8,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *testing.T) {
@@ -63,7 +64,7 @@ func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *
 	assertSessionOwnerEqual(t, "submitted content", submitted[0].Content[0].Text, "hello")
 	assertSessionOwnerEqual(t, "wait request ID", waitInput.RequestID, "runtime-request")
 	assertSessionOwnerEqual(t, "wait trace ID", waitInput.TraceID, "trace-1")
-	assertSessionOwnerEqual(t, "wait input source", waitInput.InputSource, InputSourceLabel(ArgumentSourceKindCompatibilityContent))
+	assertSessionOwnerEqual(t, "wait input source", waitInput.InputSource, workinvocation.InputSourceLabel(workinvocation.ArgumentSourceKindCompatibilityContent))
 }
 
 func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *testing.T) {
@@ -83,7 +84,7 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	if len(argument.Values) != 1 || argument.Values[0] != "hello" {
 		t.Fatalf("argument values = %#v, want [hello]", argument.Values)
 	}
-	if len(argument.Sources) != 1 || argument.Sources[0].Kind != string(ArgumentSourceKindStructured) {
+	if len(argument.Sources) != 1 || argument.Sources[0].Kind != string(workinvocation.ArgumentSourceKindStructured) {
 		t.Fatalf("argument sources = %#v, want STRUCTURED", argument.Sources)
 	}
 }
@@ -145,8 +146,8 @@ func TestSessionOwner_RejectsInterpolationFailureBeforeSubmittingWork(t *testing
 	})
 
 	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}})
-	var argumentErr *ArgumentError
-	if !errors.As(err, &argumentErr) || argumentErr.Code != ArgumentErrorCodeInvalidInterpolation {
+	var argumentErr *workinvocation.ArgumentError
+	if !errors.As(err, &argumentErr) || argumentErr.Code != workinvocation.ArgumentErrorCodeInvalidInterpolation {
 		t.Fatalf("error = %v, want INVALID_INTERPOLATION", err)
 	}
 	if submitCalls != 0 {
@@ -257,7 +258,7 @@ func TestSessionOwnerWait_ExplicitPolicyIgnoresUnrelatedMatchingWork(t *testing.
 	state.TerminalWorkByID[unrelated.ID] = interfaces.FactoryTerminalWork{WorkItem: unrelated, Status: "TERMINAL"}
 
 	result := waitForSessionOwnerObservation(t, SessionInvocationObservation{WorldState: state}, &interfaces.InvocationReturnConfig{
-		Policy: invocationReturnPolicyExplicit, WorkTypeName: "summary", TerminalState: "complete",
+		Policy: workinvocation.ReturnPolicyExplicit, WorkTypeName: "summary", TerminalState: "complete",
 	})
 
 	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusCompleted)
@@ -320,37 +321,37 @@ func TestSessionOwnerWait_PreservesTerminalFailureClassifications(t *testing.T) 
 	tests := []struct {
 		name        string
 		observation SessionInvocationObservation
-		wantCode    PrimaryResultErrorCode
+		wantCode    workinvocation.PrimaryResultErrorCode
 		wantMessage string
-		wantContext InvocationFailureContext
+		wantContext workinvocation.InvocationFailureContext
 	}{
 		{
-			name: "blocked", observation: classifiedObservation(PrimaryResultErrorCodeBlocked, "blocked"), wantCode: PrimaryResultErrorCodeBlocked,
+			name: "blocked", observation: classifiedObservation(workinvocation.PrimaryResultErrorCodeBlocked, "blocked"), wantCode: workinvocation.PrimaryResultErrorCodeBlocked,
 			wantMessage: `invocation blocked: work "Goal" is waiting in state "goal:blocked"`,
-			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:blocked"},
+			wantContext: workinvocation.InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:blocked"},
 		},
 		{
-			name: "needs human", observation: classifiedObservation(PrimaryResultErrorCodeNeedsHuman, "needs-human"), wantCode: PrimaryResultErrorCodeNeedsHuman,
+			name: "needs human", observation: classifiedObservation(workinvocation.PrimaryResultErrorCodeNeedsHuman, "needs-human"), wantCode: workinvocation.PrimaryResultErrorCodeNeedsHuman,
 			wantMessage: `invocation needs human input: work "Goal" is waiting in state "goal:needs-human"`,
-			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:needs-human"},
+			wantContext: workinvocation.InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:needs-human"},
 		},
 		{
-			name: "paused", observation: pausedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodePaused,
+			name: "paused", observation: pausedSessionInvocationObservation(), wantCode: workinvocation.PrimaryResultErrorCodePaused,
 			wantMessage: `invocation paused: session "session-1" is paused; resume the session to continue waiting for primary result`,
-			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:init"},
+			wantContext: workinvocation.InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:init"},
 		},
 		{
-			name: "interrupted", observation: interruptedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeInterrupted,
+			name: "interrupted", observation: interruptedSessionInvocationObservation(), wantCode: workinvocation.PrimaryResultErrorCodeInterrupted,
 			wantMessage: `invocation interrupted: session "session-1" dispatch "dispatch-1" for work "Goal" was interrupted before a primary result was available`,
-			wantContext: InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:init"},
+			wantContext: workinvocation.InvocationFailureContext{SessionID: "session-1", WorkID: "work-root", WorkName: "Goal", WorkState: "goal:init"},
 		},
 		{
-			name: "failed", observation: failedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeFailed,
+			name: "failed", observation: failedSessionInvocationObservation(), wantCode: workinvocation.PrimaryResultErrorCodeFailed,
 			wantMessage: `invocation failed: work "Goal" reached failed state "goal:failed" before a primary result was available`,
-			wantContext: InvocationFailureContext{WorkID: "work-root", WorkName: "Goal", WorkState: "goal:failed"},
+			wantContext: workinvocation.InvocationFailureContext{WorkID: "work-root", WorkName: "Goal", WorkState: "goal:failed"},
 		},
 		{
-			name: "unresolved", observation: stoppedSessionInvocationObservation(), wantCode: PrimaryResultErrorCodeUnresolved,
+			name: "unresolved", observation: stoppedSessionInvocationObservation(), wantCode: workinvocation.PrimaryResultErrorCodeUnresolved,
 			wantMessage: "invocation primary result unresolved: submitted work did not resolve to terminal output",
 		},
 	}
@@ -397,9 +398,9 @@ func stoppedSessionInvocationObservation() SessionInvocationObservation {
 	return SessionInvocationObservation{WorldState: state}
 }
 
-func classifiedObservation(code PrimaryResultErrorCode, state string) SessionInvocationObservation {
+func classifiedObservation(code workinvocation.PrimaryResultErrorCode, state string) SessionInvocationObservation {
 	observation := stoppedSessionInvocationObservation()
-	observation.MissingPrimaryResult = ClassifyMissingPrimaryResultWorkItem(
+	observation.MissingPrimaryResult = workinvocation.ClassifyMissingPrimaryResultWorkItem(
 		"request-1", nil, invocationWorkItem("work-root", "goal", state, "Goal", "goal:"+state), "session-1",
 	)
 	if observation.MissingPrimaryResult == nil || observation.MissingPrimaryResult.Code != code {
@@ -429,4 +430,51 @@ func failedSessionInvocationObservation() SessionInvocationObservation {
 	failed := invocationWorkItem("work-root", "goal", "failed", "Goal", "goal:failed")
 	observation.WorldState.FailedWorkItemsByID[failed.ID] = failed
 	return observation
+}
+
+func invocationWorldStateFixture() interfaces.FactoryWorldState {
+	return interfaces.FactoryWorldState{
+		PayloadLineage:           interfaces.WorkPayloadLineageProjection{},
+		WorkItemsByID:            make(map[string]interfaces.FactoryWorkItem),
+		WorkRequestsByID:         make(map[string]interfaces.WorkRequestPayload),
+		TerminalWorkByID:         make(map[string]interfaces.FactoryTerminalWork),
+		FailedWorkItemsByID:      make(map[string]interfaces.FactoryWorkItem),
+		WorkStateChangesByWorkID: make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
+	}
+}
+
+func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) interfaces.FactoryWorkItem {
+	return interfaces.FactoryWorkItem{
+		ID:          workID,
+		WorkTypeID:  workTypeName,
+		State:       stateName,
+		DisplayName: name,
+		TraceID:     workID + "-trace",
+		PlaceID:     placeID,
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: workID + "-content",
+		}},
+	}
+}
+
+func recordInvocationSubmittedWork(state *interfaces.FactoryWorldState, tick int, requestID string, items ...interfaces.FactoryWorkItem) {
+	request := interfaces.WorkRequestPayload{
+		RequestID: requestID,
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: append([]interfaces.FactoryWorkItem(nil), items...),
+	}
+	state.WorkRequestsByID[requestID] = request
+	for _, item := range items {
+		state.PayloadLineage.RecordWorkRequestSnapshot(tick, requestID, item)
+	}
+}
+
+func recordInvocationDispatchOutput(state *interfaces.FactoryWorldState, tick int, dispatchID string, consumed []interfaces.FactoryWorkItem, outputs ...interfaces.FactoryWorkItem) {
+	for _, item := range consumed {
+		state.PayloadLineage.RecordConsumedInputSnapshot(dispatchID, item)
+	}
+	for i, item := range outputs {
+		state.PayloadLineage.RecordDispatchOutputSnapshot(tick, dispatchID, consumed, item, i)
+	}
 }

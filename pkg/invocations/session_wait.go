@@ -7,6 +7,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 const sessionInvocationPollInterval = 10 * time.Millisecond
@@ -17,7 +18,7 @@ type SessionInvocationObservation struct {
 	WorldState           interfaces.FactoryWorldState
 	FactoryState         string
 	ActiveWork           bool
-	MissingPrimaryResult *PrimaryResultError
+	MissingPrimaryResult *workinvocation.PrimaryResultError
 }
 
 // SessionInvocationSpecialFailure describes a packaged-factory terminal
@@ -71,10 +72,10 @@ func (o *SessionOwner) resolveObservation(
 	observation SessionInvocationObservation,
 	packaged bool,
 ) (FactoryInvocationResult, bool, error) {
-	selectionInput := PrimaryResultSelectionInput{
+	selectionInput := workinvocation.PrimaryResultSelectionInput{
 		RequestID: input.RequestID, InvocationReturn: input.InvocationReturn, WorldState: observation.WorldState,
 	}
-	selection, err := ResolvePrimaryResult(selectionInput)
+	selection, err := workinvocation.ResolvePrimaryResult(selectionInput)
 	if err == nil {
 		if packaged {
 			if telemetry, ok := o.deps.Telemetry.(SessionInvocationPackagedTelemetry); ok {
@@ -83,17 +84,17 @@ func (o *SessionOwner) resolveObservation(
 		}
 		return o.completedResult(sessionID, input, selection), true, nil
 	}
-	primaryErr, ok := err.(*PrimaryResultError)
+	primaryErr, ok := err.(*workinvocation.PrimaryResultError)
 	if !ok {
 		return FactoryInvocationResult{}, true, err
 	}
 	if observation.MissingPrimaryResult != nil {
 		return o.failedResult(sessionID, input, observation.MissingPrimaryResult), true, nil
 	}
-	if classified, ok := ClassifyInvocationControlState(sessionID, observation.FactoryState, selectionInput); ok {
+	if classified, ok := workinvocation.ClassifyInvocationControlState(sessionID, observation.FactoryState, selectionInput); ok {
 		return o.failedResult(sessionID, input, classified), true, nil
 	}
-	if classified, ok := ClassifyMissingPrimaryResult(selectionInput); ok {
+	if classified, ok := workinvocation.ClassifyMissingPrimaryResult(selectionInput); ok {
 		return o.failedResult(sessionID, input, classified), true, nil
 	}
 	if _, exists := observation.WorldState.WorkRequestsByID[input.RequestID]; !exists || observation.ActiveWork {
@@ -105,8 +106,8 @@ func (o *SessionOwner) resolveObservation(
 func (o *SessionOwner) resolveStoppedInvocation(
 	sessionID string,
 	input SessionInvocationWaitInput,
-	selectionInput PrimaryResultSelectionInput,
-	primaryErr *PrimaryResultError,
+	selectionInput workinvocation.PrimaryResultSelectionInput,
+	primaryErr *workinvocation.PrimaryResultError,
 	packaged bool,
 ) FactoryInvocationResult {
 	if packaged {
@@ -127,13 +128,13 @@ func (o *SessionOwner) resolveStoppedInvocation(
 			return result
 		}
 	}
-	if classified, ok := ClassifyInvocationControlState(sessionID, "", selectionInput); ok {
+	if classified, ok := workinvocation.ClassifyInvocationControlState(sessionID, "", selectionInput); ok {
 		return o.failedResult(sessionID, input, classified)
 	}
-	if classified, ok := ClassifyFailedInvocation(sessionID, selectionInput); ok {
+	if classified, ok := workinvocation.ClassifyFailedInvocation(sessionID, selectionInput); ok {
 		return o.failedResult(sessionID, input, classified)
 	}
-	if classified, ok := ClassifyMissingPrimaryResult(selectionInput); ok {
+	if classified, ok := workinvocation.ClassifyMissingPrimaryResult(selectionInput); ok {
 		return o.failedResult(sessionID, input, classified)
 	}
 	return o.failedResult(sessionID, input, primaryErr)
@@ -142,7 +143,7 @@ func (o *SessionOwner) resolveStoppedInvocation(
 func (o *SessionOwner) completedResult(
 	sessionID string,
 	input SessionInvocationWaitInput,
-	selection PrimaryResultSelection,
+	selection workinvocation.PrimaryResultSelection,
 ) FactoryInvocationResult {
 	result := FactoryInvocationResult{
 		RequestID: input.RequestID, TraceID: input.TraceID,
@@ -158,7 +159,7 @@ func (o *SessionOwner) completedResult(
 func (o *SessionOwner) failedResult(
 	sessionID string,
 	input SessionInvocationWaitInput,
-	primaryErr *PrimaryResultError,
+	primaryErr *workinvocation.PrimaryResultError,
 ) FactoryInvocationResult {
 	result := FactoryInvocationResult{
 		RequestID: input.RequestID, TraceID: input.TraceID,
@@ -231,17 +232,17 @@ func invocationWaitContext(ctx context.Context, timeoutMillis *int64) (context.C
 	return ctx, func() {}
 }
 
-func failureClassForPrimaryResultError(code PrimaryResultErrorCode) string {
+func failureClassForPrimaryResultError(code workinvocation.PrimaryResultErrorCode) string {
 	switch code {
-	case PrimaryResultErrorCodeFailed:
+	case workinvocation.PrimaryResultErrorCodeFailed:
 		return "failed"
-	case PrimaryResultErrorCodePaused:
+	case workinvocation.PrimaryResultErrorCodePaused:
 		return "paused"
-	case PrimaryResultErrorCodeInterrupted:
+	case workinvocation.PrimaryResultErrorCodeInterrupted:
 		return "interrupted"
-	case PrimaryResultErrorCodeBlocked:
+	case workinvocation.PrimaryResultErrorCodeBlocked:
 		return "blocked"
-	case PrimaryResultErrorCodeNeedsHuman:
+	case workinvocation.PrimaryResultErrorCodeNeedsHuman:
 		return "needs_human"
 	default:
 		return "unresolved_primary"

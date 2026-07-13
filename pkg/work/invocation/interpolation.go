@@ -1,23 +1,23 @@
-package invocations
+package invocation
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 var invocationInterpolationPattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}`)
 
 const ArgumentErrorCodeInvalidInterpolation ArgumentErrorCode = "INVOCATION_ARGUMENT_INVALID_INTERPOLATION"
+
+// FileReader resolves FILE_CONTENTS arguments at an explicit IO boundary.
+type FileReader func(string) ([]byte, error)
 
 // RuntimeInvocationArguments converts normalized invocation arguments into the
 // runtime-owned transport-independent metadata carried on submitted work.
@@ -66,22 +66,22 @@ func RuntimeInvocationArguments(
 // ValidateInvocationInterpolation verifies that runtime-supported invocation
 // interpolation can resolve the authored worker and workstation fields for the
 // supplied normalized argument set without mutating the canonical runtime config.
-func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *interfaces.InvocationArguments) error {
+func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *interfaces.InvocationArguments, readFile FileReader) error {
 	if cfg == nil || args == nil {
 		return nil
 	}
 	for _, worker := range cfg.Workers {
-		if _, err := InterpolateWorkerConfig(worker, args); err != nil {
+		if _, err := InterpolateWorkerConfig(worker, args, readFile); err != nil {
 			return err
 		}
 	}
 	for _, workstation := range cfg.Workstations {
-		if _, err := InterpolateWorkstationConfig(workstation, args); err != nil {
+		if _, err := InterpolateWorkstationConfig(workstation, args, readFile); err != nil {
 			return err
 		}
 	}
 	if signature := cfg.InvocationSignature; signature != nil && signature.OutputContract != nil {
-		if err := validateInvocationOutputContract(signature.OutputContract, args); err != nil {
+		if err := validateInvocationOutputContract(signature.OutputContract, args, readFile); err != nil {
 			return err
 		}
 	}
@@ -90,38 +90,38 @@ func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *interf
 
 // InterpolateWorkerConfig resolves supported `${parameter}` placeholders on one
 // effective worker definition using runtime invocation arguments.
-func InterpolateWorkerConfig(worker interfaces.WorkerConfig, args *interfaces.InvocationArguments) (interfaces.WorkerConfig, error) {
-	next := config.CloneWorkerConfig(worker)
+func InterpolateWorkerConfig(worker interfaces.WorkerConfig, args *interfaces.InvocationArguments, readFile FileReader) (interfaces.WorkerConfig, error) {
+	next := cloneWorkerForInterpolation(worker)
 	var err error
-	if next.Provider, err = interpolateInvocationField(next.Provider, args, "worker.provider", false); err != nil {
+	if next.Provider, err = interpolateInvocationField(next.Provider, args, "worker.provider", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.Model, err = interpolateInvocationField(next.Model, args, "worker.model", false); err != nil {
+	if next.Model, err = interpolateInvocationField(next.Model, args, "worker.model", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.ModelProvider, err = interpolateInvocationField(next.ModelProvider, args, "worker.modelProvider", false); err != nil {
+	if next.ModelProvider, err = interpolateInvocationField(next.ModelProvider, args, "worker.modelProvider", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.ExecutorProvider, err = interpolateInvocationField(next.ExecutorProvider, args, "worker.executorProvider", false); err != nil {
+	if next.ExecutorProvider, err = interpolateInvocationField(next.ExecutorProvider, args, "worker.executorProvider", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.Command, err = interpolateInvocationField(next.Command, args, "worker.command", false); err != nil {
+	if next.Command, err = interpolateInvocationField(next.Command, args, "worker.command", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.Timeout, err = interpolateInvocationField(next.Timeout, args, "worker.timeout", false); err != nil {
+	if next.Timeout, err = interpolateInvocationField(next.Timeout, args, "worker.timeout", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.StopToken, err = interpolateInvocationField(next.StopToken, args, "worker.stopToken", false); err != nil {
+	if next.StopToken, err = interpolateInvocationField(next.StopToken, args, "worker.stopToken", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "worker.openCodeAgent", false); err != nil {
+	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "worker.openCodeAgent", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
-	if next.Body, err = interpolateInvocationField(next.Body, args, "worker body", false); err != nil {
+	if next.Body, err = interpolateInvocationField(next.Body, args, "worker body", false, readFile); err != nil {
 		return interfaces.WorkerConfig{}, err
 	}
 	for i := range next.Args {
-		if next.Args[i], err = interpolateInvocationField(next.Args[i], args, "worker.args entry", false); err != nil {
+		if next.Args[i], err = interpolateInvocationField(next.Args[i], args, "worker.args entry", false, readFile); err != nil {
 			return interfaces.WorkerConfig{}, err
 		}
 	}
@@ -130,41 +130,41 @@ func InterpolateWorkerConfig(worker interfaces.WorkerConfig, args *interfaces.In
 
 // InterpolateWorkstationConfig resolves supported `${parameter}` placeholders on
 // one effective workstation definition using runtime invocation arguments.
-func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfig, args *interfaces.InvocationArguments) (interfaces.FactoryWorkstationConfig, error) {
-	next := config.CloneWorkstationConfig(workstation)
+func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfig, args *interfaces.InvocationArguments, readFile FileReader) (interfaces.FactoryWorkstationConfig, error) {
+	next := cloneWorkstationForInterpolation(workstation)
 	var err error
-	if next.WorkerTypeName, err = interpolateInvocationField(next.WorkerTypeName, args, "workstation.worker", false); err != nil {
+	if next.WorkerTypeName, err = interpolateInvocationField(next.WorkerTypeName, args, "workstation.worker", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.Runner, err = interpolateInvocationField(next.Runner, args, "workstation.runner", false); err != nil {
+	if next.Runner, err = interpolateInvocationField(next.Runner, args, "workstation.runner", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "workstation.openCodeAgent", false); err != nil {
+	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "workstation.openCodeAgent", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.PromptFile, err = interpolateInvocationField(next.PromptFile, args, "workstation.promptFile", false); err != nil {
+	if next.PromptFile, err = interpolateInvocationField(next.PromptFile, args, "workstation.promptFile", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.OutputSchema, err = interpolateInvocationField(next.OutputSchema, args, "workstation.outputSchema", false); err != nil {
+	if next.OutputSchema, err = interpolateInvocationField(next.OutputSchema, args, "workstation.outputSchema", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.Timeout, err = interpolateInvocationField(next.Timeout, args, "workstation.timeout", false); err != nil {
+	if next.Timeout, err = interpolateInvocationField(next.Timeout, args, "workstation.timeout", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.Body, err = interpolateInvocationField(next.Body, args, "workstation prompt body", false); err != nil {
+	if next.Body, err = interpolateInvocationField(next.Body, args, "workstation prompt body", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.PromptTemplate, err = interpolateInvocationField(next.PromptTemplate, args, "workstation.promptTemplate", false); err != nil {
+	if next.PromptTemplate, err = interpolateInvocationField(next.PromptTemplate, args, "workstation.promptTemplate", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.WorkingDirectory, err = interpolateInvocationField(next.WorkingDirectory, args, "workstation.workingDirectory", false); err != nil {
+	if next.WorkingDirectory, err = interpolateInvocationField(next.WorkingDirectory, args, "workstation.workingDirectory", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
-	if next.Worktree, err = interpolateInvocationField(next.Worktree, args, "workstation.worktree", false); err != nil {
+	if next.Worktree, err = interpolateInvocationField(next.Worktree, args, "workstation.worktree", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
 	for key, value := range next.Env {
-		resolved, err := interpolateInvocationField(value, args, fmt.Sprintf("workstation.env[%q]", key), false)
+		resolved, err := interpolateInvocationField(value, args, fmt.Sprintf("workstation.env[%q]", key), false, readFile)
 		if err != nil {
 			return interfaces.FactoryWorkstationConfig{}, err
 		}
@@ -173,7 +173,7 @@ func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfi
 	return next, nil
 }
 
-func validateInvocationOutputContract(output *interfaces.InvocationOutputContractConfig, args *interfaces.InvocationArguments) error {
+func validateInvocationOutputContract(output *interfaces.InvocationOutputContractConfig, args *interfaces.InvocationArguments, readFile FileReader) error {
 	if output == nil {
 		return nil
 	}
@@ -192,7 +192,7 @@ func validateInvocationOutputContract(output *interfaces.InvocationOutputContrac
 			Parameter: pathParameter,
 		}
 	}
-	if _, err := invocationArgumentScalar(argument, pathParameter, "invocationSignature.outputContract.pathParameter"); err != nil {
+	if _, err := invocationArgumentScalar(argument, pathParameter, "invocationSignature.outputContract.pathParameter", readFile); err != nil {
 		return err
 	}
 	return nil
@@ -203,6 +203,7 @@ func interpolateInvocationField(
 	args *interfaces.InvocationArguments,
 	fieldDescriptor string,
 	allowsRepeated bool,
+	readFile FileReader,
 ) (string, error) {
 	if !strings.Contains(authored, "${") {
 		return authored, nil
@@ -220,7 +221,7 @@ func interpolateInvocationField(
 		if allowsRepeated {
 			return strings.Join(argument.Values, ","), nil
 		}
-		return invocationArgumentScalar(argument, name, fieldDescriptor)
+		return invocationArgumentScalar(argument, name, fieldDescriptor, readFile)
 	}
 	var builder strings.Builder
 	cursor := 0
@@ -235,7 +236,7 @@ func interpolateInvocationField(
 				Parameter: name,
 			}
 		}
-		replacement, err := invocationArgumentScalar(argument, name, fieldDescriptor)
+		replacement, err := invocationArgumentScalar(argument, name, fieldDescriptor, readFile)
 		if err != nil {
 			return "", err
 		}
@@ -254,7 +255,7 @@ func invocationArgumentByName(args *interfaces.InvocationArguments, name string)
 	return argument, ok
 }
 
-func invocationArgumentScalar(argument interfaces.InvocationArgument, parameterName, fieldDescriptor string) (string, error) {
+func invocationArgumentScalar(argument interfaces.InvocationArgument, parameterName, fieldDescriptor string, readFile FileReader) (string, error) {
 	if len(argument.Values) != 1 {
 		return "", &ArgumentError{
 			Code:      ArgumentErrorCodeInvalidInterpolation,
@@ -263,10 +264,17 @@ func invocationArgumentScalar(argument interfaces.InvocationArgument, parameterN
 		}
 	}
 	value := argument.Values[0]
-	if argument.ValueMode != string(factoryapi.FactoryInvocationParameterValueModeFileContents) {
+	if argument.ValueMode != valueModeFileContents {
 		return value, nil
 	}
-	data, err := os.ReadFile(value)
+	if readFile == nil {
+		return "", &ArgumentError{
+			Code:      ArgumentErrorCodeInvalidInterpolation,
+			Message:   fmt.Sprintf("invocation parameter %q requires a FILE_CONTENTS reader", parameterName),
+			Parameter: parameterName,
+		}
+	}
+	data, err := readFile(value)
 	if err != nil {
 		return "", &ArgumentError{
 			Code:      ArgumentErrorCodeInvalidInterpolation,
@@ -275,6 +283,22 @@ func invocationArgumentScalar(argument interfaces.InvocationArgument, parameterN
 		}
 	}
 	return string(data), nil
+}
+
+func cloneWorkerForInterpolation(worker interfaces.WorkerConfig) interfaces.WorkerConfig {
+	worker.Args = append([]string(nil), worker.Args...)
+	return worker
+}
+
+func cloneWorkstationForInterpolation(workstation interfaces.FactoryWorkstationConfig) interfaces.FactoryWorkstationConfig {
+	if workstation.Env != nil {
+		env := make(map[string]string, len(workstation.Env))
+		for key, value := range workstation.Env {
+			env[key] = value
+		}
+		workstation.Env = env
+	}
+	return workstation
 }
 
 // InvocationDiagnostic returns a replay-safe invocation summary that preserves

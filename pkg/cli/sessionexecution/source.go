@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 type sourceSelector struct {

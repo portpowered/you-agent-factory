@@ -98,8 +98,9 @@ the standards.
 - `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
   types used across subsystems.
 - `pkg/work/` contains canonical Work content, materialization, query, graph,
-  and time-work behavior; `pkg/invocations/` remains a migration-only
-  invocation helper root.
+  time-work, and pure invocation input/return-policy behavior;
+  `pkg/invocations/` remains a migration-only stateful session and inference
+  helper root.
 - `pkg/localmodels/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
 - `pkg/petri/` contains internal Petri-net primitives.

@@ -1,4 +1,4 @@
-package invocations
+package invocation
 
 import (
 	"encoding/json"
@@ -8,8 +8,30 @@ import (
 	"strconv"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+const (
+	bindingKindPositional = "POSITIONAL"
+	bindingKindNamed      = "NAMED"
+	bindingKindStdin      = "STDIN"
+	bindingKindNamedRest  = "NAMED_REST"
+
+	valueModeExact        = "EXACT"
+	valueModeRepeated     = "REPEATED"
+	valueModeVariadic     = "VARIADIC"
+	valueModeFileContents = "FILE_CONTENTS"
+
+	unknownNamedReject  = "REJECT"
+	unknownNamedAllow   = "ALLOW"
+	unknownNamedCollect = "COLLECT"
+
+	typeHintString        = "STRING"
+	typeHintPath          = "PATH"
+	typeHintFilePath      = "FILE_PATH"
+	typeHintDirectoryPath = "DIRECTORY_PATH"
+	typeHintNumberString  = "NUMBER_STRING"
+	typeHintBooleanString = "BOOLEAN_STRING"
 )
 
 type ArgumentSourceKind string
@@ -284,18 +306,18 @@ func buildSignatureIndex(signature *interfaces.InvocationSignatureConfig) (signa
 		}
 		for _, binding := range parameter.Bindings {
 			switch strings.TrimSpace(binding.Kind) {
-			case string(factoryapi.FactoryInvocationParameterBindingKindPositional):
+			case bindingKindPositional:
 				index.positionalBySlot[binding.Position] = name
 				index.orderedSlots = append(index.orderedSlots, binding.Position)
-				if def.valueMode == string(factoryapi.FactoryInvocationParameterValueModeVariadic) {
+				if def.valueMode == valueModeVariadic {
 					def.variadic = true
 				}
-			case string(factoryapi.FactoryInvocationParameterBindingKindNamed):
+			case bindingKindNamed:
 				def.named = true
-			case string(factoryapi.FactoryInvocationParameterBindingKindStdin):
+			case bindingKindStdin:
 				def.stdin = true
 				index.stdinParameter = name
-			case string(factoryapi.FactoryInvocationParameterBindingKindNamedRest):
+			case bindingKindNamedRest:
 				def.namedRest = true
 				index.namedRest = name
 			}
@@ -328,7 +350,7 @@ func parameterDefaults(parameter interfaces.InvocationParameterConfig) []string 
 func normalizedValueMode(valueMode string) string {
 	trimmed := strings.TrimSpace(valueMode)
 	if trimmed == "" {
-		return string(factoryapi.FactoryInvocationParameterValueModeExact)
+		return valueModeExact
 	}
 	return trimmed
 }
@@ -392,16 +414,16 @@ func applyNamedArguments(index signatureIndex, namedArgs []NamedArgumentInput, s
 			continue
 		}
 		switch index.unknownPolicy {
-		case "", string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject):
+		case "", unknownNamedReject:
 			return &ArgumentError{
 				Code:       ArgumentErrorCodeUnknownArgument,
 				Message:    fmt.Sprintf("unknown named argument %q", key),
 				Argument:   key,
 				SourceKind: ArgumentSourceKindNamed,
 			}
-		case string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyAllow):
+		case unknownNamedAllow:
 			state.unknown[key] = append(state.unknown[key], slices.Clone(named.Values)...)
-		case string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect):
+		case unknownNamedCollect:
 			def, ok := index.parameters[index.namedRest]
 			if !ok {
 				return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, "invocationSignature COLLECT policy requires a NAMED_REST parameter", "", key)
@@ -435,16 +457,16 @@ func applyDirectArguments(index signatureIndex, directArgs []NamedArgumentInput,
 			continue
 		}
 		switch index.unknownPolicy {
-		case "", string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject):
+		case "", unknownNamedReject:
 			return &ArgumentError{
 				Code:       ArgumentErrorCodeUnknownArgument,
 				Message:    fmt.Sprintf("unknown named argument %q", key),
 				Argument:   key,
 				SourceKind: ArgumentSourceKindStructured,
 			}
-		case string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyAllow):
+		case unknownNamedAllow:
 			state.unknown[key] = append(state.unknown[key], slices.Clone(direct.Values)...)
-		case string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect):
+		case unknownNamedCollect:
 			def, ok := index.parameters[index.namedRest]
 			if !ok {
 				return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, "invocationSignature COLLECT policy requires a NAMED_REST parameter", "", key)
@@ -534,7 +556,7 @@ func addArgumentValues(arguments map[string]NormalizedArgument, def parameterDef
 		}
 	}
 	switch def.valueMode {
-	case string(factoryapi.FactoryInvocationParameterValueModeExact), string(factoryapi.FactoryInvocationParameterValueModeFileContents):
+	case valueModeExact, valueModeFileContents:
 		if len(values) != 1 {
 			return &ArgumentError{
 				Code:       ArgumentErrorCodeSourceConflict,
@@ -554,7 +576,7 @@ func addArgumentValues(arguments map[string]NormalizedArgument, def parameterDef
 			}
 		}
 		current.Values = append(current.Values, values[0])
-	case string(factoryapi.FactoryInvocationParameterValueModeRepeated), string(factoryapi.FactoryInvocationParameterValueModeVariadic):
+	case valueModeRepeated, valueModeVariadic:
 		current.Values = append(current.Values, values...)
 	default:
 		return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, fmt.Sprintf("parameter %q uses unsupported valueMode %q", def.name, def.valueMode), def.name, source.Name)
@@ -574,9 +596,9 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		}
 	}
 	switch def.typeHint {
-	case "", string(factoryapi.FactoryInvocationParameterTypeHintString), string(factoryapi.FactoryInvocationParameterTypeHintPath), string(factoryapi.FactoryInvocationParameterTypeHintFilePath), string(factoryapi.FactoryInvocationParameterTypeHintDirectoryPath):
+	case "", typeHintString, typeHintPath, typeHintFilePath, typeHintDirectoryPath:
 		return nil
-	case string(factoryapi.FactoryInvocationParameterTypeHintBooleanString):
+	case typeHintBooleanString:
 		if _, err := strconv.ParseBool(strings.TrimSpace(value)); err != nil {
 			return &ArgumentError{
 				Code:      ArgumentErrorCodeStringValidationMismatch,
@@ -584,7 +606,7 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 				Parameter: def.name,
 			}
 		}
-	case string(factoryapi.FactoryInvocationParameterTypeHintNumberString):
+	case typeHintNumberString:
 		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
 			return &ArgumentError{
 				Code:      ArgumentErrorCodeStringValidationMismatch,
