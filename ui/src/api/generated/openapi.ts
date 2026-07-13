@@ -3558,7 +3558,7 @@ export interface components {
       eventId: string;
       /**
        * Format: int64
-       * @description Monotonic session-scoped cursor for reconnect and ordering.
+       * @description Monotonic session-scoped cursor for published events. Sequence zero is reserved for synthetic out-of-band read markers such as retention gaps; those markers do not consume or reuse a published sequence.
        */
       sequence: number;
       /**
@@ -3894,12 +3894,12 @@ export interface components {
     FactoryResponseEventStreamGapPayload: {
       /**
        * Format: int64
-       * @description Last retained sequence before the gap.
+       * @description Lowest unavailable published sequence greater than the reader's cursor.
        */
       fromSequence: number;
       /**
        * Format: int64
-       * @description First available sequence after the gap.
+       * @description Highest unavailable published sequence in the reader's catch-up window.
        */
       toSequence: number;
       /** @description Optional reason for the stream gap such as retention_window. */

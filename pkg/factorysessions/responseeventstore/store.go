@@ -21,6 +21,10 @@ type SessionResponseEventStore struct {
 	factorySessionID string
 	nextSequence     int64
 	events           []responseevents.FactoryResponseEvent
+	eventSizes       []int
+	droppedSequences []sequenceSpan
+	limits           RetentionLimits
+	retainedBytes    int
 	closed           bool
 	completed        bool
 	completedAt      time.Time
@@ -30,17 +34,88 @@ type SessionResponseEventStore struct {
 
 // NewSessionResponseEventStore allocates an empty store for one session runtime.
 func NewSessionResponseEventStore(factorySessionID string) *SessionResponseEventStore {
-	return NewSessionResponseEventStoreWithClock(factorySessionID, factory.RealClock{})
+	store, _ := NewSessionResponseEventStoreWithClockAndLimits(
+		factorySessionID,
+		factory.RealClock{},
+		DefaultRetentionLimits(),
+	)
+	return store
 }
 
 // NewSessionResponseEventStoreWithClock allocates an empty store using the
 // supplied clock.
 func NewSessionResponseEventStoreWithClock(factorySessionID string, clock factory.Clock) *SessionResponseEventStore {
+	store, _ := NewSessionResponseEventStoreWithClockAndLimits(
+		factorySessionID,
+		clock,
+		DefaultRetentionLimits(),
+	)
+	return store
+}
+
+// NewSessionResponseEventStoreWithLimits allocates an empty store with explicit
+// positive hard retention limits.
+func NewSessionResponseEventStoreWithLimits(
+	factorySessionID string,
+	limits RetentionLimits,
+) (*SessionResponseEventStore, error) {
+	return NewSessionResponseEventStoreWithClockAndLimits(factorySessionID, factory.RealClock{}, limits)
+}
+
+// NewSessionResponseEventStoreWithClockAndLimits allocates an empty store with
+// an explicit clock and positive hard retention limits.
+func NewSessionResponseEventStoreWithClockAndLimits(
+	factorySessionID string,
+	clock factory.Clock,
+	limits RetentionLimits,
+) (*SessionResponseEventStore, error) {
+	if err := validateRetentionLimits(limits); err != nil {
+		return nil, err
+	}
 	return &SessionResponseEventStore{
 		clock:            factory.EnsureClock(clock),
 		factorySessionID: strings.TrimSpace(factorySessionID),
+		limits:           limits,
 		subscribers:      make(map[int64]*storeSubscriber),
+	}, nil
+}
+
+// RetentionLimits returns the active session-wide hard limits.
+func (s *SessionResponseEventStore) RetentionLimits() RetentionLimits {
+	if s == nil {
+		return RetentionLimits{}
 	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.limits
+}
+
+// SetRetentionLimits applies positive hard limits and immediately evicts until
+// both are satisfied. Invalid limits leave the current policy unchanged.
+func (s *SessionResponseEventStore) SetRetentionLimits(limits RetentionLimits) error {
+	if s == nil {
+		return errNilStore
+	}
+	if err := validateRetentionLimits(limits); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.limits = limits
+	s.enforceRetentionLocked()
+	subscribers := s.subscribersSnapshotLocked()
+	s.mu.Unlock()
+	notifyStoreSubscribers(subscribers)
+	return nil
+}
+
+// RetentionAccounting returns exact counters for the immutable retained events.
+func (s *SessionResponseEventStore) RetentionAccounting() RetentionAccounting {
+	if s == nil {
+		return RetentionAccounting{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return RetentionAccounting{EventCount: len(s.events), TotalBytes: s.retainedBytes}
 }
 
 // FactorySessionID returns the session identity bound to this store.
@@ -144,13 +219,52 @@ func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponse
 		return responseevents.FactoryResponseEvent{}, ErrStoreCompleted
 	}
 	stored := s.assignIdentityLocked(prepared)
+	storedBytes, err := SerializedEventSize(stored)
+	if err != nil {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, err
+	}
 	s.events = append(s.events, stored)
+	s.eventSizes = append(s.eventSizes, storedBytes)
+	s.retainedBytes += storedBytes
+	s.enforceRetentionLocked()
 	subscribers := s.subscribersSnapshotLocked()
 	s.mu.Unlock()
 
 	notifyStoreSubscribers(subscribers)
 
 	return cloneEvent(stored), nil
+}
+
+func (s *SessionResponseEventStore) enforceRetentionLocked() {
+	for len(s.events) > s.limits.MaxEvents || s.retainedBytes > s.limits.MaxBytes {
+		index := s.evictionIndexLocked()
+		if index < 0 {
+			return
+		}
+		s.retainedBytes -= s.eventSizes[index]
+		s.droppedSequences = addDroppedSequence(s.droppedSequences, s.events[index].Sequence)
+		copy(s.events[index:], s.events[index+1:])
+		s.events = s.events[:len(s.events)-1]
+		copy(s.eventSizes[index:], s.eventSizes[index+1:])
+		s.eventSizes = s.eventSizes[:len(s.eventSizes)-1]
+	}
+}
+
+func (s *SessionResponseEventStore) evictionIndexLocked() int {
+	if len(s.events) == 0 {
+		return -1
+	}
+	lowestTier := eventRetentionTier(s.events[0])
+	oldestIndex := 0
+	for index := 1; index < len(s.events); index++ {
+		tier := eventRetentionTier(s.events[index])
+		if tier < lowestTier {
+			lowestTier = tier
+			oldestIndex = index
+		}
+	}
+	return oldestIndex
 }
 
 func (s *SessionResponseEventStore) preparePublishInput(input responseevents.FactoryResponseEvent) responseevents.FactoryResponseEvent {
