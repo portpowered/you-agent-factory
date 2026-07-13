@@ -513,7 +513,10 @@ func selectFragmentInScope(
 				}
 			}
 		}
-		segment := strings.NewReplacer("~1", "/", "~0", "~").Replace(encoded)
+		segment, err := decodeJSONPointerToken(encoded)
+		if err != nil {
+			return nil, resolutionScope{}, nil, err
+		}
 		switch typed := current.(type) {
 		case map[string]any:
 			var ok bool
@@ -534,6 +537,19 @@ func selectFragmentInScope(
 		applyCurrentID = true
 	}
 	return current, scope, currentSegments, nil
+}
+
+func decodeJSONPointerToken(encoded string) (string, error) {
+	for index := 0; index < len(encoded); index++ {
+		if encoded[index] != '~' {
+			continue
+		}
+		if index+1 >= len(encoded) || (encoded[index+1] != '0' && encoded[index+1] != '1') {
+			return "", errors.New("fragment contains an invalid JSON Pointer escape")
+		}
+		index++
+	}
+	return strings.NewReplacer("~1", "/", "~0", "~").Replace(encoded), nil
 }
 
 func normalizeRepositoryPath(value string) string {

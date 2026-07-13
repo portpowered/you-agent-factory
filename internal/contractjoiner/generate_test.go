@@ -99,6 +99,32 @@ func TestGenerateUnsupportedReferenceKeywordPreservesPreviousCompleteSet(t *test
 	}
 }
 
+func TestGenerateMalformedJSONPointerPreservesPreviousCompleteSet(t *testing.T) {
+	root := t.TempDir()
+	writeGenerationFixture(t, root, "contracts/root.json", `{"$id":"root","type":"object"}`)
+	if diagnostics := contractjoiner.Generate(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/root.json"},
+	}); len(diagnostics) != 0 {
+		t.Fatalf("initial Generate() diagnostics = %#v, want none", diagnostics)
+	}
+	before := generatedTree(t, root)
+
+	writeGenerationFixture(t, root, "contracts/broken.json", `{"value":{"$ref":"pointers.json#/foo~2bar"}}`)
+	writeGenerationFixture(t, root, "contracts/pointers.json", `{"foo~2bar":{"type":"string"}}`)
+	diagnostics := contractjoiner.Generate(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/root.json", "contracts/broken.json"},
+		Components:     []string{"contracts/pointers.json"},
+	})
+	if len(diagnostics) != 1 || diagnostics[0].Code != "reference.fragment" || diagnostics[0].Path != "/value/$ref" {
+		t.Fatalf("Generate(malformed pointer) diagnostics = %#v, want stable fragment diagnostic", diagnostics)
+	}
+	if after := generatedTree(t, root); !equalByteTrees(before, after) {
+		t.Fatalf("malformed-pointer generation changed prior output:\nbefore=%q\nafter=%q", before, after)
+	}
+}
+
 func TestGenerateResourceCollisionPreservesPreviousCompleteSet(t *testing.T) {
 	root := t.TempDir()
 	writeGenerationFixture(t, root, "contracts/root.json", `{"$id":"root","type":"object"}`)

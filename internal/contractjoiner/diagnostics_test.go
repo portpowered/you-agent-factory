@@ -20,6 +20,7 @@ func TestJoinRejectsUnsafeReferenceGraphsWithoutPartialDocuments(t *testing.T) {
 	writeFile(t, root, "components/first.json", `{"$ref":"second.json"}`)
 	writeFile(t, root, "components/second.json", `{"$ref":"first.json"}`)
 	writeFile(t, root, "components/target.json", `{"type":"string"}`)
+	writeFile(t, root, "components/pointers.json", `{"foo~bar":{"type":"number"},"foo~2bar":{"type":"string"}}`)
 	writeFile(t, parent, "outside.json", `{}`)
 	writeFile(t, parent, "repository-copy/outside.json", `{}`)
 	absPath := filepath.Join(parent, "outside.json")
@@ -42,6 +43,8 @@ func TestJoinRejectsUnsafeReferenceGraphsWithoutPartialDocuments(t *testing.T) {
 		{name: "non-string reference", rootPath: "roots/non-string.json", contents: `{"value":{"$ref":42}}`, code: "reference.invalid", document: "roots/non-string.json", path: "/value/$ref"},
 		{name: "query", rootPath: "roots/query.json", contents: `{"value":{"$ref":"../components/target.json?version=1"}}`, components: []string{"components/target.json"}, code: "reference.unsupported", document: "roots/query.json", path: "/value/$ref"},
 		{name: "unsupported fragment", rootPath: "roots/fragment.json", contents: `{"value":{"$ref":"../components/target.json#anchor"}}`, components: []string{"components/target.json"}, code: "reference.fragment", document: "roots/fragment.json", path: "/value/$ref"},
+		{name: "bare JSON Pointer escape", rootPath: "roots/bare-pointer-escape.json", contents: `{"value":{"$ref":"../components/pointers.json#/foo~bar"}}`, components: []string{"components/pointers.json"}, code: "reference.fragment", document: "roots/bare-pointer-escape.json", path: "/value/$ref"},
+		{name: "invalid JSON Pointer escape with matching key", rootPath: "roots/invalid-pointer-escape.json", contents: `{"value":{"$ref":"../components/pointers.json#/foo~2bar"}}`, components: []string{"components/pointers.json"}, code: "reference.fragment", document: "roots/invalid-pointer-escape.json", path: "/value/$ref"},
 		{name: "external dynamic reference", rootPath: "roots/dynamic-external.json", contents: `{"nested":{"$dynamicRef":"https://example.test/external.json#node"}}`, code: "reference.unsupported", document: "roots/dynamic-external.json", path: "/nested/$dynamicRef"},
 		{name: "repository-relative dynamic reference", rootPath: "roots/dynamic-relative.json", contents: `{"nested":{"$dynamicRef":"../components/target.json#node"}}`, components: []string{"components/target.json"}, code: "reference.unsupported", document: "roots/dynamic-relative.json", path: "/nested/$dynamicRef"},
 		{name: "legacy recursive reference", rootPath: "roots/recursive.json", contents: `{"nested":{"$recursiveRef":"#"}}`, code: "reference.unsupported", document: "roots/recursive.json", path: "/nested/$recursiveRef"},
@@ -64,6 +67,69 @@ func TestJoinRejectsUnsafeReferenceGraphsWithoutPartialDocuments(t *testing.T) {
 			}
 			assertJoinDiagnostic(t, diagnostics, test.code, test.document, test.path, root)
 		})
+	}
+}
+
+func TestJoinRejectsMalformedJSONPointerEscapesDeterministically(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "roots/a.json", `{"value":{"$ref":"../components/pointers.json#/foo~2bar"}}`)
+	writeFile(t, root, "roots/b.json", `{"value":{"$ref":"../components/pointers.json#/foo~bar"}}`)
+	writeFile(t, root, "components/pointers.json", `{"foo~bar":{"type":"number"},"foo~2bar":{"type":"string"}}`)
+	input := contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"roots/a.json", "roots/b.json"},
+		Components:     []string{"components/pointers.json"},
+	}
+
+	documents, forward := contractjoiner.Join(input)
+	shuffledDocuments, shuffled := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          reversed(input.Roots),
+		Components:     reversed(input.Components),
+	})
+	if documents != nil || shuffledDocuments != nil {
+		t.Fatalf("Join() returned partial documents: forward=%+v shuffled=%+v", documents, shuffledDocuments)
+	}
+	if !reflect.DeepEqual(forward, shuffled) {
+		t.Fatalf("input order changed malformed-pointer diagnostics:\nforward: %+v\nshuffled: %+v", forward, shuffled)
+	}
+	want := []contractvalidator.Diagnostic{
+		{Code: "reference.fragment", Path: "/value/$ref", Message: `reference "../components/pointers.json#/foo~2bar" has an unresolved fragment`, Document: "roots/a.json"},
+		{Code: "reference.fragment", Path: "/value/$ref", Message: `reference "../components/pointers.json#/foo~bar" has an unresolved fragment`, Document: "roots/b.json"},
+	}
+	if !reflect.DeepEqual(forward, want) {
+		t.Fatalf("Join() diagnostics = %+v, want %+v", forward, want)
+	}
+}
+
+func TestJoinResolvesValidJSONPointerEscapes(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "roots/root.json", `{
+  "properties":{
+    "tilde":{"$ref":"../components/pointers.json#/foo~0bar"},
+    "slash":{"$ref":"../components/pointers.json#/foo~1bar"}
+  }
+}`)
+	writeFile(t, root, "components/pointers.json", `{"foo~bar":{"type":"number"},"foo/bar":{"type":"string"}}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"roots/root.json"},
+		Components:     []string{"components/pointers.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	if len(documents) != 1 {
+		t.Fatalf("Join() documents = %+v, want one", documents)
+	}
+	rootObject := documents[0].Value.(map[string]any)
+	properties := rootObject["properties"].(map[string]any)
+	if got := properties["tilde"].(map[string]any)["type"]; got != "number" {
+		t.Fatalf("escaped tilde target type = %v, want number", got)
+	}
+	if got := properties["slash"].(map[string]any)["type"]; got != "string" {
+		t.Fatalf("escaped slash target type = %v, want string", got)
 	}
 }
 
