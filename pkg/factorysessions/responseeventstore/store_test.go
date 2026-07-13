@@ -41,6 +41,9 @@ func TestSessionResponseEventStore_PublishAssignsMonotonicSequenceAndEventID(t *
 
 	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-abc", &fixedClock{now: start})
+	if got := store.FactorySessionID(); got != "session-abc" {
+		t.Fatalf("FactorySessionID() = %q, want session-abc", got)
+	}
 
 	first, err := store.Publish(samplePublishInput())
 	if err != nil {

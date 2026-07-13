@@ -228,7 +228,9 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-s.subscriber.done:
-			return nil, ErrSubscriptionClosed
+			// Complete/Close may close done while a retained event is already
+			// available; re-read before honoring completion.
+			continue
 		case <-s.subscriber.wake:
 		}
 	}

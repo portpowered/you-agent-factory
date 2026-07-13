@@ -34,6 +34,9 @@ func TestSessionResponseEventStoreSubscription_DispatchFilterOmitsNonMatchingCat
 		t.Fatalf("Subscribe: %v", err)
 	}
 	defer subscription.Detach()
+	if got := subscription.DispatchFilter(); got != "dispatch-alpha" {
+		t.Fatalf("DispatchFilter() = %q, want dispatch-alpha", got)
+	}
 
 	events, err := subscription.Next(context.Background())
 	if err != nil {

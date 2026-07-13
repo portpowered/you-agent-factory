@@ -320,3 +320,60 @@ func TestSessionResponseEventStore_CompleteIsIdempotent(t *testing.T) {
 		t.Fatal("Completed() = false after duplicate Complete")
 	}
 }
+
+func TestSessionResponseEventStore_CompleteWhileWaitingNextDrainsPublishedEvent(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	waiting := make(chan struct{})
+	go func() {
+		close(waiting)
+		events, err := subscription.Next(context.Background())
+		if err != nil {
+			t.Errorf("Next: %v", err)
+			return
+		}
+		if len(events) != 1 {
+			t.Errorf("event count = %d, want 1", len(events))
+			return
+		}
+		if events[0].Sequence != 1 {
+			t.Errorf("sequence = %d, want 1", events[0].Sequence)
+		}
+		if _, err := subscription.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+			t.Errorf("Next after drain error = %v, want ErrSubscriptionClosed", err)
+		}
+	}()
+
+	select {
+	case <-waiting:
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not start waiting")
+	}
+
+	time.Sleep(20 * time.Millisecond)
+
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish while subscriber waiting: %v", err)
+	}
+	store.Complete()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for subscriber to drain published event after complete")
+		default:
+			if store.SubscriberCount() == 0 {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
