@@ -61,6 +61,9 @@ type InferenceProgressFragment struct {
 	// CanonicalDraft carries an exact provider-adapter event alongside the
 	// legacy fragment used by compatibility consumers.
 	CanonicalDraft any
+	// CanonicalEventAlreadyPublished prevents a legacy terminal marker from
+	// duplicating an exact native terminal draft published earlier in the stream.
+	CanonicalEventAlreadyPublished bool
 }
 
 // InferenceProgressPublisher receives provider progress fragments for one live
@@ -119,6 +122,12 @@ type InferenceProgressPublishingCommandRunner struct {
 // SupportsResponseStreaming reports that the runner observes subprocess output
 // incrementally and can therefore consume native streaming protocols.
 func (InferenceProgressPublishingCommandRunner) SupportsResponseStreaming() bool { return true }
+
+// PublishesCanonicalCodexJSONL reports whether this runner has the typed Codex
+// normalizer needed to publish exact native terminal drafts before process exit.
+func (r InferenceProgressPublishingCommandRunner) PublishesCanonicalCodexJSONL() bool {
+	return r.Publisher != nil && r.NormalizerFactory != nil
+}
 
 // Run executes the provider subprocess and publishes incremental stdout/stderr
 // fragments into the configured internal session response stream.

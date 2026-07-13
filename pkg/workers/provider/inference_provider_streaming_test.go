@@ -104,6 +104,91 @@ func TestScriptWrapProvider_CodexResponseStreamUsesJSONLAndKeepsFinalResultIndep
 	}
 }
 
+func TestScriptWrapProvider_CodexTypedFailureWinsOverZeroExitAndFinalParse(t *testing.T) {
+	stdout := []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-failed-1\"}\n" +
+		"{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n")
+	fakeExec := &codexJSONLCapableRecordingExec{recordingProviderExec: recordingProviderExec{result: CommandResult{Stdout: stdout}}}
+	var published []InferenceProgressFragment
+	finalCalled := false
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { published = append(published, fragment) }),
+		WithCodexJSONLFinalParser(func([]byte) (interfaces.InferenceResponse, error) {
+			finalCalled = true
+			return interfaces.InferenceResponse{Content: "must not succeed"}, nil
+		}),
+		WithCodexJSONLTerminalFailureParser(func([]byte) (CodexJSONLTerminalFailure, bool) {
+			return CodexJSONLTerminalFailure{
+				Type: interfaces.WorkFailureTypeThrottled, Message: codexThrottleFailureMessage,
+				ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "thread-failed-1"},
+			}, true
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-codex-typed-failure"},
+		ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("error = %T, want *ProviderError", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled || providerErr.Family != interfaces.WorkFailureFamilyThrottle || finalCalled {
+		t.Fatalf("provider error = %#v, finalCalled = %t", providerErr, finalCalled)
+	}
+	if providerErr.ProviderSession == nil || providerErr.ProviderSession.ID != "thread-failed-1" {
+		t.Fatalf("provider session = %#v", providerErr.ProviderSession)
+	}
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind || published[0].Payload != codexThrottleFailureMessage {
+		t.Fatalf("published = %#v, want one terminal failure", published)
+	}
+}
+
+func TestScriptWrapProvider_CodexCancellationPrecedesTypedFailure(t *testing.T) {
+	fakeExec := &codexJSONLCapableRecordingExec{recordingProviderExec: recordingProviderExec{
+		result: CommandResult{Stdout: []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n")},
+		err:    context.DeadlineExceeded,
+	}}
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(InferenceProgressFragment) {}),
+		WithCodexJSONLFinalParser(func([]byte) (interfaces.InferenceResponse, error) { return interfaces.InferenceResponse{}, nil }),
+		WithCodexJSONLTerminalFailureParser(func([]byte) (CodexJSONLTerminalFailure, bool) {
+			return CodexJSONLTerminalFailure{Type: interfaces.WorkFailureTypeThrottled, Message: codexThrottleFailureMessage}, true
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok || providerErr.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("error = %#v, want timeout ProviderError", err)
+	}
+}
+
+func TestScriptWrapProvider_CodexTimeoutExitPrecedesTypedFailure(t *testing.T) {
+	fakeExec := &codexJSONLCapableRecordingExec{recordingProviderExec: recordingProviderExec{
+		result: CommandResult{ExitCode: 124, Stdout: []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n")},
+	}}
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(InferenceProgressFragment) {}),
+		WithCodexJSONLFinalParser(func([]byte) (interfaces.InferenceResponse, error) { return interfaces.InferenceResponse{}, nil }),
+		WithCodexJSONLTerminalFailureParser(func([]byte) (CodexJSONLTerminalFailure, bool) {
+			return CodexJSONLTerminalFailure{Type: interfaces.WorkFailureTypeThrottled, Message: codexThrottleFailureMessage}, true
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+	})
+	providerErr, ok := err.(*ProviderError)
+	if !ok || providerErr.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("error = %#v, want timeout ProviderError", err)
+	}
+}
+
 type codexJSONLCapableRecordingExec struct{ recordingProviderExec }
 
 func (*codexJSONLCapableRecordingExec) SupportsResponseStreaming() bool { return true }

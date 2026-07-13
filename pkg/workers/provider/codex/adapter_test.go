@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex"
@@ -37,18 +38,11 @@ func TestDecoderMapsThreadTurnAndCompletedAgentMessageExactly(t *testing.T) {
 		t.Fatalf("Flush() error = %v", err)
 	}
 	drafts = append(drafts, flushed.Drafts...)
-	if len(drafts) != 4 {
-		t.Fatalf("draft count = %d, want 4: %#v", len(drafts), drafts)
+	if len(drafts) != 5 {
+		t.Fatalf("draft count = %d, want 5: %#v", len(drafts), drafts)
 	}
-	wantKinds := []responseevents.Kind{responseevents.KindSession, responseevents.KindTurn, responseevents.KindMessage, responseevents.KindTurn}
-	for index, draft := range drafts {
-		if err := responseevents.ValidateDraft(draft); err != nil {
-			t.Fatalf("draft[%d] invalid: %v", index, err)
-		}
-		if draft.Kind != wantKinds[index] || draft.ProviderSessionRef != "thread-codex-123" {
-			t.Fatalf("draft[%d] = %#v", index, draft)
-		}
-	}
+	wantKinds := []responseevents.Kind{responseevents.KindSession, responseevents.KindTurn, responseevents.KindMessage, responseevents.KindUsage, responseevents.KindTurn}
+	assertDraftKindsAndSession(t, drafts, wantKinds, "thread-codex-123")
 	message := drafts[2]
 	if message.ItemID != "item-message-1" || message.Phase != responseevents.PhaseCompleted || message.TurnID != drafts[1].TurnID {
 		t.Fatalf("message correlation = %#v", message)
@@ -59,6 +53,25 @@ func TestDecoderMapsThreadTurnAndCompletedAgentMessageExactly(t *testing.T) {
 	}
 	if len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Text != "authoritative answer" {
 		t.Fatalf("message payload = %#v", payload)
+	}
+	var usage responseevents.UsagePayload
+	if err := json.Unmarshal(drafts[3].Payload, &usage); err != nil {
+		t.Fatal(err)
+	}
+	if usage.InputTokens != 4 || usage.OutputTokens != 2 {
+		t.Fatalf("usage payload = %#v", usage)
+	}
+}
+
+func assertDraftKindsAndSession(t *testing.T, drafts []responseevents.Draft, wantKinds []responseevents.Kind, wantSession string) {
+	t.Helper()
+	for index, draft := range drafts {
+		if err := responseevents.ValidateDraft(draft); err != nil {
+			t.Fatalf("draft[%d] invalid: %v", index, err)
+		}
+		if draft.Kind != wantKinds[index] || draft.ProviderSessionRef != wantSession {
+			t.Fatalf("draft[%d] = %#v", index, draft)
+		}
 	}
 }
 
@@ -88,8 +101,8 @@ func TestCommandOutputNormalizerPublishesTypedCanonicalDrafts(t *testing.T) {
 	}
 	normalizer.Observe("stdout", []byte(lifecycleFixture))
 	normalizer.Flush()
-	if len(published) != 4 {
-		t.Fatalf("published = %#v, want four typed records", published)
+	if len(published) != 5 {
+		t.Fatalf("published = %#v, want five typed records", published)
 	}
 	for index, fragment := range published {
 		draft, ok := fragment.CanonicalDraft.(*responseevents.Draft)
@@ -118,8 +131,8 @@ func TestDecoderPreservesEverySupportedItemSemanticAndIdentity(t *testing.T) {
 	if len(decoded.Diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", decoded.Diagnostics)
 	}
-	if len(decoded.Drafts) != 18 {
-		t.Fatalf("draft count = %d, want 18", len(decoded.Drafts))
+	if len(decoded.Drafts) != 19 {
+		t.Fatalf("draft count = %d, want 19", len(decoded.Drafts))
 	}
 	for index, draft := range decoded.Drafts {
 		if err := responseevents.ValidateDraft(draft); err != nil {
@@ -154,6 +167,88 @@ func TestDecoderClassifiesOnlyExactNestedItemTypes(t *testing.T) {
 	}
 	if len(decoded.Drafts) != 0 || len(decoded.Diagnostics) != 1 || decoded.Diagnostics[0].Code != "codex_unknown_item" {
 		t.Fatalf("decoded = %#v", decoded)
+	}
+}
+
+func TestDecoderMapsFullUsageAndTypedFailuresToCanonicalFacts(t *testing.T) {
+	stream := strings.Join([]string{
+		`{"type":"thread.started","thread_id":"thread-terminal-1"}`,
+		`{"type":"turn.started"}`,
+		`{"type":"turn.completed","usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":5}}`,
+		`{"type":"turn.failed","error":{"message":"You've hit your usage limit"}}`,
+		`{"type":"error","message":"unexpected status 500 from upstream"}`,
+	}, "\n") + "\n"
+	decoder := codex.NewDecoder(adapter.DecoderContext{RunID: "run-terminal", DispatchID: "dispatch-terminal"})
+	decoded, err := decoder.Observe(context.Background(), adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(stream)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Diagnostics) != 0 || len(decoded.Drafts) != 6 {
+		t.Fatalf("decoded = %#v", decoded)
+	}
+	var usage responseevents.UsagePayload
+	decodePayload(t, decoded.Drafts[2], &usage)
+	if usage.InputTokens != 100 || usage.CachedInputTokens != 40 || usage.OutputTokens != 25 || usage.ReasoningOutputTokens != 5 {
+		t.Fatalf("usage = %#v", usage)
+	}
+	for index, wantCode := range []string{"codex_turn_failed", "codex_error"} {
+		draft := decoded.Drafts[index+4]
+		if draft.Kind != responseevents.KindError || draft.Phase != responseevents.PhaseFailed || draft.ProviderSessionRef != "thread-terminal-1" {
+			t.Fatalf("failure draft[%d] = %#v", index, draft)
+		}
+		var payload responseevents.ErrorPayload
+		decodePayload(t, draft, &payload)
+		if payload.Code != wantCode || !payload.Retryable || strings.Contains(payload.Message, "upstream") {
+			t.Fatalf("failure payload[%d] = %#v", index, payload)
+		}
+	}
+}
+
+func TestParseTerminalFailureUsesExactTypedRecordsAndRecognizedPrecedence(t *testing.T) {
+	stream := strings.Join([]string{
+		`{"type":"thread.started","thread_id":"thread-failure-1"}`,
+		`{"type":"turn.failed","error":{"message":"unexpected status 429"}}`,
+		`{"type":"error","message":"cleanup detail that must not override"}`,
+	}, "\n") + "\n"
+	failure, ok := codex.ParseTerminalFailure([]byte(stream))
+	if !ok {
+		t.Fatal("ParseTerminalFailure() did not find typed failure")
+	}
+	if failure.Type != interfaces.WorkFailureTypeThrottled || !failure.Retryable || failure.NativeEventType != "turn.failed" {
+		t.Fatalf("failure = %#v", failure)
+	}
+	if failure.ProviderSession == nil || failure.ProviderSession.ID != "thread-failure-1" || failure.Message != "Codex is temporarily unavailable due to usage or capacity limits." {
+		t.Fatalf("failure identity/message = %#v", failure)
+	}
+}
+
+func TestParseTerminalFailurePreservesCodexFailureCategoriesAndRetryPolicy(t *testing.T) {
+	tests := []struct {
+		name      string
+		message   string
+		wantType  interfaces.WorkFailureType
+		retryable bool
+	}{
+		{name: "authentication", message: "unexpected status 401", wantType: interfaces.WorkFailureTypeAuthFailure},
+		{name: "bad request", message: "unexpected status 400", wantType: interfaces.WorkFailureTypePermanentBadRequest},
+		{name: "throttled", message: "You've hit your usage limit", wantType: interfaces.WorkFailureTypeThrottled, retryable: true},
+		{name: "server", message: "unexpected status 503", wantType: interfaces.WorkFailureTypeInternalServerError, retryable: true},
+		{name: "timeout", message: "command timed out", wantType: interfaces.WorkFailureTypeTimeout, retryable: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			record, err := json.Marshal(map[string]any{"type": "turn.failed", "error": map[string]string{"message": tc.message}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			failure, ok := codex.ParseTerminalFailure(append(record, '\n'))
+			if !ok || failure.Type != tc.wantType || failure.Retryable != tc.retryable {
+				t.Fatalf("failure = %#v", failure)
+			}
+			if strings.Contains(failure.Message, tc.message) {
+				t.Fatalf("failure message exposed native text: %q", failure.Message)
+			}
+		})
 	}
 }
 

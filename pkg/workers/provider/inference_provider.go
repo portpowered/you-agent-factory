@@ -106,6 +106,20 @@ func WithCodexJSONLFinalParser(parser func([]byte) (interfaces.InferenceResponse
 	return func(p *ScriptWrapProvider) { p.codexJSONLFinalParser = parser }
 }
 
+// CodexJSONLTerminalFailure is the provider-boundary projection of a typed
+// Codex terminal event. The Codex adapter owns native JSONL interpretation.
+type CodexJSONLTerminalFailure struct {
+	Type            interfaces.WorkFailureType
+	Message         string
+	ProviderSession *interfaces.ProviderSessionMetadata
+}
+
+// WithCodexJSONLTerminalFailureParser injects exact typed terminal parsing
+// without making the provider coordinator import its Codex adapter child.
+func WithCodexJSONLTerminalFailureParser(parser func([]byte) (CodexJSONLTerminalFailure, bool)) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) { p.codexJSONLTerminalFailureParser = parser }
+}
+
 // WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
 func WithMaterializeOptions(opts *materialize.Options) ScriptWrapProviderOption {
 	return func(p *ScriptWrapProvider) {
@@ -126,8 +140,9 @@ type ScriptWrapProvider struct {
 	Logger logging.Logger
 	exec   CommandRunner
 
-	progressPublisher     InferenceProgressPublisher
-	codexJSONLFinalParser func([]byte) (interfaces.InferenceResponse, error)
+	progressPublisher               InferenceProgressPublisher
+	codexJSONLFinalParser           func([]byte) (interfaces.InferenceResponse, error)
+	codexJSONLTerminalFailureParser func([]byte) (CodexJSONLTerminalFailure, bool)
 }
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
@@ -203,6 +218,12 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	commandDiagnostics := commandDiagnostics(execReq, result, duration, false)
 	providerSession := effectiveProviderSession(req, result)
 	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
+	codexJSONL := req.ModelProvider == string(interfaces.ModelProviderCodex) && hasCommandArg(execReq.Args, "--json")
+	if providerErr := p.codexTypedTerminalFailure(ctx, codexJSONL, result, err, commandDiagnostics); providerErr != nil {
+		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
+		p.publishTypedFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
+		return interfaces.InferenceResponse{}, providerErr
+	}
 	if err != nil {
 		logger.Error("inference dispatch failed with error",
 			providerLogFields(req, "error", err.Error())...)
@@ -236,7 +257,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	if cursorProvider {
 		return p.completeCursorInference(req, result, commandDiagnostics, logger)
 	}
-	if req.ModelProvider == string(interfaces.ModelProviderCodex) && hasCommandArg(execReq.Args, "--json") {
+	if codexJSONL {
 		parsed, parseErr := p.codexJSONLFinalParser(result.Stdout)
 		if parseErr != nil {
 			providerErr := newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeUnknown, parseErr.Error(), parseErr, providerSession, commandDiagnostics)
@@ -260,6 +281,31 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		ProviderSession: providerSession,
 		Diagnostics:     commandDiagnostics,
 	}, nil
+}
+
+func (p *ScriptWrapProvider) codexTypedTerminalFailure(
+	ctx context.Context,
+	codexJSONL bool,
+	result CommandResult,
+	commandErr error,
+	diagnostics *interfaces.WorkDiagnostics,
+) *ProviderError {
+	if !codexJSONL || p.codexJSONLTerminalFailureParser == nil || isProviderExecutionCancellation(ctx, commandErr) || result.ExitCode == 124 {
+		return nil
+	}
+	failure, failed := p.codexJSONLTerminalFailureParser(result.Stdout)
+	if !failed {
+		return nil
+	}
+	return newProviderErrorFromResultWithDiagnostics(
+		ProviderFailureResult{Reason: failure.Type, Message: failure.Message}, commandErr,
+		failure.ProviderSession, diagnostics,
+	)
+}
+
+func isProviderExecutionCancellation(ctx context.Context, err error) bool {
+	return errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (p *ScriptWrapProvider) responseStreamCapable() bool {
@@ -567,6 +613,25 @@ func (p *ScriptWrapProvider) publishCompletedFragment(dispatchID string, provide
 }
 
 func (p *ScriptWrapProvider) publishFailureFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, err error) {
+	p.publishFailureFragmentWithCanonicalState(dispatchID, providerSession, err, false)
+}
+
+func (p *ScriptWrapProvider) publishTypedFailureFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, err error) {
+	canonicalPublished := false
+	if p != nil {
+		if publisher, ok := p.exec.(interface{ PublishesCanonicalCodexJSONL() bool }); ok {
+			canonicalPublished = publisher.PublishesCanonicalCodexJSONL()
+		}
+	}
+	p.publishFailureFragmentWithCanonicalState(dispatchID, providerSession, err, canonicalPublished)
+}
+
+func (p *ScriptWrapProvider) publishFailureFragmentWithCanonicalState(
+	dispatchID string,
+	providerSession *interfaces.ProviderSessionMetadata,
+	err error,
+	canonicalPublished bool,
+) {
 	if p == nil || p.progressPublisher == nil {
 		return
 	}
@@ -578,7 +643,9 @@ func (p *ScriptWrapProvider) publishFailureFragment(dispatchID string, providerS
 	if message == "" && err != nil {
 		message = strings.TrimSpace(err.Error())
 	}
-	p.progressPublisher(FailedFragment(dispatchID, providerSession, message))
+	fragment := FailedFragment(dispatchID, providerSession, message)
+	fragment.CanonicalEventAlreadyPublished = canonicalPublished
+	p.progressPublisher(fragment)
 }
 
 func formatProviderCommandFailure(provider string, result CommandResult, err error) string {

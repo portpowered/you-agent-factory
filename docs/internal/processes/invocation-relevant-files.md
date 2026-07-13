@@ -228,6 +228,11 @@ primary-result behavior.
   nested item discriminator, retain the provider's native item ID across start,
   update, and completion records, and represent the completed full item as the
   authoritative snapshot rather than synthesizing a second completed item.
+  Reconcile typed terminal failures before generic process-exit fallback, but
+  preserve cancellation and timeout precedence. When the native decoder already
+  published the exact terminal `ERROR` draft, keep the legacy terminal marker
+  for response-stream consumers while explicitly suppressing its second
+  canonical projection.
   Session-scoped immutable response-event storage lives in
   `pkg/factorysessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is

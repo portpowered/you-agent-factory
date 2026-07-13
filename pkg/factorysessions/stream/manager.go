@@ -158,15 +158,17 @@ func (m *Manager) inferenceProgressPublisher(
 		if fragment.CanonicalDraft != nil {
 			canonicalDraft, _ = fragment.CanonicalDraft.(*responseevents.Draft)
 		}
-		if err := publishCanonicalResponseEvents(session, stored, canonicalDraft); err != nil {
-			m.host.ObserveResponseStreamDegraded(
-				session,
-				normalizedSessionID,
-				dispatchID,
-				"CANONICAL_EVENT_PUBLISH_FAILED",
-				logger,
-				err,
-			)
+		if !fragment.CanonicalEventAlreadyPublished {
+			if err := publishCanonicalResponseEvents(session, stored, canonicalDraft); err != nil {
+				m.host.ObserveResponseStreamDegraded(
+					session,
+					normalizedSessionID,
+					dispatchID,
+					"CANONICAL_EVENT_PUBLISH_FAILED",
+					logger,
+					err,
+				)
+			}
 		}
 		m.host.ObserveResponseStreamPublished(session, normalizedSessionID, stored)
 	}

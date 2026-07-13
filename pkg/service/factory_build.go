@@ -983,6 +983,12 @@ func providerRunnerOptions(
 			parsed, err := codexpkg.ParseFinalOutput(output)
 			return interfaces.InferenceResponse{Content: parsed.Content, ProviderSession: parsed.ProviderSession}, err
 		}),
+		workerprovider.WithCodexJSONLTerminalFailureParser(func(output []byte) (workerprovider.CodexJSONLTerminalFailure, bool) {
+			failure, ok := codexpkg.ParseTerminalFailure(output)
+			return workerprovider.CodexJSONLTerminalFailure{
+				Type: failure.Type, Message: failure.Message, ProviderSession: failure.ProviderSession,
+			}, ok
+		}),
 	}
 	if inferenceProgressPublisher != nil {
 		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))

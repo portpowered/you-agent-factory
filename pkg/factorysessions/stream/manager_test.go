@@ -177,6 +177,27 @@ func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testin
 	}
 }
 
+func TestManager_DoesNotDuplicateTypedTerminalErrorWithLegacyMarker(t *testing.T) {
+	t.Parallel()
+	session := factorysessions.NewLiveSession("sess-terminal-dedup", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
+	manager := stream.NewManager(&streamTestHost{session: session})
+	publish := manager.InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, _ := json.Marshal(responseevents.ErrorPayload{Code: "codex_turn_failed", Message: "Codex request timed out.", Retryable: true})
+	draft := responseevents.Draft{DispatchID: "dispatch-terminal", ProviderSessionRef: "thread-terminal", Kind: responseevents.KindError, Phase: responseevents.PhaseFailed, Payload: payload,
+		Provenance: responseevents.Provenance{Provider: "codex", NativeEventType: "turn.failed", Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationNotification, Fidelity: responseevents.FidelityNormalized}}
+	native := workerprovider.ProgressFragment("dispatch-terminal", &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "thread-terminal"}, "ERROR")
+	native.CanonicalDraft = &draft
+	publish(native)
+	terminal := workerprovider.FailedFragment("dispatch-terminal", native.ProviderSessionRef, "Codex request timed out.")
+	terminal.CanonicalEventAlreadyPublished = true
+	publish(terminal)
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].Kind != responseevents.KindError || events[0].Provenance.NativeEventType != "turn.failed" {
+		t.Fatalf("canonical events = %#v, want one native terminal error", events)
+	}
+}
+
 func TestManager_CloseAllPreventsSubscription(t *testing.T) {
 	t.Parallel()
 

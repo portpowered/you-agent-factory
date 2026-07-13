@@ -54,6 +54,20 @@ type recordEnvelope struct {
 	Type     string          `json:"type"`
 	ThreadID string          `json:"thread_id"`
 	Item     json.RawMessage `json:"item"`
+	Usage    *usageRecord    `json:"usage"`
+	Error    *threadError    `json:"error"`
+	Message  string          `json:"message"`
+}
+
+type usageRecord struct {
+	InputTokens           int64 `json:"input_tokens"`
+	CachedInputTokens     int64 `json:"cached_input_tokens"`
+	OutputTokens          int64 `json:"output_tokens"`
+	ReasoningOutputTokens int64 `json:"reasoning_output_tokens"`
+}
+
+type threadError struct {
+	Message string `json:"message"`
 }
 
 func (d *Decoder) decodeRecord(raw []byte) adapter.DecodeResult {
@@ -76,11 +90,49 @@ func (d *Decoder) decodeRecord(raw []byte) adapter.DecodeResult {
 		d.turnID = fmt.Sprintf("codex-turn-%d", d.turnSequence)
 		return oneDraft(d.lifecycleDraft(responseevents.KindTurn, responseevents.PhaseStarted, "started", "turn.started"))
 	case "turn.completed":
-		return oneDraft(d.lifecycleDraft(responseevents.KindTurn, responseevents.PhaseCompleted, "completed", "turn.completed"))
+		if record.Usage == nil {
+			return diagnostic("codex_malformed_turn_completed", diagnosticMessage)
+		}
+		return appendResult(oneDraft(d.usageDraft(*record.Usage)), oneDraft(d.lifecycleDraft(responseevents.KindTurn, responseevents.PhaseCompleted, "completed", "turn.completed")))
+	case "turn.failed":
+		if record.Error == nil || strings.TrimSpace(record.Error.Message) == "" {
+			return diagnostic("codex_malformed_turn_failed", diagnosticMessage)
+		}
+		return oneDraft(d.errorDraft("turn.failed", record.Error.Message))
+	case "error":
+		if strings.TrimSpace(record.Message) == "" {
+			return diagnostic("codex_malformed_error", diagnosticMessage)
+		}
+		return oneDraft(d.errorDraft("error", record.Message))
 	case "item.started", "item.updated", "item.completed":
 		return d.decodeItem(record.Type, record.Item)
 	default:
 		return diagnostic("codex_unknown_event", "codex JSONL event type is not supported: "+safeDiscriminator(record.Type))
+	}
+}
+
+func (d *Decoder) usageDraft(usage usageRecord) responseevents.Draft {
+	payload := mustJSON(responseevents.UsagePayload{
+		InputTokens: usage.InputTokens, CachedInputTokens: usage.CachedInputTokens,
+		OutputTokens: usage.OutputTokens, ReasoningOutputTokens: usage.ReasoningOutputTokens,
+	})
+	return responseevents.Draft{
+		RunID: d.context.RunID, DispatchID: d.context.DispatchID, TurnID: d.turnID,
+		ProviderSessionRef: d.threadID, Kind: responseevents.KindUsage, Phase: responseevents.PhaseUpdated,
+		Provenance: provenance("turn.completed", responseevents.RepresentationSnapshot), Payload: payload,
+	}
+}
+
+func (d *Decoder) errorDraft(nativeType, message string) responseevents.Draft {
+	failure, _ := classifyTerminalMessage(nativeType, message, d.threadID)
+	payload := mustJSON(responseevents.ErrorPayload{
+		Code: "codex_" + strings.ReplaceAll(nativeType, ".", "_"), Message: failure.Message,
+		Retryable: failure.Retryable,
+	})
+	return responseevents.Draft{
+		RunID: d.context.RunID, DispatchID: d.context.DispatchID, TurnID: d.turnID,
+		ProviderSessionRef: d.threadID, Kind: responseevents.KindError, Phase: responseevents.PhaseFailed,
+		Provenance: provenance(nativeType, responseevents.RepresentationNotification), Payload: payload,
 	}
 }
 
