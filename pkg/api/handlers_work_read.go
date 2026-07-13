@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -25,7 +24,7 @@ import (
 	workcontent "github.com/portpowered/infinite-you/pkg/work/content"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
-	"github.com/portpowered/infinite-you/pkg/workquery"
+	workquery "github.com/portpowered/infinite-you/pkg/work/query"
 	"go.uber.org/zap"
 )
 
@@ -54,12 +53,10 @@ func (s *Server) listWork(
 	params factoryapi.ListWorkBySessionIdParams,
 	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
 ) {
-	if params.StateType != nil && !workquery.ValidWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
-		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
-		return
-	}
-	if params.SortBy != nil && *params.SortBy != factoryapi.ListWorkBySessionIdParamsSortByStateType {
-		s.writeError(w, http.StatusBadRequest, "sortBy must be state.type", "BAD_REQUEST")
+	selectionOptions := listWorkSelectionOptions(params)
+	selection, err := workquery.NewSelection(selectionOptions)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}
 
@@ -77,17 +74,21 @@ func (s *Server) listWork(
 	// Collect, filter, and sort public work for deterministic pagination.
 	materialized := materialize.CollectPublicWorkTokens(&snapshot.Marking, snapshot.Dispatches)
 	workNamesByID := publicWorkNamesByID(materialized.Tokens)
-	items := make([]listWorkItem, 0, len(materialized.Tokens))
+	itemsByID := make(map[string]listWorkItem, len(materialized.Tokens))
+	queryItems := make([]workquery.Item, 0, len(materialized.Tokens))
 	for _, t := range materialized.Tokens {
 		_, inFlightOnly := materialized.InFlightOnlyByID[t.ID]
 		work := tokenToWork(t, snapshot.Topology, inFlightOnly)
 		work.Relations = generatedWorkRelations(t, work.Name, workNamesByID)
-		if !workMatchesListFilters(work, params) {
-			continue
-		}
-		items = append(items, listWorkItem{cursorID: t.ID, work: work})
+		item := listWorkItem{cursorID: t.ID, work: work}
+		itemsByID[t.ID] = item
+		queryItems = append(queryItems, listWorkQueryItem(item))
 	}
-	sortListWorkItems(items, listWorkSortMode(params.SortBy))
+	selected := selection.Apply(queryItems)
+	items := make([]listWorkItem, 0, len(selected))
+	for _, item := range selected {
+		items = append(items, itemsByID[item.ID])
+	}
 
 	// Consume the generated route params directly. Non-positive values still fall back
 	// to the default page size after successful integer binding.
@@ -128,76 +129,45 @@ type listWorkItem struct {
 	work     factoryapi.Work
 }
 
-type listWorkSortModeValue int
-
-const (
-	listWorkSortDefault listWorkSortModeValue = iota
-	listWorkSortStateType
-)
-
-func listWorkSortMode(sortBy *factoryapi.ListWorkBySessionIdParamsSortBy) listWorkSortModeValue {
-	if sortBy != nil && *sortBy == factoryapi.ListWorkBySessionIdParamsSortByStateType {
-		return listWorkSortStateType
-	}
-	return listWorkSortDefault
-}
-
-func sortListWorkItems(items []listWorkItem, mode listWorkSortModeValue) {
-	sort.Slice(items, func(i, j int) bool {
-		left := items[i]
-		right := items[j]
-		if mode == listWorkSortStateType {
-			return lessListWorkByStateType(left, right)
-		}
-
-		leftOrder := listWorkStateOrder(left.work.State)
-		rightOrder := listWorkStateOrder(right.work.State)
-		if leftOrder != rightOrder {
-			return leftOrder < rightOrder
-		}
-
-		leftStateType := listWorkStateType(left.work.State)
-		rightStateType := listWorkStateType(right.work.State)
-		if leftStateType != rightStateType {
-			return leftStateType < rightStateType
-		}
-
-		return left.cursorID < right.cursorID
-	})
-}
-
-func lessListWorkByStateType(left, right listWorkItem) bool {
-	leftStateType := listWorkStateType(left.work.State)
-	rightStateType := listWorkStateType(right.work.State)
-	if leftStateType != rightStateType {
-		return leftStateType < rightStateType
-	}
-	return left.cursorID < right.cursorID
-}
-
-func listWorkStateOrder(workState *factoryapi.WorkState) int {
-	if workState == nil {
-		return 4
-	}
-	switch workState.Type {
-	case factoryapi.WorkStateTypeINITIAL:
-		return 0
-	case factoryapi.WorkStateTypePROCESSING:
-		return 1
-	case factoryapi.WorkStateTypeFAILED:
-		return 2
-	case factoryapi.WorkStateTypeTERMINAL:
-		return 3
-	default:
-		return 4
+func listWorkSelectionOptions(params factoryapi.ListWorkBySessionIdParams) workquery.SelectionOptions {
+	return workquery.SelectionOptions{
+		StateName:    listWorkOptionalString(params.StateName),
+		StateType:    listWorkOptionalString(params.StateType),
+		Name:         listWorkOptionalString(params.Name),
+		WorkTypeName: listWorkOptionalString(params.WorkTypeName),
+		TraceID:      listWorkOptionalString(params.TraceId),
+		SortBy:       listWorkString(params.SortBy),
 	}
 }
 
-func listWorkStateType(workState *factoryapi.WorkState) string {
-	if workState == nil {
+func listWorkOptionalString[T ~string](value *T) *string {
+	if value == nil {
+		return nil
+	}
+	result := string(*value)
+	return &result
+}
+
+func listWorkString[T ~string](value *T) string {
+	if value == nil {
 		return ""
 	}
-	return string(workState.Type)
+	return string(*value)
+}
+
+func listWorkQueryItem(item listWorkItem) workquery.Item {
+	work := item.work
+	queryItem := workquery.Item{
+		ID:                     item.cursorID,
+		Name:                   work.Name,
+		WorkTypeName:           stringValue(work.WorkTypeName),
+		TraceID:                stringValue(work.TraceId),
+		CurrentChainingTraceID: stringValue(work.CurrentChainingTraceId),
+	}
+	if work.State != nil {
+		queryItem.State = &workquery.State{Name: work.State.Name, Type: string(work.State.Type)}
+	}
+	return queryItem
 }
 
 func nextListWorkIndex(items []listWorkItem, cursorID string) int {
@@ -215,49 +185,6 @@ func listWorkResults(items []listWorkItem) []factoryapi.Work {
 		results[i] = item.work
 	}
 	return results
-}
-
-func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
-	return workMatchesStateListFilters(work, params) &&
-		workMatchesNameListFilter(work, params) &&
-		workMatchesWorkTypeNameListFilter(work, params) &&
-		workMatchesTraceIDListFilter(work, params)
-}
-
-func workMatchesStateListFilters(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
-	if params.StateName != nil {
-		if work.State == nil || work.State.Name != *params.StateName {
-			return false
-		}
-	}
-	if params.StateType != nil {
-		if work.State == nil || work.State.Type != *params.StateType {
-			return false
-		}
-	}
-	return true
-}
-
-func workMatchesNameListFilter(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
-	if params.Name == nil || *params.Name == "" {
-		return true
-	}
-	return strings.Contains(strings.ToLower(work.Name), strings.ToLower(string(*params.Name)))
-}
-
-func workMatchesWorkTypeNameListFilter(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
-	if params.WorkTypeName == nil || *params.WorkTypeName == "" {
-		return true
-	}
-	return stringValue(work.WorkTypeName) == string(*params.WorkTypeName)
-}
-
-func workMatchesTraceIDListFilter(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
-	if params.TraceId == nil || *params.TraceId == "" {
-		return true
-	}
-	traceID := string(*params.TraceId)
-	return stringValue(work.TraceId) == traceID || stringValue(work.CurrentChainingTraceId) == traceID
 }
 
 func (s *Server) GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, id factoryapi.WorkOrTokenID) {
