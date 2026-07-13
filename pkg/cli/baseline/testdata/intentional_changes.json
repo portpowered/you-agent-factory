@@ -1,10 +1,4 @@
 {
-  "planned_removals": [
-    {
-      "surface": "run_flag",
-      "name": "workflow",
-      "rationale": "Remove you run --workflow; workflow selection uses dedicated workflow commands."
-    }
-  ],
+  "planned_removals": [],
   "planned_moves": []
 }
