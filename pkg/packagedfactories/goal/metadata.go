@@ -9,8 +9,6 @@ const (
 	PackagedGoalWorkTypeName = "goal"
 	// PackagedExecuteWorkstationName is the single repeater workstation for goal work.
 	PackagedExecuteWorkstationName = "execute-goal"
-	// PackagedExecuteStateName is the loop state for in-progress goal work.
-	PackagedExecuteStateName = "execute"
 	// Deprecated multi-stage workstation names retained for transitional test and mock helpers.
 	PackagedPlanWorkstationName                  = "plan-goal"
 	PackagedCheckWorkstationName                 = "check-goal"
