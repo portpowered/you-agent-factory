@@ -335,9 +335,10 @@ primary-result behavior.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
   hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
   instead of hard-coding packaged-factory argument inventories in CLI help.
-- `docs/reference/packaged-fusion.md` is the packaged `you docs packaged-fusion`
-  customer guide for `@you/fusion` invocation, signature-aware help, examples,
-  materialization, and edit-after-materialize behavior.
+- `docs/reference/run.md` (`you docs run`) owns supported `@you/fusion`
+  invocation and signature-aware help. Factory materialization, examples, and
+  edit-after-materialize behavior belong in
+  `docs/reference/authoring-factories.md`.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -447,22 +448,23 @@ primary-result behavior.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
   worker model so customer edits to materialized `factory.json` affect the next
   invocation result.
-- `docs/reference/packaged-goal.md` is the packaged `you docs packaged-goal`
-  customer guide for `@you/goal` batch invocation, stdout primary result, operator
-  controls during active execution, internal-only CLI response-stream scope, and
-  the supported headless operator-interaction scope without widening localhost
-  listener promises. Packaged docs proof lives in
-  `pkg/cli/docs/docs_packaged_reference_test.go` and
+- `docs/reference/run.md` (`you docs run`) owns supported `@you/goal` batch
+  invocation, stdout primary-result, and response-stream guidance.
+  `docs/reference/sessions.md` owns operator controls and inspect-first recovery;
+  `docs/reference/authoring-factories.md` owns named Factory authoring and
+  materialization. Prove packaged guidance through the installed command in
   `tests/functional/smoke/cli_docs_smoke_test.go`; maintainer final-verification
   evidence for public-contract boundaries lives in
   `docs/internal/development/plans/you-goal/api-contract-audit.md`.
 - `docs/reference/models.md` is the customer guide for `INFERENCE_RUN`,
   `INFERENCE_WORKER`, managed-runtime `/models` surfaces, local modelhost lease
   execution, and legacy `MODEL_INVOKE` / `MODEL_WORKER` migration aliases.
-- `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
-  customer guide for `@you/tts` invocation, materialization, metadata result,
-  edit-after-materialize behavior, and raw-artifact streaming scope. Prefer
-  `INFERENCE_WORKER` / `INFERENCE_RUN` terminology there while documenting
+- `docs/reference/models.md` (`you docs models`) owns supported TTS discovery,
+  readiness, direct invocation, result selection, and raw-audio output guidance.
+  Named `@you/tts` invocation belongs in `docs/reference/run.md`; Factory
+  authoring, materialization, metadata, and edit-after-materialize behavior
+  belong in `docs/reference/authoring-factories.md`. Prefer `INFERENCE_WORKER` /
+  `INFERENCE_RUN` terminology in retained guidance while documenting
   `MODEL_WORKER` / `MODEL_INVOKE` as migration aliases.
 - `pkg/packagedfactories/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
@@ -512,14 +514,13 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
-- `docs/reference/packaged-goal.md` is the customer-facing reference for
-  packaged `@you/goal` invocation behavior, including operator-visible blocked,
-  needs-human, paused, interrupted, failed, timed-out, and unresolved-primary-result
-  outcomes plus recovery through existing session/work commands. Keep the
-  `@you/goal`-specific inspect-first recovery sequence there, but keep the
-  shared `FactorySession`/`Work` control vocabulary and command ownership in
-  `docs/reference/sessions.md` so future goal lanes extend one operator flow
-  instead of inventing route- or factory-specific recovery docs.
+- `docs/reference/run.md` is the customer-facing owner for packaged `@you/goal`
+  invocation behavior. Operator-visible blocked, needs-human, paused,
+  interrupted, failed, timed-out, and unresolved-primary-result outcomes plus
+  inspect-first recovery belong in `docs/reference/sessions.md`; keep shared
+  `FactorySession`/`Work` control vocabulary there so future goal lanes extend
+  one operator flow instead of inventing route- or factory-specific recovery
+  docs.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.

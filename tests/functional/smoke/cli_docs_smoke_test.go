@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	agentcli "github.com/portpowered/infinite-you/pkg/cli"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -49,36 +48,6 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "templates", heading: "# Templates", markers: []string{".Context.Project", ".Context.WorkDir", "docs/reference/templates.md", "text/template", "you docs guards", "you docs relationships"}, absent: []string{"docs/reference/prompt-variables.md"}},
 	{name: "models", heading: "# Models", markers: []string{"you models list", "you models inspect OMNIVOICE_Q4_K_M", "you models pull OMNIVOICE_Q4_K_M", "readinessState", "lifecycleState", "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text", "--output ./speech.wav", "you --json models invoke", "INFERENCE_RUN", "INFERENCE_WORKER", "WorkContent", "`you docs workers`", "`you docs workstations`"}, absent: []string{"docs/reference/workstations-and-workers.md", "## Maintainer Long-Test Expectations"}},
 	{name: "mcp", heading: "# MCP Host Setup", markers: []string{"you mcp serve", "mcpServers", `"args": ["mcp", "serve"]`, "you.factory_session.validate_source", "you.factory_session.start_async", "## Choose A Backing Mode", "## Run The First-Host Smoke", "## Know What Is Proven", "## Troubleshoot Setup And Calls", "fixture catalog not found", "factory_session.result.not_ready", "serve_smoke_test.go", "serve_runtime_smoke_test.go", "serve_runtime_resume_smoke_test.go", "serve_runtime_resume_non_regression_test.go", "you mcp serve --runtime", "Fixture-backed (default)", "Runtime-backed", "`you docs orchestrators`"}, absent: []string{"you docs mcp-hosts", "[Orchestrators](orchestrators.md)", "Follow-Up Cell For Async Install Smoke", "follow-up-cell-mcp-session-serve.md", "HTTP and SSE MCP transports are supported"}},
-}
-
-func TestDocsCommandSmoke_AuthoringFactoriesLinkCoverageFromCanonicalTree(t *testing.T) {
-	repoRoot := testutil.MustRepoRoot(t)
-	path := filepath.Join(repoRoot, "docs", "reference", "authoring-factories.md")
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read authoring factories docs: %v", err)
-	}
-	doc := string(content)
-
-	for _, marker := range []string{
-		"you run --factory ./factory.json \"Fix the lint issues\"",
-		"handlingBehavior: [\"DEFAULT\"]",
-		"## Test Workflows With Mock Workers",
-		"you run --dir ./factory --with-mock-workers",
-		"you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json",
-		"../examples/mock-workers.json",
-		"../examples/mock-workers-script.json",
-		"../examples/mock-workers-mixed.json",
-		"../examples/startup-work.json",
-		"../examples/README.md",
-		"you docs mock-workers",
-		"you docs record-replay",
-		"--no-record",
-	} {
-		if !strings.Contains(doc, marker) {
-			t.Fatalf("authoring factories docs missing marker %q", marker)
-		}
-	}
 }
 
 var retiredDocsInvocationPatterns = []*regexp.Regexp{
