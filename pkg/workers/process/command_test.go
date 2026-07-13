@@ -795,6 +795,9 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	case "spawn-child-success":
 		spawnCommandHelperChild()
 		os.Exit(0)
+	case "child-sleep":
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
 	case "pid-sleep":
 		writeCommandHelperPID()
 		time.Sleep(10 * time.Second)
@@ -860,9 +863,9 @@ func spawnCommandHelperChild() {
 	child := exec.Command(os.Args[0],
 		"-test.run=TestExecCommandRunner_HelperProcess",
 		"--",
-		"pid-sleep",
+		"child-sleep",
 	)
-	child.Env = append(os.Environ(), "GO_WANT_COMMAND_HELPER=1", "COMMAND_HELPER_PID_FILE="+pidFile)
+	child.Env = append(os.Environ(), "GO_WANT_COMMAND_HELPER=1")
 	if err := child.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)
