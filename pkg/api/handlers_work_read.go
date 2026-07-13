@@ -23,7 +23,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	workcontent "github.com/portpowered/infinite-you/pkg/work/content"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workquery"
 	"go.uber.org/zap"
 )
@@ -453,7 +454,7 @@ func publicWorkToken(token *interfaces.Token) bool {
 	return materialize.IsPublicWorkToken(token)
 }
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	return workcontent.GeneratedPtrFromParts(parts)
+	return contentcontract.GeneratedPtrFromParts(parts)
 }
 
 func (s *Server) StageSubmitWorkFileBySessionId(

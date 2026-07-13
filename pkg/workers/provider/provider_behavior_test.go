@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 )
 
@@ -164,7 +164,7 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 	if err := os.WriteFile(imagePath, []byte("png"), 0o644); err != nil {
 		t.Fatalf("write image: %v", err)
 	}
-	rawURL, err := workcontent.FilesystemPathToContentURL(imagePath)
+	rawURL, err := content.FilesystemPathToContentURL(imagePath)
 	if err != nil {
 		t.Fatalf("content url: %v", err)
 	}

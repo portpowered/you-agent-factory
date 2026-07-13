@@ -9,7 +9,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // StructuredArgumentsInputSource identifies invocation input resolved from the
@@ -236,7 +236,7 @@ func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest)
 	if request.SourceKind == nil || *request.SourceKind != factoryapi.InvocationInputSourceKindText {
 		return nil, &interfaces.RequestValidationError{Message: "sourceKind must be text"}
 	}
-	return workcontent.PartsFromGenerated(request.Content), nil
+	return contentcontract.PartsFromGenerated(request.Content), nil
 }
 
 func sessionInvocationStructuredArgs(request factoryapi.InvocationRequest) ([]NamedArgumentInput, error) {

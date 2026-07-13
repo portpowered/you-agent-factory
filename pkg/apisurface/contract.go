@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // ModelAPI is the model catalog and direct-invocation seam for API handlers and
@@ -141,7 +141,7 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 		TraceId:   result.TraceID,
 		Status:    result.Status,
 	}
-	if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
+	if content := contentcontract.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
 		response.PrimaryResult = content
 	}
 	if code := strings.TrimSpace(result.ErrorCode); code != "" {

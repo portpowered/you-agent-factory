@@ -18,7 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"go.uber.org/zap"
 )
 
@@ -288,7 +288,7 @@ func factoryInvocationRoot(cfg RunConfig) string {
 
 func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *factoryapi.InvocationRequest {
 	sourceKind := factoryapi.InvocationInputSourceKindText
-	content := *workcontent.GeneratedPtrFromParts(resolved.Content)
+	content := *contentcontract.GeneratedPtrFromParts(resolved.Content)
 	return &factoryapi.InvocationRequest{
 		SourceKind: &sourceKind,
 		Content:    &content,

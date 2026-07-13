@@ -7,7 +7,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // ResolveInferenceOperationBindings resolves supported operation input slots for
@@ -69,8 +69,8 @@ func OperationBindingsFromGenerated(values *[]factoryapi.WorkstationOperationBin
 	for _, binding := range *values {
 		current := interfaces.ModelOperationBinding{
 			Slot:           strings.TrimSpace(binding.Slot),
-			Config:         workcontent.PartsFromGenerated(binding.Config),
-			DefaultContent: workcontent.PartsFromGenerated(binding.DefaultContent),
+			Config:         contentcontract.PartsFromGenerated(binding.Config),
+			DefaultContent: contentcontract.PartsFromGenerated(binding.DefaultContent),
 		}
 		if binding.Selector != nil {
 			current.Selector = &interfaces.ModelOperationBindingSelector{
@@ -129,13 +129,13 @@ func WorkContentFromInferenceOutput(raw string, operation interfaces.ModelOperat
 
 	var content factoryapi.WorkContent
 	if err := json.Unmarshal([]byte(trimmed), &content); err == nil {
-		return orderWorkContentByOperationOutputs(workcontent.PartsFromGenerated(&content), operation), nil
+		return orderWorkContentByOperationOutputs(contentcontract.PartsFromGenerated(&content), operation), nil
 	}
 	var envelope struct {
 		Content factoryapi.WorkContent `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && envelope.Content != nil {
-		return orderWorkContentByOperationOutputs(workcontent.PartsFromGenerated(&envelope.Content), operation), nil
+		return orderWorkContentByOperationOutputs(contentcontract.PartsFromGenerated(&envelope.Content), operation), nil
 	}
 	var parts []interfaces.WorkContentPart
 	if err := json.Unmarshal([]byte(trimmed), &parts); err == nil {

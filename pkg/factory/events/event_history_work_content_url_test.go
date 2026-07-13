@@ -10,7 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 )
 
@@ -21,7 +21,7 @@ func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializ
 	if err := os.WriteFile(localPath, []byte("png"), 0o644); err != nil {
 		t.Fatalf("write local image: %v", err)
 	}
-	localURL, err := workcontent.FilesystemPathToContentURL(localPath)
+	localURL, err := content.FilesystemPathToContentURL(localPath)
 	if err != nil {
 		t.Fatalf("local content url: %v", err)
 	}

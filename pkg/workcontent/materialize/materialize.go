@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/work/content"
 )
 
 const (
@@ -60,7 +60,7 @@ func (o *Options) allowPrivateURLs() bool {
 // For http(s) and data URLs a bounded temp file is created; callers must invoke cleanup when done.
 func MaterializeContentURL(ctx context.Context, rawURL string, opts *Options) (localPath string, cleanup CleanupFunc, err error) {
 	trimmed := strings.TrimSpace(rawURL)
-	if err := workcontent.ValidateContentURL(trimmed); err != nil {
+	if err := content.ValidateContentURL(trimmed); err != nil {
 		return "", noopCleanup, fmt.Errorf("scheme not supported: %s", trimmed)
 	}
 

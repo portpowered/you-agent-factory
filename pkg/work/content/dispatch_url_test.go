@@ -1,20 +1,20 @@
-package workcontent_test
+package content_test
 
 import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/work/content"
 )
 
 func TestResolveDispatchContentURL_AbsoluteFileURLUnchanged(t *testing.T) {
 	absPath := filepath.Join(t.TempDir(), "img.png")
-	rawURL, err := workcontent.FilesystemPathToContentURL(absPath)
+	rawURL, err := content.FilesystemPathToContentURL(absPath)
 	if err != nil {
 		t.Fatalf("file URL: %v", err)
 	}
 
-	got, err := workcontent.ResolveDispatchContentURL("/tmp/workspace", rawURL)
+	got, err := content.ResolveDispatchContentURL("/tmp/workspace", rawURL)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
@@ -27,11 +27,11 @@ func TestResolveDispatchContentURL_RelativeFileURLJoinsWorkingDirectory(t *testi
 	workspace := t.TempDir()
 	rawURL := "file://fixtures/ui.png"
 
-	got, err := workcontent.ResolveDispatchContentURL(workspace, rawURL)
+	got, err := content.ResolveDispatchContentURL(workspace, rawURL)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	want, err := workcontent.FilesystemPathToContentURL(filepath.Join(workspace, "fixtures", "ui.png"))
+	want, err := content.FilesystemPathToContentURL(filepath.Join(workspace, "fixtures", "ui.png"))
 	if err != nil {
 		t.Fatalf("want file URL: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestResolveDispatchContentURL_RelativeFileURLJoinsWorkingDirectory(t *testi
 
 func TestResolveDispatchContentURL_RemoteURLUnchanged(t *testing.T) {
 	rawURL := "https://cdn.example.com/image.png"
-	got, err := workcontent.ResolveDispatchContentURL("/tmp/workspace", rawURL)
+	got, err := content.ResolveDispatchContentURL("/tmp/workspace", rawURL)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}

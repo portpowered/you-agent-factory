@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -63,7 +63,7 @@ func (s *Service) InvokeModel(
 		return apisurface.ModelInvocationResult{}, readinessErr
 	}
 
-	inputContent := workcontent.PartsFromGenerated(request.Content)
+	inputContent := contentcontract.PartsFromGenerated(request.Content)
 	inputTokens := []interfaces.Token{{
 		ID: "direct-model-invocation-input",
 		Color: interfaces.TokenColor{
@@ -151,7 +151,7 @@ func directModelInvocationWorkstationRequest(
 	factoryRunnerID string,
 ) interfaces.WorkstationExecutionRequest {
 	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
-	inputContent := workcontent.PartsFromGenerated(request.Content)
+	inputContent := contentcontract.PartsFromGenerated(request.Content)
 	return interfaces.WorkstationExecutionRequest{
 		Dispatch: interfaces.WorkDispatch{
 			DispatchID:      directModelInvocationTransitionID,

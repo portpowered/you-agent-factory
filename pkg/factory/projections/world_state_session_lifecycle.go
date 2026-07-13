@@ -5,7 +5,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func (r *factoryWorldReducer) applySessionLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
@@ -79,7 +79,7 @@ func (r *factoryWorldReducer) applySessionResultUpdatedEvent(event factoryapi.Fa
 	bracket := r.ensureSessionBracket()
 	mergeSessionBracketIdentity(bracket, event.Context)
 	bracket.ResultStatus = string(payload.ResultStatus)
-	bracket.ResultSummary = workcontent.PartsFromGenerated(payload.ResultSummary)
+	bracket.ResultSummary = contentcontract.PartsFromGenerated(payload.ResultSummary)
 	bracket.ArtifactIDs = cloneStringSlice(sliceValue(payload.ArtifactIds))
 	if runtime := r.ensureJavaScriptRuntime(); runtime != nil {
 		runtime.PrimaryResult = cloneWorkContentParts(bracket.ResultSummary)

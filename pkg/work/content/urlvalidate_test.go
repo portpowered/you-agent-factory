@@ -1,4 +1,4 @@
-package workcontent
+package content
 
 import (
 	"strings"

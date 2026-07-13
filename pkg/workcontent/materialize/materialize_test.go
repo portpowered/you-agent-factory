@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 )
 
@@ -22,7 +22,7 @@ func TestMaterializeContentURL_LocalFileOK(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rawURL, err := workcontent.FilesystemPathToContentURL(path)
+	rawURL, err := content.FilesystemPathToContentURL(path)
 	if err != nil {
 		t.Fatalf("file URL: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestMaterializeContentURL_LocalFileOK(t *testing.T) {
 }
 
 func TestMaterializeContentURL_LocalMissing(t *testing.T) {
-	rawURL, err := workcontent.FilesystemPathToContentURL(filepath.Join(t.TempDir(), "missing.png"))
+	rawURL, err := content.FilesystemPathToContentURL(filepath.Join(t.TempDir(), "missing.png"))
 	if err != nil {
 		t.Fatalf("file URL: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestDispatchCache_ReusesURLAndCleansUpOnRelease(t *testing.T) {
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rawURL, err := workcontent.FilesystemPathToContentURL(path)
+	rawURL, err := content.FilesystemPathToContentURL(path)
 	if err != nil {
 		t.Fatalf("file URL: %v", err)
 	}
