@@ -6,9 +6,14 @@ interface CheckpointWriteLane {
   tail: Promise<void>;
 }
 
-const writeLanesByDatabase = new WeakMap<
+interface CheckpointWriteCoordinator {
+  committedSequences: Map<string, number>;
+  lanes: Map<string, CheckpointWriteLane>;
+}
+
+const coordinatorsByDatabase = new WeakMap<
   IndexedDBLike,
-  Map<string, CheckpointWriteLane>
+  CheckpointWriteCoordinator
 >();
 
 function writeAdvancesLane(
@@ -33,14 +38,20 @@ export function enqueueOrderedCheckpointWrite(
     streamIdentity.logicalSessionKeyID,
     streamIdentity.streamGenerationID,
   ]);
-  let lanes = writeLanesByDatabase.get(indexedDB);
-  if (!lanes) {
-    lanes = new Map();
-    writeLanesByDatabase.set(indexedDB, lanes);
+  let coordinator = coordinatorsByDatabase.get(indexedDB);
+  if (!coordinator) {
+    coordinator = {
+      committedSequences: new Map(),
+      lanes: new Map(),
+    };
+    coordinatorsByDatabase.set(indexedDB, coordinator);
   }
 
+  const { committedSequences, lanes } = coordinator;
   let lane = lanes.get(laneKey);
-  if (lane && !writeAdvancesLane(lane.newestSequence, afterSequence)) {
+  const newestSequence =
+    lane?.newestSequence ?? committedSequences.get(laneKey);
+  if (!writeAdvancesLane(newestSequence, afterSequence)) {
     return Promise.resolve();
   }
   const startsLane = !lane;
@@ -57,21 +68,20 @@ export function enqueueOrderedCheckpointWrite(
     write = startsLane ? writeCheckpoint() : lane.tail.then(writeCheckpoint);
   } catch (error) {
     lanes.delete(laneKey);
-    if (lanes.size === 0) {
-      writeLanesByDatabase.delete(indexedDB);
-    }
     return Promise.reject(error);
   }
-  const settledTail = write.catch(() => {});
+  const committedWrite = write.then(() => {
+    if (afterSequence !== undefined) {
+      committedSequences.set(laneKey, afterSequence);
+    }
+  });
+  const settledTail = committedWrite.catch(() => {});
   lane.tail = settledTail;
   void settledTail.finally(() => {
     if (lanes.get(laneKey)?.tail !== settledTail) {
       return;
     }
     lanes.delete(laneKey);
-    if (lanes.size === 0) {
-      writeLanesByDatabase.delete(indexedDB);
-    }
   });
-  return write;
+  return committedWrite;
 }

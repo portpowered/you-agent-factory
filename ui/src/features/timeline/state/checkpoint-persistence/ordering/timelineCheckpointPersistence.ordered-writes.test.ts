@@ -234,7 +234,9 @@ describe("timeline checkpoint independent stream writes", () => {
 
     expect([...fixture.records.values()]).toHaveLength(1);
   });
+});
 
+describe("timeline checkpoint lane lifecycle", () => {
   it("removes idle lane state after the last pending write settles", async () => {
     const fixture =
       createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
@@ -270,6 +272,53 @@ describe("timeline checkpoint independent stream writes", () => {
           afterEventId: "event-82",
           afterSequence: 82,
         }),
+      }),
+    ]);
+  });
+
+  it("rejects older and equal saves after a newer checkpoint is committed", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const committedCheckpoint = checkpoint(82, "event-82", 82);
+    const committed = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      committedCheckpoint,
+      streamIdentity,
+    );
+
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("put");
+    fixture.controls.completeTransaction();
+    await committed;
+    await flushPromiseContinuations();
+
+    const older = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(81, "stale-event-81", 81),
+      streamIdentity,
+    );
+    const equal = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(83, "different-event-at-82", 82),
+      streamIdentity,
+    );
+    await Promise.all([older, equal]);
+
+    expect(fixture.controls.pendingOperations()).toEqual([]);
+    expect([...fixture.records.values()]).toEqual([
+      expect.objectContaining({
+        checkpoint: expect.objectContaining({
+          afterEventId: "event-82",
+          afterSequence: 82,
+          materializedWorkOutcomeState: expect.objectContaining({
+            counts: expect.objectContaining({ completed: 82 }),
+          }),
+          replayState: expect.objectContaining({ tick_count: 82 }),
+          selectedTick: 82,
+          syncIdentity: committedCheckpoint.syncIdentity,
+        }),
+        streamIdentity,
       }),
     ]);
   });
