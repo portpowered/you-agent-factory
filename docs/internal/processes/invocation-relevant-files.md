@@ -173,8 +173,28 @@ primary-result behavior.
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
-  `pkg/factorysessions/responsestream` fragment kinds). Session-scoped immutable
-  response-event storage lives in `pkg/factorysessions/responseeventstore` with
+  `pkg/factorysessions/responsestream` fragment kinds). Legacy fragment
+  compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
+  (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
+  the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
+  later transport lanes adopt mapped canonical events. Response fragments map to
+  `MESSAGE`/`DELTA` with `MessageDeltaPayload` (`contentBlockIndex` 0,
+  `contentBlockKind` `TEXT`, `textDelta` from fragment payload without parsing
+  provider grammar) and dispatch-scoped `item-legacy-*` IDs from
+  `factorySessionId|runId|dispatchId|providerSessionRef`. Terminal stream markers
+  map to `RUN`/`COMPLETED` (`RunPayload.status` `completed`) or `ERROR`/`FAILED`
+  (`ErrorPayload` with stable `stream_failed` / `stream_canceled` codes and
+  fragment payload as message) without selecting invocation primary results.
+  Compaction signals map to `STREAM_GAP`/`UPDATED` with `StreamGapPayload`
+  (`fromSequence`/`toSequence` from `CompactionSummary` dropped bounds when
+  present, `reason` from compaction reason) and always `LOSSY` provenance.
+  `compat/mapper_fixture_matrix_test.go` is the consolidated coverage matrix for
+  every declared legacy fragment kind plus legacy publisher smoke; focused
+  invocation primary-result byte fixtures live in
+  `compat/testdata/primary_result_regression/` and are asserted by
+  `primary_result_regression_test.go` without wiring the mapper into selection.
+  Session-scoped immutable response-event storage lives in
+  `pkg/factorysessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is
   session-runtime-local state separate from canonical `FactoryEvent` history.
   `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
@@ -184,8 +204,7 @@ primary-result behavior.
   further publishes while retained events remain for catch-up; `Close()` rejects
   new subscriptions and publishes and detaches active subscribers. Mirror
   `responsestream.Subscription` patterns when extending close/complete behavior.
-  Package docs in
-  `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
+  Package docs in `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`
   enforces isolation from CLI, HTTP, subprocess, and provider imports.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
