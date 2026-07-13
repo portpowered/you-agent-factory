@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -773,7 +773,7 @@ func setupMCPRuntimeResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workfl
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", fixtureName, err)
 	}

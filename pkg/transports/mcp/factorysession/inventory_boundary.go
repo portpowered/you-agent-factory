@@ -141,14 +141,14 @@ const (
 
 // ResultPolicyInventory is a pure, read-only projection of MCP success and error transport policy.
 type ResultPolicyInventory struct {
-	FormatVersion         string                      `json:"formatVersion"`
-	ProtocolVersion       string                      `json:"protocolVersion"`
-	SuccessTransport      SuccessTransportPolicy      `json:"successTransport"`
-	DomainErrorTransport  DomainErrorTransportPolicy  `json:"domainErrorTransport"`
+	FormatVersion          string                       `json:"formatVersion"`
+	ProtocolVersion        string                       `json:"protocolVersion"`
+	SuccessTransport       SuccessTransportPolicy       `json:"successTransport"`
+	DomainErrorTransport   DomainErrorTransportPolicy   `json:"domainErrorTransport"`
 	ProtocolErrorTransport ProtocolErrorTransportPolicy `json:"protocolErrorTransport"`
-	Fixtures              []ResultPolicyFixture       `json:"fixtures"`
-	DomainErrorFixtures   []DomainErrorFixture        `json:"domainErrorFixtures"`
-	ProtocolErrorFixtures []ProtocolErrorFixture      `json:"protocolErrorFixtures"`
+	Fixtures               []ResultPolicyFixture        `json:"fixtures"`
+	DomainErrorFixtures    []DomainErrorFixture         `json:"domainErrorFixtures"`
+	ProtocolErrorFixtures  []ProtocolErrorFixture       `json:"protocolErrorFixtures"`
 }
 
 // SuccessTransportPolicy records the live CallToolResult success envelope contract.
@@ -607,9 +607,9 @@ func verifyProtocolErrorFixture(fixture ProtocolErrorFixture) error {
 	}
 
 	var response struct {
-		JSONRPC string         `json:"jsonrpc"`
+		JSONRPC string                 `json:"jsonrpc"`
 		Error   *jsonRPCErrorInventory `json:"error"`
-		Result  any            `json:"result"`
+		Result  any                    `json:"result"`
 	}
 	if err := json.Unmarshal(fixture.JSONRPCResponse, &response); err != nil {
 		return fmt.Errorf("protocol-error fixture %q jsonRpcResponse: %w", fixture.Name, err)

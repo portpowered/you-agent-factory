@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
+	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 )

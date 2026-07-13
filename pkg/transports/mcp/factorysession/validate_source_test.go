@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 const simpleValidWorkflowSource = `

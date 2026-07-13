@@ -11,9 +11,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
-	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 )
 
 func TestProjectAliasInventory_BuildsDocumentShape(t *testing.T) {

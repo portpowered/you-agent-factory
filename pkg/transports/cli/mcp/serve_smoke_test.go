@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 const simpleValidWorkflowSource = `
@@ -280,7 +280,7 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 
 func newContractFixtureService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
-	path := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(path)
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)

@@ -90,9 +90,9 @@ the standards.
   collaborators into transport-facing application surfaces.
 - `pkg/transports/cli/` owns setup, configuration, documentation,
   factory-authoring, workflow validation/preview, execution, Work, Factory
-  Session, model, server/startup, and dashboard CLI adapters. The remaining MCP
-  command package under `pkg/cli/` is a migration-era owner until its
-  transport-family story lands.
+  Session, model, MCP, server/startup, and dashboard CLI adapters.
+- `pkg/transports/mcp/` owns Factory Session MCP tool translation and the stdio
+  protocol server; it delegates execution to injected application collaborators.
 - `pkg/config/` contains factory config loading, persistence, mapping,
   validation entrypoints, built-in factory layout, and runtime config
   projections.

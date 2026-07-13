@@ -9,7 +9,7 @@ import (
 	"io"
 	"strings"
 
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 const protocolVersion = "2024-11-05"

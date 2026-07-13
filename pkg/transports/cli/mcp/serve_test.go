@@ -42,7 +42,7 @@ func TestResolveServeService_RuntimeBackedSelectsJavaScriptRuntimeService(t *tes
 }
 
 func TestResolveServeService_DefaultSelectsFixtureService(t *testing.T) {
-	path := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := resolveServeService(ServeConfig{FixtureCatalogPath: path})
 	if err != nil {
 		t.Fatalf("resolveServeService: %v", err)

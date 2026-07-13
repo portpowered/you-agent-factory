@@ -66,7 +66,7 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/cli/cliinputs` | 5 | 3 | directive only |
 | `pkg/transports/cli/config` | 2 | 1 | directive + coverage baseline |
 | `pkg/transports/cli/init` | 2 | 1 | directive only |
-| `pkg/cli/mcp` | 3 | 3 | directive + coverage baseline |
+| `pkg/transports/cli/mcp` | 3 | 3 | directive + coverage baseline |
 | `pkg/transports/cli/run` | 2 | 1 | directive + coverage baseline |
 | `pkg/transports/cli/submit` | 1 | 1 | directive only |
 | `pkg/transports/cli/work` | 1 | 1 | directive only |
@@ -85,7 +85,7 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/factorysessionexecution/fixtures` | 5 | 3 | directive only |
 | `pkg/interfaces` | 3 | 2 | directive + coverage baseline |
 | `pkg/internal/cursorstorage` | 10 | 5 | directive + coverage baseline |
-| `pkg/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
+| `pkg/transports/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
 | `pkg/replay` | 2 | 2 | directive + coverage baseline |
 | `pkg/replay/configtests` | 3 | 3 | directive only |
 | `pkg/runtimehost` | 5 | 3 | directive + coverage baseline |
@@ -133,7 +133,7 @@ directive occurrence in the focused scan:
 - `pkg/localmodels`
 - `pkg/localmodels/assets`
 - `pkg/logging`
-- `pkg/mcp/server`
+- `pkg/transports/mcp/server`
 - `pkg/modelhost`
 - `pkg/orchestrators/javascript/policy`
 - `pkg/orchestrators/javascript/preview`
@@ -253,15 +253,15 @@ Owner: `pkg/transports/cli/init` package maintainers. Status: **directive only**
 | `pkg/transports/cli/init/init_test.go:401` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertRalphRuntimeConfig` | T | T gate |
 | `pkg/transports/cli/init/init_test.go:732` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertInitScaffoldFilesCanonical` | T | T gate |
 
-### `pkg/cli/mcp`
+### `pkg/transports/cli/mcp`
 
-Owner: `pkg/cli/mcp` package maintainers. Status: **directive + coverage baseline**.
+Owner: `pkg/transports/cli/mcp` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/cli/mcp/serve_runtime_resume_smoke_test.go:24` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl` | T | T gate |
-| `pkg/cli/mcp/serve_runtime_smoke_test.go:26` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult` | T | T gate |
-| `pkg/cli/mcp/serve_smoke_test.go:29` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll` | T | T gate |
+| `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go:24` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl` | T | T gate |
+| `pkg/transports/cli/mcp/serve_runtime_smoke_test.go:26` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult` | T | T gate |
+| `pkg/transports/cli/mcp/serve_smoke_test.go:29` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll` | T | T gate |
 
 ### `pkg/transports/cli/run`
 
@@ -472,21 +472,21 @@ Owner: `pkg/internal/cursorstorage` package maintainers. Status: **directive + c
 | `pkg/internal/cursorstorage/store_query.go:8` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryBlobsTable` | P | P gate |
 | `pkg/internal/cursorstorage/store_query.go:111` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryMetaTable` | P | P gate |
 
-### `pkg/mcp/factorysession`
+### `pkg/transports/mcp/factorysession`
 
-Owner: `pkg/mcp/factorysession` package maintainers. Status: **directive + coverage baseline**.
+Owner: `pkg/transports/mcp/factorysession` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/mcp/factorysession/execution_test.go:45` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetSession_RunningFixtureReturnsDeterministicStatus` | T | T gate |
-| `pkg/mcp/factorysession/execution_test.go:135` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult` | T | T gate |
-| `pkg/mcp/factorysession/execution_test.go:279` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession` | T | T gate |
-| `pkg/mcp/factorysession/execution_test.go:336` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult` | T | T gate |
-| `pkg/mcp/factorysession/failure_paths_test.go:52` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails` | T | T gate |
-| `pkg/mcp/factorysession/inspection.go:157` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `invokeLifecycleControl` | R | R gate |
-| `pkg/mcp/factorysession/inspection_test.go:216` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries` | T | T gate |
-| `pkg/mcp/factorysession/inspection_test.go:306` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents` | T | T gate |
-| `pkg/mcp/factorysession/inspection_test.go:363` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions` | T | T gate |
+| `pkg/transports/mcp/factorysession/execution_test.go:45` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetSession_RunningFixtureReturnsDeterministicStatus` | T | T gate |
+| `pkg/transports/mcp/factorysession/execution_test.go:135` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult` | T | T gate |
+| `pkg/transports/mcp/factorysession/execution_test.go:279` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession` | T | T gate |
+| `pkg/transports/mcp/factorysession/execution_test.go:336` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult` | T | T gate |
+| `pkg/transports/mcp/factorysession/failure_paths_test.go:52` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails` | T | T gate |
+| `pkg/transports/mcp/factorysession/inspection.go:157` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `invokeLifecycleControl` | R | R gate |
+| `pkg/transports/mcp/factorysession/inspection_test.go:216` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries` | T | T gate |
+| `pkg/transports/mcp/factorysession/inspection_test.go:306` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents` | T | T gate |
+| `pkg/transports/mcp/factorysession/inspection_test.go:363` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions` | T | T gate |
 
 ### `pkg/replay`
 
@@ -623,7 +623,7 @@ as follows:
 | --- | --- |
 | Batch 005 — `create-root-process-owner` | Active head `4516ea35aeff5cdde5e578b9000b8054db6bb834`; changed files: `pkg/cli/root.go`, `pkg/cli/root_run_test.go`, `pkg/cli/root_work.go`, `pkg/config/operatorconfig/environment_resolution.go`, `pkg/root/input.go`, `pkg/root/root.go`, `pkg/root/root_test.go`. |
 | Batch 005 — `create-wire-application-graph` | Active head `8015a87fb4594a1659ab21c6a7720bf324ea7a85`; changed files: `pkg/wire/doc.go`, `pkg/wire/graph.go`, `pkg/wire/graph_test.go`. The dependency-blocked initializer item had no implementation file set yet. |
-| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/transports/http/**`, `pkg/apisurface/**`, `pkg/cli/**`, and `pkg/mcp/**`. |
+| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/transports/http/**`, `pkg/transports/cli/**`, `pkg/transports/mcp/**`, `pkg/apisurface/**`, and `pkg/cli/**`. |
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factorysessionexecution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
@@ -644,7 +644,7 @@ every file in the named path set; the two file exceptions add the named PR colli
 | `pkg/factorysessionexecution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
 | `pkg/interfaces/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/internal/cursorstorage/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
-| `pkg/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
+| `pkg/transports/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/runtimehost/**` | 3 | 5 | **Externally owned:** Batch 008 runtime-shim removal; `pkg/runtimehost/runtime_sessions.go` also collides with PR #1062 |
 | `pkg/service/**` | 10 | 31 | **Externally owned:** Batch 007 session/service convergence and Batch 008 runtime-shim removal |

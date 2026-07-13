@@ -12,9 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestMockClient_StartAsync_RunningFixtureReturnsInProgressSession(t *testing.T) {
@@ -546,7 +546,7 @@ func newFixtureMCPClient(t *testing.T) *mcpfactorysession.Client {
 
 func fixtureFakeService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
-	path := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := testharness.New(testharness.Config{
 		Mode:            testharness.ModeFake,
 		FakeFixturePath: path,

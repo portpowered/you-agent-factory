@@ -2,7 +2,7 @@ package initializer
 
 import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 // MCPOptions carries MCP-specific composition inputs beyond factory startup config.

@@ -11,10 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
-	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	"go.uber.org/zap"
 )
 

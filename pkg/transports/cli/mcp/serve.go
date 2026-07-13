@@ -12,9 +12,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
-	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	"github.com/spf13/cobra"
 )
 

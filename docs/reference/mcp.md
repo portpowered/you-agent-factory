@@ -145,10 +145,10 @@ The repository automates the shared server behavior that every host depends on:
 
 | Check | Automated proof |
 |-------|-----------------|
-| Fixture-backed initialize, discovery, validate, async start, status, and not-ready result | `pkg/cli/mcp/serve_smoke_test.go` |
-| Runtime-backed async start, status, and result | `pkg/cli/mcp/serve_runtime_smoke_test.go` |
-| Runtime-backed resume and dispatch continuity | `pkg/cli/mcp/serve_runtime_resume_smoke_test.go` |
-| Additive fixture/runtime regression after resume | `pkg/cli/mcp/serve_runtime_resume_non_regression_test.go` |
+| Fixture-backed initialize, discovery, validate, async start, status, and not-ready result | `pkg/transports/cli/mcp/serve_smoke_test.go` |
+| Runtime-backed async start, status, and result | `pkg/transports/cli/mcp/serve_runtime_smoke_test.go` |
+| Runtime-backed resume and dispatch continuity | `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` |
+| Additive fixture/runtime regression after resume | `pkg/transports/cli/mcp/serve_runtime_resume_non_regression_test.go` |
 
 These tests prove the stdio protocol and Factory Session tool behavior, not a
 specific host UI or configuration parser. Manually confirm that the selected
@@ -159,7 +159,7 @@ dashboard inspection, or live Factory HTTP backing.
 Run the shared automated checks from the repository root:
 
 ```bash
-go test ./pkg/cli/mcp/... ./pkg/mcp/...
+go test ./pkg/transports/cli/mcp/... ./pkg/transports/mcp/...
 go test ./tests/functional/smoke -run TestDocsCommandSmoke
 ```
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestNewValidatesOptionsAndAppliesDefaults(t *testing.T) {

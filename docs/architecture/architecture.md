@@ -181,7 +181,7 @@ root.
 
 | Migration-only roots | Target owner | Active work item and deletion gate |
 | --- | --- | --- |
-| `pkg/api`, `pkg/apisurface`, `pkg/cli`, `pkg/mcp` | `pkg/transports` | **Batch 006 — Transport family move.** Remove each exception when its HTTP, CLI, MCP, generated-contract/client, and boundary-mapping behavior and callers have moved to `pkg/transports`. |
+| `pkg/api`, `pkg/apisurface`, `pkg/cli` | `pkg/transports` | **Batch 006 — Transport family move.** Remove each exception when its HTTP, CLI, generated-contract/client, and boundary-mapping behavior and callers have moved to `pkg/transports`. MCP adapters and callers have moved to `pkg/transports/mcp` and `pkg/transports/cli/mcp`; the historical `pkg/mcp` root is retired. |
 | `pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, `pkg/workquery` | `pkg/work` | **Batch 006 — Work family move.** Remove each exception when its Work content, query, graph, pure invocation policy, materialization, or cron/time-work behavior and callers have moved to `pkg/work`. |
 | `pkg/logging`, `pkg/replay`, `pkg/sessionpersistence` | `pkg/platform` | **Batch 006 — Platform family move.** Remove each exception when its logging, replay/artifact, metrics, cursor persistence, or non-domain clock infrastructure and callers have moved to `pkg/platform`. |
 | `pkg/service` | `pkg/wire` after domain behavior converges on its narrow owners | **Batch 007 — Service and Factory Session ownership convergence**, followed by **Batch 008 — Legacy composition-root deletion.** Remove the exception when domain/session behavior has moved to its narrow owner and the remaining construction shell has moved to `pkg/wire`. |

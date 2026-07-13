@@ -5,7 +5,7 @@ github.com/portpowered/infinite-you/pkg/api
 github.com/portpowered/infinite-you/pkg/api/apitypes
 github.com/portpowered/infinite-you/pkg/apisurface
 github.com/portpowered/infinite-you/pkg/transports/cli/config
-github.com/portpowered/infinite-you/pkg/cli/mcp
+github.com/portpowered/infinite-you/pkg/transports/cli/mcp
 github.com/portpowered/infinite-you/pkg/transports/cli/models
 github.com/portpowered/infinite-you/pkg/transports/cli/run
 github.com/portpowered/infinite-you/pkg/transports/cli/session
@@ -25,8 +25,8 @@ github.com/portpowered/infinite-you/pkg/internal/cursorstorage
 github.com/portpowered/infinite-you/pkg/invocations
 github.com/portpowered/infinite-you/pkg/localmodels
 github.com/portpowered/infinite-you/pkg/localmodels/assets
-github.com/portpowered/infinite-you/pkg/mcp/factorysession
-github.com/portpowered/infinite-you/pkg/mcp/server
+github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession
+github.com/portpowered/infinite-you/pkg/transports/mcp/server
 github.com/portpowered/infinite-you/pkg/modelhost
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result

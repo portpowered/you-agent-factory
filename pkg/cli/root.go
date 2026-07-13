@@ -12,7 +12,6 @@ import (
 	"syscall"
 
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
-	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
@@ -26,6 +25,7 @@ import (
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
