@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import {
+  indexedDBErrorTestRequest,
+  indexedDBTestRequest,
+} from "../../../../testing/timeline-checkpoint-indexeddb-test-utils";
+import {
   readSessionPersistenceInvalidationRecords,
   resetSessionPersistenceInvalidationRecords,
 } from "../../../dashboard/public/session-persistence-diagnostics";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
@@ -14,7 +19,6 @@ import {
   type TimelineCheckpointStreamIdentity,
 } from "../timelineCheckpointPersistence";
 import { reconnectCursorFromCheckpoint } from "../timelineCheckpointReconnect";
-import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 
 interface StoredCheckpointEnvelope {
   checkpoint?: {
@@ -50,36 +54,60 @@ function createIndexedDBTestDouble(
     objectStoreNames: {
       contains: () => options.storeExists ?? true,
     },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => {
-            records.delete(key);
-          }),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        getAll: () => indexedDBRequest(Array.from(records.values())),
-        put: (value: StoredCheckpointEnvelope) =>
-          options.failPut
-            ? indexedDBErrorRequest<string>(new Error("put failed"))
-            : indexedDBRequest(value.storageKey ?? "", () => {
-                if (value.storageKey) {
-                  records.set(value.storageKey, value);
-                }
-              }),
-      }),
-    }),
+    transaction: () => {
+      const transaction = {
+        onabort: null,
+        oncomplete: null,
+        onerror: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBTestRequest(
+              undefined,
+              () => {
+                records.delete(key);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+          get: (key: string) => indexedDBTestRequest(records.get(key)),
+          getAll: () => indexedDBTestRequest(Array.from(records.values())),
+          put: (value: StoredCheckpointEnvelope) =>
+            options.failPut
+              ? indexedDBErrorTestRequest<string>(new Error("put failed"), () =>
+                  (transaction.onabort as ((event: Event) => void) | null)?.(
+                    {} as Event,
+                  ),
+                )
+              : indexedDBTestRequest(
+                  value.storageKey ?? "",
+                  () => {
+                    if (value.storageKey) {
+                      records.set(value.storageKey, value);
+                    }
+                  },
+                  () =>
+                    (
+                      transaction.oncomplete as ((event: Event) => void) | null
+                    )?.({} as Event),
+                ),
+        }),
+      };
+      return transaction;
+    },
   };
 
   return {
     indexedDB: {
       open: () => {
         if (options.failOpen) {
-          return indexedDBErrorRequest<typeof database>(
+          return indexedDBErrorTestRequest<typeof database>(
             new Error("open failed"),
           );
         }
 
-        const request = indexedDBRequest(database);
+        const request = indexedDBTestRequest(database);
         queueMicrotask(() =>
           request.onupgradeneeded?.({} as IDBVersionChangeEvent),
         );
@@ -89,47 +117,6 @@ function createIndexedDBTestDouble(
     createObjectStore,
     records,
   };
-}
-
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
-  const request = {
-    error: null,
-    onblocked: null,
-    onerror: null,
-    onsuccess: null,
-    onupgradeneeded: null,
-    result,
-  } as unknown as IDBRequest<T> & {
-    onblocked?: ((event: Event) => void) | null;
-    onupgradeneeded?: ((event: IDBVersionChangeEvent) => void) | null;
-  };
-
-  queueMicrotask(() => {
-    beforeSuccess?.();
-    request.onsuccess?.({} as Event);
-  });
-
-  return request;
-}
-
-function indexedDBErrorRequest<T>(error: Error) {
-  const request = {
-    error,
-    onblocked: null,
-    onerror: null,
-    onsuccess: null,
-    onupgradeneeded: null,
-    result: undefined,
-  } as unknown as IDBRequest<T> & {
-    onblocked?: ((event: Event) => void) | null;
-    onupgradeneeded?: ((event: IDBVersionChangeEvent) => void) | null;
-  };
-
-  queueMicrotask(() => {
-    request.onerror?.({} as Event);
-  });
-
-  return request;
 }
 
 function checkpointFixture(): FactoryTimelineCheckpoint {

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "$id": "https://schemas.example.test/shared.json",
+  "$defs": {
+    "entry": {
+      "$id": "https://schemas.example.test/entry.json",
+      "required": ["z", "a"],
+      "properties": {
+        "z": {"type": "integer"},
+        "a": {"$ref": "scalar.json"}
+      },
+      "type": "object"
+    }
+  }
+}

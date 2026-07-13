@@ -29,6 +29,9 @@ Production command runners must remain blocking without taking lifecycle ownersh
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected
 graph-owned transport and perform the same idempotent reverse-order shutdown.
+Map default/service run policies to initializer's API lifecycle plan and explicit
+local batch policies to its CLI lifecycle plan before constructing the run
+application; runtime mode alone must not silently select the foreground edge.
 Transport startup must receive the graph's already-composed API surface, and
 startup diagnostics should be copied into immutable graph metadata rather than
 recovered later through `runtimehost.Host` or `FactoryService`.
@@ -41,6 +44,21 @@ observer, dashboard renderer, or another sidecar behind its `Run` callback.
 before the selected transport, then stop them in the exact reverse order. A
 production-graph test should delegate through the real handles and observe this
 sequence so fake-only initializer coverage cannot hide an empty sidecar graph.
+Mode-specific lifecycle planning must validate every required handle, including
+typed-nil interface values, before activation. Optional handles should be
+omitted from the plan, and graph handles that are not selected for the mode must
+receive no start, wait, or stop calls. The selected foreground transport must be
+joinable so initializer can validate complete lifecycle ownership before any
+component starts.
+
+One initializer run derives a single child context for every selected lifecycle.
+It observes every started lifecycle that supports `Wait`, not only the foreground
+transport; any terminal exit cancels that shared context before reverse-order
+stops begin. `Stop` remains responsible for joining component-owned work, and
+initializer also drains every lifecycle wait before returning. Cancellation and
+deadline exits are normal shutdown outcomes. When multiple components return
+non-cancellation failures, report them in declared lifecycle-plan order rather
+than arrival order so goroutine scheduling cannot change terminal precedence.
 
 The production `you mcp serve` branch follows the same ownership path even
 though it does not activate run sidecars. Resolve the selected fixture-backed

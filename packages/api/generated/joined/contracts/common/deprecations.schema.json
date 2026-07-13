@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "successor": {
+      "additionalProperties": false,
+      "description": "The replacement contract item and canonical English migration guidance.",
+      "properties": {
+        "canonicalEnglish": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "targetItemId": {
+          "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "targetItemId",
+        "canonicalEnglish"
+      ],
+      "type": "object"
+    },
+    "version": {
+      "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+      "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Family-neutral lifecycle and migration metadata for one contract item. This metadata describes support history and does not control runtime callability.",
+  "oneOf": [
+    {
+      "properties": {
+        "deprecated": false,
+        "removed": false,
+        "state": {
+          "const": "active"
+        },
+        "successor": false
+      }
+    },
+    {
+      "properties": {
+        "removed": false,
+        "state": {
+          "const": "deprecated"
+        }
+      },
+      "required": [
+        "deprecated",
+        "successor"
+      ]
+    },
+    {
+      "properties": {
+        "state": {
+          "const": "removed"
+        }
+      },
+      "required": [
+        "deprecated",
+        "removed",
+        "successor"
+      ]
+    }
+  ],
+  "properties": {
+    "deprecated": {
+      "allOf": [
+        {
+          "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+          "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+          "type": "string"
+        }
+      ],
+      "description": "The first package version in which the item was deprecated."
+    },
+    "formatVersion": {
+      "const": "1.0.0",
+      "description": "The explicitly supported version of this lifecycle metadata format."
+    },
+    "itemId": {
+      "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "removed": {
+      "allOf": [
+        {
+          "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+          "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+          "type": "string"
+        }
+      ],
+      "description": "The first package version from which the item was absent."
+    },
+    "since": {
+      "allOf": [
+        {
+          "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+          "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+          "type": "string"
+        }
+      ],
+      "description": "The first package version containing the item."
+    },
+    "state": {
+      "description": "The item's publication lifecycle state.",
+      "enum": [
+        "active",
+        "deprecated",
+        "removed"
+      ]
+    },
+    "successor": {
+      "additionalProperties": false,
+      "description": "The replacement contract item and canonical English migration guidance.",
+      "properties": {
+        "canonicalEnglish": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "targetItemId": {
+          "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "targetItemId",
+        "canonicalEnglish"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "formatVersion",
+    "itemId",
+    "state",
+    "since"
+  ],
+  "title": "You contract lifecycle metadata",
+  "type": "object"
+}
