@@ -171,7 +171,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 
 	resolved := resolveWorkResult(currentTransition, result, t.runtimeConfig)
 	consumedTokens := consumedTokensForResult(snapshot, result)
-	history := buildHistory(consumedTokens, result)
+	history := buildHistory(consumedTokens, result, candidateWorkID(t.netDefinition, result.TransitionID, consumedTokens))
 	now := t.now()
 	inputColors := tokenColorsFromTokens(consumedTokens)
 	//TODO: the intermittent failure arc should be denoted as a preconstructed output, teh calculate arcs function should be a mapping of arcs for a current workstation/transition, and one such mapping would be the intermitten failure arc.

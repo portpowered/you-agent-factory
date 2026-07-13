@@ -203,10 +203,12 @@ type ProgressPayload struct {
 	PercentComplete *float64 `json:"percentComplete,omitempty"`
 }
 type UsagePayload struct {
-	InputTokens  int64  `json:"inputTokens,omitempty"`
-	OutputTokens int64  `json:"outputTokens,omitempty"`
-	TotalTokens  int64  `json:"totalTokens,omitempty"`
-	Model        string `json:"model,omitempty"`
+	InputTokens           int64  `json:"inputTokens,omitempty"`
+	CachedInputTokens     int64  `json:"cachedInputTokens,omitempty"`
+	OutputTokens          int64  `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens int64  `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           int64  `json:"totalTokens,omitempty"`
+	Model                 string `json:"model,omitempty"`
 }
 type ErrorPayload struct {
 	Code              string `json:"code"`

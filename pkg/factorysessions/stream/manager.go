@@ -165,7 +165,7 @@ func (m *Manager) inferenceProgressPublisher(
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
-		if err := publishCanonicalResponseEvents(session, stored, fragment.SkipCanonical); err != nil {
+		if err := publishCanonicalResponseEvents(session, stored, fragment.CanonicalEventAlreadyPublished); err != nil {
 			m.host.ObserveResponseStreamDegraded(
 				session,
 				normalizedSessionID,

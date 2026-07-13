@@ -10,10 +10,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/claude"
+	codexadapter "github.com/portpowered/infinite-you/pkg/workers/provider/codex"
 )
 
 // Executor owns the registered structured provider adapters.
@@ -23,7 +25,7 @@ type Executor struct {
 
 // NewExecutor constructs the production structured adapter registry.
 func NewExecutor() *Executor {
-	registry, err := adapter.NewRegistry(claudeadapter.NewAdapter())
+	registry, err := adapter.NewRegistry(claudeadapter.NewAdapter(), codexadapter.NewResponseAdapter())
 	if err != nil {
 		panic(fmt.Sprintf("register structured provider adapters: %v", err))
 	}
@@ -45,22 +47,28 @@ func (e *Executor) Execute(
 	ctx context.Context,
 	req interfaces.ProviderInferenceRequest,
 	skipPermissions bool,
+	materializeOptions *materialize.Options,
 	runner workerprovider.CommandRunner,
 	publisher workerprovider.InferenceProgressPublisher,
 	logger logging.Logger,
 ) workerprovider.ResponseStreamExecutionResult {
+	canonicalFailurePublished := false
 	result, executeErr := adapter.Execute(ctx, e.registry, commandRunner{runner: runner, logger: logger}, adapter.ExecuteInput{
 		Provider: adapter.Identity(req.ModelProvider),
-		Command:  adapter.CommandContext{Request: req, SkipPermissions: skipPermissions},
+		Command:  adapter.CommandContext{Request: req, SkipPermissions: skipPermissions, MaterializeOptions: materializeOptions},
 		Decoder:  adapter.DecoderContext{RunID: req.Dispatch.DispatchID, DispatchID: req.Dispatch.DispatchID},
 		ObserveDraft: func(draft responseevents.Draft) {
+			if draft.Kind == responseevents.KindError && draft.Phase == responseevents.PhaseFailed {
+				canonicalFailurePublished = true
+			}
 			if publisher != nil {
 				publisher(workerprovider.CanonicalDraftFragment(draft.DispatchID, draft))
 			}
 		},
 	})
 	output := workerprovider.ResponseStreamExecutionResult{
-		Response: result.Response, Request: result.Request, Command: result.Command, Err: executeErr,
+		Response: result.Response, Request: result.Request, Command: result.Command,
+		CanonicalFailurePublished: canonicalFailurePublished, Err: executeErr,
 	}
 	if result.Failure != nil {
 		output.FailureType = result.Failure.Type
