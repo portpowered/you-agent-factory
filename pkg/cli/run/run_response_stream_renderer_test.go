@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"strings"
@@ -101,19 +100,15 @@ func (w *gatedResponseStreamWriter) blockedWriteAttemptsCount() int64 {
 	return w.blockedWriteAttempts.Load()
 }
 
-func floodResponseStreamProgress(sink responseStreamEventSink, count int) {
+func floodCanonicalHumanProgress(sink responseEventSink, count int) {
 	for i := 0; i < count; i++ {
-		sink.onStreamSegment(responsestream.ReadResult{
-			Events: []responsestream.Event{
-				{
-					Sequence:   int64(i + 1),
-					Kind:       responsestream.EventKindProgressFragment,
-					Type:       responsestream.EventTypeProgress,
-					DispatchID: "dispatch-1",
-					Payload:    "working",
-				},
-			},
-		})
+		event := humanResponseEvent(
+			responseevents.KindProgress,
+			responseevents.PhaseUpdated,
+			responseevents.ProgressPayload{Label: "working"},
+		)
+		event.Sequence = int64(i + 1)
+		sink.onResponseEvents([]responseevents.FactoryResponseEvent{event})
 	}
 }
 
@@ -158,35 +153,15 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "planning",
-			},
-			{
-				Sequence:   2,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "reviewing",
-			},
-		},
+	planning := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning"})
+	planning.Sequence = 1
+	reviewing := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "reviewing"})
+	reviewing.Sequence = 2
+	message := humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
+		ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "goal completed",
 	})
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   3,
-				Kind:       responsestream.EventKindResponseFragment,
-				Type:       responsestream.EventTypeTextDelta,
-				DispatchID: "dispatch-1",
-				Payload:    "goal completed",
-			},
-		},
-	})
+	message.Sequence = 3
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{planning, reviewing, message})
 
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status: factoryapi.InvocationTerminalStatusCompleted,
@@ -233,24 +208,11 @@ func TestHumanResponseStreamRenderer_SkipsDuplicateSequencesAndBoundsPayload(t *
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
 	longPayload := strings.Repeat("x", maxHumanProgressLineBytes+32)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    longPayload,
-			},
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "duplicate",
-			},
-		},
-	})
+	first := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: longPayload})
+	first.Sequence = 1
+	duplicate := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "duplicate"})
+	duplicate.Sequence = 1
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{first, duplicate})
 
 	renderer.stopProgressRendering()
 	got := output.String()
@@ -266,65 +228,16 @@ func TestHumanResponseStreamRenderer_SkipsDuplicateSequencesAndBoundsPayload(t *
 	}
 }
 
-func TestHumanResponseStreamRenderer_SuppressesCompactionNotice(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Compaction: &responsestream.CompactionSummary{
-			Reason:               responsestream.CompactionReasonTruncated,
-			DroppedSequenceCount: 3,
-		},
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "planning",
-			},
-		},
-	})
-
-	renderer.stopProgressRendering()
-	got := output.String()
-	if strings.Contains(got, "stream truncated") || strings.Contains(got, "earlier events omitted") {
-		t.Fatalf("compaction notice must not appear in human output:\n%s", got)
-	}
-	if !strings.Contains(got, "planning") {
-		t.Fatalf("readable progress must still render:\n%s", got)
-	}
-}
-
 func TestHumanResponseStreamRenderer_SuppressesTokenUsageProgress(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:          1,
-				Kind:              responsestream.EventKindProgressFragment,
-				Type:              responsestream.EventTypeProgress,
-				DispatchID:        "dispatch-1",
-				ExternalEventType: "token_count",
-				Payload:           "input_tokens=120 output_tokens=34 total_tokens=154",
-				Metadata: map[string]string{
-					"input_tokens":  "120",
-					"output_tokens": "34",
-				},
-			},
-			{
-				Sequence:   2,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "reviewing plan",
-			},
-		},
-	})
+	usage := humanResponseEvent(responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{InputTokens: 120, OutputTokens: 34})
+	usage.Sequence = 1
+	progress := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "reviewing plan"})
+	progress.Sequence = 2
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{usage, progress})
 
 	renderer.stopProgressRendering()
 	got := output.String()
@@ -335,112 +248,6 @@ func TestHumanResponseStreamRenderer_SuppressesTokenUsageProgress(t *testing.T) 
 	}
 	if !strings.Contains(got, "reviewing plan") {
 		t.Fatalf("readable progress must still render:\n%s", got)
-	}
-}
-
-func assertHumanResponseStreamExcludesInternalMarkers(t *testing.T, got string) {
-	t.Helper()
-
-	for _, marker := range []string{
-		"[you:progress]",
-		"stream truncated",
-		"stream coalesced",
-		"stream compacted",
-		"earlier events omitted",
-		"terminal output backlog",
-		"earlier progress unavailable",
-		"input_tokens",
-		"output_tokens",
-		"total_tokens",
-		"token_count",
-		"cache_read_tokens",
-	} {
-		if strings.Contains(got, marker) {
-			t.Fatalf("human output must not include internal marker %q:\n%s", marker, got)
-		}
-	}
-}
-
-func responseStreamDiagnosticStressReadResult() responsestream.ReadResult {
-	return responsestream.ReadResult{
-		BehindRetainedWindow: true,
-		Compaction: &responsestream.CompactionSummary{
-			Reason:               responsestream.CompactionReasonCoalesced,
-			DroppedSequenceCount: 2,
-		},
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "stream coalesced (2 earlier events omitted)",
-			},
-			{
-				Sequence:          2,
-				Kind:              responsestream.EventKindProgressFragment,
-				Type:              responsestream.EventTypeProgress,
-				DispatchID:        "dispatch-1",
-				ExternalEventType: "token_count",
-				Payload:           "input_tokens=120 output_tokens=34 total_tokens=154",
-				Metadata: map[string]string{
-					"input_tokens":  "120",
-					"output_tokens": "34",
-				},
-			},
-			{
-				Sequence:   3,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "terminal output backlog (progress dropped)",
-			},
-			{
-				Sequence:   4,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "reviewing plan",
-			},
-		},
-	}
-}
-
-func TestHumanResponseStreamRenderer_ExcludesAllInternalMarkersGolden(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responseStreamDiagnosticStressReadResult())
-	renderer.stopProgressRendering()
-
-	got := output.String()
-	assertHumanResponseStreamExcludesInternalMarkers(t, got)
-	if !strings.Contains(got, "reviewing plan") {
-		t.Fatalf("readable progress must still render:\n%s", got)
-	}
-}
-
-func TestResponseStreamRenderer_JSONFidelityAndHumanGoldenNegatives(t *testing.T) {
-	t.Parallel()
-
-	segment := responseStreamDiagnosticStressReadResult()
-
-	var humanOutput strings.Builder
-	humanRenderer := newHumanResponseStreamRenderer(&humanOutput)
-	humanRenderer.onStreamSegment(segment)
-	humanRenderer.stopProgressRendering()
-	humanGot := humanOutput.String()
-	assertHumanResponseStreamExcludesInternalMarkers(t, humanGot)
-	if !strings.Contains(humanGot, "reviewing plan") {
-		t.Fatalf("human output missing readable progress:\n%s", humanGot)
-	}
-
-	var jsonOutput strings.Builder
-	jsonRenderer := newJSONResponseStreamRenderer(&jsonOutput)
-	jsonRenderer.stopProgressRendering()
-	if jsonGot := jsonOutput.String(); jsonGot != "" {
-		t.Fatalf("legacy response fragments must not produce JSON records:\n%s", jsonGot)
 	}
 }
 
@@ -506,17 +313,9 @@ func TestHumanResponseStreamRenderer_WritesInvocationOutcomeAfterProgress(t *tes
 
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "waiting for review",
-			},
-		},
-	})
+	progress := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "waiting for review"})
+	progress.Sequence = 1
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{progress})
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status:    factoryapi.InvocationTerminalStatusTimedOut,
 		ErrorCode: "INVOCATION_TIMED_OUT",
@@ -870,7 +669,7 @@ func TestHumanResponseStreamRenderer_SuppressesTerminalOutputBacklog(t *testing.
 	output := &gatedResponseStreamWriter{}
 	output.block()
 	renderer := newHumanResponseStreamRenderer(output)
-	floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
+	floodCanonicalHumanProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
 
 	output.release()
 	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
@@ -938,60 +737,50 @@ func canonicalResponseEventFixture(sequence int64, kind responseevents.Kind) res
 	}
 }
 
-func TestResponseStreamAttachment_SubscribesWhenDispatchAppears(t *testing.T) {
+func TestResponseEventAttachment_DeliversCanonicalEvents(t *testing.T) {
 	t.Parallel()
 
-	attachable := newRecordingResponseStreamAttachable()
-	attachable.ensureDispatch("dispatch-1")
-	sink := &countingResponseStreamSink{}
+	attachable := newRecordingResponseEventAttachable()
+	sink := &countingResponseEventSink{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	attachment := startResponseStreamAttachment(ctx, attachable, factorysessions.DefaultSessionID, sink)
+	attachment := startResponseEventAttachment(ctx, attachable, factorysessions.DefaultSessionID, sink)
 	if attachment == nil {
 		t.Fatal("expected attachment")
 	}
 	defer attachment.stop()
 
+	select {
+	case <-attachable.subscribed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected canonical response-event subscription")
+	}
+	event := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "working"})
+	if err := attachable.publish(event); err != nil {
+		t.Fatalf("publish response event: %v", err)
+	}
+
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if len(attachable.subscribeCalls) > 0 {
+		if sink.events() > 0 {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if len(attachable.subscribeCalls) == 0 {
-		t.Fatal("expected internal response-stream subscription")
-	}
-
-	attachable.stream("dispatch-1").Append(responsestream.Event{
-		Kind:    responsestream.EventKindProgressFragment,
-		Type:    responsestream.EventTypeProgress,
-		Payload: "working",
-	})
-
-	for time.Now().Before(deadline) {
-		if sink.segments() > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if sink.segments() == 0 {
-		t.Fatal("expected stream segment delivery after subscription")
-	}
-	if got := attachable.subscribeCalls[0].dispatchID; got != "dispatch-1" {
-		t.Fatalf("dispatchID = %q, want dispatch-1", got)
+	if sink.events() == 0 {
+		t.Fatal("expected canonical event delivery after subscription")
 	}
 }
 
-type countingResponseStreamSink struct {
-	segmentCount int
+type countingResponseEventSink struct {
+	eventCount atomic.Int64
 }
 
-func (s *countingResponseStreamSink) onStreamSegment(factorysessions.SessionResponseStreamReadResult) {
-	s.segmentCount++
+func (s *countingResponseEventSink) onResponseEvents(events []responseevents.FactoryResponseEvent) {
+	s.eventCount.Add(int64(len(events)))
 }
 
-func (s *countingResponseStreamSink) segments() int {
-	return s.segmentCount
+func (s *countingResponseEventSink) events() int64 {
+	return s.eventCount.Load()
 }

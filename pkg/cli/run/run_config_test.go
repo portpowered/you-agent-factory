@@ -412,19 +412,29 @@ func TestHumanResponseStreamRenderer_CanonicalEventsPreserveSessionOrderAndSkipD
 	}
 }
 
-func TestHumanResponseStreamRenderer_LegacyUnknownProgressDoesNotFallbackToPayload(t *testing.T) {
+func TestHumanResponseStreamRenderer_CanonicalInvalidEventsDoNotLeakPayload(t *testing.T) {
 	t.Parallel()
 
-	const canary = "RAW_UNKNOWN_PROVIDER_EVENT"
+	const canary = "RAW_UNKNOWN_PROVIDER_EVENT_CANARY"
+	const answer = "authoritative answer"
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{Events: []responsestream.Event{{
-		Sequence: 1, Kind: responsestream.EventKindProgressFragment,
-		Type: responsestream.EventTypeUnknown, Payload: canary,
-	}}})
-	renderer.stopProgressRendering()
-	if got := output.String(); got != "" {
-		t.Fatalf("unknown legacy event leaked through payload fallback: %q", got)
+	unknownKind := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
+	unknownKind.Kind = responseevents.Kind("PROVIDER_NATIVE_UNKNOWN")
+	invalidPhase := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
+	invalidPhase.Phase = responseevents.PhaseCompleted
+	invalidPayload := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
+	invalidPayload.Payload = json.RawMessage(`{"label":"` + canary + `"`)
+
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{unknownKind, invalidPhase, invalidPayload})
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		Status:        factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: answer}},
+	}); err != nil {
+		t.Fatalf("write final invocation result: %v", err)
+	}
+	if got := output.String(); got != answer {
+		t.Fatalf("invalid canonical event leaked through human stdout: %q", got)
 	}
 }
 

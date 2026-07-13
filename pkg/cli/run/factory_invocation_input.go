@@ -208,11 +208,6 @@ func defaultBuildInvocationBootstrap(
 	return bootstrap, nil
 }
 
-type sessionResponseStreamInvocationRunner interface {
-	sessionInvocationRunner
-	sessionResponseStreamAttachable
-}
-
 type sessionResponseEventInvocationRunner interface {
 	sessionInvocationRunner
 	sessionResponseEventAttachable
