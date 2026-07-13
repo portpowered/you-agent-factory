@@ -23,7 +23,10 @@ type structuredTerminalError struct {
 
 func (e *structuredTerminalError) Error() string { return e.message }
 
-func (a *StructuredAdapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
+func (a *NegotiatedAdapter) ParseFinal(ctx context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
+	if a.decision.Mode == ModeFinalOnly {
+		return parseFinalOnly(ctx, input)
+	}
 	parsed, err := parseStructuredFinal(input.CommandResult.Stdout)
 	if err != nil {
 		return adapter.FinalParseResult{}, err
@@ -182,7 +185,7 @@ func processTerminalError(result workerprocess.CommandResult, commandErr error) 
 	}
 	return &structuredTerminalError{
 		failureType: interfaces.WorkFailureTypeUnknown,
-		message:     fmt.Sprintf("OpenCode structured execution exited with code %d.", result.ExitCode),
+		message:     fmt.Sprintf("OpenCode execution exited with code %d.", result.ExitCode),
 	}
 }
 
@@ -193,7 +196,7 @@ func providerSession(sessionID string) *interfaces.ProviderSessionMetadata {
 	return &interfaces.ProviderSessionMetadata{Provider: "opencode", Kind: providerSessionKind, ID: sessionID}
 }
 
-func (*StructuredAdapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
+func (a *NegotiatedAdapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
 	if input.FlushReason == adapter.FlushReasonCanceled {
 		return failureResult(&structuredTerminalError{
 			failureType: interfaces.WorkFailureTypeTimeout, message: "OpenCode request was canceled or timed out.", retryable: true,
@@ -208,7 +211,7 @@ func (*StructuredAdapter) ClassifyFailure(_ context.Context, input adapter.Failu
 			return failureResult(terminal, providerSessionFromOutput(input.CommandResult.Stdout))
 		}
 		return failureResult(&structuredTerminalError{
-			failureType: interfaces.WorkFailureTypeUnknown, message: "OpenCode structured output could not be processed.",
+			failureType: interfaces.WorkFailureTypeUnknown, message: "OpenCode output could not be processed.",
 		}, providerSessionFromOutput(input.CommandResult.Stdout))
 	}
 	if input.CommandResult.ExitCode != 0 {

@@ -18,6 +18,8 @@ const (
 
 var ErrCapabilityCacheFull = errors.New("opencode capability cache is full")
 
+var ErrCapabilityDecisionStale = errors.New("opencode capability decision is not current")
+
 // Mode is the selected OpenCode output protocol.
 type Mode string
 
@@ -154,6 +156,43 @@ func (r *Resolver) Resolve(ctx context.Context, executable string) (Decision, er
 
 	go r.discover(key, installation, entry)
 	return awaitDecision(ctx, entry)
+}
+
+// Downgrade replaces one current structured decision with final-only fidelity.
+// The replacement entry is immutable so callers already awaiting the previous
+// decision cannot race with the cache update.
+func (r *Resolver) Downgrade(decision Decision) (Decision, error) {
+	if r == nil || decision.Mode != ModeStructured {
+		return Decision{}, ErrCapabilityDecisionStale
+	}
+	key := decision.Installation.cacheKey()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	entry := r.entries[key]
+	if entry == nil {
+		return Decision{}, ErrCapabilityDecisionStale
+	}
+	select {
+	case <-entry.ready:
+	default:
+		return Decision{}, ErrCapabilityDecisionStale
+	}
+	if entry.err != nil {
+		return Decision{}, ErrCapabilityDecisionStale
+	}
+	if entry.decision.Installation == decision.Installation && entry.decision.Version == decision.Version && entry.decision.Mode == ModeFinalOnly {
+		return entry.decision, nil
+	}
+	if entry.decision != decision {
+		return Decision{}, ErrCapabilityDecisionStale
+	}
+	downgraded := decision
+	downgraded.Mode = ModeFinalOnly
+	replacement := &cacheEntry{ready: make(chan struct{}), decision: downgraded}
+	close(replacement.ready)
+	r.entries[key] = replacement
+	r.touchLocked(key)
+	return downgraded, nil
 }
 
 func (r *Resolver) discover(key string, installation Installation, entry *cacheEntry) {

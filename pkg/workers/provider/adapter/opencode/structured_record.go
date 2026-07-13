@@ -3,6 +3,7 @@ package opencode
 import (
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -86,5 +87,9 @@ func boundedText(value string) string {
 	if len(value) <= maxPublishedTextBytes {
 		return value
 	}
-	return value[:maxPublishedTextBytes]
+	end := maxPublishedTextBytes
+	for end > 0 && !utf8.ValidString(value[:end]) {
+		end--
+	}
+	return value[:end]
 }

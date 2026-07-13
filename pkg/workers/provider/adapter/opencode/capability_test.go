@@ -80,6 +80,25 @@ func TestResolverFailedDiscoveryDoesNotPoisonCache(t *testing.T) {
 	}
 }
 
+func TestResolverDowngradeIsReusableAndIdempotentForConcurrentStaleCallers(t *testing.T) {
+	t.Parallel()
+	discoverer := &fakeDiscoverer{decision: opencode.Decision{Version: "1.2.3", Mode: opencode.ModeStructured}}
+	resolver := newResolver(t, &fakeIdentifier{installation: installation()}, discoverer)
+	structured := resolve(t, resolver)
+	first, err := resolver.Downgrade(structured)
+	if err != nil {
+		t.Fatalf("Downgrade() error = %v", err)
+	}
+	second, err := resolver.Downgrade(structured)
+	if err != nil {
+		t.Fatalf("idempotent Downgrade() error = %v", err)
+	}
+	cached := resolve(t, resolver)
+	if first.Mode != opencode.ModeFinalOnly || second != first || cached != first || discoverer.calls.Load() != 1 {
+		t.Fatalf("downgrades = %#v / %#v, cached = %#v, calls = %d", first, second, cached, discoverer.calls.Load())
+	}
+}
+
 func TestResolverConcurrentCallsShareOneDiscovery(t *testing.T) {
 	t.Parallel()
 	release := make(chan struct{})

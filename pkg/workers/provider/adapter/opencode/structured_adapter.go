@@ -17,7 +17,14 @@ const providerSessionKind = "session_id"
 // positively negotiated OpenCode installation. Capability negotiation remains
 // separate so no customer request is needed to construct this adapter.
 type StructuredAdapter struct {
+	*NegotiatedAdapter
+}
+
+// NegotiatedAdapter executes exactly the protocol selected for one cached
+// OpenCode installation decision.
+type NegotiatedAdapter struct {
 	decision Decision
+	resolver *Resolver
 }
 
 // NewStructuredAdapter binds structured execution to one negotiated decision.
@@ -28,16 +35,35 @@ func NewStructuredAdapter(decision Decision) (*StructuredAdapter, error) {
 	if strings.TrimSpace(decision.Installation.Executable) == "" {
 		return nil, errors.New("opencode structured adapter requires a resolved executable")
 	}
-	return &StructuredAdapter{decision: decision}, nil
+	negotiated, err := NewNegotiatedAdapter(decision, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &StructuredAdapter{NegotiatedAdapter: negotiated}, nil
 }
 
-func (*StructuredAdapter) Identity() adapter.Identity {
+// NewNegotiatedAdapter binds execution to a cached structured or final-only
+// decision. A resolver enables safe stale-capability downgrade.
+func NewNegotiatedAdapter(decision Decision, resolver *Resolver) (*NegotiatedAdapter, error) {
+	if decision.Mode != ModeStructured && decision.Mode != ModeFinalOnly {
+		return nil, errors.New("opencode adapter requires a negotiated capability decision")
+	}
+	if strings.TrimSpace(decision.Installation.Executable) == "" {
+		return nil, errors.New("opencode adapter requires a resolved executable")
+	}
+	return &NegotiatedAdapter{decision: decision, resolver: resolver}, nil
+}
+
+func (*NegotiatedAdapter) Identity() adapter.Identity {
 	return adapter.Identity(interfaces.ModelProviderOpenCode)
 }
 
-func (a *StructuredAdapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
+func (a *NegotiatedAdapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
 	request := input.Request
-	args := []string{"run", "--format", "json"}
+	args := []string{"run"}
+	if a.decision.Mode == ModeStructured {
+		args = append(args, "--format", "json")
+	}
 	if request.Model != "" {
 		args = append(args, "--model", request.Model)
 	}
@@ -85,12 +111,16 @@ func structuredCommandEnv(overrides map[string]string) []string {
 	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(overrides), automation)
 }
 
-func (*StructuredAdapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (adapter.Decoder, error) {
+func (a *NegotiatedAdapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (adapter.Decoder, error) {
+	if a.decision.Mode == ModeFinalOnly {
+		return finalOnlyDecoder{}, nil
+	}
 	return newStructuredDecoder(input), nil
 }
 
-func (a *StructuredAdapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
+func (a *NegotiatedAdapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
 	return adapter.CapabilityResult{Capabilities: a.decision.Capabilities()}, nil
 }
 
 var _ adapter.Adapter = (*StructuredAdapter)(nil)
+var _ adapter.Adapter = (*NegotiatedAdapter)(nil)

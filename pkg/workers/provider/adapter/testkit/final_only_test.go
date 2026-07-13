@@ -42,7 +42,7 @@ func TestFinalOnlyAdapterConformance(t *testing.T) {
 				Result: workerprocess.CommandResult{Stdout: []byte(`{"content":"` + finalOnlySecret)},
 			},
 		},
-		Expected:            testkit.FinalOnlyExpected{Content: "Complete response", ProviderSession: session},
+		Expected:            testkit.FinalOnlyExpected{Content: "Complete response", ProviderSession: &session},
 		ForbiddenDiagnostic: []string{finalOnlyPrompt, finalOnlySecret},
 	})
 }

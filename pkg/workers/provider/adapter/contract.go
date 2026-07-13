@@ -152,6 +152,34 @@ type FailureResult struct {
 	Failure *FailureFacts
 }
 
+// FallbackContext contains the completed first-attempt facts an adapter may
+// use to decide whether a second subprocess launch is provably safe. Native
+// syntax remains provider-owned; orchestration only enforces a single retry.
+type FallbackContext struct {
+	CommandResult workerprocess.CommandResult
+	CommandError  error
+	DecodeError   error
+	FlushError    error
+	ParseError    error
+	FlushReason   FlushReason
+	Drafts        []responseevents.Draft
+	Diagnostics   []Diagnostic
+}
+
+// FallbackPlan selects the adapter for one final fallback attempt and carries
+// the bounded degradation signal published with its capability update.
+type FallbackPlan struct {
+	Adapter    Adapter
+	Diagnostic Diagnostic
+}
+
+// FallbackPlanner is an optional provider-owned extension. Execute consults it
+// once after the first attempt and never recursively retries its returned
+// adapter.
+type FallbackPlanner interface {
+	PlanFallback(context.Context, FallbackContext) (FallbackPlan, bool, error)
+}
+
 // Adapter separates every provider-owned operation needed by neutral
 // subprocess orchestration. Implementations interpret native syntax; callers
 // consume only the typed results defined here.

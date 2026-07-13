@@ -37,17 +37,27 @@ type ExecuteInput struct {
 // Event publication, retry execution, and transport formatting remain owned by
 // callers.
 type ExecuteResult struct {
-	Outcome      CommandOutcome
+	Outcome           CommandOutcome
+	Capabilities      Capabilities
+	Response          interfaces.InferenceResponse
+	Drafts            []responseevents.Draft
+	Diagnostics       []Diagnostic
+	Failure           *FailureFacts
+	Command           workerprocess.CommandResult
+	CommandError      error
+	DecodeError       error
+	FlushError        error
+	ParseError        error
+	FlushReason       FlushReason
+	CapabilityUpdates []CapabilityUpdate
+}
+
+// CapabilityUpdate records an invocation-specific fidelity change selected
+// after execution began.
+type CapabilityUpdate struct {
+	Provider     Identity
 	Capabilities Capabilities
-	Response     interfaces.InferenceResponse
-	Drafts       []responseevents.Draft
-	Diagnostics  []Diagnostic
-	Failure      *FailureFacts
-	Command      workerprocess.CommandResult
-	CommandError error
-	DecodeError  error
-	FlushError   error
-	ParseError   error
+	Diagnostic   Diagnostic
 }
 
 // Execute resolves one adapter and runs its complete neutral lifecycle. Once a
@@ -62,6 +72,31 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 		return ExecuteResult{}, errors.New("provider adapter execution requires a command runner")
 	}
 
+	result, attemptErr := executeAttempt(ctx, selected, runner, input)
+	planner, supportsFallback := selected.(FallbackPlanner)
+	if !supportsFallback {
+		return result, attemptErr
+	}
+	plan, fallback, err := planner.PlanFallback(ctx, fallbackContext(result))
+	if err != nil {
+		return result, fmt.Errorf("plan provider adapter fallback: %w", err)
+	}
+	if !fallback {
+		return result, attemptErr
+	}
+	if isNilAdapter(plan.Adapter) {
+		return result, errors.New("provider adapter fallback returned a nil adapter")
+	}
+
+	fallbackResult, fallbackErr := executeAttempt(ctx, plan.Adapter, runner, input)
+	fallbackResult.Diagnostics = append(fallbackResult.Diagnostics, plan.Diagnostic)
+	fallbackResult.CapabilityUpdates = append(fallbackResult.CapabilityUpdates, CapabilityUpdate{
+		Provider: selected.Identity(), Capabilities: fallbackResult.Capabilities, Diagnostic: plan.Diagnostic,
+	})
+	return fallbackResult, fallbackErr
+}
+
+func executeAttempt(ctx context.Context, selected Adapter, runner StreamingCommandRunner, input ExecuteInput) (ExecuteResult, error) {
 	capabilityResult, err := selected.Capabilities(ctx, CapabilityContext{Request: input.Command.Request})
 	if err != nil {
 		return ExecuteResult{}, fmt.Errorf("report provider adapter capabilities: %w", err)
@@ -86,7 +121,7 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	})
 	result.Command, result.CommandError = commandResult, commandErr
 	outcome, flushReason := commandOutcome(ctx, commandResult, commandErr)
-	result.Outcome = outcome
+	result.Outcome, result.FlushReason = outcome, flushReason
 
 	flushed, flushErr := decoder.Flush(ctx, FlushContext{Reason: flushReason})
 	result.appendDecoded(flushed)
@@ -104,6 +139,14 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	})
 	result.Failure = classified.Failure
 	return result, errors.Join(result.DecodeError, flushErr, parseErr)
+}
+
+func fallbackContext(result ExecuteResult) FallbackContext {
+	return FallbackContext{
+		CommandResult: result.Command, CommandError: result.CommandError,
+		DecodeError: result.DecodeError, FlushError: result.FlushError, ParseError: result.ParseError,
+		FlushReason: result.FlushReason, Drafts: result.Drafts, Diagnostics: result.Diagnostics,
+	}
 }
 
 func (r *ExecuteResult) appendDecoded(decoded DecodeResult) {
