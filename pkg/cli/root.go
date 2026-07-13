@@ -498,11 +498,7 @@ func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvoca
 			DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering,
 			WorkerSidecarsEnabled: true,
 		},
-		Construct: func(context.Context) (startupcli.Lifecycle, error) {
-			return startupcli.LifecycleFunc(func(runCtx context.Context) error {
-				return options.RunFactory(runCtx, cfg)
-			}), nil
-		},
+		RunConfig: &cfg,
 	}
 	return options.Startup(ctx, request)
 }

@@ -4,13 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
-	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
 
@@ -53,9 +52,7 @@ func TestRunPreservesConstructionInitializerAndCancellationFailures(t *testing.T
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	initializer := &recordingInitializer{err: ctx.Err()}
-	builder := &recordingGraphBuilder{graph: recordingGraph{
-		lifecycle: startupcli.LifecycleFunc(func(context.Context) error { return nil }),
-	}}
+	builder := &recordingGraphBuilder{graph: &ApplicationGraph{}}
 	if code := Run(Input{
 		Args: []string{"you", "run", "--dir", "."}, Env: environment, Context: ctx,
 	}, Dependencies{GraphBuilder: builder, Initializer: initializer}); code != ExitFailure {
@@ -66,35 +63,69 @@ func TestRunPreservesConstructionInitializerAndCancellationFailures(t *testing.T
 	}
 }
 
-func TestRunUsesSuppliedRuntimeBuilderOnce(t *testing.T) {
+func TestProductionRunGraphCompletesConstructionBeforeInitializerFailure(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
-	builderCalls := 0
-	runner := &processTestRunner{}
-	builder := runcli.FactoryServiceBuilder(func(context.Context, *service.FactoryServiceConfig) (runcli.RuntimeRunner, error) {
-		builderCalls++
-		return runner, nil
-	})
+	initializerErr := errors.New("initializer failed after construction")
+	initializer := &recordingInitializer{err: initializerErr}
 	code := Run(Input{
 		Args: []string{"you", "run", "--dir", dir, "--quiet", "--no-record"},
 		Env:  rootTestEnvironment(),
-	}, Dependencies{FactoryServiceBuilder: builder})
+	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
 
-	if code != ExitSuccess {
-		t.Fatalf("exit code = %d, want %d", code, ExitSuccess)
+	if code != ExitFailure {
+		t.Fatalf("exit code = %d, want %d", code, ExitFailure)
 	}
-	if builderCalls != 1 || runner.calls != 1 {
-		t.Fatalf("builder/runner calls = %d/%d, want 1/1", builderCalls, runner.calls)
+	if initializer.calls != 1 {
+		t.Fatalf("initializer calls = %d, want 1 after completed production construction", initializer.calls)
+	}
+	if initializer.input.Graph == nil {
+		t.Fatal("initializer did not receive the constructed production graph")
 	}
 }
 
-type processTestRunner struct{ calls int }
+func TestProductionGraphConstructionFailuresPreventInitializerStartup(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "run", args: []string{"you", "run", "--dir", t.TempDir(), "--quiet", "--no-record"}},
+		{name: "MCP", args: []string{"you", "mcp", "serve", "--fixture-catalog", filepath.Join(t.TempDir(), "missing.json")}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			initializer := &recordingInitializer{}
+			code := Run(Input{Args: test.args, Env: rootTestEnvironment()}, Dependencies{
+				GraphBuilder: productionGraphBuilder{}, Initializer: initializer,
+			})
+			if code != ExitFailure {
+				t.Fatalf("exit code = %d, want %d", code, ExitFailure)
+			}
+			if initializer.calls != 0 {
+				t.Fatalf("initializer calls = %d, want 0 after production construction failure", initializer.calls)
+			}
+		})
+	}
+}
 
-func (runner *processTestRunner) Run(context.Context) error {
-	runner.calls++
-	return nil
+func TestProductionMCPGraphUsesSuppliedProcessStreams(t *testing.T) {
+	t.Parallel()
+	fixturePath := testutil.MustRepoPath(t, "pkg/api/testdata/durable-session-contract-fixtures.json")
+	input := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"root-test","version":"test"}}}` + "\n")
+	var output bytes.Buffer
+	code := Run(Input{
+		Args: []string{"you", "mcp", "serve", "--fixture-catalog", fixturePath},
+		Env:  rootTestEnvironment(), Stdin: input, Stdout: &output,
+	}, Dependencies{})
+	if code != ExitSuccess {
+		t.Fatalf("MCP exit code = %d, want %d", code, ExitSuccess)
+	}
+	if !strings.Contains(output.String(), `"protocolVersion":"2024-11-05"`) {
+		t.Fatalf("MCP stdout = %q, want initialize response", output.String())
+	}
 }
 
 func rootTestEnvironment() []string {

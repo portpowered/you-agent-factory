@@ -2,6 +2,7 @@ package initializer_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -282,4 +283,64 @@ func TestSessionRuntimeHost_NilReceiverMethodsAreSafe(t *testing.T) {
 	if host.CompatibilityServiceShell() != nil {
 		t.Fatal("expected nil compatibility shell for nil host")
 	}
+}
+
+func TestRunProcessStartsExactlyOneConstructedMode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		graph func(*recordingProcessApplication) *initializer.ProcessGraph
+	}{
+		{name: "run", graph: func(application *recordingProcessApplication) *initializer.ProcessGraph {
+			return &initializer.ProcessGraph{Run: application}
+		}},
+		{name: "MCP", graph: func(application *recordingProcessApplication) *initializer.ProcessGraph {
+			return &initializer.ProcessGraph{MCP: application}
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.WithValue(context.Background(), processContextKey{}, test.name)
+			wantErr := errors.New("lifecycle stopped")
+			application := &recordingProcessApplication{err: wantErr}
+			err := initializer.RunProcess(ctx, test.graph(application))
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("RunProcess() error = %v, want %v", err, wantErr)
+			}
+			if application.calls != 1 || application.ctx != ctx {
+				t.Fatalf("application calls/context = %d/%v, want 1/supplied context", application.calls, application.ctx)
+			}
+		})
+	}
+}
+
+func TestRunProcessRejectsMissingOrAmbiguousGraph(t *testing.T) {
+	t.Parallel()
+	application := &recordingProcessApplication{}
+	for _, graph := range []*initializer.ProcessGraph{
+		nil,
+		{},
+		{Run: application, MCP: application},
+	} {
+		if err := initializer.RunProcess(context.Background(), graph); err == nil {
+			t.Fatalf("RunProcess(%+v) error = nil, want validation error", graph)
+		}
+	}
+	if application.calls != 0 {
+		t.Fatalf("ambiguous application calls = %d, want 0", application.calls)
+	}
+}
+
+type processContextKey struct{}
+
+type recordingProcessApplication struct {
+	calls int
+	ctx   context.Context
+	err   error
+}
+
+func (application *recordingProcessApplication) Run(ctx context.Context) error {
+	application.calls++
+	application.ctx = ctx
+	return application.err
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/cli"
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/spf13/cobra"
 )
@@ -22,16 +21,9 @@ func NewCommand(input ProcessInput) *cobra.Command {
 // construction and lifecycle boundaries.
 func NewCommandWithDependencies(input ProcessInput, dependencies Dependencies) *cobra.Command {
 	dependencies = normalizeDependencies(dependencies)
-	runFactory := runcli.Run
-	if dependencies.FactoryServiceBuilder != nil {
-		runFactory = func(ctx context.Context, cfg runcli.RunConfig) error {
-			return runcli.RunWithFactoryServiceBuilder(ctx, cfg, dependencies.FactoryServiceBuilder)
-		}
-	}
 	command := cli.NewRootCommandWithOptions(cli.RootCommandOptions{
-		HomeDir:    func() (string, error) { return homeDir(input) },
-		LookupEnv:  input.LookupEnv,
-		RunFactory: runFactory,
+		HomeDir:   func() (string, error) { return homeDir(input) },
+		LookupEnv: input.LookupEnv,
 		Startup: func(ctx context.Context, request startupcli.Request) error {
 			return executeStartup(ctx, request, dependencies)
 		},

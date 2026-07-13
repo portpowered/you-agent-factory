@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -656,7 +655,7 @@ func TestRun_WireBuiltFactoryServiceServesStatus(t *testing.T) {
 		startAPIServer = originalStartAPIServer
 		serveFactoryAPIServer = originalServeFactoryAPIServer
 	}()
-	serveFactoryAPIServer = compose.ServeAPIServer
+	serveFactoryAPIServer = defaultServeFactoryAPIServer
 	startAPIServer = func(
 		ctx context.Context,
 		runtime apisurface.APISurface,
@@ -743,7 +742,7 @@ func TestRun_WireBuiltFactoryServiceListsModels(t *testing.T) {
 		startAPIServer = originalStartAPIServer
 		serveFactoryAPIServer = originalServeFactoryAPIServer
 	}()
-	serveFactoryAPIServer = compose.ServeAPIServer
+	serveFactoryAPIServer = defaultServeFactoryAPIServer
 	startAPIServer = func(
 		ctx context.Context,
 		runtime apisurface.APISurface,

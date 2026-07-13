@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 )
 
 // Mode is the process behavior selected by the root after command parsing.
@@ -29,27 +29,25 @@ type SidecarPolicy struct {
 
 // GraphRequest is the narrow construction input selected by the process root.
 type GraphRequest struct {
-	Mode      Mode
-	Sidecars  SidecarPolicy
-	Construct startupcli.Construct
+	Mode     Mode
+	Sidecars SidecarPolicy
+	Startup  startupcli.Request
 }
 
-// ApplicationGraph is the opaque constructed collaborator handed to the
-// initializer. Root never inspects or retains runtime-domain state.
-type ApplicationGraph interface {
-	Lifecycle() startupcli.Lifecycle
-}
+// ApplicationGraph is the typed process graph handed to the initializer. Root
+// never inspects or retains its runtime-domain collaborators.
+type ApplicationGraph = initializer.ProcessGraph
 
 // GraphBuilder constructs one application graph before lifecycle startup.
 type GraphBuilder interface {
-	Build(context.Context, GraphRequest) (ApplicationGraph, error)
+	Build(context.Context, GraphRequest) (*ApplicationGraph, error)
 }
 
 // Initialization is the complete root-to-initializer lifecycle handoff.
 type Initialization struct {
 	Mode     Mode
 	Sidecars SidecarPolicy
-	Graph    ApplicationGraph
+	Graph    *ApplicationGraph
 }
 
 // Initializer starts and owns the lifecycle of an already-constructed graph.
@@ -60,9 +58,8 @@ type Initializer interface {
 // Dependencies are the only construction and lifecycle capabilities retained
 // by the process root.
 type Dependencies struct {
-	GraphBuilder          GraphBuilder
-	Initializer           Initializer
-	FactoryServiceBuilder runcli.FactoryServiceBuilder
+	GraphBuilder GraphBuilder
+	Initializer  Initializer
 }
 
 func executeStartup(ctx context.Context, request startupcli.Request, dependencies Dependencies) error {
@@ -71,7 +68,7 @@ func executeStartup(ctx context.Context, request startupcli.Request, dependencie
 		return err
 	}
 	graph, err := dependencies.GraphBuilder.Build(ctx, GraphRequest{
-		Mode: mode, Sidecars: sidecars, Construct: request.Construct,
+		Mode: mode, Sidecars: sidecars, Startup: request,
 	})
 	if err != nil {
 		return fmt.Errorf("construct %s application graph: %w", mode, err)
@@ -107,38 +104,12 @@ func selectMode(request startupcli.Request) (Mode, SidecarPolicy, error) {
 	}
 }
 
-type applicationGraph struct{ lifecycle startupcli.Lifecycle }
-
-func (graph applicationGraph) Lifecycle() startupcli.Lifecycle { return graph.lifecycle }
-
-type graphBuilder struct{}
-
-func (graphBuilder) Build(ctx context.Context, request GraphRequest) (ApplicationGraph, error) {
-	if request.Construct == nil {
-		return nil, fmt.Errorf("startup constructor is required")
-	}
-	lifecycle, err := request.Construct(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if lifecycle == nil {
-		return nil, fmt.Errorf("startup constructor returned nil lifecycle")
-	}
-	return applicationGraph{lifecycle: lifecycle}, nil
-}
-
-type lifecycleInitializer struct{}
-
-func (lifecycleInitializer) Run(ctx context.Context, initialization Initialization) error {
-	return initialization.Graph.Lifecycle().Run(ctx)
-}
-
 func normalizeDependencies(dependencies Dependencies) Dependencies {
 	if dependencies.GraphBuilder == nil {
-		dependencies.GraphBuilder = graphBuilder{}
+		dependencies.GraphBuilder = productionGraphBuilder{}
 	}
 	if dependencies.Initializer == nil {
-		dependencies.Initializer = lifecycleInitializer{}
+		dependencies.Initializer = productionInitializer{}
 	}
 	return dependencies
 }

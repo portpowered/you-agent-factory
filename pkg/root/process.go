@@ -4,8 +4,7 @@ import (
 	"context"
 	"os"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/wire"
 )
 
@@ -32,9 +31,17 @@ func Main() int {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		Context: context.Background(),
-	}, Dependencies{FactoryServiceBuilder: productionFactoryServiceBuilder})
+	}, Dependencies{})
 }
 
-func productionFactoryServiceBuilder(ctx context.Context, cfg *service.FactoryServiceConfig) (runcli.RuntimeRunner, error) {
-	return wire.BuildCLIRunner(ctx, cfg)
+type productionGraphBuilder struct{}
+
+func (productionGraphBuilder) Build(ctx context.Context, request GraphRequest) (*ApplicationGraph, error) {
+	return wire.BuildProcessGraph(ctx, request.Startup)
+}
+
+type productionInitializer struct{}
+
+func (productionInitializer) Run(ctx context.Context, initialization Initialization) error {
+	return initializer.RunProcess(ctx, initialization.Graph)
 }

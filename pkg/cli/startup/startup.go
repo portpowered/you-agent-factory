@@ -3,7 +3,12 @@
 // the CLI does not depend on the process owner or application graph packages.
 package startup
 
-import "context"
+import (
+	"context"
+	"io"
+
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+)
 
 // Kind identifies the command behavior that requested process startup.
 type Kind string
@@ -22,26 +27,30 @@ type RunIntent struct {
 	WorkerSidecarsEnabled bool
 }
 
-// Lifecycle is an already-selected startup behavior constructed behind the
-// application graph boundary and executed by the initializer boundary.
-type Lifecycle interface {
-	Run(context.Context) error
+// MCPIntent contains the parsed MCP transport inputs needed by the graph
+// constructor. Process streams remain explicit so startup never consults
+// mutable process globals.
+type MCPIntent struct {
+	FixtureCatalogPath string
+	RuntimeBacked      bool
+	ProjectRoot        string
+	Stdin              io.Reader
+	Stdout             io.Writer
 }
-
-// LifecycleFunc adapts a function to Lifecycle.
-type LifecycleFunc func(context.Context) error
-
-func (run LifecycleFunc) Run(ctx context.Context) error { return run(ctx) }
-
-// Construct builds the lifecycle collaborator for one startup request.
-type Construct func(context.Context) (Lifecycle, error)
 
 // Request is emitted after command parsing and before application construction.
 type Request struct {
 	Kind      Kind
 	Run       RunIntent
-	Construct Construct
+	RunConfig *runcli.RunConfig
+	MCP       MCPIntent
 }
 
 // Handler delegates one startup request to the process owner.
 type Handler func(context.Context, Request) error
+
+// Handle invokes the startup boundary while preserving the supplied context
+// and immutable request value.
+func (handler Handler) Handle(ctx context.Context, request Request) error {
+	return handler(ctx, request)
+}

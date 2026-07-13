@@ -209,7 +209,7 @@ var buildFactoryService FactoryServiceBuilder = defaultBuildFactoryService
 
 // SetBuildFactoryService registers the factory service builder used by Run.
 // Legacy callers may use this compatibility hook; process-root executions use
-// RunWithFactoryServiceBuilder so construction stays invocation-scoped.
+// BuildApplication with an invocation-scoped builder.
 func SetBuildFactoryService(builder FactoryServiceBuilder) {
 	if builder == nil {
 		buildFactoryService = defaultBuildFactoryService
@@ -366,13 +366,31 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	return runWithFactoryServiceBuilder(ctx, cfg, nil)
 }
 
-// RunWithFactoryServiceBuilder executes a local run with an explicit,
-// invocation-scoped construction boundary.
-func RunWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) error {
-	return runWithFactoryServiceBuilder(ctx, cfg, builder)
+func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) error {
+	application, err := BuildApplication(ctx, cfg, builder)
+	if err != nil {
+		return err
+	}
+	return application.Run(ctx)
 }
 
-func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) error {
+// Application is the already-constructed local-run graph consumed by the
+// initializer lifecycle boundary.
+type Application struct {
+	cfg               RunConfig
+	logger            *zap.Logger
+	runner            RuntimeRunner
+	invocationRequest *factoryapi.InvocationRequest
+	invocationMode    bool
+	recordPath        resolvedRunRecordPath
+	mockWorkersConfig *factoryconfig.MockWorkersConfig
+	reservedAPIServer *reservedAPIServerListener
+	dashboardReady    <-chan struct{}
+}
+
+// BuildApplication resolves run inputs and constructs the runtime graph without
+// starting its transport, sidecars, or runtime loop.
+func BuildApplication(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) (*Application, error) {
 	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
@@ -380,12 +398,12 @@ func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder Fa
 	}
 	cfg, invocationRequest, invocationMode, recordPath, err := prepareRunConfig(cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	mockWorkersConfig, err := loadMockWorkersConfig(cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	reservedAPIServer, err := reserveAPIServerListener(cfg.Port, cfg.AutoPort)
@@ -394,22 +412,28 @@ func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder Fa
 		err = nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	requestedPort := cfg.Port
-	if reservedAPIServer != nil {
-		defer func() {
-			if err := reservedAPIServer.CloseIfUnused(); err != nil {
-				logger.Warn("release reserved API server listener failed", zap.Error(err))
+	closeReserved := func() {
+		if reservedAPIServer != nil {
+			if closeErr := reservedAPIServer.CloseIfUnused(); closeErr != nil {
+				logger.Warn("release reserved API server listener failed", zap.Error(closeErr))
 			}
-		}()
+		}
+	}
+	if reservedAPIServer != nil {
 		cfg.Port = reservedAPIServer.Port()
 	}
 	emitNamedFactoryResolutionDiagnostics(cfg, logger)
 	emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 
 	if invocationMode {
-		return runFactoryInvocation(ctx, cfg, *invocationRequest, logger, mockWorkersConfig)
+		return &Application{
+			cfg: cfg, logger: logger, invocationRequest: invocationRequest,
+			invocationMode: true, recordPath: recordPath,
+			mockWorkersConfig: mockWorkersConfig, reservedAPIServer: reservedAPIServer,
+		}, nil
 	}
 
 	dashboardReady := make(chan struct{})
@@ -421,17 +445,48 @@ func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder Fa
 	}
 	factorySvc, err := builder(ctx, svcCfg)
 	if err != nil {
-		return err
+		closeReserved()
+		return nil, err
+	}
+	if factorySvc == nil {
+		closeReserved()
+		return nil, fmt.Errorf("construct local runtime: builder returned nil runner")
 	}
 
-	shouldOpenDashboard := emitStartupMessages(cfg, runtimeLogDiagnosticsForRunner(factorySvc))
+	return &Application{
+		cfg: cfg, logger: logger, runner: factorySvc, recordPath: recordPath,
+		reservedAPIServer: reservedAPIServer, dashboardReady: dashboardReady,
+	}, nil
+}
+
+// Run starts the lifecycle for an application graph that has already been
+// built successfully.
+func (application *Application) Run(ctx context.Context) error {
+	if application == nil {
+		return fmt.Errorf("run local application: graph is required")
+	}
+	if application.reservedAPIServer != nil {
+		defer func() {
+			if err := application.reservedAPIServer.CloseIfUnused(); err != nil {
+				application.logger.Warn("release reserved API server listener failed", zap.Error(err))
+			}
+		}()
+	}
+	if application.invocationMode {
+		return runFactoryInvocation(
+			ctx, application.cfg, *application.invocationRequest,
+			application.logger, application.mockWorkersConfig,
+		)
+	}
+
+	shouldOpenDashboard := emitStartupMessages(application.cfg, runtimeLogDiagnosticsForRunner(application.runner))
 	waitForDashboardOpen := func() {}
 	if shouldOpenDashboard {
-		waitForDashboardOpen = openDashboardWhenServerReady(ctx, cfg, dashboardReady)
+		waitForDashboardOpen = openDashboardWhenServerReady(ctx, application.cfg, application.dashboardReady)
 	}
 	defer waitForDashboardOpen()
 
-	return runFactoryServiceAndEmitResult(ctx, cfg, factorySvc, recordPath)
+	return runFactoryServiceAndEmitResult(ctx, application.cfg, application.runner, application.recordPath)
 }
 
 func normalizeRunInvocationMode(cfg RunConfig) RunConfig {

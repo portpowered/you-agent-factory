@@ -6,22 +6,26 @@ import (
 	"testing"
 )
 
-func TestLifecycleFuncRunsWithSuppliedContextAndResult(t *testing.T) {
+func TestHandlerRunsWithSuppliedContextRequestAndResult(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.WithValue(context.Background(), lifecycleContextKey{}, "value")
 	wantErr := errors.New("lifecycle failed")
 	called := 0
-	lifecycle := LifecycleFunc(func(got context.Context) error {
+	wantRequest := Request{Kind: KindMCPServe, MCP: MCPIntent{ProjectRoot: "/tmp/project"}}
+	handler := Handler(func(got context.Context, request Request) error {
 		called++
 		if got != ctx {
-			t.Fatal("LifecycleFunc.Run did not preserve context identity")
+			t.Fatal("Handler did not preserve context identity")
+		}
+		if request.Kind != wantRequest.Kind || request.MCP.ProjectRoot != wantRequest.MCP.ProjectRoot {
+			t.Fatalf("Handler request = %+v, want %+v", request, wantRequest)
 		}
 		return wantErr
 	})
 
-	if err := lifecycle.Run(ctx); !errors.Is(err, wantErr) {
-		t.Fatalf("LifecycleFunc.Run() error = %v, want %v", err, wantErr)
+	if err := handler.Handle(ctx, wantRequest); !errors.Is(err, wantErr) {
+		t.Fatalf("Handler() error = %v, want %v", err, wantErr)
 	}
 	if called != 1 {
 		t.Fatalf("lifecycle calls = %d, want 1", called)

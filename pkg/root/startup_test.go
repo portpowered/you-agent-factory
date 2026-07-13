@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 )
 
 func TestExecuteWithDependencies_SelectsStartupModesAndSidecars(t *testing.T) {
@@ -50,7 +48,7 @@ func TestExecuteWithDependencies_SelectsStartupModesAndSidecars(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			builder := &recordingGraphBuilder{graph: &recordingGraph{lifecycle: startupcli.LifecycleFunc(func(context.Context) error { return nil })}}
+			builder := &recordingGraphBuilder{graph: &ApplicationGraph{}}
 			initializer := &recordingInitializer{}
 			err := ExecuteWithDependencies(Input{
 				Args: test.args, Env: homeEnvironment(t.TempDir()), Context: context.Background(),
@@ -119,7 +117,7 @@ func TestExecuteWithDependencies_ConstructionFailureShortCircuitsStartup(t *test
 
 func TestExecuteWithDependencies_PreservesInitializerFailureAndContext(t *testing.T) {
 	startupErr := errors.New("api listener stopped")
-	graph := &recordingGraph{lifecycle: startupcli.LifecycleFunc(func(context.Context) error { return nil })}
+	graph := &ApplicationGraph{}
 	builder := &recordingGraphBuilder{graph: graph}
 	initializer := &recordingInitializer{err: startupErr}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -139,18 +137,14 @@ func TestExecuteWithDependencies_PreservesInitializerFailureAndContext(t *testin
 	}
 }
 
-type recordingGraph struct{ lifecycle startupcli.Lifecycle }
-
-func (graph recordingGraph) Lifecycle() startupcli.Lifecycle { return graph.lifecycle }
-
 type recordingGraphBuilder struct {
 	calls   int
 	request GraphRequest
-	graph   ApplicationGraph
+	graph   *ApplicationGraph
 	err     error
 }
 
-func (builder *recordingGraphBuilder) Build(_ context.Context, request GraphRequest) (ApplicationGraph, error) {
+func (builder *recordingGraphBuilder) Build(_ context.Context, request GraphRequest) (*ApplicationGraph, error) {
 	builder.calls++
 	builder.request = request
 	return builder.graph, builder.err

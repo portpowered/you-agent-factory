@@ -3,6 +3,7 @@ package mcpcli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -23,21 +24,39 @@ type ServeConfig struct {
 	RuntimeBacked      bool
 	ProjectRoot        string
 	Service            factorysessionexecution.Service
-	Stdin              *os.File
-	Stdout             *os.File
+	Stdin              io.Reader
+	Stdout             io.Writer
 }
 
 // RunServe starts the Factory Session MCP stdio server until stdin closes or the
 // process receives SIGINT/SIGTERM.
 func RunServe(ctx context.Context, cfg ServeConfig) error {
-	service, err := resolveServeService(cfg)
+	application, err := BuildServeApplication(cfg)
 	if err != nil {
 		return err
+	}
+	return application.Run(ctx)
+}
+
+// ServeApplication is the already-constructed MCP transport graph consumed by
+// the initializer lifecycle boundary.
+type ServeApplication struct {
+	server *mcpserver.Server
+	stdin  io.Reader
+	stdout io.Writer
+}
+
+// BuildServeApplication constructs the MCP service, client, and server without
+// starting stdio processing.
+func BuildServeApplication(cfg ServeConfig) (*ServeApplication, error) {
+	service, err := resolveServeService(cfg)
+	if err != nil {
+		return nil, err
 	}
 	client := mcpfactorysession.NewClientWithService(service)
 	server, err := mcpserver.New(mcpserver.Options{Client: client})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	stdin := cfg.Stdin
@@ -48,10 +67,17 @@ func RunServe(ctx context.Context, cfg ServeConfig) error {
 	if stdout == nil {
 		stdout = os.Stdout
 	}
+	return &ServeApplication{server: server, stdin: stdin, stdout: stdout}, nil
+}
 
+// Run starts stdio handling for an MCP graph that has already been built.
+func (application *ServeApplication) Run(ctx context.Context) error {
+	if application == nil || application.server == nil {
+		return fmt.Errorf("run MCP application: graph is required")
+	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return server.ServeStdio(ctx, stdin, stdout)
+	return application.server.ServeStdio(ctx, application.stdin, application.stdout)
 }
 
 func resolveServeService(cfg ServeConfig) (factorysessionexecution.Service, error) {
@@ -160,16 +186,20 @@ func newServeCommand(startup startupcli.Handler) *cobra.Command {
 				FixtureCatalogPath: fixtureCatalogPath,
 				RuntimeBacked:      runtimeBacked,
 				ProjectRoot:        projectRoot,
+				Stdin:              cmd.InOrStdin(),
+				Stdout:             cmd.OutOrStdout(),
 			}
 			if startup == nil {
 				return RunServe(cmd.Context(), cfg)
 			}
 			return startup(cmd.Context(), startupcli.Request{
 				Kind: startupcli.KindMCPServe,
-				Construct: func(context.Context) (startupcli.Lifecycle, error) {
-					return startupcli.LifecycleFunc(func(runCtx context.Context) error {
-						return RunServe(runCtx, cfg)
-					}), nil
+				MCP: startupcli.MCPIntent{
+					FixtureCatalogPath: cfg.FixtureCatalogPath,
+					RuntimeBacked:      cfg.RuntimeBacked,
+					ProjectRoot:        cfg.ProjectRoot,
+					Stdin:              cfg.Stdin,
+					Stdout:             cfg.Stdout,
 				},
 			})
 		},
