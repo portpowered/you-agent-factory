@@ -2210,19 +2210,25 @@ type FactoryResponseEventSessionPayload struct {
 	Status *string `json:"status,omitempty"`
 }
 
-// FactoryResponseEventStreamGapPayload Discontinuity marker in the retained response-event stream.
+// FactoryResponseEventStreamGapPayload Discontinuity marker for either unavailable retained response-event sequences or an affected provider item whose lifecycle could not be fully observed. Retention gaps include fromSequence, toSequence, and firstAvailableSequence; item-scoped gaps include affectedItemId and reason.
 type FactoryResponseEventStreamGapPayload struct {
+	// AffectedItemId Stable item identifier affected by a provider lifecycle discontinuity.
+	AffectedItemId *string `json:"affectedItemId,omitempty"`
+
 	// FirstAvailableSequence Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
-	FirstAvailableSequence int64 `json:"firstAvailableSequence"`
+	FirstAvailableSequence *int64 `json:"firstAvailableSequence,omitempty"`
 
 	// FromSequence Lowest unavailable published sequence greater than the reader's cursor.
-	FromSequence int64 `json:"fromSequence"`
+	FromSequence *int64 `json:"fromSequence,omitempty"`
 
-	// Reason Optional reason for the stream gap such as retention_window.
+	// Reason Gap reason such as retention_window, provider_reconnect, or provider_terminated.
 	Reason *string `json:"reason,omitempty"`
 
 	// ToSequence Highest unavailable published sequence in the reader's catch-up window.
-	ToSequence int64 `json:"toSequence"`
+	ToSequence *int64 `json:"toSequence,omitempty"`
+
+	// ToolCallId Provider tool-call identifier when the affected item is a tool lifecycle.
+	ToolCallId *string `json:"toolCallId,omitempty"`
 }
 
 // FactoryResponseEventStructuredOutputContentBlock Structured JSON output content block.

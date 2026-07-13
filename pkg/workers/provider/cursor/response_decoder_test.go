@@ -12,7 +12,32 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
 )
+
+func TestResponseEventDecoder_SharedConformance(t *testing.T) {
+	finalRecord := `{"type":"result","subtype":"success","is_error":false,"result":"conformance done","session_id":"cursor-conformance"}`
+	toolLifecycle := []byte(strings.Join([]string{
+		`{"type":"system","subtype":"init","session_id":"cursor-conformance"}`,
+		`{"type":"tool_call","subtype":"started","call_id":"call-conformance","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"cursor-conformance"}`,
+		`{"type":"tool_call","subtype":"completed","call_id":"call-conformance","tool_call":{"readToolCall":{"result":{"success":{"bytes":128}}}},"session_id":"cursor-conformance"}`,
+		finalRecord,
+	}, "\n"))
+	privatePayload := "private conformance prompt"
+	testkit.RunDecoderConformance(t, testkit.DecoderConformanceFixture{
+		NewDecoder: func(input adapter.DecoderContext) adapter.Decoder { return NewResponseEventDecoder(input) },
+		Lifecycle:  []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: toolLifecycle}},
+		UnsafeAndRecovering: []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(
+			`{"type":"future_shape","prompt":"` + privatePayload + `"}` + "\n" + finalRecord + "\n",
+		)}},
+		UnterminatedFinal: []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(finalRecord)}},
+		Expected: testkit.DecoderConformanceExpected{
+			ProviderRef: "cursor-conformance", MessageItemID: "cursor-message/run-decoder-conformance",
+			ToolItemID: "cursor-tool/call-conformance", ToolCallID: "call-conformance", FinalContent: "conformance done",
+		},
+		ForbiddenDiagnostic: []string{privatePayload},
+	})
+}
 
 func TestResponseEventDecoder_MapsCursorInitializationAndAssistantFixture(t *testing.T) {
 	raw := readCursorStreamFixture(t, "session_assistant.ndjson")
@@ -166,6 +191,107 @@ func TestResponseEventDecoder_InvalidToolCallIDIsDiagnosticAndDoesNotMergeTools(
 	}
 }
 
+func TestResponseEventDecoder_ReconnectRetainsCorrelationForRecoveredCompletion(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		`{"type":"system","subtype":"init","session_id":"cursor-before-reconnect"}`,
+		`{"type":"tool_call","subtype":"started","call_id":"call-recovered","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"cursor-before-reconnect"}`,
+		`{"type":"system","subtype":"init","session_id":"cursor-after-reconnect"}`,
+		`{"type":"tool_call","subtype":"completed","call_id":"call-recovered","tool_call":{"readToolCall":{"result":{"success":{"bytes":128}}}},"session_id":"cursor-after-reconnect"}`,
+		`{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"cursor-after-reconnect"}`,
+	}, "\n"))
+	result := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: raw}})
+
+	if gap := cursorDraftOfKind(result.Drafts, responseevents.KindStreamGap); gap != nil {
+		t.Fatalf("recovered completion also emitted a gap: %#v", *gap)
+	}
+	tools := cursorDraftsOfKind(result.Drafts, responseevents.KindTool)
+	if len(tools) != 2 {
+		t.Fatalf("tool drafts = %#v, want one recovered lifecycle", tools)
+	}
+	assertCursorToolDraft(t, tools[0], responseevents.PhaseStarted, "call-recovered", "readToolCall", "started")
+	assertCursorToolDraft(t, tools[1], responseevents.PhaseCompleted, "call-recovered", "readToolCall", "completed")
+}
+
+func TestResponseEventDecoder_ReconnectReportsEveryStillUnresolvedToolAsGap(t *testing.T) {
+	result := decodeCursorObservations(t, []adapter.Observation{{
+		Stream: adapter.OutputStreamStdout,
+		Chunk:  readCursorStreamFixture(t, "tool_reconnect_gap.ndjson"),
+	}})
+
+	gaps := cursorDraftsOfKind(result.Drafts, responseevents.KindStreamGap)
+	if len(gaps) != 2 {
+		t.Fatalf("gap drafts = %#v, want both unresolved tools", gaps)
+	}
+	for index, callID := range []string{"call-edit", "call-read"} {
+		assertCursorToolGapDraft(t, gaps[index], callID, cursorToolGapReconnect)
+	}
+	if last := result.Drafts[len(result.Drafts)-1]; last.Kind != responseevents.KindMessage || last.Phase != responseevents.PhaseCompleted {
+		t.Fatalf("terminal draft = %#v, want successful message after explicit gaps", last)
+	}
+}
+
+func TestResponseEventDecoder_TerminalFailureReportsUnresolvedToolGap(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		`{"type":"tool_call","subtype":"started","call_id":"call-failed-run","tool_call":{"shellToolCall":{"args":{"command":"go test ./..."}}}}`,
+		`{"type":"result","subtype":"api_error","is_error":true,"result":"Provider unavailable","session_id":"cursor-failed-run"}`,
+	}, "\n"))
+	result := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: raw}})
+
+	if len(result.Drafts) != 3 {
+		t.Fatalf("drafts = %#v, want tool start, gap, and terminal failure", result.Drafts)
+	}
+	assertCursorToolGapDraft(t, result.Drafts[1], "call-failed-run", cursorToolGapFailure)
+	if result.Drafts[2].Kind != responseevents.KindError || result.Drafts[2].Phase != responseevents.PhaseFailed {
+		t.Fatalf("terminal draft = %#v, want ERROR/FAILED", result.Drafts[2])
+	}
+}
+
+func TestResponseEventDecoder_ExplicitCancellationClosesUnresolvedToolsAsCanceled(t *testing.T) {
+	started := adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(
+		`{"type":"tool_call","subtype":"started","call_id":"call-canceled-run","tool_call":{"readToolCall":{"args":{"path":"README.md"}}}}` + "\n" +
+			`{"type":"result","subtype":"canceled","is_error":true,"result":"User canceled","session_id":"cursor-canceled-run"}`,
+	)}
+	result := decodeCursorObservations(t, []adapter.Observation{started})
+
+	if len(result.Drafts) != 3 {
+		t.Fatalf("drafts = %#v, want tool start, tool cancellation, and run cancellation", result.Drafts)
+	}
+	assertCursorSynthesizedToolCancellation(t, result.Drafts[1], "call-canceled-run", "readToolCall", ResultTypeResult)
+	if result.Drafts[2].Kind != responseevents.KindRun || result.Drafts[2].Phase != responseevents.PhaseCanceled {
+		t.Fatalf("terminal draft = %#v, want RUN/CANCELED", result.Drafts[2])
+	}
+}
+
+func TestResponseEventDecoder_FlushClosesEveryUnresolvedToolFromBoundaryEvidence(t *testing.T) {
+	observation := adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(
+		`{"type":"tool_call","subtype":"started","call_id":"call-flush","tool_call":{"readToolCall":{"args":{"path":"README.md"}}}}` + "\n",
+	)}
+	testCases := []struct {
+		name      string
+		reason    adapter.FlushReason
+		wantKind  responseevents.Kind
+		wantPhase responseevents.Phase
+		wantGap   string
+	}{
+		{name: "CompletedWithoutTerminalRecord", reason: adapter.FlushReasonCompleted, wantKind: responseevents.KindStreamGap, wantPhase: responseevents.PhaseUpdated, wantGap: cursorToolGapFlush},
+		{name: "ProcessTerminated", reason: adapter.FlushReasonTerminated, wantKind: responseevents.KindStreamGap, wantPhase: responseevents.PhaseUpdated, wantGap: cursorToolGapTerminated},
+		{name: "ProviderCanceled", reason: adapter.FlushReasonCanceled, wantKind: responseevents.KindTool, wantPhase: responseevents.PhaseCanceled},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := decodeCursorObservationsWithReason(t, []adapter.Observation{observation}, tc.reason)
+			if len(result.Drafts) != 2 || result.Drafts[1].Kind != tc.wantKind || result.Drafts[1].Phase != tc.wantPhase {
+				t.Fatalf("drafts = %#v, want start then %s/%s", result.Drafts, tc.wantKind, tc.wantPhase)
+			}
+			if tc.wantGap != "" {
+				assertCursorToolGapDraft(t, result.Drafts[1], "call-flush", tc.wantGap)
+			} else {
+				assertCursorSynthesizedToolCancellation(t, result.Drafts[1], "call-flush", "readToolCall", "provider_boundary")
+			}
+		})
+	}
+}
+
 func TestResponseEventDecoder_TerminalResultIsAuthoritativeSnapshot(t *testing.T) {
 	testCases := []struct {
 		name       string
@@ -304,6 +430,10 @@ func TestCursorSafeToolSummaryDecodesStructuredFunctionArgumentsAndRejectsUnsafe
 }
 
 func decodeCursorObservations(t *testing.T, observations []adapter.Observation) adapter.DecodeResult {
+	return decodeCursorObservationsWithReason(t, observations, adapter.FlushReasonCompleted)
+}
+
+func decodeCursorObservationsWithReason(t *testing.T, observations []adapter.Observation, reason adapter.FlushReason) adapter.DecodeResult {
 	t.Helper()
 	decoder := NewResponseEventDecoder(adapter.DecoderContext{RunID: "run-cursor-1", DispatchID: "dispatch-cursor-1"})
 	var combined adapter.DecodeResult
@@ -314,11 +444,29 @@ func decodeCursorObservations(t *testing.T, observations []adapter.Observation) 
 		}
 		combined = appendCursorDecodeResult(combined, result)
 	}
-	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted})
+	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: reason})
 	if err != nil {
 		t.Fatalf("Flush() error = %v", err)
 	}
 	return appendCursorDecodeResult(combined, flushed)
+}
+
+func cursorDraftsOfKind(drafts []responseevents.Draft, kind responseevents.Kind) []responseevents.Draft {
+	var matching []responseevents.Draft
+	for _, draft := range drafts {
+		if draft.Kind == kind {
+			matching = append(matching, draft)
+		}
+	}
+	return matching
+}
+
+func cursorDraftOfKind(drafts []responseevents.Draft, kind responseevents.Kind) *responseevents.Draft {
+	matching := cursorDraftsOfKind(drafts, kind)
+	if len(matching) == 0 {
+		return nil
+	}
+	return &matching[0]
 }
 
 func assertCursorSessionDraft(t *testing.T, draft responseevents.Draft) {
@@ -419,6 +567,42 @@ func assertCursorToolDraft(t *testing.T, draft responseevents.Draft, phase respo
 	decodeCursorToolPayload(t, draft, &payload)
 	if payload.ToolCallID != callID || payload.ToolName != name || payload.Status != status {
 		t.Fatalf("tool payload = %#v, want call=%q name=%q status=%q", payload, callID, name, status)
+	}
+}
+
+func assertCursorToolGapDraft(t *testing.T, draft responseevents.Draft, callID, reason string) {
+	t.Helper()
+	if draft.Kind != responseevents.KindStreamGap || draft.Phase != responseevents.PhaseUpdated || draft.ItemID != "cursor-tool/"+callID {
+		t.Fatalf("tool gap correlation = %#v", draft)
+	}
+	if draft.Provenance.Provider != "cursor" || draft.Provenance.Delivery != responseevents.DeliverySynthesized {
+		t.Fatalf("tool gap provenance = %#v", draft.Provenance)
+	}
+	var payload responseevents.StreamGapPayload
+	decodeCursorPayload(t, draft, &payload)
+	if payload.AffectedItemID != draft.ItemID || payload.ToolCallID != callID || payload.Reason != reason {
+		t.Fatalf("tool gap payload = %#v, want call=%q reason=%q", payload, callID, reason)
+	}
+	if err := responseevents.ValidateDraft(draft); err != nil {
+		t.Fatalf("invalid tool gap draft: %v", err)
+	}
+}
+
+func assertCursorSynthesizedToolCancellation(t *testing.T, draft responseevents.Draft, callID, name, nativeType string) {
+	t.Helper()
+	if draft.Kind != responseevents.KindTool || draft.Phase != responseevents.PhaseCanceled || draft.ItemID != "cursor-tool/"+callID {
+		t.Fatalf("synthesized tool cancellation = %#v", draft)
+	}
+	if draft.Provenance.Provider != "cursor" || draft.Provenance.Delivery != responseevents.DeliverySynthesized || draft.Provenance.NativeEventType != nativeType {
+		t.Fatalf("synthesized tool cancellation provenance = %#v", draft.Provenance)
+	}
+	var payload responseevents.ToolPayload
+	decodeCursorToolPayload(t, draft, &payload)
+	if payload.ToolCallID != callID || payload.ToolName != name || payload.Status != "canceled" {
+		t.Fatalf("synthesized tool cancellation payload = %#v", payload)
+	}
+	if err := responseevents.ValidateDraft(draft); err != nil {
+		t.Fatalf("invalid synthesized tool cancellation: %v", err)
 	}
 }
 

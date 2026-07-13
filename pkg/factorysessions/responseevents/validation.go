@@ -212,6 +212,18 @@ func validateStreamGapKindPayload(payload json.RawMessage) error {
 	if err := decodePayload(payload, &body, "StreamGapPayload"); err != nil {
 		return err
 	}
+	if strings.TrimSpace(body.AffectedItemID) != "" {
+		if strings.TrimSpace(body.Reason) == "" {
+			return validationError("payload.reason", "reason is required for an item-scoped StreamGapPayload")
+		}
+		if body.FromSequence != 0 || body.ToSequence != 0 || body.FirstAvailableSequence != 0 {
+			return validationError("payload.fromSequence", "sequence fields are not allowed for an item-scoped StreamGapPayload")
+		}
+		return nil
+	}
+	if strings.TrimSpace(body.ToolCallID) != "" {
+		return validationError("payload.affectedItemId", "affectedItemId is required when toolCallId is supplied for StreamGapPayload")
+	}
 	if body.FromSequence < 0 || body.ToSequence < 0 {
 		return validationError("payload.fromSequence", "fromSequence and toSequence must be non-negative for StreamGapPayload")
 	}

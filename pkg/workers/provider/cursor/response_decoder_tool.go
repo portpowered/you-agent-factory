@@ -17,11 +17,24 @@ const (
 	cursorToolSummaryStringLimit = 256
 	cursorToolRedactedValue      = "<redacted>"
 	cursorToolTruncatedValue     = "<truncated>"
+	cursorToolGapReconnect       = "provider_reconnect"
+	cursorToolGapFlush           = "decoder_flush"
+	cursorToolGapTerminated      = "provider_terminated"
+	cursorToolGapTerminal        = "terminal_result_missing_completion"
+	cursorToolGapFailure         = "provider_terminal_failure"
 )
 
 type cursorToolState struct {
 	name             string
 	argumentsSummary json.RawMessage
+	gapReason        string
+}
+
+type cursorToolCloseOutcome struct {
+	reason        string
+	canceled      bool
+	nativeType    string
+	nativeSubtype string
 }
 
 type cursorToolEnvelope struct {
@@ -65,6 +78,10 @@ func (d *ResponseEventDecoder) decodeToolCall(record cursorStreamRecord) (adapte
 }
 
 func (d *ResponseEventDecoder) cursorToolDraft(record cursorStreamRecord, callID, name string, phase responseevents.Phase, status string, arguments, result json.RawMessage) (adapter.DecodeResult, error) {
+	return d.cursorToolDraftWithProviderRef(record, callID, name, phase, status, arguments, result, d.providerRef(record.SessionID))
+}
+
+func (d *ResponseEventDecoder) cursorToolDraftWithProviderRef(record cursorStreamRecord, callID, name string, phase responseevents.Phase, status string, arguments, result json.RawMessage, providerRef string) (adapter.DecodeResult, error) {
 	payload, err := json.Marshal(responseevents.ToolPayload{
 		ToolCallID: callID, ToolName: name, Status: status,
 		ArgumentsSummary: arguments, ResultSummary: result,
@@ -75,10 +92,108 @@ func (d *ResponseEventDecoder) cursorToolDraft(record cursorStreamRecord, callID
 	return adapter.DecodeResult{Drafts: []responseevents.Draft{{
 		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
 		Kind: responseevents.KindTool, Phase: phase,
-		ItemID: "cursor-tool/" + callID, ProviderSessionRef: d.providerRef(record.SessionID),
+		ItemID: "cursor-tool/" + callID, ProviderSessionRef: providerRef,
 		Provenance: cursorResponseProvenance("tool_call", record.Subtype, responseevents.RepresentationNotification, responseevents.FidelityNormalized),
 		Payload:    payload,
 	}}}, nil
+}
+
+func (d *ResponseEventDecoder) markToolsInterrupted(reason string) {
+	for callID, state := range d.tools {
+		if state.gapReason == "" {
+			state.gapReason = reason
+			d.tools[callID] = state
+		}
+	}
+}
+
+func (d *ResponseEventDecoder) closeUnresolvedTools(outcome cursorToolCloseOutcome) (adapter.DecodeResult, error) {
+	callIDs := make([]string, 0, len(d.tools))
+	for callID := range d.tools {
+		callIDs = append(callIDs, callID)
+	}
+	sort.Strings(callIDs)
+
+	var result adapter.DecodeResult
+	for _, callID := range callIDs {
+		state := d.tools[callID]
+		delete(d.tools, callID)
+		if outcome.canceled {
+			closed, err := d.cursorCanceledToolDraft(callID, state, outcome)
+			result = appendCursorDecodeResult(result, closed)
+			if err != nil {
+				return result, err
+			}
+			continue
+		}
+		reason := state.gapReason
+		if reason == "" {
+			reason = outcome.reason
+		}
+		closed, err := d.cursorToolGapDraft(callID, reason)
+		result = appendCursorDecodeResult(result, closed)
+		if err != nil {
+			return result, err
+		}
+	}
+	return result, nil
+}
+
+func (d *ResponseEventDecoder) cursorCanceledToolDraft(callID string, state cursorToolState, outcome cursorToolCloseOutcome) (adapter.DecodeResult, error) {
+	payload, err := json.Marshal(responseevents.ToolPayload{
+		ToolCallID: callID, ToolName: state.name, Status: "canceled",
+		ArgumentsSummary: state.argumentsSummary,
+	})
+	if err != nil {
+		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor synthesized tool cancellation payload: %w", err)
+	}
+	return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
+		Kind: responseevents.KindTool, Phase: responseevents.PhaseCanceled,
+		ItemID: "cursor-tool/" + callID, ProviderSessionRef: d.providerSessionRef,
+		Provenance: responseevents.Provenance{
+			Provider:        cursorResponseProvenance(outcome.nativeType, outcome.nativeSubtype, responseevents.RepresentationNotification, responseevents.FidelityNormalized).Provider,
+			NativeEventType: outcome.nativeType, NativeEventSubtype: outcome.nativeSubtype,
+			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationNotification,
+			Fidelity: responseevents.FidelityNormalized,
+		},
+		Payload: payload,
+	}}}, nil
+}
+
+func (d *ResponseEventDecoder) cursorToolGapDraft(callID, reason string) (adapter.DecodeResult, error) {
+	itemID := "cursor-tool/" + callID
+	payload, err := json.Marshal(responseevents.StreamGapPayload{
+		AffectedItemID: itemID,
+		ToolCallID:     callID,
+		Reason:         reason,
+	})
+	if err != nil {
+		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor tool gap payload: %w", err)
+	}
+	return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
+		Kind: responseevents.KindStreamGap, Phase: responseevents.PhaseUpdated,
+		ItemID: itemID, ProviderSessionRef: d.providerSessionRef,
+		Provenance: responseevents.Provenance{
+			Provider:        cursorResponseProvenance("tool_call", "missing_completion", responseevents.RepresentationNotification, responseevents.FidelityLossy).Provider,
+			NativeEventType: "tool_call", NativeEventSubtype: "missing_completion",
+			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationNotification,
+			Fidelity: responseevents.FidelityLossy,
+		},
+		Payload: payload,
+	}}}, nil
+}
+
+func cursorToolFlushOutcome(reason adapter.FlushReason) cursorToolCloseOutcome {
+	switch reason {
+	case adapter.FlushReasonCanceled:
+		return cursorToolCloseOutcome{canceled: true, nativeType: "provider_boundary", nativeSubtype: "canceled"}
+	case adapter.FlushReasonTerminated:
+		return cursorToolCloseOutcome{reason: cursorToolGapTerminated}
+	default:
+		return cursorToolCloseOutcome{reason: cursorToolGapFlush}
+	}
 }
 
 func decodeCursorToolDetails(raw json.RawMessage) (name string, arguments, result json.RawMessage, malformed bool) {

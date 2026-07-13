@@ -73,6 +73,17 @@ func TestValidateEvent_RejectsInvalidKindPhasePairsWithActionableErrors(t *testi
 	}
 }
 
+func TestValidateEvent_AcceptsItemScopedStreamGap(t *testing.T) {
+	t.Parallel()
+
+	event := sampleEvent(t, responseevents.KindStreamGap, responseevents.PhaseUpdated, json.RawMessage(
+		`{"affectedItemId":"cursor-tool/call-1","toolCallId":"call-1","reason":"provider_reconnect"}`,
+	))
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+}
+
 func TestValidateEvent_RejectsKindPayloadMismatchesWithActionableErrors(t *testing.T) {
 	t.Parallel()
 
@@ -172,6 +183,20 @@ func TestValidateEvent_RejectsRequiredPayloadFields(t *testing.T) {
 			phase:     responseevents.PhaseUpdated,
 			payload:   json.RawMessage(`{"fromSequence":1,"toSequence":4}`),
 			wantField: "payload.firstAvailableSequence",
+		},
+		{
+			name:      "item stream gap missing reason",
+			kind:      responseevents.KindStreamGap,
+			phase:     responseevents.PhaseUpdated,
+			payload:   json.RawMessage(`{"affectedItemId":"cursor-tool/call-1","toolCallId":"call-1"}`),
+			wantField: "payload.reason",
+		},
+		{
+			name:      "tool stream gap missing affected item",
+			kind:      responseevents.KindStreamGap,
+			phase:     responseevents.PhaseUpdated,
+			payload:   json.RawMessage(`{"toolCallId":"call-1","reason":"provider_reconnect"}`),
+			wantField: "payload.affectedItemId",
 		},
 		{
 			name:      "message missing role",

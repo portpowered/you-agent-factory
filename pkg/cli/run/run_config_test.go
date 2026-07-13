@@ -143,6 +143,7 @@ func TestHumanResponseStreamRenderer_CanonicalNonToolGolden(t *testing.T) {
 		{"progress minimal", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning"}), "progress: planning\n"},
 		{"progress full", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "review", Message: "checking\r\nresults", PercentComplete: &percent}), "progress: review — checking results (42.5%)\n"},
 		{"stream gap", humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{FromSequence: 8, ToSequence: 14, FirstAvailableSequence: 15, Reason: "retention\nwindow"}), "stream gap: sequences 8-14 unavailable (reason=retention window)\n"},
+		{"item stream gap", humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{AffectedItemID: "cursor-tool/call-1", ToolCallID: "call-1", Reason: "provider_reconnect"}), "stream gap: item cursor-tool/call-1 lifecycle is incomplete (reason=provider_reconnect)\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

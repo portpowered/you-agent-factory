@@ -52,8 +52,13 @@ func (d *ResponseEventDecoder) Observe(_ context.Context, observation adapter.Ob
 }
 
 // Flush processes a final unterminated NDJSON record exactly once.
-func (d *ResponseEventDecoder) Flush(_ context.Context, _ adapter.FlushContext) (adapter.DecodeResult, error) {
-	return d.consumeCompleteLines(true)
+func (d *ResponseEventDecoder) Flush(_ context.Context, input adapter.FlushContext) (adapter.DecodeResult, error) {
+	result, err := d.consumeCompleteLines(true)
+	if err != nil {
+		return result, err
+	}
+	closed, closeErr := d.closeUnresolvedTools(cursorToolFlushOutcome(input.Reason))
+	return appendCursorDecodeResult(result, closed), closeErr
 }
 
 func (d *ResponseEventDecoder) consumeCompleteLines(flushRemainder bool) (adapter.DecodeResult, error) {
@@ -138,6 +143,7 @@ func (d *ResponseEventDecoder) decodeInitialization(record cursorStreamRecord) (
 		return cursorDiagnostic(cursorDiagnosticInvalidSession, "Cursor initialization omitted a valid session identifier"), nil
 	}
 	d.providerSessionRef = session.ID
+	d.markToolsInterrupted(cursorToolGapReconnect)
 	payload, err := json.Marshal(responseevents.SessionPayload{Status: "started"})
 	if err != nil {
 		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor session payload: %w", err)

@@ -3910,24 +3910,28 @@ export interface components {
        */
       retryAttempt?: number;
     };
-    /** @description Discontinuity marker in the retained response-event stream. */
+    /** @description Discontinuity marker for either unavailable retained response-event sequences or an affected provider item whose lifecycle could not be fully observed. Retention gaps include fromSequence, toSequence, and firstAvailableSequence; item-scoped gaps include affectedItemId and reason. */
     FactoryResponseEventStreamGapPayload: {
       /**
        * Format: int64
        * @description Lowest unavailable published sequence greater than the reader's cursor.
        */
-      fromSequence: number;
+      fromSequence?: number;
       /**
        * Format: int64
        * @description Highest unavailable published sequence in the reader's catch-up window.
        */
-      toSequence: number;
+      toSequence?: number;
       /**
        * Format: int64
        * @description Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
        */
-      firstAvailableSequence: number;
-      /** @description Optional reason for the stream gap such as retention_window. */
+      firstAvailableSequence?: number;
+      /** @description Stable item identifier affected by a provider lifecycle discontinuity. */
+      affectedItemId?: string;
+      /** @description Provider tool-call identifier when the affected item is a tool lifecycle. */
+      toolCallId?: string;
+      /** @description Gap reason such as retention_window, provider_reconnect, or provider_terminated. */
       reason?: string;
     };
     /**

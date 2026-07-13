@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-item-stream-gap-001",
+  "sequence": 49,
+  "recordedAt": "2026-07-13T12:00:07Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "STREAM_GAP",
+  "phase": "UPDATED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "tool.missing_completion",
+    "delivery": "SYNTHESIZED",
+    "representation": "NOTIFICATION",
+    "fidelity": "NORMALIZED"
+  },
+  "payload": {
+    "affectedItemId": "tool-item-001",
+    "toolCallId": "call-tool-001",
+    "reason": "provider_reconnect"
+  },
+  "dispatchId": "dispatch-001",
+  "itemId": "tool-item-001",
+  "providerSessionRef": "provider-session-001"
+}

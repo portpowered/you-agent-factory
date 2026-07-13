@@ -18,21 +18,37 @@ func (d *ResponseEventDecoder) decodeResult(record cursorStreamRecord) (adapter.
 		if canonicalProviderSession(string(interfaces.ModelProviderCursor), record.SessionID) == nil {
 			return cursorDiagnostic(cursorDiagnosticInvalidResult, "Cursor success result omitted a valid session identifier"), nil
 		}
-		return d.cursorResultSnapshot(record, providerRef)
+		closed, err := d.closeUnresolvedTools(cursorToolCloseOutcome{reason: cursorToolGapTerminal})
+		if err != nil {
+			return closed, err
+		}
+		snapshot, snapshotErr := d.cursorResultSnapshot(record, providerRef)
+		return appendCursorDecodeResult(closed, snapshot), snapshotErr
 	}
 
 	if cursorResultCanceled(record.Subtype) {
+		closed, closeErr := d.closeUnresolvedTools(cursorToolCloseOutcome{
+			canceled: true, nativeType: ResultTypeResult, nativeSubtype: record.Subtype,
+		})
+		if closeErr != nil {
+			return closed, closeErr
+		}
 		payload, err := json.Marshal(responseevents.RunPayload{Status: "canceled"})
 		if err != nil {
 			return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor canceled result payload: %w", err)
 		}
-		return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+		canceled := adapter.DecodeResult{Drafts: []responseevents.Draft{{
 			RunID: d.context.RunID, DispatchID: d.context.DispatchID,
 			Kind: responseevents.KindRun, Phase: responseevents.PhaseCanceled,
 			ProviderSessionRef: providerRef,
 			Provenance:         cursorResponseProvenance(ResultTypeResult, record.Subtype, responseevents.RepresentationNotification, responseevents.FidelityNormalized),
 			Payload:            payload,
-		}}}, nil
+		}}}
+		return appendCursorDecodeResult(closed, canceled), nil
+	}
+	closed, closeErr := d.closeUnresolvedTools(cursorToolCloseOutcome{reason: cursorToolGapFailure})
+	if closeErr != nil {
+		return closed, closeErr
 	}
 
 	failure := failureResultFromPayload(resultPayload{
@@ -46,13 +62,14 @@ func (d *ResponseEventDecoder) decodeResult(record cursorStreamRecord) (adapter.
 	if err != nil {
 		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor failed result payload: %w", err)
 	}
-	return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+	failed := adapter.DecodeResult{Drafts: []responseevents.Draft{{
 		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
 		Kind: responseevents.KindError, Phase: responseevents.PhaseFailed,
 		ProviderSessionRef: providerRef,
 		Provenance:         cursorResponseProvenance(ResultTypeResult, record.Subtype, responseevents.RepresentationNotification, responseevents.FidelityNormalized),
 		Payload:            payload,
-	}}}, nil
+	}}}
+	return appendCursorDecodeResult(closed, failed), nil
 }
 
 func (d *ResponseEventDecoder) cursorResultSnapshot(record cursorStreamRecord, providerRef string) (adapter.DecodeResult, error) {

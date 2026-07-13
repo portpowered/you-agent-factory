@@ -121,10 +121,13 @@ type ErrorPayload struct {
 	RetryAttempt      *int   `json:"retryAttempt,omitempty"`
 }
 
-// StreamGapPayload records a discontinuity in the retained response-event stream.
+// StreamGapPayload records either retained sequence loss or an item-scoped
+// discontinuity reported by a provider adapter.
 type StreamGapPayload struct {
-	FromSequence           int64  `json:"fromSequence"`
-	ToSequence             int64  `json:"toSequence"`
-	FirstAvailableSequence int64  `json:"firstAvailableSequence"`
+	FromSequence           int64  `json:"fromSequence,omitempty"`
+	ToSequence             int64  `json:"toSequence,omitempty"`
+	FirstAvailableSequence int64  `json:"firstAvailableSequence,omitempty"`
+	AffectedItemID         string `json:"affectedItemId,omitempty"`
+	ToolCallID             string `json:"toolCallId,omitempty"`
 	Reason                 string `json:"reason,omitempty"`
 }

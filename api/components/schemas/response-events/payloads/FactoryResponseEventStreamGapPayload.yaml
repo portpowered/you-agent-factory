@@ -1,10 +1,10 @@
 type: object
 additionalProperties: false
-description: Discontinuity marker in the retained response-event stream.
-required:
-  - fromSequence
-  - toSequence
-  - firstAvailableSequence
+description: >-
+  Discontinuity marker for either unavailable retained response-event sequences
+  or an affected provider item whose lifecycle could not be fully observed.
+  Retention gaps include fromSequence, toSequence, and firstAvailableSequence;
+  item-scoped gaps include affectedItemId and reason.
 properties:
   fromSequence:
     type: integer
@@ -25,6 +25,14 @@ properties:
     description: >-
       Sequence of the first retained event available to this subscription, or
       the next sequence that can be published when no retained event matches.
+  affectedItemId:
+    type: string
+    minLength: 1
+    description: Stable item identifier affected by a provider lifecycle discontinuity.
+  toolCallId:
+    type: string
+    minLength: 1
+    description: Provider tool-call identifier when the affected item is a tool lifecycle.
   reason:
     type: string
-    description: Optional reason for the stream gap such as retention_window.
+    description: Gap reason such as retention_window, provider_reconnect, or provider_terminated.

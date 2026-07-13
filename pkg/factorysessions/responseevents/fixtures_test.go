@@ -22,6 +22,7 @@ var responseEventFixtures = []struct {
 	{name: "final_only_message"},
 	{name: "usage"},
 	{name: "stream_gap"},
+	{name: "item_stream_gap"},
 }
 
 func TestFixtureRoundTrip_PreservesDeclaredFields(t *testing.T) {

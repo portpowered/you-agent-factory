@@ -162,6 +162,7 @@ var representativeResponseEventFixtureNames = []string{
 	"final_only_message",
 	"usage",
 	"stream_gap",
+	"item_stream_gap",
 }
 
 var canonicalFactoryResponseEventPayloadSchemaNames = []string{
