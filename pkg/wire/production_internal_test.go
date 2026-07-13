@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -13,16 +14,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	transportStarted := make(chan struct{})
+	var dashboardRenders int
 	graph, err := Build(context.Background(), Inputs{
 		Config: &runtimehost.Config{
 			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
@@ -36,7 +40,7 @@ func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 				<-ctx.Done()
 				return ctx.Err()
 			},
-			SimpleDashboardRenderer: func(runtimehost.SimpleDashboardRenderInput) {},
+			SimpleDashboardRenderer: func(runtimehost.SimpleDashboardRenderInput) { dashboardRenders++ },
 		},
 		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
 	})
@@ -70,6 +74,194 @@ func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	if got, want := recorder.stopped(), []string{"cli", "dashboard", "workers", "runtime"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("production stop order = %v, want %v", got, want)
 	}
+	if dashboardRenders != 1 {
+		t.Fatalf("dashboard render count = %d, want one final render", dashboardRenders)
+	}
+}
+
+func TestProductionWorkerSidecarUsesGraphSchedulerAndConfigBeforeTransport(t *testing.T) {
+	dir := t.TempDir()
+	factoryConfig := factoryfixtures.MinimalFactoryConfig()
+	factoryConfig["workstations"] = append(factoryConfig["workstations"].([]map[string]any), map[string]any{
+		"name":     "scheduled-task",
+		"behavior": "CRON",
+		"worker":   "worker-a",
+		"cron":     map[string]any{"schedule": "0 * * * *"},
+		"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
+	})
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryConfig)
+
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	transportStarted := make(chan struct{})
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
+			Port: 43176, Logger: zap.New(logCore), Clock: productionInternalClock{},
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+			APIServerStarter: func(ctx context.Context, _ apisurface.APISurface, _ int, _ *zap.Logger) error {
+				registered := observedLogs.FilterMessage("cron watcher registered").All()
+				if len(registered) != 1 || registered[0].ContextMap()["workstation"] != "scheduled-task" {
+					return fmt.Errorf("transport started before graph worker scheduler was ready: logs=%v", observedLogs.All())
+				}
+				close(transportStarted)
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	workerScheduler := graph.Workers
+	if workerScheduler == nil || graph.Sidecars.Workers == nil {
+		t.Fatal("production graph omitted its worker scheduler or worker lifecycle")
+	}
+
+	application, err := initializer.NewApplication(initializer.ModeAPI, graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	if application.Graph() != graph || graph.Workers != workerScheduler {
+		t.Fatal("initializer replaced the graph or worker scheduler instance")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	go func() { runDone <- application.Run(ctx) }()
+	select {
+	case <-transportStarted:
+	case err := <-runDone:
+		t.Fatalf("Application.Run() returned before transport startup: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("graph-owned transport did not start after worker readiness")
+	}
+	cancel()
+	if err := <-runDone; err != nil {
+		t.Fatalf("Application.Run() error = %v", err)
+	}
+}
+
+func TestProductionMCPModeLeavesWorkerSidecarsInactive(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
+			Logger: zap.NewNop(), Clock: productionInternalClock{},
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	recorder := &lifecycleOrder{}
+	graph.Sidecars.Runtime = recorder.wrap("runtime", graph.Sidecars.Runtime)
+	graph.Sidecars.Workers = recorder.wrap("workers", graph.Sidecars.Workers)
+	graph.Sidecars.Dashboard = recorder.wrap("dashboard", graph.Sidecars.Dashboard)
+
+	application, err := initializer.NewApplication(initializer.ModeMCP, graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	if err := application.Run(context.Background()); err != nil {
+		t.Fatalf("Application.Run() error = %v", err)
+	}
+	if starts, stops := recorder.started(), recorder.stopped(); len(starts) != 0 || len(stops) != 0 {
+		t.Fatalf("MCP run sidecar effects = starts %v stops %v, want none", starts, stops)
+	}
+}
+
+func TestProductionCLIModePreservesTransportFailureAfterDashboardShutdown(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	var dashboardRenders int
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
+			Port: 43175, Logger: zap.NewNop(), Clock: productionInternalClock{},
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+			SimpleDashboardRenderer:                 func(runtimehost.SimpleDashboardRenderInput) { dashboardRenders++ },
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	transportErr := errors.New("CLI runner failed")
+	cli := newRunnerLifecycle(func(context.Context) error { return transportErr })
+	graph.Transports.CLI = cli
+	application, err := initializer.NewApplication(initializer.ModeCLI, graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	if application.Graph() != graph || graph.Transports.CLI != cli {
+		t.Fatal("CLI mode replaced the supplied graph or CLI lifecycle")
+	}
+	if err := application.Run(context.Background()); !errors.Is(err, transportErr) {
+		t.Fatalf("Application.Run() error = %v, want CLI runner failure", err)
+	}
+	if dashboardRenders != 1 {
+		t.Fatalf("dashboard render count = %d, want one final render after CLI failure", dashboardRenders)
+	}
+}
+
+func TestProductionDashboardDisabledOmitsEveryDashboardLifecycleEffect(t *testing.T) {
+	var runtime runtimehost.ApplicationRuntime
+	sidecars, err := buildProductionSidecars(
+		&runtimehost.Config{SimpleDashboardRenderer: nil},
+		nil,
+		&runtime,
+	)
+	if err != nil {
+		t.Fatalf("buildProductionSidecars() error = %v", err)
+	}
+	if sidecars.Dashboard != nil {
+		t.Fatalf("dashboard lifecycle = %T, want nil when rendering is disabled", sidecars.Dashboard)
+	}
+}
+
+func TestDashboardLifecycleJoinsPeriodicLoopBeforeFinalRender(t *testing.T) {
+	ticker := &joiningDashboardTicker{ticks: make(chan time.Time), stopped: make(chan struct{})}
+	finalRendered := make(chan struct{}, 1)
+	sidecar, err := initializerdashboard.NewDashboardSidecar(initializerdashboard.DashboardSidecarConfig{
+		Reader: dashboardReaderFunc(func(context.Context, time.Time) (initializerdashboard.DashboardRenderInput, error) {
+			select {
+			case <-ticker.stopped:
+				return initializerdashboard.DashboardRenderInput{}, nil
+			default:
+				return initializerdashboard.DashboardRenderInput{}, errors.New("final render preceded dashboard join")
+			}
+		}),
+		Renderer: dashboardRendererFunc(func(initializerdashboard.DashboardRenderInput) {
+			finalRendered <- struct{}{}
+		}),
+		Timing: dashboardTiming{ticker: ticker},
+	})
+	if err != nil {
+		t.Fatalf("NewDashboardSidecar() error = %v", err)
+	}
+	lifecycle := newDashboardLifecycle(sidecar)
+	if err := lifecycle.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := lifecycle.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	select {
+	case <-finalRendered:
+	default:
+		t.Fatal("dashboard lifecycle did not render after joining its periodic loop")
+	}
 }
 
 type lifecycleOrder struct {
@@ -79,7 +271,12 @@ type lifecycleOrder struct {
 }
 
 func (o *lifecycleOrder) wrap(name string, lifecycle Lifecycle) Lifecycle {
-	return &recordingProductionLifecycle{order: o, name: name, lifecycle: lifecycle}
+	recording := &recordingProductionLifecycle{order: o, name: name, lifecycle: lifecycle}
+	waiter, ok := lifecycle.(interface{ Wait(context.Context) error })
+	if !ok {
+		return recording
+	}
+	return &recordingWaitableProductionLifecycle{recordingProductionLifecycle: recording, waiter: waiter}
 }
 
 type recordingProductionLifecycle struct {
@@ -102,12 +299,13 @@ func (l *recordingProductionLifecycle) Stop(ctx context.Context) error {
 	return l.lifecycle.Stop(ctx)
 }
 
-func (l *recordingProductionLifecycle) Wait(ctx context.Context) error {
-	waiter, ok := l.lifecycle.(interface{ Wait(context.Context) error })
-	if !ok {
-		return errors.New("recorded lifecycle is not waitable")
-	}
-	return waiter.Wait(ctx)
+type recordingWaitableProductionLifecycle struct {
+	*recordingProductionLifecycle
+	waiter interface{ Wait(context.Context) error }
+}
+
+func (l *recordingWaitableProductionLifecycle) Wait(ctx context.Context) error {
+	return l.waiter.Wait(ctx)
 }
 
 func (o *lifecycleOrder) started() []string {
@@ -257,3 +455,40 @@ func canceledProductionContext() context.Context {
 type productionInternalClock struct{}
 
 func (productionInternalClock) Now() time.Time { return time.Unix(0, 0).UTC() }
+
+type dashboardReaderFunc func(context.Context, time.Time) (initializerdashboard.DashboardRenderInput, error)
+
+func (fn dashboardReaderFunc) ReadDashboard(
+	ctx context.Context,
+	now time.Time,
+) (initializerdashboard.DashboardRenderInput, error) {
+	return fn(ctx, now)
+}
+
+type dashboardRendererFunc func(initializerdashboard.DashboardRenderInput)
+
+func (fn dashboardRendererFunc) RenderDashboard(input initializerdashboard.DashboardRenderInput) {
+	fn(input)
+}
+
+type dashboardTiming struct {
+	ticker initializerdashboard.DashboardTicker
+}
+
+func (dashboardTiming) Now() time.Time { return time.Unix(0, 0).UTC() }
+
+func (timing dashboardTiming) NewTicker(time.Duration) initializerdashboard.DashboardTicker {
+	return timing.ticker
+}
+
+type joiningDashboardTicker struct {
+	ticks   chan time.Time
+	stopped chan struct{}
+	once    sync.Once
+}
+
+func (ticker *joiningDashboardTicker) C() <-chan time.Time { return ticker.ticks }
+
+func (ticker *joiningDashboardTicker) Stop() {
+	ticker.once.Do(func() { close(ticker.stopped) })
+}

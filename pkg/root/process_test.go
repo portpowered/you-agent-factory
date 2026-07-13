@@ -125,7 +125,10 @@ func TestProductionGraphConstructionFailuresPreventInitializerStartup(t *testing
 func TestProductionMCPGraphUsesSuppliedProcessStreams(t *testing.T) {
 	t.Parallel()
 	fixturePath := testutil.MustRepoPath(t, "pkg/api/testdata/durable-session-contract-fixtures.json")
-	input := strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"root-test","version":"test"}}}` + "\n")
+	input := strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"root-test","version":"test"}}}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"you.factory_session.list","arguments":{"scope":"persisted"}}}` + "\n",
+	)
 	var output bytes.Buffer
 	code := Run(Input{
 		Args: []string{"you", "mcp", "serve", "--fixture-catalog", fixturePath},
@@ -136,6 +139,11 @@ func TestProductionMCPGraphUsesSuppliedProcessStreams(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), `"protocolVersion":"2024-11-05"`) {
 		t.Fatalf("MCP stdout = %q, want initialize response", output.String())
+	}
+	if !strings.Contains(output.String(), `"id":2`) ||
+		!strings.Contains(output.String(), `"isError":false`) ||
+		!strings.Contains(output.String(), `dur-sess-js-failed-partial-001`) {
+		t.Fatalf("MCP stdout = %q, want successful graph-backed Factory Session list response", output.String())
 	}
 }
 

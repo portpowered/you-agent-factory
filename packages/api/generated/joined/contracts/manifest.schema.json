@@ -1,0 +1,442 @@
+{
+  "$defs": {
+    "export": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactHash": {
+          "description": "Lowercase hexadecimal SHA-256 of the exported artifact.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "documentation": {
+          "$defs": {
+            "descriptionDocumentation": {
+              "additionalProperties": false,
+              "description": "The required description translation. The .description suffix makes its ID structurally distinct from the title ID.",
+              "properties": {
+                "canonicalEnglish": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "id": {
+                  "allOf": [
+                    {
+                      "description": "Stable lowercase documentation identity independent of translated text and source location.",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]description$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "canonicalEnglish"
+              ],
+              "type": "object"
+            },
+            "documentationIdBase": {
+              "description": "Stable lowercase documentation identity independent of translated text and source location.",
+              "type": "string"
+            },
+            "itemId": {
+              "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+              "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+              "type": "string"
+            },
+            "titleDocumentation": {
+              "additionalProperties": false,
+              "description": "The required title translation. The .title suffix makes its ID structurally distinct from the description ID.",
+              "properties": {
+                "canonicalEnglish": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "id": {
+                  "allOf": [
+                    {
+                      "description": "Stable lowercase documentation identity independent of translated text and source location.",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]title$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "canonicalEnglish"
+              ],
+              "type": "object"
+            }
+          },
+          "$id": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json",
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "description": "Family-neutral identity, canonical English documentation, examples, visibility, and source integrity metadata for one contract item.",
+          "properties": {
+            "documentation": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "additionalProperties": false,
+                  "description": "The required description translation. The .description suffix makes its ID structurally distinct from the title ID.",
+                  "properties": {
+                    "canonicalEnglish": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "id": {
+                      "allOf": [
+                        {
+                          "description": "Stable lowercase documentation identity independent of translated text and source location.",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]description$"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "canonicalEnglish"
+                  ],
+                  "type": "object"
+                },
+                "title": {
+                  "additionalProperties": false,
+                  "description": "The required title translation. The .title suffix makes its ID structurally distinct from the description ID.",
+                  "properties": {
+                    "canonicalEnglish": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "id": {
+                      "allOf": [
+                        {
+                          "description": "Stable lowercase documentation identity independent of translated text and source location.",
+                          "type": "string"
+                        },
+                        {
+                          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]title$"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "canonicalEnglish"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "title",
+                "description"
+              ],
+              "type": "object"
+            },
+            "examples": {
+              "description": "Representative values in any JSON shape.",
+              "items": true,
+              "minItems": 1,
+              "type": "array"
+            },
+            "formatVersion": {
+              "const": "1.0.0",
+              "description": "The explicitly supported version of this documentation metadata format."
+            },
+            "itemId": {
+              "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+              "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+              "type": "string"
+            },
+            "sourceHash": {
+              "description": "Lowercase hexadecimal SHA-256 of the source from which this metadata was produced.",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "visibility": {
+              "description": "Whether the documented contract item is customer-facing or repository-internal.",
+              "enum": [
+                "public",
+                "internal"
+              ]
+            }
+          },
+          "required": [
+            "formatVersion",
+            "itemId",
+            "documentation",
+            "examples",
+            "visibility",
+            "sourceHash"
+          ],
+          "title": "You contract documentation metadata",
+          "type": "object"
+        },
+        "family": {
+          "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+          "type": "string"
+        },
+        "lifecycle": {
+          "$defs": {
+            "successor": {
+              "additionalProperties": false,
+              "description": "The replacement contract item and canonical English migration guidance.",
+              "properties": {
+                "canonicalEnglish": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "targetItemId": {
+                  "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+                  "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "targetItemId",
+                "canonicalEnglish"
+              ],
+              "type": "object"
+            },
+            "version": {
+              "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+              "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+              "type": "string"
+            }
+          },
+          "$id": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json",
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "description": "Family-neutral lifecycle and migration metadata for one contract item. This metadata describes support history and does not control runtime callability.",
+          "oneOf": [
+            {
+              "properties": {
+                "deprecated": false,
+                "removed": false,
+                "state": {
+                  "const": "active"
+                },
+                "successor": false
+              }
+            },
+            {
+              "properties": {
+                "removed": false,
+                "state": {
+                  "const": "deprecated"
+                }
+              },
+              "required": [
+                "deprecated",
+                "successor"
+              ]
+            },
+            {
+              "properties": {
+                "state": {
+                  "const": "removed"
+                }
+              },
+              "required": [
+                "deprecated",
+                "removed",
+                "successor"
+              ]
+            }
+          ],
+          "properties": {
+            "deprecated": {
+              "allOf": [
+                {
+                  "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+                  "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+                  "type": "string"
+                }
+              ],
+              "description": "The first package version in which the item was deprecated."
+            },
+            "formatVersion": {
+              "const": "1.0.0",
+              "description": "The explicitly supported version of this lifecycle metadata format."
+            },
+            "itemId": {
+              "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+              "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+              "type": "string"
+            },
+            "removed": {
+              "allOf": [
+                {
+                  "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+                  "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+                  "type": "string"
+                }
+              ],
+              "description": "The first package version from which the item was absent."
+            },
+            "since": {
+              "allOf": [
+                {
+                  "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+                  "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+                  "type": "string"
+                }
+              ],
+              "description": "The first package version containing the item."
+            },
+            "state": {
+              "description": "The item's publication lifecycle state.",
+              "enum": [
+                "active",
+                "deprecated",
+                "removed"
+              ]
+            },
+            "successor": {
+              "additionalProperties": false,
+              "description": "The replacement contract item and canonical English migration guidance.",
+              "properties": {
+                "canonicalEnglish": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "targetItemId": {
+                  "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+                  "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "targetItemId",
+                "canonicalEnglish"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "formatVersion",
+            "itemId",
+            "state",
+            "since"
+          ],
+          "title": "You contract lifecycle metadata",
+          "type": "object"
+        },
+        "path": {
+          "description": "Stable repository-relative artifact path with no empty, current-directory, or parent-directory segments.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "family",
+        "artifactHash",
+        "documentation",
+        "lifecycle"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.portpowered.com/you/contracts/manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Family-neutral package, source, export, and artifact integrity metadata for a published contract bundle.",
+  "properties": {
+    "exports": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactHash": {
+            "description": "Lowercase hexadecimal SHA-256 of the exported artifact.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "documentation": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+          },
+          "family": {
+            "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "type": "string"
+          },
+          "lifecycle": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+          },
+          "path": {
+            "description": "Stable repository-relative artifact path with no empty, current-directory, or parent-directory segments.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "family",
+          "artifactHash",
+          "documentation",
+          "lifecycle"
+        ],
+        "type": "object"
+      },
+      "description": "Published artifacts keyed by stable export identifiers. Object keys make duplicate export IDs structurally unrepresentable.",
+      "minProperties": 1,
+      "propertyNames": {
+        "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "familyFormatVersions": {
+      "additionalProperties": {
+        "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+        "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+        "type": "string"
+      },
+      "description": "Supported contract-family format versions keyed by stable, family-neutral identifiers.",
+      "minProperties": 1,
+      "propertyNames": {
+        "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "formatVersion": {
+      "const": "1.0.0",
+      "description": "The explicitly supported version of this manifest format."
+    },
+    "packageId": {
+      "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "packageVersion": {
+      "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+      "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sourceCommit": {
+      "description": "The lowercase full-length Git SHA-1 or SHA-256 commit identifying the package source.",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "formatVersion",
+    "packageId",
+    "packageVersion",
+    "sourceCommit",
+    "familyFormatVersions",
+    "exports"
+  ],
+  "title": "You contract package manifest",
+  "type": "object"
+}

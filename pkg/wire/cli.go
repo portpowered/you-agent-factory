@@ -19,6 +19,14 @@ import (
 // Construction remains inert; initializer activates and shuts down the graph
 // when the returned application is run.
 func BuildCLIRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (initializer.LocalRuntimeRunner, error) {
+	return buildApplicationRunner(ctx, cfg, initializer.ModeCLI)
+}
+
+func buildApplicationRunner(
+	ctx context.Context,
+	cfg *service.FactoryServiceConfig,
+	mode initializer.Mode,
+) (initializer.LocalRuntimeRunner, error) {
 	runtimeCfg := service.RuntimeHostConfigFromFactoryService(cfg)
 	if runtimeCfg != nil {
 		copied := *runtimeCfg
@@ -34,10 +42,10 @@ func BuildCLIRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (ini
 	if err != nil {
 		return nil, err
 	}
-	application, err := initializer.NewApplication(initializer.ModeCLI, graph)
+	application, err := initializer.NewApplication(mode, graph)
 	if err != nil {
 		if cleanupErr := graph.Close(); cleanupErr != nil {
-			return nil, errors.Join(err, fmt.Errorf("close rejected CLI application graph: %w", cleanupErr))
+			return nil, errors.Join(err, fmt.Errorf("close rejected %s application graph: %w", mode, cleanupErr))
 		}
 		return nil, err
 	}

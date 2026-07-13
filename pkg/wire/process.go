@@ -18,16 +18,23 @@ func BuildProcessGraph(ctx context.Context, request startupcli.Request, policy i
 	return buildProcessGraph(ctx, request, policy, func(
 		buildCtx context.Context,
 		cfg *service.FactoryServiceConfig,
+		mode initializer.Mode,
 	) (runcli.RuntimeRunner, error) {
-		return BuildCLIRunner(buildCtx, cfg)
+		return buildApplicationRunner(buildCtx, cfg, mode)
 	})
 }
+
+type processRunnerBuilder func(
+	context.Context,
+	*service.FactoryServiceConfig,
+	initializer.Mode,
+) (runcli.RuntimeRunner, error)
 
 func buildProcessGraph(
 	ctx context.Context,
 	request startupcli.Request,
 	policy initializer.ProcessPolicy,
-	buildRunner runcli.FactoryServiceBuilder,
+	buildRunner processRunnerBuilder,
 ) (*initializer.ProcessGraph, error) {
 	switch request.Kind {
 	case startupcli.KindRun:
@@ -38,7 +45,16 @@ func buildProcessGraph(
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
 		}
-		application, err := runcli.BuildApplication(ctx, runConfig, buildRunner)
+		applicationMode, err := applicationModeForProcess(policy.Mode)
+		if err != nil {
+			return nil, fmt.Errorf("construct run graph: %w", err)
+		}
+		application, err := runcli.BuildApplication(ctx, runConfig, func(
+			buildCtx context.Context,
+			cfg *service.FactoryServiceConfig,
+		) (runcli.RuntimeRunner, error) {
+			return buildRunner(buildCtx, cfg, applicationMode)
+		})
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
 		}
@@ -73,6 +89,17 @@ func buildProcessGraph(
 		return &initializer.ProcessGraph{Policy: policy, MCP: application}, nil
 	default:
 		return nil, fmt.Errorf("construct process graph: unsupported startup kind %q", request.Kind)
+	}
+}
+
+func applicationModeForProcess(mode initializer.ProcessMode) (initializer.Mode, error) {
+	switch mode {
+	case initializer.ProcessModeDefaultRun, initializer.ProcessModeAPIService:
+		return initializer.ModeAPI, nil
+	case initializer.ProcessModeLocalRun:
+		return initializer.ModeCLI, nil
+	default:
+		return "", fmt.Errorf("run graph requires a run process mode, got %q", mode)
 	}
 }
 
