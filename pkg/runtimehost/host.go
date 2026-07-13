@@ -108,7 +108,7 @@ type hostRunState struct {
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
 //
-// Extracted domains are composed explicitly: pkg/factorysessions owns the live
+// Extracted domains are composed explicitly: pkg/factory/sessions owns the live
 // session registry, pkg/models/local owns managed model runtime wiring, and
 // pkg/workers/hosted owns hosted poller supervision invoked from poller_watcher.
 // pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
