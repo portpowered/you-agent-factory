@@ -22,6 +22,7 @@ func (disabledURLLoader) Load(resourceURL string) (any, error) {
 type referenceResolver struct {
 	root                               string
 	documents                          map[string]any
+	authoredResourceDocuments          map[string]string
 	active                             map[string]bool
 	allowed                            map[string]struct{}
 	deduplicateResources               bool
@@ -119,6 +120,7 @@ func resolveReferencesWithin(
 	resolver := referenceResolver{
 		root:                               root,
 		documents:                          map[string]any{document: value},
+		authoredResourceDocuments:          authoredResourceDocuments(root, document, value, allowed),
 		active:                             make(map[string]bool),
 		allowed:                            allowed,
 		deduplicateResources:               deduplicateResources,
@@ -142,6 +144,44 @@ func resolveReferencesWithin(
 		loaded = append(loaded, loadedDocument{path: path, value: resolver.documents[path]})
 	}
 	return resolved, loaded, nil
+}
+
+func authoredResourceDocuments(root, primaryDocument string, primaryValue any, allowed map[string]struct{}) map[string]string {
+	resources := make(map[string]string)
+	if allowed == nil {
+		return resources
+	}
+	paths := make([]string, 0, len(allowed))
+	for path := range allowed {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		value := primaryValue
+		if path != primaryDocument {
+			loaded, issue := loadJSON(root, path, "document")
+			if issue != nil {
+				continue
+			}
+			value = loaded
+		}
+		object, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		identifier, ok := object["$id"].(string)
+		if !ok {
+			continue
+		}
+		parsed, err := url.Parse(identifier)
+		if err != nil || !parsed.IsAbs() || parsed.Fragment != "" {
+			continue
+		}
+		if _, exists := resources[parsed.String()]; !exists {
+			resources[parsed.String()] = path
+		}
+	}
+	return resources
 }
 
 func (r *referenceResolver) resolveNode(value any, document string, segments, sourceSegments []string, scope resolutionScope) (any, []Diagnostic) {
@@ -468,6 +508,13 @@ func (r *referenceResolver) classifyReference(referringDocument, reference strin
 		return "", "", &issue
 	}
 	parsed, err := url.Parse(portable)
+	if err == nil && parsed.IsAbs() && parsed.RawQuery == "" {
+		resource := *parsed
+		resource.Fragment = ""
+		if target, ok := r.authoredResourceDocuments[resource.String()]; ok {
+			return target, parsed.Fragment, nil
+		}
+	}
 	if err != nil || parsed.Scheme != "" || parsed.Host != "" || parsed.RawQuery != "" {
 		issue := r.singleIssue("reference.unsupported", fmt.Sprintf("reference %q is not repository-relative", reference), referringDocument, segments)
 		return "", "", &issue
