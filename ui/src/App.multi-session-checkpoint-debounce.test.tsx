@@ -159,6 +159,38 @@ async function advanceCheckpointTimer(milliseconds: number): Promise<void> {
   });
 }
 
+async function settleCheckpointPersistence(): Promise<void> {
+  await act(async () => {
+    for (let turn = 0; turn < 8; turn += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+async function renderSessionA(options: { writeError?: Error } = {}) {
+  const checkpointDatabase =
+    createTimelineCheckpointIndexedDBTestDouble(options);
+  const { indexedDB } = checkpointDatabase;
+  vi.stubGlobal("indexedDB", indexedDB);
+  useDashboardSessionStore.setState({
+    pausedSessionIDs: [],
+    selectedSessionID: A.streamIdentity.factorySessionID,
+  });
+  const view = await renderAppWithDashboardShell({
+    factorySessions,
+    fetchOverride: multiSessionPreflightFetch(),
+    seedTimelineFromSnapshot: false,
+    snapshot: snapshotFor(A),
+  });
+  await waitFor(() => {
+    expect(requireEventStream(MockEventSource.instances).url).toBe(
+      expectedStreamURL(A),
+    );
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  return { ...checkpointDatabase, ...view };
+}
+
 describe("App multi-session checkpoint debounce regression", () => {
   registerAppDashboardTestLifecycle();
 
@@ -166,30 +198,8 @@ describe("App multi-session checkpoint debounce regression", () => {
     vi.useRealTimers();
   });
 
-  async function renderSessionA(): Promise<IDBFactory> {
-    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
-    vi.stubGlobal("indexedDB", indexedDB);
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: A.streamIdentity.factorySessionID,
-    });
-    await renderAppWithDashboardShell({
-      factorySessions,
-      fetchOverride: multiSessionPreflightFetch(),
-      seedTimelineFromSnapshot: false,
-      snapshot: snapshotFor(A),
-    });
-    await waitFor(() => {
-      expect(requireEventStream(MockEventSource.instances).url).toBe(
-        expectedStreamURL(A),
-      );
-    });
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    return indexedDB;
-  }
-
   it("flushes each stream's latest checkpoint during rapid A to B to A switching", async () => {
-    const indexedDB = await renderSessionA();
+    const { indexedDB } = await renderSessionA();
 
     await scheduleCheckpoint(previousCheckpointFor(A));
     await scheduleCheckpoint(A);
@@ -212,7 +222,7 @@ describe("App multi-session checkpoint debounce regression", () => {
   });
 
   it("keeps A durable when switching A to B to A after its 750 ms boundary", async () => {
-    const indexedDB = await renderSessionA();
+    const { indexedDB } = await renderSessionA();
 
     await scheduleCheckpoint(A);
     await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
@@ -237,5 +247,118 @@ describe("App multi-session checkpoint debounce regression", () => {
     await expect(
       readTimelineCheckpoint(indexedDB, B.streamIdentity),
     ).resolves.toEqual(B.checkpoint);
+  });
+});
+
+describe("App checkpoint lifecycle handoff", () => {
+  registerAppDashboardTestLifecycle();
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("flushes the latest pending checkpoint on unmount", async () => {
+    const { indexedDB, unmount, writeAttempts } = await renderSessionA();
+
+    await scheduleCheckpoint(previousCheckpointFor(A));
+    await scheduleCheckpoint(A);
+    unmount();
+    await settleCheckpointPersistence();
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+    expect(writeAttempts()).toBe(1);
+  });
+
+  it("flushes on pagehide without blocking navigation or repeating the handoff", async () => {
+    const { indexedDB, writeAttempts } = await renderSessionA();
+    await scheduleCheckpoint(A);
+    const pageHide = new Event("pagehide", { cancelable: true });
+
+    expect(window.dispatchEvent(pageHide)).toBe(true);
+    expect(pageHide.defaultPrevented).toBe(false);
+    window.dispatchEvent(new Event("pagehide"));
+    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+    expect(writeAttempts()).toBe(1);
+  });
+
+  it("flushes only when visibility changes to hidden", async () => {
+    const { indexedDB, writeAttempts } = await renderSessionA();
+    await scheduleCheckpoint(A);
+    const visibilityState = vi.spyOn(document, "visibilityState", "get");
+
+    visibilityState.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    visibilityState.mockReturnValue("prerender");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(writeAttempts()).toBe(0);
+
+    visibilityState.mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    await settleCheckpointPersistence();
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+    expect(writeAttempts()).toBe(1);
+  });
+});
+
+describe("App checkpoint lifecycle safety", () => {
+  registerAppDashboardTestLifecycle();
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("installs lifecycle listeners once and removes them on unmount", async () => {
+    const addWindowListener = vi.spyOn(window, "addEventListener");
+    const removeWindowListener = vi.spyOn(window, "removeEventListener");
+    const addDocumentListener = vi.spyOn(document, "addEventListener");
+    const removeDocumentListener = vi.spyOn(document, "removeEventListener");
+    const { unmount } = await renderSessionA();
+
+    expect(
+      addWindowListener.mock.calls.filter(([type]) => type === "pagehide"),
+    ).toHaveLength(1);
+    expect(
+      addDocumentListener.mock.calls.filter(
+        ([type]) => type === "visibilitychange",
+      ),
+    ).toHaveLength(1);
+
+    unmount();
+
+    expect(
+      removeWindowListener.mock.calls.filter(([type]) => type === "pagehide"),
+    ).toHaveLength(1);
+    expect(
+      removeDocumentListener.mock.calls.filter(
+        ([type]) => type === "visibilitychange",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("contains a lifecycle-time persistence rejection", async () => {
+    const { indexedDB, writeAttempts } = await renderSessionA({
+      writeError: new Error("storage refused"),
+    });
+    await scheduleCheckpoint(A);
+    const pageHide = new Event("pagehide", { cancelable: true });
+
+    expect(window.dispatchEvent(pageHide)).toBe(true);
+    await settleCheckpointPersistence();
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toBeNull();
+    expect(pageHide.defaultPrevented).toBe(false);
+    expect(writeAttempts()).toBe(1);
   });
 });

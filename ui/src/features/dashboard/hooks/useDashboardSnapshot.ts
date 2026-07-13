@@ -172,6 +172,29 @@ function usePersistedTimelineCheckpoint({
       flushPendingCheckpoint(streamKey);
     };
   }, [flushPendingCheckpoint, streamKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const handlePageHide = () => {
+      flushPendingCheckpoint();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushPendingCheckpoint();
+      }
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      flushPendingCheckpoint();
+    };
+  }, [flushPendingCheckpoint]);
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: snapshot composition keeps preflight, checkpoint hydration, and stream wiring in one hook.
