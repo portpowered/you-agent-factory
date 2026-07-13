@@ -1,0 +1,216 @@
+package contractvalidator
+
+import (
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
+)
+
+type disabledURLLoader struct{}
+
+func (disabledURLLoader) Load(resourceURL string) (any, error) {
+	return nil, fmt.Errorf("external schema loading is disabled: %s", resourceURL)
+}
+
+type referenceResolver struct {
+	root      string
+	documents map[string]any
+	active    map[string]bool
+}
+
+func resolveReferences(repositoryRoot, document string, value any) (any, []Diagnostic) {
+	root, err := canonicalRoot(repositoryRoot)
+	if err != nil {
+		return nil, []Diagnostic{newDiagnostic("reference.root", rootPath, "repository root could not be resolved", document)}
+	}
+	document = normalizeRepositoryPath(document)
+	resolver := referenceResolver{
+		root:      root,
+		documents: map[string]any{document: value},
+		active:    make(map[string]bool),
+	}
+	resolved, diagnostics := resolver.resolveNode(value, document, nil)
+	return resolved, diagnostics
+}
+
+func (r *referenceResolver) resolveNode(value any, document string, segments []string) (any, []Diagnostic) {
+	switch typed := value.(type) {
+	case map[string]any:
+		if reference, ok := typed["$ref"]; ok {
+			return r.resolveReference(reference, document, appendPath(segments, "$ref"))
+		}
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		resolved := make(map[string]any, len(typed))
+		var diagnostics []Diagnostic
+		for _, key := range keys {
+			child, issues := r.resolveNode(typed[key], document, appendPath(segments, key))
+			resolved[key] = child
+			diagnostics = append(diagnostics, issues...)
+		}
+		return resolved, diagnostics
+	case []any:
+		resolved := make([]any, len(typed))
+		var diagnostics []Diagnostic
+		for index, child := range typed {
+			var issues []Diagnostic
+			resolved[index], issues = r.resolveNode(child, document, appendPath(segments, strconv.Itoa(index)))
+			diagnostics = append(diagnostics, issues...)
+		}
+		return resolved, diagnostics
+	default:
+		return value, nil
+	}
+}
+
+func (r *referenceResolver) resolveReference(value any, referringDocument string, segments []string) (any, []Diagnostic) {
+	reference, ok := value.(string)
+	if !ok || reference == "" {
+		return nil, r.issue("reference.invalid", "reference must be a non-empty string", referringDocument, segments)
+	}
+	targetDocument, fragment, issue := r.classifyReference(referringDocument, reference, segments)
+	if issue != nil {
+		return nil, []Diagnostic{*issue}
+	}
+	key := targetDocument + "#" + fragment
+	if r.active[key] {
+		return nil, r.issue("reference.cycle", fmt.Sprintf("reference %q forms a cycle", reference), referringDocument, segments)
+	}
+	r.active[key] = true
+	defer delete(r.active, key)
+
+	target, issue := r.loadTarget(targetDocument, referringDocument, segments)
+	if issue != nil {
+		return nil, []Diagnostic{*issue}
+	}
+	selected, err := selectFragment(target, fragment)
+	if err != nil {
+		return nil, r.issue("reference.fragment", fmt.Sprintf("reference %q has an unresolved fragment", reference), referringDocument, segments)
+	}
+	return r.resolveNode(selected, targetDocument, nil)
+}
+
+func (r *referenceResolver) classifyReference(referringDocument, reference string, segments []string) (string, string, *Diagnostic) {
+	if strings.HasPrefix(reference, "#") {
+		return referringDocument, strings.TrimPrefix(reference, "#"), nil
+	}
+	portable := strings.ReplaceAll(reference, `\`, "/")
+	if filepath.IsAbs(filepath.FromSlash(portable)) || filepath.VolumeName(filepath.FromSlash(portable)) != "" || strings.HasPrefix(portable, "/") {
+		issue := r.singleIssue("reference.unsupported", fmt.Sprintf("reference %q is not repository-relative", reference), referringDocument, segments)
+		return "", "", &issue
+	}
+	parsed, err := url.Parse(portable)
+	if err != nil || parsed.Scheme != "" || parsed.Host != "" || parsed.RawQuery != "" {
+		issue := r.singleIssue("reference.unsupported", fmt.Sprintf("reference %q is not repository-relative", reference), referringDocument, segments)
+		return "", "", &issue
+	}
+	target := normalizeRepositoryPath(filepath.Join(filepath.Dir(referringDocument), filepath.FromSlash(parsed.Path)))
+	candidate := filepath.Join(r.root, filepath.FromSlash(target))
+	if !containedBy(r.root, candidate) {
+		issue := r.singleIssue("reference.escape", fmt.Sprintf("reference %q escapes the repository root", reference), referringDocument, segments)
+		return "", "", &issue
+	}
+	return target, parsed.Fragment, nil
+}
+
+func (r *referenceResolver) loadTarget(targetDocument, referringDocument string, segments []string) (any, *Diagnostic) {
+	if value, ok := r.documents[targetDocument]; ok {
+		return value, nil
+	}
+	candidate := filepath.Join(r.root, filepath.FromSlash(targetDocument))
+	canonical, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		code, message := "reference.read", "referenced document could not be read"
+		if errors.Is(err, os.ErrNotExist) {
+			code, message = "reference.missing", "referenced document does not exist"
+		}
+		issue := r.singleIssue(code, message, referringDocument, segments)
+		return nil, &issue
+	}
+	if !containedBy(r.root, canonical) {
+		issue := r.singleIssue("reference.escape", "reference resolves outside the repository root", referringDocument, segments)
+		return nil, &issue
+	}
+	file, err := os.Open(canonical)
+	if err != nil {
+		issue := r.singleIssue("reference.read", "referenced document could not be read", referringDocument, segments)
+		return nil, &issue
+	}
+	defer file.Close()
+	value, err := jsonschema.UnmarshalJSON(file)
+	if err != nil {
+		issue := r.singleIssue("reference.parse", "referenced document is not valid JSON", referringDocument, segments)
+		return nil, &issue
+	}
+	r.documents[targetDocument] = value
+	return value, nil
+}
+
+func canonicalRoot(root string) (string, error) {
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(absolute)
+}
+
+func containedBy(root, candidate string) bool {
+	relative, err := filepath.Rel(root, filepath.Clean(candidate))
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func selectFragment(value any, fragment string) (any, error) {
+	if fragment == "" {
+		return value, nil
+	}
+	if !strings.HasPrefix(fragment, "/") {
+		return nil, errors.New("fragment is not a JSON Pointer")
+	}
+	current := value
+	for _, encoded := range strings.Split(strings.TrimPrefix(fragment, "/"), "/") {
+		segment := strings.NewReplacer("~1", "/", "~0", "~").Replace(encoded)
+		switch typed := current.(type) {
+		case map[string]any:
+			var ok bool
+			current, ok = typed[segment]
+			if !ok {
+				return nil, errors.New("object member does not exist")
+			}
+		case []any:
+			index, err := strconv.Atoi(segment)
+			if err != nil || index < 0 || index >= len(typed) {
+				return nil, errors.New("array element does not exist")
+			}
+			current = typed[index]
+		default:
+			return nil, errors.New("fragment traverses a scalar")
+		}
+	}
+	return current, nil
+}
+
+func normalizeRepositoryPath(value string) string {
+	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(strings.ReplaceAll(value, `\`, "/"))))
+}
+
+func appendPath(segments []string, segment string) []string {
+	return append(append([]string(nil), segments...), segment)
+}
+
+func (r *referenceResolver) issue(code, message, document string, segments []string) []Diagnostic {
+	return []Diagnostic{r.singleIssue(code, message, document, segments)}
+}
+
+func (r *referenceResolver) singleIssue(code, message, document string, segments []string) Diagnostic {
+	return newDiagnostic(code, instancePath(segments), message, normalizeRepositoryPath(document))
+}

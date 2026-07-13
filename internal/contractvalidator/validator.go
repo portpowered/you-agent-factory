@@ -91,6 +91,7 @@ func Validate(repositoryRoot string, registry Registry, family, formatVersion st
 
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
+	compiler.UseLoader(disabledURLLoader{})
 	for _, resource := range entry.Schemas {
 		value, issue := loadJSON(repositoryRoot, resource.Path, "schema")
 		if issue != nil {
@@ -115,6 +116,11 @@ func Validate(repositoryRoot string, registry Registry, family, formatVersion st
 		value, issue := loadJSON(repositoryRoot, document.Path, "document")
 		if issue != nil {
 			diagnostics = append(diagnostics, *issue)
+			continue
+		}
+		value, referenceDiagnostics := resolveReferences(repositoryRoot, document.Path, value)
+		if len(referenceDiagnostics) != 0 {
+			diagnostics = append(diagnostics, referenceDiagnostics...)
 			continue
 		}
 		schema, ok := compiled[document.SchemaID]
@@ -151,7 +157,22 @@ func (registry Registry) selectEntry(family, formatVersion string) (Entry, *Diag
 }
 
 func loadJSON(repositoryRoot, document, kind string) (any, *Diagnostic) {
-	path := filepath.Join(repositoryRoot, filepath.FromSlash(document))
+	document = normalizeRepositoryPath(document)
+	root, err := canonicalRoot(repositoryRoot)
+	if err != nil {
+		diagnostic := newDiagnostic(kind+".read", rootPath, "registered "+kind+" could not be read", document)
+		return nil, &diagnostic
+	}
+	path := filepath.Join(root, filepath.FromSlash(document))
+	if !containedBy(root, path) {
+		diagnostic := newDiagnostic(kind+".read", rootPath, "registered "+kind+" could not be read", document)
+		return nil, &diagnostic
+	}
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil || !containedBy(root, path) {
+		diagnostic := newDiagnostic(kind+".read", rootPath, "registered "+kind+" could not be read", document)
+		return nil, &diagnostic
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		diagnostic := newDiagnostic(kind+".read", rootPath, "registered "+kind+" could not be read", document)
