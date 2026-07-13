@@ -201,10 +201,10 @@ func (s *Service) modelInvocationExecutor(
 }
 
 func (s *Service) factoryRunnerID() string {
-	if s == nil || s.deps.FactoryRunnerID == nil {
+	if s == nil {
 		return ""
 	}
-	return s.deps.FactoryRunnerID()
+	return s.deps.FactoryRunnerID
 }
 
 func (s *Service) recordManagedRuntimeInvocationReadiness(

@@ -66,7 +66,7 @@ func TestService_ListModels_ReturnsInspectFailureFromModelHost(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return failingInspectHost{} },
+		ModelHost:     failingInspectHost{},
 	})
 
 	_, err := svc.ListModels(context.Background())
@@ -84,7 +84,7 @@ func TestService_ListModels_ProjectsManagedRuntimeFromModelHost(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return missingCacheInspectHost{} },
+		ModelHost:     missingCacheInspectHost{},
 	})
 
 	models, err := svc.ListModels(context.Background())

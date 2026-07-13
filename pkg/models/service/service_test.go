@@ -7,7 +7,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
@@ -30,12 +29,12 @@ func TestNewRetainsExplicitDependencies(t *testing.T) {
 
 	svc := New(Dependencies{
 		RuntimeConfig:           func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:               func() modelhost.Host { return nil },
-		ModelAssetPuller:        func() localmodels.AssetPuller { return puller },
-		Logger:                  func() *zap.Logger { return logger },
-		ModelPullMetrics:        func() PullMetricsRecorder { return metrics },
+		ModelHost:               nil,
+		ModelAssetPuller:        puller,
+		Logger:                  logger,
+		ModelPullMetrics:        metrics,
 		ModelInvocationExecutor: executor,
-		FactoryRunnerID:         func() string { return "runner-a" },
+		FactoryRunnerID:         "runner-a",
 	})
 
 	if svc.runtimeConfig() != runtimeCfg {
@@ -47,7 +46,7 @@ func TestNewRetainsExplicitDependencies(t *testing.T) {
 	if svc.logger() != logger {
 		t.Fatal("logger accessor did not return the supplied logger")
 	}
-	if svc.deps.ModelPullMetrics() != metrics {
+	if svc.deps.ModelPullMetrics != metrics {
 		t.Fatal("metrics accessor did not return the supplied recorder")
 	}
 	if svc.deps.ModelInvocationExecutor == nil {
