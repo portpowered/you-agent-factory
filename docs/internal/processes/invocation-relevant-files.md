@@ -206,8 +206,11 @@ primary-result behavior.
   after the cursor, then continues live via `Subscription.Next`; optional
   `WithDispatchFilter(dispatchID)` omits non-matching events while preserving
   each delivered event's global session sequence and eventId. `Complete()` stops
-  further publishes while retained events remain for catch-up; `Close()` rejects
-  new subscriptions and publishes and detaches active subscribers. Mirror
+  further publishes while retained events remain for catch-up; catch-up readers
+  created after completion are not registered as live subscribers. Publishing
+  rejects an explicit Factory Session ID that differs from the store's canonical
+  identity. `Close()` rejects new subscriptions and publishes and detaches active
+  subscribers. Mirror
   `responsestream.Subscription` patterns when extending close/complete behavior.
   Package docs in `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`

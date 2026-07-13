@@ -50,8 +50,8 @@ func (s *storeSubscriber) close() {
 type SubscribeOption func(*subscribeConfig)
 
 type subscribeConfig struct {
-	dispatchID          string
-	hasDispatchFilter   bool
+	dispatchID        string
+	hasDispatchFilter bool
 }
 
 // WithDispatchFilter limits delivery to events whose dispatchId matches the
@@ -102,6 +102,14 @@ func (s *SessionResponseEventStore) Subscribe(afterSequence int64, opts ...Subsc
 	defer s.mu.Unlock()
 	if s.closed {
 		return nil, ErrStoreClosed
+	}
+	if s.completed {
+		return &Subscription{
+			store:         s,
+			subscriber:    subscriber,
+			afterSequence: afterSequence,
+			dispatchID:    config.dispatchID,
+		}, nil
 	}
 	s.nextSubID++
 	subscriberID := s.nextSubID

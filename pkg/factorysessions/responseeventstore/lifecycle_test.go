@@ -83,7 +83,9 @@ func TestSessionResponseEventStore_CompleteLateSubscribeCatchUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Subscribe after complete: %v", err)
 	}
-	defer subscription.Detach()
+	if got := store.SubscriberCount(); got != 0 {
+		t.Fatalf("subscriber count after late Subscribe = %d, want 0", got)
+	}
 
 	events, err := subscription.Next(context.Background())
 	if err != nil {
@@ -94,6 +96,30 @@ func TestSessionResponseEventStore_CompleteLateSubscribeCatchUp(t *testing.T) {
 	}
 	if _, err := subscription.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
 		t.Fatalf("Next after drain error = %v, want ErrSubscriptionClosed", err)
+	}
+	if got := store.SubscriberCount(); got != 0 {
+		t.Fatalf("subscriber count after terminal Next = %d, want 0", got)
+	}
+}
+
+func TestSessionResponseEventStore_CompleteLateSubscribeAtLatestDoesNotRegister(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	store.Complete()
+
+	subscription, err := store.Subscribe(store.LatestSequence())
+	if err != nil {
+		t.Fatalf("Subscribe after complete at latest: %v", err)
+	}
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("Next at completed latest cursor error = %v, want ErrSubscriptionClosed", err)
+	}
+	if got := store.SubscriberCount(); got != 0 {
+		t.Fatalf("subscriber count after terminal Next = %d, want 0", got)
 	}
 }
 
