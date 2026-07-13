@@ -1,0 +1,322 @@
+package responseeventstore_test
+
+import (
+	"context"
+	"errors"
+	"runtime"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
+)
+
+func TestSessionResponseEventStore_CompleteRejectsPublish(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish before complete: %v", err)
+	}
+
+	store.Complete()
+
+	if _, err := store.Publish(samplePublishInput()); !errors.Is(err, responseeventstore.ErrStoreCompleted) {
+		t.Fatalf("publish after complete error = %v, want ErrStoreCompleted", err)
+	}
+	if events := store.Events(); len(events) != 1 {
+		t.Fatalf("retained event count = %d, want 1", len(events))
+	}
+	if !store.Completed() {
+		t.Fatal("Completed() = false, want true after Complete")
+	}
+}
+
+func TestSessionResponseEventStore_CompleteSubscriberDrainsRetainedThenObservesCompletion(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-abc", &fixedClock{now: start})
+
+	for range 3 {
+		if _, err := store.Publish(samplePublishInput()); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	store.Complete()
+
+	events, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("catch-up event count = %d, want 3", len(events))
+	}
+
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("Next after drain error = %v, want ErrSubscriptionClosed", err)
+	}
+	if completedAt := store.CompletedAt(); !completedAt.Equal(start) {
+		t.Fatalf("CompletedAt = %s, want %s", completedAt, start)
+	}
+}
+
+func TestSessionResponseEventStore_CompleteLateSubscribeCatchUp(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	for range 2 {
+		if _, err := store.Publish(samplePublishInput()); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+	store.Complete()
+
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe after complete: %v", err)
+	}
+	defer subscription.Detach()
+
+	events, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("event count = %d, want 2", len(events))
+	}
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("Next after drain error = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func TestSessionResponseEventStore_CloseRejectsPublish(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish before close: %v", err)
+	}
+
+	store.Close()
+
+	if _, err := store.Publish(samplePublishInput()); !errors.Is(err, responseeventstore.ErrStoreClosed) {
+		t.Fatalf("publish after close error = %v, want ErrStoreClosed", err)
+	}
+}
+
+func TestSessionResponseEventStore_PublishDoesNotBlockOnSlowSubscriber(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	blocking := make(chan struct{})
+	go func() {
+		_, _ = subscription.Next(context.Background())
+		close(blocking)
+	}()
+
+	select {
+	case <-blocking:
+		t.Fatal("Next returned before any publish")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	done := make(chan struct{})
+	go func() {
+		for range 64 {
+			if _, err := store.Publish(samplePublishInput()); err != nil {
+				t.Errorf("publish: %v", err)
+				return
+			}
+		}
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("publish blocked on slow subscriber")
+	}
+}
+
+func TestSessionResponseEventStore_DetachStopsWakeups(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	subscription.Detach()
+	if got := store.SubscriberCount(); got != 0 {
+		t.Fatalf("subscriber count after detach = %d, want 0", got)
+	}
+
+	for range 8 {
+		if _, err := store.Publish(samplePublishInput()); err != nil {
+			t.Fatalf("publish after detach: %v", err)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := subscription.Next(ctx); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("Next after detach error = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func TestSessionResponseEventStore_LifecycleConcurrentRace(t *testing.T) {
+	const workers = 24
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+
+	var wg sync.WaitGroup
+	wg.Add(workers * 3)
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			subscription, err := store.Subscribe(0)
+			if err != nil {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			for {
+				events, err := subscription.Next(ctx)
+				if err != nil {
+					subscription.Detach()
+					return
+				}
+				if len(events) == 0 {
+					continue
+				}
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for range 8 {
+				_, _ = store.Publish(samplePublishInput())
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			time.Sleep(time.Duration(i%5) * time.Millisecond)
+			switch i % 3 {
+			case 0:
+				store.Complete()
+			case 1:
+				subscription, err := store.Subscribe(0)
+				if err == nil {
+					subscription.Detach()
+				}
+			default:
+				store.Close()
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestSessionResponseEventStore_CloseAndDetachDoNotLeakGoroutines(t *testing.T) {
+	runtime.GC()
+	time.Sleep(20 * time.Millisecond)
+	baseline := runtime.NumGoroutine()
+
+	for range 8 {
+		store := responseeventstore.NewSessionResponseEventStore("session-abc")
+		subscriptions := make([]*responseeventstore.Subscription, 0, 4)
+		for range 4 {
+			subscription, err := store.Subscribe(0)
+			if err != nil {
+				t.Fatalf("Subscribe: %v", err)
+			}
+			subscriptions = append(subscriptions, subscription)
+			go func(sub *responseeventstore.Subscription) {
+				ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+				defer cancel()
+				_, _ = sub.Next(ctx)
+			}(subscription)
+		}
+		for range 4 {
+			if _, err := store.Publish(samplePublishInput()); err != nil {
+				t.Fatalf("publish: %v", err)
+			}
+		}
+		for _, subscription := range subscriptions {
+			subscription.Detach()
+		}
+		store.Complete()
+		store.Close()
+	}
+
+	runtime.GC()
+	time.Sleep(100 * time.Millisecond)
+	if leaked := runtime.NumGoroutine() - baseline; leaked > 8 {
+		t.Fatalf("goroutine leak: baseline=%d current=%d delta=%d", baseline, runtime.NumGoroutine(), leaked)
+	}
+}
+
+func TestSessionResponseEventStore_FilteredSubscriptionCompleteDrain(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	input := samplePublishInput()
+	input.DispatchID = "dispatch-a"
+	if _, err := store.Publish(input); err != nil {
+		t.Fatalf("publish dispatch-a: %v", err)
+	}
+	other := samplePublishInput()
+	other.DispatchID = "dispatch-b"
+	if _, err := store.Publish(other); err != nil {
+		t.Fatalf("publish dispatch-b: %v", err)
+	}
+
+	subscription, err := store.Subscribe(0, responseeventstore.WithDispatchFilter("dispatch-a"))
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	store.Complete()
+
+	events, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("filtered event count = %d, want 1", len(events))
+	}
+	if events[0].DispatchID != "dispatch-a" {
+		t.Fatalf("dispatch ID = %q, want dispatch-a", events[0].DispatchID)
+	}
+	if events[0].Sequence != 1 {
+		t.Fatalf("sequence = %d, want global sequence 1", events[0].Sequence)
+	}
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("Next after drain error = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func TestSessionResponseEventStore_CompleteIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	store.Complete()
+	store.Complete()
+	if !store.Completed() {
+		t.Fatal("Completed() = false after duplicate Complete")
+	}
+}

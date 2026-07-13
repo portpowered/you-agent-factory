@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -20,6 +21,8 @@ type SessionResponseEventStore struct {
 	nextSequence     int64
 	events           []responseevents.FactoryResponseEvent
 	closed           bool
+	completed        bool
+	completedAt      time.Time
 	nextSubID        int64
 	subscribers      map[int64]*storeSubscriber
 }
@@ -89,6 +92,27 @@ func (s *SessionResponseEventStore) EventAtSequence(sequence int64) (responseeve
 	return responseevents.FactoryResponseEvent{}, false
 }
 
+// Completed reports whether publication has finished while retained events
+// remain available for catch-up subscribers.
+func (s *SessionResponseEventStore) Completed() bool {
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.completed
+}
+
+// CompletedAt returns when publication completed, or zero when still live.
+func (s *SessionResponseEventStore) CompletedAt() time.Time {
+	if s == nil {
+		return time.Time{}
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.completedAt
+}
+
 // Publish validates input, assigns the next session-monotonic sequence and a
 // stable event ID, and appends an immutable copy to the retained buffer.
 func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponseEvent) (responseevents.FactoryResponseEvent, error) {
@@ -102,6 +126,14 @@ func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponse
 	}
 
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, ErrStoreClosed
+	}
+	if s.completed {
+		s.mu.Unlock()
+		return responseevents.FactoryResponseEvent{}, ErrStoreCompleted
+	}
 	stored := s.assignIdentityLocked(prepared)
 	s.events = append(s.events, stored)
 	subscribers := s.subscribersSnapshotLocked()

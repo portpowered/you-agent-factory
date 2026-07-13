@@ -180,7 +180,9 @@ primary-result behavior.
   `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
   after the cursor, then continues live via `Subscription.Next`; optional
   `WithDispatchFilter(dispatchID)` omits non-matching events while preserving
-  each delivered event's global session sequence and eventId. Mirror
+  each delivered event's global session sequence and eventId. `Complete()` stops
+  further publishes while retained events remain for catch-up; `Close()` rejects
+  new subscriptions and publishes and detaches active subscribers. Mirror
   `responsestream.Subscription` patterns when extending close/complete behavior.
   Package docs in
   `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON

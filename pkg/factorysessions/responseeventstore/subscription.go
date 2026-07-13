@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 )
@@ -72,6 +73,7 @@ type Subscription struct {
 	mu            sync.Mutex
 	afterSequence int64
 	dispatchID    string
+	detached      bool
 }
 
 // Subscribe registers one consumer starting after the supplied sequence. The
@@ -132,9 +134,29 @@ func (s *SessionResponseEventStore) SubscriberCount() int {
 	return len(s.subscribers)
 }
 
-// Close rejects new subscriptions and detaches active subscribers. Retained
-// events remain readable through snapshot APIs until a later story adds
-// completion semantics.
+// Complete stops further publication while retaining buffered events so
+// existing and late subscribers can drain ordered progress until the store is
+// fully closed.
+func (s *SessionResponseEventStore) Complete() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.closed || s.completed {
+		s.mu.Unlock()
+		return
+	}
+	s.completed = true
+	s.completedAt = s.storeNowLocked()
+	subscribers := s.subscribersSnapshotLocked()
+	s.subscribers = make(map[int64]*storeSubscriber)
+	s.mu.Unlock()
+	closeStoreSubscribers(subscribers)
+}
+
+// Close rejects new subscriptions and publishes, detaches active subscribers,
+// and makes subsequent subscription reads return a closed outcome. Retained
+// events remain readable through snapshot APIs.
 func (s *SessionResponseEventStore) Close() {
 	if s == nil {
 		return
@@ -151,11 +173,22 @@ func (s *SessionResponseEventStore) Close() {
 	closeStoreSubscribers(subscribers)
 }
 
+func (s *SessionResponseEventStore) storeNowLocked() time.Time {
+	if s.clock == nil {
+		return time.Now().UTC()
+	}
+	return s.clock.Now().UTC()
+}
+
 // Detach releases the store-owned subscriber registration.
 func (s *Subscription) Detach() {
 	if s == nil {
 		return
 	}
+	s.mu.Lock()
+	s.detached = true
+	s.mu.Unlock()
+
 	store := s.store
 	if store != nil {
 		store.detachSubscriber(s.subscriberID)
@@ -168,6 +201,12 @@ func (s *Subscription) Detach() {
 // Next returns the next retained or live events after the subscription cursor.
 func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryResponseEvent, error) {
 	if s == nil || s.store == nil || s.subscriber == nil {
+		return nil, ErrSubscriptionClosed
+	}
+	s.mu.Lock()
+	detached := s.detached
+	s.mu.Unlock()
+	if detached {
 		return nil, ErrSubscriptionClosed
 	}
 	for {
@@ -207,7 +246,11 @@ func (s *SessionResponseEventStore) readForSubscriber(afterSequence int64, dispa
 	if s.closed {
 		return nil, true
 	}
-	return s.eventsAfterLocked(afterSequence, dispatchID), false
+	events := s.eventsAfterLocked(afterSequence, dispatchID)
+	if s.completed && len(events) == 0 {
+		return nil, true
+	}
+	return events, false
 }
 
 func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispatchID string) []responseevents.FactoryResponseEvent {
