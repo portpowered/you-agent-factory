@@ -82,9 +82,10 @@ the standards.
   factory-local docs.
 - `pkg/api/` contains HTTP handlers, API boundary tests, OpenAPI contract tests,
   server tests, and API test data.
-- `pkg/apisurface/` contains mapping and normalization at the public API
-  boundary. Prefer this layer for transport-independent request/response
-  shaping.
+- `pkg/apisurface/` contains transport-neutral public contracts and legacy
+  request/response shaping that is still converging into the transport family.
+- `pkg/transports/mapping/` owns stateless composition of explicit wired
+  collaborators into transport-facing application surfaces.
 - `pkg/cli/` contains CLI commands and CLI adapters for shared service logic.
 - `pkg/config/` contains factory config loading, persistence, mapping,
   validation entrypoints, built-in factory layout, and runtime config

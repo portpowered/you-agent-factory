@@ -1,4 +1,4 @@
-package apisurface
+package mapping
 
 import (
 	"context"
@@ -7,9 +7,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+type SessionAPI = apisurface.SessionAPI
+type ModelAPI = apisurface.ModelAPI
+type FactorySaveAPI = apisurface.FactorySaveAPI
+type InvocationAPI = apisurface.InvocationAPI
+type SessionAPISurface = apisurface.SessionAPISurface
+type FactoryInvocationResult = apisurface.FactoryInvocationResult
 
 type sessionCollaboratorFake struct {
 	SessionAPI

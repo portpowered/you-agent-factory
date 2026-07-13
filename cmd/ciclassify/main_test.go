@@ -128,6 +128,12 @@ func TestClassifyPathsMarksSharedRiskForCrossCuttingAndUnknownSurfaces(t *testin
 			},
 		},
 		{
+			name: "transport-mapping-surface",
+			paths: []string{
+				"pkg/transports/mapping/surface.go",
+			},
+		},
+		{
 			name: "mixed-ui-and-backend",
 			paths: []string{
 				"ui/src/App.tsx",

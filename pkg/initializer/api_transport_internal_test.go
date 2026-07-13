@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
@@ -71,7 +72,7 @@ func TestComposeSessionAPISurfacePassesBoundedCollaboratorsToConstructor(t *test
 		model apisurface.ModelAPI,
 		factoryDefinition apisurface.FactorySaveAPI,
 		invocation apisurface.InvocationAPI,
-		durable apisurface.DurableSessionAPI,
+		durable transportmapping.DurableSessionAPI,
 	) (apisurface.SessionAPISurface, error) {
 		constructorCalls++
 		for role, collaborator := range map[string]any{
@@ -85,7 +86,7 @@ func TestComposeSessionAPISurfacePassesBoundedCollaboratorsToConstructor(t *test
 				t.Fatalf("%s constructor input retained *service.FactoryService", role)
 			}
 		}
-		return apisurface.NewSessionAPISurface(session, model, factoryDefinition, invocation, durable)
+		return transportmapping.NewSessionAPISurface(session, model, factoryDefinition, invocation, durable)
 	})
 	if err != nil {
 		t.Fatalf("composeSessionAPISurfaceWithConstructor: %v", err)
