@@ -595,6 +595,138 @@ Owner: `tests/functional/runtime_api/factory_transformation` package maintainers
 | --- | --- | --- | --- | --- |
 | `tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go:84` | `backendsizecheck:ignore-function` | `TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution` | T | T gate |
 
+## External ownership overlay
+
+> Ownership snapshot time: `2026-07-13T07:18:59Z` (UTC)
+>
+> Local source base: `dcda359c40703b01c3d1e0b32bbd03a547f9313f` (`main`)
+>
+> Inventory document head before this overlay: `619ae00f4f88e781f08c02bed81f411be60aaf16`
+
+This overlay is dispatch-time coordination, not permanent code ownership. **Externally
+owned** means that the file is inside an active or reserved dynamic-cleanup work item, or
+is present in an open pull request at the exact head recorded below. No duplicate exemption
+cleanup should be assigned there. **Unowned at snapshot** means only that none of those
+file sets collided at the timestamp above; refresh the open-PR and active-worktree sets
+before dispatching a later cleanup.
+
+The authoritative dynamic-cleanup definitions were the planner artifacts
+`docs/temp/dynamic-workflows-cleanup/005-root-wire-foundation.json` through
+`008-runtime-shim-removal.json`, with request IDs
+`dynamic-workflows-cleanup-005-root-wire-foundation`,
+`dynamic-workflows-cleanup-006-domain-package-convergence`,
+`dynamic-workflows-cleanup-007-session-service-convergence`, and
+`dynamic-workflows-cleanup-008-runtime-shim-removal`. Their reservation sets were applied
+as follows:
+
+| Batch/work item | Exact reservation used for this overlay |
+| --- | --- |
+| Batch 005 — `create-root-process-owner` | Active head `4516ea35aeff5cdde5e578b9000b8054db6bb834`; changed files: `pkg/cli/root.go`, `pkg/cli/root_run_test.go`, `pkg/cli/root_work.go`, `pkg/config/operatorconfig/environment_resolution.go`, `pkg/root/input.go`, `pkg/root/root.go`, `pkg/root/root_test.go`. |
+| Batch 005 — `create-wire-application-graph` | Active head `8015a87fb4594a1659ab21c6a7720bf324ea7a85`; changed files: `pkg/wire/doc.go`, `pkg/wire/graph.go`, `pkg/wire/graph_test.go`. The dependency-blocked initializer item had no implementation file set yet. |
+| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/api/**`, `pkg/apisurface/**`, `pkg/cli/**`, and `pkg/mcp/**`. |
+| Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
+| Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
+| Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factorysessionexecution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
+| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/interfaces/**`, `pkg/internal/cursorstorage/**`, and `pkg/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
+| Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factorysessionexecution/**` and `pkg/service/**`. |
+| Batch 008 — `retire-legacy-composition-entrypoints` and `delete-host-composition-shims` | Every detailed directive file under `pkg/runtimehost/**` and `pkg/service/**`. Other Batch 008 deletion items have no additional directive file in this snapshot. |
+
+The overlay covers all **177** active occurrences across all **93** handwritten files:
+**141** occurrences in **69** externally owned files and **36** occurrences in **24**
+files unowned at snapshot. The group rows below apply to every detailed directive row for
+every file in the named path set; the two file exceptions add the named PR collision.
+
+| Detailed file set | Files | Directives | Snapshot ownership |
+| --- | ---: | ---: | --- |
+| `pkg/api/**` | 6 | 12 | **Externally owned:** Batch 006 transport-family convergence |
+| `pkg/apisurface/**` | 6 | 8 | **Externally owned:** Batch 006 transport-family convergence |
+| `pkg/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
+| `pkg/factorysessionexecution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
+| `pkg/interfaces/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/internal/cursorstorage/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
+| `pkg/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/runtimehost/**` | 3 | 5 | **Externally owned:** Batch 008 runtime-shim removal; `pkg/runtimehost/runtime_sessions.go` also collides with PR #1062 |
+| `pkg/service/**` | 10 | 31 | **Externally owned:** Batch 007 session/service convergence and Batch 008 runtime-shim removal |
+| `pkg/workers/**` | 5 | 9 | **Externally owned:** Batch 006 model/worker convergence; `pkg/workers/provider/recording_provider_test.go` also collides with PR #1001 |
+
+Every remaining detailed file is explicitly **unowned at snapshot**:
+
+| File | Package owner | Covered directives | Reason |
+| --- | --- | --- | --- |
+| `pkg/config/config_mapper.go` | `pkg/config` | file size + file lines | F |
+| `pkg/config/factory_config_mapping.go` | `pkg/config` | file size + file lines | F |
+| `pkg/config/factory_config_mapping_internal.go` | `pkg/config` | file size + file lines | F |
+| `pkg/config/layout.go` | `pkg/config` | file size + file lines | F |
+| `pkg/config/openapitests/openapi_factory_test.go` | `pkg/config/openapitests` | cyclomatic complexity | T |
+| `pkg/factory/events/event_history.go` | `pkg/factory/events` | cyclomatic complexity | R |
+| `pkg/factory/events/event_history_dispatch_lifecycle.go` | `pkg/factory/events` | cyclomatic complexity | R |
+| `pkg/factory/events/event_history_lineage_test.go` | `pkg/factory/events` | cyclomatic complexity | T |
+| `pkg/factory/ingest/filewatcher_test.go` | `pkg/factory/ingest` | cyclomatic complexity | T |
+| `pkg/factory/projections/world_state.go` | `pkg/factory/projections` | file size + file lines + cyclomatic complexity | F, R |
+| `pkg/factory/projections/world_state_dispatch.go` | `pkg/factory/projections` | cyclomatic complexity | R |
+| `pkg/factory/projections/projectiontests/dispatch_lifecycle_event_replay_test.go` | `pkg/factory/projections/projectiontests` | cyclomatic complexity | T |
+| `pkg/factory/projections/projectiontests/simple_dashboard_projection_test.go` | `pkg/factory/projections/projectiontests` | 2 cyclomatic-complexity directives | T |
+| `pkg/factory/projections/projectiontests/world_state_support_test.go` | `pkg/factory/projections/projectiontests` | 2 cyclomatic-complexity directives | T |
+| `pkg/factory/projections/projectiontests/world_state_test.go` | `pkg/factory/projections/projectiontests` | cyclomatic complexity | T |
+| `pkg/factory/requests/work_request_submit_test.go` | `pkg/factory/requests` | cyclomatic complexity | T |
+| `pkg/factory/requests/work_request_test.go` | `pkg/factory/requests` | cyclomatic complexity | T |
+| `pkg/factory/runtime/factory_event_history_test.go` | `pkg/factory/runtime` | 3 cyclomatic-complexity directives | T |
+| `pkg/factory/runtime/factory_modes_test.go` | `pkg/factory/runtime` | 2 cyclomatic-complexity directives | T |
+| `pkg/factory/runtime/factory_runtime_test_helpers_test.go` | `pkg/factory/runtime` | cyclomatic complexity | T |
+| `pkg/factory/subsystems/history_transitioner_pipeline_test.go` | `pkg/factory/subsystems` | cyclomatic complexity | T |
+| `pkg/factory/subsystems/dispatchertests/dispatcher_test.go` | `pkg/factory/subsystems/dispatchertests` | cyclomatic complexity | T |
+| `pkg/factory/validation/validation_test.go` | `pkg/factory/validation` | file size + file lines | T |
+| `tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go` | `tests/functional/runtime_api/factory_transformation` | function size | T |
+
+### Open pull-request collision snapshot
+
+The open-PR set was fetched at `2026-07-13T07:18:59Z` UTC. PR conversation inspection
+found no PR for this inventory branch at that time. These are the exact heads and file lists
+used for collision evaluation; only PRs #1001 and #1062 intersect active directive files,
+but all files were compared when selecting the cohort.
+
+| PR | Head revision | Files used for comparison |
+| --- | --- | --- |
+| #1001 `provider-failure-dashboard-details` | `ad2e805a360c1f6aaef11b0a9087c38cd36174ca` | `pkg/workers/provider/recording_provider_test.go`; `ui/src/api/dashboard/types.ts`; `ui/src/api/factory-sessions/normalize-durable-inspection.test.ts`; `ui/src/features/current-selection/base/messages/shell/current-selection-dispatch-history.ts`; `ui/src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-history-card.tsx`; `ui/src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-history.test.tsx`; `ui/src/features/current-selection/work-selection/components/execution/terminal-work-summary-detail.test.tsx`; `ui/src/features/current-selection/work-selection/components/execution/terminal-work-summary-detail.tsx`; `ui/src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-metadata-details.test.tsx`; `ui/src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-metadata-details.tsx`; `ui/src/features/current-selection/work-selection/components/work-item/work-item-card.stories.tsx`; `ui/src/features/factory-session-detail/components/dispatch-detail/dispatch-detail-content.test.tsx`; `ui/src/features/factory-session-detail/components/dispatch-detail/dispatch-detail-content.tsx`; `ui/src/features/factory-session-detail/components/factory-session-detail-panel.failure.test.tsx`; `ui/src/features/factory-session-detail/components/live-provider-inspection/factory-session-detail-panel.failed-bridged-child-inspection.test.tsx`; `ui/src/features/factory-session-detail/components/stories/factory-session-detail-panel.live-provider-story-definitions.stories.shared.tsx`; `ui/src/features/factory-session-detail/lib/factory-session-detail-panel.story-definitions.stories.shared.tsx`; `ui/src/features/factory-session-detail/messages/factory-session-detail.ts`; `ui/src/features/timeline/state/timeline/cloneTimelineSnapshot.ts`; `ui/src/features/timeline/state/timeline/projectWorkstationRequests.ts`; `ui/src/features/timeline/state/timeline/replayCompletion.ts`; `ui/src/features/timeline/state/timeline/replayWorldState.ts`; `ui/src/features/timeline/state/timeline/replayWorldStateInference.test.ts`; `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts`; `ui/src/features/timeline/state/timeline/types.ts`; `ui/src/testing/factory-session-live-provider-inspection-fixtures.ts` |
+| #1037 `session-repair-exact-checkpoint-identity` | `94066d9ae60a9f609b690076a2a2cd69a61626cb` | `pkg/cli/root.go`; `pkg/cli/run/failure_baseline_quiet_leak_test.go`; `pkg/cli/terminalpolicy/policy.go`; `pkg/cli/terminalpolicy/policy_test.go`; `pkg/workers/process/command_test.go`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.identity-race.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.ts`; `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`; `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.test.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.ts`; `ui/src/features/timeline/public/index.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.multi-session.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.test.ts`; `ui/src/features/timeline/state/timelineCheckpointPersistence.ts` |
+| #1040 `you-goal-b07-stream-program-gate` | `41ad64d6d527d7bb6c09131f94e71c879318f9f3` | `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`; `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`; `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`; `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`; `docs/internal/processes/api-relevant-files.md`; `docs/internal/processes/invocation-relevant-files.md`; `pkg/cli/root.go`; `pkg/packagedfactories/subagent/materialize_test.go`; `pkg/workers/service/hosted_poller_test.go`; `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`; `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`; `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`; `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go` |
+| #1062 `fix-sessions` | `76db760b53e0cb0a15b5da8485d4a74f851eb93d` | `factory/workstations/review/AGENTS.md`; `pkg/runtimehost/model_catalog_test.go`; `pkg/runtimehost/runtime_sessions.go` |
+| #1064 `stream-b03-sse-contract` | `be3d3136a5135be080597e488184b054a082a840` | `api/codegen_config/client.yaml`; `api/codegen_config/server.yaml`; `api/components/parameters/ResponseEventAfterSequence.yaml`; `api/components/parameters/ResponseEventDispatchID.yaml`; `api/components/parameters/ResponseEventKind.yaml`; `api/components/responses/ResponseEventBadRequest.yaml`; `api/components/responses/ResponseEventSessionNotFound.yaml`; `api/components/responses/ResponseEventStreamExpired.yaml`; `api/components/schemas/api/ErrorFamily.yaml`; `api/components/schemas/api/ErrorResponse.yaml`; `api/openapi-main.yaml`; `api/openapi.yaml`; `contracts/testdata/baseline/rest-operations.json`; `docs/internal/processes/api-relevant-files.md`; `pkg/api/contracttests/generated_contract_common_test.go`; `pkg/api/contracttests/openapi_contract_authoring_test.go`; `pkg/api/contracttests/openapi_contract_response_events_test.go`; `pkg/api/contracttests/openapi_contract_surface_test.go`; `pkg/api/generated/server.gen.go`; `pkg/config/openapitests/parity_inventory_test.go`; `pkg/generatedclient/client.gen.go`; `ui/src/api/generated/openapi.ts` |
+| #1066 `stream-b03-provider-adapter-kernel` | `f680f5737f131888137969574b2721f462f40b67` | `pkg/factorysessions/responseevents/draft.go`; `pkg/factorysessions/responseevents/draft_test.go`; `pkg/workers/provider/adapter/contract.go`; `pkg/workers/provider/adapter/contract_test.go`; `pkg/workers/provider/adapter/orchestration.go`; `pkg/workers/provider/adapter/orchestration_test.go`; `pkg/workers/provider/adapter/registry.go`; `pkg/workers/provider/adapter/registry_test.go`; `pkg/workers/provider/adapter/testkit/conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_test.go`; `pkg/workers/provider/adapter/testkit/full_stream_test.go` |
+
+Active website-session work was also excluded from cohort selection. PR #1037's exact set
+is in the open-PR table; the other active sets were:
+
+| Active website-session head | Exact files used for comparison |
+| --- | --- |
+| `session-repair-explicit-hydration-state` at `2ca9f77dfb7f76c574cd19087f4fd6a2025bfcc7` | `ui/src/App.session-stream.test.tsx`; `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`; `ui/src/features/dashboard/hooks/useDashboardSnapshot.ts`; `ui/src/features/dashboard/hooks/useDashboardWorldView.test.tsx`; `ui/src/features/dashboard/hooks/useDashboardWorldView.ts`; `ui/src/features/dashboard/lib/dashboard-world-view.test.ts`; `ui/src/features/dashboard/lib/dashboard-world-view.ts`; `ui/src/features/dashboard/lib/synchronization/dashboard-synchronization-state.test.ts`; `ui/src/features/dashboard/lib/synchronization/dashboard-synchronization-state.ts` |
+| `session-repair-work-outcome-materializer` at `3eb9f246691014147dd7d28cc760f84ca915c587` | `ui/src/features/work-outcome/lib/materialized-work-outcome.test.ts`; `ui/src/features/work-outcome/lib/materialized-work-outcome.ts` |
+
+None of the active website-session files intersects the selected cohort.
+
+## Ranked first burn-down cohort
+
+This cohort is a later implementation assignment, not a change made by this inventory.
+All five files were unowned at the ownership snapshot, are handwritten test files, and are
+outside `cmd/factory`, root/wire composition, Factory Session packages and adapters,
+response-stream packages and adapters, active website-session work, and every open-PR file
+set above. They avoid the event-history and world-state projection files whose replay and
+projection responsibilities carry wider consolidation risk.
+
+| Rank | File and owner | Covered directive/target | Low-collision rationale | Required removal evidence and focused preservation check |
+| ---: | --- | --- | --- | --- |
+| 1 | `pkg/factory/requests/work_request_submit_test.go` — `pkg/factory/requests` | cyclomatic complexity on `TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract` | One test-only batch-normalization scenario in a narrow domain package; no active ownership collision. | Split table setup/assertions while preserving canonical batch request, relation, and trace assertions; run `go test ./pkg/factory/requests` and both quality checkers. |
+| 2 | `pkg/factory/requests/work_request_test.go` — `pkg/factory/requests` | cyclomatic complexity on `TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace` | Same narrow package and test-fixture class as rank 1, permitting one bounded review without touching runtime composition. | Split independent-work-item fixtures/assertions with equivalent request/trace identity coverage; run `go test ./pkg/factory/requests` and both quality checkers. |
+| 3 | `pkg/factory/ingest/filewatcher_test.go` — `pkg/factory/ingest` | cyclomatic complexity on `TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName` | Isolated ingest behavior test; no composition, session, stream, website, batch, or PR collision. | Extract fixture and assertion helpers while preserving observable parent/child-by-work-name ingestion; run the named test in `go test ./pkg/factory/ingest` and both quality checkers. |
+| 4 | `pkg/factory/subsystems/dispatchertests/dispatcher_test.go` — `pkg/factory/subsystems/dispatchertests` | cyclomatic complexity on `assertSingleTransitionDispatchResult` | Test-only assertion helper in an existing dispatcher test package; production dispatch logic remains untouched. | Split the assertion by observable dispatch/result facets with equivalent callers and outcomes; run `go test ./pkg/factory/subsystems/dispatchertests` and both quality checkers. |
+| 5 | `pkg/factory/validation/validation_test.go` — `pkg/factory/validation` | file-size and file-line directives | Test-only file in the validation owner; ranked last because removing two file-level directives requires a larger scenario split than the four function cases above. | Split scenarios by validation responsibility while preserving all acceptance/rejection assertions; run `go test ./pkg/factory/validation` and both quality checkers. |
+
+A dispatching maintainer must refresh the batch worktrees, website-session worktrees, and
+open-PR file lists immediately before starting this cohort. Any new collision makes the
+affected file externally owned and requires selecting the next ranked unowned candidate;
+it does not authorize duplicate cleanup.
+
 ## Non-handwritten and checker-owned matches
 
 ### Generated, vendored, and fixture-data exclusions
