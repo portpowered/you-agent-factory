@@ -6,7 +6,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -199,7 +199,7 @@ func providerRunnerOptions(
 	providerCommandRunner workers.CommandRunner,
 ) []workerprovider.ScriptWrapProviderOption {
 	opts := []workerprovider.ScriptWrapProviderOption{
-		workerprovider.WithSkipPermissions(invocations.EffectiveSkipPermissions(
+		workerprovider.WithSkipPermissions(skippermissions.EffectiveSkipPermissions(
 			def.SkipPermissions,
 			def.Type,
 			invocationSkipPermissionsOverride,

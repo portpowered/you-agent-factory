@@ -33,7 +33,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
@@ -794,7 +794,7 @@ func validateWorkerLoadPreflight(
 	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
 		return err
 	}
-	return invocations.ValidateInvocationSkipPermissionsWorkers(factoryCfg, runtimeCfg, invocationSkipPermissionsOverride)
+	return skippermissions.ValidateInvocationSkipPermissionsWorkers(factoryCfg, runtimeCfg, invocationSkipPermissionsOverride)
 }
 
 func configuredWorkstationExecutor(
@@ -971,7 +971,7 @@ func providerRunnerOptions(
 	providerCommandRunner workers.CommandRunner,
 ) []workerprovider.ScriptWrapProviderOption {
 	opts := []workerprovider.ScriptWrapProviderOption{
-		workerprovider.WithSkipPermissions(invocations.EffectiveSkipPermissions(
+		workerprovider.WithSkipPermissions(skippermissions.EffectiveSkipPermissions(
 			def.SkipPermissions,
 			def.Type,
 			invocationSkipPermissionsOverride,

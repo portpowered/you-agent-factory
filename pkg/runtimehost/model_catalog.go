@@ -12,7 +12,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
@@ -144,7 +144,7 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 	if !ok || workerDef == nil {
 		return nil, fmt.Errorf("worker %q is not configured", workerName)
 	}
-	if err := invocations.ValidateInvocationSkipPermissionsForWorker(workerDef, fs.invocationSkipPermissionsOverride()); err != nil {
+	if err := skippermissions.ValidateInvocationSkipPermissionsForWorker(workerDef, fs.invocationSkipPermissionsOverride()); err != nil {
 		return nil, fmt.Errorf("worker %q: %w", workerName, err)
 	}
 	bundle := fs.currentRuntimeBundle()
