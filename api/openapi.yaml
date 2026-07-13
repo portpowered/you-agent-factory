@@ -7245,7 +7245,7 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Monotonic session-scoped cursor for reconnect and ordering.
+          description: Monotonic session-scoped cursor for published events. Sequence zero is reserved for synthetic out-of-band read markers such as retention gaps; those markers do not consume or reuse a published sequence.
         recordedAt:
           type: string
           format: date-time
@@ -7883,12 +7883,12 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: Last retained sequence before the gap.
+          description: Lowest unavailable published sequence greater than the reader's cursor.
         toSequence:
           type: integer
           format: int64
           minimum: 0
-          description: First available sequence after the gap.
+          description: Highest unavailable published sequence in the reader's catch-up window.
         reason:
           type: string
           description: Optional reason for the stream gap such as retention_window.

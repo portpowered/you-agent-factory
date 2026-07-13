@@ -20,4 +20,7 @@ var ErrSubscriptionClosed = errors.New("session response event store subscriptio
 // ErrInvalidDispatchFilter indicates a dispatch filter was requested without a dispatch identity.
 var ErrInvalidDispatchFilter = errors.New("session response event store dispatch filter requires a dispatch identity")
 
+// ErrInvalidRetentionLimits indicates that one or both hard limits are not positive.
+var ErrInvalidRetentionLimits = errors.New("invalid session response event retention limits")
+
 var errInvalidDispatchFilter = ErrInvalidDispatchFilter
