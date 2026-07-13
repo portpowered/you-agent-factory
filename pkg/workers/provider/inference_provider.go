@@ -97,19 +97,20 @@ func WithInferenceProgressPublisher(publisher InferenceProgressPublisher) Script
 // without making the core provider package depend on Factory Session types.
 type ResponseStreamExecutor interface {
 	Supports(provider string) bool
-	Execute(context.Context, interfaces.ProviderInferenceRequest, bool, CommandRunner, InferenceProgressPublisher, logging.Logger) ResponseStreamExecutionResult
+	Execute(context.Context, interfaces.ProviderInferenceRequest, bool, *materialize.Options, CommandRunner, InferenceProgressPublisher, logging.Logger) ResponseStreamExecutionResult
 }
 
 // ResponseStreamExecutionResult carries the structured execution outcome back
 // to the provider boundary for existing diagnostics and failure publication.
 type ResponseStreamExecutionResult struct {
-	Response       interfaces.InferenceResponse
-	Request        CommandRequest
-	Command        CommandResult
-	FailureType    interfaces.WorkFailureType
-	FailureMessage string
-	FailureSession *interfaces.ProviderSessionMetadata
-	Err            error
+	Response                  interfaces.InferenceResponse
+	Request                   CommandRequest
+	Command                   CommandResult
+	FailureType               interfaces.WorkFailureType
+	FailureMessage            string
+	FailureSession            *interfaces.ProviderSessionMetadata
+	CanonicalFailurePublished bool
+	Err                       error
 }
 
 // WithResponseStreamExecutor injects structured provider mode selection.
@@ -186,7 +187,11 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 
 	logger.Info("inferencer: request starting",
 		providerLogFields(req, "model", req.Model)...)
-	if p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider) {
+	structuredResponseStream := p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider)
+	if structuredResponseStream && strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderCodex)) {
+		structuredResponseStream = p.codexResponseStreamCapable()
+	}
+	if structuredResponseStream {
 		if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderClaude)) {
 			if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
 				return providerRequestValidationFailure(req, err, logger)
@@ -246,7 +251,6 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	if cursorProvider {
 		return p.completeCursorInference(req, result, commandDiagnostics, logger)
 	}
-
 	content := string(result.Stdout)
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req,
@@ -260,13 +264,21 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	}, nil
 }
 
+func (p *ScriptWrapProvider) codexResponseStreamCapable() bool {
+	if p == nil || p.exec == nil {
+		return false
+	}
+	capable, ok := p.exec.(interface{ SupportsResponseStreaming() bool })
+	return ok && capable.SupportsResponseStreaming()
+}
+
 func (p *ScriptWrapProvider) executeStructuredResponseStream(
 	ctx context.Context,
 	req interfaces.ProviderInferenceRequest,
 	logger logging.Logger,
 ) (interfaces.InferenceResponse, error) {
 	started := time.Now()
-	result := p.responseStreamExecutor.Execute(ctx, req, p.SkipPermissions, p.exec, p.progressPublisher, logger)
+	result := p.responseStreamExecutor.Execute(ctx, req, p.SkipPermissions, p.MaterializeOptions, p.exec, p.progressPublisher, logger)
 	duration := time.Since(started)
 	diagnostics := commandDiagnostics(result.Request, result.Command, duration, false)
 	if result.Err != nil || result.FailureType != "" {
@@ -279,7 +291,7 @@ func (p *ScriptWrapProvider) executeStructuredResponseStream(
 			message = "Provider invocation failed."
 		}
 		providerErr := newProviderErrorWithDiagnostics(failureType, message, result.Err, result.FailureSession, diagnostics)
-		p.publishFailureFragment(req.Dispatch.DispatchID, result.FailureSession, providerErr)
+		p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, result.FailureSession, providerErr, result.CanonicalFailurePublished)
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	result.Response.Diagnostics = diagnostics
@@ -589,6 +601,15 @@ func (p *ScriptWrapProvider) publishCompletedFragment(dispatchID string, provide
 }
 
 func (p *ScriptWrapProvider) publishFailureFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, err error) {
+	p.publishFailureFragmentWithCanonicalState(dispatchID, providerSession, err, false)
+}
+
+func (p *ScriptWrapProvider) publishFailureFragmentWithCanonicalState(
+	dispatchID string,
+	providerSession *interfaces.ProviderSessionMetadata,
+	err error,
+	canonicalPublished bool,
+) {
 	if p == nil || p.progressPublisher == nil {
 		return
 	}
@@ -600,7 +621,9 @@ func (p *ScriptWrapProvider) publishFailureFragment(dispatchID string, providerS
 	if message == "" && err != nil {
 		message = strings.TrimSpace(err.Error())
 	}
-	p.progressPublisher(FailedFragment(dispatchID, providerSession, message))
+	fragment := FailedFragment(dispatchID, providerSession, message)
+	fragment.CanonicalEventAlreadyPublished = canonicalPublished
+	p.progressPublisher(fragment)
 }
 
 func formatProviderCommandFailure(provider string, result CommandResult, err error) string {

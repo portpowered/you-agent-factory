@@ -241,6 +241,38 @@ primary-result behavior.
   invocation primary-result byte fixtures live in
   `compat/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
+  Provider-native typed adapters live under `pkg/workers/provider/<provider>`
+  and emit validated `responseevents.Draft` values. While legacy response-stream
+  consumers remain supported, carry an exact draft beside the compatibility
+  fragment and let `pkg/factorysessions/stream/manager.go` publish that draft
+  directly; do not remap it through the lossy legacy fragment mapper. Keep the
+  provider's final-result parser independent from decoder observation state so
+  streamed message snapshots cannot select or duplicate invocation
+  `primaryResult`. For typed item unions, classify semantics only from the exact
+  nested item discriminator, retain the provider's native item ID across start,
+  update, and completion records, and represent the completed full item as the
+  authoritative snapshot rather than synthesizing a second completed item.
+  When the native item union distinguishes non-fatal error items from terminal
+  stream errors, map those items to correlated `ERROR`/`UPDATED` snapshots and
+  reserve `ERROR`/`FAILED` plus invocation failure classification for terminal
+  records and process outcomes.
+  Reconcile typed terminal failures before generic process-exit fallback, but
+  preserve cancellation and timeout precedence. A streaming decoder must hold
+  terminal `ERROR` drafts until the shared executor flushes it with the process
+  outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
+  When multiple typed terminal records arrive, the held canonical draft and
+  final failure parser must use the same selection rule: recognized failures
+  outrank later unrecognized cleanup errors, while later recognized failures
+  may replace earlier ones.
+  When the native decoder publishes the surviving exact terminal `ERROR` draft,
+  keep the legacy terminal marker for response-stream consumers while explicitly
+  suppressing its second canonical projection.
+  Treat provider JSONL as a bounded record stream: diagnose and discard one
+  oversized record without retaining the rest of that line, then resume at the
+  next newline. Decoder flush and independent final/failure parsers must apply
+  the same record boundary so an unknown oversized record cannot hide a later
+  authoritative completion or typed failure, and diagnostics must describe the
+  class/discriminator without copying raw provider payloads.
   Session-scoped immutable response-event storage lives in
   `pkg/factory/sessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is

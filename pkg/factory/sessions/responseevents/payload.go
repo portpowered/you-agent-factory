@@ -106,10 +106,12 @@ type ProgressPayload struct {
 
 // UsagePayload carries token or model usage accounting.
 type UsagePayload struct {
-	InputTokens  int64  `json:"inputTokens,omitempty"`
-	OutputTokens int64  `json:"outputTokens,omitempty"`
-	TotalTokens  int64  `json:"totalTokens,omitempty"`
-	Model        string `json:"model,omitempty"`
+	InputTokens           int64  `json:"inputTokens,omitempty"`
+	CachedInputTokens     int64  `json:"cachedInputTokens,omitempty"`
+	OutputTokens          int64  `json:"outputTokens,omitempty"`
+	ReasoningOutputTokens int64  `json:"reasoningOutputTokens,omitempty"`
+	TotalTokens           int64  `json:"totalTokens,omitempty"`
+	Model                 string `json:"model,omitempty"`
 }
 
 // ErrorPayload carries a provider-neutral error with optional retry metadata.
