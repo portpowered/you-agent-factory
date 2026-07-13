@@ -53,6 +53,7 @@ type SessionAPI interface {
 	CloseFactorySession(ctx context.Context, sessionID string) error
 	PauseLiveFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	ResumeLiveFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	SubscribeFactoryResponseEventsForSession(ctx context.Context, sessionID string, afterSequence int64, dispatchID string) (FactoryResponseEventSubscription, error)
 }
 
 // WorkAPI is the session-scoped work submission, operator move, and runtime observability seam.

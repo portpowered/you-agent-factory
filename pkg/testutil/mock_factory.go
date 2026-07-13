@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -35,6 +37,8 @@ type MockFactory struct {
 	FactoryEvents                     []factoryapi.FactoryEvent
 	FactoryEventStream                *interfaces.FactoryEventStream
 	FactoryEventStreamCtx             context.Context
+	ResponseEventStore                *responseeventstore.SessionResponseEventStore
+	ResponseEventSubscribeErr         error
 	EngineStateSnapshotCalls          int
 	CreatedFactories                  []factoryapi.Factory
 	SaveFactoryForSessionErr          error
@@ -878,6 +882,60 @@ func (m *MockFactory) SubscribeFactoryEventsForSession(ctx context.Context, sess
 		return nil, err
 	}
 	return session.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
+}
+
+func (m *MockFactory) SubscribeFactoryResponseEventsForSession(ctx context.Context, sessionID string, afterSequence int64, dispatchID string) (apisurface.FactoryResponseEventSubscription, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	session, err := m.sessionFactory(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session.ResponseEventSubscribeErr != nil {
+		return nil, session.ResponseEventSubscribeErr
+	}
+	if session.ResponseEventStore == nil {
+		return nil, fmt.Errorf("response event store unavailable for factory session %q", sessionID)
+	}
+	options := []responseeventstore.SubscribeOption{}
+	if strings.TrimSpace(dispatchID) != "" {
+		options = append(options, responseeventstore.WithDispatchFilter(dispatchID))
+	}
+	subscription, err := session.ResponseEventStore.Subscribe(afterSequence, options...)
+	if err != nil {
+		if errors.Is(err, responseeventstore.ErrStoreExpired) {
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, sessionID)
+		}
+		return nil, err
+	}
+	return &mockFactoryResponseEventSubscription{subscription: subscription}, nil
+}
+
+type mockFactoryResponseEventSubscription struct {
+	subscription *responseeventstore.Subscription
+}
+
+func (s *mockFactoryResponseEventSubscription) Next(ctx context.Context) ([]apisurface.FactoryResponseEventRecord, error) {
+	events, err := s.subscription.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]apisurface.FactoryResponseEventRecord, 0, len(events))
+	for _, event := range events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			return nil, fmt.Errorf("serialize factory response event: %w", err)
+		}
+		records = append(records, apisurface.FactoryResponseEventRecord{Sequence: event.Sequence, Kind: string(event.Kind), Data: data})
+	}
+	return records, nil
+}
+
+func (s *mockFactoryResponseEventSubscription) Detach() {
+	if s != nil && s.subscription != nil {
+		s.subscription.Detach()
+	}
 }
 
 func (m *MockFactory) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

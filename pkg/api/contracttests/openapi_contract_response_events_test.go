@@ -633,8 +633,8 @@ func TestFactoryResponseEventRepresentativeFixturesHaveCanonicalWireParity(t *te
 			}
 
 			if fixtureName == "stream_gap" {
-				assertStreamGapBounds(t, domainEvent.Payload, 100, 150)
-				assertStreamGapBounds(t, generatedJSONPayload(t, generatedEvent), 100, 150)
+				assertStreamGapBounds(t, domainEvent.Payload, 100, 150, 151)
+				assertStreamGapBounds(t, generatedJSONPayload(t, generatedEvent), 100, 150, 151)
 			}
 		})
 	}
@@ -649,11 +649,12 @@ func generatedJSONPayload(t *testing.T, event factoryapi.FactoryResponseEvent) j
 	return encoded
 }
 
-func assertStreamGapBounds(t *testing.T, payload json.RawMessage, wantFrom, wantTo int64) {
+func assertStreamGapBounds(t *testing.T, payload json.RawMessage, wantFrom, wantTo, wantFirstAvailable int64) {
 	t.Helper()
 	var gap struct {
-		FromSequence int64 `json:"fromSequence"`
-		ToSequence   int64 `json:"toSequence"`
+		FromSequence           int64 `json:"fromSequence"`
+		ToSequence             int64 `json:"toSequence"`
+		FirstAvailableSequence int64 `json:"firstAvailableSequence"`
 	}
 	if err := json.Unmarshal(payload, &gap); err != nil {
 		t.Fatalf("unmarshal STREAM_GAP payload: %v", err)
@@ -666,6 +667,9 @@ func assertStreamGapBounds(t *testing.T, payload json.RawMessage, wantFrom, want
 			wantFrom,
 			wantTo,
 		)
+	}
+	if gap.FirstAvailableSequence != wantFirstAvailable {
+		t.Fatalf("STREAM_GAP first available sequence = %d, want %d", gap.FirstAvailableSequence, wantFirstAvailable)
 	}
 }
 

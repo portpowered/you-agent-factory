@@ -17,6 +17,7 @@
   "payload": {
     "fromSequence": 100,
     "toSequence": 150,
+    "firstAvailableSequence": 151,
     "reason": "retention_window"
   }
 }

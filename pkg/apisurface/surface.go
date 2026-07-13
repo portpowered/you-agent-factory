@@ -1,12 +1,34 @@
 package apisurface
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 )
+
+// ErrFactoryResponseEventStreamExpired reports that the completed session's
+// ephemeral response-event retention window elapsed before subscription.
+var ErrFactoryResponseEventStreamExpired = errors.New("factory response event stream expired")
+
+// FactoryResponseEventRecord is one transport-neutral serialized observation
+// returned by a session-owned ephemeral response-event subscription.
+type FactoryResponseEventRecord struct {
+	Sequence int64
+	Kind     string
+	Data     []byte
+}
+
+// FactoryResponseEventSubscription is the transport-independent cursor exposed
+// by one session-owned ephemeral response-event store. The HTTP transport owns
+// detachment; canceling that observer must not cancel the Factory Session run.
+type FactoryResponseEventSubscription interface {
+	Next(ctx context.Context) ([]FactoryResponseEventRecord, error)
+	Detach()
+}
 
 // DurableSessionAPI groups the durable execution role consumed by HTTP
 // handlers, including start, listing, projection, and lifecycle operations.

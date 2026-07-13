@@ -58,7 +58,7 @@ func TestValidateEvent_RejectsInvalidKindPhasePairsWithActionableErrors(t *testi
 		t.Fatalf("expected allowed phase list in error, got %v", err)
 	}
 
-	event = sampleEvent(t, responseevents.KindStreamGap, responseevents.PhaseDelta, json.RawMessage(`{"fromSequence":1,"toSequence":4}`))
+	event = sampleEvent(t, responseevents.KindStreamGap, responseevents.PhaseDelta, json.RawMessage(`{"fromSequence":1,"toSequence":4,"firstAvailableSequence":5}`))
 	err = responseevents.ValidateEvent(event)
 	assertValidationField(t, err, "phase")
 	if !strings.Contains(err.Error(), "allowed phases: UPDATED") {
@@ -163,8 +163,15 @@ func TestValidateEvent_RejectsRequiredPayloadFields(t *testing.T) {
 			name:      "stream gap negative sequence",
 			kind:      responseevents.KindStreamGap,
 			phase:     responseevents.PhaseUpdated,
-			payload:   json.RawMessage(`{"fromSequence":-1,"toSequence":4}`),
+			payload:   json.RawMessage(`{"fromSequence":-1,"toSequence":4,"firstAvailableSequence":5}`),
 			wantField: "payload.fromSequence",
+		},
+		{
+			name:      "stream gap missing first available sequence",
+			kind:      responseevents.KindStreamGap,
+			phase:     responseevents.PhaseUpdated,
+			payload:   json.RawMessage(`{"fromSequence":1,"toSequence":4}`),
+			wantField: "payload.firstAvailableSequence",
 		},
 		{
 			name:      "message missing role",
@@ -377,7 +384,7 @@ func sampleStaticKindPayload(t *testing.T, kind responseevents.Kind) json.RawMes
 	case responseevents.KindError:
 		return json.RawMessage(`{"code":"temporary","message":"retry later","retryable":true,"retryAttempt":1}`)
 	case responseevents.KindStreamGap:
-		return json.RawMessage(`{"fromSequence":10,"toSequence":20,"reason":"retention"}`)
+		return json.RawMessage(`{"fromSequence":10,"toSequence":20,"firstAvailableSequence":21,"reason":"retention"}`)
 	default:
 		t.Fatalf("unsupported sample kind %q", kind)
 		return nil

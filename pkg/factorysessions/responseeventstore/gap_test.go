@@ -39,6 +39,9 @@ func decodeGap(t *testing.T, event responseevents.FactoryResponseEvent) response
 	if payload.Reason != "retention_window" {
 		t.Fatalf("gap reason = %q, want retention_window", payload.Reason)
 	}
+	if payload.FirstAvailableSequence <= 0 {
+		t.Fatalf("gap first available sequence = %d, want positive sequence", payload.FirstAvailableSequence)
+	}
 	return payload
 }
 
@@ -69,6 +72,9 @@ func TestSessionResponseEventStoreSubscription_StaleCursorGetsExactGapBeforeOrde
 	gap := decodeGap(t, events[0])
 	if gap.FromSequence != 1 || gap.ToSequence != 5 {
 		t.Fatalf("gap = %#v, want dropped bounds [1,5]", gap)
+	}
+	if gap.FirstAvailableSequence != published[1].Sequence {
+		t.Fatalf("gap first available sequence = %d, want %d", gap.FirstAvailableSequence, published[1].Sequence)
 	}
 	if !reflect.DeepEqual(events[1:], []responseevents.FactoryResponseEvent{published[1], published[3]}) {
 		t.Fatalf("catch-up = %#v, want retained original envelopes", events[1:])
@@ -150,6 +156,9 @@ func TestSessionResponseEventStoreSubscription_GapOnlyReadAdvancesThenContinuesL
 	gap := decodeGap(t, first[0])
 	if gap.FromSequence != oversized.Sequence || gap.ToSequence != oversized.Sequence {
 		t.Fatalf("gap = %#v, want oversized sequence %d", gap, oversized.Sequence)
+	}
+	if gap.FirstAvailableSequence != oversized.Sequence+1 {
+		t.Fatalf("gap first available sequence = %d, want next publish sequence %d", gap.FirstAvailableSequence, oversized.Sequence+1)
 	}
 
 	if err := store.SetRetentionLimits(responseeventstore.RetentionLimits{MaxEvents: 4, MaxBytes: generousByteLimit}); err != nil {
