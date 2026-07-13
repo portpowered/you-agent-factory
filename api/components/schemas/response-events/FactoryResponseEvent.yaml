@@ -31,7 +31,10 @@ properties:
     type: integer
     format: int64
     minimum: 0
-    description: Monotonic session-scoped cursor for reconnect and ordering.
+    description: >-
+      Monotonic session-scoped cursor for published events. Sequence zero is
+      reserved for synthetic out-of-band read markers such as retention gaps;
+      those markers do not consume or reuse a published sequence.
   recordedAt:
     type: string
     format: date-time

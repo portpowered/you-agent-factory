@@ -2,8 +2,6 @@ name: CI
 
 on:
   pull_request:
-    paths-ignore:
-      - "docs/internal/**"
   push:
     branches:
       - main

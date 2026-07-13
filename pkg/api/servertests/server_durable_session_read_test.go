@@ -685,23 +685,26 @@ func removeAPILifecycleProjectState(t *testing.T, projectRoot string) {
 	var absentSince time.Time
 	for time.Now().Before(deadline) {
 		_, statErr := os.Stat(runtimeStateRoot)
-		switch {
-		case errors.Is(statErr, os.ErrNotExist):
-			if absentSince.IsZero() {
-				absentSince = time.Now()
-			}
-			if time.Since(absentSince) >= cleanupQuietPeriod {
-				return
-			}
-		case statErr == nil:
+		if statErr == nil {
 			// Terminate can publish its terminal projection before the async
 			// runner completes its final persistence write. Reset the quiet
 			// period whenever that late write recreates runtime state.
 			absentSince = time.Time{}
-			_ = os.RemoveAll(runtimeStateRoot)
-		default:
+		} else if !errors.Is(statErr, os.ErrNotExist) {
 			absentSince = time.Time{}
+		}
+
+		if err := os.RemoveAll(runtimeStateRoot); err != nil {
+			absentSince = time.Time{}
+			time.Sleep(cleanupPollInterval)
+			continue
+		}
+		if absentSince.IsZero() {
+			absentSince = time.Now()
+		} else if time.Since(absentSince) >= cleanupQuietPeriod {
+			return
 		}
 		time.Sleep(cleanupPollInterval)
 	}
+	t.Errorf("runtime state directory %q did not remain removed during cleanup", runtimeStateRoot)
 }

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/backendsizecheck"
+	"github.com/portpowered/infinite-you/internal/exemptionbudget"
 )
 
 const (
@@ -75,6 +76,16 @@ func run(cfg config, stdout io.Writer, stderr io.Writer) error {
 	}
 	if cfg.cyclomaticLimit <= 0 {
 		return fmt.Errorf("cyclomatic limit must be positive, got %d", cfg.cyclomaticLimit)
+	}
+	budgetDifferences, err := exemptionbudget.Reconcile(cfg.root, exemptionbudget.ScopePackage)
+	if err != nil {
+		return err
+	}
+	if len(budgetDifferences) > 0 {
+		for _, difference := range budgetDifferences {
+			fmt.Fprintln(stderr, exemptionbudget.FormatDifference(difference))
+		}
+		return fmt.Errorf("[agent-factory:pkg-maint] found %d exemption budget violation(s)", len(budgetDifferences))
 	}
 
 	violations, err := scanRepo(cfg)
@@ -289,7 +300,7 @@ func countLines(source []byte) int {
 func hasIgnoreDirective(groups []*ast.CommentGroup, directive string) bool {
 	for _, group := range groups {
 		for _, comment := range group.List {
-			if strings.Contains(comment.Text, directive) {
+			if _, ok := exemptionbudget.MatchDirective(comment.Text, directive); ok {
 				return true
 			}
 		}

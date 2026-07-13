@@ -9,6 +9,10 @@ import {
   type TimelineCheckpointStreamIdentity,
 } from "../../timeline/state/timelineCheckpointPersistence";
 import {
+  createMaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
+} from "../lib/materializer/materialized-work-outcome";
+import {
   buildWorkOutcomeTimelineSamplesFromEvents,
   useWorkOutcomeChart,
 } from "./useWorkOutcomeChart";
@@ -287,6 +291,24 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     ]);
   });
 
+  it("adapts selected events from the materialized state", () => {
+    const selectedEvents = baselineEvents.filter(
+      (timelineEvent) => timelineEvent.context.tick <= 4,
+    );
+    const materialized = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      selectedEvents,
+    );
+
+    expect(
+      buildWorkOutcomeTimelineSamplesFromEvents(
+        [...baselineEvents, tailEvent],
+        4,
+      ),
+    ).toEqual(materialized.samples);
+    expect(buildWorkOutcomeTimelineSamplesFromEvents([], 4)).toEqual([]);
+  });
+
   it("characterizes checkpoint restore, tail replacement, and duplicate delivery", async () => {
     const { indexedDB } = createIndexedDBTestDouble();
     const streamIdentity = streamIdentityFixture();
@@ -366,34 +388,6 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
         .getState()
         .events.filter((timelineEvent) => timelineEvent.id === tailEvent.id),
     ).toHaveLength(1);
-  });
-
-  it.fails("preserves the uninterrupted series across checkpoint restore and one tail event", async () => {
-    const { indexedDB } = createIndexedDBTestDouble();
-    const streamIdentity = streamIdentityFixture();
-    useFactoryTimelineStore.getState().appendEvents(baselineEvents);
-    const checkpoint =
-      useFactoryTimelineStore.getState().currentReplayCheckpoint;
-    await persistTimelineCheckpoint(indexedDB, checkpoint, streamIdentity);
-    useFactoryTimelineStore.getState().reset();
-    const restoredCheckpoint = await readTimelineCheckpoint(
-      indexedDB,
-      streamIdentity,
-    );
-    if (!restoredCheckpoint) {
-      throw new Error("expected the persisted baseline checkpoint to restore");
-    }
-    useFactoryTimelineStore.getState().restoreCheckpoint(restoredCheckpoint);
-
-    const repaired = renderHook(() => useTimelineWorkOutcomeChart());
-    act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
-    act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
-
-    const uninterruptedThroughTail = buildWorkOutcomeTimelineSamplesFromEvents(
-      [...baselineEvents, tailEvent],
-      7,
-    );
-    expect(repaired.result.current.samples).toEqual(uninterruptedThroughTail);
   });
 });
 

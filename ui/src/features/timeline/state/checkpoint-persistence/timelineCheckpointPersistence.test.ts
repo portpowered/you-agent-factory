@@ -164,6 +164,7 @@ function checkpointStorageKey(
   return [
     identity.backendScopeID,
     identity.factorySessionID,
+    identity.logicalSessionKeyID,
     identity.streamGenerationID,
   ].join("::");
 }
@@ -222,6 +223,7 @@ describe("timeline checkpoint persistence diagnostics", () => {
         scope: {
           backendScopeID: streamIdentity.backendScopeID,
           factorySessionID: streamIdentity.factorySessionID,
+          logicalSessionKeyID: streamIdentity.logicalSessionKeyID,
           streamGenerationID: streamIdentity.streamGenerationID,
         },
       },
@@ -408,21 +410,44 @@ describe("timeline checkpoint guard migration", () => {
   it.each([
     ["backend scope", { backendScopeID: "backend-scope-b" }],
     ["logical session key", { logicalSessionKeyID: "logical-other" }],
-    ["factory session id", { factorySessionID: "session-other" }],
+    [
+      "factory session id",
+      { factorySessionID: "b1b2c3d4-e5f6-4789-a012-3456789abcde" },
+    ],
     ["stream generation", { streamGenerationID: "2026-06-27T00:00:00Z" }],
   ] as const)("fails closed for a %s mismatch", async (_label, mismatch) => {
-    const { indexedDB } = createIndexedDBTestDouble();
+    resetSessionPersistenceInvalidationRecords();
+    const { indexedDB, records } = createIndexedDBTestDouble();
     const checkpoint = checkpointFixture();
-    const persistedIdentity = streamIdentityFixture();
+    const expectedIdentity = streamIdentityFixture();
+    const affectedStorageKey = checkpointStorageKey(expectedIdentity);
+    const unaffectedIdentity = {
+      backendScopeID: "backend-scope-unaffected",
+      factorySessionID: "c1b2c3d4-e5f6-4789-a012-3456789abcde",
+      logicalSessionKeyID: "logical-unaffected",
+      streamGenerationID: "2026-06-28T00:00:00Z",
+    } satisfies TimelineCheckpointStreamIdentity;
 
-    await persistTimelineCheckpoint(indexedDB, checkpoint, persistedIdentity);
+    records.set(affectedStorageKey, {
+      checkpoint,
+      schemaVersion: 3,
+      storageKey: affectedStorageKey,
+      streamIdentity: { ...expectedIdentity, ...mismatch },
+    });
+    await persistTimelineCheckpoint(indexedDB, checkpoint, unaffectedIdentity);
 
+    const restored = await readTimelineCheckpoint(indexedDB, expectedIdentity);
+
+    expect(restored).toBeNull();
+    expect(reconnectCursorFromCheckpoint(restored)).toBeUndefined();
+    expect(records.has(affectedStorageKey)).toBe(false);
     await expect(
-      readTimelineCheckpoint(indexedDB, {
-        ...persistedIdentity,
-        ...mismatch,
-      }),
-    ).resolves.toBe(null);
+      readTimelineCheckpoint(indexedDB, unaffectedIdentity),
+    ).resolves.toMatchObject({
+      afterEventId: checkpoint.afterEventId,
+      afterSequence: checkpoint.afterSequence,
+    });
+    expect(readSessionPersistenceInvalidationRecords()).toHaveLength(1);
   });
 });
 
