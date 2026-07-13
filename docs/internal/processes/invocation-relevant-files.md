@@ -188,6 +188,11 @@ primary-result behavior.
   Compaction signals map to `STREAM_GAP`/`UPDATED` with `StreamGapPayload`
   (`fromSequence`/`toSequence` from `CompactionSummary` dropped bounds when
   present, `reason` from compaction reason) and always `LOSSY` provenance.
+  `compat/mapper_fixture_matrix_test.go` is the consolidated coverage matrix for
+  every declared legacy fragment kind plus legacy publisher smoke; focused
+  invocation primary-result byte fixtures live in
+  `compat/testdata/primary_result_regression/` and are asserted by
+  `primary_result_regression_test.go` without wiring the mapper into selection.
   Package docs in `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`
   enforces isolation from CLI, HTTP, subprocess, and provider imports.
