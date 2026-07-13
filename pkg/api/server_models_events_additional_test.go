@@ -18,6 +18,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -479,10 +480,13 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
 
 	transport, err := initializer.InitializeAPITransport(context.Background(), &initializer.Config{
-		Dir:               dir,
-		MockWorkersConfig: factoryconfig.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-		ModelAssets:       listModelsWiringAssetPuller{},
+		Dir:                        dir,
+		MockWorkersConfig:          factoryconfig.NewEmptyMockWorkersConfig(),
+		Logger:                     zap.NewNop(),
+		SystemConfigHomeDir:        dir,
+		RuntimeFileLoggingPolicy:   runtimehost.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:       runtimehost.RuntimeMetricsPolicyDisabled,
+		ModelAssets:                listModelsWiringAssetPuller{},
 	})
 	if err != nil {
 		t.Fatalf("InitializeAPITransport: %v", err)
