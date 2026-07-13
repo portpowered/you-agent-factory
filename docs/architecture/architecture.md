@@ -192,6 +192,14 @@ Generated-code exceptions are a separate policy class, not migration roots:
 standard `Code generated ... DO NOT EDIT.` header. They may contain generated
 transport contracts or clients but must never own handwritten product behavior.
 
+Historical model and hosted-worker roots are a prohibited policy class, not
+migration exceptions. `pkg/modelhost`, `pkg/localmodels`, and
+`pkg/hostedworkers` must not be recreated or imported. Their canonical owners
+are `pkg/models/host`, `pkg/models/local` or `pkg/models/assets`, and
+`pkg/workers/hosted`, respectively. The package-boundary check enforces both
+directory creation and Go imports while allowing legitimate nested packages
+within the canonical model and worker families.
+
 ### Other migration-era surfaces and compatibility aliases
 
 The following packages and aliases exist to keep current behavior working while

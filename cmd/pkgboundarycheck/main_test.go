@@ -111,6 +111,108 @@ func TestRunRejectsDomainPackageImportOfApplicationGraphSubpackage(t *testing.T)
 	}
 }
 
+func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		packagePath    string
+		canonicalOwner string
+	}{
+		{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
+		{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
+		{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	} {
+		t.Run(tt.packagePath, func(t *testing.T) {
+			t.Parallel()
+			repoRoot := t.TempDir()
+			makeDir(t, repoRoot, tt.packagePath)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want retired package root failure")
+			}
+
+			got := stderr.String()
+			for _, want := range []string{
+				"prohibited retired package root: " + tt.packagePath,
+				"canonical owner: " + tt.canonicalOwner,
+				"move the code to " + tt.canonicalOwner + " and delete the retired root",
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+			if strings.Contains(got, "unapproved root package family") {
+				t.Fatalf("run() stderr = %q, want retired-root diagnostic instead of generic root diagnostic", got)
+			}
+		})
+	}
+}
+
+func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		importPath     string
+		retiredRoot    string
+		canonicalOwner string
+	}{
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/modelhost",
+			retiredRoot:    "pkg/modelhost",
+			canonicalOwner: "pkg/models/host",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/localmodels/assets",
+			retiredRoot:    "pkg/localmodels",
+			canonicalOwner: "pkg/models/local or pkg/models/assets",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/hostedworkers/linear",
+			retiredRoot:    "pkg/hostedworkers",
+			canonicalOwner: "pkg/workers/hosted",
+		},
+	} {
+		t.Run(tt.retiredRoot, func(t *testing.T) {
+			t.Parallel()
+			repoRoot := t.TempDir()
+			writeGoImportFile(t, repoRoot, "pkg/factory/retired_import.go", "factory", tt.importPath)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want retired package import failure")
+			}
+
+			got := stderr.String()
+			for _, want := range []string{
+				"prohibited retired package import: " + tt.importPath + " (pkg/factory/retired_import.go)",
+				"canonical owner: " + tt.canonicalOwner,
+				"do not recreate or depend on " + tt.retiredRoot,
+			} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRunAllowsCanonicalModelAndWorkerSubpackages(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/factory/canonical_imports.go", "factory", "github.com/portpowered/infinite-you/pkg/models/host")
+	writeGoImportFile(t, repoRoot, "pkg/models/host/host.go", "modelhost", "github.com/portpowered/infinite-you/pkg/models/local")
+	writeGoImportFile(t, repoRoot, "pkg/workers/service/hosted.go", "service", "github.com/portpowered/infinite-you/pkg/workers/hosted")
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want canonical nested packages allowed; stderr=%q", err, stderr.String())
+	}
+}
+
 func TestRunAllowsValidMigrationPackageException(t *testing.T) {
 	t.Parallel()
 
