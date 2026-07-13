@@ -344,6 +344,27 @@ func (r *referenceResolver) resolveReference(value any, referringDocument string
 	if err != nil {
 		return nil, r.issue("reference.fragment", fmt.Sprintf("reference %q has an unresolved fragment", reference), referringDocument, segments)
 	}
+	relocationURI, relocatesIDLessResource := referencedResourceRelocationURI(
+		selected,
+		selectedScope.baseURI,
+		referringDocument,
+		targetDocument,
+		fragment,
+	)
+	location := resourceLocation{document: targetDocument, segments: append([]string(nil), selectedSegments...)}
+	if r.deduplicateResources && relocatesIDLessResource {
+		if previous, exists := r.resolvedResourceIDs[relocationURI.String()]; exists {
+			if !sameResourceLocation(previous, location) {
+				return nil, r.issue(
+					"reference.resource_collision",
+					fmt.Sprintf("stable resource URI %q is declared by multiple authored resources", relocationURI.String()),
+					targetDocument,
+					selectedSegments,
+				)
+			}
+			return map[string]any{"$ref": relocationURI.String()}, nil
+		}
+	}
 	key := targetDocument + "#" + instancePath(selectedSegments)
 	if r.active[key] {
 		return nil, r.issue("reference.cycle", fmt.Sprintf("reference %q forms a cycle", reference), referringDocument, segments)
@@ -355,7 +376,11 @@ func (r *referenceResolver) resolveReference(value any, referringDocument string
 	if len(diagnostics) != 0 {
 		return nil, diagnostics
 	}
-	return preserveReferencedResourceBase(resolved, selected, selectedScope.baseURI, referringDocument, targetDocument, fragment), nil
+	resolved = preserveReferencedResourceBase(resolved, selected, selectedScope.baseURI, referringDocument, targetDocument, fragment)
+	if r.deduplicateResources && relocatesIDLessResource {
+		r.resolvedResourceIDs[relocationURI.String()] = location
+	}
+	return resolved, nil
 }
 
 func preserveReferencedResourceBase(resolved, authored any, baseURI *url.URL, referringDocument, document, fragment string) any {
@@ -373,18 +398,39 @@ func preserveReferencedResourceBase(resolved, authored any, baseURI *url.URL, re
 		if !resolvedIsObject || resolvedObject["$id"] != identifier {
 			return resolved
 		}
-	} else if referringDocument == document || !containsOuterBaseDependentResource(authoredObject) {
-		return resolved
+	} else {
+		if _, relocates := referencedResourceRelocationURI(authored, baseURI, referringDocument, document, fragment); !relocates {
+			return resolved
+		}
 	}
 
+	return map[string]any{
+		"$id":   resourceRelocationURI(baseURI, document, fragment).String(),
+		"allOf": []any{resolved},
+	}
+}
+
+func referencedResourceRelocationURI(authored any, baseURI *url.URL, referringDocument, document, fragment string) (*url.URL, bool) {
+	authoredObject, ok := authored.(map[string]any)
+	if !ok {
+		return baseURI, false
+	}
+	if identifier, hasIdentifier := authoredObject["$id"].(string); hasIdentifier && identifier != "" {
+		return baseURI, false
+	}
+	if referringDocument == document || !containsOuterBaseDependentResource(authoredObject) {
+		return baseURI, false
+	}
+
+	return resourceRelocationURI(baseURI, document, fragment), true
+}
+
+func resourceRelocationURI(baseURI *url.URL, document, fragment string) *url.URL {
 	relocationBase := *baseURI
 	query := relocationBase.Query()
 	query.Set("you-join-source", normalizeRepositoryPath(document)+"#"+fragment)
 	relocationBase.RawQuery = query.Encode()
-	return map[string]any{
-		"$id":   relocationBase.String(),
-		"allOf": []any{resolved},
-	}
+	return &relocationBase
 }
 
 func containsOuterBaseDependentResource(value any) bool {

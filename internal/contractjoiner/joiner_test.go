@@ -299,6 +299,65 @@ func TestJoinPreservesRetrievalBaseForNestedRelativeResourceID(t *testing.T) {
 	}
 }
 
+func TestJoinDeduplicatesRelocatedIDLessResourceWithNestedRelativeID(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "contracts/roots/root.json", `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://schemas.example.test/roots/root.json",
+  "type":"object",
+  "required":["first","second"],
+  "properties":{
+    "first":{"$ref":"../components/container.json"},
+    "second":{"$ref":"../components/container.json"}
+  }
+}`)
+	writeFile(t, root, "contracts/components/container.json", `{
+  "type":"object",
+  "required":["value"],
+  "$defs":{"item":{"$id":"item.json","type":"string","minLength":2}},
+  "properties":{"value":{"$ref":"#/$defs/item"}}
+}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/roots/root.json"},
+		Components:     []string{"contracts/components/container.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	joined := documents[0].Value
+	relocationID := "https://schemas.example.test/components/container.json?you-join-source=contracts%2Fcomponents%2Fcontainer.json%23"
+	if got := countResourceID(joined, relocationID); got != 1 {
+		t.Fatalf("joined synthetic relocation resource count = %d, want 1", got)
+	}
+	if got := countResourceID(joined, "item.json"); got != 1 {
+		t.Fatalf("joined authored nested resource count = %d, want 1", got)
+	}
+	properties := object(t, object(t, joined)["properties"])
+	if got := object(t, properties["second"])["$ref"]; got != relocationID {
+		t.Fatalf("repeated relocated resource reference = %v, want %s", got, relocationID)
+	}
+
+	schema := compileJoinedSchema(t, joined)
+	for _, test := range []struct {
+		name  string
+		value any
+		valid bool
+	}{
+		{name: "both relocated uses pass", value: map[string]any{"first": map[string]any{"value": "aa"}, "second": map[string]any{"value": "bb"}}, valid: true},
+		{name: "first relocated use fails", value: map[string]any{"first": map[string]any{"value": "a"}, "second": map[string]any{"value": "bb"}}, valid: false},
+		{name: "second relocated use fails", value: map[string]any{"first": map[string]any{"value": "aa"}, "second": map[string]any{"value": 2}}, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := schema.Validate(test.value)
+			if (err == nil) != test.valid {
+				t.Fatalf("Validate(%v) error = %v, want valid %t", test.value, err, test.valid)
+			}
+		})
+	}
+}
+
 func TestJoinResolvesFragmentsWithinSelectedSchemaResourceScope(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "contracts/roots/root.json", `{
