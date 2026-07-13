@@ -1,12 +1,14 @@
 package work
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/workgraph"
+	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
+	workgraph "github.com/portpowered/infinite-you/pkg/work/graph"
 )
 
 const (
@@ -52,8 +54,18 @@ func Visualize(cfg VisualizeConfig) error {
 		}
 		return fmt.Errorf("read %s: %w", path, err)
 	}
+	if len(data) == 0 {
+		return fmt.Errorf("batch input is empty")
+	}
+	if !json.Valid(data) {
+		return fmt.Errorf("invalid JSON")
+	}
 
-	graph, err := workgraph.DeriveFromJSON(data)
+	request, err := factoryrequests.ParseCanonicalWorkRequestJSON(data)
+	if err != nil {
+		return err
+	}
+	graph, err := workgraph.DeriveFromWorkRequest(request)
 	if err != nil {
 		return err
 	}

@@ -1,13 +1,11 @@
-// Package workgraph derives deterministic work dependency graphs from batch JSON.
-package workgraph
+// Package graph derives deterministic Work relationship graphs.
+package graph
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -28,25 +26,6 @@ type Edge struct {
 type Graph struct {
 	Nodes []Node
 	Edges []Edge
-}
-
-// DeriveFromJSON parses canonical FACTORY_REQUEST_BATCH JSON and derives a graph.
-func DeriveFromJSON(data []byte) (Graph, error) {
-	if len(data) == 0 {
-		return Graph{}, fmt.Errorf("batch input is empty")
-	}
-	if !json.Valid(data) {
-		return Graph{}, fmt.Errorf("invalid JSON")
-	}
-	if err := requests.ValidateCanonicalWorkRequestJSON(data); err != nil {
-		return Graph{}, err
-	}
-
-	var request interfaces.WorkRequest
-	if err := json.Unmarshal(data, &request); err != nil {
-		return Graph{}, err
-	}
-	return DeriveFromWorkRequest(request)
 }
 
 // DeriveFromWorkRequest projects a parsed batch request into a dependency graph.

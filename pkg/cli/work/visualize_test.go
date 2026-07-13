@@ -175,6 +175,45 @@ func TestVisualize_InvalidBatchLeavesStdoutEmpty(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid JSON error")
 	}
+	if got := err.Error(); got != "invalid JSON" {
+		t.Fatalf("error = %q, want invalid JSON", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", out.String())
+	}
+}
+
+func TestVisualize_EmptyBatchLeavesStdoutEmpty(t *testing.T) {
+	path := writeVisualizeBatchFile(t, "")
+
+	var out bytes.Buffer
+	err := Visualize(VisualizeConfig{BatchFile: path, Output: &out})
+	if err == nil {
+		t.Fatal("expected empty batch error")
+	}
+	if got := err.Error(); got != "batch input is empty" {
+		t.Fatalf("error = %q, want batch input is empty", got)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", out.String())
+	}
+}
+
+func TestVisualize_RetiredAliasLeavesStdoutEmpty(t *testing.T) {
+	path := writeVisualizeBatchFile(t, `{
+  "requestId": "retired-alias",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [{"name": "alpha", "work_type_id": "task"}]
+}`)
+
+	var out bytes.Buffer
+	err := Visualize(VisualizeConfig{BatchFile: path, Output: &out})
+	if err == nil {
+		t.Fatal("expected retired alias error")
+	}
+	if got := err.Error(); !strings.Contains(got, "work_type_id is not supported") {
+		t.Fatalf("error = %q, want retired alias guidance", got)
+	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty", out.String())
 	}

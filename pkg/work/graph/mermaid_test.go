@@ -1,4 +1,4 @@
-package workgraph
+package graph
 
 import (
 	"strings"

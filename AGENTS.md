@@ -97,7 +97,7 @@ the standards.
   contracts.
 - `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
   types used across subsystems.
-- `pkg/work/` contains canonical Work content, materialization, and query
+- `pkg/work/` contains canonical Work content, materialization, query, and graph
   behavior; `pkg/invocations/` remains a migration-only invocation helper root.
 - `pkg/localmodels/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.

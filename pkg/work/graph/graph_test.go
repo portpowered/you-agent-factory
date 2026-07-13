@@ -1,32 +1,31 @@
-package workgraph
+package graph
 
 import (
 	"encoding/json"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func TestDeriveFromJSON_ThreeWorksTwoDependencies(t *testing.T) {
-	data := []byte(`{
-  "requestId": "graph-test",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "alpha", "workTypeName": "task"},
-    {"name": "beta", "workTypeName": "task"},
-    {"name": "gamma", "workTypeName": "task"}
-  ],
-  "relations": [
-    {"type": "DEPENDS_ON", "sourceWorkName": "beta", "targetWorkName": "alpha"},
-    {"type": "DEPENDS_ON", "sourceWorkName": "gamma", "targetWorkName": "beta"}
-  ]
-}`)
+func TestDeriveFromWorkRequest_ThreeWorksTwoDependencies(t *testing.T) {
+	req := interfaces.WorkRequest{
+		RequestID: "graph-test",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "alpha", WorkTypeID: "task"},
+			{Name: "beta", WorkTypeID: "task"},
+			{Name: "gamma", WorkTypeID: "task"},
+		},
+		Relations: []interfaces.WorkRelation{
+			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "beta", TargetWorkName: "alpha"},
+			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "gamma", TargetWorkName: "beta"},
+		},
+	}
 
-	graph, err := DeriveFromJSON(data)
+	graph, err := DeriveFromWorkRequest(req)
 	if err != nil {
-		t.Fatalf("DeriveFromJSON: %v", err)
+		t.Fatalf("DeriveFromWorkRequest: %v", err)
 	}
 	if len(graph.Nodes) != 3 {
 		t.Fatalf("node count = %d, want 3", len(graph.Nodes))
@@ -44,19 +43,19 @@ func TestDeriveFromJSON_ThreeWorksTwoDependencies(t *testing.T) {
 	}
 }
 
-func TestDeriveFromJSON_StandaloneWorkPreserved(t *testing.T) {
-	data := []byte(`{
-  "requestId": "standalone-test",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "solo-a", "workTypeName": "task"},
-    {"name": "solo-b", "workTypeName": "task"}
-  ]
-}`)
+func TestDeriveFromWorkRequest_StandaloneWorkPreserved(t *testing.T) {
+	req := interfaces.WorkRequest{
+		RequestID: "standalone-test",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "solo-a", WorkTypeID: "task"},
+			{Name: "solo-b", WorkTypeID: "task"},
+		},
+	}
 
-	graph, err := DeriveFromJSON(data)
+	graph, err := DeriveFromWorkRequest(req)
 	if err != nil {
-		t.Fatalf("DeriveFromJSON: %v", err)
+		t.Fatalf("DeriveFromWorkRequest: %v", err)
 	}
 	if len(graph.Nodes) != 2 {
 		t.Fatalf("node count = %d, want 2", len(graph.Nodes))
@@ -73,35 +72,35 @@ func TestDeriveFromJSON_StandaloneWorkPreserved(t *testing.T) {
 	}
 }
 
-func TestDeriveFromJSON_DeterministicAcrossRuns(t *testing.T) {
-	data := []byte(`{
-  "requestId": "deterministic-test",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "z-last", "workTypeName": "task"},
-    {"name": "a-first", "workTypeName": "task"},
-    {"name": "m-middle", "workTypeName": "task"}
-  ],
-  "relations": [
-    {"type": "DEPENDS_ON", "sourceWorkName": "m-middle", "targetWorkName": "a-first"},
-    {"type": "DEPENDS_ON", "sourceWorkName": "z-last", "targetWorkName": "m-middle"}
-  ]
-}`)
-
-	first, err := DeriveFromJSON(data)
-	if err != nil {
-		t.Fatalf("first DeriveFromJSON: %v", err)
+func TestDeriveFromWorkRequest_DeterministicAcrossRuns(t *testing.T) {
+	req := interfaces.WorkRequest{
+		RequestID: "deterministic-test",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "z-last", WorkTypeID: "task"},
+			{Name: "a-first", WorkTypeID: "task"},
+			{Name: "m-middle", WorkTypeID: "task"},
+		},
+		Relations: []interfaces.WorkRelation{
+			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "m-middle", TargetWorkName: "a-first"},
+			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "z-last", TargetWorkName: "m-middle"},
+		},
 	}
-	second, err := DeriveFromJSON(data)
+
+	first, err := DeriveFromWorkRequest(req)
 	if err != nil {
-		t.Fatalf("second DeriveFromJSON: %v", err)
+		t.Fatalf("first DeriveFromWorkRequest: %v", err)
+	}
+	second, err := DeriveFromWorkRequest(req)
+	if err != nil {
+		t.Fatalf("second DeriveFromWorkRequest: %v", err)
 	}
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("graphs differ across runs:\nfirst=%#v\nsecond=%#v", first, second)
 	}
 }
 
-func TestDeriveFromJSON_NodeLabelsPreferWorkNames(t *testing.T) {
+func TestDeriveFromWorkRequest_NodeLabelsPreferWorkNames(t *testing.T) {
 	req := interfaces.WorkRequest{
 		RequestID: "label-test",
 		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
@@ -132,38 +131,33 @@ func TestNodeLabelFallbackUsesStableIndex(t *testing.T) {
 	}
 }
 
-func TestDeriveFromJSON_InvalidJSON(t *testing.T) {
-	_, err := DeriveFromJSON([]byte(`{not json`))
-	if err == nil {
-		t.Fatal("expected invalid JSON error")
-	}
-}
-
-func TestDeriveFromJSON_MissingRequiredFields(t *testing.T) {
+func TestDeriveFromWorkRequest_MissingRequiredFields(t *testing.T) {
 	cases := []struct {
 		name string
-		data string
+		req  interfaces.WorkRequest
 		want string
 	}{
 		{
 			name: "missing requestId",
-			data: `{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"a","workTypeName":"task"}]}`,
+			req: interfaces.WorkRequest{Type: interfaces.WorkRequestTypeFactoryRequestBatch,
+				Works: []interfaces.Work{{Name: "a", WorkTypeID: "task"}}},
 			want: "batch requestId is required",
 		},
 		{
 			name: "missing works",
-			data: `{"requestId":"x","type":"FACTORY_REQUEST_BATCH","works":[]}`,
+			req:  interfaces.WorkRequest{RequestID: "x", Type: interfaces.WorkRequestTypeFactoryRequestBatch},
 			want: "batch works must contain at least one item",
 		},
 		{
 			name: "missing work name",
-			data: `{"requestId":"x","type":"FACTORY_REQUEST_BATCH","works":[{"workTypeName":"task"}]}`,
+			req: interfaces.WorkRequest{RequestID: "x", Type: interfaces.WorkRequestTypeFactoryRequestBatch,
+				Works: []interfaces.Work{{WorkTypeID: "task"}}},
 			want: "works[0] is missing required name",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := DeriveFromJSON([]byte(tc.data))
+			_, err := DeriveFromWorkRequest(tc.req)
 			if err == nil {
 				t.Fatal("expected error")
 			}
@@ -174,19 +168,17 @@ func TestDeriveFromJSON_MissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestDeriveFromJSON_UnknownDependencyReference(t *testing.T) {
-	data := []byte(`{
-  "requestId": "unknown-ref",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "alpha", "workTypeName": "task"}
-  ],
-  "relations": [
-    {"type": "DEPENDS_ON", "sourceWorkName": "alpha", "targetWorkName": "missing"}
-  ]
-}`)
+func TestDeriveFromWorkRequest_UnknownDependencyReference(t *testing.T) {
+	req := interfaces.WorkRequest{
+		RequestID: "unknown-ref",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works:     []interfaces.Work{{Name: "alpha", WorkTypeID: "task"}},
+		Relations: []interfaces.WorkRelation{{
+			Type: interfaces.WorkRelationDependsOn, SourceWorkName: "alpha", TargetWorkName: "missing",
+		}},
+	}
 
-	_, err := DeriveFromJSON(data)
+	_, err := DeriveFromWorkRequest(req)
 	if err == nil {
 		t.Fatal("expected unknown targetWorkName error")
 	}
@@ -195,38 +187,21 @@ func TestDeriveFromJSON_UnknownDependencyReference(t *testing.T) {
 	}
 }
 
-func TestDeriveFromJSON_RejectsRetiredAliases(t *testing.T) {
-	data := []byte(`{
-  "requestId": "alias-test",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "alpha", "work_type_id": "task"}
-  ]
-}`)
-	_, err := DeriveFromJSON(data)
-	if err == nil {
-		t.Fatal("expected retired alias error")
+func TestDeriveFromWorkRequest_ParentChildRelationIncluded(t *testing.T) {
+	req := interfaces.WorkRequest{
+		RequestID: "parent-child",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Works: []interfaces.Work{
+			{Name: "child", WorkTypeID: "task"},
+			{Name: "parent", WorkTypeID: "task"},
+		},
+		Relations: []interfaces.WorkRelation{{
+			Type: interfaces.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent",
+		}},
 	}
-	if got := err.Error(); !strings.Contains(got, "work_type_id is not supported") {
-		t.Fatalf("error = %q", got)
-	}
-}
-
-func TestDeriveFromJSON_ParentChildRelationIncluded(t *testing.T) {
-	data := []byte(`{
-  "requestId": "parent-child",
-  "type": "FACTORY_REQUEST_BATCH",
-  "works": [
-    {"name": "child", "workTypeName": "task"},
-    {"name": "parent", "workTypeName": "task"}
-  ],
-  "relations": [
-    {"type": "PARENT_CHILD", "sourceWorkName": "child", "targetWorkName": "parent"}
-  ]
-}`)
-	graph, err := DeriveFromJSON(data)
+	graph, err := DeriveFromWorkRequest(req)
 	if err != nil {
-		t.Fatalf("DeriveFromJSON: %v", err)
+		t.Fatalf("DeriveFromWorkRequest: %v", err)
 	}
 	if len(graph.Edges) != 1 {
 		t.Fatalf("edge count = %d, want 1", len(graph.Edges))
@@ -236,7 +211,7 @@ func TestDeriveFromJSON_ParentChildRelationIncluded(t *testing.T) {
 	}
 }
 
-func TestDeriveFromJSON_EdgesSortedDeterministically(t *testing.T) {
+func TestDeriveFromWorkRequest_EdgesSortedDeterministically(t *testing.T) {
 	req := interfaces.WorkRequest{
 		RequestID: "edge-order",
 		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
