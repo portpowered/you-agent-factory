@@ -11,6 +11,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -79,6 +80,7 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 		buildModelInvocationBootstrap = originalBuilder
 	}()
 
+	homeDir := t.TempDir()
 	var capturedModel string
 	var capturedRequest factoryapi.ModelInvocationRequest
 	buildModelInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (modelBootstrapRunner, error) {
@@ -90,6 +92,9 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 		}
 		if cfg.APIServerStarter != nil {
 			t.Fatal("expected bootstrap config to skip API server starter")
+		}
+		if cfg.SystemConfigHomeDir != homeDir || cfg.RuntimeLogDir != defaultpaths.RuntimeLogsRoot(homeDir) || cfg.RuntimeMetricsDir != defaultpaths.RuntimeMetricsRoot(homeDir) {
+			t.Fatalf("bootstrap home paths = home %q logs %q metrics %q; want roots below %q", cfg.SystemConfigHomeDir, cfg.RuntimeLogDir, cfg.RuntimeMetricsDir, homeDir)
 		}
 		return &stubModelBootstrapRunner{
 			sessionReady: true,
@@ -115,6 +120,7 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 		Operation:  "TTS",
 		Text:       "hello world",
 		FactoryDir: t.TempDir(),
+		HomeDir:    homeDir,
 		Server:     failureBaselineUnreachableServer,
 		JSON:       true,
 		Logger:     zap.NewNop(),

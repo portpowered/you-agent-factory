@@ -321,13 +321,10 @@ func runFactoryInvocation(
 	ctx context.Context,
 	cfg RunConfig,
 	request factoryapi.InvocationRequest,
-	logger *zap.Logger,
-	mockWorkersConfig *factoryconfig.MockWorkersConfig,
+	invoker sessionInvocationRunner,
 ) error {
-	svcCfg := buildInvocationRunServiceConfig(cfg, logger, mockWorkersConfig)
-	invoker, err := buildInvocationBootstrap(ctx, svcCfg)
-	if err != nil {
-		return err
+	if invoker == nil {
+		return fmt.Errorf("run factory invocation: runner is required")
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
