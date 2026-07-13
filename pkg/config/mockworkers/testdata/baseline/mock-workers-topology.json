@@ -1,0 +1,354 @@
+{
+  "formatVersion": "mock-workers-topology/v1",
+  "loaderEntrypoints": [
+    "ParseMockWorkersConfig",
+    "LoadMockWorkersConfig",
+    "MockWorkersConfig.Validate",
+    "MockWorkerConfig.Validate"
+  ],
+  "unknownFieldPolicy": "ParseMockWorkersConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values",
+  "entrySelectionPolicy": "first matching mockWorkers[] entry wins; there is no response-sequence or multi-hit authoring surface beyond that first-match selection",
+  "runTypeUnion": {
+    "summary": "runType is required on every mockWorkers[] entry and selects which nested config shape Validate enforces",
+    "values": [
+      {
+        "value": "accept",
+        "nestedConfigPolicy": "no nested config required; scriptConfig and rejectConfig are ignored when present"
+      },
+      {
+        "value": "script",
+        "nestedConfig": "scriptConfig",
+        "nestedConfigPolicy": "scriptConfig is required; scriptConfig.command is required non-empty"
+      },
+      {
+        "value": "reject",
+        "nestedConfig": "rejectConfig",
+        "nestedConfigPolicy": "rejectConfig is optional; rejectConfig.exitCode when set must be between 1 and 255"
+      }
+    ]
+  },
+  "unmatchedDispatchPolicies": [
+    {
+      "value": "accept",
+      "omittedBehavior": true,
+      "summary": "default when unmatchedDispatchPolicy is omitted; unmatched dispatches return the synthetic accepted mock result"
+    },
+    {
+      "value": "accept",
+      "summary": "explicit accept policy; same default-accept behavior as omission"
+    },
+    {
+      "value": "passthrough",
+      "summary": "unmatched dispatches execute through the normal worker runner/provider path"
+    }
+  ],
+  "validationBoundaries": [
+    {
+      "condition": "unknown top-level or nested JSON field",
+      "owner": "decode",
+      "errorPattern": "unknown field"
+    },
+    {
+      "condition": "trailing JSON after the root object",
+      "owner": "decode",
+      "errorPattern": "unexpected trailing JSON"
+    },
+    {
+      "condition": "unknown unmatchedDispatchPolicy value",
+      "owner": "validate",
+      "errorPattern": "unmatchedDispatchPolicy must be one of \"accept\" or \"passthrough\""
+    },
+    {
+      "condition": "unknown runType value",
+      "owner": "validate",
+      "errorPattern": "runType must be one of \"accept\", \"script\", or \"reject\""
+    },
+    {
+      "condition": "runType script without scriptConfig",
+      "owner": "validate",
+      "errorPattern": "scriptConfig is required when runType is \"script\""
+    },
+    {
+      "condition": "runType script with scriptConfig missing command",
+      "owner": "validate",
+      "errorPattern": "scriptConfig.command is required when runType is \"script\""
+    },
+    {
+      "condition": "rejectConfig.exitCode outside 1-255 when set",
+      "owner": "validate",
+      "errorPattern": "rejectConfig.exitCode must be between 1 and 255"
+    }
+  ],
+  "notAcceptedCapabilities": [
+    {
+      "category": "media",
+      "reason": "no media payload or media-response authoring fields are accepted by ParseMockWorkersConfig"
+    },
+    {
+      "category": "dispatch delay or timing fields",
+      "reason": "no per-entry delay, sleep, or dispatch-timing fields are accepted; scriptConfig.timeout only bounds local script execution"
+    },
+    {
+      "category": "artifact payloads",
+      "reason": "no artifact upload/download or artifact payload fields are accepted on mockWorkers entries"
+    },
+    {
+      "category": "response sequences",
+      "reason": "no multi-step response sequence authoring exists beyond first-match mockWorkers[] entry selection"
+    }
+  ],
+  "fields": [
+    {
+      "id": "mockWorkers",
+      "jsonPath": "mockWorkers",
+      "jsonName": "mockWorkers",
+      "valueType": "array",
+      "required": "required",
+      "defaultEmptyBehavior": "missing mockWorkers decodes as an empty slice; nil after decode is normalized to []",
+      "validationOwner": "decode",
+      "notes": "LoadMockWorkersConfig with an empty path returns NewEmptyMockWorkersConfig without reading a file"
+    },
+    {
+      "id": "unmatchedDispatchPolicy",
+      "jsonPath": "unmatchedDispatchPolicy",
+      "jsonName": "unmatchedDispatchPolicy",
+      "valueType": "string enum",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted or empty string behaves as accept for unmatched dispatches",
+      "validationOwner": "validate",
+      "notes": "accepted values are \"accept\" and \"passthrough\""
+    },
+    {
+      "id": "mockWorkers[].id",
+      "jsonPath": "mockWorkers[].id",
+      "jsonName": "id",
+      "valueType": "string",
+      "parentField": "mockWorkers[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted id is allowed and leaves diagnostics matching unconstrained",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workerName",
+      "jsonPath": "mockWorkers[].workerName",
+      "jsonName": "workerName",
+      "valueType": "string",
+      "parentField": "mockWorkers[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted workerName does not constrain worker-name matching",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workstationName",
+      "jsonPath": "mockWorkers[].workstationName",
+      "jsonName": "workstationName",
+      "valueType": "string",
+      "parentField": "mockWorkers[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted workstationName does not constrain workstation matching",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workInputs",
+      "jsonPath": "mockWorkers[].workInputs",
+      "jsonName": "workInputs",
+      "valueType": "array",
+      "parentField": "mockWorkers[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted workInputs does not constrain consumed work-input selectors",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].runType",
+      "jsonPath": "mockWorkers[].runType",
+      "jsonName": "runType",
+      "valueType": "string enum",
+      "parentField": "mockWorkers[]",
+      "required": "required",
+      "defaultEmptyBehavior": "missing runType fails Validate with actionable runType union message",
+      "validationOwner": "validate",
+      "notes": "accepted values are \"accept\", \"script\", and \"reject\""
+    },
+    {
+      "id": "mockWorkers[].scriptConfig",
+      "jsonPath": "mockWorkers[].scriptConfig",
+      "jsonName": "scriptConfig",
+      "valueType": "object",
+      "parentField": "mockWorkers[]",
+      "required": "required when runType is script",
+      "defaultEmptyBehavior": "omitted scriptConfig is rejected when runType is script",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].rejectConfig",
+      "jsonPath": "mockWorkers[].rejectConfig",
+      "jsonName": "rejectConfig",
+      "valueType": "object",
+      "parentField": "mockWorkers[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted rejectConfig is allowed when runType is reject",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].workInputs[].workId",
+      "jsonPath": "mockWorkers[].workInputs[].workId",
+      "jsonName": "workId",
+      "valueType": "string",
+      "parentField": "mockWorkers[].workInputs[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workInputs[].workType",
+      "jsonPath": "mockWorkers[].workInputs[].workType",
+      "jsonName": "workType",
+      "valueType": "string",
+      "parentField": "mockWorkers[].workInputs[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workInputs[].state",
+      "jsonPath": "mockWorkers[].workInputs[].state",
+      "jsonName": "state",
+      "valueType": "string",
+      "parentField": "mockWorkers[].workInputs[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workInputs[].inputName",
+      "jsonPath": "mockWorkers[].workInputs[].inputName",
+      "jsonName": "inputName",
+      "valueType": "string",
+      "parentField": "mockWorkers[].workInputs[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workInputs[].traceId",
+      "jsonPath": "mockWorkers[].workInputs[].traceId",
+      "jsonName": "traceId",
+      "valueType": "string",
+      "parentField": "mockWorkers[].workInputs[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workInputs[].channel",
+      "jsonPath": "mockWorkers[].workInputs[].channel",
+      "jsonName": "channel",
+      "valueType": "string",
+      "parentField": "mockWorkers[].workInputs[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].workInputs[].payloadHash",
+      "jsonPath": "mockWorkers[].workInputs[].payloadHash",
+      "jsonName": "payloadHash",
+      "valueType": "string",
+      "parentField": "mockWorkers[].workInputs[]",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].scriptConfig.command",
+      "jsonPath": "mockWorkers[].scriptConfig.command",
+      "jsonName": "command",
+      "valueType": "string",
+      "parentField": "mockWorkers[].scriptConfig",
+      "required": "required when runType is script",
+      "defaultEmptyBehavior": "missing or empty command fails Validate when runType is script",
+      "validationOwner": "validate"
+    },
+    {
+      "id": "mockWorkers[].scriptConfig.args",
+      "jsonPath": "mockWorkers[].scriptConfig.args",
+      "jsonName": "args",
+      "valueType": "array of string",
+      "parentField": "mockWorkers[].scriptConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted args leaves command argument list empty",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].scriptConfig.env",
+      "jsonPath": "mockWorkers[].scriptConfig.env",
+      "jsonName": "env",
+      "valueType": "object map string to string",
+      "parentField": "mockWorkers[].scriptConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted env leaves script environment unchanged aside from runner defaults",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].scriptConfig.workingDirectory",
+      "jsonPath": "mockWorkers[].scriptConfig.workingDirectory",
+      "jsonName": "workingDirectory",
+      "valueType": "string",
+      "parentField": "mockWorkers[].scriptConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted workingDirectory uses runner default working directory",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].scriptConfig.stdin",
+      "jsonPath": "mockWorkers[].scriptConfig.stdin",
+      "jsonName": "stdin",
+      "valueType": "string",
+      "parentField": "mockWorkers[].scriptConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted stdin leaves script stdin empty",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].scriptConfig.timeout",
+      "jsonPath": "mockWorkers[].scriptConfig.timeout",
+      "jsonName": "timeout",
+      "valueType": "string",
+      "parentField": "mockWorkers[].scriptConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted timeout uses runner default script timeout; duration strings such as 30s are accepted when set",
+      "validationOwner": "decode",
+      "notes": "bounds local script execution only; not a dispatch-delay authoring field"
+    },
+    {
+      "id": "mockWorkers[].rejectConfig.stdout",
+      "jsonPath": "mockWorkers[].rejectConfig.stdout",
+      "jsonName": "stdout",
+      "valueType": "string",
+      "parentField": "mockWorkers[].rejectConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted stdout leaves rejected command stdout empty",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].rejectConfig.stderr",
+      "jsonPath": "mockWorkers[].rejectConfig.stderr",
+      "jsonName": "stderr",
+      "valueType": "string",
+      "parentField": "mockWorkers[].rejectConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted stderr leaves rejected command stderr empty",
+      "validationOwner": "decode"
+    },
+    {
+      "id": "mockWorkers[].rejectConfig.exitCode",
+      "jsonPath": "mockWorkers[].rejectConfig.exitCode",
+      "jsonName": "exitCode",
+      "valueType": "integer",
+      "parentField": "mockWorkers[].rejectConfig",
+      "required": "optional",
+      "defaultEmptyBehavior": "omitted exitCode leaves rejected exit code unset; when set must be between 1 and 255",
+      "validationOwner": "validate"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "mockWorkers": [
+    {
+      "id": "bad",
+      "runType": "accept",
+      "unexpectedNested": true
+    }
+  ]
+}
