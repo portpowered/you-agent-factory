@@ -162,8 +162,8 @@ provider calls.
 
 `INFERENCE_RUN` workstations execute one bounded model operation through an
 `INFERENCE_WORKER` backend. They are harnessless inference steps, not agent
-loops. Use `you docs models` and `you docs packaged-tts` for OmniVoice TTS and
-other typed inference authoring.
+loops. Use `you docs models` for OmniVoice TTS and other typed inference
+authoring.
 
 `AGENT_RUN` workstations execute prompt-rendered agent loops through an
 `AGENT_WORKER` backend. Configure explicit `agentTools.policy` on the worker,
@@ -182,6 +182,7 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 |--------|---------|
 | Agent orientation (start here) | `you docs agents` |
 | Factory authoring walkthrough | `you docs authoring-factories` |
+| Run a Factory | `you docs run` |
 | `factory.json` topology and portability | `you docs config` |
 | Mock-worker test runs | `you docs mock-workers` |
 | Record and replay CLI modes | `you docs record-replay` |
@@ -189,8 +190,8 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 | Batch relations (`DEPENDS_ON`, `PARENT_CHILD`, `SPAWNED_BY`) | `you docs relationships` |
 | Submitted work (`POST /factory-sessions/{session_id}/work`, tags, tokens) | `you docs work` |
 | Sessions, factory query, status API, dashboard | `you docs sessions` |
-| Dynamic workflow MCP host setup | `you docs mcp-hosts` |
-| Factory Session MCP preview install scope and follow-up cell | `you docs mcp` |
+| Dynamic workflow authoring and execution | `you docs javascript-workflows` |
+| Factory Session MCP host setup | `you docs mcp` |
 | Workstation routing and runtime fields | `you docs workstations` |
 | Worker types and providers | `you docs workers` |
 | Resource capacity | `you docs resources` |
@@ -198,7 +199,6 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 | Agent-loop workers, tool policy, and failure classes | `you docs workers` |
 | `AGENT_RUN` workstations and agent-loop routing | `you docs workstations` |
 | Agent-run dispatch inspection | `you docs sessions` |
-| Packaged OmniVoice TTS (`@you/tts`) | `you docs packaged-tts` |
 | Batch ingress and inbox layout | `you docs batch-inputs` (alias: `you docs batch-work`) |
 | Prompt template variables | `you docs templates` |
 

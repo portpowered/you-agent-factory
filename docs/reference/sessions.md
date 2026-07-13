@@ -9,11 +9,10 @@ doc-id: agent-factory/guides/sessions
 Use this guide when you need to discover live factory sessions, confirm a
 service is listening, inspect the active factory on a running host, read session
 status from the API, or route submit and work commands to a non-default session.
-It also owns the operator path for the currently supported durable JavaScript
-`FactorySession` slice: validate source, start a durable session, inspect
-status, result, dispatches, artifacts, and `FactoryEvent` history, confirm the
-same session in the website detail surface, and apply lifecycle controls where
-the current surface supports them.
+For the end-to-end JavaScript workflow task—select or author source, validate,
+start, inspect, and recover—use `you docs javascript-workflows`. This page owns
+general Factory Session discovery, lifecycle controls, routing, and runtime
+inspection shared by every orchestrator kind.
 
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
@@ -25,7 +24,11 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
-## Canonical JavaScript Factory Session Path
+## JavaScript Factory Session Model
+
+The task procedure and complete CLI/API/MCP command sequence live in
+`you docs javascript-workflows`. The material here only maps that procedure to
+the shared Factory Session model used by the rest of this session reference.
 
 A JavaScript execution is a `FactorySession` whose `orchestratorKind` is
 `JAVASCRIPT`. It is not a workflow run or another resource alongside a Factory
@@ -188,8 +191,8 @@ you use this proof for closeout review.
 
 | Need | Use |
 |------|-----|
-| Validate JavaScript source before durable execution | [Canonical JavaScript Factory Session Path](#canonical-javascript-factory-session-path) and `you docs orchestrators` |
-| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs packaged-goal` |
+| Validate JavaScript source before durable execution | [JavaScript Factory Session model](#javascript-factory-session-model) and `you docs javascript-workflows` |
+| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs run` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
@@ -241,8 +244,9 @@ yet — start or attach a factory before submitting work.
 ### Unreachable host
 
 **Connection refused** or **endpoint not reachable** means nothing is listening on
-the configured host and port. Start the factory with `you`, `you run --continuously`,
-or `you run --dir <factory>` before retrying.
+the configured host and port. Start the Factory with explicit Work, such as
+`you run --continuously --work ./docs/examples/startup-work.json`, before
+retrying.
 
 ### Discover session ids
 
@@ -302,8 +306,8 @@ surfaces.
 | Needs-human `Work` | The human input, approval, or artifact review required for that work item. | Existing human-input, approval, or repair step in the current workflow |
 | Interrupted `Dispatch` or session | Interruption status and latest dispatch or result summary. | Existing dispatch retry, work repair, or session workflow controls |
 
-For the `@you/goal` packaged-factory examples and invocation-specific failure
-codes, use `you docs packaged-goal`.
+For named-Factory inputs and output modes, use `you docs run`. The inspection
+and recovery controls remain on this page.
 
 ## Session pause and resume
 

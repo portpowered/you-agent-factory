@@ -24,22 +24,19 @@ concept owners below when you need the complete customer-facing contract.
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
-| `config` | `factory.json` topology, split layout, and portability | [Config](config.md) and [Author factories](authoring-factories.md) |
+| `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
+| `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
-| `mcp-hosts` | Dynamic workflow MCP host setup, `you mcp serve`, transport assumptions, and host examples | [MCP host setup](mcp-hosts.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `javascript-workflows` | Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
-| `mcp` | Canonical `you mcp serve` install path, preview tool catalog, and scope boundaries | [MCP install path](mcp.md) |
+| `mcp` | `you mcp serve` host setup, backing modes, first-use smoke, and troubleshooting | [MCP host setup](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
-| `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
-| `packaged-fusion` | Packaged `@you/fusion` invocation, signature-aware help, materialization, and editability | [Packaged Fusion](packaged-fusion.md) |
-| `packaged-goal` | Packaged `@you/goal` batch invocation, stdout primary result, materialization, and headless operator-interaction scope | [Packaged Goal](packaged-goal.md) |
-| `packaged-tts` | Packaged `@you/tts` invocation, materialization, metadata result, and editability | [Packaged TTS](packaged-tts.md) |
+| `models` | Model discovery, readiness, pull, invocation, and Factory execution boundaries | [Models](models.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
 
@@ -89,8 +86,8 @@ filesystem work around that invocation.
 - [JavaScript workflows](javascript-workflows.md) owns the supported JavaScript
   authoring surface, equivalent execution and inspection flows, child worker
   preset rules, host-capability boundary, and executable examples.
-- [MCP install path](mcp.md) owns the canonical `you mcp serve` host
-  configuration, preview tool catalog, and install scope boundaries.
+- [MCP host setup](mcp.md) owns the canonical `you mcp serve` host
+  configuration, backing modes, first-use smoke, and troubleshooting.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
@@ -112,9 +109,8 @@ Use these canonical concept owners when you need the current contract.
   `factory.json`, `workers/`, `workstations/`, and `inputs/`.
 - [Resources](resources.md) explains top-level resource pools and the
   `{name, capacity}` requirements consumed by workers or workstations.
-- [Models and model operations](models.md) explains `INFERENCE_RUN`,
-  `INFERENCE_WORKER` capabilities, typed model resources, `/models`, and local or
-  cloud TTS authoring patterns.
+- [Models](models.md) explains model discovery, readiness, pull, direct
+  invocation, and the `INFERENCE_WORKER`/`INFERENCE_RUN` Factory boundary.
 - [Batch inputs](batch-inputs.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces, the
@@ -139,7 +135,7 @@ Use these canonical concept owners when you need the current contract.
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Resources](resources.md)
-- [Models and model operations](models.md)
+- [Models](models.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)
 - [Templates](templates.md)

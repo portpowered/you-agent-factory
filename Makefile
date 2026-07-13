@@ -125,7 +125,7 @@ contracts-validate:
 	$(GO) run ./cmd/contractsvalidate -root .
 
 docs-reference-check:
-	$(GO) run ../markdown-linter/cmd/markdown-linter docs/README.md docs/reference
+	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
 
 docs-reference-smoke:
 	$(MAKE) docs-reference-check
