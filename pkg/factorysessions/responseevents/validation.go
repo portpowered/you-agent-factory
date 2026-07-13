@@ -309,7 +309,10 @@ func validateContentBlock(block ContentBlock) error {
 		return validationError("kind", err.Error())
 	}
 	switch block.Kind {
-	case ContentBlockText, ContentBlockReasoningSummary:
+	case ContentBlockText:
+		// Empty text is a valid authoritative snapshot when the provider
+		// explicitly completes a message with an empty final value.
+	case ContentBlockReasoningSummary:
 		if strings.TrimSpace(block.Text) == "" {
 			return validationError("text", fmt.Sprintf("text is required for content block kind %q", block.Kind))
 		}

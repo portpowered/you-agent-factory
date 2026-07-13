@@ -95,6 +95,8 @@ type cursorStreamRecord struct {
 	Message     json.RawMessage `json:"message"`
 	CallID      string          `json:"call_id"`
 	ToolCall    json.RawMessage `json:"tool_call"`
+	IsError     bool            `json:"is_error"`
+	Result      string          `json:"result"`
 }
 
 type cursorAssistantMessage struct {
@@ -124,8 +126,7 @@ func (d *ResponseEventDecoder) decodeRecord(raw []byte) (adapter.DecodeResult, e
 	case "tool_call":
 		return d.decodeToolCall(record)
 	case ResultTypeResult:
-		// A later Cursor adapter story adds authoritative terminal results.
-		return adapter.DecodeResult{}, nil
+		return d.decodeResult(record)
 	default:
 		return cursorDiagnostic(cursorDiagnosticUnknownRecord, "Cursor stream ignored an unknown record type"), nil
 	}

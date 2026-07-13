@@ -1,0 +1,96 @@
+package cursor
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+)
+
+const cursorDiagnosticInvalidResult = "cursor_invalid_result"
+
+func (d *ResponseEventDecoder) decodeResult(record cursorStreamRecord) (adapter.DecodeResult, error) {
+	providerRef := d.providerRef(record.SessionID)
+	if record.Subtype == ResultSubtypeSuccess && !record.IsError {
+		if canonicalProviderSession(string(interfaces.ModelProviderCursor), record.SessionID) == nil {
+			return cursorDiagnostic(cursorDiagnosticInvalidResult, "Cursor success result omitted a valid session identifier"), nil
+		}
+		return d.cursorResultSnapshot(record, providerRef)
+	}
+
+	if cursorResultCanceled(record.Subtype) {
+		payload, err := json.Marshal(responseevents.RunPayload{Status: "canceled"})
+		if err != nil {
+			return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor canceled result payload: %w", err)
+		}
+		return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+			RunID: d.context.RunID, DispatchID: d.context.DispatchID,
+			Kind: responseevents.KindRun, Phase: responseevents.PhaseCanceled,
+			ProviderSessionRef: providerRef,
+			Provenance:         cursorResponseProvenance(ResultTypeResult, record.Subtype, responseevents.RepresentationNotification, responseevents.FidelityNormalized),
+			Payload:            payload,
+		}}}, nil
+	}
+
+	failure := failureResultFromPayload(resultPayload{
+		Type: ResultTypeResult, Subtype: record.Subtype, IsError: record.IsError,
+		Result: record.Result, SessionID: record.SessionID,
+	})
+	payload, err := json.Marshal(responseevents.ErrorPayload{
+		Code: string(failure.Reason), Message: failure.Message,
+		Retryable: cursorFailureRetryable(failure.Reason),
+	})
+	if err != nil {
+		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor failed result payload: %w", err)
+	}
+	return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
+		Kind: responseevents.KindError, Phase: responseevents.PhaseFailed,
+		ProviderSessionRef: providerRef,
+		Provenance:         cursorResponseProvenance(ResultTypeResult, record.Subtype, responseevents.RepresentationNotification, responseevents.FidelityNormalized),
+		Payload:            payload,
+	}}}, nil
+}
+
+func (d *ResponseEventDecoder) cursorResultSnapshot(record cursorStreamRecord, providerRef string) (adapter.DecodeResult, error) {
+	result := boundedText(record.Result, PublishedTextLimit)
+	fidelity := responseevents.FidelityLossless
+	if result != record.Result {
+		fidelity = responseevents.FidelityLossy
+	}
+	payload, err := json.Marshal(responseevents.MessagePayload{
+		Role:          "assistant",
+		ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: result}},
+	})
+	if err != nil {
+		return adapter.DecodeResult{}, fmt.Errorf("marshal Cursor terminal result payload: %w", err)
+	}
+	return adapter.DecodeResult{Drafts: []responseevents.Draft{{
+		RunID: d.context.RunID, DispatchID: d.context.DispatchID,
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
+		ItemID: d.messageItemID(), ProviderSessionRef: providerRef,
+		Provenance: cursorResponseProvenance(ResultTypeResult, record.Subtype, responseevents.RepresentationSnapshot, fidelity),
+		Payload:    payload,
+	}}}, nil
+}
+
+func cursorResultCanceled(subtype string) bool {
+	switch strings.ToLower(strings.TrimSpace(subtype)) {
+	case "cancel", "canceled", "cancelled":
+		return true
+	default:
+		return false
+	}
+}
+
+func cursorFailureRetryable(reason interfaces.WorkFailureType) bool {
+	switch reason {
+	case interfaces.WorkFailureTypeThrottled, interfaces.WorkFailureTypeTimeout, interfaces.WorkFailureTypeInternalServerError:
+		return true
+	default:
+		return false
+	}
+}

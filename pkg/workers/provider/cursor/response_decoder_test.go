@@ -3,12 +3,14 @@ package cursor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -164,6 +166,101 @@ func TestResponseEventDecoder_InvalidToolCallIDIsDiagnosticAndDoesNotMergeTools(
 	}
 }
 
+func TestResponseEventDecoder_TerminalResultIsAuthoritativeSnapshot(t *testing.T) {
+	testCases := []struct {
+		name       string
+		deltas     []string
+		final      string
+		wantDrafts int
+	}{
+		{name: "ExactMatch", deltas: []string{"final"}, final: "final", wantDrafts: 2},
+		{name: "PrefixExtension", deltas: []string{"final"}, final: "final answer", wantDrafts: 2},
+		{name: "Divergent", deltas: []string{"draft"}, final: "replacement", wantDrafts: 2},
+		{name: "SnapshotOnly", final: "final", wantDrafts: 1},
+		{name: "EmptySuccess", deltas: []string{"draft"}, final: "", wantDrafts: 2},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var lines []string
+			for index, delta := range tc.deltas {
+				lines = append(lines, fmt.Sprintf(`{"type":"assistant","timestamp_ms":%d,"message":{"role":"assistant","content":[{"type":"text","text":%q}]},"session_id":"cursor-result-session"}`, index+1, delta))
+			}
+			lines = append(lines, fmt.Sprintf(`{"type":"result","subtype":"success","is_error":false,"result":%q,"session_id":"cursor-result-session"}`, tc.final))
+
+			result := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(strings.Join(lines, "\n"))}})
+			if len(result.Diagnostics) != 0 || len(result.Drafts) != tc.wantDrafts {
+				t.Fatalf("result = %#v, want %d drafts and no diagnostics", result, tc.wantDrafts)
+			}
+			assertCursorMessageSnapshot(t, result.Drafts[len(result.Drafts)-1], tc.final)
+			if got := reconstructCursorMessage(t, result.Drafts); got != tc.final {
+				t.Fatalf("reconstructed message = %q, want authoritative snapshot %q", got, tc.final)
+			}
+			for _, draft := range result.Drafts {
+				if err := responseevents.ValidateDraft(draft); err != nil {
+					t.Fatalf("invalid draft: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestResponseEventDecoder_TerminalFixtureAndInferenceResultStayAligned(t *testing.T) {
+	raw := readCursorStreamFixture(t, "terminal_results.ndjson")
+	decoded := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: raw}})
+	if len(decoded.Drafts) != 4 || len(decoded.Diagnostics) != 0 {
+		t.Fatalf("decoded = %#v, want session, two deltas, and snapshot", decoded)
+	}
+	assertCursorMessageSnapshot(t, decoded.Drafts[3], "Plan done")
+
+	parsed, failure := ParseInferenceResult(string(interfaces.ModelProviderCursor), raw)
+	if failure != nil || parsed == nil || parsed.Content != "Plan done" {
+		t.Fatalf("parsed = %#v failure = %#v, want aligned terminal result", parsed, failure)
+	}
+}
+
+func TestResponseEventDecoder_TerminalFailureAndCancellationDoNotCompleteMessage(t *testing.T) {
+	testCases := []struct {
+		name      string
+		record    string
+		wantKind  responseevents.Kind
+		wantPhase responseevents.Phase
+	}{
+		{name: "Failure", record: `{"type":"result","subtype":"api_error","is_error":true,"result":"Provider unavailable","session_id":"cursor-result-session"}`, wantKind: responseevents.KindError, wantPhase: responseevents.PhaseFailed},
+		{name: "ErrorFlaggedSuccess", record: `{"type":"result","subtype":"success","is_error":true,"result":"Request timed out","session_id":"cursor-result-session"}`, wantKind: responseevents.KindError, wantPhase: responseevents.PhaseFailed},
+		{name: "Canceled", record: `{"type":"result","subtype":"canceled","is_error":true,"result":"User canceled","session_id":"cursor-result-session"}`, wantKind: responseevents.KindRun, wantPhase: responseevents.PhaseCanceled},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(tc.record)}})
+			if len(result.Drafts) != 1 || result.Drafts[0].Kind != tc.wantKind || result.Drafts[0].Phase != tc.wantPhase {
+				t.Fatalf("drafts = %#v, want %s/%s", result.Drafts, tc.wantKind, tc.wantPhase)
+			}
+			if err := responseevents.ValidateDraft(result.Drafts[0]); err != nil {
+				t.Fatalf("invalid terminal draft: %v", err)
+			}
+		})
+	}
+}
+
+func TestResponseEventDecoder_TerminalSnapshotIsBounded(t *testing.T) {
+	final := strings.Repeat("x", PublishedTextLimit+20)
+	record := fmt.Sprintf(`{"type":"result","subtype":"success","is_error":false,"result":%q,"session_id":"cursor-result-session"}`, final)
+	result := decodeCursorObservations(t, []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(record)}})
+	if len(result.Drafts) != 1 {
+		t.Fatalf("drafts = %#v, want one bounded snapshot", result.Drafts)
+	}
+	var payload responseevents.MessagePayload
+	decodeCursorPayload(t, result.Drafts[0], &payload)
+	if got := payload.ContentBlocks[0].Text; len(got) != PublishedTextLimit+3 || !strings.HasSuffix(got, "...") {
+		t.Fatalf("snapshot length = %d, want %d with ellipsis", len(got), PublishedTextLimit+3)
+	}
+	if result.Drafts[0].Provenance.Fidelity != responseevents.FidelityLossy {
+		t.Fatalf("snapshot provenance = %#v, want lossy", result.Drafts[0].Provenance)
+	}
+}
+
 func TestCursorSafeToolSummaryIsDeterministicBoundedAndRedacted(t *testing.T) {
 	large := map[string]any{
 		"path":          "README.md",
@@ -257,6 +354,53 @@ func assertCursorMessageDelta(t *testing.T, draft responseevents.Draft, wantText
 	}
 	if payload.ContentBlockKind != responseevents.ContentBlockText || payload.TextDelta != wantText {
 		t.Fatalf("message payload = %#v, want text %q", payload, wantText)
+	}
+}
+
+func assertCursorMessageSnapshot(t *testing.T, draft responseevents.Draft, wantText string) {
+	t.Helper()
+	if draft.Kind != responseevents.KindMessage || draft.Phase != responseevents.PhaseCompleted {
+		t.Fatalf("message snapshot kind/phase = %s/%s", draft.Kind, draft.Phase)
+	}
+	if draft.ItemID != "cursor-message/run-cursor-1" || (draft.ProviderSessionRef != "cursor-result-session" && draft.ProviderSessionRef != "cursor-terminal-session") {
+		t.Fatalf("message snapshot correlation = item:%q provider:%q", draft.ItemID, draft.ProviderSessionRef)
+	}
+	if draft.Provenance.Provider != "cursor" || draft.Provenance.NativeEventType != "result" || draft.Provenance.NativeEventSubtype != "success" || draft.Provenance.Representation != responseevents.RepresentationSnapshot {
+		t.Fatalf("message snapshot provenance = %#v", draft.Provenance)
+	}
+	var payload responseevents.MessagePayload
+	decodeCursorPayload(t, draft, &payload)
+	if payload.Role != "assistant" || len(payload.ContentBlocks) != 1 || payload.ContentBlocks[0].Kind != responseevents.ContentBlockText || payload.ContentBlocks[0].Text != wantText {
+		t.Fatalf("message snapshot payload = %#v, want %q", payload, wantText)
+	}
+}
+
+func reconstructCursorMessage(t *testing.T, drafts []responseevents.Draft) string {
+	t.Helper()
+	var assembled string
+	for _, draft := range drafts {
+		if draft.Kind != responseevents.KindMessage {
+			continue
+		}
+		if draft.Phase == responseevents.PhaseDelta {
+			var payload responseevents.MessageDeltaPayload
+			decodeCursorPayload(t, draft, &payload)
+			assembled += payload.TextDelta
+			continue
+		}
+		if draft.Phase == responseevents.PhaseCompleted {
+			var payload responseevents.MessagePayload
+			decodeCursorPayload(t, draft, &payload)
+			assembled = payload.ContentBlocks[0].Text
+		}
+	}
+	return assembled
+}
+
+func decodeCursorPayload(t *testing.T, draft responseevents.Draft, target any) {
+	t.Helper()
+	if err := json.Unmarshal(draft.Payload, target); err != nil {
+		t.Fatalf("decode Cursor payload: %v", err)
 	}
 }
 

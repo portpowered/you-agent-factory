@@ -271,6 +271,20 @@ func TestValidateEvent_ValidatesDeclaredContentBlockKinds(t *testing.T) {
 	}
 }
 
+func TestValidateEvent_AllowsAuthoritativeEmptyTextSnapshot(t *testing.T) {
+	t.Parallel()
+
+	event := sampleEvent(
+		t,
+		responseevents.KindMessage,
+		responseevents.PhaseCompleted,
+		json.RawMessage(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":""}]}`),
+	)
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+}
+
 func TestCapabilities_MarshalDeclaredFlags(t *testing.T) {
 	t.Parallel()
 
