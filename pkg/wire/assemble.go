@@ -4,7 +4,7 @@ import (
 	"errors"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"

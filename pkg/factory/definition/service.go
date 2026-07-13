@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -18,7 +19,8 @@ import (
 // could be resolved for canonical current-factory reads.
 var ErrCurrentFactoryNotFound = apisurface.ErrCurrentFactoryNotFound
 
-// Service owns current and named factory definition reads.
+// Service owns current and named factory definition reads, persistence, and
+// activation policy.
 type Service struct {
 	host Host
 }
@@ -26,6 +28,23 @@ type Service struct {
 // New constructs a factory-definition read collaborator with explicit dependencies.
 func New(host Host) *Service {
 	return &Service{host: host}
+}
+
+// Save coordinates the session-scoped definition submission pipeline for the
+// requested persistence and activation policy.
+func (s *Service) Save(
+	ctx context.Context,
+	sessionID string,
+	mode factoryapi.FactorySaveMode,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	if s == nil || s.host == nil {
+		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
+	}
+	if mode == factoryapi.FactorySaveModeUpsertNamedAndActivate {
+		return s.SaveUpsertNamedAndActivateForSession(ctx, sessionID, request)
+	}
+	return s.SaveReplaceCurrentForSession(ctx, sessionID, request)
 }
 
 // GetCurrentNamedFactory returns the durable current named-factory read model
@@ -119,4 +138,13 @@ func (s *Service) SerializeNamedFactory(
 
 func sameFactoryDir(left, right string) bool {
 	return factorysessions.SameFactoryDir(left, right)
+}
+
+// SessionFactoryPersistRoot resolves the on-disk factory root for
+// session-scoped definition persistence.
+func SessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
+	if session != nil && !session.IsDefault && strings.TrimSpace(session.FolderPath) != "" {
+		return session.FolderPath
+	}
+	return factorysessions.SessionFactoryRootDir(serviceRootDir, session)
 }

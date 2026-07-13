@@ -7,7 +7,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"

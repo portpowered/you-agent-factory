@@ -200,7 +200,9 @@ func (h *upsertDefinitionHost) GetCurrentFactoryForSession(context.Context, stri
 
 func (h *upsertDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
 
-func (h *upsertDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error { return nil }
+func (h *upsertDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error {
+	return nil
+}
 
 func (h *upsertDefinitionHost) ActivateSessionEditableFactory(
 	_ context.Context,

@@ -19,15 +19,15 @@ import (
 )
 
 type stubDefinitionHost struct {
-	persistRootDir      string
-	workstationLoader   factoryconfig.WorkstationLoader
-	currentRuntime      *factoryconfig.LoadedFactoryConfig
-	workflowID          string
-	session             *factorysessions.LiveSession
-	sessionRuntime      *factoryconfig.LoadedFactoryConfig
-	sessionPersistRoot  string
-	requireSessionErr   error
-	sessionRuntimeErr   error
+	persistRootDir     string
+	workstationLoader  factoryconfig.WorkstationLoader
+	currentRuntime     *factoryconfig.LoadedFactoryConfig
+	workflowID         string
+	session            *factorysessions.LiveSession
+	sessionRuntime     *factoryconfig.LoadedFactoryConfig
+	sessionPersistRoot string
+	requireSessionErr  error
+	sessionRuntimeErr  error
 }
 
 func (h stubDefinitionHost) PersistRootDir() string { return h.persistRootDir }

@@ -6,7 +6,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 )
 
