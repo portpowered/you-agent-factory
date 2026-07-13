@@ -3,6 +3,7 @@
 package terminalpolicy
 
 import (
+	"errors"
 	"io"
 
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -118,6 +119,9 @@ func (p Policy) BuildLogger(build LoggerBuilder) (*zap.Logger, error) {
 	case ModeNormal:
 		return logging.BuildTerminalMutedLogger()
 	default:
+		if build == nil {
+			return nil, errors.New("verbose terminal policy requires a logger builder")
+		}
 		return build(p.VerboseEnabled(), p.DebugEnabled())
 	}
 }

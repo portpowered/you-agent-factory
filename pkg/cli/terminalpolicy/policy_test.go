@@ -130,6 +130,13 @@ func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
 	}
 }
 
+func TestBuildLogger_RejectsMissingVerboseBuilder(t *testing.T) {
+	logger, err := Resolve(Options{Verbose: true}).BuildLogger(nil)
+	if err == nil || logger != nil {
+		t.Fatalf("BuildLogger(nil) = %#v, %v; want explicit error", logger, err)
+	}
+}
+
 func TestBuildLogger_NormalModeDoesNotWriteStructuredLogsToStderr(t *testing.T) {
 	oldStderr := os.Stderr
 	readPipe, writePipe, err := os.Pipe()
