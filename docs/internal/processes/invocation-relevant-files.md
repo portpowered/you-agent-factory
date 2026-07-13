@@ -327,18 +327,14 @@ primary-result behavior.
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
--   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
+- `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
-  routes review mode from `check-goal` (`plain` -> `goal:review`, `structured` ->
-  `goal:structured-review`) so plain classifier and structured envelope lanes are
-  both reachable without competing logical advances from `goal:check`. The built-in
-  `goal-checker` script worker must emit only the lane label on stdout after
-  verification (`plain` by default, opt-in `structured` via
-  `YOU_GOAL_REVIEW_MODE`) because `check-goal` is a `CLASSIFIER_WORKSTATION`.
-  Retry exhaustion is authored separately for `review-goal` and
-  `structured-review-goal`, each with its own guarded loop-breaker from `goal:plan`
-  to `goal:failed`.
+  has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
+  accepted completion routes to `goal:complete`, continue/reject route back to
+  `goal:init`, and worker or workstation failure routes to `goal:failed`.
+  `pkg/config/builtingoal/` owns the authored factory and concise executor prompt;
+  assembly and materialization require only `goal-executor` and `execute-goal`.
   Packaged workstation `body` templates must use canonical `PromptData` roots
   such as `(index .Inputs 0).Payload`; legacy top-level aliases like
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.
@@ -383,42 +379,15 @@ primary-result behavior.
   selects terminal `goal:complete` work content as the primary result.
   `summary.go` shapes terminal `execute-goal` work content from worker output so
   EXPLICIT primary-result selection returns the final summary instead of
-  submitted goal input text; classifier `review-goal` output is a route label
-  and must preserve carried summary content. `primary_result_test.go` covers both
+  submitted goal input text. `primary_result_test.go` covers both
   successful EXPLICIT selection and unresolved failure when `goal:complete` is
   absent from terminal work in scope.
-- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
-  reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
-  Goal routing envelopes with authored `classificationRoutes` map parsed
-  `decision` labels onto `SelectedClassificationLabel` while preserving
-  `Feedback`, optional `Output`, and `RecordedOutputWork`.
-- `pkg/workers/executor/agent.go` routes workstations with
-  `outcomeFormat: decision-envelope` through
-  `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
-  Those workstations with authored
-  `classificationRoutes` use `goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed`.
-- `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
-  reviewer/checker envelope shape, the standard outcome vocabulary, the
-  packaged-goal goal-routing decision vocabulary used when
-  `classificationRoutes` are present, and malformed-input behavior.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
-  invocation summary shaping on `execute-goal` workstations alongside packaged
-  TTS metadata shaping. `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
-  proves each authored `review-goal` classifier label routes to the expected goal place
-  through the mapped runtime net and proves structured `structured-review-goal`
-  envelopes route from parsed decision labels while preserving mapped
-  `WorkResult` fields. The same file also proves malformed JSON and unknown
-  decisions route to `goal:failed` with actionable failure text instead of
-  misrouting to complete, rework, or escalation states.
-- `pkg/packagedfactories/goal/factory_test.go` proves `goal:execute` schedules
-  the `check-goal` review-mode classifier in the mapped runtime net.
-- `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` proves the
-  materialized built-in goal topology dispatches `review-goal` when
-  `check-goal` returns `plain` and `structured-review-goal` when `check-goal`
-  returns `structured`, using the real authored `goal-checker` contract rather
-  than mocked lane-label output. The same file proves repeated structured
-  `needs_changes` rework trips the structured loop-breaker instead of retrying
-  forever.
+  invocation summary shaping on the single `execute-goal` repeater alongside
+  packaged TTS metadata shaping.
+- `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
+  proves the assembled minimal topology repeats continue/reject outcomes through
+  `goal:init` and routes worker failure to `goal:failed` without live providers.
 - Behavioral proof for named goal batch invocation lives in
   `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a

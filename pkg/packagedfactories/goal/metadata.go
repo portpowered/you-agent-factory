@@ -7,34 +7,19 @@ const (
 	PackagedFactoryProject = "builtin-goal"
 	// PackagedGoalWorkTypeName is the canonical default goal work type name.
 	PackagedGoalWorkTypeName = "goal"
-	// PackagedPlanWorkstationName is the workstation that plans submitted goal work.
-	PackagedPlanWorkstationName = "plan-goal"
-	// PackagedExecuteWorkstationName is the workstation that executes planned goal work.
+	// PackagedExecuteWorkstationName is the single repeater workstation for goal work.
 	PackagedExecuteWorkstationName = "execute-goal"
-	// PackagedCheckWorkstationName is the workstation that runs goal verification checks.
-	PackagedCheckWorkstationName = "check-goal"
-	// PackagedReviewWorkstationName is the workstation that classifies review outcomes.
-	PackagedReviewWorkstationName = "review-goal"
-	// PackagedStructuredReviewStateName is the goal state for structured envelope review.
-	PackagedStructuredReviewStateName = "structured-review"
-	// PackagedReviewModePlainLabel selects the classifier-driven plain review lane.
-	PackagedReviewModePlainLabel = "plain"
-	// PackagedReviewModeStructuredLabel selects the structured envelope review lane.
-	PackagedReviewModeStructuredLabel = "structured"
-	// PackagedCheckReviewModeEnvVar lets the built-in checker opt into the structured
-	// review lane while defaulting to the plain classifier lane.
-	PackagedCheckReviewModeEnvVar = "YOU_GOAL_REVIEW_MODE"
-	// PackagedAdvanceStructuredReviewWorkstationName is retained for factories that
-	// still advance checked work through a dedicated logical move.
-	PackagedAdvanceStructuredReviewWorkstationName = "advance-goal-structured-review"
-	// PackagedStructuredReviewWorkstationName routes richer reviewer envelopes through
-	// parsed goal decision labels.
-	PackagedStructuredReviewWorkstationName = "structured-review-goal"
-	// PackagedLoopBreakerWorkstationName is the guarded loop breaker for review retries.
-	PackagedLoopBreakerWorkstationName = "goal-loop-breaker"
-	// PackagedStructuredLoopBreakerWorkstationName is the guarded loop breaker for
-	// structured review retries.
+	// Deprecated multi-stage workstation names retained for transitional test and mock helpers.
+	PackagedPlanWorkstationName                  = "plan-goal"
+	PackagedCheckWorkstationName                 = "check-goal"
+	PackagedReviewWorkstationName                = "review-goal"
+	PackagedStructuredReviewStateName            = "structured-review"
+	PackagedStructuredReviewWorkstationName      = "structured-review-goal"
+	PackagedLoopBreakerWorkstationName           = "goal-loop-breaker"
 	PackagedStructuredLoopBreakerWorkstationName = "goal-structured-loop-breaker"
+	PackagedCheckReviewModeEnvVar                = "YOU_GOAL_REVIEW_MODE"
+	PackagedReviewModePlainLabel                 = "plain"
+	PackagedReviewModeStructuredLabel            = "structured"
 	// PackagedInvokeWorkstationName aliases the execute workstation for simplified
 	// invocation-primary-result scaffolds and legacy references.
 	PackagedInvokeWorkstationName = PackagedExecuteWorkstationName
@@ -63,9 +48,5 @@ const (
 // PackagedGoalRolePromptSources lists each role-specific authored prompt source in
 // the packaged goal factory's normal worker/workstation load paths.
 var PackagedGoalRolePromptSources = []PackagedGoalRolePromptSource{
-	{Role: "planner", WorkstationName: PackagedPlanWorkstationName, PromptFile: "prompts/planner.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
 	{Role: "executor", WorkstationName: PackagedExecuteWorkstationName, PromptFile: "prompts/executor.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
-	{Role: "checker", WorkstationName: PackagedCheckWorkstationName, PromptFile: "prompts/checker.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
-	{Role: "reviewer", WorkerName: "goal-reviewer", SourceKind: PackagedGoalRolePromptSourceKindWorkerBody},
-	{Role: "summarizer", WorkstationName: PackagedReviewWorkstationName, PromptFile: "prompts/summarizer.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
 }

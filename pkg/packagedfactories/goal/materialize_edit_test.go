@@ -13,15 +13,15 @@ import (
 
 func TestEditedMaterializedPackagedGoalFactoryChangesNextLoad(t *testing.T) {
 	factoryDir := materializePackagedGoalFactory(t, t.TempDir())
-	initialWorker := loadPackagedGoalWorker(t, factoryDir, "goal-reviewer")
+	initialWorker := loadPackagedGoalWorker(t, factoryDir, "goal-executor")
 	if initialWorker.Body == "" {
-		t.Fatal("expected initial materialized goal-reviewer worker body from authored prompt source")
+		t.Fatal("expected initial materialized goal-executor worker body from authored prompt source")
 	}
 
-	editedBody := "You are the customer-edited @you/goal built-in reviewer.\n"
-	editMaterializedWorkerBody(t, factoryDir, "goal-reviewer", editedBody)
+	editedBody := "You are the customer-edited @you/goal built-in executor.\n"
+	editMaterializedWorkerBody(t, factoryDir, "goal-executor", editedBody)
 
-	editedWorker := loadPackagedGoalWorker(t, factoryDir, "goal-reviewer")
+	editedWorker := loadPackagedGoalWorker(t, factoryDir, "goal-executor")
 	if editedWorker.Body != strings.TrimSpace(editedBody) {
 		t.Fatalf("edited worker body = %q, want %q", editedWorker.Body, strings.TrimSpace(editedBody))
 	}

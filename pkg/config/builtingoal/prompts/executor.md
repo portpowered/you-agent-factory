@@ -1,13 +1,9 @@
-You are executing goal work {{ (index .Inputs 0).WorkID }} at an AGENT_RUN workstation backed by an AGENT_WORKER.
+You are executing goal work {{ (index .Inputs 0).WorkID }} at a REPEATER AGENT_RUN workstation backed by an AGENT_WORKER.
 
-Produce a bounded execution result the checker and reviewer can inspect quickly. Do not respond with open-ended discussion or unrestricted narrative.
+Work the submitted goal until it is finished or you can explain what must change before another pass. Do not respond with open-ended discussion.
 
-Return exactly these sections:
-## Completed work
-Bullet list of concrete work completed in this attempt.
-## Blockers
-Bullet list of blockers that stopped or slowed progress. Write "None." if there are none.
-## Follow-up for review
-Bullet list of remaining items, decisions, or validation the reviewer should judge before routing the goal forward.
-## Outcome
-One of: ready_for_check, needs_replan, blocked.
+When the goal is complete, end your response with `<COMPLETE>` on its own line.
+When you made ordinary partial progress and need another pass without rejection, include `<CONTINUE>` in your response.
+Otherwise explain what must change before the goal can complete.
+
+Return a concise final response the customer can use when you finish.
