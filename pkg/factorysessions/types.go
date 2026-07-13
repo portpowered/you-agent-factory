@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
 
@@ -98,6 +99,17 @@ func EnsureRuntimeFactorySessionID(session *LiveSession) {
 	if session.IsDefault || session.ID == DefaultSessionID {
 		session.RuntimeFactorySessionID = NewSessionID()
 	}
+}
+
+// SessionResponseEventStore retains immutable FactoryResponseEvent records for
+// one live Factory Session runtime. It is separate from canonical factory event
+// history and from service-coordinator state.
+type SessionResponseEventStore = responseeventstore.SessionResponseEventStore
+
+// NewSessionResponseEventStore allocates an empty response-event store owned
+// by one live Factory Session runtime.
+func NewSessionResponseEventStore(factorySessionID string) *SessionResponseEventStore {
+	return responseeventstore.NewSessionResponseEventStore(factorySessionID)
 }
 
 // SessionResponseStream keeps ordered internal provider progress for one live

@@ -173,7 +173,11 @@ primary-result behavior.
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
-  `pkg/factorysessions/responsestream` fragment kinds). Package docs in
+  `pkg/factorysessions/responsestream` fragment kinds). Session-scoped immutable
+  response-event storage lives in `pkg/factorysessions/responseeventstore` with
+  `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is
+  session-runtime-local state separate from canonical `FactoryEvent` history.
+  Package docs in
   `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`
   enforces isolation from CLI, HTTP, subprocess, and provider imports.
