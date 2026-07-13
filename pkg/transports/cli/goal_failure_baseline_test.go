@@ -86,7 +86,7 @@ func TestFailureBaseline_QuietLeak_InvalidTopologySuppressesTerminalOnOperationa
 	}
 
 	var stdout, stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newComposedTestRootCommand(t)
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{
@@ -455,7 +455,7 @@ func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraph
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	root := NewRootCommand()
+	root := newComposedTestRootCommand(t)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{

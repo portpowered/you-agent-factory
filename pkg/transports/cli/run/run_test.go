@@ -62,6 +62,11 @@ func preserveRunGlobals(t *testing.T) {
 	originalOpener := dashboardOpener
 	originalInteractive := interactiveOutput
 	originalStartAPIServer := startAPIServer
+	if buildInvocationBootstrap == nil {
+		buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (InvocationRunner, error) {
+			return service.BuildInvocationBootstrap(ctx, cfg)
+		}
+	}
 	t.Cleanup(func() {
 		buildFactoryService = originalBuilder
 		buildInvocationBootstrap = originalInvocationBootstrap
@@ -453,7 +458,7 @@ func TestBuildApplicationSequentialHomesControlDefaultRecordingPath(t *testing.T
 			gotLogDir = cfg.RuntimeLogDir
 			gotMetricsDir = cfg.RuntimeMetricsDir
 			return stubFactoryService{run: func(context.Context) error { return nil }}, nil
-		})
+		}, nil)
 		if err != nil {
 			t.Fatalf("BuildApplication(home %q) error = %v", homeDir, err)
 		}

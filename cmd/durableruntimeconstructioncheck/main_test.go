@@ -46,6 +46,27 @@ func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
 	}
 }
 
+func TestScanRejectsTransportApplicationComposition(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/transports/cli/run/compose.go": "testdata/prohibited_transport_composition.go.txt",
+	})
+
+	findings, err := scan(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+	for _, prohibited := range []string{
+		"BuildInvocationBootstrap",
+		"NewExecutionService",
+		"NewFakeServiceFromContractFixtures",
+		"ProjectPersistence",
+	} {
+		if !containsFinding(findings, prohibited) {
+			t.Errorf("findings %#v do not report %s", findings, prohibited)
+		}
+	}
+}
+
 func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/factorysessionexecution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",

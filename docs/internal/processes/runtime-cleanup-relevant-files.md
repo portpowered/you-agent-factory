@@ -161,7 +161,15 @@ factory and approved deterministic test harness. Project-local persistence path
 resolution and directory-store construction belong at the fallible application
 composition boundary in `pkg/factorysessionexecution/service.go`; production
 runtime code must receive either that injected store or an explicit disabled
-policy and must not use a persistence boolean. Package tests, `testdata`
+policy and must not use a persistence boolean.
+
+The guard also rejects `BuildInvocationBootstrap`, `NewExecutionService`,
+`NewFakeServiceFromContractFixtures`, and `ProjectPersistence` calls outside
+approved application-composition owners. Transport packages consume injected
+invocation and durable-execution collaborators; narrow migration exceptions
+must name the unfinished story and be removed with that story.
+
+Package tests, `testdata`
 fixtures, generated code, dependencies, coverage, and build artifacts are not
 production construction sites. Production JavaScript live-child packages must
 also invoke providers through `pkg/workers/providerexecution`; the guard rejects

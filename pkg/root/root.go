@@ -27,6 +27,7 @@ func NewCommandWithDependencies(input ProcessInput, dependencies Dependencies) *
 		Startup: func(ctx context.Context, request startupcli.Request) error {
 			return executeStartup(ctx, request, dependencies)
 		},
+		BuildSessionExecution: dependencies.BuildSessionExecution,
 	})
 	command.SetArgs(input.Arguments())
 	command.SetIn(input.stdin)

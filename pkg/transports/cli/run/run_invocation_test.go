@@ -71,7 +71,7 @@ func TestBuildApplication_ConstructsInvocationBootstrapOnceBeforeInitializer(t *
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },
 		DisableDefaultRecording:  true,
-	}, nil)
+	}, nil, buildInvocationBootstrap)
 	if err != nil {
 		t.Fatalf("BuildApplication() error = %v", err)
 	}
@@ -1326,7 +1326,7 @@ func installCapturingRealInvocationBootstrap(t *testing.T) *capturingBootstrapRu
 
 	capture := &capturingBootstrapRunner{}
 	buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
-		inner, err := defaultBuildInvocationBootstrap(ctx, cfg)
+		inner, err := service.BuildInvocationBootstrap(ctx, cfg)
 		if err != nil {
 			return nil, err
 		}

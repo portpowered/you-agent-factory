@@ -355,7 +355,7 @@ func Run(ctx context.Context, cfg RunConfig) error {
 }
 
 func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) error {
-	application, err := BuildApplication(ctx, cfg, builder)
+	application, err := BuildApplication(ctx, cfg, builder, buildInvocationBootstrap)
 	if err != nil {
 		return err
 	}
@@ -378,7 +378,12 @@ type Application struct {
 
 // BuildApplication resolves run inputs and constructs the runtime graph without
 // starting its transport, sidecars, or runtime loop.
-func BuildApplication(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) (*Application, error) {
+func BuildApplication(
+	ctx context.Context,
+	cfg RunConfig,
+	builder FactoryServiceBuilder,
+	invocationBuilder InvocationBootstrapBuilder,
+) (*Application, error) {
 	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
@@ -417,19 +422,7 @@ func BuildApplication(ctx context.Context, cfg RunConfig, builder FactoryService
 	emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 
 	if invocationMode {
-		svcCfg := buildInvocationRunServiceConfig(cfg, logger, mockWorkersConfig)
-		invoker, err := buildInvocationBootstrap(ctx, svcCfg)
-		if err != nil {
-			return nil, fmt.Errorf("construct factory invocation bootstrap: %w", err)
-		}
-		if invoker == nil {
-			return nil, fmt.Errorf("construct factory invocation bootstrap: builder returned nil runner")
-		}
-		return &Application{
-			cfg: cfg, logger: logger, invocationRequest: invocationRequest,
-			invocationRunner: invoker, invocationMode: true, recordPath: recordPath,
-			reservedAPIServer: reservedAPIServer,
-		}, nil
+		return buildInvocationApplication(ctx, cfg, logger, invocationRequest, recordPath, invocationBuilder, mockWorkersConfig)
 	}
 
 	dashboardReady := make(chan struct{})

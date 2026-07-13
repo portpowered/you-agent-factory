@@ -186,26 +186,48 @@ func (e *AmbiguousInvocationInputError) Unwrap() error {
 	return e.invocationErr
 }
 
-type sessionInvocationRunner interface {
+// InvocationRunner is the already-constructed invocation collaborator consumed
+// by one-shot CLI runs.
+type InvocationRunner interface {
 	factoryServiceRunner
 	apisurface.InvocationAPI
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 	CloseFactorySession(context.Context, string) error
 }
 
-type invocationBootstrapBuilder func(context.Context, *service.FactoryServiceConfig) (sessionInvocationRunner, error)
+type sessionInvocationRunner = InvocationRunner
 
-var buildInvocationBootstrap = defaultBuildInvocationBootstrap
+// InvocationBootstrapBuilder constructs the invocation collaborator at the
+// application wiring boundary before the CLI application starts.
+type InvocationBootstrapBuilder func(context.Context, *service.FactoryServiceConfig) (InvocationRunner, error)
 
-func defaultBuildInvocationBootstrap(
+// buildInvocationBootstrap is a compatibility test seam. Production process
+// composition always supplies the builder owned by pkg/wire.
+var buildInvocationBootstrap InvocationBootstrapBuilder
+
+func buildInvocationApplication(
 	ctx context.Context,
-	cfg *service.FactoryServiceConfig,
-) (sessionInvocationRunner, error) {
-	bootstrap, err := service.BuildInvocationBootstrap(ctx, cfg)
-	if err != nil {
-		return nil, err
+	cfg RunConfig,
+	logger *zap.Logger,
+	request *factoryapi.InvocationRequest,
+	recordPath resolvedRunRecordPath,
+	builder InvocationBootstrapBuilder,
+	mockWorkersConfig *factoryconfig.MockWorkersConfig,
+) (*Application, error) {
+	if builder == nil {
+		return nil, fmt.Errorf("construct factory invocation bootstrap: builder is required")
 	}
-	return bootstrap, nil
+	runner, err := builder(ctx, buildInvocationRunServiceConfig(cfg, logger, mockWorkersConfig))
+	if err != nil {
+		return nil, fmt.Errorf("construct factory invocation bootstrap: %w", err)
+	}
+	if runner == nil {
+		return nil, fmt.Errorf("construct factory invocation bootstrap: builder returned nil runner")
+	}
+	return &Application{
+		cfg: cfg, logger: logger, invocationRequest: request,
+		invocationRunner: runner, invocationMode: true, recordPath: recordPath,
+	}, nil
 }
 
 type sessionResponseEventInvocationRunner interface {

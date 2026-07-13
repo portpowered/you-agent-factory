@@ -35,6 +35,7 @@ func buildProcessGraph(
 	request startupcli.Request,
 	policy initializer.ProcessPolicy,
 	buildRunner processRunnerBuilder,
+	invocationBuilders ...runcli.InvocationBootstrapBuilder,
 ) (*initializer.ProcessGraph, error) {
 	switch request.Kind {
 	case startupcli.KindRun:
@@ -49,12 +50,16 @@ func buildProcessGraph(
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
 		}
+		invocationBuilder := runcli.InvocationBootstrapBuilder(buildInvocationRunner)
+		if len(invocationBuilders) > 0 {
+			invocationBuilder = invocationBuilders[0]
+		}
 		application, err := runcli.BuildApplication(ctx, runConfig, func(
 			buildCtx context.Context,
 			cfg *service.FactoryServiceConfig,
 		) (runcli.RuntimeRunner, error) {
 			return buildRunner(buildCtx, cfg, applicationMode)
-		})
+		}, invocationBuilder)
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
 		}
@@ -90,6 +95,13 @@ func buildProcessGraph(
 	default:
 		return nil, fmt.Errorf("construct process graph: unsupported startup kind %q", request.Kind)
 	}
+}
+
+func buildInvocationRunner(
+	ctx context.Context,
+	cfg *service.FactoryServiceConfig,
+) (runcli.InvocationRunner, error) {
+	return service.BuildInvocationBootstrap(ctx, cfg)
 }
 
 func applicationModeForProcess(mode initializer.ProcessMode) (initializer.Mode, error) {

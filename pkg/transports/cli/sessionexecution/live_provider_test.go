@@ -52,8 +52,8 @@ func TestRunSync_LiveProviderJavaScriptSession_RequiresConfiguredProvider(t *tes
 		JSON:                   true,
 		Output:                 &runOutput,
 	})
-	if err == nil || !strings.Contains(err.Error(), "provider is required for live-provider child execution") {
-		t.Fatalf("RunSync error = %v, want missing live provider", err)
+	if err == nil || !strings.Contains(err.Error(), "durable execution service is required") {
+		t.Fatalf("RunSync error = %v, want missing injected service", err)
 	}
 }
 
@@ -90,8 +90,8 @@ func TestRunSync_JavaScriptRuntimeBackend_DoesNotInstallLiveFixtureProvider(t *t
 		JSON:   true,
 		Output: &runOutput,
 	})
-	if err == nil || !strings.Contains(err.Error(), "provider is required for live-provider child execution") {
-		t.Fatalf("RunSync error = %v, want missing live provider", err)
+	if err == nil || !strings.Contains(err.Error(), "durable execution service is required") {
+		t.Fatalf("RunSync error = %v, want missing injected service", err)
 	}
 }
 

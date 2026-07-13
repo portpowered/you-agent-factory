@@ -1,7 +1,10 @@
 package sessionexecution
 
 import (
+	"context"
 	"io"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
 // ExecutionMode selects synchronous or asynchronous durable session start.
@@ -18,6 +21,18 @@ type ExecutionBackendConfig struct {
 	Provider    string
 	ProjectRoot string
 }
+
+// ServiceRequest contains the transport-normalized inputs needed by the wiring
+// layer to construct one durable Factory Session execution collaborator.
+type ServiceRequest struct {
+	ExecutionBackendConfig
+	FixtureCatalogPath string
+	ChildExecutorMode  string
+}
+
+// ServiceBuilder constructs a durable execution collaborator outside the CLI
+// transport boundary.
+type ServiceBuilder func(context.Context, ServiceRequest) (factorysessionexecution.Service, error)
 
 // StartConfig holds CLI inputs for one durable Factory Session execution start.
 type StartConfig struct {

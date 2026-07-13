@@ -10,6 +10,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 )
 
 func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
@@ -182,6 +185,48 @@ func TestExecuteSetupAndFactoryAuthoringCommandsThroughProductionComposition(t *
 	}
 	if _, err := os.Stat(missingPath); !os.IsNotExist(err) {
 		t.Fatalf("missing factory path Stat error = %v, want not-exist", err)
+	}
+}
+
+func TestExecuteWorkflowStartsUseInjectedDurableExecutionService(t *testing.T) {
+	t.Parallel()
+	catalogPath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures() error = %v", err)
+	}
+	var requests []sessionexecutioncli.ServiceRequest
+	commands := []struct {
+		name      string
+		args      []string
+		sessionID string
+	}{
+		{name: "sync run", args: []string{"workflow", "run", "--request-id", "req-petri-success-001", "--factory", "customer-support-triage"}, sessionID: "dur-sess-petri-success-001"},
+		{name: "async start", args: []string{"workflow", "start", "--request-id", "req-js-run-n-001", "--workflow", "release-train"}, sessionID: "dur-sess-js-run-n-001"},
+	}
+	for _, command := range commands {
+		var output bytes.Buffer
+		err = ExecuteWithDependencies(Input{
+			Args: append([]string{"you", "--json"}, command.args...),
+			Env:  homeEnvironment(t.TempDir()), Stdout: &output, Context: context.Background(),
+		}, Dependencies{BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (factorysessionexecution.Service, error) {
+			requests = append(requests, request)
+			return service, nil
+		}})
+		if err != nil {
+			t.Fatalf("ExecuteWithDependencies(%s) error = %v", command.name, err)
+		}
+		if !strings.Contains(output.String(), `"sessionId":"`+command.sessionID+`"`) {
+			t.Fatalf("%s output = %q, want result from injected fixture service", command.name, output.String())
+		}
+	}
+	if len(requests) != len(commands) {
+		t.Fatalf("durable execution requests = %+v, want one per command", requests)
+	}
+	for _, request := range requests {
+		if request.Provider != string(factorysessionexecution.ExecutionProviderFake) {
+			t.Fatalf("durable execution request = %+v, want fake provider", request)
+		}
 	}
 }
 

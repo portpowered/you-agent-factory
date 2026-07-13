@@ -5,12 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -87,90 +84,10 @@ func writeRunError(output io.Writer, jsonOutput bool, err error) error {
 }
 
 func resolveExecutionService(cfg RunConfig) (factorysessionexecution.Service, error) {
-	if cfg.Service != nil {
-		return cfg.Service, nil
+	if cfg.Service == nil {
+		return nil, fmt.Errorf("durable execution service is required")
 	}
-	provider, err := normalizeExecutionProvider(cfg.Provider)
-	if err != nil {
-		return nil, err
-	}
-	if provider == factorysessionexecution.ExecutionProviderJavaScriptRuntime {
-		projectRoot, err := resolveProjectRoot(cfg.ProjectRoot)
-		if err != nil {
-			return nil, err
-		}
-		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
-		if err != nil {
-			return nil, err
-		}
-		return factorysessionexecution.NewExecutionService(provider, factorysessionexecution.ServiceConfig{
-			ProjectRoot:       projectRoot,
-			ChildExecutorMode: cfg.StartConfig.ChildExecutorMode,
-			Persistence:       persistence,
-		})
-	}
-	catalogPath, err := resolveFixtureCatalogPath(cfg.FixtureCatalogPath)
-	if err != nil {
-		return nil, err
-	}
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
-	if err != nil {
-		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
-	}
-	return service, nil
-}
-
-func normalizeExecutionProvider(provider string) (factorysessionexecution.ExecutionProvider, error) {
-	switch strings.TrimSpace(provider) {
-	case "", string(factorysessionexecution.ExecutionProviderFake):
-		return factorysessionexecution.ExecutionProviderFake, nil
-	case string(factorysessionexecution.ExecutionProviderJavaScriptRuntime):
-		return factorysessionexecution.ExecutionProviderJavaScriptRuntime, nil
-	default:
-		return "", newExecutionError(
-			ErrorCodeValidation,
-			fmt.Sprintf("execution provider %q is unsupported: use fake or javascript-runtime", provider),
-			"executionProvider",
-		)
-	}
-}
-
-func resolveProjectRoot(explicit string) (string, error) {
-	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
-		return trimmed, nil
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve current working directory: %w", err)
-	}
-	return cwd, nil
-}
-
-func resolveFixtureCatalogPath(explicit string) (string, error) {
-	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
-		return trimmed, nil
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve current working directory: %w", err)
-	}
-	relative := filepath.FromSlash(fixtures.ContractFixtureCatalogRelativePath)
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, relative)
-		if _, statErr := os.Stat(candidate); statErr == nil {
-			return candidate, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", fmt.Errorf(
-		"fixture catalog not found; run from the repository root or set --fixture-catalog to %s",
-		fixtures.ContractFixtureCatalogRelativePath,
-	)
+	return cfg.Service, nil
 }
 
 type syncTimeoutCLIResponse struct {

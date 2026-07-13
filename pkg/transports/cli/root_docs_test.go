@@ -456,7 +456,7 @@ func TestDocsCommand_JavaScriptWorkflowExamplesMatchCLIBoundary(t *testing.T) {
 func assertDocumentedWorkflowCommand(t *testing.T, args []string, wantOutput, wantError string) {
 	t.Helper()
 	var output bytes.Buffer
-	root := NewRootCommand()
+	root := newComposedTestRootCommand(t)
 	root.SetOut(&output)
 	root.SetErr(io.Discard)
 	root.SetArgs(args)

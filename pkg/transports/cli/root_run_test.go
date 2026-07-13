@@ -17,10 +17,14 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/service"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
@@ -41,6 +45,28 @@ func TestMain(m *testing.M) {
 	os.Setenv("HOMEPATH", string(os.PathSeparator))
 
 	os.Exit(m.Run())
+}
+
+func newComposedTestRootCommand(t *testing.T) *cobra.Command {
+	t.Helper()
+	return NewRootCommandWithOptions(RootCommandOptions{
+		RunFactory: func(ctx context.Context, cfg runcli.RunConfig) error {
+			application, err := runcli.BuildApplication(ctx, cfg, nil, func(
+				buildCtx context.Context,
+				serviceCfg *service.FactoryServiceConfig,
+			) (runcli.InvocationRunner, error) {
+				return service.BuildInvocationBootstrap(buildCtx, serviceCfg)
+			})
+			if err != nil {
+				return err
+			}
+			return application.Run(ctx)
+		},
+		BuildSessionExecution: func(_ context.Context, _ sessionexecutioncli.ServiceRequest) (factorysessionexecution.Service, error) {
+			catalogPath := filepath.Join("..", "..", "..", filepath.FromSlash(fixtures.ContractFixtureCatalogRelativePath))
+			return factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+		},
+	})
 }
 
 func TestRunCommand_VerboseFlag(t *testing.T) {

@@ -3,6 +3,7 @@ package wire
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"path/filepath"
 	"strings"
@@ -38,6 +39,36 @@ func TestBuildProcessGraphConstructsRunBeforeLifecycle(t *testing.T) {
 	}
 	if err := initializer.RunProcess(context.Background(), graph); err != nil {
 		t.Fatalf("RunProcess() error = %v", err)
+	}
+}
+
+func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
+	t.Parallel()
+	factoryDir := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	text := "sentinel invocation"
+	runConfig := runcli.RunConfig{
+		Dir: factoryDir, InvocationPositionalText: &text, StdinIsTTY: func() bool { return true },
+		DisableDefaultRecording: true, SuppressDashboardRendering: true,
+	}
+	wantErr := errors.New("sentinel invocation builder")
+	calls := 0
+	graph, err := buildProcessGraph(context.Background(), startupcli.Request{
+		Kind: startupcli.KindRun, RunConfig: &runConfig,
+	}, initializer.ProcessPolicy{Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true}},
+		func(context.Context, *service.FactoryServiceConfig, initializer.Mode) (runcli.RuntimeRunner, error) {
+			t.Fatal("runtime builder called for one-shot invocation")
+			return nil, nil
+		},
+		func(context.Context, *service.FactoryServiceConfig) (runcli.InvocationRunner, error) {
+			calls++
+			return nil, wantErr
+		},
+	)
+	if graph != nil || !errors.Is(err, wantErr) {
+		t.Fatalf("buildProcessGraph() = (%+v, %v), want injected builder error", graph, err)
+	}
+	if calls != 1 {
+		t.Fatalf("invocation builder calls = %d, want 1", calls)
 	}
 }
 

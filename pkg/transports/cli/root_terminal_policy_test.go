@@ -371,7 +371,7 @@ func assertTerminalPolicySecretLeakContract(t *testing.T, args []string) {
 	t.Helper()
 
 	var stdout, stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newComposedTestRootCommand(t)
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs(args)

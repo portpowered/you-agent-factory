@@ -29,6 +29,27 @@ var canonicalEventOwnerCalls = map[string]struct{}{
 	"MapCanonicalRuntimeSessionEvents":   {},
 }
 
+var applicationCompositionCalls = map[string]struct{}{
+	"BuildInvocationBootstrap":           {},
+	"NewExecutionService":                {},
+	"NewFakeServiceFromContractFixtures": {},
+	"ProjectPersistence":                 {},
+}
+
+var approvedApplicationCompositionFiles = map[string]struct{}{
+	"pkg/wire/process.go":                                {},
+	"pkg/wire/session_execution.go":                      {},
+	"pkg/factorysessionexecution/service.go":             {},
+	"pkg/factorysessionexecution/testharness/harness.go": {},
+	// Batch 008 moves remaining legacy composition roots behind pkg/wire.
+	"pkg/composebridge/core.go": {},
+	"pkg/service/factory.go":    {},
+	// converge-transport-family follow-ups: stories 006 and 007 move these
+	// remaining model/MCP constructors into pkg/wire.
+	"pkg/transports/cli/models/bootstrap_invoke.go": {},
+	"pkg/transports/cli/mcp/serve.go":               {},
+}
+
 var javascriptLiveChildRoots = []string{
 	"pkg/factorysessionexecution/livechild/",
 	"pkg/orchestrators/javascript/",
@@ -131,6 +152,12 @@ func scan(root string) ([]string, error) {
 			switch value := node.(type) {
 			case *ast.CallExpr:
 				name := calledName(value.Fun)
+				if _, applicationConstructor := applicationCompositionCalls[name]; applicationConstructor &&
+					!strings.HasSuffix(relative, "_test.go") &&
+					!approved(relative, approvedApplicationCompositionFiles) {
+					appendFinding(&findings, fileSet, value.Pos(), relative, name,
+						"construct application collaborators in pkg/wire and inject them into the transport")
+				}
 				if _, canonicalOwnerCall := canonicalEventOwnerCalls[name]; canonicalOwnerCall &&
 					!strings.HasPrefix(relative, "pkg/factorysessionexecution/") {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,

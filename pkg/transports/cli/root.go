@@ -14,6 +14,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -28,6 +29,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
@@ -84,10 +86,11 @@ type cliOperatorDefaultsOptions struct {
 // RootCommandOptions supplies process-owned values used while executing a
 // command. Zero values preserve the legacy process environment behavior.
 type RootCommandOptions struct {
-	HomeDir    func() (string, error)
-	LookupEnv  func(string) (string, bool)
-	Startup    startupcli.Handler
-	RunFactory func(context.Context, runcli.RunConfig) error
+	HomeDir               func() (string, error)
+	LookupEnv             func(string) (string, bool)
+	Startup               startupcli.Handler
+	RunFactory            func(context.Context, runcli.RunConfig) error
+	BuildSessionExecution sessionexecutioncli.ServiceBuilder
 }
 
 func NewRootCommand() *cobra.Command {
@@ -158,9 +161,9 @@ func NewRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 		newModelsCommand(globals, diagnostics, operatorDefaults, options),
 		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
-		newSessionCommand(globals, diagnostics),
+		newSessionCommand(globals, diagnostics, options),
 		newWorkCommand(globals, diagnostics),
-		newWorkflowCommand(globals, diagnostics),
+		newWorkflowCommand(globals, diagnostics, options),
 	)
 
 	return root
@@ -179,6 +182,42 @@ func normalizeRootCommandOptions(options RootCommandOptions) RootCommandOptions 
 		}
 	}
 	return options
+}
+
+func buildWorkflowExecutionService(
+	ctx context.Context,
+	options RootCommandOptions,
+	backend sessionexecutioncli.ExecutionBackendConfig,
+	fixtureCatalogPath string,
+	childExecutorMode string,
+) (fse.Service, error) {
+	if options.BuildSessionExecution == nil {
+		return nil, fmt.Errorf("construct workflow execution: durable execution builder is required")
+	}
+	service, err := options.BuildSessionExecution(ctx, sessionexecutioncli.ServiceRequest{
+		ExecutionBackendConfig: backend,
+		FixtureCatalogPath:     fixtureCatalogPath,
+		ChildExecutorMode:      childExecutorMode,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct workflow execution: %w", err)
+	}
+	if service == nil {
+		return nil, fmt.Errorf("construct workflow execution: builder returned nil service")
+	}
+	return service, nil
+}
+
+func addWorkflowExecutionBackendFlags(
+	cmd *cobra.Command,
+	backend *sessionexecutioncli.ExecutionBackendConfig,
+	childExecutorMode *string,
+) {
+	cmd.Flags().StringVar(&backend.Provider, "execution-provider", string(fse.ExecutionProviderFake), "durable execution backend: fake or javascript-runtime")
+	cmd.Flags().StringVar(&backend.ProjectRoot, "project-root", "", "project root for javascript-runtime workflow source lookup")
+	if childExecutorMode != nil {
+		cmd.Flags().StringVar(childExecutorMode, "child-executor-mode", "", "javascript child executor mode: fake or live-provider")
+	}
 }
 
 type cliDiagnosticsOptions struct {
