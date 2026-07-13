@@ -1,6 +1,7 @@
 package apiserver_test
 
 import (
+	"bufio"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,9 +12,73 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
+
+func TestFactorySessionsAPI_ResponseEventsRouteStreamsGeneratedContractEnvelope(t *testing.T) {
+	store := responseeventstore.NewSessionResponseEventStore("session-beta")
+	payload, err := json.Marshal(responseevents.ProgressPayload{Label: "integration-retained"})
+	if err != nil {
+		t.Fatalf("marshal response-event payload: %v", err)
+	}
+	want, err := store.Publish(responseevents.FactoryResponseEvent{
+		FactorySessionID: "session-beta",
+		Kind:             responseevents.KindProgress,
+		Phase:            responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider:        "test-provider",
+			NativeEventType: "progress",
+			Delivery:        responseevents.DeliveryNativeStream,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        responseevents.FidelityLossless,
+		},
+		RunID:   "run-integration",
+		Payload: payload,
+	})
+	if err != nil {
+		t.Fatalf("publish response event: %v", err)
+	}
+	store.Complete()
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET response-events status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	reader := bufio.NewReader(rec.Body)
+	idLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read SSE id: %v", err)
+	}
+	dataLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read SSE data: %v", err)
+	}
+	separator, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read SSE separator: %v", err)
+	}
+	if strings.TrimSpace(idLine) != "id: 1" || strings.TrimSpace(separator) != "" || !strings.HasPrefix(dataLine, "data: ") {
+		t.Fatalf("SSE framing = %q%q%q, want one id and one data line", idLine, dataLine, separator)
+	}
+	var got responseevents.FactoryResponseEvent
+	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(dataLine, "data: "))), &got); err != nil {
+		t.Fatalf("decode response-event SSE data: %v", err)
+	}
+	if got.EventID != want.EventID || got.FactorySessionID != "session-beta" {
+		t.Fatalf("response event = %#v, want event %q for session-beta", got, want.EventID)
+	}
+	if err := responseevents.ValidateEvent(got); err != nil {
+		t.Fatalf("response event violates public schema semantics: %v", err)
+	}
+}
 
 func newMockFactorySessionTestServer(f *testutil.MockFactory) *api.Server {
 	logger, _ := zap.NewDevelopment()

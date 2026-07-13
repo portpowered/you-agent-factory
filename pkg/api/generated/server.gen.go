@@ -6323,6 +6323,18 @@ type GetEventsBySessionIdParams struct {
 	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
 }
 
+// GetFactoryResponseEventsBySessionIdParams defines parameters for GetFactoryResponseEventsBySessionId.
+type GetFactoryResponseEventsBySessionIdParams struct {
+	// AfterSequence Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it.
+	AfterSequence *ResponseEventAfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// DispatchId Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response.
+	DispatchId *ResponseEventDispatchID `form:"dispatch_id,omitempty" json:"dispatch_id,omitempty"`
+
+	// Kind Return FactoryResponseEvent records matching any requested public kind. The parameter may be repeated, for example kind=MESSAGE&kind=TOOL. Invalid or empty kind values return the typed bad-request response.
+	Kind *ResponseEventKind `form:"kind,omitempty" json:"kind,omitempty"`
+}
+
 // GetFactorySessionResultsParams defines parameters for GetFactorySessionResults.
 type GetFactorySessionResultsParams struct {
 	// Mode Optional durable result retrieval mode. Defaults to final for terminal outputs. partial returns the latest partial workflow output when available.
@@ -8462,6 +8474,9 @@ type ServerInterface interface {
 	// Pause one Factory Session
 	// (POST /factory-sessions/{session_id}/pause)
 	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Stream ephemeral response events for one Factory Session
+	// (GET /factory-sessions/{session_id}/response-events)
+	GetFactoryResponseEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactoryResponseEventsBySessionIdParams)
 	// Get one live factory session result
 	// (GET /factory-sessions/{session_id}/result)
 	GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -9144,6 +9159,58 @@ func (siw *ServerInterfaceWrapper) PauseFactorySession(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PauseFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactoryResponseEventsBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetFactoryResponseEventsBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFactoryResponseEventsBySessionIdParams
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "dispatch_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "dispatch_id", r.URL.Query(), &params.DispatchId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "dispatch_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "kind", r.URL.Query(), &params.Kind)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactoryResponseEventsBySessionId(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -9979,6 +10046,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/partial-result", wrapper.GetFactorySessionPartialResult).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/pause", wrapper.PauseFactorySession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/response-events", wrapper.GetFactoryResponseEventsBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/result", wrapper.GetFactorySessionResult).Methods("GET")
 

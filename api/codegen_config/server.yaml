@@ -4,8 +4,4 @@ generate:
   models: true
   gorilla-server: true
 output-options:
-  # Publish the contract and models without wiring this deferred transport route
-  # into ServerInterface. The response-event handler belongs to a later lane.
-  exclude-operation-ids:
-    - getFactoryResponseEventsBySessionId
   skip-prune: true

@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -12,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"go.uber.org/zap"
@@ -110,6 +114,133 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 	})
 }
 
+// GetFactoryResponseEventsBySessionId streams the retained-then-live ephemeral
+// response-event cursor owned by exactly one Factory Session.
+func (s *Server) GetFactoryResponseEventsBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetFactoryResponseEventsBySessionIdParams,
+) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		s.writeError(w, http.StatusInternalServerError, "streaming unsupported", "INTERNAL_ERROR")
+		return
+	}
+
+	afterSequence, dispatchID, kinds, ok := s.responseEventStreamOptions(w, params)
+	if !ok {
+		return
+	}
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	subscription, err := sessionRuntime.SubscribeFactoryResponseEventsForSession(
+		r.Context(), string(sessionID), afterSequence, dispatchID,
+	)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory response-event session not found", "RESPONSE_EVENT_SESSION_NOT_FOUND")
+			return
+		}
+		s.logger.Error("subscribe factory response events failed", zap.String("session_id", string(sessionID)), zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory response events", "INTERNAL_ERROR")
+		return
+	}
+	defer subscription.Detach()
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	for {
+		events, err := subscription.Next(r.Context())
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+				return
+			}
+			s.logger.Error("read factory response events failed", zap.String("session_id", string(sessionID)), zap.Error(err))
+			return
+		}
+		for _, event := range events {
+			if !responseEventKindSelected(responseevents.Kind(event.Kind), kinds) {
+				continue
+			}
+			if err := writeFactoryResponseEventSSE(w, event); err != nil {
+				s.logger.Debug("write factory response event failed", zap.String("session_id", string(sessionID)), zap.Error(err))
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func (s *Server) responseEventStreamOptions(
+	w http.ResponseWriter,
+	params factoryapi.GetFactoryResponseEventsBySessionIdParams,
+) (int64, string, map[responseevents.Kind]struct{}, bool) {
+	var afterSequence int64
+	if params.AfterSequence != nil {
+		afterSequence = int64(*params.AfterSequence)
+		if afterSequence < 0 {
+			s.writeError(w, http.StatusBadRequest, "after_sequence must be non-negative", "INVALID_RESPONSE_EVENT_CURSOR")
+			return 0, "", nil, false
+		}
+	}
+	var dispatchID string
+	if params.DispatchId != nil {
+		dispatchID = strings.TrimSpace(string(*params.DispatchId))
+		if dispatchID == "" {
+			s.writeError(w, http.StatusBadRequest, "dispatch_id must not be empty", "INVALID_RESPONSE_EVENT_FILTER")
+			return 0, "", nil, false
+		}
+	}
+	kinds, valid := responseEventKinds(params.Kind)
+	if !valid {
+		s.writeError(w, http.StatusBadRequest, "kind must contain only public FactoryResponseEventKind values", "INVALID_RESPONSE_EVENT_FILTER")
+		return 0, "", nil, false
+	}
+	return afterSequence, dispatchID, kinds, true
+}
+
+func responseEventKinds(values *factoryapi.ResponseEventKind) (map[responseevents.Kind]struct{}, bool) {
+	if values == nil {
+		return nil, true
+	}
+	if len(*values) == 0 {
+		return nil, false
+	}
+	kinds := make(map[responseevents.Kind]struct{}, len(*values))
+	for _, value := range *values {
+		kind := responseevents.Kind(value)
+		switch kind {
+		case responseevents.KindSession, responseevents.KindRun, responseevents.KindTurn,
+			responseevents.KindMessage, responseevents.KindReasoning, responseevents.KindTool,
+			responseevents.KindFileChange, responseevents.KindPlan, responseevents.KindProgress,
+			responseevents.KindUsage, responseevents.KindError, responseevents.KindStreamGap:
+			kinds[kind] = struct{}{}
+		default:
+			return nil, false
+		}
+	}
+	return kinds, true
+}
+
+func responseEventKindSelected(kind responseevents.Kind, selected map[responseevents.Kind]struct{}) bool {
+	if len(selected) == 0 || kind == responseevents.KindStreamGap {
+		return true
+	}
+	_, ok := selected[kind]
+	return ok
+}
+
+func writeFactoryResponseEventSSE(w http.ResponseWriter, event apisurface.FactoryResponseEventRecord) error {
+	_, err := fmt.Fprintf(w, "id: %s\ndata: %s\n\n", strconv.FormatInt(event.Sequence, 10), event.Data)
+	return err
+}
+
 func requestsJSONEventRecoveryProbe(r *http.Request) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(r.Header.Get("Accept"))), "application/json")
 }
@@ -130,7 +261,7 @@ func (s *Server) probeFactorySessionEventStreamRecovery(
 			return
 		}
 		_, err = reader.ReadDurableFactorySessionEvents(probeCtx, sessionID, factoryapi.GetEventsBySessionIdParams{
-			AfterEventId: afterEventIDParam(reconnect),
+			AfterEventId:  afterEventIDParam(reconnect),
 			AfterSequence: afterSequenceParam(reconnect),
 		})
 	} else {

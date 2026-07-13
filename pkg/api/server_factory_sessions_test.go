@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -29,6 +32,172 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestFactoryResponseEventsBySessionID_RetainedThenLiveUsesExactSessionAndFlushesEachMessage(t *testing.T) {
+	defaultStore := responseeventstore.NewSessionResponseEventStore("session-default")
+	betaStore := responseeventstore.NewSessionResponseEventStore("session-beta")
+	publishResponseProgress(t, defaultStore, "default-retained")
+	wantRetained := publishResponseProgress(t, betaStore, "beta-retained")
+
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"~default":     {ResponseEventStore: defaultStore},
+		"session-beta": {ResponseEventStore: betaStore},
+	}})
+	httpServer := httptest.NewServer(srv.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, httpServer.URL+"/factory-sessions/session-beta/response-events", nil)
+	if err != nil {
+		t.Fatalf("new response-event request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("open response-event stream before live publication: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("response-event status = %d, want 200", response.StatusCode)
+	}
+	if got := response.Header.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", got)
+	}
+
+	reader := bufio.NewReader(response.Body)
+	retained := readSSEFactoryResponseEvent(t, reader)
+	if retained.EventID != wantRetained.EventID || retained.FactorySessionID != "session-beta" {
+		t.Fatalf("retained response event = %#v, want beta event %q", retained, wantRetained.EventID)
+	}
+	wantLive := publishResponseProgress(t, betaStore, "beta-live")
+	live := readSSEFactoryResponseEvent(t, reader)
+	if live.EventID != wantLive.EventID || live.Sequence <= retained.Sequence {
+		t.Fatalf("live response event = %#v, want event %q after sequence %d", live, wantLive.EventID, retained.Sequence)
+	}
+	if defaultStore.SubscriberCount() != 0 {
+		t.Fatalf("default response-event subscribers = %d, want 0", defaultStore.SubscriberCount())
+	}
+
+	cancel()
+	deadline := time.Now().Add(time.Second)
+	for betaStore.SubscriberCount() != 0 && time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	if betaStore.SubscriberCount() != 0 {
+		t.Fatalf("beta response-event subscribers after disconnect = %d, want 0", betaStore.SubscriberCount())
+	}
+}
+
+func TestFactoryResponseEventsBySessionID_KnownCursorEmitsOnlyNewerEvents(t *testing.T) {
+	store := responseeventstore.NewSessionResponseEventStore("session-beta")
+	first := publishResponseProgress(t, store, "first")
+	second := publishResponseProgress(t, store, "second")
+	third := publishResponseProgress(t, store, "third")
+	store.Complete()
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events?after_sequence=1", nil)
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("response-event reconnect status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	reader := bufio.NewReader(recorder.Body)
+	gotSecond := readSSEFactoryResponseEvent(t, reader)
+	gotThird := readSSEFactoryResponseEvent(t, reader)
+	if gotSecond.EventID != second.EventID || gotThird.EventID != third.EventID {
+		t.Fatalf("reconnect events = [%q %q], want [%q %q] after %q", gotSecond.EventID, gotThird.EventID, second.EventID, third.EventID, first.EventID)
+	}
+	if remaining, err := io.ReadAll(reader); err != nil || len(remaining) != 0 {
+		t.Fatalf("remaining SSE bytes = %q, err = %v; want clean end", remaining, err)
+	}
+}
+
+func TestFactoryResponseEventsBySessionID_UnknownSessionNeverFallsBackToDefault(t *testing.T) {
+	defaultStore := responseeventstore.NewSessionResponseEventStore("session-default")
+	publishResponseProgress(t, defaultStore, "default-retained")
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"~default": {ResponseEventStore: defaultStore},
+	}})
+
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-missing/response-events", nil)
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, request)
+	assertJSONError(t, recorder, http.StatusNotFound, "RESPONSE_EVENT_SESSION_NOT_FOUND", "factory response-event session not found")
+	if defaultStore.SubscriberCount() != 0 {
+		t.Fatalf("default response-event subscribers = %d, want 0 after unknown-session request", defaultStore.SubscriberCount())
+	}
+}
+
+func publishResponseProgress(t *testing.T, store *responseeventstore.SessionResponseEventStore, label string) responseevents.FactoryResponseEvent {
+	t.Helper()
+	payload, err := json.Marshal(responseevents.ProgressPayload{Label: label})
+	if err != nil {
+		t.Fatalf("marshal response progress payload: %v", err)
+	}
+	event, err := store.Publish(responseevents.FactoryResponseEvent{
+		FactorySessionID: store.FactorySessionID(),
+		Kind:             responseevents.KindProgress,
+		Phase:            responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider:        "test-provider",
+			NativeEventType: "progress",
+			Delivery:        responseevents.DeliveryNativeStream,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        responseevents.FidelityLossless,
+		},
+		RunID:   "run-test",
+		Payload: payload,
+	})
+	if err != nil {
+		t.Fatalf("publish response progress: %v", err)
+	}
+	return event
+}
+
+func readSSEFactoryResponseEvent(t *testing.T, reader *bufio.Reader) responseevents.FactoryResponseEvent {
+	t.Helper()
+	var idLine, dataLine string
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("read response-event SSE line: %v", err)
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			break
+		}
+		switch {
+		case strings.HasPrefix(line, "id: "):
+			if idLine != "" {
+				t.Fatalf("SSE message has multiple id lines")
+			}
+			idLine = strings.TrimPrefix(line, "id: ")
+		case strings.HasPrefix(line, "data: "):
+			if dataLine != "" {
+				t.Fatalf("SSE message has multiple data lines")
+			}
+			dataLine = strings.TrimPrefix(line, "data: ")
+		default:
+			t.Fatalf("unexpected response-event SSE line %q", line)
+		}
+	}
+	if idLine == "" || dataLine == "" {
+		t.Fatalf("SSE message id=%q data=%q, want exactly one of each", idLine, dataLine)
+	}
+	var event responseevents.FactoryResponseEvent
+	if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
+		t.Fatalf("decode response-event SSE data: %v", err)
+	}
+	if idLine != fmt.Sprint(event.Sequence) {
+		t.Fatalf("SSE id = %q, want event sequence %d", idLine, event.Sequence)
+	}
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("SSE response event is schema-invalid: %v", err)
+	}
+	return event
+}
 
 func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing.T) {
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
