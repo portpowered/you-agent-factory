@@ -33,6 +33,15 @@ Transport startup must receive the graph's already-composed API surface, and
 startup diagnostics should be copied into immutable graph metadata rather than
 recovered later through `runtimehost.Host` or `FactoryService`.
 
+A graph-owned transport is only the foreground API, CLI, or MCP edge. It must
+not start the runtime loop, worker scheduler, filesystem watcher, metrics
+observer, dashboard renderer, or another sidecar behind its `Run` callback.
+`pkg/wire` should construct those inert lifecycle handles explicitly, and
+`pkg/initializer` should start runtime, worker/watcher, and dashboard handles
+before the selected transport, then stop them in the exact reverse order. A
+production-graph test should delegate through the real handles and observe this
+sequence so fake-only initializer coverage cannot hide an empty sidecar graph.
+
 Factory Session selectors at that graph-owned transport boundary must round-trip
 the canonical ID returned by list responses. Registry aliases such as
 `~default` remain valid compatibility selectors, but production startup tests

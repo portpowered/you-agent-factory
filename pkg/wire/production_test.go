@@ -92,6 +92,9 @@ func assertProductionDomainServices(t *testing.T, graph *wire.Graph) {
 	if graph.Transports.API == nil || graph.Transports.CLI == nil || graph.Transports.MCP == nil {
 		t.Fatal("production graph omitted a transport lifecycle")
 	}
+	if graph.Sidecars.Runtime == nil || graph.Sidecars.Workers == nil || graph.Sidecars.Dashboard == nil {
+		t.Fatal("production graph omitted a runtime, worker/watcher, or dashboard lifecycle")
+	}
 }
 
 func assertProductionTransportIdentity(t *testing.T, graph *wire.Graph) {

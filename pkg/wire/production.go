@@ -9,9 +9,12 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"go.uber.org/zap"
 )
 
 // Inputs contains normalized process configuration and the stdio edges
@@ -83,6 +86,10 @@ func assembleProductionGraph(
 	host := runtimehost.NewHostFromCore(core)
 	shell := runtimehost.HostShell{Host: host}
 	host = runtimehost.AttachFactorySaveCollaborator(shell, runtimehost.ProvideFactorySaveCollaborator(shell, cfg))
+	applicationRuntime, err := runtimehost.NewApplicationRuntime(host)
+	if err != nil {
+		return nil, fmt.Errorf("construct runtime lifecycle: %w", err)
+	}
 
 	models := host.ModelService()
 	sessions := host.SessionAPI()
@@ -121,6 +128,10 @@ func assembleProductionGraph(
 		FactorySessions:   sessions,
 		DurableExecution:  core.DurableExecution(),
 	}
+	sidecars, err := buildProductionSidecars(cfg, host, applicationRuntime)
+	if err != nil {
+		return nil, err
+	}
 	return &Graph{
 		Config:            bundle.RuntimeCfg,
 		Runtime:           runtimeInputs,
@@ -135,17 +146,53 @@ func assembleProductionGraph(
 		Transport:         transport,
 		Transports: TransportLifecycles{
 			API: newRunnerLifecycle(func(runCtx context.Context) error {
-				return host.RunWithAPISurface(runCtx, apiSurface)
+				return applicationRuntime.RunTransport(runCtx, apiSurface)
 			}),
 			CLI: newRunnerLifecycle(func(runCtx context.Context) error {
-				return host.RunWithAPISurface(runCtx, apiSurface)
+				return applicationRuntime.RunTransport(runCtx, apiSurface)
 			}),
 			MCP: newRunnerLifecycle(func(runCtx context.Context) error {
 				return mcp.ServeStdio(runCtx, inputs.MCPInput, inputs.MCPOutput)
 			}),
 		},
+		Sidecars:  sidecars,
 		resources: resources,
 	}, nil
+}
+
+func buildProductionSidecars(
+	cfg *runtimehost.Config,
+	host *runtimehost.Host,
+	runtime *runtimehost.ApplicationRuntime,
+) (SidecarLifecycles, error) {
+	sidecars := SidecarLifecycles{
+		Runtime: lifecycleFuncs{start: runtime.StartRuntime, stop: runtime.StopRuntime},
+		Workers: lifecycleFuncs{start: runtime.StartWorkers, stop: runtime.StopWorkers},
+	}
+	if cfg.SimpleDashboardRenderer == nil {
+		return sidecars, nil
+	}
+	dashboard, err := initializerdashboard.NewDashboardSidecar(initializerdashboard.DashboardSidecarConfig{
+		Reader: initializerdashboard.NewRuntimeDashboardReader(host),
+		Renderer: initializerdashboard.DashboardRendererFunc(func(input initializerdashboard.DashboardRenderInput) {
+			cfg.SimpleDashboardRenderer(runtimehost.SimpleDashboardRenderInput{
+				EngineState: input.EngineState, RenderData: input.RenderData, Now: input.Now,
+			})
+		}),
+		Timing: initializerdashboard.ClockTiming{Clock: factory.EnsureClock(cfg.Clock)},
+		ReportError: func(err error) {
+			logger := cfg.Logger
+			if logger == nil {
+				logger = zap.NewNop()
+			}
+			logger.Error("simple dashboard render failed", zap.Error(err))
+		},
+	})
+	if err != nil {
+		return SidecarLifecycles{}, fmt.Errorf("construct dashboard sidecar: %w", err)
+	}
+	sidecars.Dashboard = newDashboardLifecycle(dashboard)
+	return sidecars, nil
 }
 
 func failProductionBuild(resources *resourceSet, constructionErr error) error {
@@ -159,6 +206,31 @@ func failProductionBuild(resources *resourceSet, constructionErr error) error {
 type closeFunc func() error
 
 func (fn closeFunc) Close() error { return fn() }
+
+type lifecycleFuncs struct {
+	start func(context.Context) error
+	stop  func(context.Context) error
+}
+
+func (l lifecycleFuncs) Start(ctx context.Context) error { return l.start(ctx) }
+func (l lifecycleFuncs) Stop(ctx context.Context) error  { return l.stop(ctx) }
+
+type dashboardLifecycle struct {
+	runner    *runnerLifecycle
+	dashboard *initializerdashboard.DashboardSidecar
+}
+
+func newDashboardLifecycle(dashboard *initializerdashboard.DashboardSidecar) *dashboardLifecycle {
+	return &dashboardLifecycle{runner: newRunnerLifecycle(dashboard.Run), dashboard: dashboard}
+}
+
+func (l *dashboardLifecycle) Start(ctx context.Context) error { return l.runner.Start(ctx) }
+
+func (l *dashboardLifecycle) Stop(ctx context.Context) error {
+	err := l.runner.Stop(ctx)
+	l.dashboard.RenderFinal(ctx)
+	return err
+}
 
 type runnerLifecycle struct {
 	run      func(context.Context) error

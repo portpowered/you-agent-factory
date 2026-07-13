@@ -4,13 +4,123 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
+
+func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	transportStarted := make(chan struct{})
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
+			Port: 43174, Logger: zap.NewNop(), Clock: productionInternalClock{},
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+			APIServerStarter: func(ctx context.Context, _ apisurface.APISurface, _ int, _ *zap.Logger) error {
+				close(transportStarted)
+				<-ctx.Done()
+				return ctx.Err()
+			},
+			SimpleDashboardRenderer: func(runtimehost.SimpleDashboardRenderInput) {},
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	recorder := &lifecycleOrder{}
+	graph.Sidecars.Runtime = recorder.wrap("runtime", graph.Sidecars.Runtime)
+	graph.Sidecars.Workers = recorder.wrap("workers", graph.Sidecars.Workers)
+	graph.Sidecars.Dashboard = recorder.wrap("dashboard", graph.Sidecars.Dashboard)
+	graph.Transports.CLI = recorder.wrap("cli", graph.Transports.CLI)
+	application, err := initializer.NewApplication(initializer.ModeCLI, graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	go func() { runDone <- application.Run(ctx) }()
+	select {
+	case <-transportStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("graph-owned transport did not start")
+	}
+	cancel()
+	if err := <-runDone; err != nil {
+		t.Fatalf("Application.Run() error = %v", err)
+	}
+	if got, want := recorder.started(), []string{"runtime", "workers", "dashboard", "cli"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("production start order = %v, want %v", got, want)
+	}
+	if got, want := recorder.stopped(), []string{"cli", "dashboard", "workers", "runtime"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("production stop order = %v, want %v", got, want)
+	}
+}
+
+type lifecycleOrder struct {
+	mu     sync.Mutex
+	starts []string
+	stops  []string
+}
+
+func (o *lifecycleOrder) wrap(name string, lifecycle Lifecycle) Lifecycle {
+	return &recordingProductionLifecycle{order: o, name: name, lifecycle: lifecycle}
+}
+
+type recordingProductionLifecycle struct {
+	order     *lifecycleOrder
+	name      string
+	lifecycle Lifecycle
+}
+
+func (l *recordingProductionLifecycle) Start(ctx context.Context) error {
+	l.order.mu.Lock()
+	l.order.starts = append(l.order.starts, l.name)
+	l.order.mu.Unlock()
+	return l.lifecycle.Start(ctx)
+}
+
+func (l *recordingProductionLifecycle) Stop(ctx context.Context) error {
+	l.order.mu.Lock()
+	l.order.stops = append(l.order.stops, l.name)
+	l.order.mu.Unlock()
+	return l.lifecycle.Stop(ctx)
+}
+
+func (l *recordingProductionLifecycle) Wait(ctx context.Context) error {
+	waiter, ok := l.lifecycle.(interface{ Wait(context.Context) error })
+	if !ok {
+		return errors.New("recorded lifecycle is not waitable")
+	}
+	return waiter.Wait(ctx)
+}
+
+func (o *lifecycleOrder) started() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.starts...)
+}
+
+func (o *lifecycleOrder) stopped() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.stops...)
+}
 
 func TestValidateProductionInputsReportsEachMissingEdge(t *testing.T) {
 	t.Parallel()

@@ -293,11 +293,13 @@ func (a *Application) shutdown(ctx context.Context) error {
 
 func lifecyclesForMode(mode Mode, lifecycles ApplicationLifecycles) ([]namedLifecycle, error) {
 	var sidecars []namedLifecycle
-	if lifecycles.Runtime != nil || lifecycles.Workers != nil || lifecycles.Dashboard != nil {
-		sidecars = []namedLifecycle{
-			{name: "runtime sidecar", lifecycle: lifecycles.Runtime},
-			{name: "workers sidecar", lifecycle: lifecycles.Workers},
-			{name: "dashboard sidecar", lifecycle: lifecycles.Dashboard},
+	for _, sidecar := range []namedLifecycle{
+		{name: "runtime sidecar", lifecycle: lifecycles.Runtime},
+		{name: "workers sidecar", lifecycle: lifecycles.Workers},
+		{name: "dashboard sidecar", lifecycle: lifecycles.Dashboard},
+	} {
+		if sidecar.lifecycle != nil {
+			sidecars = append(sidecars, sidecar)
 		}
 	}
 	switch mode {
