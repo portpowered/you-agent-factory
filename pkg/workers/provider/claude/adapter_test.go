@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,6 +38,48 @@ func TestAdapterBuildCommandRequestsStructuredPartialMessages(t *testing.T) {
 	want := []string{"-p", "--model", "claude-sonnet-4", "--resume", "session-1", "--output-format", "stream-json", "--include-partial-messages", "inspect the workspace"}
 	if !reflect.DeepEqual(built.Request.Args, want) {
 		t.Fatalf("args = %#v, want %#v", built.Request.Args, want)
+	}
+}
+
+func TestAdapterBuildCommandPreservesOptionalExecutionContext(t *testing.T) {
+	t.Parallel()
+
+	built, err := claude.NewAdapter().BuildCommand(context.Background(), adapter.CommandContext{
+		SkipPermissions: true,
+		Request: interfaces.ProviderInferenceRequest{
+			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-options"},
+			WorkerType:       "agent-worker",
+			WorkstationType:  "review-work",
+			ProjectID:        "project-options",
+			InputTokens:      []any{"input-token"},
+			SystemPrompt:     "safe system prompt",
+			UserMessage:      "review the workspace",
+			EnvVars:          map[string]string{"CLAUDE_TEST_BOUNDARY": "value"},
+			Worktree:         "story-worktree",
+			WorkingDirectory: "workspace",
+			Model:            "claude-sonnet-4",
+			SessionID:        "session-options",
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildCommand() error = %v", err)
+	}
+	wantArgs := []string{
+		"-p", "--dangerously-skip-permissions", "--worktree", "story-worktree",
+		"--system-prompt", "safe system prompt", "--model", "claude-sonnet-4",
+		"--resume", "session-options", "--output-format", "stream-json",
+		"--include-partial-messages", "review the workspace",
+	}
+	if !reflect.DeepEqual(built.Request.Args, wantArgs) {
+		t.Fatalf("args = %#v, want %#v", built.Request.Args, wantArgs)
+	}
+	if built.Request.DispatchID != "dispatch-options" || built.Request.WorkerType != "agent-worker" ||
+		built.Request.WorkstationName != "review-work" || built.Request.ProjectID != "project-options" ||
+		built.Request.WorkDir != "workspace" || !reflect.DeepEqual(built.Request.InputTokens, []any{"input-token"}) {
+		t.Fatalf("execution context = %#v", built.Request)
+	}
+	if !slices.Contains(built.Request.Env, "CLAUDE_TEST_BOUNDARY=value") {
+		t.Fatalf("command env omitted explicit provider value: %#v", built.Request.Env)
 	}
 }
 
@@ -250,6 +293,33 @@ func TestDecoderOmitsOutOfRangeRetryMetadata(t *testing.T) {
 	decodePayload(t, *retry, &payload)
 	if payload.RetryAttempt != nil || payload.RetryAfterSeconds != nil {
 		t.Fatalf("out-of-range retry metadata was retained: %#v", payload)
+	}
+}
+
+func TestDecoderBoundsNonSemanticStreamDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	decoder, err := claude.NewAdapter().NewDecoder(context.Background(), adapter.DecoderContext{})
+	if err != nil {
+		t.Fatalf("NewDecoder() error = %v", err)
+	}
+	stderr, err := decoder.Observe(context.Background(), adapter.Observation{
+		Stream: adapter.OutputStreamStderr, Chunk: []byte("private provider stderr"),
+	})
+	if err != nil || len(stderr.Diagnostics) != 1 || stderr.Diagnostics[0].Code != "claude_stderr_ignored" {
+		t.Fatalf("stderr result = %#v, err=%v", stderr, err)
+	}
+	ignored, err := decoder.Observe(context.Background(), adapter.Observation{
+		Stream: adapter.OutputStream("future-stream"), Chunk: []byte("ignored"),
+	})
+	if err != nil || len(ignored.Drafts) != 0 || len(ignored.Diagnostics) != 0 {
+		t.Fatalf("unknown stream result = %#v, err=%v", ignored, err)
+	}
+	oversized, err := decoder.Observe(context.Background(), adapter.Observation{
+		Stream: adapter.OutputStreamStdout, Chunk: bytes.Repeat([]byte("x"), 256*1024+1),
+	})
+	if err != nil || len(oversized.Diagnostics) != 1 || oversized.Diagnostics[0].Code != "claude_record_too_large" {
+		t.Fatalf("oversized result = %#v, err=%v", oversized, err)
 	}
 }
 
