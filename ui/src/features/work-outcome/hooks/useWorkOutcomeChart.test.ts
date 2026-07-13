@@ -292,30 +292,79 @@ describe("materialized work outcome chart projection", () => {
     ]);
   });
 
-  it("clips the retained materialized samples without rebuilding from events", () => {
-    const selectedEvents = baselineEvents.filter(
-      (timelineEvent) => timelineEvent.context.tick <= 4,
-    );
+  it("clips exact, between-sample, and before-history ticks without mutating materialized state", () => {
     const materialized = reduceMaterializedWorkOutcomeEvents(
       createMaterializedWorkOutcomeState(),
-      selectedEvents,
+      baselineEvents,
+    );
+    const materializedBeforeSelection = structuredClone(materialized);
+    const samplesThroughTickFour = materialized.samples.filter(
+      (sample) => sample.tick <= 4,
     );
 
+    expect(selectMaterializedWorkOutcomeSamples(materialized, 4)).toEqual(
+      samplesThroughTickFour,
+    );
+    expect(selectMaterializedWorkOutcomeSamples(materialized, 4.5)).toEqual(
+      samplesThroughTickFour,
+    );
+    expect(selectMaterializedWorkOutcomeSamples(materialized, -1)).toEqual([]);
+    expect(materialized).toEqual(materializedBeforeSelection);
+  });
+
+  it("keeps a historical chart pinned while live outcomes advance and restores current history", () => {
+    const store = useFactoryTimelineStore.getState();
+    act(() => store.appendEvents(baselineEvents));
+    const chart = renderHook(() => useTimelineWorkOutcomeChart());
+    const materializedBeforeSelection =
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState;
+    const baselineBeforeSelection = structuredClone(
+      materializedBeforeSelection,
+    );
+
+    act(() => store.selectTick(-1));
+    expect(chart.result.current.samples).toEqual([]);
+    expect(chart.result.current.points).toEqual([]);
+
+    act(() => store.selectTick(4));
+    expect(chart.result.current.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+    expect(chart.result.current.samples.at(-1)).toMatchObject({
+      completedCount: 1,
+      failedCount: 0,
+      queuedCount: 1,
+      tick: 4,
+    });
     expect(
-      selectMaterializedWorkOutcomeSamples(
-        reduceMaterializedWorkOutcomeEvents(
-          createMaterializedWorkOutcomeState(),
-          [...baselineEvents, tailEvent],
-        ),
-        4,
-      ),
-    ).toEqual(materialized.samples);
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState,
+    ).toBe(materializedBeforeSelection);
+    expect(materializedBeforeSelection).toEqual(baselineBeforeSelection);
+
+    act(() => store.appendEvent(tailEvent));
+    expect(chart.result.current.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+    const materializedAfterTail =
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState;
+    const baselineAfterTail = structuredClone(materializedAfterTail);
+    expect(materializedAfterTail.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
+    expect(materializedAfterTail).toMatchObject({
+      counts: { completed: 1, failed: 1, queued: 1 },
+      cursor: { eventID: tailEvent.id, tick: 7 },
+    });
+
+    act(() => store.setCurrentMode());
+    expect(chart.result.current.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
     expect(
-      selectMaterializedWorkOutcomeSamples(
-        createMaterializedWorkOutcomeState(),
-        4,
-      ),
-    ).toEqual([]);
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState,
+    ).toBe(materializedAfterTail);
+    expect(materializedAfterTail).toEqual(baselineAfterTail);
+    chart.unmount();
   });
 
   it("preserves the restored baseline and extends it with one accepted live event", async () => {

@@ -563,7 +563,7 @@ describe("App current selection", () => {
       act(() => {
         seedTimelineSnapshot(
           {
-          ...semanticWorkflowDashboardSnapshot,
+            ...semanticWorkflowDashboardSnapshot,
             tick_count: semanticWorkflowDashboardSnapshot.tick_count + 1,
           } satisfies DashboardSnapshot,
           activeStoryTraceFixtures,
@@ -665,10 +665,15 @@ describe("App current selection", () => {
         within(dashboardGrid).getByRole("article", { name: "Submit work" }),
       ).toBeTruthy();
       expect(
-        within(dashboardGrid).getByRole("img", {
-          name: "Work outcome chart for Session",
+        within(dashboardGrid).getByRole("heading", {
+          name: "No work outcome samples",
         }),
       ).toBeTruthy();
+      expect(
+        within(dashboardGrid).queryByRole("img", {
+          name: "Work outcome chart for Session",
+        }),
+      ).toBeNull();
       expect(
         within(dashboardGrid).getByRole("article", {
           name: "Trace drill-down",
