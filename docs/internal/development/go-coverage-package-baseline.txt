@@ -7,9 +7,9 @@ github.com/portpowered/infinite-you/pkg/apisurface
 github.com/portpowered/infinite-you/pkg/transports/cli/config
 github.com/portpowered/infinite-you/pkg/cli/mcp
 github.com/portpowered/infinite-you/pkg/cli/models
-github.com/portpowered/infinite-you/pkg/cli/run
-github.com/portpowered/infinite-you/pkg/cli/session
-github.com/portpowered/infinite-you/pkg/cli/sessionexecution
+github.com/portpowered/infinite-you/pkg/transports/cli/run
+github.com/portpowered/infinite-you/pkg/transports/cli/session
+github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution
 github.com/portpowered/infinite-you/pkg/config/factoryrun
 github.com/portpowered/infinite-you/pkg/config/inboxgitkeep
 github.com/portpowered/infinite-you/pkg/factory/runtime/buffers

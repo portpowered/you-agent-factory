@@ -28,11 +28,11 @@ CLI response-stream rendering.
 
 | Surface | CLI wiring | Proof |
 |---------|------------|-------|
-| Interrupted-to-resumed success | `pkg/cli/session/show.go`, `pkg/cli/session/lifecycle_control.go`, `pkg/cli/root_work.go` | `pkg/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands`) |
-| Resume continuity without replay | `pkg/cli/session/dispatches.go` | `pkg/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay`) |
-| Typed invalid resume outcomes | `pkg/cli/session/lifecycle_control.go` | `pkg/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead`, `TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead`) |
-| Additive non-resume CLI regression | existing `pkg/cli/session` create/show/list/lifecycle-control commands | `pkg/cli/session/smoke/resume_non_regression_test.go` |
-| Shared durable backend ownership | `pkg/factorysessionexecution` resume helpers consumed by HTTP handlers | runtime-backed HTTP harnesses in `pkg/cli/session/smoke/resume_smoke_test.go` |
+| Interrupted-to-resumed success | `pkg/transports/cli/session/show.go`, `pkg/transports/cli/session/lifecycle_control.go`, `pkg/cli/root_work.go` | `pkg/transports/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands`) |
+| Resume continuity without replay | `pkg/transports/cli/session/dispatches.go` | `pkg/transports/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay`) |
+| Typed invalid resume outcomes | `pkg/transports/cli/session/lifecycle_control.go` | `pkg/transports/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead`, `TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead`) |
+| Additive non-resume CLI regression | existing `pkg/transports/cli/session` create/show/list/lifecycle-control commands | `pkg/transports/cli/session/smoke/resume_non_regression_test.go` |
+| Shared durable backend ownership | `pkg/factorysessionexecution` resume helpers consumed by HTTP handlers | runtime-backed HTTP harnesses in `pkg/transports/cli/session/smoke/resume_smoke_test.go` |
 
 ## Deferred Follow-Up Cells
 
@@ -67,8 +67,8 @@ execution-service CLI path and is out of scope for this resume smoke lane.
 
 | Artifact | Purpose |
 |----------|---------|
-| `pkg/cli/session/smoke/resume_smoke_test.go` | Successful resume, continuity/no-replay, and invalid resume CLI proof |
-| `pkg/cli/session/smoke/resume_non_regression_test.go` | Non-resume CLI session regression and shared-surface scope guard |
+| `pkg/transports/cli/session/smoke/resume_smoke_test.go` | Successful resume, continuity/no-replay, and invalid resume CLI proof |
+| `pkg/transports/cli/session/smoke/resume_non_regression_test.go` | Non-resume CLI session regression and shared-surface scope guard |
 | `docs/internal/processes/api-relevant-files.md` | Maintainer map and focused verification commands |
 | `follow-up-cell-mcp-session-serve.md` | Explicit MCP resume-smoke deferral |
 | `follow-up-cell-real-backend-api-session-parity-deferred.md` | Explicit API parity deferral |

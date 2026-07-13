@@ -42,7 +42,7 @@ var approvedRuntimeConstructorFiles = map[string]struct{}{
 var approvedPersistenceCompositionFiles = map[string]struct{}{
 	"pkg/transports/http/servertests/server_durable_session_execution_test.go": {},
 	"pkg/cli/mcp/serve_runtime_resume_smoke_test.go":                           {},
-	"pkg/cli/session/smoke/resume_smoke_test.go":                               {},
+	"pkg/transports/cli/session/smoke/resume_smoke_test.go":                               {},
 	"pkg/factorysessionexecution/service.go":                                   {},
 	"pkg/factorysessionexecution/runtimepersist/store.go":                      {},
 	"pkg/factorysessionexecution/testharness/harness.go":                       {},

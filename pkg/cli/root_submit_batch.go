@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )

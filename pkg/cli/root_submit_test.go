@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 )
 
 func TestSubmitCommand_HelpAdvertisesRequiredFlags(t *testing.T) {

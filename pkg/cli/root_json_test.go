@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
-	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 
 func TestRootCommand_HelpDocumentsGlobalJSONFlag(t *testing.T) {

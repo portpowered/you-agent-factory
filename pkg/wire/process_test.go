@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 type processRunnerFunc func(context.Context) error

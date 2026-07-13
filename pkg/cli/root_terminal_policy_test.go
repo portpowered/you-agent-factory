@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 )
 
 const (

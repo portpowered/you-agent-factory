@@ -67,9 +67,9 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/transports/cli/config` | 2 | 1 | directive + coverage baseline |
 | `pkg/transports/cli/init` | 2 | 1 | directive only |
 | `pkg/cli/mcp` | 3 | 3 | directive + coverage baseline |
-| `pkg/cli/run` | 2 | 1 | directive + coverage baseline |
-| `pkg/cli/submit` | 1 | 1 | directive only |
-| `pkg/cli/work` | 1 | 1 | directive only |
+| `pkg/transports/cli/run` | 2 | 1 | directive + coverage baseline |
+| `pkg/transports/cli/submit` | 1 | 1 | directive only |
+| `pkg/transports/cli/work` | 1 | 1 | directive only |
 | `pkg/config` | 8 | 4 | directive + coverage baseline |
 | `pkg/config/openapitests` | 1 | 1 | directive only |
 | `pkg/factory/events` | 3 | 3 | directive + coverage baseline |
@@ -107,8 +107,8 @@ directive occurrence in the focused scan:
 - `pkg/cli/dashboardrender`
 - `pkg/transports/cli/default`
 - `pkg/cli/models`
-- `pkg/cli/session`
-- `pkg/cli/sessionexecution`
+- `pkg/transports/cli/session`
+- `pkg/transports/cli/sessionexecution`
 - `pkg/config/factoryrun`
 - `pkg/config/inboxgitkeep`
 - `pkg/config/load`
@@ -263,30 +263,30 @@ Owner: `pkg/cli/mcp` package maintainers. Status: **directive + coverage baselin
 | `pkg/cli/mcp/serve_runtime_smoke_test.go:26` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult` | T | T gate |
 | `pkg/cli/mcp/serve_smoke_test.go:29` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll` | T | T gate |
 
-### `pkg/cli/run`
+### `pkg/transports/cli/run`
 
-Owner: `pkg/cli/run` package maintainers. Status: **directive + coverage baseline**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/cli/run/run_invocation_test.go:1` | `backendsizecheck:ignore-file` | `pkg/cli/run/run_invocation_test.go` | T | T gate |
-| `pkg/cli/run/run_invocation_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/cli/run/run_invocation_test.go` | T | T gate |
-
-### `pkg/cli/submit`
-
-Owner: `pkg/cli/submit` package maintainers. Status: **directive only**.
+Owner: `pkg/transports/cli/run` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/cli/submit/submit_test.go:203` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSubmit_JSONPayloadPostsWorkTypeName` | T | T gate |
+| `pkg/transports/cli/run/run_invocation_test.go:1` | `backendsizecheck:ignore-file` | `pkg/transports/cli/run/run_invocation_test.go` | T | T gate |
+| `pkg/transports/cli/run/run_invocation_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/transports/cli/run/run_invocation_test.go` | T | T gate |
 
-### `pkg/cli/work`
+### `pkg/transports/cli/submit`
 
-Owner: `pkg/cli/work` package maintainers. Status: **directive only**.
+Owner: `pkg/transports/cli/submit` package maintainers. Status: **directive only**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/cli/work/list_test.go:675` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestList_JSONOutputPreservesGeneratedResponseShape` | T | T gate |
+| `pkg/transports/cli/submit/submit_test.go:203` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSubmit_JSONPayloadPostsWorkTypeName` | T | T gate |
+
+### `pkg/transports/cli/work`
+
+Owner: `pkg/transports/cli/work` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/transports/cli/work/list_test.go:675` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestList_JSONOutputPreservesGeneratedResponseShape` | T | T gate |
 
 ### `pkg/config`
 
@@ -689,7 +689,7 @@ but all files were compared when selecting the cohort.
 | PR | Head revision | Files used for comparison |
 | --- | --- | --- |
 | #1001 `provider-failure-dashboard-details` | `ad2e805a360c1f6aaef11b0a9087c38cd36174ca` | `pkg/workers/provider/recording_provider_test.go`; `ui/src/api/dashboard/types.ts`; `ui/src/api/factory-sessions/normalize-durable-inspection.test.ts`; `ui/src/features/current-selection/base/messages/shell/current-selection-dispatch-history.ts`; `ui/src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-history-card.tsx`; `ui/src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-history.test.tsx`; `ui/src/features/current-selection/work-selection/components/execution/terminal-work-summary-detail.test.tsx`; `ui/src/features/current-selection/work-selection/components/execution/terminal-work-summary-detail.tsx`; `ui/src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-metadata-details.test.tsx`; `ui/src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-metadata-details.tsx`; `ui/src/features/current-selection/work-selection/components/work-item/work-item-card.stories.tsx`; `ui/src/features/factory-session-detail/components/dispatch-detail/dispatch-detail-content.test.tsx`; `ui/src/features/factory-session-detail/components/dispatch-detail/dispatch-detail-content.tsx`; `ui/src/features/factory-session-detail/components/factory-session-detail-panel.failure.test.tsx`; `ui/src/features/factory-session-detail/components/live-provider-inspection/factory-session-detail-panel.failed-bridged-child-inspection.test.tsx`; `ui/src/features/factory-session-detail/components/stories/factory-session-detail-panel.live-provider-story-definitions.stories.shared.tsx`; `ui/src/features/factory-session-detail/lib/factory-session-detail-panel.story-definitions.stories.shared.tsx`; `ui/src/features/factory-session-detail/messages/factory-session-detail.ts`; `ui/src/features/timeline/state/timeline/cloneTimelineSnapshot.ts`; `ui/src/features/timeline/state/timeline/projectWorkstationRequests.ts`; `ui/src/features/timeline/state/timeline/replayCompletion.ts`; `ui/src/features/timeline/state/timeline/replayWorldState.ts`; `ui/src/features/timeline/state/timeline/replayWorldStateInference.test.ts`; `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts`; `ui/src/features/timeline/state/timeline/types.ts`; `ui/src/testing/factory-session-live-provider-inspection-fixtures.ts` |
-| #1037 `session-repair-exact-checkpoint-identity` | `94066d9ae60a9f609b690076a2a2cd69a61626cb` | `pkg/cli/root.go`; `pkg/cli/run/failure_baseline_quiet_leak_test.go`; `pkg/cli/terminalpolicy/policy.go`; `pkg/cli/terminalpolicy/policy_test.go`; `pkg/workers/process/command_test.go`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.identity-race.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.ts`; `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`; `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.test.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.ts`; `ui/src/features/timeline/public/index.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.multi-session.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.test.ts`; `ui/src/features/timeline/state/timelineCheckpointPersistence.ts` |
+| #1037 `session-repair-exact-checkpoint-identity` | `94066d9ae60a9f609b690076a2a2cd69a61626cb` | `pkg/cli/root.go`; `pkg/transports/cli/run/failure_baseline_quiet_leak_test.go`; `pkg/cli/terminalpolicy/policy.go`; `pkg/cli/terminalpolicy/policy_test.go`; `pkg/workers/process/command_test.go`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.identity-race.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.ts`; `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`; `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.test.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.ts`; `ui/src/features/timeline/public/index.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.multi-session.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.test.ts`; `ui/src/features/timeline/state/timelineCheckpointPersistence.ts` |
 | #1040 `you-goal-b07-stream-program-gate` | `41ad64d6d527d7bb6c09131f94e71c879318f9f3` | `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`; `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`; `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`; `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`; `docs/internal/processes/api-relevant-files.md`; `docs/internal/processes/invocation-relevant-files.md`; `pkg/cli/root.go`; `pkg/packagedfactories/subagent/materialize_test.go`; `pkg/workers/service/hosted_poller_test.go`; `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`; `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`; `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`; `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go` |
 | #1062 `fix-sessions` | `76db760b53e0cb0a15b5da8485d4a74f851eb93d` | `factory/workstations/review/AGENTS.md`; `pkg/runtimehost/model_catalog_test.go`; `pkg/runtimehost/runtime_sessions.go` |
 | #1064 `stream-b03-sse-contract` | `be3d3136a5135be080597e488184b054a082a840` | `api/codegen_config/client.yaml`; `api/codegen_config/server.yaml`; `api/components/parameters/ResponseEventAfterSequence.yaml`; `api/components/parameters/ResponseEventDispatchID.yaml`; `api/components/parameters/ResponseEventKind.yaml`; `api/components/responses/ResponseEventBadRequest.yaml`; `api/components/responses/ResponseEventSessionNotFound.yaml`; `api/components/responses/ResponseEventStreamExpired.yaml`; `api/components/schemas/api/ErrorFamily.yaml`; `api/components/schemas/api/ErrorResponse.yaml`; `api/openapi-main.yaml`; `api/openapi.yaml`; `contracts/testdata/baseline/rest-operations.json`; `docs/internal/processes/api-relevant-files.md`; `pkg/api/contracttests/generated_contract_common_test.go`; `pkg/api/contracttests/openapi_contract_authoring_test.go`; `pkg/api/contracttests/openapi_contract_response_events_test.go`; `pkg/api/contracttests/openapi_contract_surface_test.go`; `pkg/api/generated/server.gen.go`; `pkg/config/openapitests/parity_inventory_test.go`; `pkg/generatedclient/client.gen.go`; `ui/src/api/generated/openapi.ts` |

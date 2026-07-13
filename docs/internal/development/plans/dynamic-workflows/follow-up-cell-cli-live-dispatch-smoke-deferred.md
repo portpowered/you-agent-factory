@@ -29,8 +29,8 @@ inspection, HTTP-only smoke, or a broader multi-surface parity sweep.
 
 | Surface | CLI wiring | Proof |
 |---------|------------|-------|
-| Live-provider session start and re-read | `pkg/cli/sessionexecution/run.go`, `status.go`, `result.go`, `pkg/cli/root_work.go` | `run_test.go` (`TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult`, `TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixtureStub`) |
-| Bridged dispatch and artifact inspection | `pkg/cli/sessionexecution/inspection.go` | `run_test.go` (`TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection`) |
+| Live-provider session start and re-read | `pkg/transports/cli/sessionexecution/run.go`, `status.go`, `result.go`, `pkg/cli/root_work.go` | `run_test.go` (`TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult`, `TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixtureStub`) |
+| Bridged dispatch and artifact inspection | `pkg/transports/cli/sessionexecution/inspection.go` | `run_test.go` (`TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection`) |
 | Fake/fixture CLI regression | default `--execution-provider fake` | `loopback_test.go` (`TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags`), `run_test.go` (`TestRunSync_JavaScriptRuntimeFakeChildCLIInspectionRegression`, `TestRunSync_ExplicitFakeChildMode_OverridesLiveConfiguredServiceCLI`) |
 | MCP-free live child provider | `factorysessionexecution.SmokeLiveChildProvider()` in `pkg/factorysessionexecution/service.go` | injected in live-provider CLI tests; no `you mcp serve` startup |
 
@@ -64,8 +64,8 @@ API shape; human labels render existing projection fields only.
 
 | Artifact | Purpose |
 |----------|---------|
-| `pkg/cli/sessionexecution/run_test.go` | Live-provider run/status/result and dispatch/artifact CLI proof |
-| `pkg/cli/sessionexecution/loopback_test.go` | Fixture-backed CLI regression without live-provider flags |
+| `pkg/transports/cli/sessionexecution/run_test.go` | Live-provider run/status/result and dispatch/artifact CLI proof |
+| `pkg/transports/cli/sessionexecution/loopback_test.go` | Fixture-backed CLI regression without live-provider flags |
 | `docs/internal/processes/api-relevant-files.md` | Maintainer map and focused verification commands |
 | `follow-up-cell-mcp-session-serve.md` | Explicit MCP live-smoke deferral |
 | `follow-up-cell-real-backend-api-session-parity-deferred.md` | Explicit website inspection deferral |

@@ -2,8 +2,8 @@
 package defaultcmd
 
 import (
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 const (

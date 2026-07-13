@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )

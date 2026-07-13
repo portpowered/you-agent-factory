@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 // BuildProcessGraph constructs the concrete application graph selected by the

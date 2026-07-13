@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T) {

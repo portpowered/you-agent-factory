@@ -15,12 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
-	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
-	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -32,6 +28,10 @@ import (
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 

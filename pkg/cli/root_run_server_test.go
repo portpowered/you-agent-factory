@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 func TestRunCommand_DefaultServerEnablesAutoPortAndLocalBind(t *testing.T) {

@@ -15,13 +15,13 @@ import (
 	"strings"
 	"testing"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
-	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
 

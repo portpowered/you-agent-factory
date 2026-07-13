@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -249,7 +249,7 @@ func newContractFakeService(t *testing.T) fse.Service {
 
 func contractFixtureCatalogPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	return filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 }
 
 func TestRunSync_TimeoutFixtureHumanOutput(t *testing.T) {

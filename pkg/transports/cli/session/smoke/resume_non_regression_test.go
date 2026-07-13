@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -47,7 +47,7 @@ func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadS
 }
 
 func TestCLIResumeSmokeLane_NonResumeFixtureBackedListAndPauseRegression(t *testing.T) {
-	catalogPath := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	catalogPath := filepath.Join("..", "..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := fse.NewFakeServiceFromContractFixtures(catalogPath)
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)

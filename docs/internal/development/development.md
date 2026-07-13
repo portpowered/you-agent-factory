@@ -412,7 +412,7 @@ referenced fragment, then regenerate.
 
 `google/wire` is limited to `cmd/factory/compose/`. Production `you run` builds
 `*service.FactoryService` through the generated `InjectFactoryService` entry;
-`cmd/factory/main.go` may register that builder through `pkg/cli/run` before
+`cmd/factory/main.go` may register that builder through `pkg/transports/cli/run` before
 CLI execution. HTTP serving uses the same wired instance via
 `compose.ServeAPIServer`. See [cmd-factory-wire-composition.md](cmd-factory-wire-composition.md)
 and [factory-cli-wire-composition.md](factory-cli-wire-composition.md) for the full
@@ -433,7 +433,7 @@ go generate ./cmd/factory/compose/...
 
 ```bash
 go build ./cmd/factory/...
-go test ./cmd/factory/compose/... ./pkg/cli/run/... -count=1
+go test ./cmd/factory/compose/... ./pkg/transports/cli/run/... -count=1
 ```
 
 CI and `make verify-build-contracts` also run `make wire-smoke`, which
@@ -598,7 +598,7 @@ behavior explicit inside the test that needs it.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
 - Runtime log policy is service-configured, but each live session should own its own runtime log sink and emitted records. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
-- Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
+- Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/transports/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
 - Multi-session runtime ownership should follow `docs/architecture/session-runtime-ownership.md`: the service is the coordinator and router, while session runtime config, execution base, event history, and active runtime state belong to the addressed live session rather than mutable service-global config.
 - Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
 - Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/api`, `pkg/config`, or `pkg/replay` behavior tests.

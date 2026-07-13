@@ -3,14 +3,14 @@ package cli
 import (
 	"fmt"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
-	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
-	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	workflowcli "github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
 	"github.com/spf13/cobra"
 )

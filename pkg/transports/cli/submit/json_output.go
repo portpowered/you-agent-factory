@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

@@ -46,7 +46,7 @@ result transport.
 | `POST /factory-sessions/{session_id}/invocations` | Shared live-session invocation API (`invokeFactorySessionBySessionId`) | **Public** | **Reuse as-is** — canonical API entrypoint for `@you/goal` invocations against an open live Factory Session | API regression in `tests/functional/runtime_api/api_session_invocation_test.go`; contract description in `api/openapi-main.yaml` |
 | `InvocationRequest` / `InvocationResponse` | OpenAPI work schemas + `pkg/apisurface` projection | **Public** | **Reuse as-is** — text-first input via `WorkContent`; terminal status and `primaryResult` on `InvocationResponse` | OpenAPI contract tests in `pkg/api/contracttests/`; generated client sync via `make generate-api` only when these schemas change |
 | `Factory.invocationReturn` | Factory configuration on the active session factory | **Public** | **Reuse as-is** — sole public selector for the final primary result; default `SUBMITTED_WORK_TERMINAL` when omitted | Factory validation before runtime; primary-result selection tests in `pkg/invocations/primary_result_test.go` |
-| `you run --factory` / `you run --named @you/goal` | CLI transport adapter in `pkg/cli/run/` | **Public CLI** | **Reuse as-is** — must call the same shared resolver and primary-result selector as the API; no goal-specific transport contract | CLI tests in `pkg/cli/run/run_invocation_test.go`, `pkg/cli/root_run_factory_prompt_test.go`, and `pkg/cli/root_run_test.go` (`run --named @you/goal`) |
+| `you run --factory` / `you run --named @you/goal` | CLI transport adapter in `pkg/transports/cli/run/` | **Public CLI** | **Reuse as-is** — must call the same shared resolver and primary-result selector as the API; no goal-specific transport contract | CLI tests in `pkg/transports/cli/run/run_invocation_test.go`, `pkg/cli/root_run_factory_prompt_test.go`, and `pkg/cli/root_run_test.go` (`run --named @you/goal`) |
 | Shared invocation resolver (`pkg/invocations`) | Backend-owned input and return-policy logic | **Internal shared contract** | **Reuse as-is** — `ResolveTextInput` / `ResolveAPITextInputContent` for input; `ResolvePrimaryResult` for return policy | Unit tests in `pkg/invocations/input_test.go` and `pkg/invocations/primary_result_test.go` |
 | Goal-only result endpoint | — | — | **Out of scope** — this slice does **not** add `/goal/...`, `/results` variants, or any goal-named primary-result route | N/A — reject proposals that bypass `InvocationResponse.primaryResult` |
 
@@ -137,8 +137,8 @@ CLI transports must remain thin adapters over the shared invocation contract:
 3. **Primary result:** `invocations.ResolvePrimaryResult` against selected-tick
    world state — same policy semantics for CLI and API callers.
 
-Transport files: `pkg/cli/run/factory_invocation_input.go`,
-`pkg/cli/run/run.go`. Equivalence requirement is normative in
+Transport files: `pkg/transports/cli/run/factory_invocation_input.go`,
+`pkg/transports/cli/run/run.go`. Equivalence requirement is normative in
 `docs/architecture/invocation-contract.md`.
 
 ### Reviewer evidence for this boundary
@@ -150,10 +150,10 @@ Maintainers reviewing `@you/goal` invocation follow-on PRs should verify:
 | `docs/architecture/invocation-contract.md` | CLI/API equivalence and return-policy ownership are documented public contract |
 | `pkg/invocations/input.go`, `pkg/invocations/primary_result.go` | Single backend-owned resolver and selector — no transport-specific forks |
 | `pkg/service/model_catalog.go` (`InvokeFactorySession`, `resolveSessionInvocationInput`) | API path uses shared resolver; `invocationReturn` read from session factory config |
-| `pkg/cli/run/factory_invocation_input.go` | CLI path uses `invocations.ResolveTextInput` and `InvokeFactorySession` |
+| `pkg/transports/cli/run/factory_invocation_input.go` | CLI path uses `invocations.ResolveTextInput` and `InvokeFactorySession` |
 | `pkg/invocations/input_test.go`, `pkg/invocations/primary_result_test.go` | Unit coverage for input conflicts and both return policies |
-| `pkg/cli/run/run_invocation_test.go` | CLI request construction from positional/stdin sources |
-| `pkg/cli/run/run_invocation_test.go` (`TestResolveFactoryInvocationRequest_NamedFactory*`) | Named factory positional/stdin text selects standard invocation mode and builds `InvocationRequest` through the shared resolver (same code path as `@you/goal`) |
+| `pkg/transports/cli/run/run_invocation_test.go` | CLI request construction from positional/stdin sources |
+| `pkg/transports/cli/run/run_invocation_test.go` (`TestResolveFactoryInvocationRequest_NamedFactory*`) | Named factory positional/stdin text selects standard invocation mode and builds `InvocationRequest` through the shared resolver (same code path as `@you/goal`) |
 | `tests/functional/runtime_api/api_session_invocation_test.go` | End-to-end API invocation returns `primaryResult`; explicit `invocationReturn` policy honored |
 | `pkg/cli/root_run_test.go` (`TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal`) | `run --named @you/goal` resolves built-in goal factory metadata into `RunConfig` at the CLI flag layer |
 

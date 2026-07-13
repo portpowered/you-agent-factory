@@ -1102,7 +1102,7 @@ CLI resolution rules for `--workflow`:
 - `you dispatches list --session <id>` is the shared child-agent/task listing for both Petri and JavaScript sessions.
 - `you work list --session <id>` stays available for both orchestrators. JavaScript sessions may have sparse work if the workflow only uses dispatches/artifacts, but invocation input/output and final result should still be representable as work content where useful.
 
-`pkg/cli/session/session.go`
+`pkg/transports/cli/session/session.go`
 
 - `func NewCommand() *cobra.Command`
 - `func newCreateCommand() *cobra.Command`

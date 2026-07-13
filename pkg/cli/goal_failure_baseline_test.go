@@ -12,10 +12,10 @@ import (
 	"testing"
 
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 // Hermetic S02 failure-baseline fixtures for one-shot goal/model CLI paths. Each

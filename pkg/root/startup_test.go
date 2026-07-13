@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 func TestExecuteWithDependencies_SelectsStartupModesAndSidecars(t *testing.T) {

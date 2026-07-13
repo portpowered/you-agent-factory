@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
@@ -21,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -621,7 +621,7 @@ func setupCLIResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workflowName 
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", fixtureName, err)
 	}

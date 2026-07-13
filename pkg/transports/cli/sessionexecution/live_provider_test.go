@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -381,7 +381,7 @@ func setupCLIAgentRunWorkflowFixture(t *testing.T) string {
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	sourcePath := filepath.Join("..", "..", "orchestrators", "javascript", "runtime", "testdata", "agent-run-fake-child.workflow.js")
+	sourcePath := filepath.Join("..", "..", "..", "orchestrators", "javascript", "runtime", "testdata", "agent-run-fake-child.workflow.js")
 	source, err := os.ReadFile(sourcePath)
 	if err != nil {
 		t.Fatalf("read workflow fixture: %v", err)

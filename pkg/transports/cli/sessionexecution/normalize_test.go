@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 )
 
 const inlineWorkflowSource = `meta({ name: "review", version: 1 });

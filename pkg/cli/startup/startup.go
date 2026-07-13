@@ -7,7 +7,7 @@ import (
 	"context"
 	"io"
 
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
 // Kind identifies the command behavior that requested process startup.

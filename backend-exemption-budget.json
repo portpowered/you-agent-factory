@@ -9,12 +9,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/cli/run/run_invocation_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/config/config_mapper.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: factory config cloning and layout deep-copy helpers remain consolidated with CloneFactoryConfig until mapper seams are extracted."
@@ -138,6 +132,12 @@
       "target": "pkg/service/testmain_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated same-package service tests remain on root-only runtime seams until dedicated service test seams are extracted."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/cli/run/run_invocation_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
@@ -282,18 +282,6 @@
       "target": "pkg/cli/mcp/serve_smoke_test.go#TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: install smoke keeps discovery, validate, async start, and polling assertions on one documented stdio path."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/submit/submit_test.go#TestSubmit_JSONPayloadPostsWorkTypeName",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this CLI boundary test keeps the JSON request contract, headers, and response assertions in one flow."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/work/list_test.go#TestList_JSONOutputPreservesGeneratedResponseShape",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this JSON output test keeps the generated page shape assertions together so the CLI surface stays reviewer-readable."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -753,6 +741,18 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/submit/submit_test.go#TestSubmit_JSONPayloadPostsWorkTypeName",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this CLI boundary test keeps the JSON request contract, headers, and response assertions in one flow."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/work/list_test.go#TestList_JSONOutputPreservesGeneratedResponseShape",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this JSON output test keeps the generated page shape assertions together so the CLI surface stays reviewer-readable."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/http/server_submit_work_test.go#TestSubmitWork_AcceptsCanonicalContent",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract-heavy submit boundary test keeps the full canonical request and response shape in one reviewer-readable flow."
@@ -840,12 +840,6 @@
       "target": "pkg/cli/root_run_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/cli/run/run_invocation_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
@@ -966,6 +960,12 @@
       "target": "pkg/service/testmain_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated same-package service tests remain on root-only runtime seams until dedicated service test seams are extracted."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/cli/run/run_invocation_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",

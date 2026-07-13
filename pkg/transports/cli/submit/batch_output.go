@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

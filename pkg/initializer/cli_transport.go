@@ -58,7 +58,7 @@ func InitializeCLITransport(ctx context.Context, cfg *Config) (*CLITransport, er
 	}, nil
 }
 
-// Runner returns the local in-process runtime seam used by pkg/cli/run.
+// Runner returns the local in-process runtime seam used by pkg/transports/cli/run.
 func (t *CLITransport) Runner() LocalRuntimeRunner {
 	if t == nil || t.Host == nil {
 		return nil
