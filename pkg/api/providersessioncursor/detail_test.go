@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	_ "modernc.org/sqlite"
 )
 
-// pkgmaintcheck:ignore-cyclomatic-complexity fixture-backed test keeps cursor detail response assertions together.
 func TestLoadDetails_ReadsReadableSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeReadableCursorAgentStorageFixture(t)
 
@@ -32,14 +32,22 @@ func TestLoadDetails_ReadsReadableSessionFromConfiguredRoot(t *testing.T) {
 	if len(resp.Transcript) != 1 || resp.Transcript[0].Text == nil || *resp.Transcript[0].Text != "Hello from API fixture" {
 		t.Fatalf("transcript = %#v, want one readable bubble entry", resp.Transcript)
 	}
-	if resp.Parse.TokenUsage == nil || resp.Parse.TokenUsage.InputTokens == nil || *resp.Parse.TokenUsage.InputTokens != 100 {
-		t.Fatalf("token usage = %#v, want input tokens from fixture meta", resp.Parse.TokenUsage)
+	assertReadableFixtureTokenUsage(t, resp.Parse.TokenUsage)
+}
+
+func assertReadableFixtureTokenUsage(t *testing.T, usage *factoryapi.ProviderSessionTokenUsage) {
+	t.Helper()
+	if usage == nil {
+		t.Fatal("token usage = nil, want usage from fixture meta")
 	}
-	if resp.Parse.TokenUsage.CacheWriteTokens == nil || *resp.Parse.TokenUsage.CacheWriteTokens != 10 {
-		t.Fatalf("token usage = %#v, want cacheWriteTokens", resp.Parse.TokenUsage)
+	if usage.InputTokens == nil || *usage.InputTokens != 100 {
+		t.Fatalf("token usage = %#v, want 100 input tokens", usage)
 	}
-	if resp.Parse.TokenUsage.TotalTokens == nil || *resp.Parse.TokenUsage.TotalTokens != 175 {
-		t.Fatalf("token usage total = %#v, want 175", resp.Parse.TokenUsage.TotalTokens)
+	if usage.CacheWriteTokens == nil || *usage.CacheWriteTokens != 10 {
+		t.Fatalf("token usage = %#v, want 10 cache-write tokens", usage)
+	}
+	if usage.TotalTokens == nil || *usage.TotalTokens != 175 {
+		t.Fatalf("token usage = %#v, want 175 total tokens", usage)
 	}
 }
 
