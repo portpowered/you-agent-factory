@@ -263,6 +263,10 @@ type Config struct {
 	// MockWorkersConfig is the normalized mock-worker run configuration loaded
 	// by the CLI when --with-mock-workers is enabled.
 	MockWorkersConfig *factoryconfig.MockWorkersConfig
+	// InvocationSkipPermissionsOverride, when non-nil, requests an
+	// invocation-scoped skip-permissions override for agent workers in this
+	// run. It does not mutate persisted factory worker configuration.
+	InvocationSkipPermissionsOverride *bool
 	// RecordFlushInterval controls how often dirty record-mode artifacts are
 	// flushed during execution. Empty uses replay.DefaultRecordFlushInterval.
 	RecordFlushInterval time.Duration

@@ -160,6 +160,7 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		fs.factoryRunnerID(),
 		workflowContext,
 		logger,
+		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
 		fs.providerCommandRunnerOverride(),
@@ -204,4 +205,11 @@ func (fs *Host) commandRunnerOverride() workers.CommandRunner {
 		return nil
 	}
 	return fs.coordinatorPolicy().commandRunnerOverride
+}
+
+func (fs *Host) invocationSkipPermissionsOverride() *bool {
+	if fs == nil || fs.cfg == nil {
+		return nil
+	}
+	return fs.cfg.InvocationSkipPermissionsOverride
 }

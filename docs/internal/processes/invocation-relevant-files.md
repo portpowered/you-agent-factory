@@ -150,7 +150,11 @@ primary-result behavior.
   --skip-permissions` is registered in `pkg/cli/root_work.go`, mapped to
   `RunConfig.InvocationSkipPermissionsOverride`, and forwarded through
   `buildRunServiceConfig` into `service.FactoryServiceConfig` as an ephemeral
-  invocation override that must not mutate persisted worker `skipPermissions`. `RunConfig.JSONOutput`
+  invocation override that must not mutate persisted worker `skipPermissions`.
+  `invocations.EffectiveSkipPermissions` resolves persisted worker config plus
+  `FactoryServiceConfig.InvocationSkipPermissionsOverride` when building
+  provider-backed worker CLI args in `pkg/service/factory_build.go` and
+  `pkg/runtimehost/build_workers.go`. `RunConfig.JSONOutput`
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
   success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`
