@@ -1,0 +1,12 @@
+{
+  "name": "workstation-throttle-guard-factory",
+  "workTypes": [{"name": "story", "states": [{"name": "ready", "type": "PROCESSING"}, {"name": "done", "type": "TERMINAL"}]}],
+  "workers": [{"name": "writer"}],
+  "workstations": [{
+    "name": "draft-story",
+    "worker": "writer",
+    "guards": [{"type": "INFERENCE_THROTTLE_GUARD"}],
+    "inputs": [{"workType": "story", "state": "ready"}],
+    "outputs": [{"workType": "story", "state": "done"}]
+  }]
+}

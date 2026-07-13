@@ -1,0 +1,14 @@
+{
+  "name": "dynamic-workflow",
+  "orchestrator": {
+    "kind": "JAVASCRIPT",
+    "javascript": {
+      "sourceRef": "factory/workflows/review.js",
+      "entrypoint": "main",
+      "metadata": {"team": "platform"},
+      "argsSchema": {"type": "object", "properties": {"topic": {"type": "string"}}},
+      "defaultPolicy": {"maxAgents": 3},
+      "agents": {"reviewer": {"preset": "careful-review"}}
+    }
+  }
+}

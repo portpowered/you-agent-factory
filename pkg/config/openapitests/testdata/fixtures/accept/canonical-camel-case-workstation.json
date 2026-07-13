@@ -1,0 +1,41 @@
+{
+  "name": "finish-chapter-factory",
+  "workTypes": [
+    {
+      "name": "chapter",
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"}
+      ]
+    },
+    {
+      "name": "page",
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"}
+      ]
+    }
+  ],
+  "resources": [{"name": "agent-slot", "capacity": 2}],
+  "workers": [{"name": "executor", "type": "MODEL_WORKER", "modelProvider": "CLAUDE", "stopToken": "COMPLETE"}],
+  "workstations": [{
+    "id": "finish-chapter-id",
+    "name": "finish-chapter",
+    "behavior": "STANDARD",
+    "worker": "executor",
+    "type": "LOGICAL_MOVE",
+    "body": "Finish {{ .WorkID }}.",
+    "inputs": [
+      {"workType": "chapter", "state": "init"},
+      {
+        "workType": "page",
+        "state": "complete",
+        "guards": [{"type": "ALL_CHILDREN_COMPLETE", "parentInput": "chapter", "spawnedBy": "chapter-parser"}]
+      }
+    ],
+    "outputs": [{"workType": "chapter", "state": "complete"}],
+    "resources": [{"name": "agent-slot", "capacity": 2}],
+    "guards": [{"type": "VISIT_COUNT", "workstation": "review-story", "maxVisits": 3}],
+    "env": {"TEAM": "{{ index .Tags \"team\" }}"}
+  }]
+}
