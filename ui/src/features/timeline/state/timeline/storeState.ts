@@ -1,12 +1,12 @@
 import type { DashboardSnapshot } from "../../../../api/dashboard";
 import type { FactoryEvent } from "../../../../api/events";
-import type { FactoryTimelineProjection } from "./buildSnapshot";
-import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
 import {
   createMaterializedWorkOutcomeState,
   type MaterializedWorkOutcomeState,
   reduceMaterializedWorkOutcomeEvents,
 } from "../../../work-outcome/public/materializer";
+import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
+import type { FactoryTimelineProjection } from "./buildSnapshot";
 import { projectSnapshot } from "./projectSnapshot";
 import {
   emptyWorldRuntime,
@@ -322,31 +322,8 @@ export function appendTimelineEvents(
 export function replaceTimelineEvents(
   events: FactoryEvent[],
   deps: TimelineStoreStateDeps,
-): Pick<
-  FactoryTimelineState,
-  | "currentReplayCheckpoint"
-  | "events"
-  | "latestTick"
-  | "mode"
-  | "receivedEventIDs"
-  | "selectedTick"
-  | "worldViewCache"
-> {
-  const ordered = deps.orderedEvents(events);
-  const latestTick = Math.max(0, ...ordered.map((event) => event.context.tick));
-  const currentProjection = projectCurrentTick(ordered, latestTick, deps);
-
-  return {
-    currentReplayCheckpoint: currentProjection.checkpoint,
-    events: ordered,
-    latestTick,
-    mode: "current",
-    receivedEventIDs: ordered.map((event) => event.id),
-    selectedTick: latestTick,
-    worldViewCache: {
-      [latestTick]: currentProjection.worldState,
-    },
-  };
+): ReturnType<typeof emptyTimelineState> {
+  return appendTimelineEvents(emptyTimelineState(), events, deps);
 }
 
 export function restoreTimelineCheckpoint(
