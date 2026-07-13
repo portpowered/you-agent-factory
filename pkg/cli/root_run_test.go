@@ -697,6 +697,35 @@ func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
 	}
 }
 
+func TestRunCommand_WorkflowFlagRejected(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--workflow", "workflow-1"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected run-level --workflow to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unknown flag: --workflow") {
+		t.Fatalf("error = %q, want unknown flag --workflow", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run command should not execute when --workflow is unsupported")
+	}
+}
+
 func TestRunCommand_RetiredMockExecutionAliasRejected(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -898,7 +927,6 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 		"--quiet",
 		"--no-record",
 		"--dir", "custom-factory",
-		"--workflow", "workflow-1",
 		"--work", "work.json",
 	})
 
@@ -912,8 +940,8 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	if got.Dir != "custom-factory" {
 		t.Errorf("dir = %q, want %q", got.Dir, "custom-factory")
 	}
-	if got.Workflow != "workflow-1" {
-		t.Errorf("workflow = %q, want %q", got.Workflow, "workflow-1")
+	if got.Workflow != "" {
+		t.Errorf("workflow = %q, want empty (run-level --workflow removed)", got.Workflow)
 	}
 	if got.WorkFile != "work.json" {
 		t.Errorf("work file = %q, want %q", got.WorkFile, "work.json")
