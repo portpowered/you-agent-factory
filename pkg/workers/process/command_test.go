@@ -271,29 +271,34 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	type runOutcome struct {
+		result CommandResult
+		err    error
+	}
+	runDone := make(chan runOutcome, 1)
 	go func() {
-		deadline := time.Now().Add(3 * time.Second)
-		for time.Now().Before(deadline) {
-			if _, err := readCommandHelperPIDFile(pidFile); err == nil {
-				cancel()
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+		result, err := ExecCommandRunner{}.Run(ctx, CommandRequest{
+			Command: os.Args[0],
+			Args: []string{
+				"-test.run=TestExecCommandRunner_HelperProcess",
+				"--",
+				"spawn-child",
+			},
+			Env: append(os.Environ(),
+				"GO_WANT_COMMAND_HELPER=1",
+				"COMMAND_HELPER_PID_FILE="+pidFile,
+			),
+		})
+		runDone <- runOutcome{result: result, err: err}
 	}()
 
-	result, err := ExecCommandRunner{}.Run(ctx, CommandRequest{
-		Command: os.Args[0],
-		Args: []string{
-			"-test.run=TestExecCommandRunner_HelperProcess",
-			"--",
-			"spawn-child",
-		},
-		Env: append(os.Environ(),
-			"GO_WANT_COMMAND_HELPER=1",
-			"COMMAND_HELPER_PID_FILE="+pidFile,
-		),
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
 	})
+	cancel()
+	outcome := <-runDone
+	result, err := outcome.result, outcome.err
 	if err == nil {
 		t.Fatal("Run error = nil, want context canceled error")
 	}
@@ -304,10 +309,6 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 		t.Fatalf("ExitCode = %d, want zero value for cancel system error", result.ExitCode)
 	}
 
-	childPID := readCommandHelperPID(t, pidFile)
-	t.Cleanup(func() {
-		commandTestTerminateProcess(childPID)
-	})
 	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
 		t.Fatalf("spawned child process %d is still running after context cancel", childPID)
 	}
@@ -891,11 +892,6 @@ func writeCommandHelperPIDFile(pidFile string, pid int) error {
 		return err
 	}
 	return os.Rename(temporary, pidFile)
-}
-
-func readCommandHelperPID(t *testing.T, pidFile string) int {
-	t.Helper()
-	return waitForCommandHelperPID(t, pidFile, 0)
 }
 
 func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration) int {
