@@ -9,4 +9,5 @@ description: >-
   a STREAM_GAP record describing the loss instead of silently skipping it.
 schema:
   type: integer
+  format: int64
   minimum: 0

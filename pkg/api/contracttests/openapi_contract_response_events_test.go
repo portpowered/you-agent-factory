@@ -68,6 +68,9 @@ func TestOpenAPIAuthoring_ResponseEventStreamParametersAreConstrained(t *testing
 	afterSequence := loadAuthoredComponentFragment(t, "../../../api/components/parameters/ResponseEventAfterSequence.yaml")
 	assertQueryParameter(t, afterSequence, "after_sequence")
 	afterSequenceSchema := objectField(t, afterSequence, "schema")
+	if got := afterSequenceSchema["format"]; got != "int64" {
+		t.Fatalf("after_sequence format = %v, want int64", got)
+	}
 	if got := afterSequenceSchema["minimum"]; got != 0 {
 		t.Fatalf("after_sequence minimum = %v, want 0", got)
 	}

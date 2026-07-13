@@ -147,7 +147,7 @@ type FactoryValidationTarget struct {
 }
 
 // ResponseEventAfterSequence defines model for ResponseEventAfterSequence.
-type ResponseEventAfterSequence = int
+type ResponseEventAfterSequence = int64
 
 // ResponseEventDispatchID defines model for ResponseEventDispatchID.
 type ResponseEventDispatchID = string

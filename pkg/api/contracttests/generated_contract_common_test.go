@@ -12,7 +12,8 @@ import (
 )
 
 func TestGeneratedGoClientBuildsFilteredResponseEventRequest(t *testing.T) {
-	afterSequence := generatedclient.ResponseEventAfterSequence(42)
+	const reconnectCursor int64 = 4_294_967_296
+	var afterSequence int64 = generatedclient.ResponseEventAfterSequence(reconnectCursor)
 	dispatchID := generatedclient.ResponseEventDispatchID("dispatch/one")
 	kinds := generatedclient.ResponseEventKind{
 		generatedclient.FactoryResponseEventKindMessage,
@@ -34,7 +35,7 @@ func TestGeneratedGoClientBuildsFilteredResponseEventRequest(t *testing.T) {
 		t.Fatalf("generated response-event path = %q, want %q", got, want)
 	}
 	query := request.URL.Query()
-	if query.Get("after_sequence") != "42" || query.Get("dispatch_id") != "dispatch/one" {
+	if query.Get("after_sequence") != "4294967296" || query.Get("dispatch_id") != "dispatch/one" {
 		t.Fatalf("generated response-event query = %q", request.URL.RawQuery)
 	}
 	if got := query["kind"]; len(got) != 2 || got[0] != "MESSAGE" || got[1] != "TOOL" {

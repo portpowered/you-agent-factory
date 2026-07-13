@@ -85,7 +85,11 @@ func TestOpenAPIContract_ResponseEventStreamIsBundledWithTypedOutcomes(t *testin
 
 	bundledParameters := objectField(t, objectField(t, doc, "components"), "parameters")
 	afterSequence := objectField(t, bundledParameters, "ResponseEventAfterSequence")
-	if got := objectField(t, afterSequence, "schema")["minimum"]; got != 0 {
+	afterSequenceSchema := objectField(t, afterSequence, "schema")
+	if got := afterSequenceSchema["format"]; got != "int64" {
+		t.Fatalf("bundled after_sequence format = %v, want int64", got)
+	}
+	if got := afterSequenceSchema["minimum"]; got != 0 {
 		t.Fatalf("bundled after_sequence minimum = %v, want 0", got)
 	}
 	kind := objectField(t, bundledParameters, "ResponseEventKind")
