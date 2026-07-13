@@ -181,18 +181,14 @@ primary-result behavior.
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
--   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
+- `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
-  routes review mode from `check-goal` (`plain` -> `goal:review`, `structured` ->
-  `goal:structured-review`) so plain classifier and structured envelope lanes are
-  both reachable without competing logical advances from `goal:check`. The built-in
-  `goal-checker` script worker must emit only the lane label on stdout after
-  verification (`plain` by default, opt-in `structured` via
-  `YOU_GOAL_REVIEW_MODE`) because `check-goal` is a `CLASSIFIER_WORKSTATION`.
-  Retry exhaustion is authored separately for `review-goal` and
-  `structured-review-goal`, each with its own guarded loop-breaker from `goal:plan`
-  to `goal:failed`.
+  has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
+  accepted completion routes to `goal:complete`, continue/reject route back to
+  `goal:init`, and worker or workstation failure routes to `goal:failed`.
+  `pkg/config/builtingoal/` owns the authored factory and concise executor prompt;
+  assembly and materialization require only `goal-executor` and `execute-goal`.
   Packaged workstation `body` templates must use canonical `PromptData` roots
   such as `(index .Inputs 0).Payload`; legacy top-level aliases like
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.

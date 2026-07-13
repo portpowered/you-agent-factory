@@ -9,9 +9,10 @@ materialized factory on disk, and customize it like any other named factory.
 return-policy contract. This guide focuses on the `@you/goal` packaged factory
 workflow.
 
-The default `@you/goal` factory is a goal-oriented example with planner,
-executor, checker, and reviewer workstations. Use it as a runnable starting point
-before authoring a custom factory from scratch.
+The default `@you/goal` factory is a minimal goal repeater with one executor.
+It keeps running the same goal until the executor completes it, reports a hard
+failure, or shared session controls stop the invocation. Use it as a runnable
+starting point before authoring a custom factory from scratch.
 
 ## Quick start
 
@@ -95,9 +96,9 @@ Customers should expect:
 
 - The CLI selects exactly one named-factory directory and loads the split
   `factory.json`, `workers/`, and `workstations/` layout from that directory.
-- The default factory runs the `goal` work type through the multi-stage flow
-  described below, ending at terminal `goal:complete` on success or at a
-  non-success goal state when routing or workstation failure stops progress.
+- The default factory runs the `goal` work type through the repeater flow
+  described below, ending at terminal `goal:complete` on success or
+  `goal:failed` when the worker or workstation fails.
 - Later invocations reuse the materialized on-disk copy instead of overwriting
   customer edits with pristine embedded content.
 - Legacy materialized copies that still use broken top-level `{{ .WorkID }}`
@@ -106,33 +107,24 @@ Customers should expect:
 
 ## Goal flow topology
 
-The packaged `@you/goal` factory models one `goal` work type that moves through
-planning, execution, checking, review, and completion stages. Each stage is a
-normal workstation transition on submitted work; there is no goal-specific public
-route or endpoint for any stage.
+The packaged `@you/goal` factory models one `goal` work type with four states:
+`goal:init`, `goal:execute`, `goal:complete`, and `goal:failed`. One
+`execute-goal` `AGENT_RUN` workstation uses `REPEATER` behavior to perform the
+work. There is no goal-specific public route or endpoint for any stage.
 
 | Stage | Customer-facing role | Typical work state | Workstation |
 |-------|----------------------|--------------------|-------------|
-| Planning | Turn submitted goal text into an executable plan | `goal:init` → `goal:plan` | `plan-goal` |
-| Execution | Implement the plan | `goal:plan` → `goal:execute` | `execute-goal` |
-| Checking | Verify execution output and choose review mode | `goal:execute` → review path | `check-goal` |
-| Review | Evaluate results and decide whether to finish or loop | `goal:review` or `goal:structured-review` | `review-goal` or `structured-review-goal` |
-| Completion | Terminal success for the invocation | `goal:complete` | — |
+| Start | Accept submitted goal text | `goal:init` | `execute-goal` |
+| Repeat | Continue working after an unfinished or rejected pass | `goal:init` → `goal:execute` → `goal:init` | `execute-goal` |
+| Completion | Return the executor's accepted final response | `goal:execute` → `goal:complete` | `execute-goal` |
+| Failure | Record worker or workstation failure | `goal:execute` → `goal:failed` | `execute-goal` |
 
-After checking, the factory routes to either plain review (`review-goal`) or
-structured review (`structured-review-goal`). Accepted review outcomes advance
-work to `goal:complete`. Review can also loop back to planning when changes or
-test failures require another pass.
-
-Non-success goal states are part of the same topology rather than separate
-public routes:
-
-- `goal:blocked` and `goal:needs-human` — authored routed states when review
-  decides the goal cannot proceed without operator action.
-- `goal:interrupted` — routed when review or dispatch interruption metadata
-  indicates an interrupted stop.
-- `goal:failed` — workstation failure, guard exhaustion, or another terminal
-  failure path before `goal:complete`.
+An accepted response ending with the configured `<COMPLETE>` stop token advances
+work to `goal:complete`. The stop token is removed from the returned content, so
+the executor's final response becomes the invocation `primaryResult`.
+Continue and reject outcomes route back to `goal:init`, making the same goal eligible for
+another `execute-goal` dispatch. A worker or workstation failure routes to
+`goal:failed`.
 
 When a batch invocation stops before `goal:complete`, use the shared recovery
 codes and inspect-first flow in the sections below. Those surfaces explain
@@ -148,18 +140,18 @@ the goal stopped:
 
 | Outcome | Stable code | Meaning | What to do next |
 |---------|-------------|---------|-----------------|
-| Blocked authored goal state | `INVOCATION_BLOCKED` | Routed goal work reached `goal:blocked` before a complete primary result existed. | Inspect the session and blocked work, then unblock it with the existing session/work surfaces. |
-| Human input required authored goal state | `INVOCATION_NEEDS_HUMAN` | Routed goal work reached `goal:needs-human` before a complete primary result existed. | Inspect the session and relevant work, then provide the needed operator input through the existing workflow. |
+| Blocked work | `INVOCATION_BLOCKED` | A customized factory or shared runtime condition left invocation work blocked before a primary result existed. The built-in minimal topology does not author a blocked state. | Inspect the session and blocked work, then use the existing session/work surfaces. |
+| Human input required | `INVOCATION_NEEDS_HUMAN` | A customized factory or shared runtime condition requires operator input before a primary result exists. The built-in minimal topology does not author a needs-human state. | Inspect the session and relevant work, then provide the needed operator input through the existing workflow. |
 | Session paused | `INVOCATION_PAUSED` | Waiting stopped because the live Factory Session was paused. | Resume the session with `you session resume <session-id>` and then re-check progress. |
 | Dispatch or session interrupted | `INVOCATION_INTERRUPTED` | Existing interruption metadata explains the stop better than a generic failure. | Inspect the session and dispatch context to decide whether to resume, retry, or rerun. |
 | Runtime failure | `INVOCATION_RUNTIME_FAILURE` | The invocation scope failed before producing the configured primary result. | Inspect failed work and session status to find the failing step. |
 | Wait deadline expired | `INVOCATION_TIMED_OUT` | The invocation was still running when the wait window expired. | Check session status and work progress, then wait longer or rerun with a different operator workflow. |
 | No primary result resolved | `INVOCATION_PRIMARY_RESULT_UNRESOLVED` | Work settled, but the configured `invocationReturn` target never produced a primary result. | Inspect the session/work state and the authored `invocationReturn` contract. |
 
-Blocked and needs-human are authored routed goal states. Paused and interrupted
-come from shared session lifecycle or dispatch interruption context. They are
-reported distinctly so operators do not need a goal-specific endpoint or raw
-provider payload inspection to understand what happened.
+These are shared invocation recovery codes rather than extra states in the
+built-in goal topology. Paused and interrupted come from shared session
+lifecycle or dispatch interruption context. Blocked and needs-human remain
+relevant to customized materialized factories or shared runtime conditions.
 
 ## Operator controls during active execution
 
@@ -177,9 +169,8 @@ During an open live session (for example one started by `you run --named
   `POST /factory-sessions/{session_id}/resume` to wake execution and drain
   buffered submissions and completed worker results in submission order.
 - **Interrupt** an in-flight dispatch through the existing dispatch
-  interruption surfaces; interrupted goals route to `goal:interrupted` and
-  surface `INVOCATION_INTERRUPTED` when an invocation waits on the interrupted
-  work.
+  interruption surfaces; interruption metadata can surface
+  `INVOCATION_INTERRUPTED` when an invocation waits on the interrupted work.
 
 Paused sessions report `INVOCATION_PAUSED` when a batch invocation stops
 waiting. `SESSION_LIFECYCLE_CONTROL` events record pause and resume for replay
@@ -211,7 +202,8 @@ public nouns stay the same across CLI and API: `FactorySession`, `Work`, and
    response: `sessionId`, `workId`, `workName`, and `workState` when present.
 2. Inspect the live `FactorySession` with `you session show <session-id>` or
    `GET /factory-sessions/{session_id}` to confirm whether automation is paused,
-   blocked on work state, needs human input, or interrupted during a dispatch.
+   failed, blocked by a customized topology, awaiting human input, or interrupted
+   during a dispatch.
 3. Inspect the affected `Work` with `you work show <work-id> --session <session-id>`
    or `GET /factory-sessions/{session_id}/work/{work_id}` to read the stop
    summary, latest dispatch or result summary, and suggested recovery surface.
@@ -225,8 +217,8 @@ public nouns stay the same across CLI and API: `FactorySession`, `Work`, and
 | Stop reason | What inspect should tell you | Existing control to use next |
 |-------------|------------------------------|------------------------------|
 | Paused `FactorySession` | The session lifecycle is paused while buffered work stays attached to the same session. | Resume with `you session resume <session-id>`, then re-check the same session and work. |
-| Blocked `Work` state such as `goal:blocked` | The blocked work item, its current state, and the latest relevant dispatch or result summary. | Use existing work repair, work move, or follow-up submission controls for that work item. |
-| Needs-human `Work` state such as `goal:needs-human` | The work item that needs operator input, approval, or artifact review before progress can continue. | Provide the required human input or approval through the existing workflow, then re-inspect the same work item. |
+| Blocked `Work` in a customized factory | The blocked work item, its current state, and the latest relevant dispatch or result summary. | Use existing work repair, work move, or follow-up submission controls for that work item. |
+| Needs-human `Work` in a customized factory | The work item that needs operator input, approval, or artifact review before progress can continue. | Provide the required human input or approval through the existing workflow, then re-inspect the same work item. |
 | Interrupted `Dispatch` or session | The interrupted dispatch/result summary and the affected session/work context. | Use existing dispatch retry, work repair, or session workflow controls after inspecting the interruption context. |
 
 This flow intentionally reuses the shared session and work inspection surfaces.
@@ -264,16 +256,9 @@ after first use:
 ```text
 factory.json
 workers/
-  goal-planner/AGENTS.md
   goal-executor/AGENTS.md
-  goal-checker/AGENTS.md
-  goal-reviewer/AGENTS.md
 workstations/
-  plan-goal/AGENTS.md
   execute-goal/AGENTS.md
-  check-goal/AGENTS.md
-  review-goal/AGENTS.md
-  structured-review-goal/AGENTS.md
 ```
 
 On first materialization, the CLI expands the built-in catalog into that layout:
