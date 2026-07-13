@@ -25,7 +25,7 @@ concept owners below when you need the complete customer-facing contract.
 |-------|----------------|--------------------------------------|
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
 | `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
-| `config` | `factory.json` topology, split layout, and portability | [Config](config.md) and [Author factories](authoring-factories.md) |
+| `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |

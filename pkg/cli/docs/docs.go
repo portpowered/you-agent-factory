@@ -76,7 +76,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicAgents, description: "Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.", path: referenceAgentsPath, displayOrder: 5},
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
 	{topic: TopicRun, description: "Supported local, one-shot, batch, continuous, and mock-worker run shapes.", path: referenceRunPath, displayOrder: 15},
-	{topic: TopicConfig, description: "factory.json topology, operator model defaults, work types, states, workers, workstations, resources, and portability.", path: referenceConfigPath, displayOrder: 20},
+	{topic: TopicConfig, description: "Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.", path: referenceConfigPath, displayOrder: 20},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},

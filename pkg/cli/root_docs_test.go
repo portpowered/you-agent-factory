@@ -7,10 +7,81 @@ import (
 	"strings"
 	"testing"
 
+	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
+	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 )
+
+func TestConfigDocumentation_ExamplesReachCurrentCLIPathBoundary(t *testing.T) {
+	doc, err := docscli.Markdown("config")
+	if err != nil {
+		t.Fatalf("Markdown(config) error = %v", err)
+	}
+	for _, command := range []string{
+		"you config init",
+		"you factory config validate ./factory/factory.json",
+		"you factory config flatten ./factory > ./dist/factory.json",
+		"you factory config expand ./dist/factory.json",
+	} {
+		if !strings.Contains(doc, command) {
+			t.Fatalf("packaged config guide missing executable example %q", command)
+		}
+	}
+
+	originalValidate := validateFactory
+	originalFlatten := flattenFactoryConfig
+	originalExpand := expandFactoryConfig
+	defer func() {
+		validateFactory = originalValidate
+		flattenFactoryConfig = originalFlatten
+		expandFactoryConfig = originalExpand
+	}()
+
+	var validated, flattened, expanded string
+	validateFactory = func(cfg factorycli.ValidateConfig) error {
+		validated = cfg.Path
+		return nil
+	}
+	flattenFactoryConfig = func(cfg configcli.FactoryConfigFlattenConfig) error {
+		flattened = cfg.Path
+		return nil
+	}
+	expandFactoryConfig = func(cfg configcli.FactoryConfigExpandConfig) error {
+		expanded = cfg.Path
+		return nil
+	}
+
+	executeDocumentedConfigExample(t, []string{"factory", "config", "validate", "./factory/factory.json"})
+	executeDocumentedConfigExample(t, []string{"factory", "config", "flatten", "./factory"})
+	executeDocumentedConfigExample(t, []string{"factory", "config", "expand", "./dist/factory.json"})
+
+	if validated != "./factory/factory.json" || flattened != "./factory" || expanded != "./dist/factory.json" {
+		t.Fatalf("documented config paths = validate %q, flatten %q, expand %q", validated, flattened, expanded)
+	}
+
+	for _, subcommand := range []string{"validate", "flatten", "expand"} {
+		root := NewRootCommand()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"factory", "config", subcommand})
+		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "accepts 1 arg(s), received 0") {
+			t.Fatalf("factory config %s without path error = %v, want required-path failure", subcommand, err)
+		}
+	}
+}
+
+func executeDocumentedConfigExample(t *testing.T, args []string) {
+	t.Helper()
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute %q: %v", strings.Join(args, " "), err)
+	}
+}
 
 func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testing.T) {
 	doc, err := docscli.Markdown("run")
@@ -91,7 +162,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`agents` - Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router",
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`run` - Supported local, one-shot, batch, continuous, and mock-worker run shapes",
-		"`config` - factory.json topology, operator model defaults, work types, states, workers, workstations, resources, and portability",
+		"`config` - Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
 		"`guards` - Workstation, input, and factory guards",

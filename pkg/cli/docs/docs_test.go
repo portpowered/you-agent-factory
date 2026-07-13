@@ -184,7 +184,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`agents` - Agent orientation",
 		"`authoring-factories` - Practical factory authoring workflow",
 		"`run` - Supported local, one-shot, batch, continuous, and mock-worker run shapes",
-		"`config` - factory.json topology, operator model defaults",
+		"`config` - Operator initialization and Factory validation",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
 		"`work` - Submitted work",
@@ -421,7 +421,7 @@ func TestMarkdown_RunDocumentsSupportedRunShapes(t *testing.T) {
 	}
 }
 
-func TestMarkdown_ConfigDocumentsOperatorDefaults(t *testing.T) {
+func TestMarkdown_ConfigOwnsCurrentOperatorAndFactoryConfigTasks(t *testing.T) {
 	t.Parallel()
 
 	got, err := Markdown("config")
@@ -430,18 +430,20 @@ func TestMarkdown_ConfigDocumentsOperatorDefaults(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"## Operator Model Defaults",
+		"## Initialize Operator And System Configuration",
+		"you config init",
 		"~/.you-agent-factory/config.json",
 		"YOU_DEFAULT_WORKER_MODEL_PROVIDER",
 		"YOU_DEFAULT_WORKER_MODEL",
 		"--default-worker-model-provider",
 		"--default-worker-model",
 		"file < env < flag",
-		"`DEFAULT`",
-		"you run --runner",
-		"`factory.json` and OpenAPI `runner` fields are unchanged by operator defaults",
-		"Malformed JSON fails before service construction",
-		"Unsupported `workerModelProvider`",
+		"## Validate Or Transform A Factory",
+		"you factory config validate ./factory/factory.json",
+		"you factory config validate ./factory",
+		"you factory config flatten ./factory > ./dist/factory.json",
+		"you factory config expand ./dist/factory.json",
+		"Every command requires a concrete Factory",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
@@ -449,7 +451,7 @@ func TestMarkdown_ConfigDocumentsOperatorDefaults(t *testing.T) {
 	}
 }
 
-func TestMarkdown_ConfigDocumentsInvocationContract(t *testing.T) {
+func TestMarkdown_ConfigKeepsMinimumFactoryAuthoringContract(t *testing.T) {
 	t.Parallel()
 
 	got, err := Markdown("config")
@@ -458,28 +460,32 @@ func TestMarkdown_ConfigDocumentsInvocationContract(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"## Invocation Contract",
-		"`you run --factory <factory.json> <text>`",
-		"`POST /factory-sessions/{session_id}/invocations`",
-		"`INVOCATION_INPUT_SOURCE_CONFLICT`",
-		"`INVOCATION_INPUT_EMPTY`",
+		"## Minimum Factory Authoring Contract",
+		"workTypes",
+		"handlingBehavior",
+		"workers",
+		"workstations",
+		"resources",
+		"invocationSignature",
 		"`invocationReturn`",
-		"`SUBMITTED_WORK_TERMINAL`",
-		"`EXPLICIT`",
-		"`INVOCATION_PRIMARY_RESULT_UNRESOLVED`",
-		"`you docs sessions`",
-		"`fileRef` and `audioStream` are reserved future source categories",
-		"Top-level `sourceKind: \"text\"` plus canonical `content` (`WorkContent`)",
-		`"status":"COMPLETED","primaryResult":[{"type":"text"`,
+		"supportingFiles",
+		"you docs workers",
+		"you docs workstations",
+		"you docs resources",
+		"you docs run",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
 		}
 	}
 	for _, forbidden := range []string{
-		"RUN_INVOCATION_AMBIGUOUS_INPUT",
-		`"output":"Summary text","workId":"work-123"`,
-		"source.kind: text",
+		"you config validate",
+		"you config flatten",
+		"you config expand",
+		"you factory save",
+		"## Run Controls",
+		"## Clean invocation contract",
+		"\n```bash\nyou\n```",
 	} {
 		if strings.Contains(got, forbidden) {
 			t.Fatalf("Markdown(config) still contains stale invocation contract %q:\n%s", forbidden, got)
