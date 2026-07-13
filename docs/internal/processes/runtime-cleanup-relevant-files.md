@@ -105,6 +105,14 @@ finish the named move, not ownership rationale for new product behavior.
 transport packages should own narrow contracts that startup injects instead of
 depending outward on the application graph.
 
+The same check rejects recreation or import of converged roots and reports the
+canonical replacement: `pkg/packagedfactories` to `pkg/factory/packages`,
+`pkg/factorydefinition` to `pkg/factory/definition`,
+`pkg/factorysessionexecution` to `pkg/factory/sessions/execution`,
+`pkg/factorysessions` to `pkg/factory/sessions`, and `pkg/petri` to
+`pkg/orchestrators/petri`. Add a retired-root mapping when completing a package
+convergence so an old import cannot hide inside an otherwise approved family.
+
 ## Vocabulary Guardrails
 
 Changed customer-facing docs, API descriptions, CLI help, dashboard copy, and
