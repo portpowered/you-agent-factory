@@ -1,8 +1,6 @@
 package codex
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -28,12 +26,10 @@ func ParseTerminalFailure(stdout []byte) (TerminalFailure, bool) {
 	var result TerminalFailure
 	var recognizedFailure bool
 	var threadID string
-	scanner := bufio.NewScanner(bytes.NewReader(stdout))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
+	forEachBoundedRecord(stdout, func(raw []byte) {
 		var record recordEnvelope
-		if json.Unmarshal(scanner.Bytes(), &record) != nil {
-			continue
+		if json.Unmarshal(raw, &record) != nil {
+			return
 		}
 		switch record.Type {
 		case "thread.started":
@@ -55,7 +51,7 @@ func ParseTerminalFailure(stdout []byte) (TerminalFailure, bool) {
 				recognizedFailure = recognizedFailure || recognized
 			}
 		}
-	}
+	})
 	return result, result.NativeEventType != ""
 }
 

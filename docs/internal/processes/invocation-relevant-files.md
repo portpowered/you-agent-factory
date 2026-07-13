@@ -233,6 +233,12 @@ primary-result behavior.
   published the exact terminal `ERROR` draft, keep the legacy terminal marker
   for response-stream consumers while explicitly suppressing its second
   canonical projection.
+  Treat provider JSONL as a bounded record stream: diagnose and discard one
+  oversized record without retaining the rest of that line, then resume at the
+  next newline. Decoder flush and independent final/failure parsers must apply
+  the same record boundary so an unknown oversized record cannot hide a later
+  authoritative completion or typed failure, and diagnostics must describe the
+  class/discriminator without copying raw provider payloads.
   Session-scoped immutable response-event storage lives in
   `pkg/factorysessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is

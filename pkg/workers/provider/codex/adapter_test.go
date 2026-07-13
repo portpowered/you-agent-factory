@@ -11,8 +11,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex"
 )
 
@@ -250,6 +252,193 @@ func TestParseTerminalFailurePreservesCodexFailureCategoriesAndRetryPolicy(t *te
 			}
 		})
 	}
+}
+
+func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
+	t.Parallel()
+	const (
+		threadID = "thread-conformance-1"
+		prompt   = "private prompt must not escape"
+		secret   = "sk-codex-secret"
+	)
+	content := codexObservations(
+		`{"type":"thread.started","thread_id":"`+threadID+`"}`,
+		`{"type":"turn.started"}`,
+		`{"type":"item.started","item":{"id":"command-1","type":"command_execution","command":"go test ./...","status":"in_progress"}}`,
+		`{"type":"item.updated","item":{"id":"command-1","type":"command_execution","aggregated_output":"ok","status":"in_progress"}}`,
+		`{"type":"item.completed","item":{"id":"command-1","type":"command_execution","command":"go test ./...","aggregated_output":"ok","status":"completed","exit_code":0}}`,
+		`{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"safe final"}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":2}}`,
+	)
+	session := interfaces.ProviderSessionMetadata{Provider: "codex", Kind: codex.ProviderSessionKindSessionID, ID: threadID}
+	testkit.RunSnapshotStream(t, testkit.SnapshotStreamFixture{
+		NewAdapter: func() adapter.Adapter { return codex.NewResponseAdapter() },
+		Request: interfaces.ProviderInferenceRequest{
+			Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			ModelProvider: "codex", Model: "gpt-test", UserMessage: prompt,
+		},
+		Content: content,
+		TerminalFailure: codexObservations(
+			`{"type":"thread.started","thread_id":"`+threadID+`"}`,
+			`{"type":"turn.failed","error":{"message":"unexpected status 429"}}`,
+		),
+		UnsafeAndRecovering: codexObservations(
+			`{"type":"thread.started","thread_id":"`+threadID+`"}`,
+			`{"type":`+prompt+`,"token":"`+secret+`"}`,
+			`{"type":"future.event","prompt":"`+prompt+`","token":"`+secret+`"}`,
+			`{"type":"item.completed","item":{"id":"future-1","type":"future_item","text":"`+prompt+`"}}`,
+			`{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"safe final"}}`,
+		),
+		UnterminatedFinal: []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(
+			`{"type":"thread.started","thread_id":"` + threadID + "\"}\n" +
+				`{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"safe final"}}`,
+		)}},
+		FinalResult: workerprocess.CommandResult{Stdout: observationsStdout(content)},
+		Expected: testkit.SnapshotStreamExpected{
+			Capabilities: adapter.Capabilities{
+				NativeStreaming: true, MessageSnapshots: true, ReasoningSummaries: true,
+				ToolLifecycle: true, ToolOutputDeltas: true, StableItemIDs: true,
+			},
+			Drafts: []testkit.DraftExpectation{
+				{Kind: responseevents.KindSession, Phase: responseevents.PhaseStarted, ProviderRef: threadID},
+				{Kind: responseevents.KindTurn, Phase: responseevents.PhaseStarted, ProviderRef: threadID},
+				{Kind: responseevents.KindTool, Phase: responseevents.PhaseStarted, ItemID: "command-1", ProviderRef: threadID},
+				{Kind: responseevents.KindTool, Phase: responseevents.PhaseDelta, ItemID: "command-1", ProviderRef: threadID},
+				{Kind: responseevents.KindTool, Phase: responseevents.PhaseCompleted, ItemID: "command-1", ProviderRef: threadID},
+				{Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted, ItemID: "message-1", ProviderRef: threadID},
+				{Kind: responseevents.KindUsage, Phase: responseevents.PhaseUpdated, ProviderRef: threadID},
+				{Kind: responseevents.KindTurn, Phase: responseevents.PhaseCompleted, ProviderRef: threadID},
+			},
+			ProviderSession: session, FinalContent: "safe final",
+			FailureFamily: interfaces.WorkFailureFamilyThrottle, FailureType: interfaces.WorkFailureTypeThrottled, FailureRetryable: true,
+		},
+		ForbiddenDiagnostic: []string{prompt, secret},
+	})
+}
+
+func TestDecoderBoundsOversizedRecordsAndContinuesWithUnterminatedCompletion(t *testing.T) {
+	const prompt = "private prompt must not escape"
+	oversized := `{"type":"future.record","payload":"` + strings.Repeat("x", 1024*1024+64) + prompt + `"}`
+	stream := strings.Join([]string{
+		`{"type":"thread.started","thread_id":"thread-recovery"}`,
+		`{"type":` + prompt + `}`,
+		`{"type":"future.event","prompt":"` + prompt + `"}`,
+		`{"type":"item.completed","item":{"id":"future-1","type":"future_item","text":"` + prompt + `"}}`,
+		oversized,
+	}, "\n") + "\n" + `{"type":"item.completed","item":{"id":"message-recovery","type":"agent_message","text":"recovered"}}`
+	decoder := codex.NewDecoder(adapter.DecoderContext{DispatchID: "dispatch-recovery"})
+	decoded, err := decoder.Observe(context.Background(), adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(stream)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecoveryDiagnostics(t, decoded.Diagnostics, prompt)
+	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted})
+	assertRecoveredFlush(t, flushed, err)
+
+	parsed, err := codex.ParseFinalOutput([]byte(stream))
+	assertRecoveredFinal(t, parsed, err)
+	if _, err := codex.ParseFinalOutput([]byte(oversized)); err == nil || strings.Contains(err.Error(), prompt) {
+		t.Fatalf("missing-completion error = %v", err)
+	}
+}
+
+func assertRecoveryDiagnostics(t *testing.T, diagnostics []adapter.Diagnostic, forbidden string) {
+	t.Helper()
+	if len(diagnostics) != 4 {
+		t.Fatalf("diagnostics = %#v, want malformed, unknown event, unknown item, and oversized record", diagnostics)
+	}
+	for _, diagnostic := range diagnostics {
+		if len(diagnostic.Message) > 160 || strings.Contains(diagnostic.Message, forbidden) || strings.Contains(diagnostic.Message, strings.Repeat("x", 32)) {
+			t.Fatalf("unsafe diagnostic = %#v", diagnostic)
+		}
+	}
+}
+
+func assertRecoveredFlush(t *testing.T, flushed adapter.DecodeResult, err error) {
+	t.Helper()
+	if err != nil || len(flushed.Drafts) != 1 || flushed.Drafts[0].ItemID != "message-recovery" {
+		t.Fatalf("Flush() = %#v, %v", flushed, err)
+	}
+}
+
+func assertRecoveredFinal(t *testing.T, parsed codex.FinalResult, err error) {
+	t.Helper()
+	if err != nil || parsed.Content != "recovered" || parsed.ProviderSession == nil || parsed.ProviderSession.ID != "thread-recovery" {
+		t.Fatalf("ParseFinalOutput() = %#v, %v", parsed, err)
+	}
+}
+
+func TestDecoderIgnoresAdditiveFieldsAcrossKnownEventAndItemFixtures(t *testing.T) {
+	fixture, err := os.ReadFile(filepath.Join("testdata", "supported_items.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture = append(fixture, []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n{\"type\":\"error\",\"message\":\"unexpected status 500\"}\n")...)
+	augmented := addUnknownFields(t, fixture)
+
+	want := decodeFixture(t, fixture)
+	got := decodeFixture(t, augmented)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("additive fields changed decoded drafts\ngot:  %#v\nwant: %#v", got, want)
+	}
+}
+
+func decodeFixture(t *testing.T, fixture []byte) []responseevents.Draft {
+	t.Helper()
+	decoder := codex.NewDecoder(adapter.DecoderContext{RunID: "run-additive", DispatchID: "dispatch-additive"})
+	decoded, err := decoder.Observe(context.Background(), adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: fixture})
+	if err != nil {
+		t.Fatal(err)
+	}
+	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Diagnostics)+len(flushed.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v %#v", decoded.Diagnostics, flushed.Diagnostics)
+	}
+	return append(decoded.Drafts, flushed.Drafts...)
+}
+
+func addUnknownFields(t *testing.T, fixture []byte) []byte {
+	t.Helper()
+	var output []byte
+	for _, line := range strings.Split(strings.TrimSpace(string(fixture)), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatal(err)
+		}
+		record["future_outer"] = map[string]any{"ignored": true}
+		if item, ok := record["item"].(map[string]any); ok {
+			item["future_nested"] = []any{"ignored", 42}
+		}
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output = append(output, encoded...)
+		output = append(output, '\n')
+	}
+	return output
+}
+
+func codexObservations(records ...string) []adapter.Observation {
+	stream := strings.Join(records, "\n") + "\n"
+	cut := len(stream) / 2
+	return []adapter.Observation{
+		{Stream: adapter.OutputStreamStdout, Chunk: []byte(stream[:cut])},
+		{Stream: adapter.OutputStreamStdout, Chunk: []byte(stream[cut:])},
+	}
+}
+
+func observationsStdout(observations []adapter.Observation) []byte {
+	var output []byte
+	for _, observation := range observations {
+		if observation.Stream == adapter.OutputStreamStdout {
+			output = append(output, observation.Chunk...)
+		}
+	}
+	return output
 }
 
 func draftsByItemID(drafts []responseevents.Draft) map[string][]responseevents.Draft {

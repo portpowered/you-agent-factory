@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -21,13 +20,10 @@ type FinalResult struct {
 // streamed decoder observations.
 func ParseFinalOutput(stdout []byte) (FinalResult, error) {
 	var result FinalResult
-	scanner := bufio.NewScanner(bytes.NewReader(stdout))
-	buffer := make([]byte, 0, 64*1024)
-	scanner.Buffer(buffer, 1024*1024)
-	for scanner.Scan() {
+	forEachBoundedRecord(stdout, func(raw []byte) {
 		var record recordEnvelope
-		if json.Unmarshal(scanner.Bytes(), &record) != nil {
-			continue
+		if json.Unmarshal(raw, &record) != nil {
+			return
 		}
 		switch record.Type {
 		case "thread.started":
@@ -40,12 +36,25 @@ func ParseFinalOutput(stdout []byte) (FinalResult, error) {
 				result.Content = item.Text
 			}
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return FinalResult{}, err
-	}
+	})
 	if result.Content == "" {
 		return FinalResult{}, errors.New("codex JSONL output did not contain a completed agent message")
 	}
 	return result, nil
+}
+
+func forEachBoundedRecord(output []byte, visit func([]byte)) {
+	for len(output) > 0 {
+		newline := bytes.IndexByte(output, '\n')
+		if newline < 0 {
+			newline = len(output)
+		}
+		if newline <= maxJSONLRecordBytes {
+			visit(output[:newline])
+		}
+		if newline == len(output) {
+			return
+		}
+		output = output[newline+1:]
+	}
 }

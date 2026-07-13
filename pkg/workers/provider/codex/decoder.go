@@ -13,12 +13,15 @@ import (
 
 const diagnosticMessage = "codex JSONL record could not be decoded"
 
+const maxJSONLRecordBytes = 1024 * 1024
+
 type Decoder struct {
 	context      adapter.DecoderContext
 	stdout       []byte
 	threadID     string
 	turnID       string
 	turnSequence int
+	discardLine  bool
 }
 
 func NewDecoder(input adapter.DecoderContext) *Decoder { return &Decoder{context: input} }
@@ -27,20 +30,49 @@ func (d *Decoder) Observe(_ context.Context, observation adapter.Observation) (a
 	if observation.Stream != adapter.OutputStreamStdout || len(observation.Chunk) == 0 {
 		return adapter.DecodeResult{}, nil
 	}
-	d.stdout = append(d.stdout, observation.Chunk...)
 	var result adapter.DecodeResult
-	for {
-		newline := bytes.IndexByte(d.stdout, '\n')
-		if newline < 0 {
-			break
+	chunk := observation.Chunk
+	for len(chunk) > 0 {
+		if d.discardLine {
+			newline := bytes.IndexByte(chunk, '\n')
+			if newline < 0 {
+				return result, nil
+			}
+			d.discardLine = false
+			chunk = chunk[newline+1:]
+			continue
 		}
-		result = appendResult(result, d.decodeRecord(d.stdout[:newline]))
-		d.stdout = d.stdout[newline+1:]
+
+		newline := bytes.IndexByte(chunk, '\n')
+		if newline < 0 {
+			if len(d.stdout)+len(chunk) > maxJSONLRecordBytes {
+				d.stdout = nil
+				d.discardLine = true
+				result = appendResult(result, oversizedRecordDiagnostic())
+				return result, nil
+			}
+			d.stdout = append(d.stdout, chunk...)
+			return result, nil
+		}
+
+		if len(d.stdout)+newline > maxJSONLRecordBytes {
+			result = appendResult(result, oversizedRecordDiagnostic())
+		} else {
+			d.stdout = append(d.stdout, chunk[:newline]...)
+			result = appendResult(result, d.decodeRecord(d.stdout))
+		}
+		d.stdout = d.stdout[:0]
+		chunk = chunk[newline+1:]
 	}
 	return result, nil
 }
 
 func (d *Decoder) Flush(_ context.Context, _ adapter.FlushContext) (adapter.DecodeResult, error) {
+	if d.discardLine {
+		d.stdout = nil
+		d.discardLine = false
+		return adapter.DecodeResult{}, nil
+	}
 	if len(bytes.TrimSpace(d.stdout)) == 0 {
 		d.stdout = nil
 		return adapter.DecodeResult{}, nil
@@ -48,6 +80,10 @@ func (d *Decoder) Flush(_ context.Context, _ adapter.FlushContext) (adapter.Deco
 	result := d.decodeRecord(d.stdout)
 	d.stdout = nil
 	return result, nil
+}
+
+func oversizedRecordDiagnostic() adapter.DecodeResult {
+	return diagnostic("codex_oversized_record", "codex JSONL record exceeded the safe size limit")
 }
 
 type recordEnvelope struct {
