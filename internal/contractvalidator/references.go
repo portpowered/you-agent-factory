@@ -123,21 +123,9 @@ func (r *referenceResolver) resolveNode(value any, document string, segments []s
 	switch typed := value.(type) {
 	case map[string]any:
 		if reference, ok := typed["$ref"]; ok {
-			return r.resolveReference(reference, document, appendPath(segments, "$ref"))
+			return r.resolveReferenceObject(typed, reference, document, segments)
 		}
-		keys := make([]string, 0, len(typed))
-		for key := range typed {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		resolved := make(map[string]any, len(typed))
-		var diagnostics []Diagnostic
-		for _, key := range keys {
-			child, issues := r.resolveNode(typed[key], document, appendPath(segments, key))
-			resolved[key] = child
-			diagnostics = append(diagnostics, issues...)
-		}
-		return resolved, diagnostics
+		return r.resolveObject(typed, document, segments)
 	case []any:
 		resolved := make([]any, len(typed))
 		var diagnostics []Diagnostic
@@ -150,6 +138,49 @@ func (r *referenceResolver) resolveNode(value any, document string, segments []s
 	default:
 		return value, nil
 	}
+}
+
+func (r *referenceResolver) resolveObject(value map[string]any, document string, segments []string) (map[string]any, []Diagnostic) {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	resolved := make(map[string]any, len(value))
+	var diagnostics []Diagnostic
+	for _, key := range keys {
+		child, issues := r.resolveNode(value[key], document, appendPath(segments, key))
+		resolved[key] = child
+		diagnostics = append(diagnostics, issues...)
+	}
+	return resolved, diagnostics
+}
+
+func (r *referenceResolver) resolveReferenceObject(value map[string]any, reference any, document string, segments []string) (any, []Diagnostic) {
+	resolvedReference, diagnostics := r.resolveReference(reference, document, appendPath(segments, "$ref"))
+	if len(diagnostics) != 0 {
+		return nil, diagnostics
+	}
+	if len(value) == 1 {
+		return resolvedReference, nil
+	}
+
+	siblings := make(map[string]any, len(value)-1)
+	for key, child := range value {
+		if key != "$ref" {
+			siblings[key] = child
+		}
+	}
+	resolvedSiblings, diagnostics := r.resolveObject(siblings, document, segments)
+	if len(diagnostics) != 0 {
+		return nil, diagnostics
+	}
+	if authoredAllOf, ok := resolvedSiblings["allOf"]; ok {
+		resolvedSiblings["allOf"] = []any{resolvedReference, map[string]any{"allOf": authoredAllOf}}
+	} else {
+		resolvedSiblings["allOf"] = []any{resolvedReference}
+	}
+	return resolvedSiblings, nil
 }
 
 func (r *referenceResolver) resolveReference(value any, referringDocument string, segments []string) (any, []Diagnostic) {

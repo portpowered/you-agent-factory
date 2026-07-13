@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func TestCanonicalJoinedJSONMatchesGoldenAcrossRepeatedAndShuffledInputs(t *testing.T) {
@@ -121,6 +122,66 @@ func TestJoinBuildsPortableDocumentsFromNestedSharedComponents(t *testing.T) {
 	beta := object(t, documents[1].Value)
 	assertPortableWidget(t, object(t, beta["items"]))
 	assertNoReferences(t, documents)
+}
+
+func TestJoinPreservesAdjacentReferenceKeywordsAndTheirSemantics(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "contracts/root.json", `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://schemas.example.test/stable-root.json",
+  "$ref":"component.json",
+  "maxProperties":1,
+  "allOf":[{"required":["name"]}]
+}`)
+	writeFile(t, root, "contracts/component.json", `{
+  "$id":"https://schemas.example.test/component.json",
+  "type":"object",
+  "properties":{"name":{"type":"string"}}
+}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/root.json"},
+		Components:     []string{"contracts/component.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	joined := object(t, documents[0].Value)
+	if got := joined["$id"]; got != "https://schemas.example.test/stable-root.json" {
+		t.Fatalf("joined adjacent $id = %v, want stable root ID", got)
+	}
+	if got := joined["maxProperties"]; got != json.Number("1") {
+		t.Fatalf("joined adjacent assertion = %v, want maxProperties 1", got)
+	}
+	assertNoReferences(t, documents)
+
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource("joined.json", joined); err != nil {
+		t.Fatalf("add joined schema: %v", err)
+	}
+	schema, err := compiler.Compile("joined.json")
+	if err != nil {
+		t.Fatalf("compile joined schema: %v", err)
+	}
+	for _, test := range []struct {
+		name  string
+		value any
+		valid bool
+	}{
+		{name: "both conjuncts pass", value: map[string]any{"name": "widget"}, valid: true},
+		{name: "referenced type fails", value: "widget", valid: false},
+		{name: "adjacent required fails", value: map[string]any{}, valid: false},
+		{name: "adjacent maximum fails", value: map[string]any{"name": "widget", "extra": true}, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := schema.Validate(test.value)
+			if (err == nil) != test.valid {
+				t.Fatalf("Validate(%v) error = %v, want valid %t", test.value, err, test.valid)
+			}
+		})
+	}
 }
 
 func TestJoinPropagatesComponentEditsOnlyToConsumersAndPreservesInputs(t *testing.T) {
