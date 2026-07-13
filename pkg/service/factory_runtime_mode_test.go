@@ -2417,6 +2417,10 @@ func waitForSnapshotMatch(
 	for time.Now().Before(deadline) {
 		snap, err := svc.GetEngineStateSnapshot(context.Background())
 		if err != nil {
+			if strings.Contains(err.Error(), "runtime is not available") {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
 			t.Fatalf("GetEngineStateSnapshot during %s: %v", phase, err)
 		}
 		last = snap
