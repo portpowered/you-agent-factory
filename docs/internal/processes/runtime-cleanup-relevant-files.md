@@ -29,6 +29,9 @@ Production command runners must remain blocking without taking lifecycle ownersh
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected
 graph-owned transport and perform the same idempotent reverse-order shutdown.
+Map default/service run policies to initializer's API lifecycle plan and explicit
+local batch policies to its CLI lifecycle plan before constructing the run
+application; runtime mode alone must not silently select the foreground edge.
 Transport startup must receive the graph's already-composed API surface, and
 startup diagnostics should be copied into immutable graph metadata rather than
 recovered later through `runtimehost.Host` or `FactoryService`.
