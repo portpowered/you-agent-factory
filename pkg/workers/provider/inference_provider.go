@@ -100,6 +100,12 @@ func WithInferenceProgressPublisher(publisher InferenceProgressPublisher) Script
 	}
 }
 
+// WithCodexJSONLFinalParser injects the authoritative typed Codex final parser
+// without reversing the provider package's dependency direction.
+func WithCodexJSONLFinalParser(parser func([]byte) (interfaces.InferenceResponse, error)) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) { p.codexJSONLFinalParser = parser }
+}
+
 // WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
 func WithMaterializeOptions(opts *materialize.Options) ScriptWrapProviderOption {
 	return func(p *ScriptWrapProvider) {
@@ -120,7 +126,8 @@ type ScriptWrapProvider struct {
 	Logger logging.Logger
 	exec   CommandRunner
 
-	progressPublisher InferenceProgressPublisher
+	progressPublisher     InferenceProgressPublisher
+	codexJSONLFinalParser func([]byte) (interfaces.InferenceResponse, error)
 }
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
@@ -185,6 +192,9 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 			workDiagnosticsForInferenceRequest(req),
 		)
 	}
+	if req.ModelProvider == string(interfaces.ModelProviderCodex) && p.responseStreamCapable() {
+		args = enableCodexJSONL(args)
+	}
 	execReq := behavior.BuildCommandRequest(req, args)
 	logger.Info("provider invocation prepared", providerPreparedLogFields(ctx, req, execReq)...)
 	started := time.Now()
@@ -226,6 +236,18 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	if cursorProvider {
 		return p.completeCursorInference(req, result, commandDiagnostics, logger)
 	}
+	if req.ModelProvider == string(interfaces.ModelProviderCodex) && hasCommandArg(execReq.Args, "--json") {
+		parsed, parseErr := p.codexJSONLFinalParser(result.Stdout)
+		if parseErr != nil {
+			providerErr := newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeUnknown, parseErr.Error(), parseErr, providerSession, commandDiagnostics)
+			p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+			return interfaces.InferenceResponse{}, providerErr
+		}
+		logger.Info("inferencer: request completed", appendProviderSessionLogFields(providerLogFields(req, "output_len", len(parsed.Content)), parsed.ProviderSession)...)
+		p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
+		parsed.Diagnostics = commandDiagnostics
+		return parsed, nil
+	}
 
 	content := string(result.Stdout)
 	logger.Info("inferencer: request completed",
@@ -238,6 +260,27 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		ProviderSession: providerSession,
 		Diagnostics:     commandDiagnostics,
 	}, nil
+}
+
+func (p *ScriptWrapProvider) responseStreamCapable() bool {
+	if p == nil || p.progressPublisher == nil || p.exec == nil || p.codexJSONLFinalParser == nil {
+		return false
+	}
+	capable, ok := p.exec.(interface{ SupportsResponseStreaming() bool })
+	return ok && capable.SupportsResponseStreaming()
+}
+
+func enableCodexJSONL(args []string) []string {
+	if hasCommandArg(args, "--json") {
+		return args
+	}
+	if len(args) == 0 {
+		return []string{"exec", "--json"}
+	}
+	out := make([]string, 0, len(args)+1)
+	out = append(out, args[0], "--json")
+	out = append(out, args[1:]...)
+	return out
 }
 
 // ContainsStopToken checks whether the output text contains the given stop token.

@@ -217,6 +217,14 @@ primary-result behavior.
   invocation primary-result byte fixtures live in
   `compat/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
+  Provider-native typed adapters live under `pkg/workers/provider/<provider>`
+  and emit validated `responseevents.Draft` values. While legacy response-stream
+  consumers remain supported, carry an exact draft beside the compatibility
+  fragment and let `pkg/factorysessions/stream/manager.go` publish that draft
+  directly; do not remap it through the lossy legacy fragment mapper. Keep the
+  provider's final-result parser independent from decoder observation state so
+  streamed message snapshots cannot select or duplicate invocation
+  `primaryResult`.
   Session-scoped immutable response-event storage lives in
   `pkg/factorysessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is

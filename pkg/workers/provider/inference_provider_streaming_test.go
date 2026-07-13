@@ -70,6 +70,44 @@ func TestScriptWrapProvider_CursorDiagnosticsUseInjectedDispatchLogger(t *testin
 	}
 }
 
+func TestScriptWrapProvider_CodexResponseStreamUsesJSONLAndKeepsFinalResultIndependent(t *testing.T) {
+	stdout := []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-production-1\"}\n" +
+		"{\"type\":\"turn.started\"}\n" +
+		"{\"type\":\"item.completed\",\"item\":{\"id\":\"message-production-1\",\"type\":\"agent_message\",\"text\":\"final production answer\"}}\n" +
+		"{\"type\":\"turn.completed\"}\n")
+	fakeExec := &codexJSONLCapableRecordingExec{recordingProviderExec: recordingProviderExec{result: CommandResult{Stdout: stdout}}}
+	var terminal []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { terminal = append(terminal, fragment) }),
+		WithCodexJSONLFinalParser(func(output []byte) (interfaces.InferenceResponse, error) {
+			return interfaces.InferenceResponse{Content: "final production answer", ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "thread-production-1"}}, nil
+		}),
+	)
+
+	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-production-codex"},
+		ModelProvider: string(interfaces.ModelProviderCodex), Model: "gpt-test",
+		UserMessage: "private prompt", WorkingDirectory: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("Infer() error = %v", err)
+	}
+	if !hasCommandArg(fakeExec.request.Args, "--json") || string(fakeExec.request.Stdin) != "private prompt" || fakeExec.request.WorkDir == "" {
+		t.Fatalf("command request = %#v", fakeExec.request)
+	}
+	if response.Content != "final production answer" || response.ProviderSession == nil || response.ProviderSession.ID != "thread-production-1" {
+		t.Fatalf("response = %#v", response)
+	}
+	if len(terminal) != 1 || terminal[0].Kind != CompletedFragmentKind || terminal[0].ProviderSessionRef == nil || terminal[0].ProviderSessionRef.ID != "thread-production-1" {
+		t.Fatalf("terminal fragments = %#v", terminal)
+	}
+}
+
+type codexJSONLCapableRecordingExec struct{ recordingProviderExec }
+
+func (*codexJSONLCapableRecordingExec) SupportsResponseStreaming() bool { return true }
+
 func cursorTerminalLogRecord(t *testing.T, logs string, failure bool) map[string]any {
 	t.Helper()
 	wantMessage := "inferencer: request completed"

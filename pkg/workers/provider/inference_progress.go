@@ -58,6 +58,9 @@ type InferenceProgressFragment struct {
 	ProviderSessionRef *interfaces.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
+	// CanonicalDraft carries an exact provider-adapter event alongside the
+	// legacy fragment used by compatibility consumers.
+	CanonicalDraft any
 }
 
 // InferenceProgressPublisher receives provider progress fragments for one live
@@ -108,9 +111,14 @@ func FailedFragment(dispatchID string, providerSession *interfaces.ProviderSessi
 // InferenceProgressPublishingCommandRunner publishes internal response-stream
 // fragments while provider subprocess stdout/stderr grow.
 type InferenceProgressPublishingCommandRunner struct {
-	Publisher InferenceProgressPublisher
-	Logger    logging.Logger
+	Publisher         InferenceProgressPublisher
+	Logger            logging.Logger
+	NormalizerFactory CommandOutputNormalizerFactory
 }
+
+// SupportsResponseStreaming reports that the runner observes subprocess output
+// incrementally and can therefore consume native streaming protocols.
+func (InferenceProgressPublishingCommandRunner) SupportsResponseStreaming() bool { return true }
 
 // Run executes the provider subprocess and publishes incremental stdout/stderr
 // fragments into the configured internal session response stream.
@@ -130,7 +138,7 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 			}
 		})
 	}
-	normalizer := newCommandOutputNormalizer(req, r.Publisher)
+	normalizer := newCommandOutputNormalizer(req, r.Publisher, r.NormalizerFactory)
 	observer := func(stream string, chunk []byte) {
 		if len(chunk) == 0 {
 			return
@@ -163,12 +171,19 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 	return result, err
 }
 
-type commandOutputNormalizer interface {
+type CommandOutputNormalizer interface {
 	Observe(stream string, chunk []byte) bool
 	Flush()
 }
 
-func newCommandOutputNormalizer(req CommandRequest, publisher InferenceProgressPublisher) commandOutputNormalizer {
+type CommandOutputNormalizerFactory func(CommandRequest, InferenceProgressPublisher) CommandOutputNormalizer
+
+func newCommandOutputNormalizer(req CommandRequest, publisher InferenceProgressPublisher, factory CommandOutputNormalizerFactory) CommandOutputNormalizer {
+	if factory != nil {
+		if normalizer := factory(req, publisher); normalizer != nil {
+			return normalizer
+		}
+	}
 	if !isCodexCommand(req.Command) {
 		return nil
 	}
@@ -177,6 +192,15 @@ func newCommandOutputNormalizer(req CommandRequest, publisher InferenceProgressP
 		publisher: publisher,
 		hasher:    sha256.New(),
 	}
+}
+
+func hasCommandArg(args []string, expected string) bool {
+	for _, arg := range args {
+		if arg == expected {
+			return true
+		}
+	}
+	return false
 }
 
 type codexCommandOutputNormalizer struct {
@@ -565,14 +589,19 @@ func (n *codexCommandOutputNormalizer) publishProgressEvent(eventType string, ex
 func NewInferenceProgressPublishingCommandRunner(
 	publisher InferenceProgressPublisher,
 	logger logging.Logger,
+	normalizerFactories ...CommandOutputNormalizerFactory,
 ) CommandRunner {
 	if publisher == nil {
 		return workerprocess.ExecCommandRunner{}
 	}
-	return InferenceProgressPublishingCommandRunner{
+	runner := InferenceProgressPublishingCommandRunner{
 		Publisher: publisher,
 		Logger:    logger,
 	}
+	if len(normalizerFactories) > 0 {
+		runner.NormalizerFactory = normalizerFactories[0]
+	}
+	return runner
 }
 
 func isCodexCommand(command string) bool {

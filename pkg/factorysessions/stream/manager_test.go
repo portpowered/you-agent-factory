@@ -2,12 +2,15 @@ package stream_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/stream"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -153,6 +156,24 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	}
 	if events[0].DispatchID != "dispatch-1" {
 		t.Fatalf("dispatchId = %q, want dispatch-1", events[0].DispatchID)
+	}
+}
+
+func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testing.T) {
+	t.Parallel()
+	session := factorysessions.NewLiveSession("sess-adapter", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
+	manager := stream.NewManager(&streamTestHost{session: session})
+	payload, _ := json.Marshal(responseevents.MessagePayload{Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "snapshot"}}})
+	draft := responseevents.Draft{DispatchID: "dispatch-adapter", TurnID: "turn-1", ItemID: "native-message-1", ProviderSessionRef: "thread-1",
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted, Payload: payload,
+		Provenance: responseevents.Provenance{Provider: "codex", NativeEventType: "item.completed", Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationSnapshot, Fidelity: responseevents.FidelityNormalized}}
+	fragment := workerprovider.ResponseFragment("dispatch-adapter", &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "thread-1"}, "snapshot")
+	fragment.CanonicalDraft = &draft
+	manager.InferenceProgressPublisherFactory(nil)(session.ID)(fragment)
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].Kind != responseevents.KindMessage || events[0].Phase != responseevents.PhaseCompleted || events[0].ItemID != "native-message-1" {
+		t.Fatalf("canonical events = %#v", events)
 	}
 }
 

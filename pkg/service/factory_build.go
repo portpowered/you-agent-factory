@@ -46,6 +46,7 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	codexpkg "github.com/portpowered/infinite-you/pkg/workers/provider/codex"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -978,6 +979,10 @@ func providerRunnerOptions(
 			invocationSkipPermissionsOverride,
 		)),
 		workerprovider.WithProviderLogger(logger),
+		workerprovider.WithCodexJSONLFinalParser(func(output []byte) (interfaces.InferenceResponse, error) {
+			parsed, err := codexpkg.ParseFinalOutput(output)
+			return interfaces.InferenceResponse{Content: parsed.Content, ProviderSession: parsed.ProviderSession}, err
+		}),
 	}
 	if inferenceProgressPublisher != nil {
 		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
@@ -1198,6 +1203,7 @@ func wrapProviderCommandRunnerForProgress(
 	return workerprovider.NewInferenceProgressPublishingCommandRunner(
 		input.inferenceProgressPublisher,
 		logger,
+		codexpkg.NewCommandOutputNormalizer,
 	)
 }
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream/compat"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -153,7 +154,11 @@ func (m *Manager) inferenceProgressPublisher(
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
-		if err := publishCanonicalResponseEvents(session, stored); err != nil {
+		var canonicalDraft *responseevents.Draft
+		if fragment.CanonicalDraft != nil {
+			canonicalDraft, _ = fragment.CanonicalDraft.(*responseevents.Draft)
+		}
+		if err := publishCanonicalResponseEvents(session, stored, canonicalDraft); err != nil {
 			m.host.ObserveResponseStreamDegraded(
 				session,
 				normalizedSessionID,
@@ -167,9 +172,20 @@ func (m *Manager) inferenceProgressPublisher(
 	}
 }
 
-func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event) error {
+func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event, draft *responseevents.Draft) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
+	}
+	if draft != nil {
+		event := responseevents.FactoryResponseEvent{
+			RunID: draft.RunID, Kind: draft.Kind, Phase: draft.Phase, Provenance: draft.Provenance,
+			Payload: draft.Payload, DispatchID: draft.DispatchID, TurnID: draft.TurnID,
+			ItemID: draft.ItemID, ParentItemID: draft.ParentItemID, ProviderSessionRef: draft.ProviderSessionRef,
+		}
+		if _, err := session.ResponseEvents.Publish(event); err != nil {
+			return fmt.Errorf("publish canonical adapter event: %w", err)
+		}
+		return nil
 	}
 	events, err := compat.MapFragment(compat.Context{
 		FactorySessionID: factorysessions.CanonicalFactorySessionID(session),
