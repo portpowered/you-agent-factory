@@ -30,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -252,7 +253,7 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			policy := diagnostics.resolvePolicy(false)
-			logger, err := policy.BuildLogger()
+			logger, err := policy.BuildLogger(logging.BuildLogger)
 			if err != nil {
 				return err
 			}
@@ -396,7 +397,7 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 }
 
 func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy) error {
-	logger, err := policy.BuildLogger()
+	logger, err := policy.BuildLogger(logging.BuildLogger)
 	if err != nil {
 		return err
 	}

@@ -14,6 +14,8 @@ const checkpointInsertionOrders = [
   ["C", "B", "A"],
 ] as const;
 
+const unresolvedSessionIDs = [null, "", "   ", DEFAULT_FACTORY_SESSION_ID];
+
 async function persistScenarioInOrder(
   indexedDB: IDBFactory,
   order: (typeof checkpointInsertionOrders)[number],
@@ -70,6 +72,38 @@ describe("multi-session timeline checkpoint identity regression", () => {
   });
 
   it.each(
+    unresolvedSessionIDs,
+  )("returns no checkpoint for unresolved session identity %j", async (sessionID) => {
+    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+    const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+    await persistScenarioInOrder(indexedDB, checkpointInsertionOrders[0]);
+
+    await expect(
+      peekPersistedTimelineCheckpoint(indexedDB, sessionID),
+    ).resolves.toBe(null);
+    expectCheckpointToMatchScenario(
+      (
+        await peekPersistedTimelineCheckpoint(
+          indexedDB,
+          A.streamIdentity.factorySessionID,
+        )
+      )?.checkpoint,
+      A,
+    );
+    expectCheckpointToMatchScenario(
+      (
+        await peekPersistedTimelineCheckpoint(
+          indexedDB,
+          B.streamIdentity.factorySessionID,
+        )
+      )?.checkpoint,
+      B,
+    );
+  });
+});
+
+describe("multi-session timeline checkpoint clearing regression", () => {
+  it.each(
     checkpointInsertionOrders,
   )("keeps B intact when resolved session A is cleared after %s then %s insertion", async (...order) => {
     const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
@@ -103,6 +137,35 @@ describe("multi-session timeline checkpoint identity regression", () => {
         )
       )?.checkpoint,
       C,
+    );
+  });
+
+  it.each(
+    unresolvedSessionIDs,
+  )("does not clear concrete checkpoints for unresolved session identity %j", async (sessionID) => {
+    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+    const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+    await persistScenarioInOrder(indexedDB, checkpointInsertionOrders[1]);
+
+    await clearTimelineCheckpointsForSession(indexedDB, sessionID);
+
+    expectCheckpointToMatchScenario(
+      (
+        await peekPersistedTimelineCheckpoint(
+          indexedDB,
+          A.streamIdentity.factorySessionID,
+        )
+      )?.checkpoint,
+      A,
+    );
+    expectCheckpointToMatchScenario(
+      (
+        await peekPersistedTimelineCheckpoint(
+          indexedDB,
+          B.streamIdentity.factorySessionID,
+        )
+      )?.checkpoint,
+      B,
     );
   });
 

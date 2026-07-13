@@ -1,4 +1,7 @@
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  DEFAULT_FACTORY_SESSION_ID,
+  isDefaultFactorySessionID,
+} from "../../../api/session-routing";
 import {
   identityMismatchDiagnostic,
   recordSessionPersistenceInvalidation,
@@ -29,6 +32,16 @@ interface TimelineCheckpointEnvelope {
   schemaVersion: number;
   storageKey: string;
   streamIdentity: TimelineCheckpointStreamIdentity;
+}
+
+function normalizeConcreteFactorySessionID(
+  factorySessionID: string | null | undefined,
+): string | null {
+  const normalizedFactorySessionID = factorySessionID?.trim() ?? "";
+  if (isDefaultFactorySessionID(normalizedFactorySessionID)) {
+    return null;
+  }
+  return normalizedFactorySessionID;
 }
 
 function matchesStoredCheckpointFactorySessionID(
@@ -136,7 +149,7 @@ export async function peekPersistedTimelineCheckpoint(
   sessionID: string | null,
   options: { signal?: AbortSignal } = {},
 ): Promise<PersistedTimelineCheckpointPeek | null> {
-  const normalizedSessionID = sessionID?.trim();
+  const normalizedSessionID = normalizeConcreteFactorySessionID(sessionID);
   if (!indexedDB || !normalizedSessionID) {
     return null;
   }
@@ -174,7 +187,7 @@ export async function clearTimelineCheckpointsForSession(
   sessionID: string | null,
   options: { signal?: AbortSignal } = {},
 ): Promise<void> {
-  const normalizedSessionID = sessionID?.trim();
+  const normalizedSessionID = normalizeConcreteFactorySessionID(sessionID);
   if (!indexedDB || !normalizedSessionID) {
     return;
   }
@@ -307,11 +320,7 @@ function recordCheckpointIdentityMismatch(
 function persistenceScopeFromTimelineIdentity(
   identity: TimelineCheckpointStreamIdentity,
 ): SessionPersistenceIdentityScope {
-  return {
-    backendScopeID: identity.backendScopeID,
-    factorySessionID: identity.factorySessionID,
-    streamGenerationID: identity.streamGenerationID,
-  };
+  return identity;
 }
 
 function checkpointStorageKey(
@@ -347,8 +356,9 @@ export async function findStoredCheckpointEnvelopeByFactorySessionID(
   indexedDB: IndexedDBLike | undefined,
   factorySessionID: string,
 ): Promise<TimelineCheckpointEnvelope | null> {
-  const normalizedFactorySessionID = factorySessionID.trim();
-  if (!indexedDB || normalizedFactorySessionID === "") {
+  const normalizedFactorySessionID =
+    normalizeConcreteFactorySessionID(factorySessionID);
+  if (!indexedDB || !normalizedFactorySessionID) {
     return null;
   }
 

@@ -6,7 +6,10 @@ import type {
   FactoryTimelineCheckpoint,
   TimelineCheckpointStreamIdentity,
 } from "../../../timeline/public";
-import { clearTimelineCheckpointsForSession } from "../../../timeline/public";
+import {
+  clearTimelineCheckpointsForSession,
+  deletePersistedTimelineCheckpoint,
+} from "../../../timeline/public";
 import {
   isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
@@ -155,11 +158,19 @@ export function useDashboardCheckpointPreflight({
       if (!remainsActive(resolution.requestedSessionId)) return;
 
       if (resolution.clearRequestedSessionCheckpoint) {
-        await clearTimelineCheckpointsForSession(
-          window.indexedDB,
-          resolution.requestedSessionId,
-          { signal },
-        );
+        if (resolution.checkpointToDelete) {
+          await deletePersistedTimelineCheckpoint(
+            window.indexedDB,
+            resolution.checkpointToDelete,
+            { signal },
+          );
+        } else {
+          await clearTimelineCheckpointsForSession(
+            window.indexedDB,
+            resolution.requestedSessionId,
+            { signal },
+          );
+        }
         if (!remainsActive(resolution.requestedSessionId)) return;
         recoverDashboardSessionScopedState(
           queryClient,

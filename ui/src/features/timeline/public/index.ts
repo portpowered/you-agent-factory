@@ -22,4 +22,5 @@ export {
   readTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
 } from "../state/timelineCheckpointPersistence";
+export { deletePersistedTimelineCheckpoint } from "../state/checkpoint-persistence/deletePersistedTimelineCheckpoint";
 export { reconnectCursorFromCheckpoint } from "../state/timelineCheckpointReconnect";
