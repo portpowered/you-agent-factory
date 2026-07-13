@@ -292,10 +292,10 @@ func TestRunProcessStartsExactlyOneConstructedMode(t *testing.T) {
 		graph func(*recordingProcessApplication) *initializer.ProcessGraph
 	}{
 		{name: "run", graph: func(application *recordingProcessApplication) *initializer.ProcessGraph {
-			return &initializer.ProcessGraph{Run: application}
+			return &initializer.ProcessGraph{Policy: initializer.ProcessPolicy{Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true}}, Run: application}
 		}},
 		{name: "MCP", graph: func(application *recordingProcessApplication) *initializer.ProcessGraph {
-			return &initializer.ProcessGraph{MCP: application}
+			return &initializer.ProcessGraph{Policy: initializer.ProcessPolicy{Mode: initializer.ProcessModeMCPServe}, MCP: application}
 		}},
 	}
 	for _, test := range tests {
@@ -320,7 +320,7 @@ func TestRunProcessRejectsMissingOrAmbiguousGraph(t *testing.T) {
 	for _, graph := range []*initializer.ProcessGraph{
 		nil,
 		{},
-		{Run: application, MCP: application},
+		{Policy: initializer.ProcessPolicy{Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true}}, Run: application, MCP: application},
 	} {
 		if err := initializer.RunProcess(context.Background(), graph); err == nil {
 			t.Fatalf("RunProcess(%+v) error = nil, want validation error", graph)

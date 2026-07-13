@@ -9,7 +9,8 @@ import (
 
 // CommandGlobals carries top-level CLI flags used by you config init.
 type CommandGlobals struct {
-	JSON func() bool
+	JSON    func() bool
+	HomeDir func() (string, error)
 }
 
 // CommandDiagnostics carries diagnostic output hooks for you config init.
@@ -55,6 +56,13 @@ func newSystemConfigInitCommand(binaryName string, globals CommandGlobals, diagn
 		Example: "  # Bootstrap operator/system config on a fresh home.\n" +
 			"  " + binaryName + " config init",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if globals.HomeDir != nil {
+				homeDir, err := globals.HomeDir()
+				if err != nil {
+					return fmt.Errorf("resolve config init home directory: %w", err)
+				}
+				cfg.HomeDir = homeDir
+			}
 			cfg.JSON = globals.JSON()
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.Writer(cmd)

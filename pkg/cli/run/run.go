@@ -44,25 +44,17 @@ type RunConfig struct {
 	Continuously bool
 	WorkFile     string
 	Dir          string
-	// NamedFactoryName is the canonical persisted named factory requested via
-	// you run --named. The CLI resolves it into Dir before service startup.
-	NamedFactoryName string
-	// NamedFactoryResolution carries the selected named-factory source and
-	// precedence metadata captured by CLI resolution before service startup.
-	NamedFactoryResolution *factoryconfig.NamedFactoryResolution
-	// FactoryConfigPath is the factory.json file path from you run --factory.
-	// The service uses Dir as the resolved factory root directory.
+	HomeDir      string // Normalized home for implicit paths; empty preserves legacy direct callers.
+	// NamedFactoryName is the canonical --named factory resolved into Dir before startup.
+	NamedFactoryName       string
+	NamedFactoryResolution *factoryconfig.NamedFactoryResolution // Source and precedence metadata.
+	// FactoryConfigPath is the --factory file; Dir is its resolved factory root.
 	FactoryConfigPath string
-	// InvocationPositionalText is the optional text supplied positionally to
-	// `you run --factory`. When set, factory invocation mode resolves this
-	// alongside stdin text through the shared invocation input contract.
+	// InvocationPositionalText is optional --factory text resolved by the shared input contract.
 	InvocationPositionalText *string
-	// InvocationStdinText carries stdin text resolved before Run when root
-	// already consumed the stdin stream for one-shot factory invocation.
-	InvocationStdinText *string
-	// InvocationNormalizedArguments carries CLI-normalized signature-backed
-	// invocation inputs for factories that declare invocationSignature.
-	InvocationNormalizedArguments *invocations.NormalizedArguments
+	// InvocationStdinText is stdin consumed before a one-shot factory invocation.
+	InvocationStdinText           *string
+	InvocationNormalizedArguments *invocations.NormalizedArguments // Normalized signature-backed inputs.
 	RunnerID                      string
 	// OperatorDefaults carries resolved operator-level default worker model
 	// settings loaded at the CLI boundary.
@@ -552,7 +544,7 @@ func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
 	if cfg.DisableDefaultRecording || strings.TrimSpace(cfg.ReplayPath) != "" {
 		return resolvedRunRecordPath{}, nil
 	}
-	recordPath, err := defaultLiveRunRecordPath()
+	recordPath, err := defaultLiveRunRecordPathForHome(cfg.HomeDir)
 	if err != nil {
 		return resolvedRunRecordPath{}, fmt.Errorf("resolve default replay record path: %w", err)
 	}
@@ -567,6 +559,20 @@ func generateDefaultLiveRunRecordPath() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("resolve user home: %w", err)
+	}
+	return generateDefaultLiveRunRecordPathForHome(homeDir)
+}
+
+func defaultLiveRunRecordPathForHome(homeDir string) (string, error) {
+	if strings.TrimSpace(homeDir) == "" {
+		return defaultLiveRunRecordPath()
+	}
+	return generateDefaultLiveRunRecordPathForHome(homeDir)
+}
+
+func generateDefaultLiveRunRecordPathForHome(homeDir string) (string, error) {
+	if strings.TrimSpace(homeDir) == "" {
+		return "", fmt.Errorf("resolve user home: home directory is required")
 	}
 	now := defaultLiveRunRecordTime()
 	recordingID := fmt.Sprintf(
@@ -605,21 +611,30 @@ func buildRunServiceConfig(
 	if cfg.Port > 0 {
 		apiServerReady = dashboardReady
 	}
+	runtimeLogDir := cfg.RuntimeLogDir
+	if strings.TrimSpace(runtimeLogDir) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
+		runtimeLogDir = defaultpaths.RuntimeLogsRoot(cfg.HomeDir)
+	}
+	runtimeMetricsDir := cfg.RuntimeMetricsDir
+	if strings.TrimSpace(runtimeMetricsDir) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
+		runtimeMetricsDir = defaultpaths.RuntimeMetricsRoot(cfg.HomeDir)
+	}
 	svcCfg := &service.FactoryServiceConfig{
 		Dir:                               cfg.Dir,
 		RunnerID:                          cfg.RunnerID,
 		OperatorDefaults:                  cfg.OperatorDefaults,
 		ExecutionBaseDir:                  cfg.ExecutionBaseDir,
 		RuntimeMode:                       runtimeModeForRun(cfg),
+		SystemConfigHomeDir:               cfg.HomeDir,
 		Port:                              cfg.Port,
 		Logger:                            logger,
 		Verbose:                           cfg.Verbose,
 		WorkFile:                          cfg.WorkFile,
 		RecordPath:                        cfg.RecordPath,
 		ReplayPath:                        cfg.ReplayPath,
-		RuntimeLogDir:                     cfg.RuntimeLogDir,
+		RuntimeLogDir:                     runtimeLogDir,
 		RuntimeLogConfig:                  cfg.RuntimeLogConfig,
-		RuntimeMetricsDir:                 cfg.RuntimeMetricsDir,
+		RuntimeMetricsDir:                 runtimeMetricsDir,
 		RuntimeMetricsConfig:              cfg.RuntimeMetricsConfig,
 		WorkflowID:                        cfg.Workflow,
 		MockWorkersConfig:                 mockWorkersConfig,

@@ -79,7 +79,10 @@ func TestBuildApplication_ConstructsInvocationBootstrapOnceBeforeInitializer(t *
 		t.Fatalf("after construction: build calls = %d, lifecycle started = %t; want 1, false", buildCalls, lifecycleStarted)
 	}
 
-	err = initializer.RunProcess(context.Background(), &initializer.ProcessGraph{Run: application})
+	err = initializer.RunProcess(context.Background(), &initializer.ProcessGraph{
+		Policy: initializer.ProcessPolicy{Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true}},
+		Run:    application,
+	})
 	if err != nil {
 		t.Fatalf("RunProcess() error = %v", err)
 	}

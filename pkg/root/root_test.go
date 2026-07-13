@@ -3,9 +3,13 @@ package root
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 )
 
 func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
@@ -92,6 +96,48 @@ func TestExecuteInvalidArgumentsReturnsDiagnostic(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unknown command") {
 		t.Fatalf("Execute(invalid command) error = %q", err)
+	}
+}
+
+func TestExecuteSequentialHomesControlConfigAndRunPaths(t *testing.T) {
+	ambientHome := t.TempDir()
+	t.Setenv("HOME", ambientHome)
+	t.Setenv("USERPROFILE", ambientHome)
+
+	homes := []string{t.TempDir(), t.TempDir()}
+	for _, home := range homes {
+		if err := Execute(Input{
+			Args: []string{"you", "config", "init"}, Env: homeEnvironment(home), Context: context.Background(),
+		}); err != nil {
+			t.Fatalf("Execute(config init, home %q) error = %v", home, err)
+		}
+		if _, err := os.Stat(defaultpaths.OperatorConfigPath(home)); err != nil {
+			t.Fatalf("Stat(config for supplied home %q) error = %v", home, err)
+		}
+
+		builder := &recordingGraphBuilder{graph: &ApplicationGraph{}}
+		initializer := &recordingInitializer{}
+		err := ExecuteWithDependencies(Input{
+			Args: []string{"you", "run", "--named", "@you/goal", "--no-record", "--quiet", "Plan the sprint"},
+			Env:  homeEnvironment(home), Context: context.Background(),
+		}, Dependencies{GraphBuilder: builder, Initializer: initializer})
+		if err != nil {
+			t.Fatalf("ExecuteWithDependencies(run, home %q) error = %v", home, err)
+		}
+		cfg := builder.request.Startup.RunConfig
+		if cfg == nil || cfg.HomeDir != home {
+			t.Fatalf("run home = %v, want %q", cfg, home)
+		}
+		wantGlobalRoot := defaultpaths.NamedFactoriesRoot(home)
+		if cfg.NamedFactoryResolution == nil || cfg.NamedFactoryResolution.GlobalRoot != wantGlobalRoot {
+			t.Fatalf("named-factory resolution = %+v, want global root %q", cfg.NamedFactoryResolution, wantGlobalRoot)
+		}
+		if !strings.HasPrefix(filepath.Clean(cfg.Dir), filepath.Clean(wantGlobalRoot)+string(os.PathSeparator)) {
+			t.Fatalf("named-factory dir = %q, want below supplied home root %q", cfg.Dir, wantGlobalRoot)
+		}
+	}
+	if _, err := os.Stat(defaultpaths.OperatorConfigPath(ambientHome)); !os.IsNotExist(err) {
+		t.Fatalf("ambient config Stat error = %v, want not-exist", err)
 	}
 }
 

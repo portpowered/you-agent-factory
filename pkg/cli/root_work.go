@@ -45,7 +45,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		return err
 	}
 	if helpRequested(cmd) {
-		return writeRunCommandHelp(cmd, &resolvedConfig)
+		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
 	}
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
 	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
@@ -103,8 +103,13 @@ func helpRequested(cmd *cobra.Command) bool {
 	return helpFlag != nil && helpFlag.Changed
 }
 
-func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig) error {
-	if err := resolveRunFactorySelection(cmd, cfg); err != nil {
+func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions RootCommandOptions) error {
+	homeDir, err := rootOptions.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve process home directory: %w", err)
+	}
+	cfg.HomeDir = homeDir
+	if err := resolveRunFactorySelection(cmd, cfg, homeDir); err != nil {
 		return err
 	}
 	wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelp(cmd.OutOrStdout(), cliBinaryName, *cfg)

@@ -9,29 +9,23 @@ import (
 )
 
 // Mode is the process behavior selected by the root after command parsing.
-type Mode string
+type Mode = initializer.ProcessMode
 
 const (
-	ModeDefaultRun Mode = "default-run"
-	ModeLocalRun   Mode = "local-run"
-	ModeAPIService Mode = "api-service"
-	ModeMCPServe   Mode = "mcp-serve"
+	ModeDefaultRun = initializer.ProcessModeDefaultRun
+	ModeLocalRun   = initializer.ProcessModeLocalRun
+	ModeAPIService = initializer.ProcessModeAPIService
+	ModeMCPServe   = initializer.ProcessModeMCPServe
 )
 
 // SidecarPolicy records which existing long-lived collaborators the selected
 // command permits. Lifecycle ownership remains with the initializer.
-type SidecarPolicy struct {
-	API             bool
-	Dashboard       bool
-	WorkerScheduler bool
-	Watchers        bool
-}
+type SidecarPolicy = initializer.SidecarPolicy
 
 // GraphRequest is the narrow construction input selected by the process root.
 type GraphRequest struct {
-	Mode     Mode
-	Sidecars SidecarPolicy
-	Startup  startupcli.Request
+	Policy  initializer.ProcessPolicy
+	Startup startupcli.Request
 }
 
 // ApplicationGraph is the typed process graph handed to the initializer. Root
@@ -45,9 +39,7 @@ type GraphBuilder interface {
 
 // Initialization is the complete root-to-initializer lifecycle handoff.
 type Initialization struct {
-	Mode     Mode
-	Sidecars SidecarPolicy
-	Graph    *ApplicationGraph
+	Graph *ApplicationGraph
 }
 
 // Initializer starts and owns the lifecycle of an already-constructed graph.
@@ -68,7 +60,7 @@ func executeStartup(ctx context.Context, request startupcli.Request, dependencie
 		return err
 	}
 	graph, err := dependencies.GraphBuilder.Build(ctx, GraphRequest{
-		Mode: mode, Sidecars: sidecars, Startup: request,
+		Policy: initializer.ProcessPolicy{Mode: mode, Sidecars: sidecars}, Startup: request,
 	})
 	if err != nil {
 		return fmt.Errorf("construct %s application graph: %w", mode, err)
@@ -77,7 +69,7 @@ func executeStartup(ctx context.Context, request startupcli.Request, dependencie
 		return fmt.Errorf("construct %s application graph: builder returned nil graph", mode)
 	}
 	return dependencies.Initializer.Run(ctx, Initialization{
-		Mode: mode, Sidecars: sidecars, Graph: graph,
+		Graph: graph,
 	})
 }
 

@@ -37,7 +37,7 @@ func Main() int {
 type productionGraphBuilder struct{}
 
 func (productionGraphBuilder) Build(ctx context.Context, request GraphRequest) (*ApplicationGraph, error) {
-	return wire.BuildProcessGraph(ctx, request.Startup)
+	return wire.BuildProcessGraph(ctx, request.Startup, request.Policy)
 }
 
 type productionInitializer struct{}

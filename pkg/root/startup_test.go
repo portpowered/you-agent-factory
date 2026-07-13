@@ -66,11 +66,11 @@ func TestExecuteWithDependencies_SelectsStartupModesAndSidecars(t *testing.T) {
 			if initializer.calls != 1 {
 				t.Fatalf("initializer calls = %d, want 1", initializer.calls)
 			}
-			if builder.request.Mode != test.wantMode || initializer.input.Mode != test.wantMode {
-				t.Fatalf("selected modes = builder %q, initializer %q; want %q", builder.request.Mode, initializer.input.Mode, test.wantMode)
+			if builder.request.Policy.Mode != test.wantMode || initializer.input.Graph.Policy.Mode != test.wantMode {
+				t.Fatalf("selected modes = builder %q, initializer %q; want %q", builder.request.Policy.Mode, initializer.input.Graph.Policy.Mode, test.wantMode)
 			}
-			if builder.request.Sidecars != test.wantSidecars || initializer.input.Sidecars != test.wantSidecars {
-				t.Fatalf("selected sidecars = builder %+v, initializer %+v; want %+v", builder.request.Sidecars, initializer.input.Sidecars, test.wantSidecars)
+			if builder.request.Policy.Sidecars != test.wantSidecars || initializer.input.Graph.Policy.Sidecars != test.wantSidecars {
+				t.Fatalf("selected sidecars = builder %+v, initializer %+v; want %+v", builder.request.Policy.Sidecars, initializer.input.Graph.Policy.Sidecars, test.wantSidecars)
 			}
 			if initializer.input.Graph != builder.graph {
 				t.Fatal("initializer did not receive the graph returned by construction")
@@ -130,7 +130,7 @@ func TestExecuteStartup_ProductionInvocationConstructionFailurePreventsInitializ
 	initializer := &recordingInitializer{}
 
 	err := executeStartup(context.Background(), startupcli.Request{
-		Kind: startupcli.KindRun, RunConfig: &runConfig,
+		Kind: startupcli.KindRun, Run: startupcli.RunIntent{WorkerSidecarsEnabled: true}, RunConfig: &runConfig,
 	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
 	if err == nil {
 		t.Fatal("executeStartup() error = nil, want invocation bootstrap construction failure")
@@ -175,6 +175,9 @@ type recordingGraphBuilder struct {
 func (builder *recordingGraphBuilder) Build(_ context.Context, request GraphRequest) (*ApplicationGraph, error) {
 	builder.calls++
 	builder.request = request
+	if builder.graph != nil {
+		builder.graph.Policy = request.Policy
+	}
 	return builder.graph, builder.err
 }
 

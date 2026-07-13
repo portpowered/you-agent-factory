@@ -146,7 +146,8 @@ func NewRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 	root.AddCommand(
 		newDocsCommand(diagnostics),
 		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
-			JSON: func() bool { return globals.json },
+			JSON:    func() bool { return globals.json },
+			HomeDir: options.HomeDir,
 		}, configinitcmd.CommandDiagnostics{
 			Writer:  diagnostics.writer,
 			Verbose: diagnostics.verboseEnabled,
@@ -289,13 +290,18 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 			if err != nil {
 				return err
 			}
-			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions)
+			homeDir, err := rootOptions.HomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve process home directory: %w", err)
+			}
+			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
 			if err != nil {
 				return err
 			}
 			cfg.Server = globals.server
 			cfg.ModelName = args[0]
 			cfg.JSON = globals.json
+			cfg.HomeDir = homeDir
 			cfg.OperatorDefaults = resolvedOperatorDefaults
 			cfg.Logger = logger
 			cfg.Output = cmd.OutOrStdout()
@@ -436,11 +442,16 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
 	}
-	if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
+	homeDir, err := rootOptions.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve process home directory: %w", err)
+	}
+	cfg.HomeDir = homeDir
+	if err := resolveRunFactorySelection(cmd, &cfg, homeDir); err != nil {
 		return err
 	}
 
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions)
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
 	if err != nil {
 		return err
 	}
@@ -489,13 +500,14 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 }
 
 func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options RootCommandOptions) error {
+	invocationOnly := cfg.CleanInvocation || cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil || cfg.InvocationNormalizedArguments != nil
 	request := startupcli.Request{
 		Kind: startupcli.KindRun,
 		Run: startupcli.RunIntent{
 			DefaultInvocation:     defaultInvocation,
 			Continuous:            cfg.Continuously,
-			APIEnabled:            cfg.Port > 0,
-			DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering,
+			APIEnabled:            cfg.Port > 0 && !invocationOnly,
+			DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
 			WorkerSidecarsEnabled: true,
 		},
 		RunConfig: &cfg,
@@ -528,11 +540,7 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 	return cleanInvocation, textInvocation
 }
 
-func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) (operatorconfig.ResolvedDefaults, error) {
-	homeDir, err := rootOptions.HomeDir()
-	if err != nil {
-		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("resolve operator home directory: %w", err)
-	}
+func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions, homeDir string) (operatorconfig.ResolvedDefaults, error) {
 	environment := operatorconfig.Defaults{}
 	environment.WorkerModelProvider, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModelProvider)
 	environment.WorkerModel, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModel)
@@ -564,7 +572,7 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	return nil
 }
 
-func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error {
+func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig, homeDir string) error {
 	factoryChanged := cmd.Flags().Changed("factory")
 	dirChanged := cmd.Flags().Changed("dir")
 	namedChanged := cmd.Flags().Changed("named")
@@ -575,7 +583,7 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 		case dirChanged:
 			return fmt.Errorf("--named cannot be used with --dir")
 		}
-		return resolveRunNamedFactorySelection(cfg)
+		return resolveRunNamedFactorySelection(cfg, homeDir)
 	}
 	if factoryChanged && dirChanged {
 		return fmt.Errorf("--factory cannot be used with --dir")
@@ -592,7 +600,7 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 	return nil
 }
 
-func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
+func resolveRunNamedFactorySelection(cfg *runcli.RunConfig, homeDir string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve current working directory for --named: %w", err)
@@ -601,7 +609,7 @@ func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
 	if err != nil {
 		return fmt.Errorf("resolve project named-factory root: %w", err)
 	}
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	globalRoot, err := factoryconfig.GlobalNamedFactoryRootForHome(homeDir)
 	if err != nil {
 		return fmt.Errorf("resolve global named-factory root: %w", err)
 	}
