@@ -1,0 +1,24 @@
+{
+  "formatVersion": "1.0.0",
+  "packageId": "example.contracts",
+  "packageVersion": "2.4.0",
+  "sourceCommit": "ABC123",
+  "familyFormatVersions": {"example.widgets": "1.2.0"},
+  "exports": {
+    "example.widget.create": {
+      "path": "contracts/example/create.schema.json",
+      "family": "example.widgets",
+      "artifactHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "documentation": {
+        "formatVersion": "1.0.0", "itemId": "example.widget.create",
+        "documentation": {
+          "title": {"id": "example.widget.create.title", "canonicalEnglish": "Create a widget"},
+          "description": {"id": "example.widget.create.description", "canonicalEnglish": "Creates one widget."}
+        },
+        "examples": [true], "visibility": "public",
+        "sourceHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.widget.create", "state": "active", "since": "1.0.0"}
+    }
+  }
+}
