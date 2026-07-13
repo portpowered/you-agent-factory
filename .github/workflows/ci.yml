@@ -255,6 +255,10 @@ jobs:
         timeout-minutes: 10
         run: make deadcode
 
+      - name: Run contract validation and drift smoke verification
+        timeout-minutes: 10
+        run: make contracts-smoke
+
       - name: Run API smoke verification
         timeout-minutes: 10
         run: make api-smoke

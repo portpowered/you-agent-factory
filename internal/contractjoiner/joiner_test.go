@@ -62,6 +62,28 @@ func TestCanonicalJoinedJSONMatchesGoldenAcrossRepeatedAndShuffledInputs(t *test
 	compileJoinedSchema(t, joinDocuments(t, input)[0].Value)
 }
 
+func TestJoinResolvesAbsoluteReferenceMatchingExplicitAuthoredID(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "contracts/root.json", `{"value":{"$ref":"https://schemas.example.test/shared.json#/$defs/value"}}`)
+	writeFile(t, root, "contracts/shared.json", `{"$id":"https://schemas.example.test/shared.json","$defs":{"value":{"type":"string"}}}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/root.json"},
+		Components:     []string{"contracts/shared.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %#v, want none", diagnostics)
+	}
+	canonical, err := contractjoiner.MarshalCanonicalJSON(documents[0].Value)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalJSON(): %v", err)
+	}
+	if !bytes.Contains(canonical, []byte(`"type": "string"`)) {
+		t.Fatalf("joined document did not contain absolute-ID target: %s", canonical)
+	}
+}
+
 type serializedDocument struct {
 	Path string
 	JSON []byte
