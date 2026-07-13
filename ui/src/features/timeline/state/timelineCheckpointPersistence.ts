@@ -26,6 +26,7 @@ import {
   type PersistedTimelineCheckpoint,
 } from "./checkpoint-persistence/timelineCheckpointCodec";
 import type { FactoryTimelineCheckpoint } from "./timeline/storeState";
+
 const CHECKPOINT_STORE_NAME = "checkpoints";
 
 export type TimelineCheckpointStreamIdentity = StreamDerivedCacheIdentity;
@@ -33,6 +34,7 @@ export type TimelineCheckpointStreamIdentity = StreamDerivedCacheIdentity;
 interface TimelineCheckpointEnvelope {
   checkpoint: PersistedTimelineCheckpoint;
   schemaVersion: number;
+  sessionID?: string;
   storageKey: string;
   streamIdentity: TimelineCheckpointStreamIdentity;
 }
@@ -54,9 +56,13 @@ function matchesStoredCheckpointFactorySessionID(
   const requestedSessionID = factorySessionID.trim();
   const storedFactorySessionID =
     envelope.streamIdentity?.factorySessionID?.trim() ?? "";
-  return (
-    requestedSessionID !== "" && storedFactorySessionID === requestedSessionID
-  );
+  if (requestedSessionID === "") {
+    return false;
+  }
+  if (storedFactorySessionID !== "") {
+    return storedFactorySessionID === requestedSessionID;
+  }
+  return envelope.sessionID?.trim() === requestedSessionID;
 }
 
 async function writeIndexedCheckpoint(
@@ -157,11 +163,21 @@ export async function peekPersistedTimelineCheckpoint(
     const envelope = envelopes.find((candidate) =>
       matchesStoredCheckpointFactorySessionID(candidate, normalizedSessionID),
     );
+    if (!envelope) {
+      return null;
+    }
     if (
-      !envelope ||
       envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
       !isSupportedPersistedTimelineCheckpoint(envelope.checkpoint)
     ) {
+      const storageKey = envelope.storageKey?.trim() ?? "";
+      if (storageKey !== "") {
+        await deleteIndexedCheckpoint(
+          indexedDB,
+          storageKey,
+          options.signal,
+        ).catch(() => {});
+      }
       return null;
     }
 
