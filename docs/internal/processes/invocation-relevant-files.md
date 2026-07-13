@@ -232,6 +232,10 @@ primary-result behavior.
   preserve cancellation and timeout precedence. A streaming normalizer must
   hold terminal `ERROR` drafts until flush receives the subprocess result and
   error; discard a native failure when cancellation, deadline, or exit 124 wins.
+  When multiple typed terminal records arrive, the held canonical draft and
+  final failure parser must use the same selection rule: recognized failures
+  outrank later unrecognized cleanup errors, while later recognized failures
+  may replace earlier ones.
   When the native decoder publishes the surviving exact terminal `ERROR` draft,
   keep the legacy terminal marker for response-stream consumers while explicitly
   suppressing its second canonical projection.

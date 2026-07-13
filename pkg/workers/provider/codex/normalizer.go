@@ -15,10 +15,9 @@ import (
 )
 
 type commandOutputNormalizer struct {
-	req             provider.CommandRequest
-	publisher       provider.InferenceProgressPublisher
-	decoder         *Decoder
-	pendingTerminal *responseevents.Draft
+	req       provider.CommandRequest
+	publisher provider.InferenceProgressPublisher
+	decoder   *Decoder
 }
 
 const progressMessageLimit = 1024
@@ -48,13 +47,13 @@ func (n *commandOutputNormalizer) Observe(stream string, chunk []byte) bool {
 
 func (n *commandOutputNormalizer) Flush(ctx context.Context, result provider.CommandResult, commandErr error) {
 	n.publishDecoded(n.decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted}))
-	if n.pendingTerminal == nil {
+	terminal, ok := n.decoder.terminalDraft()
+	if !ok {
 		return
 	}
 	if !terminalOutcomeOverridesNativeFailure(ctx, result, commandErr) {
-		n.publishDraft(*n.pendingTerminal)
+		n.publishDraft(terminal)
 	}
-	n.pendingTerminal = nil
 }
 
 func (n *commandOutputNormalizer) publishDecoded(decoded adapter.DecodeResult, err error) {
@@ -69,7 +68,6 @@ func (n *commandOutputNormalizer) publishDecoded(decoded adapter.DecodeResult, e
 	for index := range decoded.Drafts {
 		draft := decoded.Drafts[index]
 		if draft.Kind == responseevents.KindError && draft.Phase == responseevents.PhaseFailed {
-			n.pendingTerminal = &draft
 			continue
 		}
 		n.publishDraft(draft)

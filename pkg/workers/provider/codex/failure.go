@@ -37,7 +37,7 @@ func ParseTerminalFailure(stdout []byte) (TerminalFailure, bool) {
 		case "turn.failed":
 			if record.Error != nil && strings.TrimSpace(record.Error.Message) != "" {
 				failure, recognized := classifyTerminalMessage(record.Type, record.Error.Message, threadID)
-				if recognized || !recognizedFailure {
+				if shouldSelectTerminalFailure(recognizedFailure, recognized) {
 					result = failure
 				}
 				recognizedFailure = recognizedFailure || recognized
@@ -45,7 +45,7 @@ func ParseTerminalFailure(stdout []byte) (TerminalFailure, bool) {
 		case "error":
 			if strings.TrimSpace(record.Message) != "" {
 				failure, recognized := classifyTerminalMessage(record.Type, record.Message, threadID)
-				if recognized || !recognizedFailure {
+				if shouldSelectTerminalFailure(recognizedFailure, recognized) {
 					result = failure
 				}
 				recognizedFailure = recognizedFailure || recognized
@@ -53,6 +53,10 @@ func ParseTerminalFailure(stdout []byte) (TerminalFailure, bool) {
 		}
 	})
 	return result, result.NativeEventType != ""
+}
+
+func shouldSelectTerminalFailure(selectedRecognized, candidateRecognized bool) bool {
+	return candidateRecognized || !selectedRecognized
 }
 
 func classifyTerminalMessage(nativeType, message, threadID string) (TerminalFailure, bool) {

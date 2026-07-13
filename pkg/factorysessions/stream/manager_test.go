@@ -273,6 +273,53 @@ func TestCodexTerminalReconciliationPublishesOnlyWinningProcessFailure(t *testin
 	}
 }
 
+func TestCodexTerminalReconciliationKeepsRecognizedTypedFailure(t *testing.T) {
+	session := factorysessions.NewLiveSession("sess-terminal-selection", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
+	manager := stream.NewManager(&streamTestHost{session: session})
+	publish := manager.InferenceProgressPublisherFactory(nil)(session.ID)
+	result := workerprovider.CommandResult{Stdout: []byte(
+		"{\"type\":\"thread.started\",\"thread_id\":\"thread-terminal\"}\n" +
+			"{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n" +
+			"{\"type\":\"error\",\"message\":\"cleanup detail that must not override\"}\n")}
+	runner := &codexTerminalOutcomeRunner{publisher: publish, result: result}
+	provider := workerprovider.NewScriptWrapProvider(
+		workerprovider.WithProviderCommandRunner(runner),
+		workerprovider.WithInferenceProgressPublisher(publish),
+		workerprovider.WithCodexJSONLFinalParser(func(output []byte) (interfaces.InferenceResponse, error) {
+			parsed, err := codexpkg.ParseFinalOutput(output)
+			return interfaces.InferenceResponse{Content: parsed.Content, ProviderSession: parsed.ProviderSession}, err
+		}),
+		workerprovider.WithCodexJSONLTerminalFailureParser(func(output []byte) (workerprovider.CodexJSONLTerminalFailure, bool) {
+			failure, ok := codexpkg.ParseTerminalFailure(output)
+			return workerprovider.CodexJSONLTerminalFailure{Type: failure.Type, Message: failure.Message, ProviderSession: failure.ProviderSession}, ok
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+	})
+	providerErr, ok := err.(*workerprovider.ProviderError)
+	if !ok || providerErr.Type != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("error = %#v, want throttled ProviderError", err)
+	}
+	var terminal []responseevents.FactoryResponseEvent
+	for _, event := range session.ResponseEvents.Events() {
+		if event.Kind == responseevents.KindError {
+			terminal = append(terminal, event)
+		}
+	}
+	if len(terminal) != 1 || terminal[0].Provenance.NativeEventType != "turn.failed" {
+		t.Fatalf("terminal events = %#v, want one recognized turn.failed", terminal)
+	}
+	var payload responseevents.ErrorPayload
+	if err := json.Unmarshal(terminal[0].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.Retryable || payload.Message != providerErr.Message {
+		t.Fatalf("terminal payload = %#v, want authoritative failure %#v", payload, providerErr)
+	}
+}
+
 func TestManager_CloseAllPreventsSubscription(t *testing.T) {
 	t.Parallel()
 

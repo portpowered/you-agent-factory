@@ -16,12 +16,14 @@ const diagnosticMessage = "codex JSONL record could not be decoded"
 const maxJSONLRecordBytes = 1024 * 1024
 
 type Decoder struct {
-	context      adapter.DecoderContext
-	stdout       []byte
-	threadID     string
-	turnID       string
-	turnSequence int
-	discardLine  bool
+	context                    adapter.DecoderContext
+	stdout                     []byte
+	threadID                   string
+	turnID                     string
+	turnSequence               int
+	discardLine                bool
+	selectedTerminal           *responseevents.Draft
+	selectedTerminalRecognized bool
 }
 
 func NewDecoder(input adapter.DecoderContext) *Decoder { return &Decoder{context: input} }
@@ -160,16 +162,28 @@ func (d *Decoder) usageDraft(usage usageRecord) responseevents.Draft {
 }
 
 func (d *Decoder) errorDraft(nativeType, message string) responseevents.Draft {
-	failure, _ := classifyTerminalMessage(nativeType, message, d.threadID)
+	failure, recognized := classifyTerminalMessage(nativeType, message, d.threadID)
 	payload := mustJSON(responseevents.ErrorPayload{
 		Code: "codex_" + strings.ReplaceAll(nativeType, ".", "_"), Message: failure.Message,
 		Retryable: failure.Retryable,
 	})
-	return responseevents.Draft{
+	draft := responseevents.Draft{
 		RunID: d.context.RunID, DispatchID: d.context.DispatchID, TurnID: d.turnID,
 		ProviderSessionRef: d.threadID, Kind: responseevents.KindError, Phase: responseevents.PhaseFailed,
 		Provenance: provenance(nativeType, responseevents.RepresentationNotification), Payload: payload,
 	}
+	if shouldSelectTerminalFailure(d.selectedTerminalRecognized, recognized) {
+		d.selectedTerminal = &draft
+	}
+	d.selectedTerminalRecognized = d.selectedTerminalRecognized || recognized
+	return draft
+}
+
+func (d *Decoder) terminalDraft() (responseevents.Draft, bool) {
+	if d.selectedTerminal == nil {
+		return responseevents.Draft{}, false
+	}
+	return *d.selectedTerminal, true
 }
 
 func (d *Decoder) lifecycleDraft(kind responseevents.Kind, phase responseevents.Phase, status, nativeType string) responseevents.Draft {
