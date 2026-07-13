@@ -113,3 +113,9 @@ noise.
   sleep 4
   curl --fail --silent --show-error --max-time 10 \
     "http://127.0.0.1:$PORT/docs/modules/grouped-query-attention"
+
+## addenda
+
+sometimes there is a system problem such as the website browser tool being broken, in such cases its okay to waive the requirement. 
+
+This is not the case for code changes/tests that we can fix in the codebase though. Mostly, things that are broken out of our control like tools and mcp that we are remotely separately from. 

@@ -14,8 +14,15 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	makeDir(t, repoRoot, "pkg/service")
-	makeDir(t, repoRoot, "pkg/orchestrators")
+	for _, packagePath := range []string{
+		"pkg/root",
+		"pkg/wire",
+		"pkg/transports",
+		"pkg/work",
+		"pkg/platform",
+	} {
+		makeDir(t, repoRoot, packagePath)
+	}
 	makeDir(t, repoRoot, "pkg/generatedclient")
 
 	stdout := &bytes.Buffer{}
@@ -32,6 +39,143 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunAllowsValidMigrationPackageException(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	makeDir(t, repoRoot, "pkg/legacytransport")
+	policy := boundaryPolicy{
+		approvedProductPackageFamilies: []string{"pkg/transports"},
+		migrationPackageExceptions: []migrationPackageException{{
+			packagePath:  "pkg/legacytransport",
+			targetOwner:  "pkg/transports",
+			workItem:     batch006TransportFamilyMove,
+			deletionGate: "remove after callers move to pkg/transports",
+		}},
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := runWithPolicy(config{root: repoRoot, packageRoot: defaultScanRoot}, policy, stdout, stderr)
+	if err != nil {
+		t.Fatalf("runWithPolicy() error = %v, want nil", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "package boundary passed") {
+		t.Fatalf("runWithPolicy() stdout = %q, want success message", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("runWithPolicy() stderr = %q, want empty", got)
+	}
+}
+
+func TestValidatePolicyRejectsInvalidMigrationMetadata(t *testing.T) {
+	t.Parallel()
+
+	valid := migrationPackageException{
+		packagePath:  "pkg/legacytransport",
+		targetOwner:  "pkg/transports",
+		workItem:     batch006TransportFamilyMove,
+		deletionGate: "remove after callers move to pkg/transports",
+	}
+	tests := []struct {
+		name     string
+		mutate   func(*migrationPackageException)
+		want     string
+		families []string
+	}{
+		{
+			name: "missing target owner",
+			mutate: func(exception *migrationPackageException) {
+				exception.targetOwner = ""
+			},
+			want:     "target owner must not be empty",
+			families: []string{"pkg/transports"},
+		},
+		{
+			name: "unapproved target owner",
+			mutate: func(exception *migrationPackageException) {
+				exception.targetOwner = "pkg/experimental"
+			},
+			want:     "target owner pkg/experimental must be an approved product package family",
+			families: []string{"pkg/transports"},
+		},
+		{
+			name: "missing work item",
+			mutate: func(exception *migrationPackageException) {
+				exception.workItem = ""
+			},
+			want:     "must name an active Batch 006, Batch 007, or Batch 008 work item",
+			families: []string{"pkg/transports"},
+		},
+		{
+			name: "inactive work item",
+			mutate: func(exception *migrationPackageException) {
+				exception.workItem = "Batch 005 — Retired move"
+			},
+			want:     "must name an active Batch 006, Batch 007, or Batch 008 work item",
+			families: []string{"pkg/transports"},
+		},
+		{
+			name: "work item targets another owner",
+			mutate: func(exception *migrationPackageException) {
+				exception.workItem = batch006PlatformFamilyMove
+			},
+			want:     "targets pkg/platform, not pkg/transports",
+			families: []string{"pkg/transports", "pkg/platform"},
+		},
+		{
+			name: "missing deletion gate",
+			mutate: func(exception *migrationPackageException) {
+				exception.deletionGate = " "
+			},
+			want:     "deletion gate must not be empty",
+			families: []string{"pkg/transports"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			exception := valid
+			tt.mutate(&exception)
+			policy := boundaryPolicy{
+				approvedProductPackageFamilies: tt.families,
+				migrationPackageExceptions:     []migrationPackageException{exception},
+			}
+
+			err := validatePolicy(policy)
+			if err == nil {
+				t.Fatal("validatePolicy() error = nil, want invalid migration metadata rejection")
+			}
+			if got := err.Error(); !strings.Contains(got, tt.want) {
+				t.Fatalf("validatePolicy() error = %q, want substring %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidatePolicyRejectsMigrationExceptionAsProductFamily(t *testing.T) {
+	t.Parallel()
+
+	policy := boundaryPolicy{
+		approvedProductPackageFamilies: []string{"pkg/transports", "pkg/legacytransport"},
+		migrationPackageExceptions: []migrationPackageException{{
+			packagePath:  "pkg/legacytransport",
+			targetOwner:  "pkg/transports",
+			workItem:     batch006TransportFamilyMove,
+			deletionGate: "remove after callers move to pkg/transports",
+		}},
+	}
+
+	err := validatePolicy(policy)
+	if err == nil {
+		t.Fatal("validatePolicy() error = nil, want migration/product-family overlap rejection")
+	}
+	if got := err.Error(); got != "migration-only package exception pkg/legacytransport must not also be an approved product package family" {
+		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
 	}
 }
 
@@ -108,6 +252,31 @@ func TestValidatePolicyRejectsGeneratedExceptionAsProductFamily(t *testing.T) {
 		t.Fatal("validatePolicy() error = nil, want generated-code/product-family overlap rejection")
 	}
 	if got := err.Error(); got != "generated-code exception pkg/generatedclient must not also be an approved product package family" {
+		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
+	}
+}
+
+func TestValidatePolicyRejectsGeneratedExceptionAsMigrationException(t *testing.T) {
+	t.Parallel()
+
+	policy := boundaryPolicy{
+		approvedProductPackageFamilies: []string{"pkg/transports"},
+		migrationPackageExceptions: []migrationPackageException{{
+			packagePath:  "pkg/generatedclient",
+			targetOwner:  "pkg/transports",
+			workItem:     batch006TransportFamilyMove,
+			deletionGate: "remove after generated clients move to pkg/transports",
+		}},
+		generatedCodeExceptions: []generatedCodeException{
+			{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
+		},
+	}
+
+	err := validatePolicy(policy)
+	if err == nil {
+		t.Fatal("validatePolicy() error = nil, want generated-code/migration overlap rejection")
+	}
+	if got := err.Error(); got != "generated-code exception pkg/generatedclient must not also be a migration-only package exception" {
 		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
 	}
 }
