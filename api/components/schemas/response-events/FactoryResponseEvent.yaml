@@ -1,0 +1,71 @@
+type: object
+additionalProperties: false
+description: >-
+  Provider-neutral envelope for transient agent activity observed during one
+  Factory Session run. Unlike canonical factory events, these records are
+  ephemeral observation records and must not derive canonical work state after
+  replay.
+required:
+  - schemaVersion
+  - eventId
+  - sequence
+  - recordedAt
+  - factorySessionId
+  - runId
+  - kind
+  - phase
+  - provenance
+  - payload
+properties:
+  schemaVersion:
+    type: string
+    description: Version of the FactoryResponseEvent envelope schema.
+    enum:
+      - agent-factory.response-event.v1
+    x-enum-descriptions:
+      - Initial unified Factory response-event schema aligned with Story 01 vocabulary.
+  eventId:
+    type: string
+    description: Stable identifier for this response event within the session stream.
+  sequence:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Monotonic session-scoped cursor for reconnect and ordering.
+  recordedAt:
+    type: string
+    format: date-time
+    description: Wall-clock timestamp when the response event was recorded.
+  factorySessionId:
+    type: string
+    description: Factory Session identity that owns this response-event stream.
+  runId:
+    type: string
+    description: Run identity within the Factory Session that produced this event.
+  kind:
+    $ref: ./FactoryResponseEventKind.yaml
+  phase:
+    $ref: ./FactoryResponseEventPhase.yaml
+  provenance:
+    $ref: ./FactoryResponseEventProvenance.yaml
+  payload:
+    type: object
+    description: >-
+      Kind-aligned public payload. Typed payload schemas and the discriminated
+      union are declared in companion fragments and wired through the OpenAPI
+      entrypoint in a later registration story.
+  dispatchId:
+    type: string
+    description: Optional dispatch correlation identifier.
+  turnId:
+    type: string
+    description: Optional turn correlation identifier.
+  itemId:
+    type: string
+    description: Optional stable item correlation identifier.
+  parentItemId:
+    type: string
+    description: Optional parent item correlation identifier.
+  providerSessionRef:
+    type: string
+    description: Optional provider session reference for diagnostics.
