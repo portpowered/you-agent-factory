@@ -50,6 +50,8 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 78.3
+BACKEND_SIZE_ROOT ?= .
+PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check model-facade-check deadcode
@@ -227,10 +229,10 @@ lint:
 	$(MAKE) $(LINT_TARGETS)
 
 backend-size:
-	$(GO) run ./cmd/backendsizecheck
+	$(GO) run ./cmd/backendsizecheck -root $(BACKEND_SIZE_ROOT)
 
 pkg-maint:
-	$(GO) run ./cmd/pkgmaintcheck ./pkg
+	$(GO) run ./cmd/pkgmaintcheck -root $(PACKAGE_MAINT_ROOT)
 
 pkg-file-count:
 	$(GO) run ./cmd/pkgfilecountcheck -root $(PACKAGE_FILE_COUNT_ROOT)

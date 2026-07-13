@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -224,6 +225,66 @@ func TestRunRejectsStalePackageRegistration(t *testing.T) {
 	if got := stderr.String(); !strings.Contains(got, "rule=pkgmaintcheck:ignore-function-lines target=pkg/service/service.go#Removed is stale") ||
 		!strings.Contains(got, "remove its backend-exemption-budget.json entry or restore the directive") {
 		t.Fatalf("run() stderr = %q, want stale registration remediation", got)
+	}
+}
+
+func TestMakePkgMaintRejectsStaleEntryThenAllowsCompleteRemoval(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	writeGoFile(t, fixtureRoot, "pkg/service/legacy.go", "package service\n")
+	writeExemptionBaseline(t, fixtureRoot, exemptionbudget.Entry{
+		Rule:          exemptionbudget.RulePackageFileLines,
+		Target:        "pkg/service/legacy.go",
+		Owner:         "service-maintainers",
+		RemovalReason: "Split the file by responsibility.",
+	})
+
+	cmd := exec.Command("make", "pkg-maint", "PACKAGE_MAINT_ROOT="+fixtureRoot)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("make pkg-maint succeeded with stale baseline entry; output:\n%s", output)
+	}
+	got := string(output)
+	if !strings.Contains(got, "rule=pkgmaintcheck:ignore-file-lines target=pkg/service/legacy.go is stale") ||
+		!strings.Contains(got, "remove its backend-exemption-budget.json entry or restore the directive") {
+		t.Fatalf("make pkg-maint output = %q, want stale-entry remediation", got)
+	}
+
+	writeExemptionBaseline(t, fixtureRoot)
+	cmd = exec.Command("make", "pkg-maint", "PACKAGE_MAINT_ROOT="+fixtureRoot)
+	cmd.Dir = repoRoot
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make pkg-maint after baseline reduction error = %v; output:\n%s", err, output)
+	}
+	if got := string(output); !strings.Contains(got, "[agent-factory:pkg-maint] pkg maintainability passed") {
+		t.Fatalf("make pkg-maint output = %q, want success after complete removal", got)
+	}
+}
+
+func TestMakeLintRunsBothExemptionBudgetChecks(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	writeGoFile(t, fixtureRoot, "pkg/service/service.go", "package service\n")
+
+	cmd := exec.Command(
+		"make", "lint", "LINT_TARGETS=backend-size pkg-maint",
+		"BACKEND_SIZE_ROOT="+fixtureRoot, "PACKAGE_MAINT_ROOT="+fixtureRoot,
+	)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make lint focused budget path error = %v; output:\n%s", err, output)
+	}
+	got := string(output)
+	for _, want := range []string{
+		"[agent-factory:backend-size] all owned Go backend files are within",
+		"[agent-factory:pkg-maint] pkg maintainability passed",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("make lint output = %q, want %q", got, want)
+		}
 	}
 }
 

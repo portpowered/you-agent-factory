@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -229,6 +230,37 @@ func TestRunRejectsInvalidRegistrationMetadata(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "rule=backendsizecheck:ignore-file") ||
 		!strings.Contains(err.Error(), "target=pkg/service/ignored.go") || !strings.Contains(err.Error(), "set a non-empty owner") {
 		t.Fatalf("run() error = %v, want rule, target, and owner remediation", err)
+	}
+}
+
+func TestMakeBackendSizeAllowsRemovingDirectiveWithBaselineEntry(t *testing.T) {
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	fixtureRoot := t.TempDir()
+	writeGoFile(t, fixtureRoot, "pkg/service/legacy.go", "// backendsizecheck:ignore-file split this file by responsibility.\npackage service\n")
+	writeExemptionBaseline(t, fixtureRoot, exemptionbudget.Entry{
+		Rule:          exemptionbudget.RuleBackendFile,
+		Target:        "pkg/service/legacy.go",
+		Owner:         "service-maintainers",
+		RemovalReason: "Split the file by responsibility.",
+	})
+
+	assertMakeBackendSizePasses(t, repoRoot, fixtureRoot)
+
+	writeGoFile(t, fixtureRoot, "pkg/service/legacy.go", "package service\n")
+	writeExemptionBaseline(t, fixtureRoot)
+	assertMakeBackendSizePasses(t, repoRoot, fixtureRoot)
+}
+
+func assertMakeBackendSizePasses(t *testing.T, repoRoot, fixtureRoot string) {
+	t.Helper()
+	cmd := exec.Command("make", "backend-size", "BACKEND_SIZE_ROOT="+fixtureRoot)
+	cmd.Dir = repoRoot
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("make backend-size error = %v; output:\n%s", err, output)
+	}
+	if got := string(output); !strings.Contains(got, "[agent-factory:backend-size] all owned Go backend files are within") {
+		t.Fatalf("make backend-size output = %q, want success diagnostic", got)
 	}
 }
 
