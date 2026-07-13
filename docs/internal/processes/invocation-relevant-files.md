@@ -207,7 +207,11 @@ primary-result behavior.
   publication to the session owner. Adapter `BuildCommand` selects structured
   output only for the response-adapter execution path; the established
   final-only provider command path must remain unchanged until its caller
-  explicitly opts into response streaming. Native JSONL fixture tests should
+  explicitly opts into response streaming. Both command paths must use
+  `pkg/workers/provider/commandenv` so provider variables retain the established
+  non-interactive Git/editor safeguards, and the production mode-selection
+  boundary must preserve provider input validation before starting either
+  runner. Native JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.
   Provider retry and compaction records should publish only bounded typed facts

@@ -7,12 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
 )
 
 const (
@@ -52,7 +52,7 @@ func (*Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) (a
 	command := workerprocess.SubprocessRequestBase(req.Dispatch)
 	command.Command = string(interfaces.ModelProviderClaude)
 	command.Args = args
-	command.Env = workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(req.EnvVars))
+	command.Env = commandenv.Build(req.EnvVars)
 	command.WorkDir = req.WorkingDirectory
 	command.InputTokens = append([]any(nil), req.InputTokens...)
 	if req.WorkerType != "" {

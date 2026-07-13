@@ -2,6 +2,7 @@ package structured_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +21,7 @@ func TestProductionProviderBoundarySelectsStructuredClaudeOnlyForResponseStream(
 		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-claude-production"},
 		ModelProvider: string(interfaces.ModelProviderClaude), Model: "claude-sonnet",
 		SessionID: "claude-session-123", UserMessage: "private prompt",
+		EnvVars: map[string]string{"GIT_EDITOR": "vim", "GIT_TERMINAL_PROMPT": "1"},
 	}
 
 	finalRunner := &recordingRunner{result: workerprovider.CommandResult{Stdout: []byte("authoritative answer")}}
@@ -51,7 +53,44 @@ func TestProductionProviderBoundarySelectsStructuredClaudeOnlyForResponseStream(
 	if !slices.Contains(streamRunner.request.Args, "stream-json") || !slices.Contains(streamRunner.request.Args, "--include-partial-messages") {
 		t.Fatalf("response-stream args = %#v", streamRunner.request.Args)
 	}
+	assertCommandEnv(t, streamRunner.request.Env, "GIT_EDITOR", "true")
+	assertCommandEnv(t, streamRunner.request.Env, "GIT_SEQUENCE_EDITOR", "true")
+	assertCommandEnv(t, streamRunner.request.Env, "GIT_TERMINAL_PROMPT", "0")
 	assertStablePublishedMessage(t, published)
+}
+
+func TestProductionResponseStreamClaudeRejectsImageBeforeRunner(t *testing.T) {
+	runner := &recordingRunner{result: workerprovider.CommandResult{Stdout: []byte(structuredClaudeOutput())}}
+	provider := workerprovider.NewScriptWrapProvider(
+		workerprovider.WithProviderCommandRunner(runner),
+		workerprovider.WithInferenceProgressPublisher(func(workerprovider.InferenceProgressFragment) {}),
+		workerprovider.WithResponseStreamExecutor(structured.NewExecutor()),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-claude-image"},
+		ModelProvider: string(interfaces.ModelProviderClaude),
+		UserMessage:   "inspect",
+		InputTokens: []any{interfaces.Token{ID: "token-1", Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
+			{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+		}}}},
+	})
+	if err == nil {
+		t.Fatal("expected response-stream Claude image content to fail")
+	}
+	var providerErr *workerprovider.ProviderError
+	if !errors.As(err, &providerErr) {
+		t.Fatalf("expected ProviderError, got %T: %v", err, err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest ||
+		!strings.Contains(providerErr.Message, "input_tokens[0].color.content[1].file") ||
+		!strings.Contains(providerErr.Message, "model provider claude") {
+		t.Fatalf("provider error = %#v", providerErr)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("runner calls = %d, want 0", runner.calls)
+	}
 }
 
 func TestExecutorStreamsRealCommandAndReportsSupport(t *testing.T) {
@@ -153,9 +192,25 @@ func structuredClaudeOutput() string {
 type recordingRunner struct {
 	request workerprovider.CommandRequest
 	result  workerprovider.CommandResult
+	calls   int
 }
 
 func (r *recordingRunner) Run(_ context.Context, req workerprovider.CommandRequest) (workerprovider.CommandResult, error) {
+	r.calls++
 	r.request = req
 	return r.result, nil
+}
+
+func assertCommandEnv(t *testing.T, env []string, name, want string) {
+	t.Helper()
+	prefix := name + "="
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			if got := strings.TrimPrefix(entry, prefix); got != want {
+				t.Fatalf("%s = %q, want %q", name, got, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("environment does not contain %s", name)
 }

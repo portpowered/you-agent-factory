@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
@@ -45,14 +45,7 @@ const (
 	providerSessionKindResponseID     = "response_id"
 )
 
-var providerAutomationEnvDefaults = []workerprocess.CommandEnvEntry{
-	{Name: "GIT_EDITOR", Value: "true"},
-	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
-	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
-	{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
-	{Name: "EDITOR", Value: "true"},
-	{Name: "VISUAL", Value: "true"},
-}
+var providerAutomationEnvDefaults = commandenv.AutomationDefaults()
 
 var providerSessionPatterns = []struct {
 	kind    string
@@ -194,6 +187,11 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	logger.Info("inferencer: request starting",
 		providerLogFields(req, "model", req.Model)...)
 	if p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider) {
+		if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderClaude)) {
+			if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
+				return providerRequestValidationFailure(req, err, logger)
+			}
+		}
 		return p.executeStructuredResponseStream(ctx, req, logger)
 	}
 
@@ -205,15 +203,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	defer buildCtx.release()
 	args, err := behavior.BuildArgs(ctx, req, p.SkipPermissions, buildCtx)
 	if err != nil {
-		logger.Error("inferencer: request argument validation failed",
-			providerLogFields(req, "error", err.Error())...)
-		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
-			interfaces.WorkFailureTypePermanentBadRequest,
-			err.Error(),
-			err,
-			nil,
-			workDiagnosticsForInferenceRequest(req),
-		)
+		return providerRequestValidationFailure(req, err, logger)
 	}
 	execReq := behavior.BuildCommandRequest(req, args)
 	logger.Info("provider invocation prepared", providerPreparedLogFields(ctx, req, execReq)...)
@@ -312,7 +302,23 @@ func ContainsStopToken(output, stopToken string) bool {
 // buildProviderEnv merges subprocess environment sources with deterministic
 // precedence: process environment, provider env vars, then automation defaults.
 func buildProviderEnv(envVars map[string]string) []string {
-	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(envVars), providerAutomationEnvDefaults)
+	return commandenv.Build(envVars)
+}
+
+func providerRequestValidationFailure(
+	req interfaces.ProviderInferenceRequest,
+	err error,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	logger.Error("inferencer: request argument validation failed",
+		providerLogFields(req, "error", err.Error())...)
+	return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		err.Error(),
+		err,
+		nil,
+		workDiagnosticsForInferenceRequest(req),
+	)
 }
 
 // TODO: right now the stderr/stdout for the print prints out the entire response log for the stdout....
