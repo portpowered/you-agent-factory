@@ -15,6 +15,55 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
+func TestRunCommand_HelpDocumentsSupportedInputPathsAndStdoutModes(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	for _, want := range []string{
+		"--dir",
+		"--named",
+		"--factory",
+		"trailing positional text or piped stdin text",
+		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"primary-result-only stdout by default",
+		"--output response-stream",
+		"you workflow",
+	} {
+		if !strings.Contains(runCmd.Long, want) {
+			t.Fatalf("run command long help missing %q", want)
+		}
+	}
+	if strings.Contains(runCmd.Long, "run --workflow") {
+		t.Fatal("run command long help must not document run-level --workflow")
+	}
+
+	for _, want := range []string{
+		"run --dir factory",
+		"run --named @you/tts",
+		"run --factory ./factory.json",
+		"echo \"Ship the login bugfix\" | you run --named @you/goal",
+		"run --named @you/goal --output response-stream",
+	} {
+		if !strings.Contains(runCmd.Example, want) {
+			t.Fatalf("run command examples missing %q", want)
+		}
+	}
+	if strings.Contains(runCmd.Example, "--workflow") {
+		t.Fatal("run command examples must not document --workflow")
+	}
+
+	outputFlag := runCmd.Flags().Lookup("output")
+	if outputFlag == nil {
+		t.Fatal("expected --output flag on run command")
+	}
+	if !strings.Contains(outputFlag.Usage, "primary (default)") || !strings.Contains(outputFlag.Usage, "response-stream") {
+		t.Fatalf("--output usage = %q, want primary default and response-stream guidance", outputFlag.Usage)
+	}
+}
+
 func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	root := NewRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
