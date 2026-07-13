@@ -1,0 +1,14 @@
+description: >-
+  The retained response-event stream has expired and can no longer be opened.
+  This is distinct from an invalid cursor or filter.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      expiredStream:
+        summary: Retained response-event history is no longer available.
+        value:
+          message: The retained Factory Response Event stream has expired.
+          family: GONE
+          code: RESPONSE_EVENT_STREAM_EXPIRED

@@ -273,9 +273,10 @@ func TestWriteFactoryOpenAPIParityIndexBaseline(t *testing.T) {
 	}
 }
 
-// productionBoundarySources records Factory schema, OpenAPI fragment, mapping,
-// and generated-client files this inventory lane must not alter. Update hashes
-// only when intentionally changing boundary behavior outside this lane.
+// productionBoundarySources records the handwritten Factory schema, OpenAPI
+// fragments, and mappings this inventory lane must not alter. Generated API
+// artifacts are protected by the generation drift gate and consumer compile
+// tests instead of source hashes.
 var productionBoundarySources = []struct {
 	relativePath string
 	sha256Hex    string
@@ -323,14 +324,6 @@ var productionBoundarySources = []struct {
 	{
 		relativePath: "api/components/schemas/data-models/Resource.yaml",
 		sha256Hex:    "56099e658940395035851cfcce7424782ef9e42193b8eb608b93b45d5866ab28",
-	},
-	{
-		relativePath: "pkg/api/generated/server.gen.go",
-		sha256Hex:    "e19e1c9af8f878ef11aede6f6604fb40e2ff58c95c87d956f09cf226c8889e12",
-	},
-	{
-		relativePath: "pkg/generatedclient/client.gen.go",
-		sha256Hex:    "2ad86aba1ef76f69b1bfdeee0d02cfc4398ebab95b556dfc01cec778eb9f8233",
 	},
 }
 
