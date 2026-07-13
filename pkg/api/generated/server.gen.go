@@ -2212,6 +2212,9 @@ type FactoryResponseEventSessionPayload struct {
 
 // FactoryResponseEventStreamGapPayload Discontinuity marker in the retained response-event stream.
 type FactoryResponseEventStreamGapPayload struct {
+	// FirstAvailableSequence Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
+	FirstAvailableSequence int64 `json:"firstAvailableSequence"`
+
 	// FromSequence Lowest unavailable published sequence greater than the reader's cursor.
 	FromSequence int64 `json:"fromSequence"`
 

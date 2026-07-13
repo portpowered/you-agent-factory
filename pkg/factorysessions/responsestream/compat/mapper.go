@@ -243,7 +243,7 @@ func mapCompactionFragment(ctx Context, fragment responsestream.Event) (response
 
 func streamGapPayloadFromCompaction(summary *responsestream.CompactionSummary) responseevents.StreamGapPayload {
 	if summary == nil {
-		return responseevents.StreamGapPayload{Reason: "compaction"}
+		return responseevents.StreamGapPayload{FirstAvailableSequence: 1, Reason: "compaction"}
 	}
 
 	fromSequence := int64(0)
@@ -254,16 +254,22 @@ func streamGapPayloadFromCompaction(summary *responsestream.CompactionSummary) r
 			fromSequence = 0
 		}
 	}
-	if summary.FirstRetainedSequence > 0 {
-		toSequence = summary.FirstRetainedSequence
-	} else if summary.LastDroppedSequence > 0 {
-		toSequence = summary.LastDroppedSequence + 1
+	if summary.LastDroppedSequence > 0 {
+		toSequence = summary.LastDroppedSequence
+	}
+	firstAvailableSequence := summary.FirstRetainedSequence
+	if firstAvailableSequence <= 0 {
+		firstAvailableSequence = summary.LastDroppedSequence + 1
+	}
+	if firstAvailableSequence <= 0 {
+		firstAvailableSequence = 1
 	}
 
 	return responseevents.StreamGapPayload{
-		FromSequence: fromSequence,
-		ToSequence:   toSequence,
-		Reason:       compactionReasonString(summary.Reason),
+		FromSequence:           fromSequence,
+		ToSequence:             toSequence,
+		FirstAvailableSequence: firstAvailableSequence,
+		Reason:                 compactionReasonString(summary.Reason),
 	}
 }
 

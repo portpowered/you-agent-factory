@@ -4,6 +4,7 @@ description: Discontinuity marker in the retained response-event stream.
 required:
   - fromSequence
   - toSequence
+  - firstAvailableSequence
 properties:
   fromSequence:
     type: integer
@@ -17,6 +18,13 @@ properties:
     minimum: 0
     description: >-
       Highest unavailable published sequence in the reader's catch-up window.
+  firstAvailableSequence:
+    type: integer
+    format: int64
+    minimum: 1
+    description: >-
+      Sequence of the first retained event available to this subscription, or
+      the next sequence that can be published when no retained event matches.
   reason:
     type: string
     description: Optional reason for the stream gap such as retention_window.

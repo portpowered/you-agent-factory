@@ -6,24 +6,24 @@ import "encoding/json"
 type ContentBlockKind string
 
 const (
-	ContentBlockText              ContentBlockKind = "TEXT"
-	ContentBlockReasoningSummary  ContentBlockKind = "REASONING_SUMMARY"
-	ContentBlockToolRequest       ContentBlockKind = "TOOL_REQUEST"
-	ContentBlockImageRef          ContentBlockKind = "IMAGE_REF"
-	ContentBlockResourceRef       ContentBlockKind = "RESOURCE_REF"
-	ContentBlockStructuredOutput  ContentBlockKind = "STRUCTURED_OUTPUT"
+	ContentBlockText             ContentBlockKind = "TEXT"
+	ContentBlockReasoningSummary ContentBlockKind = "REASONING_SUMMARY"
+	ContentBlockToolRequest      ContentBlockKind = "TOOL_REQUEST"
+	ContentBlockImageRef         ContentBlockKind = "IMAGE_REF"
+	ContentBlockResourceRef      ContentBlockKind = "RESOURCE_REF"
+	ContentBlockStructuredOutput ContentBlockKind = "STRUCTURED_OUTPUT"
 )
 
 // ContentBlock carries one typed slice of assistant-visible message content.
 type ContentBlock struct {
-	Kind               ContentBlockKind `json:"kind"`
-	Text               string           `json:"text,omitempty"`
-	ToolCallID         string           `json:"toolCallId,omitempty"`
-	ToolName           string           `json:"toolName,omitempty"`
-	ArgumentsSummary   json.RawMessage  `json:"argumentsSummary,omitempty"`
-	ImageRef           string           `json:"imageRef,omitempty"`
-	ResourceRef        string           `json:"resourceRef,omitempty"`
-	StructuredOutput   json.RawMessage  `json:"structuredOutput,omitempty"`
+	Kind             ContentBlockKind `json:"kind"`
+	Text             string           `json:"text,omitempty"`
+	ToolCallID       string           `json:"toolCallId,omitempty"`
+	ToolName         string           `json:"toolName,omitempty"`
+	ArgumentsSummary json.RawMessage  `json:"argumentsSummary,omitempty"`
+	ImageRef         string           `json:"imageRef,omitempty"`
+	ResourceRef      string           `json:"resourceRef,omitempty"`
+	StructuredOutput json.RawMessage  `json:"structuredOutput,omitempty"`
 }
 
 // SessionPayload records session-scoped lifecycle and capability metadata.
@@ -64,11 +64,11 @@ type ReasoningPayload struct {
 
 // ToolPayload carries tool lifecycle metadata and bounded summaries.
 type ToolPayload struct {
-	ToolCallID         string          `json:"toolCallId"`
-	ToolName           string          `json:"toolName"`
-	Status             string          `json:"status,omitempty"`
-	ArgumentsSummary   json.RawMessage `json:"argumentsSummary,omitempty"`
-	ResultSummary      json.RawMessage `json:"resultSummary,omitempty"`
+	ToolCallID       string          `json:"toolCallId"`
+	ToolName         string          `json:"toolName"`
+	Status           string          `json:"status,omitempty"`
+	ArgumentsSummary json.RawMessage `json:"argumentsSummary,omitempty"`
+	ResultSummary    json.RawMessage `json:"resultSummary,omitempty"`
 }
 
 // ToolDeltaPayload carries incremental tool output.
@@ -123,7 +123,8 @@ type ErrorPayload struct {
 
 // StreamGapPayload records a discontinuity in the retained response-event stream.
 type StreamGapPayload struct {
-	FromSequence int64  `json:"fromSequence"`
-	ToSequence   int64  `json:"toSequence"`
-	Reason       string `json:"reason,omitempty"`
+	FromSequence           int64  `json:"fromSequence"`
+	ToSequence             int64  `json:"toSequence"`
+	FirstAvailableSequence int64  `json:"firstAvailableSequence"`
+	Reason                 string `json:"reason,omitempty"`
 }

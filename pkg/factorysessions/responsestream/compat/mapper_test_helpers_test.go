@@ -9,14 +9,14 @@ import (
 )
 
 type mappedFragmentEnvelopeExpectation struct {
-	sessionID            string
-	runID                string
-	sequence             int64
-	recordedAt           time.Time
-	dispatchID           string
-	providerSessionRef   string
-	wantEmptyItemID      bool
-	wantNonEmptyItemID   bool
+	sessionID          string
+	runID              string
+	sequence           int64
+	recordedAt         time.Time
+	dispatchID         string
+	providerSessionRef string
+	wantEmptyItemID    bool
+	wantNonEmptyItemID bool
 }
 
 func assertMappedFragmentEnvelope(
@@ -66,6 +66,7 @@ func assertStreamGapPayload(
 	payloadJSON json.RawMessage,
 	wantFromSequence int64,
 	wantToSequence int64,
+	wantFirstAvailableSequence int64,
 	wantReason string,
 ) {
 	t.Helper()
@@ -76,6 +77,9 @@ func assertStreamGapPayload(
 	}
 	if payload.FromSequence != wantFromSequence || payload.ToSequence != wantToSequence {
 		t.Fatalf("gap bounds = %d/%d, want %d/%d", payload.FromSequence, payload.ToSequence, wantFromSequence, wantToSequence)
+	}
+	if payload.FirstAvailableSequence != wantFirstAvailableSequence {
+		t.Fatalf("first available sequence = %d, want %d", payload.FirstAvailableSequence, wantFirstAvailableSequence)
 	}
 	if payload.Reason != wantReason {
 		t.Fatalf("gap reason = %q, want %q", payload.Reason, wantReason)

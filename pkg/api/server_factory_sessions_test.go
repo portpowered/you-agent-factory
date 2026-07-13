@@ -87,6 +87,94 @@ func TestFactoryResponseEventsBySessionID_RetainedThenLiveUsesExactSessionAndFlu
 	}
 }
 
+func TestFactoryResponseEventsBySessionID_StaleCursorGetsGapBeforeRetainedAndLiveEvents(t *testing.T) {
+	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
+		"session-beta",
+		responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20},
+	)
+	if err != nil {
+		t.Fatalf("new response-event store: %v", err)
+	}
+	publishResponseProgress(t, store, "dropped-1")
+	publishResponseProgress(t, store, "dropped-2")
+	retainedFirst := publishResponseProgress(t, store, "retained-3")
+	retainedSecond := publishResponseProgress(t, store, "retained-4")
+
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+	httpServer := httptest.NewServer(srv.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		httpServer.URL+"/factory-sessions/session-beta/response-events?after_sequence=1&kind=PROGRESS",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new stale response-event request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("open stale response-event stream: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("stale response-event status = %d, want 200", response.StatusCode)
+	}
+
+	reader := bufio.NewReader(response.Body)
+	gap := readSSEFactoryResponseEvent(t, reader)
+	gapPayload := decodeSSEStreamGap(t, gap)
+	if gapPayload.FromSequence != 2 || gapPayload.ToSequence != 2 || gapPayload.FirstAvailableSequence != 3 {
+		t.Fatalf("STREAM_GAP payload = %#v, want unavailable 2..2 and first available 3", gapPayload)
+	}
+	retained := []responseevents.FactoryResponseEvent{
+		readSSEFactoryResponseEvent(t, reader),
+		readSSEFactoryResponseEvent(t, reader),
+	}
+	if retained[0].EventID != retainedFirst.EventID || retained[1].EventID != retainedSecond.EventID {
+		t.Fatalf("retained events = [%q %q], want [%q %q]", retained[0].EventID, retained[1].EventID, retainedFirst.EventID, retainedSecond.EventID)
+	}
+	liveWant := publishResponseProgress(t, store, "live-5")
+	live := readSSEFactoryResponseEvent(t, reader)
+	if live.EventID != liveWant.EventID || live.Sequence != 5 {
+		t.Fatalf("live event = %#v, want sequence 5 event %q", live, liveWant.EventID)
+	}
+}
+
+func TestFactoryResponseEventsBySessionID_CursorInsideRetainedSuffixDoesNotGetGap(t *testing.T) {
+	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
+		"session-beta",
+		responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20},
+	)
+	if err != nil {
+		t.Fatalf("new response-event store: %v", err)
+	}
+	publishResponseProgress(t, store, "dropped-1")
+	publishResponseProgress(t, store, "dropped-2")
+	retainedFirst := publishResponseProgress(t, store, "retained-3")
+	retainedSecond := publishResponseProgress(t, store, "retained-4")
+	store.Complete()
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events?after_sequence=3", nil)
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("current response-event status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	got := readSSEFactoryResponseEvent(t, bufio.NewReader(recorder.Body))
+	if got.Kind == responseevents.KindStreamGap || got.EventID != retainedSecond.EventID {
+		t.Fatalf("current cursor event = %#v, want retained event %q without gap after %q", got, retainedSecond.EventID, retainedFirst.EventID)
+	}
+}
+
 func TestFactoryResponseEventsBySessionID_KnownCursorEmitsOnlyNewerEvents(t *testing.T) {
 	store := responseeventstore.NewSessionResponseEventStore("session-beta")
 	first := publishResponseProgress(t, store, "first")
@@ -197,6 +285,18 @@ func readSSEFactoryResponseEvent(t *testing.T, reader *bufio.Reader) responseeve
 		t.Fatalf("SSE response event is schema-invalid: %v", err)
 	}
 	return event
+}
+
+func decodeSSEStreamGap(t *testing.T, event responseevents.FactoryResponseEvent) responseevents.StreamGapPayload {
+	t.Helper()
+	if event.Kind != responseevents.KindStreamGap {
+		t.Fatalf("first response event kind = %q, want STREAM_GAP", event.Kind)
+	}
+	var payload responseevents.StreamGapPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		t.Fatalf("decode STREAM_GAP payload: %v", err)
+	}
+	return payload
 }
 
 func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing.T) {
