@@ -9,14 +9,14 @@ import (
 
 // URLMaterializationCase is one regression fixture for MaterializeContentURL.
 type URLMaterializationCase struct {
-	Name         string                         `json:"name"`
-	Setup        string                         `json:"setup,omitempty"`
-	URL          string                         `json:"url,omitempty"`
-	FileContent  string                         `json:"fileContent,omitempty"`
-	ResponseBody string                         `json:"responseBody,omitempty"`
-	ContentType  string                         `json:"contentType,omitempty"`
-	StatusCode   int                            `json:"statusCode,omitempty"`
-	MaxBytes     int64                          `json:"maxBytes,omitempty"`
+	Name         string                            `json:"name"`
+	Setup        string                            `json:"setup,omitempty"`
+	URL          string                            `json:"url,omitempty"`
+	FileContent  string                            `json:"fileContent,omitempty"`
+	ResponseBody string                            `json:"responseBody,omitempty"`
+	ContentType  string                            `json:"contentType,omitempty"`
+	StatusCode   int                               `json:"statusCode,omitempty"`
+	MaxBytes     int64                             `json:"maxBytes,omitempty"`
 	Expect       URLMaterializationCaseExpectation `json:"expect"`
 }
 

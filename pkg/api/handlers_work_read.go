@@ -21,10 +21,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workcontent "github.com/portpowered/infinite-you/pkg/work/content"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	"github.com/portpowered/infinite-you/pkg/workquery"
 	"go.uber.org/zap"
 )

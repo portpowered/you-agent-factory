@@ -62,8 +62,9 @@ primary-result behavior.
   `WorkContentPart` and request-validation error shapes used below transport
   and service boundaries; `pkg/invocations/session_owner.go` owns the shared
   `FactoryInvocationResult` returned by the canonical owner.
-- `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
-  backend-owned `interfaces.WorkContentPart` shape.
+- `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
+  and the backend-owned `interfaces.WorkContentPart` shape; pure content rules
+  remain in `pkg/work/content`.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.

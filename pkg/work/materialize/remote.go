@@ -2,6 +2,7 @@ package materialize
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,8 +24,8 @@ func materializeRemoteURL(ctx context.Context, rawURL string, parsed *url.URL, o
 
 	resp, err := client.Do(req)
 	if err != nil {
-		if ctx.Err() != nil {
-			return "", noopCleanup, inaccessibleError(rawURL, "timeout")
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", noopCleanup, inaccessibleError(rawURL, contextFailureReason(ctxErr))
 		}
 		return "", noopCleanup, inaccessibleError(rawURL, err.Error())
 	}
@@ -55,6 +56,13 @@ func materializeRemoteURL(ctx context.Context, rawURL string, parsed *url.URL, o
 	}
 
 	return path, cleanup, nil
+}
+
+func contextFailureReason(err error) string {
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	return "timeout"
 }
 
 var errSizeLimit = fmt.Errorf("size limit exceeded")

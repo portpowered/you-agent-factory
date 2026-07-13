@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/work/content"
-	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
 
 func TestMaterializeContentURL_LocalFileOK(t *testing.T) {
@@ -130,6 +130,21 @@ func TestMaterializeContentURL_RemoteTimeout(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "media url inaccessible") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestMaterializeContentURL_RemoteCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	opts := &materialize.Options{AllowPrivateURLs: true}
+	_, cleanup, err := materialize.MaterializeContentURL(ctx, "https://example.com/image.png", opts)
+	defer cleanup()
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+	if !strings.Contains(err.Error(), "media url inaccessible") || !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("error = %v, want explicit cancellation", err)
 	}
 }
 

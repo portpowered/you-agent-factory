@@ -12,9 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
 
 // ModelAPI is the model catalog and direct-invocation seam for API handlers and

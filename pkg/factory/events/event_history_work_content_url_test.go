@@ -11,7 +11,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work/content"
-	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
 
 // T9: WORK_REQUEST after submit serializes canonical url on content parts, not dispatch temps.
