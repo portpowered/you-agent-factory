@@ -180,12 +180,7 @@ func assertMockWorkersConfigExpectation(t *testing.T, cfg *mockworkers.MockWorke
 	if cfg == nil {
 		t.Fatal("loader returned nil config")
 	}
-	if want.UnmatchedDispatchPolicy != "" {
-		got := string(cfg.UnmatchedDispatchPolicy)
-		if got != want.UnmatchedDispatchPolicy {
-			t.Fatalf("unmatchedDispatchPolicy = %q, want %q", got, want.UnmatchedDispatchPolicy)
-		}
-	}
+	assertUnmatchedDispatchPolicyExpectation(t, cfg, want)
 	if len(cfg.MockWorkers) != want.MockWorkerCount {
 		t.Fatalf("mock worker count = %d, want %d", len(cfg.MockWorkers), want.MockWorkerCount)
 	}
@@ -193,35 +188,66 @@ func assertMockWorkersConfigExpectation(t *testing.T, cfg *mockworkers.MockWorke
 		if i >= len(cfg.MockWorkers) {
 			t.Fatalf("mockWorkers[%d] missing, want %#v", i, wantWorker)
 		}
-		gotWorker := cfg.MockWorkers[i]
-		if wantWorker.ID != "" && gotWorker.ID != wantWorker.ID {
-			t.Fatalf("mockWorkers[%d].id = %q, want %q", i, gotWorker.ID, wantWorker.ID)
-		}
-		if wantWorker.WorkerName != "" && gotWorker.WorkerName != wantWorker.WorkerName {
-			t.Fatalf("mockWorkers[%d].workerName = %q, want %q", i, gotWorker.WorkerName, wantWorker.WorkerName)
-		}
-		if wantWorker.WorkstationName != "" && gotWorker.WorkstationName != wantWorker.WorkstationName {
-			t.Fatalf("mockWorkers[%d].workstationName = %q, want %q", i, gotWorker.WorkstationName, wantWorker.WorkstationName)
-		}
-		if wantWorker.RunType != "" && string(gotWorker.RunType) != wantWorker.RunType {
-			t.Fatalf("mockWorkers[%d].runType = %q, want %q", i, gotWorker.RunType, wantWorker.RunType)
-		}
-		if wantWorker.ScriptCommand != "" {
-			if gotWorker.ScriptConfig == nil {
-				t.Fatalf("mockWorkers[%d].scriptConfig = nil, want command %q", i, wantWorker.ScriptCommand)
-			}
-			if gotWorker.ScriptConfig.Command != wantWorker.ScriptCommand {
-				t.Fatalf("mockWorkers[%d].scriptConfig.command = %q, want %q", i, gotWorker.ScriptConfig.Command, wantWorker.ScriptCommand)
-			}
-		}
-		if wantWorker.RejectExitCode != nil {
-			if gotWorker.RejectConfig == nil || gotWorker.RejectConfig.ExitCode == nil {
-				t.Fatalf("mockWorkers[%d].rejectConfig.exitCode = %#v, want %d", i, gotWorker.RejectConfig, *wantWorker.RejectExitCode)
-			}
-			if *gotWorker.RejectConfig.ExitCode != *wantWorker.RejectExitCode {
-				t.Fatalf("mockWorkers[%d].rejectConfig.exitCode = %d, want %d", i, *gotWorker.RejectConfig.ExitCode, *wantWorker.RejectExitCode)
-			}
-		}
+		assertMockWorkerExpectation(t, i, cfg.MockWorkers[i], wantWorker)
+	}
+}
+
+func assertUnmatchedDispatchPolicyExpectation(t *testing.T, cfg *mockworkers.MockWorkersConfig, want *mockworkers.MockWorkersConfigExpectation) {
+	t.Helper()
+
+	if want.UnmatchedDispatchPolicy == "" {
+		return
+	}
+	got := string(cfg.UnmatchedDispatchPolicy)
+	if got != want.UnmatchedDispatchPolicy {
+		t.Fatalf("unmatchedDispatchPolicy = %q, want %q", got, want.UnmatchedDispatchPolicy)
+	}
+}
+
+func assertMockWorkerExpectation(t *testing.T, index int, got mockworkers.MockWorkerConfig, want mockworkers.MockWorkerExpectation) {
+	t.Helper()
+
+	if want.ID != "" && got.ID != want.ID {
+		t.Fatalf("mockWorkers[%d].id = %q, want %q", index, got.ID, want.ID)
+	}
+	if want.WorkerName != "" && got.WorkerName != want.WorkerName {
+		t.Fatalf("mockWorkers[%d].workerName = %q, want %q", index, got.WorkerName, want.WorkerName)
+	}
+	if want.WorkstationName != "" && got.WorkstationName != want.WorkstationName {
+		t.Fatalf("mockWorkers[%d].workstationName = %q, want %q", index, got.WorkstationName, want.WorkstationName)
+	}
+	if want.RunType != "" && string(got.RunType) != want.RunType {
+		t.Fatalf("mockWorkers[%d].runType = %q, want %q", index, got.RunType, want.RunType)
+	}
+	assertMockWorkerScriptExpectation(t, index, got, want)
+	assertMockWorkerRejectExpectation(t, index, got, want)
+}
+
+func assertMockWorkerScriptExpectation(t *testing.T, index int, got mockworkers.MockWorkerConfig, want mockworkers.MockWorkerExpectation) {
+	t.Helper()
+
+	if want.ScriptCommand == "" {
+		return
+	}
+	if got.ScriptConfig == nil {
+		t.Fatalf("mockWorkers[%d].scriptConfig = nil, want command %q", index, want.ScriptCommand)
+	}
+	if got.ScriptConfig.Command != want.ScriptCommand {
+		t.Fatalf("mockWorkers[%d].scriptConfig.command = %q, want %q", index, got.ScriptConfig.Command, want.ScriptCommand)
+	}
+}
+
+func assertMockWorkerRejectExpectation(t *testing.T, index int, got mockworkers.MockWorkerConfig, want mockworkers.MockWorkerExpectation) {
+	t.Helper()
+
+	if want.RejectExitCode == nil {
+		return
+	}
+	if got.RejectConfig == nil || got.RejectConfig.ExitCode == nil {
+		t.Fatalf("mockWorkers[%d].rejectConfig.exitCode = %#v, want %d", index, got.RejectConfig, *want.RejectExitCode)
+	}
+	if *got.RejectConfig.ExitCode != *want.RejectExitCode {
+		t.Fatalf("mockWorkers[%d].rejectConfig.exitCode = %d, want %d", index, *got.RejectConfig.ExitCode, *want.RejectExitCode)
 	}
 }
 
