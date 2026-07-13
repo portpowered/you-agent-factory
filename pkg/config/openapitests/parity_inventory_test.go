@@ -29,6 +29,48 @@ func TestProjectParityInventory_RecordsFactoryOpenAPIScope(t *testing.T) {
 	}
 }
 
+func TestProjectParityInventory_CoversRepresentativeFactoryShapes(t *testing.T) {
+	t.Parallel()
+
+	requiredShapes := []string{
+		shapeOrchestrator,
+		shapeWorkstation,
+		shapeWorker,
+		shapeResource,
+		shapeGuard,
+		shapeLayout,
+	}
+	covered := make(map[string]struct{}, len(requiredShapes))
+	for _, parityCase := range ProjectParityInventory().Cases {
+		covered[parityCase.Shape] = struct{}{}
+	}
+	for _, shape := range requiredShapes {
+		if _, ok := covered[shape]; !ok {
+			t.Fatalf("missing representative parity case for shape %q", shape)
+		}
+	}
+}
+
+func TestProjectParityInventory_IndexesRepresentativeUnionAndEnumCases(t *testing.T) {
+	t.Parallel()
+
+	requiredCategories := []string{
+		categoryTaxonomyEnum,
+		categoryBoundaryEnum,
+		categoryGuardUnion,
+		categoryLayoutContract,
+	}
+	covered := make(map[string]struct{}, len(requiredCategories))
+	for _, parityCase := range ProjectParityInventory().Cases {
+		covered[parityCase.Category] = struct{}{}
+	}
+	for _, category := range requiredCategories {
+		if _, ok := covered[category]; !ok {
+			t.Fatalf("missing representative parity case for category %q", category)
+		}
+	}
+}
+
 func TestProjectParityInventory_HasStableCaseIDsAndFixtureLocators(t *testing.T) {
 	t.Parallel()
 

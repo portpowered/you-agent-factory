@@ -20,6 +20,7 @@ const (
 	categoryLayoutContract  = "layout-contract"
 	categoryRetiredBoundary = "retired-boundary"
 	categoryShapeMapping    = "shape-mapping"
+	categoryTaxonomyEnum    = "taxonomy-enum"
 
 	shapeGuard        = "guard"
 	shapeLayout       = "layout"

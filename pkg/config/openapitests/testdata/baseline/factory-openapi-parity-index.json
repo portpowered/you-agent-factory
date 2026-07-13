@@ -63,6 +63,26 @@
       "loaderOutcome": "accept"
     },
     {
+      "id": "accept-inference-worker-taxonomy",
+      "shape": "worker",
+      "category": "taxonomy-enum",
+      "sourceTest": "openapi_factory_worker_taxonomy_test.go:TestFactoryConfigFromOpenAPIJSON_AcceptsNewWorkerTaxonomyAndProjectsLegacyRuntimeTypes",
+      "fixture": "accept/inference-worker-taxonomy.json",
+      "description": "INFERENCE_WORKER taxonomy enum maps through API and config-loader boundaries",
+      "apiOutcome": "accept",
+      "loaderOutcome": "accept"
+    },
+    {
+      "id": "accept-inference-run-workstation-taxonomy",
+      "shape": "workstation",
+      "category": "taxonomy-enum",
+      "sourceTest": "openapi_factory_workstation_taxonomy_test.go:TestFactoryConfigFromOpenAPIJSON_AcceptsNewWorkstationTaxonomyAndProjectsLegacyRuntimeTypes",
+      "fixture": "accept/inference-run-workstation-taxonomy.json",
+      "description": "INFERENCE_RUN workstation taxonomy enum maps through API and config-loader boundaries",
+      "apiOutcome": "accept",
+      "loaderOutcome": "accept"
+    },
+    {
       "id": "accept-typed-model-resource",
       "shape": "resource",
       "category": "shape-mapping",
@@ -112,6 +132,22 @@
       "errorFragments": [
         "decode factory generated-schema boundary",
         "unsupported value \"MYSTERY-PROVIDER\""
+      ]
+    },
+    {
+      "id": "reject-miscased-workstation-type",
+      "shape": "workstation",
+      "category": "boundary-enum",
+      "sourceTest": "openapi_factory_boundary_enum_test.go:TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary",
+      "fixture": "reject/miscased-workstation-type.json",
+      "description": "mis-cased workstation type enum fails at generated-schema boundary",
+      "apiOutcome": "reject",
+      "loaderOutcome": "reject",
+      "expectedErrorPath": "workstations[0].type",
+      "expectedErrorCategory": "boundary-enum",
+      "errorFragments": [
+        "decode factory generated-schema boundary",
+        "unsupported value \"logical_move\""
       ]
     },
     {
