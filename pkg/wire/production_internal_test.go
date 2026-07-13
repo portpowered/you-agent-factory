@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
@@ -74,6 +76,105 @@ func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	}
 	if dashboardRenders != 1 {
 		t.Fatalf("dashboard render count = %d, want one final render", dashboardRenders)
+	}
+}
+
+func TestProductionWorkerSidecarUsesGraphSchedulerAndConfigBeforeTransport(t *testing.T) {
+	dir := t.TempDir()
+	factoryConfig := factoryfixtures.MinimalFactoryConfig()
+	factoryConfig["workstations"] = append(factoryConfig["workstations"].([]map[string]any), map[string]any{
+		"name":     "scheduled-task",
+		"behavior": "CRON",
+		"worker":   "worker-a",
+		"cron":     map[string]any{"schedule": "0 * * * *"},
+		"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
+	})
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryConfig)
+
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	transportStarted := make(chan struct{})
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
+			Port: 43176, Logger: zap.New(logCore), Clock: productionInternalClock{},
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+			APIServerStarter: func(ctx context.Context, _ apisurface.APISurface, _ int, _ *zap.Logger) error {
+				registered := observedLogs.FilterMessage("cron watcher registered").All()
+				if len(registered) != 1 || registered[0].ContextMap()["workstation"] != "scheduled-task" {
+					return fmt.Errorf("transport started before graph worker scheduler was ready: logs=%v", observedLogs.All())
+				}
+				close(transportStarted)
+				<-ctx.Done()
+				return ctx.Err()
+			},
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	workerScheduler := graph.Workers
+	if workerScheduler == nil || graph.Sidecars.Workers == nil {
+		t.Fatal("production graph omitted its worker scheduler or worker lifecycle")
+	}
+
+	application, err := initializer.NewApplication(initializer.ModeAPI, graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	if application.Graph() != graph || graph.Workers != workerScheduler {
+		t.Fatal("initializer replaced the graph or worker scheduler instance")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	runDone := make(chan error, 1)
+	go func() { runDone <- application.Run(ctx) }()
+	select {
+	case <-transportStarted:
+	case err := <-runDone:
+		t.Fatalf("Application.Run() returned before transport startup: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("graph-owned transport did not start after worker readiness")
+	}
+	cancel()
+	if err := <-runDone; err != nil {
+		t.Fatalf("Application.Run() error = %v", err)
+	}
+}
+
+func TestProductionMCPModeLeavesWorkerSidecarsInactive(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
+			Logger: zap.NewNop(), Clock: productionInternalClock{},
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	recorder := &lifecycleOrder{}
+	graph.Sidecars.Runtime = recorder.wrap("runtime", graph.Sidecars.Runtime)
+	graph.Sidecars.Workers = recorder.wrap("workers", graph.Sidecars.Workers)
+	graph.Sidecars.Dashboard = recorder.wrap("dashboard", graph.Sidecars.Dashboard)
+
+	application, err := initializer.NewApplication(initializer.ModeMCP, graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	if err := application.Run(context.Background()); err != nil {
+		t.Fatalf("Application.Run() error = %v", err)
+	}
+	if starts, stops := recorder.started(), recorder.stopped(); len(starts) != 0 || len(stops) != 0 {
+		t.Fatalf("MCP run sidecar effects = starts %v stops %v, want none", starts, stops)
 	}
 }
 
