@@ -29,13 +29,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factorysessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -2120,8 +2120,8 @@ func (l sessionPersistenceZapLogger) Info(msg string, fields map[string]string) 
 }
 
 // InvocationMetricNormalizationAttempts remains an exported compatibility
-// alias while metric-name ownership lives in pkg/invocations.
-const InvocationMetricNormalizationAttempts = invocations.InvocationMetricNormalizationAttempts
+// alias while metric-name ownership lives in pkg/factorysessions/invocation.
+const InvocationMetricNormalizationAttempts = sessioninvocation.InvocationMetricNormalizationAttempts
 
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.
@@ -2153,11 +2153,11 @@ func (fs *FactoryService) InvokeFactorySession(
 	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) sessionInvocationOwner() invocations.SessionInvoker {
+func (fs *FactoryService) sessionInvocationOwner() sessioninvocation.SessionInvoker {
 	if fs.sessionInvoker != nil {
 		return fs.sessionInvoker
 	}
-	return invocations.NewSessionOwner(invocations.SessionOwnerDependencies{
+	return sessioninvocation.NewSessionOwner(sessioninvocation.SessionOwnerDependencies{
 		FactoryConfig: fs.sessionInvocationFactoryConfig,
 		SubmitWork:    fs.submitSessionInvocationWork,
 		Observe:       fs.observeSessionInvocation,
@@ -2166,13 +2166,13 @@ func (fs *FactoryService) sessionInvocationOwner() invocations.SessionInvoker {
 	})
 }
 
-func (fs *FactoryService) sessionInvocationTelemetry() invocations.SessionInvocationTelemetry {
-	return invocations.NewSessionInvocationTelemetry(invocations.SessionInvocationTelemetryDependencies{
-		RecordMetric: func(metric invocations.SessionInvocationMetric) {
+func (fs *FactoryService) sessionInvocationTelemetry() sessioninvocation.SessionInvocationTelemetry {
+	return sessioninvocation.NewSessionInvocationTelemetry(sessioninvocation.SessionInvocationTelemetryDependencies{
+		RecordMetric: func(metric sessioninvocation.SessionInvocationMetric) {
 			fs.recordInvocationMetric(metric.Name, metric.Labels)
 		},
 		RecordLog: fs.recordSessionInvocationLog,
-		Packaged: &invocations.PackagedInvocationTelemetry{
+		Packaged: &sessioninvocation.PackagedInvocationTelemetry{
 			Active: tts.IsPackagedFactory, FactoryName: tts.PackagedFactoryName, Backend: tts.BackendRuntimeLabel(),
 			AttemptsMetric: tts.MetricPackagedFactoryAttempts, SuccessMetric: tts.MetricPackagedFactorySuccess,
 			FailureMetric: tts.MetricPackagedFactoryFailure, NotReadyMetric: tts.MetricPackagedFactoryNotReady,
@@ -2181,7 +2181,7 @@ func (fs *FactoryService) sessionInvocationTelemetry() invocations.SessionInvoca
 	})
 }
 
-func (fs *FactoryService) recordSessionInvocationLog(record invocations.SessionInvocationLogRecord) {
+func (fs *FactoryService) recordSessionInvocationLog(record sessioninvocation.SessionInvocationLogRecord) {
 	if fs == nil || fs.logger == nil {
 		return
 	}
@@ -2222,17 +2222,17 @@ func (fs *FactoryService) submitSessionInvocationWork(
 func (fs *FactoryService) observeSessionInvocation(
 	ctx context.Context,
 	sessionID string,
-	input invocations.SessionInvocationWaitInput,
-) (invocations.SessionInvocationObservation, error) {
+	input sessioninvocation.SessionInvocationWaitInput,
+) (sessioninvocation.SessionInvocationObservation, error) {
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, sessionID)
 	if err != nil {
-		return invocations.SessionInvocationObservation{}, err
+		return sessioninvocation.SessionInvocationObservation{}, err
 	}
 	worldState, err := fs.sessionInvocationWorldState(ctx, sessionID, snapshot.TickCount)
 	if err != nil {
-		return invocations.SessionInvocationObservation{}, err
+		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	return invocations.SessionInvocationObservation{
+	return sessioninvocation.SessionInvocationObservation{
 		WorldState: worldState, FactoryState: snapshot.FactoryState,
 		ActiveWork:           snapshotHasActiveWork(snapshot),
 		MissingPrimaryResult: classifyInvocationMissingPrimaryResultFromSnapshot(sessionID, snapshot, input),
@@ -2245,12 +2245,12 @@ func (serviceSessionInvocationSpecialCase) Active(cfg *interfaces.FactoryConfig)
 	return tts.IsPackagedFactory(cfg)
 }
 
-func (serviceSessionInvocationSpecialCase) TerminalFailure(worldState interfaces.FactoryWorldState, requestID string) *invocations.SessionInvocationSpecialFailure {
+func (serviceSessionInvocationSpecialCase) TerminalFailure(worldState interfaces.FactoryWorldState, requestID string) *sessioninvocation.SessionInvocationSpecialFailure {
 	_, failure := tts.ClassifyInvocationWait(worldState, requestID, false)
 	if failure == nil {
 		return nil
 	}
-	return &invocations.SessionInvocationSpecialFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass}
+	return &sessioninvocation.SessionInvocationSpecialFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass}
 }
 
 func (fs *FactoryService) sessionInvocationWorldState(
@@ -2279,7 +2279,7 @@ func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]
 func classifyInvocationMissingPrimaryResultFromSnapshot(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	input invocations.SessionInvocationWaitInput,
+	input sessioninvocation.SessionInvocationWaitInput,
 ) *workinvocation.PrimaryResultError {
 	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
 		return nil

@@ -1,4 +1,4 @@
-package invocations
+package invocation
 
 import (
 	"context"

@@ -11,7 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
@@ -131,7 +130,7 @@ type SessionAPISurface interface {
 
 // FactoryInvocationResult carries the runtime-owned outcome of one session
 // invocation request after input resolution and primary-result selection.
-type FactoryInvocationResult = invocations.FactoryInvocationResult
+type FactoryInvocationResult = interfaces.FactoryInvocationResult
 
 // InvocationResponseFromResult maps a shared invocation result onto the public
 // invocation response contract used by both API and CLI JSON surfaces.

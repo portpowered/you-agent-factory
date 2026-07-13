@@ -93,14 +93,14 @@ the standards.
   requests, validation, scheduling, subsystems, runtime support, and workstation
   config plumbing.
 - `pkg/factorysessions/` and `pkg/factorysessionexecution/` contain
-  session-level projection/read models and durable/live session execution
-  contracts.
+  session-level projection/read models, live invocation orchestration, and
+  durable/live session execution contracts.
 - `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
   types used across subsystems.
 - `pkg/work/` contains canonical Work content, materialization, query, graph,
   time-work, and pure invocation input/return-policy behavior;
-  `pkg/invocations/` remains a migration-only stateful session and inference
-  helper root.
+  `pkg/invocations/` remains a migration-only inference and permission-helper
+  root.
 - `pkg/localmodels/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
 - `pkg/petri/` contains internal Petri-net primitives.

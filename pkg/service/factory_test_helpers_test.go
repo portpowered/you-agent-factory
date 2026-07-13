@@ -24,8 +24,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factorysessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -1386,7 +1386,7 @@ func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *tes
 
 	requestID := "request-1"
 	request := factoryapi.InvocationRequest{RequestId: &requestID, Args: &map[string]any{"input": "hello"}}
-	wantResult := invocations.FactoryInvocationResult{
+	wantResult := sessioninvocation.FactoryInvocationResult{
 		RequestID: "result-request",
 		TraceID:   "trace-1",
 		Status:    factoryapi.InvocationTerminalStatusCompleted,

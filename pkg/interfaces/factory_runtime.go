@@ -3,6 +3,8 @@ package interfaces
 import (
 	"encoding/json"
 	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 // RequestValidationError reports a stable client-side validation failure.
@@ -88,6 +90,21 @@ type WorkRequestSubmitResult struct {
 	WorkTypeName string
 	Accepted     bool
 	Works        []WorkRequestSubmittedWork
+}
+
+// FactoryInvocationResult carries the transport-independent outcome of one
+// Factory Session invocation after input resolution and result selection.
+type FactoryInvocationResult struct {
+	RequestID     string
+	TraceID       string
+	Status        factoryapi.InvocationTerminalStatus
+	PrimaryResult []WorkContentPart
+	ErrorCode     string
+	Message       string
+	SessionID     string
+	WorkID        string
+	WorkName      string
+	WorkState     string
 }
 
 // Work is one public item inside a WorkRequest batch.

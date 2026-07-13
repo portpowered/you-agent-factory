@@ -93,7 +93,7 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 	{packagePath: "pkg/apisurface", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after boundary mapping and callers move to pkg/transports"},
 	{packagePath: "pkg/cli", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after CLI adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/mcp", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after MCP adapters and callers move to pkg/transports"},
-	{packagePath: "pkg/invocations", targetOwner: "pkg/factorysessions", workItem: batch007FactorySessionMove, deletionGate: "remove after Factory Session orchestration and remaining helpers move to their narrow owners"},
+	{packagePath: "pkg/invocations", targetOwner: "pkg/factorysessions", workItem: batch007FactorySessionMove, deletionGate: "remove after remaining inference and permission helpers move to their narrow owners"},
 	{packagePath: "pkg/logging", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after logging infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/replay", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after replay and artifact infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/sessionpersistence", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after cursor persistence and callers move to pkg/platform"},

@@ -1,4 +1,4 @@
-package invocations
+package invocation
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *testing.T) {
 	cfg := sessionOwnerFactoryConfig()
-	requestID := "caller-request"
+	requestID := " caller-request "
 	sourceKind := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "hello")
 	deadline := time.Now().Add(time.Minute)

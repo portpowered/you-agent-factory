@@ -7,15 +7,14 @@ primary-result behavior.
   interpolation, return-policy selection, and stable policy errors used by CLI,
   API, workers, and Factory Session orchestration. It consumes domain-owned
   values and has no generated transport or live-session dependency.
-- `pkg/invocations/` temporarily contains the canonical stateful Factory
-  Session invocation owner plus inference and permission helpers awaiting their
-  narrow-owner migrations.
-- `pkg/invocations/session_owner.go` owns live-session request normalization,
+- `pkg/invocations/` temporarily contains inference and permission helpers
+  awaiting their narrow-owner migrations.
+- `pkg/factorysessions/invocation/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
-  `pkg/invocations/session_wait.go` owns polling, timeout and cancellation,
+  `pkg/factorysessions/invocation/session_wait.go` owns polling, timeout and cancellation,
   primary-result selection, and terminal classification over narrow runtime
-  observations. `pkg/invocations/session_telemetry.go` owns invocation metric
+  observations. `pkg/factorysessions/invocation/session_telemetry.go` owns invocation metric
   names, low-cardinality labels, exactly-once emission points, safe structured
   log fields, and packaged-factory telemetry policy. Keep session configuration,
   Work submission, observation, wait/time behavior, telemetry sinks, and
@@ -66,9 +65,9 @@ primary-result behavior.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/interfaces/factory_runtime.go` owns the backend canonical
-  `WorkContentPart` and request-validation error shapes used below transport
-  and service boundaries; `pkg/invocations/session_owner.go` owns the shared
-  `FactoryInvocationResult` returned by the canonical owner.
+  `WorkContentPart`, request-validation error, and `FactoryInvocationResult`
+  shapes used below transport and service boundaries; the Factory Session owner
+  constructs that shared result.
 - `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
   and the backend-owned `interfaces.WorkContentPart` shape; pure content rules
   remain in `pkg/work/content`.
@@ -80,11 +79,11 @@ primary-result behavior.
   session config, canonical Work submission, event-derived observations,
   metric/log sinks, and packaged-factory terminal classification. Their
   `InvokeFactorySession` methods must remain transparent forwards to
-  `invocations.SessionInvoker`; model-catalog files must not own Factory
+  `pkg/factorysessions/invocation.SessionInvoker`; model-catalog files must not own Factory
   Session invocation behavior. Metric names, label policy, log shaping, and
   emission sequencing must not be reimplemented in these adapters. Submission
-  sequencing, polling, and timeout/cancellation temporarily belong to
-  `pkg/invocations`; normalization, interpolation, primary-result selection,
+  sequencing, polling, and timeout/cancellation belong to
+  `pkg/factorysessions/invocation`; normalization, interpolation, primary-result selection,
   and general terminal classification belong to `pkg/work/invocation` and are
   delegated to by the stateful owner.
 - API structured args use the direct structured-argument carrier rather than
@@ -275,7 +274,7 @@ primary-result behavior.
   plus public session, event, artifact, and result reads with fail-on-use live
   dependencies.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
-  bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
+  bytes into `pkg/work/invocation.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
   transport-specific empty-stdin errors. When `Stdin` is overridden away from
   `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
@@ -528,7 +527,7 @@ primary-result behavior.
   on that same-session refresh via `shouldResumeFromPersistedCheckpoint` in
   `ui/src/features/dashboard/lib/dashboard-session-lifecycle.ts` plus
   `useDashboardInitialReconnectCursor`.
-- `pkg/invocations/session_wait.go` owns the session invocation wait loop and
+- `pkg/factorysessions/invocation/session_wait.go` owns the session invocation wait loop and
   calls explicit packaged-factory hooks at active, completed, and terminal-failure
   boundaries. `pkg/service/runtime_sessions.go` and
   `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,

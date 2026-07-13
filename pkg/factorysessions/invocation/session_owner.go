@@ -1,4 +1,4 @@
-package invocations
+package invocation
 
 import (
 	"context"
@@ -18,19 +18,9 @@ import (
 // structured API argument carrier rather than compatibility content.
 const StructuredArgumentsInputSource workinvocation.InputSourceLabel = "signature_args"
 
-// FactoryInvocationResult carries the runtime-owned outcome of one session invocation.
-type FactoryInvocationResult struct {
-	RequestID     string
-	TraceID       string
-	Status        factoryapi.InvocationTerminalStatus
-	PrimaryResult []interfaces.WorkContentPart
-	ErrorCode     string
-	Message       string
-	SessionID     string
-	WorkID        string
-	WorkName      string
-	WorkState     string
-}
+// FactoryInvocationResult is the shared domain outcome constructed by the
+// Factory Session invocation owner.
+type FactoryInvocationResult = interfaces.FactoryInvocationResult
 
 // SessionInvoker is the canonical Factory Session invocation boundary.
 type SessionInvoker interface {
@@ -129,7 +119,7 @@ func (o *SessionOwner) InvokeFactorySession(
 		return FactoryInvocationResult{}, err
 	}
 	submitResult, err := o.deps.SubmitWork(ctx, sessionID, interfaces.SubmitRequest{
-		RequestID:           strings.TrimSpace(stringValue(request.RequestId)),
+		RequestID:           trimmedStringValue(request.RequestId),
 		WorkTypeID:          workTypeName,
 		Content:             resolved.Content,
 		InvocationArguments: workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
@@ -257,6 +247,13 @@ func firstStructuredArgumentKey(arguments []workinvocation.NamedArgumentInput) s
 		return ""
 	}
 	return strings.TrimSpace(arguments[0].Key)
+}
+
+func trimmedStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
 }
 
 func normalizeSessionInvocationError(err error) error {
