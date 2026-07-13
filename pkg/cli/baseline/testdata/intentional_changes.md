@@ -13,8 +13,7 @@ contract without an intentional ledger update.
 
 | Surface | Identifier | Rationale |
 | --- | --- | --- |
-| `you run` flag | `workflow` | Remove `you run --workflow`; workflow selection uses dedicated workflow commands. |
-| command | `you factory save` | Remove `you factory save` from the production CLI. |
+| _none_ | _none_ | No planned CLI removals. |
 
 ## Planned moves
 

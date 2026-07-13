@@ -32,6 +32,10 @@ type Policy struct {
 	resolved bool
 }
 
+// LoggerBuilder constructs the structured logger selected for verbose mode.
+// The CLI composition root owns the concrete builder and injects it here.
+type LoggerBuilder func(verbose, debug bool) (*zap.Logger, error)
+
 // Resolve returns the single terminal-output mode for one CLI invocation.
 // Quiet wins over verbose/debug. Debug implies verbose diagnostics channels.
 func Resolve(opts Options) Policy {
@@ -103,17 +107,18 @@ func (p Policy) HumanTerminalWriter(stdout io.Writer) io.Writer {
 	return stdout
 }
 
-// BuildLogger creates the zap logger for this policy. Quiet mode discards
-// terminal logger output while still allowing BuildRuntimeLogger to tee
-// structured runtime records into rolling file sinks.
-func (p Policy) BuildLogger() (*zap.Logger, error) {
+// BuildLogger creates the zap logger for this policy using the logger builder
+// supplied by the CLI composition root. Quiet mode discards terminal logger
+// output while still allowing BuildRuntimeLogger to tee structured runtime
+// records into rolling file sinks.
+func (p Policy) BuildLogger(build LoggerBuilder) (*zap.Logger, error) {
 	switch p.Mode() {
 	case ModeQuiet:
 		return zap.NewNop(), nil
 	case ModeNormal:
 		return logging.BuildTerminalMutedLogger()
 	default:
-		return logging.BuildLogger(p.VerboseEnabled(), p.DebugEnabled())
+		return build(p.VerboseEnabled(), p.DebugEnabled())
 	}
 }
 

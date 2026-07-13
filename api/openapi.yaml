@@ -7215,6 +7215,683 @@ components:
         finishedAt:
           type: string
           format: date-time
+    FactoryResponseEvent:
+      type: object
+      additionalProperties: false
+      description: Provider-neutral envelope for transient agent activity observed during one Factory Session run. Unlike canonical factory events, these records are ephemeral observation records and must not derive canonical work state after replay.
+      required:
+        - schemaVersion
+        - eventId
+        - sequence
+        - recordedAt
+        - factorySessionId
+        - runId
+        - kind
+        - phase
+        - provenance
+        - payload
+      properties:
+        schemaVersion:
+          type: string
+          description: Version of the FactoryResponseEvent envelope schema.
+          enum:
+            - agent-factory.response-event.v1
+          x-enum-descriptions:
+            - Initial unified Factory response-event schema aligned with Story 01 vocabulary.
+        eventId:
+          type: string
+          description: Stable identifier for this response event within the session stream.
+        sequence:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Monotonic session-scoped cursor for reconnect and ordering.
+        recordedAt:
+          type: string
+          format: date-time
+          description: Wall-clock timestamp when the response event was recorded.
+        factorySessionId:
+          type: string
+          description: Factory Session identity that owns this response-event stream.
+        runId:
+          type: string
+          description: Run identity within the Factory Session that produced this event.
+        kind:
+          $ref: '#/components/schemas/FactoryResponseEventKind'
+        phase:
+          $ref: '#/components/schemas/FactoryResponseEventPhase'
+        provenance:
+          $ref: '#/components/schemas/FactoryResponseEventProvenance'
+        payload:
+          $ref: '#/components/schemas/FactoryResponseEventPayload'
+        dispatchId:
+          type: string
+          description: Optional dispatch correlation identifier.
+        turnId:
+          type: string
+          description: Optional turn correlation identifier.
+        itemId:
+          type: string
+          description: Optional stable item correlation identifier.
+        parentItemId:
+          type: string
+          description: Optional parent item correlation identifier.
+        providerSessionRef:
+          type: string
+          description: Optional provider session reference for diagnostics.
+    FactoryResponseEventKind:
+      type: string
+      description: Semantic category of one FactoryResponseEvent. Response events are ephemeral observation records and must not derive canonical factory replay state.
+      x-enum-varnames:
+        - FactoryResponseEventKindSession
+        - FactoryResponseEventKindRun
+        - FactoryResponseEventKindTurn
+        - FactoryResponseEventKindMessage
+        - FactoryResponseEventKindReasoning
+        - FactoryResponseEventKindTool
+        - FactoryResponseEventKindFileChange
+        - FactoryResponseEventKindPlan
+        - FactoryResponseEventKindProgress
+        - FactoryResponseEventKindUsage
+        - FactoryResponseEventKindError
+        - FactoryResponseEventKindStreamGap
+      enum:
+        - SESSION
+        - RUN
+        - TURN
+        - MESSAGE
+        - REASONING
+        - TOOL
+        - FILE_CHANGE
+        - PLAN
+        - PROGRESS
+        - USAGE
+        - ERROR
+        - STREAM_GAP
+      x-enum-descriptions:
+        - Session-scoped lifecycle and capability metadata.
+        - Run-scoped lifecycle metadata.
+        - Turn-scoped lifecycle metadata.
+        - Assistant or user message snapshots and deltas.
+        - Reasoning summary snapshots and deltas.
+        - Tool lifecycle metadata and bounded summaries.
+        - Observed file mutation notifications.
+        - Published plan updates.
+        - Coarse progress notifications.
+        - Token or model usage accounting.
+        - Provider-neutral error notifications with optional retry metadata.
+        - Discontinuity markers in the retained response-event stream.
+    FactoryResponseEventPhase:
+      type: string
+      description: Lifecycle position of one FactoryResponseEvent within its kind. Allowed phase/kind combinations are validated before publication.
+      x-enum-varnames:
+        - FactoryResponseEventPhaseStarted
+        - FactoryResponseEventPhaseDelta
+        - FactoryResponseEventPhaseUpdated
+        - FactoryResponseEventPhaseCompleted
+        - FactoryResponseEventPhaseFailed
+        - FactoryResponseEventPhaseCanceled
+      enum:
+        - STARTED
+        - DELTA
+        - UPDATED
+        - COMPLETED
+        - FAILED
+        - CANCELED
+      x-enum-descriptions:
+        - The scoped entity or stream segment started.
+        - Incremental content arrived for a streaming kind.
+        - A notification-style payload was updated.
+        - The scoped entity or stream segment completed successfully.
+        - The scoped entity or stream segment failed.
+        - The scoped entity or stream segment was canceled.
+    FactoryResponseEventProvenance:
+      type: object
+      additionalProperties: false
+      description: Provider-neutral fidelity metadata for one response event. Exposes diagnostic identity without promoting provider-native schemas into the public vocabulary.
+      required:
+        - provider
+        - nativeEventType
+        - delivery
+        - representation
+        - fidelity
+      properties:
+        provider:
+          type: string
+          description: Provider identifier for the originating adapter session.
+        nativeEventType:
+          type: string
+          description: Provider-native event type label retained for diagnostics only.
+        nativeEventSubtype:
+          type: string
+          description: Optional provider-native event subtype label retained for diagnostics only.
+        delivery:
+          $ref: '#/components/schemas/FactoryResponseEventProvenanceDelivery'
+        representation:
+          $ref: '#/components/schemas/FactoryResponseEventProvenanceRepresentation'
+        fidelity:
+          $ref: '#/components/schemas/FactoryResponseEventProvenanceFidelity'
+    FactoryResponseEventProvenanceDelivery:
+      type: string
+      description: How the response event entered the Factory vocabulary.
+      x-enum-varnames:
+        - FactoryResponseEventProvenanceDeliveryNativeStream
+        - FactoryResponseEventProvenanceDeliveryNativeFinal
+        - FactoryResponseEventProvenanceDeliverySynthesized
+        - FactoryResponseEventProvenanceDeliveryReplay
+      enum:
+        - NATIVE_STREAM
+        - NATIVE_FINAL
+        - SYNTHESIZED
+        - REPLAY
+      x-enum-descriptions:
+        - Observed from a provider-native streaming channel.
+        - Observed from a provider-native final-only channel.
+        - Synthesized by the Factory adapter from non-streaming evidence.
+        - Replayed from retained session observation data.
+    FactoryResponseEventProvenanceRepresentation:
+      type: string
+      description: Shape fidelity model used for the public payload.
+      x-enum-varnames:
+        - FactoryResponseEventProvenanceRepresentationDelta
+        - FactoryResponseEventProvenanceRepresentationSnapshot
+        - FactoryResponseEventProvenanceRepresentationNotification
+      enum:
+        - DELTA
+        - SNAPSHOT
+        - NOTIFICATION
+      x-enum-descriptions:
+        - Incremental delta payload semantics.
+        - Full snapshot payload semantics.
+        - Notification-style update semantics.
+    FactoryResponseEventProvenanceFidelity:
+      type: string
+      description: How closely the public payload preserves provider detail.
+      x-enum-varnames:
+        - FactoryResponseEventProvenanceFidelityLossless
+        - FactoryResponseEventProvenanceFidelityNormalized
+        - FactoryResponseEventProvenanceFidelityLossy
+        - FactoryResponseEventProvenanceFidelityFinalOnly
+        - FactoryResponseEventProvenanceFidelityLifecycleOnly
+      enum:
+        - LOSSLESS
+        - NORMALIZED
+        - LOSSY
+        - FINAL_ONLY
+        - LIFECYCLE_ONLY
+      x-enum-descriptions:
+        - Public payload preserves provider-visible detail without loss.
+        - Public payload is normalized to the Factory vocabulary.
+        - Public payload intentionally omits some provider detail.
+        - Only final provider outcomes are represented publicly.
+        - Only lifecycle transitions are represented publicly.
+    FactoryResponseEventCapabilities:
+      type: object
+      additionalProperties: false
+      description: Declares which response-event features a provider session supports. Adapters publish capability flags so consumers can interpret fidelity and phase availability without depending on provider-native schemas.
+      required:
+        - nativeStreaming
+        - messageDeltas
+        - messageSnapshots
+        - reasoningSummaries
+        - toolLifecycle
+        - toolOutputDeltas
+        - fileChanges
+        - plans
+        - usage
+        - stableItemIds
+        - providerReconnect
+      properties:
+        nativeStreaming:
+          type: boolean
+          description: Provider session exposes native streaming observation.
+        messageDeltas:
+          type: boolean
+          description: Provider session can emit incremental message deltas.
+        messageSnapshots:
+          type: boolean
+          description: Provider session can emit message snapshots.
+        reasoningSummaries:
+          type: boolean
+          description: Provider session can emit reasoning summaries or deltas.
+        toolLifecycle:
+          type: boolean
+          description: Provider session can emit tool lifecycle metadata.
+        toolOutputDeltas:
+          type: boolean
+          description: Provider session can emit incremental tool output deltas.
+        fileChanges:
+          type: boolean
+          description: Provider session can emit observed file changes.
+        plans:
+          type: boolean
+          description: Provider session can emit plan updates.
+        usage:
+          type: boolean
+          description: Provider session can emit usage accounting.
+        stableItemIds:
+          type: boolean
+          description: Provider session assigns stable item identifiers across events.
+        providerReconnect:
+          type: boolean
+          description: Provider session supports reconnect after stream interruption.
+    FactoryResponseEventPayload:
+      description: Public typed payload union for FactoryResponseEvent. Variants align with envelope kind and phase semantics from the Story 01 vocabulary. MESSAGE and TOOL kinds use distinct snapshot and delta payload shapes; consumers select the variant using envelope kind and phase together with structural decoding.
+      oneOf:
+        - $ref: '#/components/schemas/FactoryResponseEventSessionPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventRunPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventTurnPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventMessagePayload'
+        - $ref: '#/components/schemas/FactoryResponseEventMessageDeltaPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventReasoningPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventToolPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventToolDeltaPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventFileChangePayload'
+        - $ref: '#/components/schemas/FactoryResponseEventPlanPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventProgressPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventUsagePayload'
+        - $ref: '#/components/schemas/FactoryResponseEventErrorPayload'
+        - $ref: '#/components/schemas/FactoryResponseEventStreamGapPayload'
+    FactoryResponseEventContentBlock:
+      description: One typed slice of assistant-visible message content. Discriminated by the content block kind field.
+      oneOf:
+        - $ref: '#/components/schemas/FactoryResponseEventTextContentBlock'
+        - $ref: '#/components/schemas/FactoryResponseEventReasoningSummaryContentBlock'
+        - $ref: '#/components/schemas/FactoryResponseEventToolRequestContentBlock'
+        - $ref: '#/components/schemas/FactoryResponseEventImageRefContentBlock'
+        - $ref: '#/components/schemas/FactoryResponseEventResourceRefContentBlock'
+        - $ref: '#/components/schemas/FactoryResponseEventStructuredOutputContentBlock'
+      discriminator:
+        propertyName: kind
+        mapping:
+          TEXT: '#/components/schemas/FactoryResponseEventTextContentBlock'
+          REASONING_SUMMARY: '#/components/schemas/FactoryResponseEventReasoningSummaryContentBlock'
+          TOOL_REQUEST: '#/components/schemas/FactoryResponseEventToolRequestContentBlock'
+          IMAGE_REF: '#/components/schemas/FactoryResponseEventImageRefContentBlock'
+          RESOURCE_REF: '#/components/schemas/FactoryResponseEventResourceRefContentBlock'
+          STRUCTURED_OUTPUT: '#/components/schemas/FactoryResponseEventStructuredOutputContentBlock'
+    FactoryResponseEventContentBlockKind:
+      type: string
+      description: Identifies one provider-neutral message content block kind.
+      x-enum-varnames:
+        - FactoryResponseEventContentBlockKindText
+        - FactoryResponseEventContentBlockKindReasoningSummary
+        - FactoryResponseEventContentBlockKindToolRequest
+        - FactoryResponseEventContentBlockKindImageRef
+        - FactoryResponseEventContentBlockKindResourceRef
+        - FactoryResponseEventContentBlockKindStructuredOutput
+      enum:
+        - TEXT
+        - REASONING_SUMMARY
+        - TOOL_REQUEST
+        - IMAGE_REF
+        - RESOURCE_REF
+        - STRUCTURED_OUTPUT
+      x-enum-descriptions:
+        - Inline assistant or user-visible text content.
+        - Reasoning summary text exposed to consumers.
+        - Tool invocation request with bounded argument summary.
+        - Reference to an image artifact or URL.
+        - Reference to a factory resource or artifact.
+        - Structured JSON output block.
+    FactoryResponseEventTextContentBlock:
+      type: object
+      additionalProperties: false
+      description: Inline text content block.
+      required:
+        - kind
+        - text
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FactoryResponseEventContentBlockKind'
+          enum:
+            - TEXT
+        text:
+          type: string
+          description: Inline text content.
+    FactoryResponseEventReasoningSummaryContentBlock:
+      type: object
+      additionalProperties: false
+      description: Reasoning summary text content block.
+      required:
+        - kind
+        - text
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FactoryResponseEventContentBlockKind'
+          enum:
+            - REASONING_SUMMARY
+        text:
+          type: string
+          description: Reasoning summary text.
+    FactoryResponseEventToolRequestContentBlock:
+      type: object
+      additionalProperties: false
+      description: Tool invocation request content block with bounded argument summary.
+      required:
+        - kind
+        - toolCallId
+        - toolName
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FactoryResponseEventContentBlockKind'
+          enum:
+            - TOOL_REQUEST
+        toolCallId:
+          type: string
+          description: Stable tool call identifier within the message.
+        toolName:
+          type: string
+          description: Declared tool name for the invocation request.
+        argumentsSummary:
+          type: object
+          description: Bounded summary of tool arguments. Not a raw provider protocol payload.
+          additionalProperties: true
+    FactoryResponseEventImageRefContentBlock:
+      type: object
+      additionalProperties: false
+      description: Image reference content block.
+      required:
+        - kind
+        - imageRef
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FactoryResponseEventContentBlockKind'
+          enum:
+            - IMAGE_REF
+        imageRef:
+          type: string
+          description: Reference to an image artifact or URL.
+    FactoryResponseEventResourceRefContentBlock:
+      type: object
+      additionalProperties: false
+      description: Factory resource reference content block.
+      required:
+        - kind
+        - resourceRef
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FactoryResponseEventContentBlockKind'
+          enum:
+            - RESOURCE_REF
+        resourceRef:
+          type: string
+          description: Reference to a factory resource or artifact.
+    FactoryResponseEventStructuredOutputContentBlock:
+      type: object
+      additionalProperties: false
+      description: Structured JSON output content block.
+      required:
+        - kind
+        - structuredOutput
+      properties:
+        kind:
+          allOf:
+            - $ref: '#/components/schemas/FactoryResponseEventContentBlockKind'
+          enum:
+            - STRUCTURED_OUTPUT
+        structuredOutput:
+          type: object
+          description: Structured JSON output value.
+          additionalProperties: true
+    FactoryResponseEventSessionPayload:
+      type: object
+      additionalProperties: false
+      description: Session-scoped lifecycle and capability metadata payload.
+      properties:
+        status:
+          type: string
+          description: Session lifecycle status when applicable.
+        capabilities:
+          $ref: '#/components/schemas/FactoryResponseEventCapabilities'
+    FactoryResponseEventRunPayload:
+      type: object
+      additionalProperties: false
+      description: Run-scoped lifecycle metadata payload.
+      properties:
+        status:
+          type: string
+          description: Run lifecycle status when applicable.
+    FactoryResponseEventTurnPayload:
+      type: object
+      additionalProperties: false
+      description: Turn-scoped lifecycle metadata payload.
+      properties:
+        turnIndex:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Zero-based turn index within the run when applicable.
+        status:
+          type: string
+          description: Turn lifecycle status when applicable.
+    FactoryResponseEventMessagePayload:
+      type: object
+      additionalProperties: false
+      description: Message snapshot payload with typed content blocks.
+      required:
+        - role
+        - contentBlocks
+      properties:
+        role:
+          type: string
+          description: Message role such as assistant or user.
+        contentBlocks:
+          type: array
+          minItems: 1
+          description: Ordered typed content blocks for the message snapshot.
+          items:
+            $ref: '#/components/schemas/FactoryResponseEventContentBlock'
+    FactoryResponseEventMessageDeltaPayload:
+      type: object
+      additionalProperties: false
+      description: Incremental message content delta for one content block.
+      required:
+        - contentBlockIndex
+        - contentBlockKind
+      properties:
+        contentBlockIndex:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Zero-based index of the content block receiving the delta.
+        contentBlockKind:
+          $ref: '#/components/schemas/FactoryResponseEventContentBlockKind'
+        textDelta:
+          type: string
+          description: Incremental text appended to the targeted content block.
+    FactoryResponseEventReasoningPayload:
+      type: object
+      additionalProperties: false
+      description: Reasoning summary snapshot or delta payload.
+      properties:
+        summary:
+          type: string
+          description: Full reasoning summary text when emitting a snapshot.
+        summaryDelta:
+          type: string
+          description: Incremental reasoning summary text when emitting a delta.
+    FactoryResponseEventToolPayload:
+      type: object
+      additionalProperties: false
+      description: Tool lifecycle metadata with bounded argument and result summaries.
+      required:
+        - toolCallId
+        - toolName
+      properties:
+        toolCallId:
+          type: string
+          description: Stable tool call identifier within the run.
+        toolName:
+          type: string
+          description: Declared tool name for the invocation.
+        status:
+          type: string
+          description: Tool lifecycle status when applicable.
+        argumentsSummary:
+          type: object
+          description: Bounded summary of tool arguments. Not a raw provider protocol payload.
+          additionalProperties: true
+        resultSummary:
+          type: object
+          description: Bounded summary of tool results. Not a raw provider protocol payload.
+          additionalProperties: true
+    FactoryResponseEventToolDeltaPayload:
+      type: object
+      additionalProperties: false
+      description: Incremental tool output delta payload.
+      required:
+        - toolCallId
+        - outputDelta
+      properties:
+        toolCallId:
+          type: string
+          description: Stable tool call identifier receiving output.
+        outputDelta:
+          type: string
+          description: Incremental tool output text.
+    FactoryResponseEventFileChangePayload:
+      type: object
+      additionalProperties: false
+      description: Observed file mutation payload.
+      required:
+        - path
+        - operation
+      properties:
+        path:
+          type: string
+          description: Observed file path relative to the workspace or artifact root.
+        operation:
+          type: string
+          description: Observed file operation such as create, update, or delete.
+        summary:
+          type: string
+          description: Optional human-readable summary of the mutation.
+    FactoryResponseEventPlanPayload:
+      type: object
+      additionalProperties: false
+      description: Published plan update payload.
+      properties:
+        steps:
+          type: array
+          description: Ordered plan steps when emitting a plan snapshot.
+          items:
+            $ref: '#/components/schemas/FactoryResponseEventPlanStep'
+        summary:
+          type: string
+          description: Optional plan summary text.
+    FactoryResponseEventPlanStep:
+      type: object
+      additionalProperties: false
+      description: One step in a published plan snapshot.
+      required:
+        - id
+        - description
+      properties:
+        id:
+          type: string
+          description: Stable plan step identifier.
+        description:
+          type: string
+          description: Human-readable step description.
+        status:
+          type: string
+          description: Plan step status when applicable.
+    FactoryResponseEventProgressPayload:
+      type: object
+      additionalProperties: false
+      description: Coarse progress notification payload.
+      required:
+        - label
+      properties:
+        label:
+          type: string
+          description: Short progress label for UI or CLI consumers.
+        message:
+          type: string
+          description: Optional longer progress message.
+        percentComplete:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: Optional completion percentage when known.
+    FactoryResponseEventUsagePayload:
+      type: object
+      additionalProperties: false
+      description: Token or model usage accounting payload.
+      properties:
+        inputTokens:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Reported input token count when available.
+        outputTokens:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Reported output token count when available.
+        totalTokens:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Reported total token count when available.
+        model:
+          type: string
+          description: Model identifier associated with the usage report.
+    FactoryResponseEventErrorPayload:
+      type: object
+      additionalProperties: false
+      description: Provider-neutral error payload with optional retry metadata.
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Stable provider-neutral error code.
+        message:
+          type: string
+          description: Human-readable error message.
+        retryable:
+          type: boolean
+          description: Whether the error may be retried.
+        retryAfterSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Suggested retry delay in seconds when retryable.
+        retryAttempt:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Retry attempt count when applicable.
+    FactoryResponseEventStreamGapPayload:
+      type: object
+      additionalProperties: false
+      description: Discontinuity marker in the retained response-event stream.
+      required:
+        - fromSequence
+        - toSequence
+      properties:
+        fromSequence:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Last retained sequence before the gap.
+        toSequence:
+          type: integer
+          format: int64
+          minimum: 0
+          description: First available sequence after the gap.
+        reason:
+          type: string
+          description: Optional reason for the stream gap such as retention_window.
     FactorySaveMode:
       type: string
       description: Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.

@@ -1,0 +1,11 @@
+{
+  "mockWorkers": [
+    {
+      "id": "script-minimal",
+      "runType": "script",
+      "scriptConfig": {
+        "command": "echo"
+      }
+    }
+  ]
+}

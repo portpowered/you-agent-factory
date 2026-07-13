@@ -19,6 +19,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+// commandHelperSpawnTimeoutBudget allows slow CI hosts (especially Windows) to
+// start the helper, spawn the child, and write the pid file before the test
+// context deadline fires. spawn-child sleeps 10s after spawning.
+const commandHelperSpawnTimeoutBudget = 3 * time.Second
+
 func canonicalWorkerTestPath(value string) string {
 	if value == "" {
 		return ""
@@ -224,7 +229,7 @@ func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
 
 func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), commandHelperSpawnTimeoutBudget)
 	defer cancel()
 
 	result, err := ExecCommandRunner{}.Run(ctx, CommandRequest{
@@ -249,7 +254,7 @@ func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testi
 		t.Fatalf("ExitCode = %d, want zero value for timeout system error", result.ExitCode)
 	}
 
-	childPID := readCommandHelperPID(t, pidFile)
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
@@ -392,7 +397,7 @@ func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 		runDone <- err
 	}()
 
-	childPID := waitForCommandHelperPID(t, pidFile, 3*time.Second)
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})

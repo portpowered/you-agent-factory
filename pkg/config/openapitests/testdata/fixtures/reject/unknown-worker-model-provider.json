@@ -1,0 +1,12 @@
+{
+  "name": "model-provider-roundtrip-factory",
+  "workTypes": [{"name": "story", "states": [{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}]}],
+  "workers": [{"name": "executor", "type": "MODEL_WORKER", "modelProvider": "MYSTERY-PROVIDER"}],
+  "workstations": [{
+    "name": "execute-story",
+    "worker": "executor",
+    "type": "MODEL_WORKSTATION",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}]
+  }]
+}

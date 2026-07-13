@@ -9,6 +9,7 @@ import (
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/spf13/cobra"
@@ -49,6 +50,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
 	err = runFactory(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy)
 	if err != nil {
+		err = factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, resolvedConfig.Dir)
 		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
 		if !runcli.WriteInvocationError(errorWriter, err, globals.json) {
 			if errorWriter != nil {
@@ -80,6 +82,10 @@ func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, cfg *ru
 		return nil, *cfg, err
 	}
 	cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
+	if cmd.Flags().Changed("skip-permissions") {
+		override := true
+		cfg.InvocationSkipPermissionsOverride = &override
+	}
 	promptArgs := args
 	if cfg.MockWorkersConfigPath != defaultMockWorkersConfigPathSentinel {
 		return promptArgs, *cfg, nil
@@ -113,7 +119,6 @@ func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig) error {
 
 func registerRunCommandFlags(cmd *cobra.Command, cfg *runcli.RunConfig, invocationOutputMode *string) {
 	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.Workflow, "workflow", "", "workflow ID to run (default: all)")
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
@@ -136,6 +141,8 @@ func registerRunCommandFlags(cmd *cobra.Command, cfg *runcli.RunConfig, invocati
 	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
 	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
 	cmd.Flags().StringVar(invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream for live internal session progress on supported one-shot factory runs")
+	var skipPermissions bool
+	cmd.Flags().BoolVar(&skipPermissions, "skip-permissions", false, "request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration")
 }
 
 func runCommandLongHelp() string {
@@ -150,14 +157,16 @@ func runCommandLongHelp() string {
 		"Use --continuously to keep the factory alive while idle until you cancel it. " +
 		"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 		"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
+		"Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. " +
 		"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/you-agent-factories. " +
 		"Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 		"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
+		"Supported run factory selectors are --dir, --named, and --factory; dynamic workflow source selection stays under " + cliBinaryName + " workflow. " +
 		"Selected factories can define custom invocation arguments; run " + cliBinaryName + " run --named <factory> --help or " + cliBinaryName + " run --factory <factory.json> --help to inspect signature-backed usage while keeping existing run-level flags available. " +
 		"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
 		"Packaged @you/fusion, @you/goal, and @you/tts invocation details live in " + cliBinaryName + " docs packaged-fusion, " + cliBinaryName + " docs packaged-goal, and " + cliBinaryName + " docs packaged-tts. " +
 		"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
-		"Use --output response-stream on supported one-shot factory invocations to render live internal session response-stream progress while the CLI owns the runtime; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
+		"Supported one-shot factory invocations use primary-result-only stdout by default; use --output response-stream to render live internal session response-stream progress while the CLI owns the runtime; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
 		"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
 		"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
 		"Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures."
@@ -174,7 +183,9 @@ func runCommandExamples() string {
 		"  " + cliBinaryName + " run --named @you/tts\n\n" +
 		"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
 		"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"\n\n" +
-		"  # Render live internal response-stream progress for a named goal invocation.\n" +
+		"  # Pipe invocation input via stdin (default primary-result stdout).\n" +
+		"  echo \"Ship the login bugfix\" | " + cliBinaryName + " run --named @you/goal\n\n" +
+		"  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n" +
 		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
 }
 

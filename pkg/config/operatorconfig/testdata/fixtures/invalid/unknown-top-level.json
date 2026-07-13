@@ -1,0 +1,6 @@
+{
+  "defaults": {
+    "workerModelProvider": "codex"
+  },
+  "unexpectedTopLevel": true
+}

@@ -1,0 +1,166 @@
+{
+  "formatVersion": "system-config-input/v1",
+  "unknownFieldPolicy": "loadBackendScopeID unmarshals only backendScopeID and ignores other top-level keys on read; persistBackendScopeID rewrites through a raw-message map that preserves unrelated sibling keys",
+  "siblingPreservation": "persistBackendScopeID preserves defaults, workerPresets, and unknown top-level sibling keys already present in the shared config file",
+  "cases": [
+    {
+      "id": "valid-missing-file",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "accept",
+      "description": "missing config file generates local-\u003cuuid\u003e and persists it before returning",
+      "expectedScope": {
+        "outcome": "generated",
+        "requireLocalUUID": true
+      },
+      "persistedFileExpectation": {
+        "backendScopeIDMatchesResolved": true
+      }
+    },
+    {
+      "id": "valid-missing-scope",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "accept",
+      "fixture": "valid/missing-scope.json",
+      "description": "empty config object without backendScopeID generates and persists local-\u003cuuid\u003e",
+      "expectedScope": {
+        "outcome": "generated",
+        "requireLocalUUID": true
+      },
+      "persistedFileExpectation": {
+        "backendScopeIDMatchesResolved": true
+      }
+    },
+    {
+      "id": "valid-empty-scope-field",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "accept",
+      "fixture": "valid/empty-scope-field.json",
+      "description": "whitespace-only backendScopeID value is treated as missing and regenerated",
+      "expectedScope": {
+        "outcome": "generated",
+        "requireLocalUUID": true
+      },
+      "persistedFileExpectation": {
+        "backendScopeIDMatchesResolved": true
+      }
+    },
+    {
+      "id": "valid-whitespace-config",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "accept",
+      "fixture": "valid/whitespace-only.json",
+      "description": "whitespace-only config file content is treated as missing scope and regenerated",
+      "expectedScope": {
+        "outcome": "generated",
+        "requireLocalUUID": true
+      },
+      "persistedFileExpectation": {
+        "backendScopeIDMatchesResolved": true
+      }
+    },
+    {
+      "id": "valid-reuse-persisted-scope",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "accept",
+      "fixture": "valid/existing-scope.json",
+      "description": "existing local backendScopeID is reused without rewrite",
+      "expectedScope": {
+        "backendScopeID": "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        "outcome": "reused"
+      }
+    },
+    {
+      "id": "valid-preserves-defaults-siblings",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "accept",
+      "fixture": "valid/defaults-sibling.json",
+      "description": "generating backendScopeID preserves unrelated defaults sibling keys on persist",
+      "expectedScope": {
+        "outcome": "generated",
+        "requireLocalUUID": true
+      },
+      "persistedFileExpectation": {
+        "backendScopeIDMatchesResolved": true,
+        "preservesDefaults": true
+      }
+    },
+    {
+      "id": "valid-tolerates-unknown-sibling",
+      "category": "tolerant-sibling",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "accept",
+      "fixture": "valid/unknown-sibling.json",
+      "description": "tolerant load ignores unknown top-level siblings on read and preserves them on persist",
+      "expectedScope": {
+        "outcome": "generated",
+        "requireLocalUUID": true
+      },
+      "persistedFileExpectation": {
+        "backendScopeIDMatchesResolved": true,
+        "preservesDefaults": true,
+        "preservesSiblingKeys": [
+          "unknownTopLevel"
+        ]
+      }
+    },
+    {
+      "id": "invalid-empty-config-path",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "reject",
+      "description": "empty config path is rejected before file access",
+      "errorFragments": [
+        "system config path is required"
+      ]
+    },
+    {
+      "id": "invalid-malformed-json",
+      "category": "ensure-scope",
+      "entrypoint": "EnsureLocalBackendScope",
+      "outcome": "reject",
+      "fixture": "invalid/malformed-json.json",
+      "description": "malformed JSON fails parse during load",
+      "errorFragments": [
+        "parse system config"
+      ]
+    },
+    {
+      "id": "invalid-persist-empty-scope",
+      "category": "persist-scope",
+      "entrypoint": "persistBackendScopeID",
+      "outcome": "reject",
+      "description": "persistBackendScopeID rejects empty backend scope IDs",
+      "errorFragments": [
+        "backend scope ID is required"
+      ]
+    },
+    {
+      "id": "invalid-persist-non-local-scope",
+      "category": "persist-scope",
+      "entrypoint": "persistBackendScopeID",
+      "outcome": "reject",
+      "description": "persistBackendScopeID rejects non-local backend scope IDs",
+      "persistScopeID": "not-a-local-scope",
+      "errorFragments": [
+        "not a valid local backend scope"
+      ]
+    },
+    {
+      "id": "invalid-persist-provider-scope",
+      "category": "persist-scope",
+      "entrypoint": "persistBackendScopeID",
+      "outcome": "reject",
+      "description": "provider-derived scope IDs cannot be persisted as local backend scopes",
+      "persistScopeID": "provider-codex-account-workspace",
+      "errorFragments": [
+        "not a valid local backend scope"
+      ]
+    }
+  ]
+}

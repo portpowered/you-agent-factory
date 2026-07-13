@@ -38,6 +38,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -263,6 +264,10 @@ type Config struct {
 	// MockWorkersConfig is the normalized mock-worker run configuration loaded
 	// by the CLI when --with-mock-workers is enabled.
 	MockWorkersConfig *factoryconfig.MockWorkersConfig
+	// InvocationSkipPermissionsOverride, when non-nil, requests an
+	// invocation-scoped skip-permissions override for agent workers in this
+	// run. It does not mutate persisted factory worker configuration.
+	InvocationSkipPermissionsOverride *bool
 	// RecordFlushInterval controls how often dirty record-mode artifacts are
 	// flushed during execution. Empty uses replay.DefaultRecordFlushInterval.
 	RecordFlushInterval time.Duration
@@ -337,6 +342,10 @@ type Config struct {
 	// supported LOCAL model workers. Package tests use this to exercise the
 	// load/invoke/reuse path without a live embedded backend.
 	LocalModelRuntimeOverride localModelRuntime
+	// ModelHostOverride replaces the default catalog model host wired into
+	// runtime bundles. Tests use this to inject supervised hosts with fake
+	// process launchers for hermetic local-model bootstrap invoke coverage.
+	ModelHostOverride modelhost.Host
 	// FactorySave, when non-nil, replaces the default factorysave.Service
 	// collaborator. Tests use this to assert SaveFactoryForSession delegates
 	// without running the full save orchestration pipeline.

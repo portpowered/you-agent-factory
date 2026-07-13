@@ -1,0 +1,26 @@
+{
+  "name": "tts-factory",
+  "workTypes": [{"name": "story", "states": [{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}]}],
+  "workers": [{
+    "name": "tts-worker",
+    "type": "MODEL_WORKER",
+    "operations": [{
+      "name": "TTS",
+      "inputs": [{"name": "text", "contentTypes": ["TEXT"], "required": true}],
+      "outputs": [{"name": "audio", "contentTypes": ["AUDIO"]}]
+    }]
+  }],
+  "workstations": [{
+    "name": "speak-story",
+    "worker": "tts-worker",
+    "type": "MODEL_INVOKE",
+    "operation": "TTS",
+    "operationBindings": [{
+      "slot": "text",
+      "selector": {"slot": "text", "type": "TEXT"},
+      "defaultContent": [{"type": "TEXT", "slot": "text", "text": "fallback"}]
+    }],
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}]
+  }]
+}

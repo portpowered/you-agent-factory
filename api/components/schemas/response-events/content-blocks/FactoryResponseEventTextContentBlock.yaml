@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+description: Inline text content block.
+required:
+  - kind
+  - text
+properties:
+  kind:
+    allOf:
+      - $ref: ../FactoryResponseEventContentBlockKind.yaml
+    enum:
+      - TEXT
+  text:
+    type: string
+    description: Inline text content.

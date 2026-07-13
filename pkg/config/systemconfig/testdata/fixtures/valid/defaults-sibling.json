@@ -1,0 +1,6 @@
+{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  }
+}

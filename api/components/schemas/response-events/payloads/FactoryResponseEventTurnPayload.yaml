@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+description: Turn-scoped lifecycle metadata payload.
+properties:
+  turnIndex:
+    type: integer
+    format: int32
+    minimum: 0
+    description: Zero-based turn index within the run when applicable.
+  status:
+    type: string
+    description: Turn lifecycle status when applicable.

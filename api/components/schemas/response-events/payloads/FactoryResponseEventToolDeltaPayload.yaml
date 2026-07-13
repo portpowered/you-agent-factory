@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+description: Incremental tool output delta payload.
+required:
+  - toolCallId
+  - outputDelta
+properties:
+  toolCallId:
+    type: string
+    description: Stable tool call identifier receiving output.
+  outputDelta:
+    type: string
+    description: Incremental tool output text.

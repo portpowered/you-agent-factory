@@ -18,21 +18,116 @@ import (
 )
 
 var removedFactoryConfigCommandPaths = []string{
-	"you config",
 	"you config flatten",
 	"you config expand",
 	"you factory validate",
 }
 
+var removedFactorySaveCommandPaths = []string{
+	"you factory save",
+}
+
+func TestFactorySaveCommand_NotRegistered(t *testing.T) {
+	root := NewRootCommand()
+
+	factoryCmd, _, err := root.Find([]string{"factory"})
+	if err != nil {
+		t.Fatalf("find factory: %v", err)
+	}
+	for _, child := range factoryCmd.Commands() {
+		if child.Name() == "save" {
+			t.Fatalf("factory must not register save as a direct child")
+		}
+	}
+}
+
+func TestFactorySaveCommand_DoesNotInvokeOwningPersistence(t *testing.T) {
+	originalCreate := createFactoryFromFile
+	originalReplace := replaceFactoryCurrent
+	defer func() {
+		createFactoryFromFile = originalCreate
+		replaceFactoryCurrent = originalReplace
+	}()
+
+	createCalled := false
+	replaceCalled := false
+	createFactoryFromFile = func(factorycli.CreateFromFileConfig) error {
+		createCalled = true
+		return nil
+	}
+	replaceFactoryCurrent = func(factorycli.ReplaceCurrentConfig) error {
+		replaceCalled = true
+		return nil
+	}
+
+	cases := [][]string{
+		{"factory", "save", "staging", "--from", "./factory.json"},
+		{"factory", "save"},
+		{"factory", "save", "staging"},
+		{"factory", "nosuch"},
+	}
+	for _, args := range cases {
+		root := NewRootCommand()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		err := root.Execute()
+		if err == nil {
+			t.Fatalf("expected removed/unknown factory subcommand %v to fail", args)
+		}
+		if !strings.Contains(err.Error(), "unknown command") {
+			t.Fatalf("execute %v: got %v, want unknown-command error", args, err)
+		}
+	}
+	if createCalled {
+		t.Fatal("removed factory save must not invoke create persistence")
+	}
+	if replaceCalled {
+		t.Fatal("removed factory save must not invoke replace-current persistence")
+	}
+}
+
+func TestFactorySaveCommand_NoHiddenOrDeprecatedWrappers(t *testing.T) {
+	root := NewRootCommand()
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("walk command tree: %v", err)
+	}
+
+	removed := make(map[string]struct{}, len(removedFactorySaveCommandPaths))
+	for _, path := range removedFactorySaveCommandPaths {
+		removed[path] = struct{}{}
+	}
+
+	for _, record := range inventory.Commands {
+		if _, stillRegistered := removed[record.Path]; stillRegistered {
+			t.Fatalf("removed path %q is still registered", record.Path)
+		}
+		if record.Visibility == "hidden" || record.Lifecycle == "deprecated" {
+			for path := range removed {
+				if record.Path == path {
+					t.Fatalf("%s command %q reintroduces removed path", record.Visibility, record.Path)
+				}
+			}
+		}
+	}
+}
+
 func TestFactoryConfigCommand_OldPathsNotRegistered(t *testing.T) {
 	root := NewRootCommand()
-	for _, path := range [][]string{
-		{"config"},
-		{"config", "flatten"},
-		{"config", "expand"},
-	} {
-		if _, _, err := root.Find(path); err == nil {
-			t.Fatalf("find %v: expected lookup failure for removed path", path)
+	if _, _, err := root.Find([]string{"config", "init"}); err != nil {
+		t.Fatalf("find config init: %v", err)
+	}
+
+	inventory, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("walk command tree: %v", err)
+	}
+	for _, path := range []string{"you config flatten", "you config expand"} {
+		for _, record := range inventory.Commands {
+			if record.Path == path {
+				t.Fatalf("removed path %q is still registered", path)
+			}
 		}
 	}
 
@@ -52,7 +147,6 @@ func TestFactoryConfigCommand_OldPathsRejectAtRuntime(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "top-level config", args: []string{"config", "--help"}},
 		{name: "config flatten", args: []string{"config", "flatten", "./factory"}},
 		{name: "config expand", args: []string{"config", "expand", "./factory.json"}},
 	}
@@ -86,14 +180,16 @@ func TestFactoryConfigCommand_DirectFactoryValidateDoesNotRun(t *testing.T) {
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "validate", "./factory.json"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory validate: %v", err)
+	if err := root.Execute(); err == nil {
+		t.Fatal("expected removed factory validate to fail as unknown command")
+	} else if !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("factory validate error = %v, want unknown-command failure", err)
 	}
 	if called {
 		t.Fatal("direct you factory validate must not invoke factory validation")
 	}
-	if !strings.Contains(out.String(), "you factory config validate") {
-		t.Fatalf("factory validate should fall back to factory help, got:\n%s", out.String())
+	if out.Len() != 0 {
+		t.Fatalf("factory validate should not write stdout, got:\n%s", out.String())
 	}
 }
 
@@ -310,8 +406,9 @@ func TestFactoryCommand_RegistersSubcommands(t *testing.T) {
 		{"factory", "config", "validate"},
 		{"factory", "config", "flatten"},
 		{"factory", "config", "expand"},
-		{"factory", "save"},
+		{"factory", "create"},
 		{"factory", "update"},
+		{"factory", "replace-current"},
 		{"factory", "delete"},
 	} {
 		if _, _, err := root.Find(path); err != nil {
@@ -336,17 +433,18 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"query",
 		"list",
 		"config",
-		"save",
+		"create",
 		"update",
+		"replace-current",
 		"delete",
 		"global --server",
 		"you factory query",
 		"you factory config validate",
 		"you factory list",
-		"you factory save staging --from ./factory.json",
+		"you factory create staging --from ./factory.json",
 		"you factory update staging --from ./factory.json",
 		"you factory delete staging",
-		"you factory save",
+		"you factory replace-current",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory help missing %q:\n%s", want, help)
@@ -357,6 +455,9 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	}
 	if strings.Contains(help, "you factory validate") {
 		t.Fatalf("factory help must not advertise direct you factory validate:\n%s", help)
+	}
+	if strings.Contains(help, "you factory save") {
+		t.Fatalf("factory help must not advertise removed you factory save:\n%s", help)
 	}
 }
 

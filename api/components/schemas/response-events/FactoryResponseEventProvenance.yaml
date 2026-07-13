@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+description: >-
+  Provider-neutral fidelity metadata for one response event. Exposes diagnostic
+  identity without promoting provider-native schemas into the public vocabulary.
+required:
+  - provider
+  - nativeEventType
+  - delivery
+  - representation
+  - fidelity
+properties:
+  provider:
+    type: string
+    description: Provider identifier for the originating adapter session.
+  nativeEventType:
+    type: string
+    description: Provider-native event type label retained for diagnostics only.
+  nativeEventSubtype:
+    type: string
+    description: Optional provider-native event subtype label retained for diagnostics only.
+  delivery:
+    $ref: ./FactoryResponseEventProvenanceDelivery.yaml
+  representation:
+    $ref: ./FactoryResponseEventProvenanceRepresentation.yaml
+  fidelity:
+    $ref: ./FactoryResponseEventProvenanceFidelity.yaml

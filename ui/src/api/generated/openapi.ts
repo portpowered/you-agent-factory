@@ -3547,6 +3547,364 @@ export interface components {
       /** Format: date-time */
       finishedAt?: string;
     };
+    /** @description Provider-neutral envelope for transient agent activity observed during one Factory Session run. Unlike canonical factory events, these records are ephemeral observation records and must not derive canonical work state after replay. */
+    FactoryResponseEvent: {
+      /**
+       * @description Version of the FactoryResponseEvent envelope schema.
+       * @enum {string}
+       */
+      schemaVersion: FactoryResponseEventSchemaVersion;
+      /** @description Stable identifier for this response event within the session stream. */
+      eventId: string;
+      /**
+       * Format: int64
+       * @description Monotonic session-scoped cursor for reconnect and ordering.
+       */
+      sequence: number;
+      /**
+       * Format: date-time
+       * @description Wall-clock timestamp when the response event was recorded.
+       */
+      recordedAt: string;
+      /** @description Factory Session identity that owns this response-event stream. */
+      factorySessionId: string;
+      /** @description Run identity within the Factory Session that produced this event. */
+      runId: string;
+      kind: components["schemas"]["FactoryResponseEventKind"];
+      phase: components["schemas"]["FactoryResponseEventPhase"];
+      provenance: components["schemas"]["FactoryResponseEventProvenance"];
+      payload: components["schemas"]["FactoryResponseEventPayload"];
+      /** @description Optional dispatch correlation identifier. */
+      dispatchId?: string;
+      /** @description Optional turn correlation identifier. */
+      turnId?: string;
+      /** @description Optional stable item correlation identifier. */
+      itemId?: string;
+      /** @description Optional parent item correlation identifier. */
+      parentItemId?: string;
+      /** @description Optional provider session reference for diagnostics. */
+      providerSessionRef?: string;
+    };
+    /**
+     * @description Semantic category of one FactoryResponseEvent. Response events are ephemeral observation records and must not derive canonical factory replay state.
+     * @enum {string}
+     */
+    FactoryResponseEventKind: FactoryResponseEventKind;
+    /**
+     * @description Lifecycle position of one FactoryResponseEvent within its kind. Allowed phase/kind combinations are validated before publication.
+     * @enum {string}
+     */
+    FactoryResponseEventPhase: FactoryResponseEventPhase;
+    /** @description Provider-neutral fidelity metadata for one response event. Exposes diagnostic identity without promoting provider-native schemas into the public vocabulary. */
+    FactoryResponseEventProvenance: {
+      /** @description Provider identifier for the originating adapter session. */
+      provider: string;
+      /** @description Provider-native event type label retained for diagnostics only. */
+      nativeEventType: string;
+      /** @description Optional provider-native event subtype label retained for diagnostics only. */
+      nativeEventSubtype?: string;
+      delivery: components["schemas"]["FactoryResponseEventProvenanceDelivery"];
+      representation: components["schemas"]["FactoryResponseEventProvenanceRepresentation"];
+      fidelity: components["schemas"]["FactoryResponseEventProvenanceFidelity"];
+    };
+    /**
+     * @description How the response event entered the Factory vocabulary.
+     * @enum {string}
+     */
+    FactoryResponseEventProvenanceDelivery: FactoryResponseEventProvenanceDelivery;
+    /**
+     * @description Shape fidelity model used for the public payload.
+     * @enum {string}
+     */
+    FactoryResponseEventProvenanceRepresentation: FactoryResponseEventProvenanceRepresentation;
+    /**
+     * @description How closely the public payload preserves provider detail.
+     * @enum {string}
+     */
+    FactoryResponseEventProvenanceFidelity: FactoryResponseEventProvenanceFidelity;
+    /** @description Declares which response-event features a provider session supports. Adapters publish capability flags so consumers can interpret fidelity and phase availability without depending on provider-native schemas. */
+    FactoryResponseEventCapabilities: {
+      /** @description Provider session exposes native streaming observation. */
+      nativeStreaming: boolean;
+      /** @description Provider session can emit incremental message deltas. */
+      messageDeltas: boolean;
+      /** @description Provider session can emit message snapshots. */
+      messageSnapshots: boolean;
+      /** @description Provider session can emit reasoning summaries or deltas. */
+      reasoningSummaries: boolean;
+      /** @description Provider session can emit tool lifecycle metadata. */
+      toolLifecycle: boolean;
+      /** @description Provider session can emit incremental tool output deltas. */
+      toolOutputDeltas: boolean;
+      /** @description Provider session can emit observed file changes. */
+      fileChanges: boolean;
+      /** @description Provider session can emit plan updates. */
+      plans: boolean;
+      /** @description Provider session can emit usage accounting. */
+      usage: boolean;
+      /** @description Provider session assigns stable item identifiers across events. */
+      stableItemIds: boolean;
+      /** @description Provider session supports reconnect after stream interruption. */
+      providerReconnect: boolean;
+    };
+    /** @description Public typed payload union for FactoryResponseEvent. Variants align with envelope kind and phase semantics from the Story 01 vocabulary. MESSAGE and TOOL kinds use distinct snapshot and delta payload shapes; consumers select the variant using envelope kind and phase together with structural decoding. */
+    FactoryResponseEventPayload:
+      | components["schemas"]["FactoryResponseEventSessionPayload"]
+      | components["schemas"]["FactoryResponseEventRunPayload"]
+      | components["schemas"]["FactoryResponseEventTurnPayload"]
+      | components["schemas"]["FactoryResponseEventMessagePayload"]
+      | components["schemas"]["FactoryResponseEventMessageDeltaPayload"]
+      | components["schemas"]["FactoryResponseEventReasoningPayload"]
+      | components["schemas"]["FactoryResponseEventToolPayload"]
+      | components["schemas"]["FactoryResponseEventToolDeltaPayload"]
+      | components["schemas"]["FactoryResponseEventFileChangePayload"]
+      | components["schemas"]["FactoryResponseEventPlanPayload"]
+      | components["schemas"]["FactoryResponseEventProgressPayload"]
+      | components["schemas"]["FactoryResponseEventUsagePayload"]
+      | components["schemas"]["FactoryResponseEventErrorPayload"]
+      | components["schemas"]["FactoryResponseEventStreamGapPayload"];
+    /** @description One typed slice of assistant-visible message content. Discriminated by the content block kind field. */
+    FactoryResponseEventContentBlock:
+      | components["schemas"]["FactoryResponseEventTextContentBlock"]
+      | components["schemas"]["FactoryResponseEventReasoningSummaryContentBlock"]
+      | components["schemas"]["FactoryResponseEventToolRequestContentBlock"]
+      | components["schemas"]["FactoryResponseEventImageRefContentBlock"]
+      | components["schemas"]["FactoryResponseEventResourceRefContentBlock"]
+      | components["schemas"]["FactoryResponseEventStructuredOutputContentBlock"];
+    /**
+     * @description Identifies one provider-neutral message content block kind.
+     * @enum {string}
+     */
+    FactoryResponseEventContentBlockKind: FactoryResponseEventContentBlockKind;
+    /** @description Inline text content block. */
+    FactoryResponseEventTextContentBlock: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: FactoryResponseEventTextContentBlockKind;
+      /** @description Inline text content. */
+      text: string;
+    };
+    /** @description Reasoning summary text content block. */
+    FactoryResponseEventReasoningSummaryContentBlock: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: FactoryResponseEventReasoningSummaryContentBlockKind;
+      /** @description Reasoning summary text. */
+      text: string;
+    };
+    /** @description Tool invocation request content block with bounded argument summary. */
+    FactoryResponseEventToolRequestContentBlock: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: FactoryResponseEventToolRequestContentBlockKind;
+      /** @description Stable tool call identifier within the message. */
+      toolCallId: string;
+      /** @description Declared tool name for the invocation request. */
+      toolName: string;
+      /** @description Bounded summary of tool arguments. Not a raw provider protocol payload. */
+      argumentsSummary?: {
+        [key: string]: unknown;
+      };
+    };
+    /** @description Image reference content block. */
+    FactoryResponseEventImageRefContentBlock: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: FactoryResponseEventImageRefContentBlockKind;
+      /** @description Reference to an image artifact or URL. */
+      imageRef: string;
+    };
+    /** @description Factory resource reference content block. */
+    FactoryResponseEventResourceRefContentBlock: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: FactoryResponseEventResourceRefContentBlockKind;
+      /** @description Reference to a factory resource or artifact. */
+      resourceRef: string;
+    };
+    /** @description Structured JSON output content block. */
+    FactoryResponseEventStructuredOutputContentBlock: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: FactoryResponseEventStructuredOutputContentBlockKind;
+      /** @description Structured JSON output value. */
+      structuredOutput: {
+        [key: string]: unknown;
+      };
+    };
+    /** @description Session-scoped lifecycle and capability metadata payload. */
+    FactoryResponseEventSessionPayload: {
+      /** @description Session lifecycle status when applicable. */
+      status?: string;
+      capabilities?: components["schemas"]["FactoryResponseEventCapabilities"];
+    };
+    /** @description Run-scoped lifecycle metadata payload. */
+    FactoryResponseEventRunPayload: {
+      /** @description Run lifecycle status when applicable. */
+      status?: string;
+    };
+    /** @description Turn-scoped lifecycle metadata payload. */
+    FactoryResponseEventTurnPayload: {
+      /**
+       * Format: int32
+       * @description Zero-based turn index within the run when applicable.
+       */
+      turnIndex?: number;
+      /** @description Turn lifecycle status when applicable. */
+      status?: string;
+    };
+    /** @description Message snapshot payload with typed content blocks. */
+    FactoryResponseEventMessagePayload: {
+      /** @description Message role such as assistant or user. */
+      role: string;
+      /** @description Ordered typed content blocks for the message snapshot. */
+      contentBlocks: components["schemas"]["FactoryResponseEventContentBlock"][];
+    };
+    /** @description Incremental message content delta for one content block. */
+    FactoryResponseEventMessageDeltaPayload: {
+      /**
+       * Format: int32
+       * @description Zero-based index of the content block receiving the delta.
+       */
+      contentBlockIndex: number;
+      contentBlockKind: components["schemas"]["FactoryResponseEventContentBlockKind"];
+      /** @description Incremental text appended to the targeted content block. */
+      textDelta?: string;
+    };
+    /** @description Reasoning summary snapshot or delta payload. */
+    FactoryResponseEventReasoningPayload: {
+      /** @description Full reasoning summary text when emitting a snapshot. */
+      summary?: string;
+      /** @description Incremental reasoning summary text when emitting a delta. */
+      summaryDelta?: string;
+    };
+    /** @description Tool lifecycle metadata with bounded argument and result summaries. */
+    FactoryResponseEventToolPayload: {
+      /** @description Stable tool call identifier within the run. */
+      toolCallId: string;
+      /** @description Declared tool name for the invocation. */
+      toolName: string;
+      /** @description Tool lifecycle status when applicable. */
+      status?: string;
+      /** @description Bounded summary of tool arguments. Not a raw provider protocol payload. */
+      argumentsSummary?: {
+        [key: string]: unknown;
+      };
+      /** @description Bounded summary of tool results. Not a raw provider protocol payload. */
+      resultSummary?: {
+        [key: string]: unknown;
+      };
+    };
+    /** @description Incremental tool output delta payload. */
+    FactoryResponseEventToolDeltaPayload: {
+      /** @description Stable tool call identifier receiving output. */
+      toolCallId: string;
+      /** @description Incremental tool output text. */
+      outputDelta: string;
+    };
+    /** @description Observed file mutation payload. */
+    FactoryResponseEventFileChangePayload: {
+      /** @description Observed file path relative to the workspace or artifact root. */
+      path: string;
+      /** @description Observed file operation such as create, update, or delete. */
+      operation: string;
+      /** @description Optional human-readable summary of the mutation. */
+      summary?: string;
+    };
+    /** @description Published plan update payload. */
+    FactoryResponseEventPlanPayload: {
+      /** @description Ordered plan steps when emitting a plan snapshot. */
+      steps?: components["schemas"]["FactoryResponseEventPlanStep"][];
+      /** @description Optional plan summary text. */
+      summary?: string;
+    };
+    /** @description One step in a published plan snapshot. */
+    FactoryResponseEventPlanStep: {
+      /** @description Stable plan step identifier. */
+      id: string;
+      /** @description Human-readable step description. */
+      description: string;
+      /** @description Plan step status when applicable. */
+      status?: string;
+    };
+    /** @description Coarse progress notification payload. */
+    FactoryResponseEventProgressPayload: {
+      /** @description Short progress label for UI or CLI consumers. */
+      label: string;
+      /** @description Optional longer progress message. */
+      message?: string;
+      /**
+       * Format: double
+       * @description Optional completion percentage when known.
+       */
+      percentComplete?: number;
+    };
+    /** @description Token or model usage accounting payload. */
+    FactoryResponseEventUsagePayload: {
+      /**
+       * Format: int64
+       * @description Reported input token count when available.
+       */
+      inputTokens?: number;
+      /**
+       * Format: int64
+       * @description Reported output token count when available.
+       */
+      outputTokens?: number;
+      /**
+       * Format: int64
+       * @description Reported total token count when available.
+       */
+      totalTokens?: number;
+      /** @description Model identifier associated with the usage report. */
+      model?: string;
+    };
+    /** @description Provider-neutral error payload with optional retry metadata. */
+    FactoryResponseEventErrorPayload: {
+      /** @description Stable provider-neutral error code. */
+      code: string;
+      /** @description Human-readable error message. */
+      message: string;
+      /** @description Whether the error may be retried. */
+      retryable?: boolean;
+      /**
+       * Format: int64
+       * @description Suggested retry delay in seconds when retryable.
+       */
+      retryAfterSeconds?: number;
+      /**
+       * Format: int32
+       * @description Retry attempt count when applicable.
+       */
+      retryAttempt?: number;
+    };
+    /** @description Discontinuity marker in the retained response-event stream. */
+    FactoryResponseEventStreamGapPayload: {
+      /**
+       * Format: int64
+       * @description Last retained sequence before the gap.
+       */
+      fromSequence: number;
+      /**
+       * Format: int64
+       * @description First available sequence after the gap.
+       */
+      toSequence: number;
+      /** @description Optional reason for the stream gap such as retention_window. */
+      reason?: string;
+    };
     /**
      * @description Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
      * @default REPLACE_CURRENT
@@ -7129,6 +7487,138 @@ export const SafeAgentRunDiagnosticExecutionBehavior = {
 } as const;
 export type SafeAgentRunDiagnosticExecutionBehavior =
   (typeof SafeAgentRunDiagnosticExecutionBehavior)[keyof typeof SafeAgentRunDiagnosticExecutionBehavior];
+export const FactoryResponseEventSchemaVersion = {
+  // Initial unified Factory response-event schema aligned with Story 01 vocabulary.
+  agent_factory_response_event_v1: "agent-factory.response-event.v1",
+} as const;
+export type FactoryResponseEventSchemaVersion =
+  (typeof FactoryResponseEventSchemaVersion)[keyof typeof FactoryResponseEventSchemaVersion];
+export const FactoryResponseEventKind = {
+  // Session-scoped lifecycle and capability metadata.
+  FactoryResponseEventKindSession: "SESSION",
+  // Run-scoped lifecycle metadata.
+  FactoryResponseEventKindRun: "RUN",
+  // Turn-scoped lifecycle metadata.
+  FactoryResponseEventKindTurn: "TURN",
+  // Assistant or user message snapshots and deltas.
+  FactoryResponseEventKindMessage: "MESSAGE",
+  // Reasoning summary snapshots and deltas.
+  FactoryResponseEventKindReasoning: "REASONING",
+  // Tool lifecycle metadata and bounded summaries.
+  FactoryResponseEventKindTool: "TOOL",
+  // Observed file mutation notifications.
+  FactoryResponseEventKindFileChange: "FILE_CHANGE",
+  // Published plan updates.
+  FactoryResponseEventKindPlan: "PLAN",
+  // Coarse progress notifications.
+  FactoryResponseEventKindProgress: "PROGRESS",
+  // Token or model usage accounting.
+  FactoryResponseEventKindUsage: "USAGE",
+  // Provider-neutral error notifications with optional retry metadata.
+  FactoryResponseEventKindError: "ERROR",
+  // Discontinuity markers in the retained response-event stream.
+  FactoryResponseEventKindStreamGap: "STREAM_GAP",
+} as const;
+export type FactoryResponseEventKind =
+  (typeof FactoryResponseEventKind)[keyof typeof FactoryResponseEventKind];
+export const FactoryResponseEventPhase = {
+  // The scoped entity or stream segment started.
+  FactoryResponseEventPhaseStarted: "STARTED",
+  // Incremental content arrived for a streaming kind.
+  FactoryResponseEventPhaseDelta: "DELTA",
+  // A notification-style payload was updated.
+  FactoryResponseEventPhaseUpdated: "UPDATED",
+  // The scoped entity or stream segment completed successfully.
+  FactoryResponseEventPhaseCompleted: "COMPLETED",
+  // The scoped entity or stream segment failed.
+  FactoryResponseEventPhaseFailed: "FAILED",
+  // The scoped entity or stream segment was canceled.
+  FactoryResponseEventPhaseCanceled: "CANCELED",
+} as const;
+export type FactoryResponseEventPhase =
+  (typeof FactoryResponseEventPhase)[keyof typeof FactoryResponseEventPhase];
+export const FactoryResponseEventProvenanceDelivery = {
+  // Observed from a provider-native streaming channel.
+  FactoryResponseEventProvenanceDeliveryNativeStream: "NATIVE_STREAM",
+  // Observed from a provider-native final-only channel.
+  FactoryResponseEventProvenanceDeliveryNativeFinal: "NATIVE_FINAL",
+  // Synthesized by the Factory adapter from non-streaming evidence.
+  FactoryResponseEventProvenanceDeliverySynthesized: "SYNTHESIZED",
+  // Replayed from retained session observation data.
+  FactoryResponseEventProvenanceDeliveryReplay: "REPLAY",
+} as const;
+export type FactoryResponseEventProvenanceDelivery =
+  (typeof FactoryResponseEventProvenanceDelivery)[keyof typeof FactoryResponseEventProvenanceDelivery];
+export const FactoryResponseEventProvenanceRepresentation = {
+  // Incremental delta payload semantics.
+  FactoryResponseEventProvenanceRepresentationDelta: "DELTA",
+  // Full snapshot payload semantics.
+  FactoryResponseEventProvenanceRepresentationSnapshot: "SNAPSHOT",
+  // Notification-style update semantics.
+  FactoryResponseEventProvenanceRepresentationNotification: "NOTIFICATION",
+} as const;
+export type FactoryResponseEventProvenanceRepresentation =
+  (typeof FactoryResponseEventProvenanceRepresentation)[keyof typeof FactoryResponseEventProvenanceRepresentation];
+export const FactoryResponseEventProvenanceFidelity = {
+  // Public payload preserves provider-visible detail without loss.
+  FactoryResponseEventProvenanceFidelityLossless: "LOSSLESS",
+  // Public payload is normalized to the Factory vocabulary.
+  FactoryResponseEventProvenanceFidelityNormalized: "NORMALIZED",
+  // Public payload intentionally omits some provider detail.
+  FactoryResponseEventProvenanceFidelityLossy: "LOSSY",
+  // Only final provider outcomes are represented publicly.
+  FactoryResponseEventProvenanceFidelityFinalOnly: "FINAL_ONLY",
+  // Only lifecycle transitions are represented publicly.
+  FactoryResponseEventProvenanceFidelityLifecycleOnly: "LIFECYCLE_ONLY",
+} as const;
+export type FactoryResponseEventProvenanceFidelity =
+  (typeof FactoryResponseEventProvenanceFidelity)[keyof typeof FactoryResponseEventProvenanceFidelity];
+export const FactoryResponseEventContentBlockKind = {
+  // Inline assistant or user-visible text content.
+  FactoryResponseEventContentBlockKindText: "TEXT",
+  // Reasoning summary text exposed to consumers.
+  FactoryResponseEventContentBlockKindReasoningSummary: "REASONING_SUMMARY",
+  // Tool invocation request with bounded argument summary.
+  FactoryResponseEventContentBlockKindToolRequest: "TOOL_REQUEST",
+  // Reference to an image artifact or URL.
+  FactoryResponseEventContentBlockKindImageRef: "IMAGE_REF",
+  // Reference to a factory resource or artifact.
+  FactoryResponseEventContentBlockKindResourceRef: "RESOURCE_REF",
+  // Structured JSON output block.
+  FactoryResponseEventContentBlockKindStructuredOutput: "STRUCTURED_OUTPUT",
+} as const;
+export type FactoryResponseEventContentBlockKind =
+  (typeof FactoryResponseEventContentBlockKind)[keyof typeof FactoryResponseEventContentBlockKind];
+export const FactoryResponseEventTextContentBlockKind = {
+  TEXT: "TEXT",
+} as const;
+export type FactoryResponseEventTextContentBlockKind =
+  (typeof FactoryResponseEventTextContentBlockKind)[keyof typeof FactoryResponseEventTextContentBlockKind];
+export const FactoryResponseEventReasoningSummaryContentBlockKind = {
+  REASONING_SUMMARY: "REASONING_SUMMARY",
+} as const;
+export type FactoryResponseEventReasoningSummaryContentBlockKind =
+  (typeof FactoryResponseEventReasoningSummaryContentBlockKind)[keyof typeof FactoryResponseEventReasoningSummaryContentBlockKind];
+export const FactoryResponseEventToolRequestContentBlockKind = {
+  TOOL_REQUEST: "TOOL_REQUEST",
+} as const;
+export type FactoryResponseEventToolRequestContentBlockKind =
+  (typeof FactoryResponseEventToolRequestContentBlockKind)[keyof typeof FactoryResponseEventToolRequestContentBlockKind];
+export const FactoryResponseEventImageRefContentBlockKind = {
+  IMAGE_REF: "IMAGE_REF",
+} as const;
+export type FactoryResponseEventImageRefContentBlockKind =
+  (typeof FactoryResponseEventImageRefContentBlockKind)[keyof typeof FactoryResponseEventImageRefContentBlockKind];
+export const FactoryResponseEventResourceRefContentBlockKind = {
+  RESOURCE_REF: "RESOURCE_REF",
+} as const;
+export type FactoryResponseEventResourceRefContentBlockKind =
+  (typeof FactoryResponseEventResourceRefContentBlockKind)[keyof typeof FactoryResponseEventResourceRefContentBlockKind];
+export const FactoryResponseEventStructuredOutputContentBlockKind = {
+  STRUCTURED_OUTPUT: "STRUCTURED_OUTPUT",
+} as const;
+export type FactoryResponseEventStructuredOutputContentBlockKind =
+  (typeof FactoryResponseEventStructuredOutputContentBlockKind)[keyof typeof FactoryResponseEventStructuredOutputContentBlockKind];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",

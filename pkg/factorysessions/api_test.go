@@ -36,7 +36,7 @@ func TestListSummaries_OrdersDefaultSessionFirst(t *testing.T) {
 	if len(summaries) != 2 {
 		t.Fatalf("len(summaries) = %d, want 2", len(summaries))
 	}
-	if !summaries[0].IsDefault || summaries[0].Id != DefaultSessionID {
+	if !summaries[0].IsDefault || summaries[0].Id != CanonicalFactorySessionID(registry.DefaultSession()) {
 		t.Fatalf("first summary = %#v, want default session first", summaries[0])
 	}
 }
@@ -110,5 +110,60 @@ func TestValidateInitNewFactoryNestedDir_RejectsPopulatedNestedDirectory(t *test
 	reason, field, ok := ValidationReasonFromError(err)
 	if !ok || reason != ValidationReasonConflict || field != "folderPath" {
 		t.Fatalf("ValidationReasonFromError = (%q, %q, %v), want conflict on folderPath", reason, field, ok)
+	}
+}
+
+func TestNewSessionResponseEventStoreAlias(t *testing.T) {
+	t.Parallel()
+
+	store := NewSessionResponseEventStore("session-alias")
+	if store == nil {
+		t.Fatal("NewSessionResponseEventStore returned nil")
+	}
+	if got := store.FactorySessionID(); got != "session-alias" {
+		t.Fatalf("FactorySessionID() = %q, want session-alias", got)
+	}
+}
+
+func TestNewLiveSessionOwnsCanonicalResponseEventStore(t *testing.T) {
+	t.Parallel()
+
+	session := NewLiveSession(
+		DefaultSessionID,
+		"/factories/default",
+		"/workspace",
+		"/workspace",
+		TargetRef{Kind: TargetKindDefault},
+		nil,
+		true,
+		"default",
+	)
+	if session.ResponseEvents == nil {
+		t.Fatal("ResponseEvents = nil, want session-owned store")
+	}
+	if got := session.ResponseEvents.FactorySessionID(); got != CanonicalFactorySessionID(session) {
+		t.Fatalf("response event store session ID = %q, want %q", got, CanonicalFactorySessionID(session))
+	}
+}
+
+func TestNewLiveSessionDefaultUUIDKeepsRegistryIdentity(t *testing.T) {
+	t.Parallel()
+
+	sessionID := NewSessionID()
+	session := NewLiveSession(
+		sessionID,
+		"/factories/default",
+		"/workspace",
+		"/workspace",
+		TargetRef{Kind: TargetKindDefault},
+		nil,
+		true,
+		"default",
+	)
+	if got := CanonicalFactorySessionID(session); got != sessionID {
+		t.Fatalf("canonical session ID = %q, want registry UUID %q", got, sessionID)
+	}
+	if got := session.ResponseEvents.FactorySessionID(); got != sessionID {
+		t.Fatalf("response event store session ID = %q, want registry UUID %q", got, sessionID)
 	}
 }

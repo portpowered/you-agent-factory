@@ -1,0 +1,19 @@
+description: >-
+  One typed slice of assistant-visible message content. Discriminated by the
+  content block kind field.
+oneOf:
+  - $ref: ./content-blocks/FactoryResponseEventTextContentBlock.yaml
+  - $ref: ./content-blocks/FactoryResponseEventReasoningSummaryContentBlock.yaml
+  - $ref: ./content-blocks/FactoryResponseEventToolRequestContentBlock.yaml
+  - $ref: ./content-blocks/FactoryResponseEventImageRefContentBlock.yaml
+  - $ref: ./content-blocks/FactoryResponseEventResourceRefContentBlock.yaml
+  - $ref: ./content-blocks/FactoryResponseEventStructuredOutputContentBlock.yaml
+discriminator:
+  propertyName: kind
+  mapping:
+    TEXT: ./content-blocks/FactoryResponseEventTextContentBlock.yaml
+    REASONING_SUMMARY: ./content-blocks/FactoryResponseEventReasoningSummaryContentBlock.yaml
+    TOOL_REQUEST: ./content-blocks/FactoryResponseEventToolRequestContentBlock.yaml
+    IMAGE_REF: ./content-blocks/FactoryResponseEventImageRefContentBlock.yaml
+    RESOURCE_REF: ./content-blocks/FactoryResponseEventResourceRefContentBlock.yaml
+    STRUCTURED_OUTPUT: ./content-blocks/FactoryResponseEventStructuredOutputContentBlock.yaml

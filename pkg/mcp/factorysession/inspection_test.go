@@ -3,6 +3,9 @@ package factorysession_test
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -546,4 +549,49 @@ func mustJSON(t *testing.T, value any) json.RawMessage {
 		t.Fatalf("json.Marshal: %v", err)
 	}
 	return encoded
+}
+
+func runtimeMCPTestCleanupDeadline() time.Time {
+	d := 3 * time.Second
+	if runtime.GOOS == "windows" {
+		d = 5 * time.Second
+	}
+	return time.Now().Add(d)
+}
+
+func drainRuntimeMCPClientSessions(t *testing.T, service factorysessionexecution.Service) {
+	t.Helper()
+	for time.Now().Before(runtimeMCPTestCleanupDeadline()) {
+		list, err := service.ListSessions(context.Background(), factorysessionexecution.ListSessionsRequest{
+			Scope: factorysessionexecution.SessionListScopeAll,
+		})
+		if err != nil {
+			return
+		}
+		pending := false
+		for _, session := range list.DurableSessions {
+			if factorysessionexecution.IsTerminalLifecycleStatus(session.Status) {
+				continue
+			}
+			pending = true
+			_, _ = service.Terminate(context.Background(), session.SessionID, factorysessionexecution.ControlRequest{
+				Reason: "test cleanup",
+			})
+		}
+		if !pending {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func removeRuntimeMCPProjectState(t *testing.T, projectRoot string) {
+	t.Helper()
+	runtimeStateRoot := filepath.Join(projectRoot, ".you-agent-factory")
+	for time.Now().Before(runtimeMCPTestCleanupDeadline()) {
+		if err := os.RemoveAll(runtimeStateRoot); err == nil {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }

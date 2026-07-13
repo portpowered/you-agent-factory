@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-message-snapshot-001",
+  "sequence": 43,
+  "recordedAt": "2026-07-13T12:00:01Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "MESSAGE",
+  "phase": "COMPLETED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "message.completed",
+    "delivery": "NATIVE_STREAM",
+    "representation": "SNAPSHOT",
+    "fidelity": "LOSSLESS"
+  },
+  "payload": {
+    "role": "assistant",
+    "contentBlocks": [
+      {
+        "kind": "TEXT",
+        "text": "Here is the completed assistant message."
+      },
+      {
+        "kind": "TOOL_REQUEST",
+        "toolCallId": "call-search-001",
+        "toolName": "search",
+        "argumentsSummary": {
+          "query": "factory response events"
+        }
+      }
+    ]
+  },
+  "dispatchId": "dispatch-001",
+  "turnId": "turn-001",
+  "itemId": "item-msg-002",
+  "parentItemId": "item-msg-001"
+}

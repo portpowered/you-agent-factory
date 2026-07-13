@@ -1,0 +1,12 @@
+{
+  "name": "workstation-type-factory",
+  "workTypes": [{"name": "story", "states": [{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}]}],
+  "workers": [{"name": "executor", "type": "MODEL_WORKER"}],
+  "workstations": [{
+    "name": "execute-story",
+    "worker": "executor",
+    "type": "logical_move",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}]
+  }]
+}

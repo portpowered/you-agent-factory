@@ -44,3 +44,12 @@ const transformedSource = generatedSource.replace(
 
 mkdirSync(dirname(outputPath), { recursive: true });
 writeFileSync(outputPath, transformedSource);
+
+execFileSync(
+  process.execPath,
+  ["./node_modules/@biomejs/biome/bin/biome", "check", "--write", outputPath],
+  {
+    cwd: projectRoot,
+    stdio: "inherit",
+  },
+);

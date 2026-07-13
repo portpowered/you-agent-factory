@@ -1,0 +1,24 @@
+{
+  "name": "hosted-linear-factory",
+  "workTypes": [{"name": "story", "states": [{"name": "init", "type": "INITIAL"}, {"name": "queued", "type": "PROCESSING"}]}],
+  "workers": [{
+    "name": "linear-poller",
+    "type": "HOSTED_WORKER",
+    "provider": "LINEAR",
+    "auth": {"secretRef": "secrets/linear-api-key"},
+    "linear": {
+      "pollInterval": "45s",
+      "teamIds": ["team-a"],
+      "stateIds": ["state-b"],
+      "mapping": {"workType": "story", "state": "init"},
+      "claim": {"assigneeField": "assignee.email"}
+    }
+  }],
+  "workstations": [{
+    "name": "poll-linear",
+    "behavior": "POLLER",
+    "worker": "linear-poller",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "queued"}]
+  }]
+}

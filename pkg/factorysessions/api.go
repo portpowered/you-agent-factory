@@ -93,7 +93,7 @@ func NewLiveSession(
 	isDefault bool,
 	project string,
 ) *LiveSession {
-	return &LiveSession{
+	session := &LiveSession{
 		ID: sessionID,
 		SessionState: SessionState{
 			FactoryDir:       factoryDir,
@@ -105,6 +105,9 @@ func NewLiveSession(
 		Project:   project,
 		Target:    target,
 	}
+	EnsureRuntimeFactorySessionID(session)
+	session.ResponseEvents = NewSessionResponseEventStore(CanonicalFactorySessionID(session))
+	return session
 }
 
 // SessionFactoryRootDir resolves the editable-definition root for a live session.
@@ -161,7 +164,6 @@ func stringPointerOrNil(value string) *string {
 	}
 	return &trimmed
 }
-
 
 // ValidateInitNewFactoryNestedDir rejects init-new-factory when the canonical nested
 // factory directory already exists with content that init cannot populate without

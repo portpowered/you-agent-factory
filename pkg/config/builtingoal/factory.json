@@ -28,25 +28,21 @@
   "workers": [
     {
       "name": "goal-planner",
-      "type": "AGENT_WORKER",
-      "body": "Planner worker for @you/goal."
+      "type": "AGENT_WORKER"
     },
     {
       "name": "goal-executor",
-      "type": "AGENT_WORKER",
-      "body": "Executor worker for @you/goal."
+      "type": "AGENT_WORKER"
     },
     {
       "name": "goal-checker",
       "type": "SCRIPT_WORKER",
       "command": "sh",
-      "args": ["-c", "make test >/dev/null && printf '%s' \"${YOU_GOAL_REVIEW_MODE:-plain}\""],
-      "body": "Checker worker for @you/goal."
+      "args": ["-c", "make test >/dev/null && printf '%s' \"${YOU_GOAL_REVIEW_MODE:-plain}\""]
     },
     {
       "name": "goal-reviewer",
-      "type": "AGENT_WORKER",
-      "body": "Reviewer worker for @you/goal."
+      "type": "AGENT_WORKER"
     }
   ],
   "workstations": [

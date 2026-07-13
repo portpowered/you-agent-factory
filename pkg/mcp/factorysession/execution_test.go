@@ -729,6 +729,7 @@ func TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyRes
 	assertRuntimeSessionStatus(t, client, started.Result.SessionId, factoryapi.FactorySessionDurableLifecycleStatusRunning)
 	assertRuntimeNotReadyResult(t, client, started.Result.SessionId)
 	cancelRuntimeSession(t, client, started.Result.SessionId)
+	waitUntilRuntimeSessionStatus(t, runtimeServiceFromClient(t, client), started.Result.SessionId, factorysessionexecution.LifecycleStatusCanceled, 5*time.Second)
 }
 
 func TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult(t *testing.T) {
@@ -855,11 +856,12 @@ func assertRuntimeTerminalSessionReads(t *testing.T, client *runtimeMCPClient, s
 
 func newRuntimeMCPClient(t *testing.T) *runtimeMCPClient {
 	t.Helper()
+	projectRoot := t.TempDir()
 	service, err := testharness.New(testharness.Config{
 		Mode:              testharness.ModeJavaScript,
-		ProjectRoot:       t.TempDir(),
+		ProjectRoot:       projectRoot,
 		Clock:             factory.RealClock{},
-		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
+		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(projectRoot, "durable-sessions")},
 		ChildExecutorMode: factorysessionexecution.ChildExecutorModeFake,
 	})
 	if err != nil {
@@ -867,6 +869,7 @@ func newRuntimeMCPClient(t *testing.T) *runtimeMCPClient {
 	}
 	t.Cleanup(func() {
 		drainRuntimeMCPClientSessions(t, service)
+		removeRuntimeMCPProjectState(t, projectRoot)
 	})
 	return &runtimeMCPClient{
 		Client:  mcpfactorysession.NewClientWithService(service),
@@ -885,34 +888,6 @@ func runtimeServiceFromClient(t *testing.T, client *runtimeMCPClient) factoryses
 		t.Fatal("runtime service missing from MCP client wrapper")
 	}
 	return client.service
-}
-
-func drainRuntimeMCPClientSessions(t *testing.T, service factorysessionexecution.Service) {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		list, err := service.ListSessions(context.Background(), factorysessionexecution.ListSessionsRequest{
-			Scope: factorysessionexecution.SessionListScopeAll,
-		})
-		if err != nil {
-			return
-		}
-
-		pending := false
-		for _, session := range list.DurableSessions {
-			if factorysessionexecution.IsTerminalLifecycleStatus(session.Status) {
-				continue
-			}
-			pending = true
-			_, _ = service.Terminate(context.Background(), session.SessionID, factorysessionexecution.ControlRequest{
-				Reason: "test cleanup",
-			})
-		}
-		if !pending {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 }
 
 func runtimeBusyLoopAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {

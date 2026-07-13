@@ -218,7 +218,7 @@ func (fs *FactoryService) registerLiveSession(
 		sessionID == defaultFactorySessionID,
 		registration.project,
 	)
-	factorysessions.EnsureRuntimeFactorySessionID(session)
+	factorysessions.BindResponseEventCompletion(session, handle.Bundle.EventHistory.AddGeneratedRecorder)
 	fs.sessions.Upsert(session, selectSession)
 }
 
@@ -660,7 +660,10 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		session.Project,
 	)
 	replacementSession.RuntimeFactorySessionID = session.RuntimeFactorySessionID
-	factorysessions.EnsureRuntimeFactorySessionID(replacementSession)
+	replacementSession.ResponseEvents = factorysessions.NewSessionResponseEventStore(
+		factorysessions.CanonicalFactorySessionID(replacementSession),
+	)
+	factorysessions.BindResponseEventCompletion(replacementSession, replacement.EventHistory.AddGeneratedRecorder)
 	fs.sessions.Upsert(replacementSession, isActiveSession)
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
@@ -1066,7 +1069,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		checkpointStore = fs.requireSessionGateway().JavaScriptCheckpointStore(session)
 		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
 	}
-	projectionCtx.JavaScript, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
+	projectionCtx.JavaScript, projectionCtx.JavaScriptSession, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
@@ -1080,17 +1083,19 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 	session *factorysessions.LiveSession,
 	checkpointStore *factorysessions.JavaScriptCheckpointStore,
 	selectedTick int,
-) (*interfaces.FactorySessionJavaScriptRuntimeState, error) {
+) (*interfaces.FactorySessionJavaScriptRuntimeState, *interfaces.FactoryWorldSessionBracketState, error) {
 	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
+	bracket := (*interfaces.FactoryWorldSessionBracketState)(nil)
 	handle := liveSessionHandle(session)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
 		worldState, err := projections.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		state = worldState.JavaScriptRuntime
+		bracket = worldState.SessionBracket
 	}
-	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), nil
+	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), bracket, nil
 }
 
 func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
@@ -1153,6 +1158,7 @@ func (fs *FactoryService) closeSessionResponseStreams(session *factorysessions.L
 }
 
 func (fs *FactoryService) closeSessionResponseStreamsDirect(session *factorysessions.LiveSession) {
+	session.CloseResponseEvents()
 	streams := fs.sessionResponseStreams(session)
 	if streams == nil {
 		return

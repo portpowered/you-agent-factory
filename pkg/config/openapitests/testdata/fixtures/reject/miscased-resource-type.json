@@ -1,0 +1,12 @@
+{
+  "name": "miscased-resource-factory",
+  "workTypes": [{"name": "story", "states": [{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}]}],
+  "resources": [{"name": "slot", "type": "model", "capacity": 1}],
+  "workers": [{"name": "executor"}],
+  "workstations": [{
+    "name": "execute-story",
+    "worker": "executor",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}]
+  }]
+}

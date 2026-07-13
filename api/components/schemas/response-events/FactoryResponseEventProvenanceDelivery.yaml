@@ -1,0 +1,17 @@
+type: string
+description: How the response event entered the Factory vocabulary.
+x-enum-varnames:
+  - FactoryResponseEventProvenanceDeliveryNativeStream
+  - FactoryResponseEventProvenanceDeliveryNativeFinal
+  - FactoryResponseEventProvenanceDeliverySynthesized
+  - FactoryResponseEventProvenanceDeliveryReplay
+enum:
+  - NATIVE_STREAM
+  - NATIVE_FINAL
+  - SYNTHESIZED
+  - REPLAY
+x-enum-descriptions:
+  - Observed from a provider-native streaming channel.
+  - Observed from a provider-native final-only channel.
+  - Synthesized by the Factory adapter from non-streaming evidence.
+  - Replayed from retained session observation data.

@@ -1,0 +1,22 @@
+type: object
+additionalProperties: false
+description: Token or model usage accounting payload.
+properties:
+  inputTokens:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Reported input token count when available.
+  outputTokens:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Reported output token count when available.
+  totalTokens:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Reported total token count when available.
+  model:
+    type: string
+    description: Model identifier associated with the usage report.

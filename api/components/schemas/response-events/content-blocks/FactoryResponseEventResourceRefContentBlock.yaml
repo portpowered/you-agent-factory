@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+description: Factory resource reference content block.
+required:
+  - kind
+  - resourceRef
+properties:
+  kind:
+    allOf:
+      - $ref: ../FactoryResponseEventContentBlockKind.yaml
+    enum:
+      - RESOURCE_REF
+  resourceRef:
+    type: string
+    description: Reference to a factory resource or artifact.

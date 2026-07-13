@@ -71,8 +71,8 @@ func TestRootCommand_SharedDiagnosticsFlagsAvailableOnCoveredCommands(t *testing
 		{"work", "list"},
 		{"factory", "query"},
 		{"factory", "list"},
-		{"factory", "save"},
-		{"factory", "save", "staging"},
+		{"factory", "create"},
+		{"factory", "replace-current"},
 		{"factory", "update", "staging"},
 		{"factory", "delete", "staging"},
 		{"models", "list"},
@@ -697,6 +697,110 @@ func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
 	}
 }
 
+func TestRunCommand_SkipPermissionsFlag(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	flag := runCmd.Flags().Lookup("skip-permissions")
+	if flag == nil {
+		t.Fatal("expected --skip-permissions flag on run command")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("default skip-permissions = %q, want false", flag.DefValue)
+	}
+	if !strings.Contains(flag.Usage, "invocation-only unsafe permission bypass") {
+		t.Errorf("skip-permissions usage = %q", flag.Usage)
+	}
+	if !strings.Contains(runCmd.Long, "--skip-permissions") {
+		t.Fatal("expected run command long help text to mention --skip-permissions")
+	}
+}
+
+func TestRunCommand_SkipPermissionsFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--skip-permissions"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --skip-permissions: %v", err)
+	}
+	if got.InvocationSkipPermissionsOverride == nil {
+		t.Fatal("expected --skip-permissions to set invocation override")
+	}
+	if !*got.InvocationSkipPermissionsOverride {
+		t.Fatal("expected invocation skip-permissions override to be true")
+	}
+}
+
+func TestRunCommand_WithoutSkipPermissionsLeavesInvocationOverrideUnset(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run: %v", err)
+	}
+	if got.InvocationSkipPermissionsOverride != nil {
+		t.Fatalf("invocation skip-permissions override = %#v, want nil when flag omitted", got.InvocationSkipPermissionsOverride)
+	}
+}
+
+func TestRunCommand_WorkflowFlagRejected(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--workflow", "workflow-1"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected run-level --workflow to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unknown flag: --workflow") {
+		t.Fatalf("error = %q, want unknown flag --workflow", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run command should not execute when --workflow is unsupported")
+	}
+}
+
 func TestRunCommand_RetiredMockExecutionAliasRejected(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -898,7 +1002,6 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 		"--quiet",
 		"--no-record",
 		"--dir", "custom-factory",
-		"--workflow", "workflow-1",
 		"--work", "work.json",
 	})
 
@@ -912,8 +1015,8 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	if got.Dir != "custom-factory" {
 		t.Errorf("dir = %q, want %q", got.Dir, "custom-factory")
 	}
-	if got.Workflow != "workflow-1" {
-		t.Errorf("workflow = %q, want %q", got.Workflow, "workflow-1")
+	if got.Workflow != "" {
+		t.Errorf("workflow = %q, want empty (run-level --workflow removed)", got.Workflow)
 	}
 	if got.WorkFile != "work.json" {
 		t.Errorf("work file = %q, want %q", got.WorkFile, "work.json")
