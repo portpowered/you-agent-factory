@@ -13,12 +13,12 @@ sessions.
 
 | Responsibility | Owner |
 | --- | --- |
-| Local model asset cache inspection | `pkg/modelhost` via `AssetGateway` |
-| Pull or install materialization | `pkg/modelhost` delegating to `pkg/models/local` pull/cache |
-| Supervised local server lifecycle (`LLAMACPP`) | `pkg/modelhost` `CatalogHost` runtime slots |
-| Readiness and failure-class projection | `pkg/modelhost` |
-| Lease issuance, release, and capacity | `pkg/modelhost` |
-| Idle unload and resource-pressure eviction | `pkg/modelhost` |
+| Local model asset cache inspection | `pkg/models/host` via `AssetGateway` |
+| Pull or install materialization | `pkg/models/host` delegating to `pkg/models/local` pull/cache |
+| Supervised local server lifecycle (`LLAMACPP`) | `pkg/models/host` `CatalogHost` runtime slots |
+| Readiness and failure-class projection | `pkg/models/host` |
+| Lease issuance, release, and capacity | `pkg/models/host` |
+| Idle unload and resource-pressure eviction | `pkg/models/host` |
 | Managed-runtime API/CLI vocabulary | `pkg/models/service` + `pkg/apisurface` |
 | Factory session runtime state | per-session runtime only |
 
@@ -26,7 +26,7 @@ Factory sessions and workers **borrow** local model capacity through host leases
 They do not own subprocesses, asset caches, or unload policy.
 
 Direct invocation and local inference/agent worker execution route through
-`pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when the process-wide
+`pkg/models/host/execution.go` (`LeaseExecution.WrapRunner`) when the process-wide
 host is configured. Supervised leases pass `ServingEndpoint` metadata from
 `lease.Endpoint` into runtime execution so inference uses the host-owned server
 boundary instead of bypassing it with a separate local runtime load path.
@@ -42,7 +42,7 @@ classification.
 assembly:
 
 - build entrypoint: `newRuntimeLocalModelDependencies` in `pkg/service/factory_build.go`
-- host contract: `pkg/modelhost.Host` / `CatalogHost`
+- host contract: `pkg/models/host.Host` / `CatalogHost`
 - session access: `FactoryCore.ModelHost()`
 
 Managed-runtime list, inspect, pull, and invocation-readiness surfaces are owned
@@ -106,4 +106,4 @@ Provider-neutral failure classes drive caller outcomes:
 - `capacity_exhausted`
 
 These map to managed-runtime `readinessState` values through
-`pkg/modelhost/failure.go` and `ManagedRuntimeFromSnapshot`.
+`pkg/models/host/contract.go` and `ManagedRuntimeFromSnapshot`.

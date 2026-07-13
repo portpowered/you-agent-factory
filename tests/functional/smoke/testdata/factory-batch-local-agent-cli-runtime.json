@@ -12,7 +12,7 @@
         "currentProgress": [
           "The repo already has managed runtime readiness, pull, and invocation surfaces through /models and pkg/models/local.",
           "The current local runtime is scoped to OmniVoice llama.cpp TTS behavior rather than a reusable model host boundary.",
-          "No clear pkg/modelhost data-plane package exists yet for assets, process supervision, readiness, leases, unload policy, and resource pressure."
+          "No clear pkg/models/host data-plane package exists yet for assets, process supervision, readiness, leases, unload policy, and resource pressure."
         ],
         "requestedOutcome": "Create the modelhost boundary that owns model assets, process lifecycle, readiness, pull/install integration, leases, and provider-neutral failure classes while preserving existing managed-runtime API behavior."
       }

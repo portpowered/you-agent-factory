@@ -134,7 +134,7 @@ directive occurrence in the focused scan:
 - `pkg/models/assets`
 - `pkg/logging`
 - `pkg/mcp/server`
-- `pkg/modelhost`
+- `pkg/models/host`
 - `pkg/orchestrators/javascript/policy`
 - `pkg/orchestrators/javascript/preview`
 - `pkg/orchestrators/javascript/result`
