@@ -2,6 +2,7 @@ package responseeventstore
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -121,6 +122,14 @@ func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponse
 	}
 
 	prepared := s.preparePublishInput(input)
+	if prepared.FactorySessionID != s.factorySessionID {
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf(
+			"%w: got %q, want %q",
+			ErrFactorySessionMismatch,
+			prepared.FactorySessionID,
+			s.factorySessionID,
+		)
+	}
 	if err := responseevents.ValidateEvent(prepared); err != nil {
 		return responseevents.FactoryResponseEvent{}, err
 	}

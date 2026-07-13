@@ -2,6 +2,7 @@ package responseeventstore_test
 
 import (
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -170,6 +171,24 @@ func TestSessionResponseEventStore_PublishRejectsInvalidEvent(t *testing.T) {
 	}
 	if events := store.Events(); len(events) != 0 {
 		t.Fatalf("invalid publish retained events = %#v, want empty buffer", events)
+	}
+}
+
+func TestSessionResponseEventStore_PublishRejectsForeignFactorySessionID(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	input := samplePublishInput()
+	input.FactorySessionID = "session-other"
+
+	if _, err := store.Publish(input); !errors.Is(err, responseeventstore.ErrFactorySessionMismatch) {
+		t.Fatalf("publish foreign session error = %v, want ErrFactorySessionMismatch", err)
+	}
+	if events := store.Events(); len(events) != 0 {
+		t.Fatalf("foreign-session publish retained events = %#v, want empty buffer", events)
+	}
+	if latest := store.LatestSequence(); latest != 0 {
+		t.Fatalf("latest sequence = %d, want 0 after rejected publish", latest)
 	}
 }
 
