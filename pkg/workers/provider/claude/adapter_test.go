@@ -102,6 +102,69 @@ func TestDecoderInvalidToolInputDoesNotLeakOrStopLaterMessage(t *testing.T) {
 	}
 }
 
+func TestDecoderCompleteTextSnapshotSupersedesDeltasAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodeFixture(t, "testdata/snapshot_text.jsonl", true)
+	assertValidDrafts(t, drafts, diagnostics)
+	completed := draftsByKindAndPhase(drafts, responseevents.KindMessage, responseevents.PhaseCompleted)
+	if len(completed) != 2 {
+		t.Fatalf("completed messages = %d, want authoritative and distinct later message: %#v", len(completed), drafts)
+	}
+	assertMessageContent(t, completed[0], "msg_text", []string{"authoritative text"})
+	assertMessageContent(t, completed[1], "msg_text_2", []string{"later message"})
+	if encoded, err := json.Marshal(completed); err != nil || bytes.Contains(encoded, []byte("draft text")) {
+		t.Fatalf("completed snapshots retained accumulated draft text: %s (err=%v)", encoded, err)
+	}
+}
+
+func TestDecoderCompleteToolSnapshotReusesLogicalToolIdentity(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodeFixture(t, "testdata/snapshot_tool.jsonl", false)
+	assertValidDrafts(t, drafts, diagnostics)
+	completedTools := draftsByKindAndPhase(drafts, responseevents.KindTool, responseevents.PhaseCompleted)
+	if len(completedTools) != 2 {
+		t.Fatalf("completed tools = %d, want partial completion and authoritative update: %#v", len(completedTools), drafts)
+	}
+	for _, draft := range completedTools {
+		if draft.ItemID != "msg_tool/content-block/0" || draft.ParentItemID != "msg_tool" {
+			t.Fatalf("tool snapshot allocated a second logical identity: %#v", draft)
+		}
+	}
+	var authoritative responseevents.ToolPayload
+	decodePayload(t, completedTools[1], &authoritative)
+	var summary map[string]any
+	if err := json.Unmarshal(authoritative.ArgumentsSummary, &summary); err != nil {
+		t.Fatalf("decode authoritative tool summary: %v", err)
+	}
+	if authoritative.ToolCallID != "toolu_snapshot" || summary["city"] != "Bergen" || summary["api_token"] != "<redacted>" {
+		t.Fatalf("authoritative tool snapshot = %#v", authoritative)
+	}
+	if bytes.Contains(authoritative.ArgumentsSummary, []byte("snapshot-secret")) {
+		t.Fatalf("authoritative tool summary leaked provider input: %s", authoritative.ArgumentsSummary)
+	}
+	if got := len(draftsByKindAndPhase(drafts, responseevents.KindMessage, responseevents.PhaseCompleted)); got != 1 {
+		t.Fatalf("completed messages = %d, want one authoritative snapshot", got)
+	}
+}
+
+func TestDecoderCompleteMixedSnapshotPreservesProviderBlockOrder(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodeFixture(t, "testdata/snapshot_mixed.jsonl", true)
+	assertValidDrafts(t, drafts, diagnostics)
+	completed := draftsByKindAndPhase(drafts, responseevents.KindMessage, responseevents.PhaseCompleted)
+	if len(completed) != 1 {
+		t.Fatalf("completed messages = %d, want one: %#v", len(completed), drafts)
+	}
+	var payload responseevents.MessagePayload
+	decodePayload(t, completed[0], &payload)
+	if len(payload.ContentBlocks) != 3 || payload.ContentBlocks[0].Text != "final first" || payload.ContentBlocks[1].ToolCallID != "toolu_mixed" || payload.ContentBlocks[2].Text != "final last" {
+		t.Fatalf("mixed snapshot order = %#v", payload.ContentBlocks)
+	}
+}
+
 func TestParseFinalKeepsTerminalResultAuthoritative(t *testing.T) {
 	t.Parallel()
 
@@ -154,6 +217,45 @@ func decodeFixture(t *testing.T, path string, keepFinalRecordUnterminated bool) 
 		t.Fatalf("Flush() error = %v", err)
 	}
 	return append(drafts, flushed.Drafts...), append(diagnostics, flushed.Diagnostics...)
+}
+
+func assertValidDrafts(t *testing.T, drafts []responseevents.Draft, diagnostics []adapter.Diagnostic) {
+	t.Helper()
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want none", diagnostics)
+	}
+	for index, draft := range drafts {
+		if err := responseevents.ValidateDraft(draft); err != nil {
+			t.Fatalf("draft[%d] invalid: %v", index, err)
+		}
+	}
+}
+
+func draftsByKindAndPhase(drafts []responseevents.Draft, kind responseevents.Kind, phase responseevents.Phase) []responseevents.Draft {
+	var matched []responseevents.Draft
+	for _, draft := range drafts {
+		if draft.Kind == kind && draft.Phase == phase {
+			matched = append(matched, draft)
+		}
+	}
+	return matched
+}
+
+func assertMessageContent(t *testing.T, draft responseevents.Draft, itemID string, texts []string) {
+	t.Helper()
+	if draft.ItemID != itemID {
+		t.Fatalf("message item ID = %q, want %q", draft.ItemID, itemID)
+	}
+	var payload responseevents.MessagePayload
+	decodePayload(t, draft, &payload)
+	if len(payload.ContentBlocks) != len(texts) {
+		t.Fatalf("message blocks = %#v, want text count %d", payload.ContentBlocks, len(texts))
+	}
+	for index, text := range texts {
+		if payload.ContentBlocks[index].Text != text {
+			t.Fatalf("message block[%d] = %#v, want text %q", index, payload.ContentBlocks[index], text)
+		}
+	}
 }
 
 func assertMessageDrafts(t *testing.T, drafts []responseevents.Draft) {

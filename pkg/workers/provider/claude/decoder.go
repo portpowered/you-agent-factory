@@ -23,10 +23,25 @@ type decoder struct {
 	context adapter.DecoderContext
 	pending []byte
 
-	runStarted bool
-	messageID  string
-	sessionRef string
-	blocks     map[int]*contentBlock
+	runStarted        bool
+	messageID         string
+	sessionRef        string
+	blocks            map[int]*contentBlock
+	pendingCompletion *messageCompletion
+	completedMessages map[string]string
+	completedTools    map[string]string
+}
+
+type messageCompletion struct {
+	messageID     string
+	nativeType    string
+	contentBlocks []responseevents.ContentBlock
+	toolSnapshots []indexedToolSnapshot
+}
+
+type indexedToolSnapshot struct {
+	index int
+	block responseevents.ContentBlock
 }
 
 type contentBlock struct {
@@ -54,8 +69,9 @@ type nativeEvent struct {
 }
 
 type nativeMessage struct {
-	ID   string `json:"id"`
-	Role string `json:"role"`
+	ID      string        `json:"id"`
+	Role    string        `json:"role"`
+	Content []nativeBlock `json:"content"`
 }
 
 type nativeBlock struct {
@@ -73,7 +89,10 @@ type nativeDelta struct {
 }
 
 func newDecoder(input adapter.DecoderContext) *decoder {
-	return &decoder{context: input, blocks: make(map[int]*contentBlock)}
+	return &decoder{
+		context: input, blocks: make(map[int]*contentBlock),
+		completedMessages: make(map[string]string), completedTools: make(map[string]string),
+	}
 }
 
 func (d *decoder) Observe(_ context.Context, observation adapter.Observation) (adapter.DecodeResult, error) {
@@ -92,7 +111,12 @@ func (d *decoder) Observe(_ context.Context, observation adapter.Observation) (a
 }
 
 func (d *decoder) Flush(_ context.Context, _ adapter.FlushContext) (adapter.DecodeResult, error) {
-	return d.drain(true)
+	result, err := d.drain(true)
+	if err != nil {
+		return result, err
+	}
+	completed, completeErr := d.publishPendingCompletion()
+	return appendResult(result, completed), completeErr
 }
 
 func (d *decoder) drain(flush bool) (adapter.DecodeResult, error) {
@@ -130,17 +154,25 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 		d.sessionRef = session.ID
 	}
 	if envelope.Type == "assistant" && envelope.Message != nil {
-		return adapter.DecodeResult{}, nil
+		return d.completeNativeMessage(*envelope.Message)
 	}
 	if envelope.Type != "stream_event" {
 		return adapter.DecodeResult{}, nil
 	}
+	return d.decodeStreamEvent(envelope.Event)
+}
+
+func (d *decoder) decodeStreamEvent(raw json.RawMessage) (adapter.DecodeResult, error) {
 	var event nativeEvent
-	if err := json.Unmarshal(envelope.Event, &event); err != nil {
+	if err := json.Unmarshal(raw, &event); err != nil {
 		return safeDiagnostic("claude_malformed_event", "Claude emitted a malformed stream event"), nil
 	}
 	switch event.Type {
 	case "message_start":
+		result, err := d.publishPendingCompletion()
+		if err != nil {
+			return result, err
+		}
 		if event.Message != nil {
 			d.messageID = strings.TrimSpace(event.Message.ID)
 		}
@@ -148,7 +180,7 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 			d.messageID = fallbackMessageID(d.context)
 		}
 		d.blocks = make(map[int]*contentBlock)
-		return d.withRunStart(adapter.DecodeResult{}), nil
+		return appendResult(result, d.withRunStart(adapter.DecodeResult{})), nil
 	case "content_block_start":
 		return d.startBlock(event)
 	case "content_block_delta":
@@ -156,7 +188,7 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 	case "content_block_stop":
 		return d.stopBlock(event)
 	case "message_stop":
-		return d.completeMessage()
+		return d.deferAccumulatedMessage()
 	default:
 		return adapter.DecodeResult{}, nil
 	}
@@ -237,7 +269,7 @@ func (d *decoder) stopBlock(event nativeEvent) (adapter.DecodeResult, error) {
 	return result, nil
 }
 
-func (d *decoder) completeMessage() (adapter.DecodeResult, error) {
+func (d *decoder) deferAccumulatedMessage() (adapter.DecodeResult, error) {
 	indexes := make([]int, 0, len(d.blocks))
 	for index := range d.blocks {
 		indexes = append(indexes, index)
@@ -259,17 +291,134 @@ func (d *decoder) completeMessage() (adapter.DecodeResult, error) {
 			blocks = append(blocks, content)
 		}
 	}
-	if len(blocks) == 0 {
+	if len(blocks) > 0 {
+		d.pendingCompletion = &messageCompletion{messageID: d.stableMessageID(), nativeType: "message_stop", contentBlocks: blocks}
+	}
+	return adapter.DecodeResult{}, nil
+}
+
+func (d *decoder) completeNativeMessage(message nativeMessage) (adapter.DecodeResult, error) {
+	if strings.TrimSpace(message.Role) != "assistant" {
 		return adapter.DecodeResult{}, nil
 	}
-	payload, err := marshalPayload(responseevents.MessagePayload{Role: "assistant", ContentBlocks: blocks})
+	messageID := strings.TrimSpace(message.ID)
+	if messageID == "" {
+		messageID = d.stableMessageID()
+	}
+	var result adapter.DecodeResult
+	if d.pendingCompletion != nil && d.pendingCompletion.messageID != messageID {
+		pending, err := d.publishPendingCompletion()
+		if err != nil {
+			return pending, err
+		}
+		result = appendResult(result, pending)
+	}
+	blocks, tools, diagnostics := canonicalNativeBlocks(message.Content)
+	if len(blocks) == 0 {
+		result.Diagnostics = append(result.Diagnostics, diagnostics...)
+		return result, nil
+	}
+	if d.pendingCompletion != nil && d.pendingCompletion.messageID == messageID {
+		d.pendingCompletion = nil
+	}
+	d.messageID = messageID
+	completed, err := d.publishCompletion(messageCompletion{
+		messageID: messageID, nativeType: "assistant", contentBlocks: blocks, toolSnapshots: tools,
+	})
+	completed.Diagnostics = append(completed.Diagnostics, diagnostics...)
+	return appendResult(result, completed), err
+}
+
+func canonicalNativeBlocks(native []nativeBlock) ([]responseevents.ContentBlock, []indexedToolSnapshot, []adapter.Diagnostic) {
+	blocks := make([]responseevents.ContentBlock, 0, len(native))
+	tools := make([]indexedToolSnapshot, 0, len(native))
+	var diagnostics []adapter.Diagnostic
+	for index, block := range native {
+		switch block.Type {
+		case "text":
+			if block.Text != "" {
+				blocks = append(blocks, responseevents.ContentBlock{Kind: responseevents.ContentBlockText, Text: block.Text})
+			}
+		case "tool_use":
+			canonical, diagnostic := canonicalNativeTool(block)
+			if diagnostic != nil {
+				diagnostics = append(diagnostics, *diagnostic)
+				continue
+			}
+			blocks = append(blocks, canonical)
+			tools = append(tools, indexedToolSnapshot{index: index, block: canonical})
+		}
+	}
+	return blocks, tools, diagnostics
+}
+
+func canonicalNativeTool(block nativeBlock) (responseevents.ContentBlock, *adapter.Diagnostic) {
+	toolID, toolName := strings.TrimSpace(block.ID), strings.TrimSpace(block.Name)
+	if toolID == "" || toolName == "" {
+		return responseevents.ContentBlock{}, &adapter.Diagnostic{Code: "claude_invalid_tool_snapshot", Message: "Claude emitted a complete tool block without stable identity"}
+	}
+	canonical := responseevents.ContentBlock{Kind: responseevents.ContentBlockToolRequest, ToolCallID: toolID, ToolName: toolName}
+	if len(block.Input) == 0 {
+		return canonical, nil
+	}
+	if len(block.Input) > maximumToolInputBytes {
+		return canonical, &adapter.Diagnostic{Code: "claude_tool_input_too_large", Message: "Claude tool input exceeded the safe summary boundary"}
+	}
+	if summary, ok := safeJSONSummary(block.Input); ok {
+		canonical.ArgumentsSummary = json.RawMessage(summary)
+		return canonical, nil
+	}
+	return canonical, &adapter.Diagnostic{Code: "claude_invalid_tool_input", Message: "Claude tool input did not form a valid safe summary"}
+}
+
+func (d *decoder) publishPendingCompletion() (adapter.DecodeResult, error) {
+	if d.pendingCompletion == nil {
+		return adapter.DecodeResult{}, nil
+	}
+	completion := *d.pendingCompletion
+	d.pendingCompletion = nil
+	return d.publishCompletion(completion)
+}
+
+func (d *decoder) publishCompletion(completion messageCompletion) (adapter.DecodeResult, error) {
+	payload, err := marshalPayload(responseevents.MessagePayload{Role: "assistant", ContentBlocks: completion.contentBlocks})
 	if err != nil {
 		return adapter.DecodeResult{}, err
 	}
-	return d.withRunStart(adapter.DecodeResult{Drafts: []responseevents.Draft{{
-		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted, ItemID: d.stableMessageID(), ProviderSessionRef: d.sessionRef,
-		Provenance: provenance("message_stop", responseevents.RepresentationSnapshot), Payload: payload,
-	}}}), nil
+	if d.completedMessages[completion.messageID] == string(payload) {
+		return adapter.DecodeResult{}, nil
+	}
+	result, err := d.publishToolSnapshots(completion)
+	if err != nil {
+		return result, err
+	}
+	d.completedMessages[completion.messageID] = string(payload)
+	result.Drafts = append(result.Drafts, responseevents.Draft{
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted, ItemID: completion.messageID, ProviderSessionRef: d.sessionRef,
+		Provenance: provenance(completion.nativeType, responseevents.RepresentationSnapshot), Payload: payload,
+	})
+	return d.withRunStart(result), nil
+}
+
+func (d *decoder) publishToolSnapshots(completion messageCompletion) (adapter.DecodeResult, error) {
+	var result adapter.DecodeResult
+	for _, tool := range completion.toolSnapshots {
+		body := responseevents.ToolPayload{ToolCallID: tool.block.ToolCallID, ToolName: tool.block.ToolName, Status: "completed", ArgumentsSummary: tool.block.ArgumentsSummary}
+		payload, err := marshalPayload(body)
+		if err != nil {
+			return result, err
+		}
+		itemID := toolItemID(completion.messageID, tool.index)
+		if d.completedTools[itemID] == string(payload) {
+			continue
+		}
+		d.completedTools[itemID] = string(payload)
+		result.Drafts = append(result.Drafts, responseevents.Draft{
+			Kind: responseevents.KindTool, Phase: responseevents.PhaseCompleted, ItemID: itemID, ParentItemID: completion.messageID, ProviderSessionRef: d.sessionRef,
+			Provenance: provenance(completion.nativeType, responseevents.RepresentationSnapshot), Payload: payload,
+		})
+	}
+	return result, nil
 }
 
 func (d *decoder) messageDelta(index int, text string) (adapter.DecodeResult, error) {
@@ -308,6 +457,9 @@ func (d *decoder) toolSnapshot(index int, phase responseevents.Phase) (adapter.D
 	if err != nil {
 		return adapter.DecodeResult{}, err
 	}
+	if phase == responseevents.PhaseCompleted {
+		d.completedTools[d.toolItemID(index)] = string(payload)
+	}
 	return d.withRunStart(adapter.DecodeResult{Drafts: []responseevents.Draft{{
 		Kind: responseevents.KindTool, Phase: phase, ItemID: d.toolItemID(index), ParentItemID: d.stableMessageID(), ProviderSessionRef: d.sessionRef,
 		Provenance: provenance("content_block_"+phaseName(phase), responseevents.RepresentationSnapshot), Payload: payload,
@@ -339,7 +491,11 @@ func (d *decoder) stableMessageID() string {
 }
 
 func (d *decoder) toolItemID(index int) string {
-	return d.stableMessageID() + "/content-block/" + strconv.Itoa(index)
+	return toolItemID(d.stableMessageID(), index)
+}
+
+func toolItemID(messageID string, index int) string {
+	return messageID + "/content-block/" + strconv.Itoa(index)
 }
 
 func fallbackMessageID(input adapter.DecoderContext) string {
