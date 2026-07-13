@@ -2,18 +2,132 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
+
+func TestHumanResponseStreamRenderer_CanonicalToolLifecycleGolden(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		phase  responseevents.Phase
+		status string
+		want   string
+	}{
+		{name: "started", phase: responseevents.PhaseStarted, status: "provider-pending", want: "started"},
+		{name: "completed", phase: responseevents.PhaseCompleted, status: "provider-done", want: "completed"},
+		{name: "failed", phase: responseevents.PhaseFailed, status: "provider-crashed", want: "failed"},
+		{name: "canceled", phase: responseevents.PhaseCanceled, status: "provider-aborted", want: "canceled"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			event := humanResponseEvent(responseevents.KindTool, tc.phase, responseevents.ToolPayload{
+				ToolCallID: "call\r\n42", ToolName: "read\nfile", Status: tc.status,
+			})
+			var output strings.Builder
+			renderer := newHumanResponseStreamRenderer(&output)
+			renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+			renderer.stopProgressRendering()
+			want := "tool: name=read file call=call 42 status=" + tc.want + "\n"
+			if got := output.String(); got != want {
+				t.Fatalf("output = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestHumanResponseStreamRenderer_ToolLifecyclePreservesCorrelationOrder(t *testing.T) {
+	t.Parallel()
+
+	events := []responseevents.FactoryResponseEvent{
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{ToolCallID: "call-a", ToolName: "search"}),
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{ToolCallID: "call-b", ToolName: "read"}),
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseCompleted, responseevents.ToolPayload{ToolCallID: "call-b", ToolName: "read"}),
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseFailed, responseevents.ToolPayload{ToolCallID: "call-a", ToolName: "search"}),
+	}
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents(events)
+	renderer.stopProgressRendering()
+	want := "tool: name=search call=call-a status=started\n" +
+		"tool: name=read call=call-b status=started\n" +
+		"tool: name=read call=call-b status=completed\n" +
+		"tool: name=search call=call-a status=failed\n"
+	if got := output.String(); got != want {
+		t.Fatalf("output = %q, want ordered lifecycle %q", got, want)
+	}
+}
+
+func TestHumanResponseStreamRenderer_ToolDataNeverLeaks(t *testing.T) {
+	t.Parallel()
+
+	canaries := []string{
+		"SECRET_ARGUMENT", "SECRET_RESULT", "SECRET_DELTA", "SECRET_STATUS",
+		"SECRET_RAW_PAYLOAD", "SECRET_PROMPT", "SECRET_CREDENTIAL",
+		"SECRET_ENVIRONMENT", "SECRET_PROVENANCE",
+	}
+	lifecycle := humanResponseEvent(responseevents.KindTool, responseevents.PhaseCompleted, map[string]any{
+		"toolCallId": "call-safe", "toolName": "safe-tool", "status": canaries[3],
+		"argumentsSummary":   map[string]string{"argument": canaries[0], "prompt": canaries[5], "credential": canaries[6]},
+		"resultSummary":      map[string]string{"result": canaries[1], "environment": canaries[7]},
+		"rawProviderPayload": canaries[4],
+	})
+	lifecycle.Provenance = responseevents.Provenance{
+		Provider: canaries[8], NativeEventType: canaries[8],
+		Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationNotification,
+		Fidelity: responseevents.FidelityLifecycleOnly,
+	}
+	delta := humanResponseEvent(responseevents.KindTool, responseevents.PhaseDelta, responseevents.ToolDeltaPayload{
+		ToolCallID: "call-safe", OutputDelta: canaries[2],
+	})
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{lifecycle, delta})
+	renderer.stopProgressRendering()
+	got := output.String()
+	if want := "tool: name=safe-tool call=call-safe status=completed\n"; got != want {
+		t.Fatalf("output = %q, want lifecycle-only %q", got, want)
+	}
+	for _, canary := range canaries {
+		if strings.Contains(got, canary) {
+			t.Fatalf("human output leaked %q: %q", canary, got)
+		}
+	}
+}
+
+func TestHumanResponseStreamRenderer_ToolIdentityIsUTF8SafeAndBounded(t *testing.T) {
+	t.Parallel()
+
+	event := humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{
+		ToolCallID: "call\x00id", ToolName: strings.Repeat("界", maxHumanProgressLineBytes),
+		ArgumentsSummary: json.RawMessage(`{"secret":"must-not-render"}`),
+	})
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer.stopProgressRendering()
+	got := strings.TrimSuffix(output.String(), "\n")
+	if !utf8.ValidString(got) || len([]byte(got)) > maxHumanProgressLineBytes {
+		t.Fatalf("bounded tool output is invalid: bytes=%d output=%q", len([]byte(got)), got)
+	}
+	if strings.ContainsRune(got, '\x00') || strings.Contains(got, "must-not-render") || !strings.HasSuffix(got, "...") {
+		t.Fatalf("tool output was not safely normalized and redacted: %q", got)
+	}
+}
 
 func TestHumanResponseStreamRenderer_CanonicalOutputIsUTF8SafeAndBounded(t *testing.T) {
 	t.Parallel()

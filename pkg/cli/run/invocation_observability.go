@@ -329,6 +329,8 @@ func formatHumanResponseEvent(event responseevents.FactoryResponseEvent) (string
 	switch event.Kind {
 	case responseevents.KindReasoning:
 		line, ok = formatHumanReasoningEvent(event)
+	case responseevents.KindTool:
+		line, ok = formatHumanToolEvent(event)
 	case responseevents.KindError:
 		line, ok = formatHumanRetryEvent(event)
 	case responseevents.KindProgress:
@@ -343,6 +345,28 @@ func formatHumanResponseEvent(event responseevents.FactoryResponseEvent) (string
 	}
 	line = boundedHumanProgressPayload(line)
 	return line, line != ""
+}
+
+func formatHumanToolEvent(event responseevents.FactoryResponseEvent) (string, bool) {
+	status, ok := map[responseevents.Phase]string{
+		responseevents.PhaseStarted:   "started",
+		responseevents.PhaseCompleted: "completed",
+		responseevents.PhaseFailed:    "failed",
+		responseevents.PhaseCanceled:  "canceled",
+	}[event.Phase]
+	if !ok {
+		return "", false
+	}
+	var payload responseevents.ToolPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return "", false
+	}
+	name := normalizeHumanProgressField(payload.ToolName)
+	callID := normalizeHumanProgressField(payload.ToolCallID)
+	if name == "" || callID == "" {
+		return "", false
+	}
+	return "tool: name=" + name + " call=" + callID + " status=" + status, true
 }
 
 func formatHumanReasoningEvent(event responseevents.FactoryResponseEvent) (string, bool) {
