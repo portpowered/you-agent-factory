@@ -9,19 +9,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
-func TestS14SupportedProviderUnsafeOptionPropagationEvidence(t *testing.T) {
-	t.Parallel()
+type s14ProviderCase struct {
+	provider       interfaces.ModelProvider
+	unsafeMarker   string
+	unsafeReq      interfaces.ProviderInferenceRequest
+	safeReq        interfaces.ProviderInferenceRequest
+	unsafeArgCheck func(args []string) bool
+	safeArgCheck   func(args []string) bool
+}
 
-	type providerCase struct {
-		provider       interfaces.ModelProvider
-		unsafeMarker   string
-		unsafeReq      interfaces.ProviderInferenceRequest
-		safeReq        interfaces.ProviderInferenceRequest
-		unsafeArgCheck func(args []string) bool
-		safeArgCheck   func(args []string) bool
-	}
-
-	cases := []providerCase{
+func s14SkipPermissionsProviderCases() []s14ProviderCase {
+	return []s14ProviderCase{
 		{
 			provider:     interfaces.ModelProviderClaude,
 			unsafeMarker: "--dangerously-skip-permissions",
@@ -118,41 +116,60 @@ func TestS14SupportedProviderUnsafeOptionPropagationEvidence(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, tc := range cases {
-		tc := tc
-		if tc.safeArgCheck == nil {
-			marker := tc.unsafeMarker
-			tc.safeArgCheck = func(args []string) bool {
-				return !strings.Contains(strings.Join(args, " "), marker)
-			}
-			if tc.provider == interfaces.ModelProviderCursor {
-				tc.safeArgCheck = func(args []string) bool {
-					return len(args) == 0 || args[0] != "-f"
-				}
-			}
+func s14ResolveSafeArgCheck(tc *s14ProviderCase) {
+	if tc.safeArgCheck != nil {
+		return
+	}
+	marker := tc.unsafeMarker
+	tc.safeArgCheck = func(args []string) bool {
+		return !strings.Contains(strings.Join(args, " "), marker)
+	}
+	if tc.provider == interfaces.ModelProviderCursor {
+		tc.safeArgCheck = func(args []string) bool {
+			return len(args) == 0 || args[0] != "-f"
 		}
+	}
+}
+
+func assertS14ProviderUnsafeArgs(t *testing.T, tc s14ProviderCase) {
+	t.Helper()
+	behavior := providerBehaviorFor(string(tc.provider), logging.NoopLogger{})
+	args, err := behavior.BuildArgs(context.Background(), tc.unsafeReq, true, nil)
+	if err != nil {
+		t.Fatalf("BuildArgs(skip=true): %v", err)
+	}
+	if !tc.unsafeArgCheck(args) {
+		t.Fatalf("provider args = %#v, want unsafe marker %q", args, tc.unsafeMarker)
+	}
+}
+
+func assertS14ProviderSafeArgs(t *testing.T, tc s14ProviderCase) {
+	t.Helper()
+	behavior := providerBehaviorFor(string(tc.provider), logging.NoopLogger{})
+	args, err := behavior.BuildArgs(context.Background(), tc.safeReq, false, nil)
+	if err != nil {
+		t.Fatalf("BuildArgs(skip=false): %v", err)
+	}
+	if !tc.safeArgCheck(args) {
+		t.Fatalf("provider args = %#v, want to omit unsafe marker %q", args, tc.unsafeMarker)
+	}
+}
+
+func TestS14SupportedProviderUnsafeOptionPropagationEvidence(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range s14SkipPermissionsProviderCases() {
+		tc := tc
+		s14ResolveSafeArgCheck(&tc)
 		t.Run(string(tc.provider)+"/EffectiveTrueIncludesUnsafeOption", func(t *testing.T) {
 			t.Parallel()
-			behavior := providerBehaviorFor(string(tc.provider), logging.NoopLogger{})
-			args, err := behavior.BuildArgs(context.Background(), tc.unsafeReq, true, nil)
-			if err != nil {
-				t.Fatalf("BuildArgs(skip=true): %v", err)
-			}
-			if !tc.unsafeArgCheck(args) {
-				t.Fatalf("provider args = %#v, want unsafe marker %q", args, tc.unsafeMarker)
-			}
+			assertS14ProviderUnsafeArgs(t, tc)
 		})
 		t.Run(string(tc.provider)+"/EffectiveFalseOmitsUnsafeOption", func(t *testing.T) {
 			t.Parallel()
-			behavior := providerBehaviorFor(string(tc.provider), logging.NoopLogger{})
-			args, err := behavior.BuildArgs(context.Background(), tc.safeReq, false, nil)
-			if err != nil {
-				t.Fatalf("BuildArgs(skip=false): %v", err)
-			}
-			if !tc.safeArgCheck(args) {
-				t.Fatalf("provider args = %#v, want to omit unsafe marker %q", args, tc.unsafeMarker)
-			}
+			assertS14ProviderSafeArgs(t, tc)
 		})
 	}
 }

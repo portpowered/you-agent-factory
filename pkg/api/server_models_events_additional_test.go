@@ -18,6 +18,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
@@ -455,6 +456,24 @@ func assertJSONErrorResponse(t *testing.T, gotStatus int, header http.Header, bo
 	assertJSONError(t, rec, wantStatus, wantCode, wantMessage)
 }
 
+type listModelsWiringAssetPuller struct{}
+
+func (listModelsWiringAssetPuller) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (apisurface.ModelPullResult, error) {
+	return apisurface.ModelPullResult{}, nil
+}
+
+func (listModelsWiringAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+	return nil
+}
+
+func (listModelsWiringAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+	return localmodels.CacheLayout{}, nil
+}
+
+func (listModelsWiringAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
+	return localmodels.RuntimeCacheInspection{Supported: true, Installed: true}, nil
+}
+
 func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
@@ -463,6 +482,7 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 		Dir:               dir,
 		MockWorkersConfig: factoryconfig.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
+		ModelAssets:       listModelsWiringAssetPuller{},
 	})
 	if err != nil {
 		t.Fatalf("InitializeAPITransport: %v", err)
