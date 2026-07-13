@@ -675,12 +675,33 @@ func drainAPILifecycleRuntimeSessions(t *testing.T, service factorysessionexecut
 
 func removeAPILifecycleProjectState(t *testing.T, projectRoot string) {
 	t.Helper()
+	const (
+		cleanupTimeout      = 5 * time.Second
+		cleanupPollInterval = 25 * time.Millisecond
+		cleanupQuietPeriod  = 250 * time.Millisecond
+	)
 	runtimeStateRoot := filepath.Join(projectRoot, ".you-agent-factory")
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(cleanupTimeout)
+	var absentSince time.Time
 	for time.Now().Before(deadline) {
-		if err := os.RemoveAll(runtimeStateRoot); err == nil {
-			return
+		_, statErr := os.Stat(runtimeStateRoot)
+		switch {
+		case errors.Is(statErr, os.ErrNotExist):
+			if absentSince.IsZero() {
+				absentSince = time.Now()
+			}
+			if time.Since(absentSince) >= cleanupQuietPeriod {
+				return
+			}
+		case statErr == nil:
+			// Terminate can publish its terminal projection before the async
+			// runner completes its final persistence write. Reset the quiet
+			// period whenever that late write recreates runtime state.
+			absentSince = time.Time{}
+			_ = os.RemoveAll(runtimeStateRoot)
+		default:
+			absentSince = time.Time{}
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(cleanupPollInterval)
 	}
 }
