@@ -5,15 +5,20 @@ This artifact proves named `@you/goal` one-shot `--output response-stream` human
 JSON modes consume the merged internal response-stream renderer contract and end with
 the shared authoritative `InvocationResponse` terminal outcome.
 
-**Status:** CLI-private stream proofs recorded; gate remains incomplete pending R1/R2 (no public `FactoryResponseEvent`)
+**Status:** CLI-private stream proofs recorded; gate remains incomplete pending
+canonical runtime publication, session SSE, and CLI `FactoryResponseEvent` NDJSON
 
-**Last updated:** 2026-07-12 UTC
+**Last updated:** 2026-07-13 UTC
 
 **Audit prerequisite:** `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`
-records blocking residuals for public `FactoryResponseEvent` + session-scoped SSE.
-Story 002 therefore proves the **merged CLI stream contract** (internal
-`SessionResponseStream` vocabulary mapped through `pkg/cli/run/run_clean_invocation.go`)
-without soft-passing public canonical parity.
+records the original blocking residuals for public `FactoryResponseEvent` +
+session-scoped SSE. Since that audit, the public OpenAPI schemas, generated
+types, and legacy-fragment compatibility mapper have merged. Runtime publication,
+session-scoped response-event SSE, and canonical CLI NDJSON have not. Story 002
+therefore proves the **merged CLI stream contract** (internal
+`SessionResponseStream` vocabulary mapped through
+`pkg/cli/run/run_clean_invocation.go`) without soft-passing public canonical
+delivery parity.
 
 ## Summary verdict
 
@@ -47,7 +52,11 @@ go test ./tests/functional/smoke/ -run NamedGoalResponseStream -count=1
 
 ## Residual exclusions carried from story 001
 
-- **R1 / R2:** CLI progress NDJSON remains a CLI-private dialect until public
-  `FactoryResponseEvent` lands; story 004 owns API/CLI canonical parity.
+- **R1.1 (partially closed upstream):** authored OpenAPI schemas and generated
+  `FactoryResponseEvent` types are merged; runtime publication remains outside
+  this integration lane.
+- **R1.2 / R2:** session-scoped response-event SSE is not merged and CLI
+  progress NDJSON remains a CLI-private dialect rather than canonical
+  `FactoryResponseEvent` records; story 004 owns API/CLI canonical parity.
 - Mock-worker goal smoke fixtures may complete without live progress fragments;
   vocabulary tests still prove absence of legacy provider fragment dialect on stdout.
