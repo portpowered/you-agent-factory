@@ -922,7 +922,7 @@ func ComposeFactoryCore(
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
 	)
-	factorysessions.EnsureRuntimeFactorySessionID(defaultSession)
+	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddGeneratedRecorder)
 	collaborators.Sessions.Upsert(defaultSession, true)
 
 	coreBuilt = true

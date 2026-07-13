@@ -208,6 +208,25 @@ primary-result behavior.
   invocation primary-result byte fixtures live in
   `compat/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
+  Session-scoped immutable response-event storage lives in
+  `pkg/factorysessions/responseeventstore` with
+  `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is
+  session-runtime-local state separate from canonical `FactoryEvent` history.
+  `factorysessions.NewLiveSession` allocates one store using the canonical
+  Factory Session ID. Runtime composition binds canonical `SESSION_COMPLETED`
+  observation to `CompleteResponseEvents`, and live-session teardown closes the
+  store alongside legacy response streams; keep this lifecycle state on
+  `LiveSession`, not `FactoryService`.
+  `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
+  after the cursor, then continues live via `Subscription.Next`; optional
+  `WithDispatchFilter(dispatchID)` omits non-matching events while preserving
+  each delivered event's global session sequence and eventId. `Complete()` stops
+  further publishes while retained events remain for catch-up; catch-up readers
+  created after completion are not registered as live subscribers. Publishing
+  rejects an explicit Factory Session ID that differs from the store's canonical
+  identity. `Close()` rejects new subscriptions and publishes and detaches active
+  subscribers. Mirror
+  `responsestream.Subscription` patterns when extending close/complete behavior.
   Package docs in `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`
   enforces isolation from CLI, HTTP, subprocess, and provider imports.

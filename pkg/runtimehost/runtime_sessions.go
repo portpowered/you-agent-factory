@@ -218,7 +218,7 @@ func (fs *Host) registerLiveSession(
 		}
 	}
 	registration := fs.buildLiveSessionRegistration(sessionID, handle, target)
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
+	session := factorysessions.NewLiveSession(
 		sessionID,
 		registration.factoryDir,
 		registration.folderPath,
@@ -227,7 +227,9 @@ func (fs *Host) registerLiveSession(
 		&liveSessionState{bundle: handle.Bundle, handle: handle, spec: registration.preparedSpec},
 		isDefault,
 		registration.project,
-	), selectSession)
+	)
+	factorysessions.BindResponseEventCompletion(session, handle.Bundle.EventHistory.AddGeneratedRecorder)
+	fs.sessions.Upsert(session, selectSession)
 	return sessionID
 }
 
@@ -705,7 +707,7 @@ func (c *runtimeCoordinator) ReplaceSessionRuntime(
 		}
 	}
 	fs.closeSessionResponseStreams(session)
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
+	replacementSession := factorysessions.NewLiveSession(
 		session.ID,
 		replacement.Dir,
 		session.FolderPath,
@@ -714,7 +716,13 @@ func (c *runtimeCoordinator) ReplaceSessionRuntime(
 		&liveSessionState{handle: replacementHandle, spec: liveSessionBuildSpec(session)},
 		session.IsDefault,
 		session.Project,
-	), isActiveSession)
+	)
+	replacementSession.RuntimeFactorySessionID = session.RuntimeFactorySessionID
+	replacementSession.ResponseEvents = factorysessions.NewSessionResponseEventStore(
+		factorysessions.CanonicalFactorySessionID(replacementSession),
+	)
+	factorysessions.BindResponseEventCompletion(replacementSession, replacement.EventHistory.AddGeneratedRecorder)
+	fs.sessions.Upsert(replacementSession, isActiveSession)
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
@@ -1122,6 +1130,7 @@ func (fs *Host) closeSessionResponseStreams(session *factorysessions.LiveSession
 }
 
 func (fs *Host) closeSessionResponseStreamsDirect(session *factorysessions.LiveSession) {
+	session.CloseResponseEvents()
 	streams := fs.sessionResponseStreams(session)
 	if streams == nil {
 		return
