@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
+func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
 	cfg := defaultcmd.ExplicitRunConfig()
 	var invocationOutputMode string
 	cmd := &cobra.Command{
@@ -29,14 +29,14 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			return rejectDeprecatedPortFlag(cmd, args)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeRunCommand(cmd, args, &cfg, globals, diagnostics, operatorDefaults)
+			return executeRunCommand(cmd, args, &cfg, globals, diagnostics, operatorDefaults, rootOptions)
 		},
 	}
 	registerRunCommandFlags(cmd, &cfg, &invocationOutputMode)
 	return cmd
 }
 
-func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) error {
+func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) error {
 	promptArgs, resolvedConfig, err := resolveRunCommandInvocationInput(cmd, args, cfg)
 	if err != nil {
 		return err
@@ -45,10 +45,10 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		return err
 	}
 	if helpRequested(cmd) {
-		return writeRunCommandHelp(cmd, &resolvedConfig)
+		return writeRunCommandHelp(cmd, &resolvedConfig, rootOptions)
 	}
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
-	err = runFactory(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy)
+	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
 		err = factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, resolvedConfig.Dir)
 		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
@@ -103,8 +103,13 @@ func helpRequested(cmd *cobra.Command) bool {
 	return helpFlag != nil && helpFlag.Changed
 }
 
-func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig) error {
-	if err := resolveRunFactorySelection(cmd, cfg); err != nil {
+func writeRunCommandHelp(cmd *cobra.Command, cfg *runcli.RunConfig, rootOptions RootCommandOptions) error {
+	homeDir, err := rootOptions.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve process home directory: %w", err)
+	}
+	cfg.HomeDir = homeDir
+	if err := resolveRunFactorySelection(cmd, cfg, homeDir); err != nil {
 		return err
 	}
 	wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelp(cmd.OutOrStdout(), cliBinaryName, *cfg)

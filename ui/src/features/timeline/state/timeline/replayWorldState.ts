@@ -102,14 +102,25 @@ export function advanceWorldStateFromCheckpoint(
   events: FactoryEvent[],
   selectedTick: number,
 ): ReplayWorldState {
-  const checkpointTick = checkpoint.tick_count;
   const state = checkpoint;
   state.tick_count = selectedTick;
   for (const event of orderedEvents(events)) {
-    if (
-      event.context.tick > checkpointTick &&
-      event.context.tick <= selectedTick
-    ) {
+    if (event.context.tick <= selectedTick) {
+      applyReplayEvent(state, event);
+    }
+  }
+  return state;
+}
+
+export function advanceWorldStateFromAcceptedTail(
+  checkpoint: ReplayWorldState,
+  acceptedTail: FactoryEvent[],
+  selectedTick: number,
+): ReplayWorldState {
+  const state = checkpoint;
+  state.tick_count = selectedTick;
+  for (const event of orderedEvents(acceptedTail)) {
+    if (event.context.tick <= selectedTick) {
       applyReplayEvent(state, event);
     }
   }

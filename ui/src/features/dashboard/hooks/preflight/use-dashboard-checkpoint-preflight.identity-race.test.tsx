@@ -9,6 +9,7 @@ import {
   createControlledIndexedDBTestDouble,
   flushPromiseContinuations,
 } from "../../../../testing/controlled-indexeddb-test-utils";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import { useDashboardCheckpointPreflight } from "./use-dashboard-checkpoint-preflight";
 
 vi.mock("../../session/dashboard-session-provider", () => ({
@@ -32,8 +33,12 @@ describe("useDashboardCheckpointPreflight exact deletion cancellation", () => {
   it("preserves persisted and runtime state when deletion is superseded", async () => {
     const sessionID = "session-delete-race";
     const persistedRecord = {
-      checkpoint: { replayState: {}, selectedTick: 11 },
-      schemaVersion: 3,
+      checkpoint: {
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+        replayState: {},
+        selectedTick: 11,
+      },
+      schemaVersion: 4,
       storageKey: `checkpoint-${sessionID}`,
       streamIdentity: {
         backendScopeID: `backend-${sessionID}`,

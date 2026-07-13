@@ -69,7 +69,10 @@ export function useDashboardCheckpointPreflight({
   checkpointsDisabled: boolean;
   rawSessionID: string | null;
   refreshToken: number;
-  restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  restoreCheckpoint: (
+    streamIdentity: TimelineCheckpointStreamIdentity,
+    checkpoint: FactoryTimelineCheckpoint,
+  ) => void;
 }): UseDashboardCheckpointPreflightResult {
   const queryClient = useQueryClient();
   const remapSelectedSessionID = useRemapDashboardSelectedSession();
@@ -209,7 +212,7 @@ export function useDashboardCheckpointPreflight({
         remapSelectedSessionID(resolution.resolvedSessionId);
       }
       if (resolution.kind === "resume" && resolution.checkpoint) {
-        restoreCheckpoint({
+        restoreCheckpoint(resolution.streamIdentity, {
           ...resolution.checkpoint,
           syncIdentity: checkpointSyncIdentityFromPreflight(
             resolution.streamIdentity,

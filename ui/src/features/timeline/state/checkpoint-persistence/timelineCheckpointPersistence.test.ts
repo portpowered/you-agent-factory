@@ -14,11 +14,15 @@ import {
   type TimelineCheckpointStreamIdentity,
 } from "../timelineCheckpointPersistence";
 import { reconnectCursorFromCheckpoint } from "../timelineCheckpointReconnect";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 
 interface StoredCheckpointEnvelope {
   checkpoint?: {
     afterEventId?: string;
     afterSequence?: number;
+    materializedWorkOutcomeState?: ReturnType<
+      typeof createMaterializedWorkOutcomeState
+    >;
     replayState?: ReturnType<typeof emptyReplayWorldState>;
     selectedTick: number;
   };
@@ -138,6 +142,7 @@ function checkpointFixture(): FactoryTimelineCheckpoint {
   return {
     afterEventId: "event-7",
     afterSequence: 42,
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     replayState,
     selectedTick: 7,
     syncIdentity: {
@@ -238,7 +243,7 @@ describe("timeline checkpoint persistence diagnostics", () => {
 
     records.set(storageKey, {
       checkpoint: checkpointFixture(),
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey,
       streamIdentity: {
         ...streamIdentity,
@@ -430,7 +435,7 @@ describe("timeline checkpoint guard migration", () => {
 
     records.set(affectedStorageKey, {
       checkpoint,
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: affectedStorageKey,
       streamIdentity: { ...expectedIdentity, ...mismatch },
     });
@@ -456,6 +461,7 @@ describe("timeline checkpoint reconnect cursors", () => {
     expect(reconnectCursorFromCheckpoint(null)).toBeUndefined();
     expect(
       reconnectCursorFromCheckpoint({
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(1),
         selectedTick: 1,
       }),
@@ -468,6 +474,7 @@ describe("timeline checkpoint reconnect cursors", () => {
     expect(
       reconnectCursorFromCheckpoint({
         afterSequence: 9,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(9),
         selectedTick: 9,
       }),

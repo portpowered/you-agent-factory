@@ -1,4 +1,5 @@
 import {
+  emptyMaterializedWorkOutcomeState,
   initialEditableFactoryDefinitionVersion,
   resolvedDefaultFactorySessionID,
   timelineCheckpointDBVersion,
@@ -205,6 +206,8 @@ export async function seedTimelineCheckpoint(page, identity, cursor) {
         checkpoint: {
           afterEventId: cursor.afterEventId,
           afterSequence: cursor.afterSequence,
+          materializedWorkOutcomeState:
+            emptyMaterializedWorkOutcomeState(cursor),
           replayState,
           selectedTick: cursor.selectedTick,
         },
