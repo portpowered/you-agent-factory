@@ -103,9 +103,16 @@ function installIndexedDBTestDouble() {
         oncomplete: null,
         objectStore: () => ({
           delete: (key: string) =>
-            indexedDBRequest(undefined, () => {
-              records.delete(key);
-            }),
+            indexedDBRequest(
+              undefined,
+              () => {
+                records.delete(key);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
           get: (key: string) => indexedDBRequest(records.get(key)),
           getAll: () => indexedDBRequest([...records.values()]),
           put: (value: { sessionID: string; storageKey?: string }) =>
@@ -115,9 +122,9 @@ function installIndexedDBTestDouble() {
                 records.set(value.storageKey ?? value.sessionID, value);
               },
               () =>
-                (
-                  transaction.oncomplete as ((event: Event) => void) | null
-                )?.({} as Event),
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
             ),
         }),
       };

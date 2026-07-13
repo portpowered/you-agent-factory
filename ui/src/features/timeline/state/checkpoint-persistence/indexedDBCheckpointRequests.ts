@@ -6,6 +6,59 @@ const CHECKPOINT_DB_NAME = "agentFactoryTimelineCheckpoints";
 const CHECKPOINT_DB_VERSION = 3;
 const CHECKPOINT_STORE_NAME = "checkpoints";
 
+export async function readCheckpointDatabaseRecord<T>(
+  indexedDB: IndexedDBLike,
+  storageKey: string,
+  signal?: AbortSignal,
+): Promise<T | null> {
+  const database = await openCheckpointDatabase(indexedDB);
+  try {
+    const transaction = database.transaction(CHECKPOINT_STORE_NAME, "readonly");
+    const result = await indexedDBRequestToPromise<T | undefined>(
+      transaction.objectStore(CHECKPOINT_STORE_NAME).get(storageKey),
+      transaction,
+      signal,
+    );
+    return result ?? null;
+  } finally {
+    database.close();
+  }
+}
+
+export async function deleteCheckpointDatabaseRecord(
+  indexedDB: IndexedDBLike,
+  storageKey: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const database = await openCheckpointDatabase(indexedDB);
+  try {
+    const transaction = database.transaction(
+      CHECKPOINT_STORE_NAME,
+      "readwrite",
+    );
+    const requestOutcome = indexedDBRequestToPromise(
+      transaction.objectStore(CHECKPOINT_STORE_NAME).delete(storageKey),
+      transaction,
+      signal,
+    ).then(
+      () => ({ succeeded: true }) as const,
+      (error: unknown) => ({ error, succeeded: false }) as const,
+    );
+    const transactionOutcome = indexedDBTransactionToPromise(transaction).then(
+      () => ({ succeeded: true }) as const,
+      (error: unknown) => ({ error, succeeded: false }) as const,
+    );
+    const [request, durableTransaction] = await Promise.all([
+      requestOutcome,
+      transactionOutcome,
+    ]);
+    if (!request.succeeded) throw request.error;
+    if (!durableTransaction.succeeded) throw durableTransaction.error;
+  } finally {
+    database.close();
+  }
+}
+
 export async function writeCheckpointDatabaseRecord(
   indexedDB: IndexedDBLike,
   value: unknown,

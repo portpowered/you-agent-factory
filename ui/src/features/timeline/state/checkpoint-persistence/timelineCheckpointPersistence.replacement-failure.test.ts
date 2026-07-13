@@ -68,6 +68,11 @@ async function commitCheckpoint(
   await flushPromiseContinuations();
   fixture.controls.succeed("open");
   await flushPromiseContinuations();
+  fixture.controls.succeed("get");
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+  fixture.controls.succeed("open");
+  await flushPromiseContinuations();
   fixture.controls.succeed("put");
   fixture.controls.completeTransaction();
   await write;
@@ -78,7 +83,6 @@ async function readStoredCheckpoint(fixture: ControlledFixture) {
   fixture.controls.succeed("open");
   await flushPromiseContinuations();
   fixture.controls.succeed("get");
-  fixture.controls.completeTransaction();
   return read;
 }
 
@@ -105,6 +109,11 @@ async function expectFailedReplacementRecovery(
   ).finally(() => {
     replacementSettled = true;
   });
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+  fixture.controls.succeed("open");
+  await flushPromiseContinuations();
+  fixture.controls.succeed("get");
   await flushPromiseContinuations();
   await flushPromiseContinuations();
   fixture.controls.succeed("open");
@@ -171,6 +180,11 @@ describe("timeline checkpoint replacement failure", () => {
       checkpoint(7, "event-7", 42),
       streamIdentity,
     );
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    controls.succeed("get");
+    await flushPromiseContinuations();
+    await flushPromiseContinuations();
     controls.succeed("open");
     await flushPromiseContinuations();
     controls.succeed("put");

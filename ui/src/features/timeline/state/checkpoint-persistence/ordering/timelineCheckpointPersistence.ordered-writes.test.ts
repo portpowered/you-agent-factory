@@ -7,6 +7,7 @@ import { createMaterializedWorkOutcomeState } from "../../../../work-outcome/pub
 import { emptyReplayWorldState } from "../../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../../timeline/storeState";
 import {
+  clearTimelineCheckpoint,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
@@ -14,6 +15,7 @@ import {
 
 interface StoredCheckpointEnvelope {
   checkpoint?: FactoryTimelineCheckpoint;
+  schemaVersion?: number;
   storageKey?: string;
   streamIdentity?: TimelineCheckpointStreamIdentity;
 }
@@ -24,6 +26,15 @@ const streamIdentity = {
   logicalSessionKeyID: "logical-default",
   streamGenerationID: "2026-07-13T00:00:00Z",
 } satisfies TimelineCheckpointStreamIdentity;
+
+function storageKey(identity: TimelineCheckpointStreamIdentity): string {
+  return [
+    identity.backendScopeID,
+    identity.factorySessionID,
+    identity.logicalSessionKeyID,
+    identity.streamGenerationID,
+  ].join("::");
+}
 
 function checkpoint(
   selectedTick: number,
@@ -60,6 +71,18 @@ async function readStoredCheckpoint(
   return read;
 }
 
+async function releaseCommittedSequenceRead(
+  fixture: ReturnType<
+    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
+  >,
+) {
+  fixture.controls.succeed("open");
+  await flushPromiseContinuations();
+  fixture.controls.succeed("get");
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+}
+
 describe("timeline checkpoint same-stream write ordering", () => {
   it("serializes a strictly newer save behind the pending same-stream write", async () => {
     const fixture =
@@ -75,6 +98,8 @@ describe("timeline checkpoint same-stream write ordering", () => {
       streamIdentity,
     );
 
+    expect(fixture.controls.pendingOperations()).toEqual(["open"]);
+    await releaseCommittedSequenceRead(fixture);
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
     fixture.controls.succeed("open");
     await flushPromiseContinuations();
@@ -119,6 +144,8 @@ describe("timeline checkpoint same-stream write ordering", () => {
     await flushPromiseContinuations();
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
+    await releaseCommittedSequenceRead(fixture);
+    expect(fixture.controls.pendingOperations()).toEqual(["open"]);
     fixture.controls.succeed("open");
     await flushPromiseContinuations();
     expect(fixture.controls.pendingOperations()).toEqual(["put"]);
@@ -152,6 +179,7 @@ describe("timeline checkpoint same-stream write ordering", () => {
     await flushPromiseContinuations();
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
+    await releaseCommittedSequenceRead(fixture);
     fixture.controls.succeed("open");
     await flushPromiseContinuations();
     fixture.controls.succeed("put");
@@ -204,6 +232,14 @@ describe("timeline checkpoint independent stream writes", () => {
     fixture.controls.succeed("open");
     fixture.controls.succeed("open");
     await flushPromiseContinuations();
+    fixture.controls.succeed("get");
+    fixture.controls.succeed("get");
+    await flushPromiseContinuations();
+    await flushPromiseContinuations();
+    expect(fixture.controls.pendingOperations()).toEqual(["open", "open"]);
+    fixture.controls.succeed("open");
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
     expect(fixture.controls.pendingOperations()).toEqual(["put", "put"]);
 
     fixture.controls.succeed("put");
@@ -246,6 +282,7 @@ describe("timeline checkpoint lane lifecycle", () => {
       streamIdentity,
     );
 
+    await releaseCommittedSequenceRead(fixture);
     fixture.controls.succeed("open");
     await flushPromiseContinuations();
     fixture.controls.succeed("put");
@@ -260,6 +297,7 @@ describe("timeline checkpoint lane lifecycle", () => {
     );
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
+    await releaseCommittedSequenceRead(fixture);
     fixture.controls.succeed("open");
     await flushPromiseContinuations();
     fixture.controls.succeed("put");
@@ -275,7 +313,9 @@ describe("timeline checkpoint lane lifecycle", () => {
       }),
     ]);
   });
+});
 
+describe("timeline checkpoint durable admission lifecycle", () => {
   it("rejects older and equal saves after a newer checkpoint is committed", async () => {
     const fixture =
       createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
@@ -286,6 +326,7 @@ describe("timeline checkpoint lane lifecycle", () => {
       streamIdentity,
     );
 
+    await releaseCommittedSequenceRead(fixture);
     fixture.controls.succeed("open");
     await flushPromiseContinuations();
     fixture.controls.succeed("put");
@@ -303,6 +344,8 @@ describe("timeline checkpoint lane lifecycle", () => {
       checkpoint(83, "different-event-at-82", 82),
       streamIdentity,
     );
+    expect(fixture.controls.pendingOperations()).toEqual(["open"]);
+    await releaseCommittedSequenceRead(fixture);
     await Promise.all([older, equal]);
 
     expect(fixture.controls.pendingOperations()).toEqual([]);
@@ -317,6 +360,105 @@ describe("timeline checkpoint lane lifecycle", () => {
           replayState: expect.objectContaining({ tick_count: 82 }),
           selectedTick: 82,
           syncIdentity: committedCheckpoint.syncIdentity,
+        }),
+        streamIdentity,
+      }),
+    ]);
+  });
+
+  it("reconciles a fresh lane with a checkpoint committed by a prior realm", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const committedCheckpoint = checkpoint(82, "event-82", 82);
+    fixture.records.set(storageKey(streamIdentity), {
+      checkpoint: committedCheckpoint,
+      schemaVersion: 4,
+      storageKey: storageKey(streamIdentity),
+      streamIdentity,
+    });
+
+    const older = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(81, "stale-event-81", 81),
+      streamIdentity,
+    );
+    const equal = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(83, "different-event-at-82", 82),
+      streamIdentity,
+    );
+
+    await releaseCommittedSequenceRead(fixture);
+    await Promise.all([older, equal]);
+
+    expect(fixture.controls.pendingOperations()).toEqual([]);
+    expect([...fixture.records.values()]).toEqual([
+      expect.objectContaining({
+        checkpoint: expect.objectContaining({
+          afterEventId: "event-82",
+          afterSequence: 82,
+          materializedWorkOutcomeState: expect.objectContaining({
+            counts: expect.objectContaining({ completed: 82 }),
+          }),
+          replayState: expect.objectContaining({ tick_count: 82 }),
+          selectedTick: 82,
+          syncIdentity: committedCheckpoint.syncIdentity,
+        }),
+        streamIdentity,
+      }),
+    ]);
+  });
+});
+
+describe("timeline checkpoint clear lifecycle", () => {
+  it("allows a lower replay checkpoint after the durable checkpoint is cleared", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const committed = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(82, "event-82", 82),
+      streamIdentity,
+    );
+    await releaseCommittedSequenceRead(fixture);
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("put");
+    fixture.controls.completeTransaction();
+    await committed;
+    await flushPromiseContinuations();
+
+    const cleared = clearTimelineCheckpoint(fixture.indexedDB, streamIdentity);
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("delete");
+    fixture.controls.completeTransaction();
+    await cleared;
+    await flushPromiseContinuations();
+
+    const replayCheckpoint = checkpoint(21, "replayed-event-21", 21);
+    const replayed = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      replayCheckpoint,
+      streamIdentity,
+    );
+    await releaseCommittedSequenceRead(fixture);
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("put");
+    fixture.controls.completeTransaction();
+    await replayed;
+
+    expect([...fixture.records.values()]).toEqual([
+      expect.objectContaining({
+        checkpoint: expect.objectContaining({
+          afterEventId: "replayed-event-21",
+          afterSequence: 21,
+          materializedWorkOutcomeState: expect.objectContaining({
+            counts: expect.objectContaining({ completed: 21 }),
+          }),
+          replayState: expect.objectContaining({ tick_count: 21 }),
+          selectedTick: 21,
+          syncIdentity: replayCheckpoint.syncIdentity,
         }),
         streamIdentity,
       }),

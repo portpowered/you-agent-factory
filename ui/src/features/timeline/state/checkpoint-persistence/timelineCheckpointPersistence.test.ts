@@ -61,9 +61,16 @@ function createIndexedDBTestDouble(
         onerror: null,
         objectStore: () => ({
           delete: (key: string) =>
-            indexedDBTestRequest(undefined, () => {
-              records.delete(key);
-            }),
+            indexedDBTestRequest(
+              undefined,
+              () => {
+                records.delete(key);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
           get: (key: string) => indexedDBTestRequest(records.get(key)),
           getAll: () => indexedDBTestRequest(Array.from(records.values())),
           put: (value: StoredCheckpointEnvelope) =>

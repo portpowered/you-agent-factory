@@ -133,7 +133,7 @@ export function createControlledIndexedDBTestDouble<
     objectStoreNames: {
       contains: () => true,
     },
-    transaction: () => {
+    transaction: (_storeName: string, mode?: IDBTransactionMode) => {
       let aborted = false;
       const commitActions: Array<() => void> = [];
       const transaction = {
@@ -181,7 +181,9 @@ export function createControlledIndexedDBTestDouble<
             ),
         }),
       } as unknown as IDBTransaction;
-      pendingTransactions.push({ commitActions, transaction });
+      if (mode === "readwrite") {
+        pendingTransactions.push({ commitActions, transaction });
+      }
       return transaction;
     },
   };

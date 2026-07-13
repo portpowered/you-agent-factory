@@ -82,7 +82,14 @@ function createIndexedDBTestDouble(): IDBFactory {
         onerror: null,
         objectStore: () => ({
           delete: (key: string) =>
-            indexedDBRequest(undefined, () => records.delete(key)),
+            indexedDBRequest(
+              undefined,
+              () => records.delete(key),
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
           get: (key: string) => indexedDBRequest(records.get(key)),
           getAll: () => indexedDBRequest([...records.values()]),
           put: (value: StoredCheckpointEnvelope) =>

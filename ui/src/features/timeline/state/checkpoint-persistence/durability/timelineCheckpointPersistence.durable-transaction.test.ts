@@ -47,13 +47,19 @@ async function startWrite() {
 
   fixture.controls.succeed("open");
   await flushPromiseContinuations();
+  expect(fixture.controls.pendingOperations()).toEqual(["get"]);
+  fixture.controls.succeed("get");
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+  fixture.controls.succeed("open");
+  await flushPromiseContinuations();
   expect(fixture.controls.pendingOperations()).toEqual(["put"]);
   expect(fixture.controls.pendingTransactionCount()).toBe(1);
 
   fixture.controls.succeed("put");
   await flushPromiseContinuations();
   expect(settled).toBe(false);
-  expect(fixture.controls.closedDatabaseCount()).toBe(0);
+  expect(fixture.controls.closedDatabaseCount()).toBe(1);
   expect(fixture.records.size).toBe(0);
 
   return { ...fixture, isSettled: () => settled, write };
@@ -67,7 +73,7 @@ describe("timeline checkpoint durable transaction settlement", () => {
     await fixture.write;
 
     expect(fixture.isSettled()).toBe(true);
-    expect(fixture.controls.closedDatabaseCount()).toBe(1);
+    expect(fixture.controls.closedDatabaseCount()).toBe(2);
     expect(fixture.records.size).toBe(1);
   });
 
@@ -78,7 +84,7 @@ describe("timeline checkpoint durable transaction settlement", () => {
     await fixture.write;
 
     expect(fixture.isSettled()).toBe(true);
-    expect(fixture.controls.closedDatabaseCount()).toBe(1);
+    expect(fixture.controls.closedDatabaseCount()).toBe(2);
     expect(fixture.records.size).toBe(0);
   });
 
@@ -89,7 +95,7 @@ describe("timeline checkpoint durable transaction settlement", () => {
     await fixture.write;
 
     expect(fixture.isSettled()).toBe(true);
-    expect(fixture.controls.closedDatabaseCount()).toBe(1);
+    expect(fixture.controls.closedDatabaseCount()).toBe(2);
     expect(fixture.records.size).toBe(0);
   });
 });
