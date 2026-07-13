@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -502,18 +503,154 @@ func TestNewApplicationAllowsMissingOptionalDashboard(t *testing.T) {
 func TestApplicationStartFailureUnwindsActivatedEdges(t *testing.T) {
 	t.Parallel()
 
-	fixture := newApplicationFixture()
-	cause := errors.New("listener unavailable")
-	fixture.cli.startErr = cause
-	application, err := initializer.Start(context.Background(), initializer.ModeCLI, fixture.graph)
-	if application != nil || !errors.Is(err, cause) {
-		t.Fatalf("Start() = (%v, %v), want nil application wrapping cause", application, err)
+	tests := []struct {
+		name       string
+		failRole   string
+		rollbackAt string
+		wantEvents []string
+	}{
+		{
+			name:     "first start",
+			failRole: "runtime",
+			wantEvents: []string{
+				"start runtime", "close graph",
+			},
+		},
+		{
+			name:     "middle start",
+			failRole: "workers",
+			wantEvents: []string{
+				"start runtime", "start workers",
+				"stop runtime", "cancel runtime", "join runtime", "close graph",
+			},
+		},
+		{
+			name:       "final start with rollback failure",
+			failRole:   "cli",
+			rollbackAt: "workers",
+			wantEvents: []string{
+				"start runtime", "start workers", "start dashboard", "start cli",
+				"stop dashboard", "cancel dashboard", "join dashboard",
+				"stop workers", "cancel workers", "join workers",
+				"stop runtime", "cancel runtime", "join runtime", "close graph",
+			},
+		},
 	}
-	if got, want := fixture.stops, []string{"dashboard", "workers", "runtime"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("unwind order = %v, want %v", got, want)
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := &lifecycleRecorder{}
+			startErr := errors.New("startup unavailable")
+			rollbackErr := errors.New("rollback unavailable")
+			component := func(name string) *transactionLifecycle {
+				lifecycle := &transactionLifecycle{name: name, recorder: recorder}
+				if name == test.failRole {
+					lifecycle.startErr = startErr
+				}
+				if name == test.rollbackAt {
+					lifecycle.stopErr = rollbackErr
+				}
+				return lifecycle
+			}
+			graph := &transactionGraph{
+				recorder: recorder,
+				lifecycles: initializer.ApplicationLifecycles{
+					Runtime: component("runtime"), Workers: component("workers"),
+					Dashboard: component("dashboard"), CLI: component("cli"),
+				},
+			}
+
+			application, err := initializer.Start(context.Background(), initializer.ModeCLI, graph)
+			if application != nil || !errors.Is(err, startErr) {
+				t.Fatalf("Start() = (%v, %v), want nil application wrapping startup failure", application, err)
+			}
+			if !strings.Contains(err.Error(), `process mode "cli"`) || !strings.Contains(err.Error(), test.failRole) {
+				t.Fatalf("Start() error = %q, want mode and failed component", err)
+			}
+			if test.rollbackAt != "" && (!errors.Is(err, rollbackErr) || !strings.Contains(err.Error(), "unwind application startup")) {
+				t.Fatalf("Start() error = %q, want primary and rollback failure context", err)
+			}
+			if got := recorder.snapshot(); !reflect.DeepEqual(got, test.wantEvents) {
+				t.Fatalf("lifecycle events = %v, want %v", got, test.wantEvents)
+			}
+		})
 	}
-	if fixture.graph.closes != 1 {
-		t.Fatalf("graph closes = %d, want one", fixture.graph.closes)
+}
+
+type lifecycleRecorder struct {
+	mu     sync.Mutex
+	events []string
+}
+
+func (r *lifecycleRecorder) record(event string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, event)
+}
+
+func (r *lifecycleRecorder) snapshot() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.events...)
+}
+
+type transactionGraph struct {
+	recorder   *lifecycleRecorder
+	lifecycles initializer.ApplicationLifecycles
+}
+
+func (g *transactionGraph) Close() error {
+	g.recorder.record("close graph")
+	return nil
+}
+
+func (g *transactionGraph) Lifecycles() initializer.ApplicationLifecycles { return g.lifecycles }
+
+func (g *transactionGraph) RuntimeLogMetadata() runtimehost.RuntimeLogDiagnostics {
+	return runtimehost.RuntimeLogDiagnostics{}
+}
+
+type transactionLifecycle struct {
+	name      string
+	recorder  *lifecycleRecorder
+	startErr  error
+	stopErr   error
+	cancel    context.CancelFunc
+	done      chan struct{}
+	stopCalls int
+}
+
+func (l *transactionLifecycle) Start(ctx context.Context) error {
+	l.recorder.record("start " + l.name)
+	if l.startErr != nil {
+		return l.startErr
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	l.cancel = cancel
+	l.done = make(chan struct{})
+	go func() {
+		<-runCtx.Done()
+		l.recorder.record("join " + l.name)
+		close(l.done)
+	}()
+	return nil
+}
+
+func (l *transactionLifecycle) Stop(context.Context) error {
+	l.stopCalls++
+	l.recorder.record("stop " + l.name)
+	l.recorder.record("cancel " + l.name)
+	l.cancel()
+	<-l.done
+	return l.stopErr
+}
+
+func (l *transactionLifecycle) Wait(ctx context.Context) error {
+	select {
+	case <-l.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

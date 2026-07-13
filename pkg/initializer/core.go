@@ -149,6 +149,7 @@ const (
 
 // Application owns activation and shutdown for one constructed graph.
 type Application struct {
+	mode      Mode
 	graph     ApplicationGraph
 	selected  []namedLifecycle
 	started   []namedLifecycle
@@ -181,7 +182,7 @@ func NewApplication(mode Mode, graph ApplicationGraph) (*Application, error) {
 			primary.name,
 		)
 	}
-	return &Application{graph: graph, selected: selected, primary: primary}, nil
+	return &Application{mode: mode, graph: graph, selected: selected, primary: primary}, nil
 }
 
 // Start activates the selected mode immediately for compatibility callers.
@@ -281,7 +282,12 @@ func (a *Application) Shutdown(ctx context.Context) error {
 }
 
 func (a *Application) failStart(ctx context.Context, name string, startErr error) error {
-	startupErr := fmt.Errorf("initialize application: start %s: %w", name, startErr)
+	startupErr := fmt.Errorf(
+		"initialize application: process mode %q start %s: %w",
+		a.mode,
+		name,
+		startErr,
+	)
 	if cleanupErr := a.Shutdown(context.WithoutCancel(ctx)); cleanupErr != nil {
 		return errors.Join(startupErr, fmt.Errorf("unwind application startup: %w", cleanupErr))
 	}
