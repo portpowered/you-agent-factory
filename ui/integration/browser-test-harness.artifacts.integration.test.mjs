@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   browserArtifactDirectory,
+  installBrowserErrorCapture,
   openBrowserPage,
 } from "./browser-test-harness.mjs";
 
@@ -84,6 +85,35 @@ describe("browser artifact directory", () => {
     } finally {
       await browserPage?.close().catch(() => {});
       await rm(artifactDirectory, { force: true, recursive: true });
+    }
+  });
+
+  it("bounds diagnostic entries from a second page by count and length", async () => {
+    let browserPage = null;
+    let secondPage = null;
+
+    try {
+      browserPage = await openBrowserPage({ artifactMode: "bounded" });
+      secondPage = await browserPage.context.newPage();
+      const secondPageErrors = installBrowserErrorCapture(secondPage, {
+        characterLimit: 12,
+        entryLimit: 2,
+      });
+
+      for (let index = 0; index < 3; index += 1) {
+        await secondPage.evaluate((errorIndex) => {
+          console.error(`sensitive-second-tab-payload-${errorIndex}`);
+        }, index);
+      }
+
+      await expect.poll(() => secondPageErrors.consoleErrors.length).toBe(2);
+      expect(
+        secondPageErrors.consoleErrors.every((error) => error.length <= 12),
+      ).toBe(true);
+      expect(secondPageErrors.consoleErrors.join(" ")).not.toContain("payload");
+    } finally {
+      await secondPage?.close().catch(() => {});
+      await browserPage?.close().catch(() => {});
     }
   });
 });

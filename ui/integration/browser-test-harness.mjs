@@ -1112,6 +1112,30 @@ function recordBrowserDiagnostic(
   }
 }
 
+export function installBrowserErrorCapture(
+  page,
+  { characterLimit = null, entryLimit = null } = {},
+) {
+  const pageErrors = [];
+  const consoleErrors = [];
+  const diagnosticPolicy = { characterLimit, entryLimit };
+
+  page.on("pageerror", (error) => {
+    recordBrowserDiagnostic(
+      pageErrors,
+      error.stack ?? error.message,
+      diagnosticPolicy,
+    );
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      recordBrowserDiagnostic(consoleErrors, message.text(), diagnosticPolicy);
+    }
+  });
+
+  return { consoleErrors, pageErrors };
+}
+
 async function captureFullBrowserArtifacts({
   artifactDirectory,
   artifactLabel,
@@ -1277,24 +1301,9 @@ export async function openBrowserPage(options = {}) {
     await context.close().catch(() => {});
     throw error;
   }
-  const pageErrors = [];
-  const consoleErrors = [];
-  const diagnosticPolicy = {
+  const { consoleErrors, pageErrors } = installBrowserErrorCapture(page, {
     characterLimit: diagnosticCharacterLimit,
     entryLimit: diagnosticLimit,
-  };
-
-  page.on("pageerror", (error) => {
-    recordBrowserDiagnostic(
-      pageErrors,
-      error.stack ?? error.message,
-      diagnosticPolicy,
-    );
-  });
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      recordBrowserDiagnostic(consoleErrors, message.text(), diagnosticPolicy);
-    }
   });
 
   return {

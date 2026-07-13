@@ -6,6 +6,7 @@ import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
   initialEditableFactoryDefinitionVersion,
+  installBrowserErrorCapture,
   openBrowserPage,
   startBrowserPreview,
   startFactoryApiServer,
@@ -24,7 +25,6 @@ import {
 
 const alphaSessionID = "11111111-1111-4111-8111-111111111111";
 const betaSessionID = "22222222-2222-4222-8222-222222222222";
-const captureLimit = 16;
 
 function sessionFixture(id, name) {
   return {
@@ -113,21 +113,6 @@ function tailEvent({ eventID, sequence, tick }) {
     },
     type: "FACTORY_STATE_RESPONSE",
   });
-}
-
-function installBoundedPageErrors(page) {
-  const errors = [];
-  const capture = (value) => {
-    errors.push(value);
-    errors.splice(0, Math.max(0, errors.length - captureLimit));
-  };
-  page.on("pageerror", (error) => capture(error.message));
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      capture(message.text());
-    }
-  });
-  return errors;
 }
 
 function matchingTailURLs(urls, sessionID) {
@@ -308,7 +293,10 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
           artifactMode: "bounded",
         });
         tabTwo = await browserPage.context.newPage();
-        const tabTwoErrors = installBoundedPageErrors(tabTwo);
+        const tabTwoErrors = installBrowserErrorCapture(tabTwo, {
+          characterLimit: 512,
+          entryLimit: 16,
+        });
         const alphaNetwork = await installNetworkCapture(browserPage.page);
         const betaNetwork = await installNetworkCapture(tabTwo);
         await Promise.all([
@@ -377,16 +365,25 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
           expectRestoredPage(tabTwo, 13),
         ]);
 
+        const restoredAlphaNetworkURLs =
+          await alphaNetwork.readEventStreamURLs();
+        const restoredBetaNetworkURLs = await betaNetwork.readEventStreamURLs();
         const alphaURLs = matchingTailURLs(
-          await alphaNetwork.readEventStreamURLs(),
+          restoredAlphaNetworkURLs,
           alphaSessionID,
         );
         const betaURLs = matchingTailURLs(
-          await betaNetwork.readEventStreamURLs(),
+          restoredBetaNetworkURLs,
           betaSessionID,
         );
         expect(alphaURLs).toHaveLength(1);
         expect(betaURLs).toHaveLength(1);
+        expect(
+          matchingTailURLs(restoredAlphaNetworkURLs, betaSessionID),
+        ).toEqual([]);
+        expect(
+          matchingTailURLs(restoredBetaNetworkURLs, alphaSessionID),
+        ).toEqual([]);
         expect(
           eventStreamURL(alphaURLs[0]).searchParams.get("after_event_id"),
         ).toBe(alphaCheckpoint.afterEventId);
@@ -427,21 +424,24 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
             .locator("[data-work-chart-visible-ticks]")
             .getAttribute("data-work-chart-visible-ticks"),
         ).toBe("13,22");
+        const liveAlphaNetworkURLs = await alphaNetwork.readEventStreamURLs();
+        const liveBetaNetworkURLs = await betaNetwork.readEventStreamURLs();
         expect(
-          matchingTailURLs(
-            await alphaNetwork.readEventStreamURLs(),
-            alphaSessionID,
-          ),
+          matchingTailURLs(liveAlphaNetworkURLs, alphaSessionID),
         ).toHaveLength(1);
         expect(
-          matchingTailURLs(
-            await betaNetwork.readEventStreamURLs(),
-            betaSessionID,
-          ),
+          matchingTailURLs(liveBetaNetworkURLs, betaSessionID),
         ).toHaveLength(1);
+        expect(matchingTailURLs(liveAlphaNetworkURLs, betaSessionID)).toEqual(
+          [],
+        );
+        expect(matchingTailURLs(liveBetaNetworkURLs, alphaSessionID)).toEqual(
+          [],
+        );
         expect(browserPage.pageErrors).toEqual([]);
         expect(browserPage.consoleErrors).toEqual([]);
-        expect(tabTwoErrors).toEqual([]);
+        expect(tabTwoErrors.pageErrors).toEqual([]);
+        expect(tabTwoErrors.consoleErrors).toEqual([]);
       } finally {
         if (browserPage?.page && !browserPage.page.isClosed()) {
           await clearTimelineCheckpoints(browserPage.page).catch(() => {});
