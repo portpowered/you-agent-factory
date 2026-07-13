@@ -203,6 +203,36 @@ func TestValidateDuplicateStableIDsAreIndependentOfDocumentOrder(t *testing.T) {
 	}
 }
 
+func TestValidateAllIsIndependentOfRegistryOrderAndPathStyle(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "schema.json", `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["name"]}`)
+	writeFile(t, root, "alpha/invalid.json", `{}`)
+	writeFile(t, root, "zeta/invalid.json", `{}`)
+
+	entry := func(family, document string) contractvalidator.Entry {
+		return contractvalidator.Entry{
+			Family: family, FormatVersion: "1.0.0",
+			Schemas:   []contractvalidator.Schema{{ID: "https://example.test/schema.json", Path: "schema.json"}},
+			Documents: []contractvalidator.Document{{Path: document, SchemaID: "https://example.test/schema.json"}},
+		}
+	}
+	forward := contractvalidator.ValidateAll(root, contractvalidator.NewRegistry(
+		entry("zeta", `zeta\invalid.json`),
+		entry("alpha", "alpha/invalid.json"),
+	))
+	reversed := contractvalidator.ValidateAll(root, contractvalidator.NewRegistry(
+		entry("alpha", `alpha\invalid.json`),
+		entry("zeta", "zeta/invalid.json"),
+	))
+	want := []contractvalidator.Diagnostic{
+		{Code: "schema.validation", Path: "/", Message: "document does not conform to its registered schema", Document: "alpha/invalid.json"},
+		{Code: "schema.validation", Path: "/", Message: "document does not conform to its registered schema", Document: "zeta/invalid.json"},
+	}
+	if fmt.Sprint(forward) != fmt.Sprint(want) || fmt.Sprint(reversed) != fmt.Sprint(want) {
+		t.Fatalf("ValidateAll() diagnostics differ:\nforward: %+v\nreverse: %+v\nwant:    %+v", forward, reversed, want)
+	}
+}
+
 const componentSchema = `{
   "$schema":"https://json-schema.org/draft/2020-12/schema",
   "type":"object",

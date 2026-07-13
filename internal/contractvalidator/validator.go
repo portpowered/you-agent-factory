@@ -15,7 +15,9 @@ import (
 
 const rootPath = "/"
 
-// Diagnostic is the stable error contract returned by the validator.
+// Diagnostic is the stable error contract returned by the validator. Path uses
+// JSON Pointer escaping with "/" as the documented document-root convention.
+// Diagnostics are ordered by document, path, code, then message.
 type Diagnostic struct {
 	Code     string `json:"code"`
 	Path     string `json:"path"`
@@ -88,7 +90,23 @@ func Validate(repositoryRoot string, registry Registry, family, formatVersion st
 	if diagnostic != nil {
 		return []Diagnostic{*diagnostic}
 	}
+	diagnostics := validateEntry(repositoryRoot, entry)
+	sortDiagnostics(diagnostics)
+	return diagnostics
+}
 
+// ValidateAll validates every family/version entry deliberately present in the
+// registry and returns one deterministically ordered diagnostic collection.
+func ValidateAll(repositoryRoot string, registry Registry) []Diagnostic {
+	var diagnostics []Diagnostic
+	for _, entry := range registry.entries {
+		diagnostics = append(diagnostics, validateEntry(repositoryRoot, cloneEntry(entry))...)
+	}
+	sortDiagnostics(diagnostics)
+	return diagnostics
+}
+
+func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
 	compiler.UseLoader(disabledURLLoader{})
@@ -142,7 +160,6 @@ func Validate(repositoryRoot string, registry Registry, family, formatVersion st
 		uniqueDocuments = append(uniqueDocuments, document)
 	}
 	diagnostics = append(diagnostics, duplicateStableIDDiagnostics(uniqueDocuments)...)
-	sortDiagnostics(diagnostics)
 	return diagnostics
 }
 
@@ -229,7 +246,7 @@ func instancePath(segments []string) string {
 }
 
 func newDiagnostic(code, path, message, document string) Diagnostic {
-	return Diagnostic{Code: code, Path: path, Message: message, Document: filepath.ToSlash(document)}
+	return Diagnostic{Code: code, Path: path, Message: message, Document: normalizeRepositoryPath(document)}
 }
 
 func sortDiagnostics(diagnostics []Diagnostic) {
