@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -227,7 +228,7 @@ func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *
 				}, nil
 			}
 
-			logger, err := mode.policy.BuildLogger()
+			logger, err := mode.policy.BuildLogger(logging.BuildLogger)
 			if err != nil {
 				t.Fatalf("BuildLogger: %v", err)
 			}
@@ -265,7 +266,7 @@ func TestFailureBaseline_NormalModeSuppressesRawStructuredTerminalLogs(t *testin
 	dir, workFile := writeDashboardRunFixture(t)
 
 	policy := terminalpolicy.Resolve(terminalpolicy.Options{})
-	logger, err := policy.BuildLogger()
+	logger, err := policy.BuildLogger(logging.BuildLogger)
 	if err != nil {
 		t.Fatalf("BuildLogger: %v", err)
 	}
@@ -308,7 +309,7 @@ func TestFailureBaseline_QuietPreservesRuntimeFileDiagnosticsWhileTerminalStaysM
 	}
 
 	policy := terminalpolicy.Resolve(terminalpolicy.Options{Quiet: true})
-	logger, err := policy.BuildLogger()
+	logger, err := policy.BuildLogger(logging.BuildLogger)
 	if err != nil {
 		t.Fatalf("BuildLogger: %v", err)
 	}
