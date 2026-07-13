@@ -697,6 +697,81 @@ func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
 	}
 }
 
+func TestRunCommand_SkipPermissionsFlag(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	flag := runCmd.Flags().Lookup("skip-permissions")
+	if flag == nil {
+		t.Fatal("expected --skip-permissions flag on run command")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("default skip-permissions = %q, want false", flag.DefValue)
+	}
+	if !strings.Contains(flag.Usage, "invocation-only unsafe permission bypass") {
+		t.Errorf("skip-permissions usage = %q", flag.Usage)
+	}
+	if !strings.Contains(runCmd.Long, "--skip-permissions") {
+		t.Fatal("expected run command long help text to mention --skip-permissions")
+	}
+}
+
+func TestRunCommand_SkipPermissionsFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--skip-permissions"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --skip-permissions: %v", err)
+	}
+	if got.InvocationSkipPermissionsOverride == nil {
+		t.Fatal("expected --skip-permissions to set invocation override")
+	}
+	if !*got.InvocationSkipPermissionsOverride {
+		t.Fatal("expected invocation skip-permissions override to be true")
+	}
+}
+
+func TestRunCommand_WithoutSkipPermissionsLeavesInvocationOverrideUnset(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run: %v", err)
+	}
+	if got.InvocationSkipPermissionsOverride != nil {
+		t.Fatalf("invocation skip-permissions override = %#v, want nil when flag omitted", got.InvocationSkipPermissionsOverride)
+	}
+}
+
 func TestRunCommand_WorkflowFlagRejected(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

@@ -146,7 +146,11 @@ primary-result behavior.
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
-  logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
+  logged and counted there before the service runtime exists. `you run
+  --skip-permissions` is registered in `pkg/cli/root_work.go`, mapped to
+  `RunConfig.InvocationSkipPermissionsOverride`, and forwarded through
+  `buildRunServiceConfig` into `service.FactoryServiceConfig` as an ephemeral
+  invocation override that must not mutate persisted worker `skipPermissions`. `RunConfig.JSONOutput`
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
   success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`

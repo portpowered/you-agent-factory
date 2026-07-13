@@ -82,6 +82,10 @@ func resolveRunCommandInvocationInput(cmd *cobra.Command, args []string, cfg *ru
 		return nil, *cfg, err
 	}
 	cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
+	if cmd.Flags().Changed("skip-permissions") {
+		override := true
+		cfg.InvocationSkipPermissionsOverride = &override
+	}
 	promptArgs := args
 	if cfg.MockWorkersConfigPath != defaultMockWorkersConfigPathSentinel {
 		return promptArgs, *cfg, nil
@@ -137,6 +141,8 @@ func registerRunCommandFlags(cmd *cobra.Command, cfg *runcli.RunConfig, invocati
 	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
 	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
 	cmd.Flags().StringVar(invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream for live internal session progress on supported one-shot factory runs")
+	var skipPermissions bool
+	cmd.Flags().BoolVar(&skipPermissions, "skip-permissions", false, "request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration")
 }
 
 func runCommandLongHelp() string {
@@ -151,6 +157,7 @@ func runCommandLongHelp() string {
 		"Use --continuously to keep the factory alive while idle until you cancel it. " +
 		"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 		"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
+		"Use --skip-permissions to request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration. " +
 		"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/you-agent-factories. " +
 		"Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 		"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
