@@ -2,9 +2,13 @@ package responseeventstore
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 )
@@ -221,13 +225,13 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 			return nil, ErrSubscriptionClosed
 		}
 
-		events, closed := s.store.readForSubscriber(afterSequence, dispatchID)
+		result, closed := s.store.readForSubscriber(afterSequence, dispatchID)
 		if closed {
 			return nil, ErrSubscriptionClosed
 		}
-		if len(events) > 0 {
-			s.advance(events)
-			return events, nil
+		if len(result.events) > 0 {
+			s.advance(result.nextSequence)
+			return result.events, nil
 		}
 
 		select {
@@ -248,30 +252,38 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 	}
 }
 
-func (s *Subscription) advance(events []responseevents.FactoryResponseEvent) {
+func (s *Subscription) advance(sequence int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.afterSequence = events[len(events)-1].Sequence
+	if sequence > s.afterSequence {
+		s.afterSequence = sequence
+	}
 }
 
-func (s *SessionResponseEventStore) readForSubscriber(afterSequence int64, dispatchID string) ([]responseevents.FactoryResponseEvent, bool) {
+type subscriberRead struct {
+	events       []responseevents.FactoryResponseEvent
+	nextSequence int64
+}
+
+func (s *SessionResponseEventStore) readForSubscriber(afterSequence int64, dispatchID string) (subscriberRead, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.closed {
-		return nil, true
+		return subscriberRead{}, true
 	}
-	events := s.eventsAfterLocked(afterSequence, dispatchID)
-	if s.completed && len(events) == 0 {
-		return nil, true
+	result := s.eventsAfterLocked(afterSequence, dispatchID)
+	if s.completed && len(result.events) == 0 {
+		return subscriberRead{}, true
 	}
-	return events, false
+	return result, false
 }
 
-func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispatchID string) []responseevents.FactoryResponseEvent {
-	if len(s.events) == 0 {
-		return nil
+func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispatchID string) subscriberRead {
+	result := subscriberRead{nextSequence: afterSequence}
+	if from, to, ok := droppedBoundsAfter(s.droppedSequences, afterSequence); ok {
+		result.events = append(result.events, s.retentionGapEventLocked(from, to))
+		result.nextSequence = to
 	}
-	out := make([]responseevents.FactoryResponseEvent, 0)
 	for _, event := range s.events {
 		if event.Sequence <= afterSequence {
 			continue
@@ -279,12 +291,43 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 		if dispatchID != "" && !dispatchMatches(event.DispatchID, dispatchID) {
 			continue
 		}
-		out = append(out, cloneEvent(event))
+		result.events = append(result.events, cloneEvent(event))
+		if event.Sequence > result.nextSequence {
+			result.nextSequence = event.Sequence
+		}
 	}
-	if len(out) == 0 {
-		return nil
+	return result
+}
+
+// retentionGapEventLocked creates an out-of-band marker. Sequence zero is
+// reserved for this synthetic read result: the marker is never stored, never
+// participates in retention, and never consumes or impersonates a published
+// sequence. Its deterministic event ID identifies the same cursor-relative gap
+// consistently without entering the session's published identity space.
+func (s *SessionResponseEventStore) retentionGapEventLocked(from, to int64) responseevents.FactoryResponseEvent {
+	payload, _ := json.Marshal(responseevents.StreamGapPayload{
+		FromSequence: from,
+		ToSequence:   to,
+		Reason:       retentionGapReason,
+	})
+	identity := fmt.Sprintf("%s:%d:%d:%s", s.factorySessionID, from, to, retentionGapReason)
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          uuid.NewSHA1(uuid.NameSpaceOID, []byte(identity)).String(),
+		Sequence:         0,
+		RecordedAt:       s.storeNowLocked(),
+		FactorySessionID: s.factorySessionID,
+		Kind:             responseevents.KindStreamGap,
+		Phase:            responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider:        "you-agent-factory",
+			NativeEventType: "response.retention_gap",
+			Delivery:        responseevents.DeliverySynthesized,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        responseevents.FidelityLossy,
+		},
+		Payload: payload,
 	}
-	return out
 }
 
 func dispatchMatches(eventDispatchID, filterDispatchID string) bool {

@@ -9,12 +9,14 @@ properties:
     type: integer
     format: int64
     minimum: 0
-    description: Last retained sequence before the gap.
+    description: >-
+      Lowest unavailable published sequence greater than the reader's cursor.
   toSequence:
     type: integer
     format: int64
     minimum: 0
-    description: First available sequence after the gap.
+    description: >-
+      Highest unavailable published sequence in the reader's catch-up window.
   reason:
     type: string
     description: Optional reason for the stream gap such as retention_window.

@@ -1,0 +1,17 @@
+{
+  "formatVersion": "1.0.0",
+  "itemId": "example.internal_probe",
+  "documentation": {
+    "title": {
+      "id": "example.internal_probe.title",
+      "canonicalEnglish": "Probe internal state"
+    },
+    "description": {
+      "id": "example.internal_probe.description",
+      "canonicalEnglish": "Returns diagnostic state for maintainers."
+    }
+  },
+  "examples": ["ready", 42, false],
+  "visibility": "internal",
+  "sourceHash": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+}

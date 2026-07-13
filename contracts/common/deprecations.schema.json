@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json",
+  "title": "You contract lifecycle metadata",
+  "description": "Family-neutral lifecycle and migration metadata for one contract item. This metadata describes support history and does not control runtime callability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "itemId", "state", "since"],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this lifecycle metadata format.",
+      "const": "1.0.0"
+    },
+    "itemId": {
+      "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+    },
+    "state": {
+      "description": "The item's publication lifecycle state.",
+      "enum": ["active", "deprecated", "removed"]
+    },
+    "since": {
+      "description": "The first package version containing the item.",
+      "$ref": "#/$defs/version"
+    },
+    "deprecated": {
+      "description": "The first package version in which the item was deprecated.",
+      "$ref": "#/$defs/version"
+    },
+    "removed": {
+      "description": "The first package version from which the item was absent.",
+      "$ref": "#/$defs/version"
+    },
+    "successor": {
+      "$ref": "#/$defs/successor"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "state": { "const": "active" },
+        "deprecated": false,
+        "removed": false,
+        "successor": false
+      }
+    },
+    {
+      "required": ["deprecated", "successor"],
+      "properties": {
+        "state": { "const": "deprecated" },
+        "removed": false
+      }
+    },
+    {
+      "required": ["deprecated", "removed", "successor"],
+      "properties": {
+        "state": { "const": "removed" }
+      }
+    }
+  ],
+  "$defs": {
+    "version": {
+      "description": "A three-part stable semantic version without a leading v or leading zeroes.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)$"
+    },
+    "successor": {
+      "description": "The replacement contract item and canonical English migration guidance.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetItemId", "canonicalEnglish"],
+      "properties": {
+        "targetItemId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "canonicalEnglish": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

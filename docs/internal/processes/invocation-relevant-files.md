@@ -218,7 +218,13 @@ primary-result behavior.
   store alongside legacy response streams; keep this lifecycle state on
   `LiveSession`, not `FactoryService`.
   `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
-  after the cursor, then continues live via `Subscription.Next`; optional
+  after the cursor, then continues live via `Subscription.Next`. Retention keeps
+  ordered unavailable-sequence spans separate from immutable retained events;
+  stale reads receive one cursor-clipped `STREAM_GAP`/`UPDATED` marker with
+  `retention_window` reason and lossy provenance before catch-up. The marker is
+  out-of-band at sequence zero and advances only the private subscription
+  cursor, so it never consumes, reuses, or renumbers published identities;
+  optional
   `WithDispatchFilter(dispatchID)` omits non-matching events while preserving
   each delivered event's global session sequence and eventId. `Complete()` stops
   further publishes while retained events remain for catch-up; catch-up readers
