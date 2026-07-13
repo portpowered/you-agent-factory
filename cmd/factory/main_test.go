@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
@@ -70,14 +71,16 @@ func TestBuildCLIRunnerStartsRootGraphWithGraphOwnedAPISurface(t *testing.T) {
 		t.Fatal("production root graph transport does not retain graph-owned service identity")
 	}
 
+	var surface apisurface.APISurface
 	select {
-	case surface := <-observedSurface:
+	case surface = <-observedSurface:
 		if surface != graph.Transport.API {
 			t.Fatal("API starter observed a surface other than the graph-owned transport surface")
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("graph-owned API transport did not start")
 	}
+	assertCanonicalSessionIDResolvesThroughGraphSurface(t, ctx, surface)
 
 	cancel()
 	if err := runner.Run(ctx); err != nil {
@@ -85,6 +88,44 @@ func TestBuildCLIRunnerStartsRootGraphWithGraphOwnedAPISurface(t *testing.T) {
 	}
 	if err := application.Shutdown(context.Background()); err != nil {
 		t.Fatalf("repeated Shutdown() error = %v", err)
+	}
+}
+
+func assertCanonicalSessionIDResolvesThroughGraphSurface(
+	t *testing.T,
+	ctx context.Context,
+	surface apisurface.APISurface,
+) {
+	t.Helper()
+	sessions, ok := surface.(apisurface.SessionAPISurface)
+	if !ok {
+		t.Fatalf("graph API surface type = %T, want SessionAPISurface", surface)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		list, err := sessions.ListFactorySessions(ctx)
+		if err != nil {
+			t.Fatalf("ListFactorySessions() error = %v", err)
+		}
+		if len(list.Sessions) > 0 {
+			canonicalID := list.Sessions[0].Id
+			preflight, err := sessions.GetFactorySessionSyncPreflight(
+				ctx,
+				canonicalID,
+				interfaces.FactorySessionSyncPreflightOptions{},
+			)
+			if err != nil {
+				t.Fatalf("GetFactorySessionSyncPreflight(%q) error = %v", canonicalID, err)
+			}
+			if preflight.ReasonCode != factoryapi.Ok || preflight.FactorySessionId == nil || *preflight.FactorySessionId != canonicalID {
+				t.Fatalf("canonical session preflight = %+v, want ok for %q", preflight, canonicalID)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("graph API surface did not publish a live Factory Session")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

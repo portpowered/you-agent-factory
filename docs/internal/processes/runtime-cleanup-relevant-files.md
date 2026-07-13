@@ -33,6 +33,12 @@ Transport startup must receive the graph's already-composed API surface, and
 startup diagnostics should be copied into immutable graph metadata rather than
 recovered later through `runtimehost.Host` or `FactoryService`.
 
+Factory Session selectors at that graph-owned transport boundary must round-trip
+the canonical ID returned by list responses. Registry aliases such as
+`~default` remain valid compatibility selectors, but production startup tests
+should pass a listed canonical ID back through a session-scoped API operation so
+the public identifier cannot drift from runtime-host routing.
+
 When a change spans rows, place the durable state or policy in its owner and
 adapt outward. For example, a new session read that exposes JavaScript
 orchestrator progress should keep progress derivation in Factory Session or

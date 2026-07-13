@@ -284,7 +284,20 @@ func (fs *Host) sessionByID(sessionID string) *factorysessions.LiveSession {
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
-	return fs.sessions.Get(sessionID)
+	trimmed := strings.TrimSpace(sessionID)
+	if trimmed == "" {
+		return nil
+	}
+	if session := fs.sessions.Get(trimmed); session != nil {
+		return session
+	}
+	for _, id := range fs.sessions.IDs() {
+		session := fs.sessions.Get(id)
+		if session != nil && factorysessions.CanonicalFactorySessionID(session) == trimmed {
+			return session
+		}
+	}
+	return nil
 }
 
 func (fs *Host) resolveLiveSessionSelector(sessionID string) (*factorysessions.LiveSession, error) {
