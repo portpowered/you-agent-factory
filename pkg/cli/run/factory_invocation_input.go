@@ -213,6 +213,11 @@ type sessionResponseStreamInvocationRunner interface {
 	sessionResponseStreamAttachable
 }
 
+type sessionResponseEventInvocationRunner interface {
+	sessionInvocationRunner
+	sessionResponseEventAttachable
+}
+
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
 	if strings.TrimSpace(cfg.WorkFile) != "" {
 		return nil, false, nil
@@ -344,23 +349,11 @@ func runFactoryInvocation(
 		return err
 	}
 
-	var streamAttachment *responseStreamAttachment
-	var streamRenderer responseStreamRenderer
-	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		streamRenderer = newResponseStreamRenderer(cfg.Output, cfg.JSONOutput)
-		if streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner); ok {
-			streamAttachment = startResponseStreamAttachment(
-				ctx,
-				streamInvoker,
-				factorysessions.DefaultSessionID,
-				streamRenderer,
-			)
-		}
-	}
+	streamRenderer, stopStreamAttachment := startInvocationResponseStream(ctx, cfg, invoker)
 
 	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
-	if streamAttachment != nil {
-		streamAttachment.stop()
+	if stopStreamAttachment != nil {
+		stopStreamAttachment()
 	}
 	if streamRenderer != nil {
 		streamRenderer.stopProgressRendering()
@@ -380,6 +373,39 @@ func runFactoryInvocation(
 		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)
+}
+
+func startInvocationResponseStream(
+	ctx context.Context,
+	cfg RunConfig,
+	invoker sessionInvocationRunner,
+) (responseStreamRenderer, func()) {
+	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		return nil, nil
+	}
+	if cfg.JSONOutput {
+		renderer := newJSONResponseStreamRenderer(cfg.Output)
+		streamInvoker, ok := invoker.(sessionResponseEventInvocationRunner)
+		if !ok {
+			return renderer, nil
+		}
+		attachment := startResponseEventAttachment(ctx, streamInvoker, factorysessions.DefaultSessionID, renderer)
+		if attachment == nil {
+			return renderer, nil
+		}
+		return renderer, attachment.stop
+	}
+
+	renderer := newHumanResponseStreamRenderer(cfg.Output)
+	streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner)
+	if !ok {
+		return renderer, nil
+	}
+	attachment := startResponseStreamAttachment(ctx, streamInvoker, factorysessions.DefaultSessionID, renderer)
+	if attachment == nil {
+		return renderer, nil
+	}
+	return renderer, attachment.stop
 }
 
 func buildInvocationRunServiceConfig(

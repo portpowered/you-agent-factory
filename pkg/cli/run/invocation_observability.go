@@ -11,6 +11,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
@@ -286,6 +288,64 @@ type responseStreamEventSink interface {
 	onStreamSegment(factorysessions.SessionResponseStreamReadResult)
 }
 
+type sessionResponseEventAttachable interface {
+	SubscribeSessionResponseEventsFromLatest(sessionID string) (*responseeventstore.Subscription, error)
+}
+
+type responseEventSink interface {
+	onResponseEvents([]responseevents.FactoryResponseEvent)
+}
+
+type responseEventAttachment struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func startResponseEventAttachment(
+	ctx context.Context,
+	attachable sessionResponseEventAttachable,
+	sessionID string,
+	sink responseEventSink,
+) *responseEventAttachment {
+	if attachable == nil || sink == nil {
+		return nil
+	}
+	subscription, err := attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
+	if err != nil {
+		return nil
+	}
+	attachCtx, cancel := context.WithCancel(ctx)
+	attachment := &responseEventAttachment{cancel: cancel, done: make(chan struct{})}
+	go func() {
+		defer close(attachment.done)
+		defer subscription.Detach()
+		consumeResponseEventSubscription(attachCtx, subscription, sink)
+	}()
+	return attachment
+}
+
+func (a *responseEventAttachment) stop() {
+	if a == nil {
+		return
+	}
+	a.cancel()
+	<-a.done
+}
+
+func consumeResponseEventSubscription(
+	ctx context.Context,
+	subscription *responseeventstore.Subscription,
+	sink responseEventSink,
+) {
+	for {
+		events, err := subscription.Next(ctx)
+		if err != nil {
+			return
+		}
+		sink.onResponseEvents(events)
+	}
+}
+
 type responseStreamAttachment struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
@@ -419,15 +479,14 @@ const (
 // terminal stdout writes so a slow or blocked consumer does not stall provider
 // dispatch or invocation completion indefinitely.
 type responseStreamProgressWriter struct {
-	mu             sync.Mutex
-	outputMu       sync.Mutex
-	output         io.Writer
-	queue          chan []byte
-	wg             sync.WaitGroup
-	closed         bool
-	drainTimedOut  bool
-	droppedLines   int
-	pendingNotice  []byte
+	mu            sync.Mutex
+	outputMu      sync.Mutex
+	output        io.Writer
+	queue         chan []byte
+	wg            sync.WaitGroup
+	closed        bool
+	drainTimedOut bool
+	droppedLines  int
 }
 
 func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {
@@ -464,35 +523,6 @@ func (w *responseStreamProgressWriter) enqueue(payload []byte) bool {
 		w.droppedLines++
 		w.mu.Unlock()
 		return false
-	}
-}
-
-func (w *responseStreamProgressWriter) enqueueNotice(payload []byte) {
-	if w == nil {
-		return
-	}
-	line := appendPayloadLine(payload)
-
-	w.mu.Lock()
-	if w.closed {
-		w.pendingNotice = line
-		w.mu.Unlock()
-		return
-	}
-	w.mu.Unlock()
-
-	select {
-	case w.queue <- line:
-		return
-	default:
-	}
-
-	select {
-	case w.queue <- line:
-	default:
-		w.mu.Lock()
-		w.pendingNotice = line
-		w.mu.Unlock()
 	}
 }
 
@@ -581,11 +611,7 @@ func (w *responseStreamProgressWriter) run() {
 		if !w.writeOutputLine(line) {
 			return
 		}
-		if !w.flushPendingNoticeLocked() {
-			return
-		}
 	}
-	w.flushPendingNoticeLocked()
 }
 
 func (w *responseStreamProgressWriter) writeOutputLine(line []byte) bool {
@@ -596,21 +622,6 @@ func (w *responseStreamProgressWriter) writeOutputLine(line []byte) bool {
 	}
 	_, _ = w.output.Write(line)
 	return !w.drainAbandoned()
-}
-
-func (w *responseStreamProgressWriter) flushPendingNoticeLocked() bool {
-	for {
-		w.mu.Lock()
-		notice := w.pendingNotice
-		w.pendingNotice = nil
-		w.mu.Unlock()
-		if notice == nil {
-			return true
-		}
-		if !w.writeOutputLine(notice) {
-			return false
-		}
-	}
 }
 
 func appendPayloadLine(payload []byte) []byte {

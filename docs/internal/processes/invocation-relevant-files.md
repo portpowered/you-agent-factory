@@ -168,8 +168,8 @@ primary-result behavior.
   select primary-result-only versus internal `SessionResponseStream` attachment
   for supported one-shot factory invocations; keep mode validation, unsupported
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
-  stream attachment and bounded async progress stdout draining in
-  `pkg/cli/run/invocation_observability.go`, human and JSON progress rendering in
+  stream attachment and bounded async stdout draining in
+  `pkg/cli/run/invocation_observability.go`, human progress and canonical JSON rendering in
   `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
   `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
   `pkg/cli/run/run_wire_api_test.go`, and invocation wiring in
@@ -179,12 +179,13 @@ primary-result behavior.
   The `pkg/cli/run` package is at the
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
-  fields; JSON response-stream terminal outcomes stay on the final
-  `primary_result` NDJSON record. Human-only suppression helpers:
+  fields. JSON mode subscribes from the latest session-owned canonical response
+  event, emits only `response_event` records, and ends with `invocation_result`.
+  Human-only suppression helpers:
   `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
   `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop
-  compaction/backlog/stream-gap text and token-usage chatter while JSON mode
-  keeps `compaction` / `stream_gap` records. Internal stream listing for
+  compaction/backlog/stream-gap text and token-usage chatter. Canonical retained
+  window loss reaches JSON mode only as a public `STREAM_GAP` event. Internal stream listing for
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
@@ -438,8 +439,9 @@ primary-result behavior.
 - Named `@you/goal` response-stream boundary smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`,
   proving real CLI `--output response-stream` still returns the packaged
-  `primaryResult`, JSON response-stream NDJSON ends with a `primary_result`
-  record, durable `FactoryEvent` history omits internal response-stream terms,
+  `primaryResult`, JSON response-stream NDJSON contains canonical `response_event`
+  records and ends with an `invocation_result` record, durable `FactoryEvent`
+  history omits internal response-stream terms,
   and generated public API artifacts stay internal-only. Reuse
   `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
   and `support.StartFunctionalAPIServer` when extending boundary verification.

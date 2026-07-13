@@ -3,9 +3,12 @@ package run
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"strings"
@@ -14,11 +17,51 @@ import (
 	"testing"
 	"time"
 )
+
 type gatedResponseStreamWriter struct {
 	mu                   sync.Mutex
 	blocked              bool
 	buf                  strings.Builder
 	blockedWriteAttempts atomic.Int64
+}
+
+type recordingResponseEventAttachable struct {
+	store      *responseeventstore.SessionResponseEventStore
+	subscribed chan struct{}
+	once       sync.Once
+}
+
+func newRecordingResponseEventAttachable() *recordingResponseEventAttachable {
+	return &recordingResponseEventAttachable{
+		store:      responseeventstore.NewSessionResponseEventStore("session-1"),
+		subscribed: make(chan struct{}),
+	}
+}
+
+func (a *recordingResponseEventAttachable) SubscribeSessionResponseEventsFromLatest(
+	string,
+) (*responseeventstore.Subscription, error) {
+	subscription, err := a.store.Subscribe(a.store.LatestSequence())
+	if err == nil {
+		a.once.Do(func() { close(a.subscribed) })
+	}
+	return subscription, err
+}
+
+func (a *recordingResponseEventAttachable) publish(event responseevents.FactoryResponseEvent) error {
+	_, err := a.store.Publish(event)
+	return err
+}
+
+type stubResponseEventInvocationService struct {
+	stubInvocationService
+	attachable *recordingResponseEventAttachable
+}
+
+func (s stubResponseEventInvocationService) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	return s.attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
 }
 
 func (w *gatedResponseStreamWriter) block() {
@@ -394,21 +437,9 @@ func TestResponseStreamRenderer_JSONFidelityAndHumanGoldenNegatives(t *testing.T
 
 	var jsonOutput strings.Builder
 	jsonRenderer := newJSONResponseStreamRenderer(&jsonOutput)
-	jsonRenderer.onStreamSegment(segment)
 	jsonRenderer.stopProgressRendering()
-	jsonGot := jsonOutput.String()
-	for _, want := range []string{
-		`"recordType":"stream_gap"`,
-		`"reason":"behind_retained_window"`,
-		`"recordType":"compaction"`,
-		`"reason":"COALESCED"`,
-		`"recordType":"progress"`,
-		`"payload":"input_tokens=120 output_tokens=34 total_tokens=154"`,
-		`"payload":"reviewing plan"`,
-	} {
-		if !strings.Contains(jsonGot, want) {
-			t.Fatalf("JSON output missing %q:\n%s", want, jsonGot)
-		}
+	if jsonGot := jsonOutput.String(); jsonGot != "" {
+		t.Fatalf("legacy response fragments must not produce JSON records:\n%s", jsonGot)
 	}
 }
 
@@ -525,7 +556,7 @@ func TestHumanResponseStreamRenderer_WritesUnresolvedPrimaryResultOutcome(t *tes
 	}
 }
 
-func TestJSONResponseStreamRenderer_EmitsPrimaryResultRecordForFailedOutcome(t *testing.T) {
+func TestJSONResponseStreamRenderer_EmitsInvocationResultRecordForFailedOutcome(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
@@ -548,11 +579,11 @@ func TestJSONResponseStreamRenderer_EmitsPrimaryResultRecordForFailedOutcome(t *
 		t.Fatalf("expected 1 NDJSON line, got %d:\n%s", len(lines), output.String())
 	}
 
-	var finalRecord responseStreamJSONPrimaryResultRecord
+	var finalRecord responseStreamJSONInvocationResultRecord
 	if err := json.Unmarshal([]byte(lines[0]), &finalRecord); err != nil {
-		t.Fatalf("unmarshal primary result line: %v", err)
+		t.Fatalf("unmarshal invocation result line: %v", err)
 	}
-	if finalRecord.RecordType != responseStreamJSONRecordPrimaryResult {
+	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult {
 		t.Fatalf("record type = %q", finalRecord.RecordType)
 	}
 	if finalRecord.Invocation.Status != factoryapi.InvocationTerminalStatusFailed {
@@ -566,40 +597,16 @@ func TestJSONResponseStreamRenderer_EmitsPrimaryResultRecordForFailedOutcome(t *
 	}
 }
 
-func TestJSONResponseStreamRenderer_EmitsOrderedProgressAndPrimaryResultRecords(t *testing.T) {
+func TestJSONResponseStreamRenderer_EmitsCanonicalResponseEventsAndInvocationResult(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
 	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "planning",
-			},
-			{
-				Sequence:   2,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "reviewing",
-			},
-		},
-	})
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   3,
-				Kind:       responsestream.EventKindResponseFragment,
-				Type:       responsestream.EventTypeTextDelta,
-				DispatchID: "dispatch-1",
-				Payload:    "goal completed",
-			},
-		},
-	})
+	events := []responseevents.FactoryResponseEvent{
+		canonicalResponseEventFixture(41, responseevents.KindMessage),
+		canonicalResponseEventFixture(42, responseevents.KindStreamGap),
+	}
+	renderer.onResponseEvents(events)
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "req-1",
 		TraceID:   "trace-1",
@@ -616,27 +623,21 @@ func TestJSONResponseStreamRenderer_EmitsOrderedProgressAndPrimaryResultRecords(
 		t.Fatalf("expected 3 NDJSON lines, got %d:\n%s", len(lines), output.String())
 	}
 
-	var progress1 responseStreamJSONProgressRecord
-	if err := json.Unmarshal([]byte(lines[0]), &progress1); err != nil {
-		t.Fatalf("unmarshal progress line 1: %v", err)
-	}
-	if progress1.RecordType != responseStreamJSONRecordProgress || progress1.Payload != "planning" {
-		t.Fatalf("progress line 1 = %#v", progress1)
-	}
-
-	var progress2 responseStreamJSONProgressRecord
-	if err := json.Unmarshal([]byte(lines[1]), &progress2); err != nil {
-		t.Fatalf("unmarshal progress line 2: %v", err)
-	}
-	if progress2.RecordType != responseStreamJSONRecordProgress || progress2.Payload != "reviewing" {
-		t.Fatalf("progress line 2 = %#v", progress2)
+	for index, want := range events {
+		var record responseStreamJSONResponseEventRecord
+		if err := json.Unmarshal([]byte(lines[index]), &record); err != nil {
+			t.Fatalf("unmarshal response event line %d: %v", index, err)
+		}
+		if record.RecordType != responseStreamJSONRecordResponseEvent || record.Event.EventID != want.EventID {
+			t.Fatalf("response event line %d = %#v", index, record)
+		}
 	}
 
-	var finalRecord responseStreamJSONPrimaryResultRecord
+	var finalRecord responseStreamJSONInvocationResultRecord
 	if err := json.Unmarshal([]byte(lines[2]), &finalRecord); err != nil {
-		t.Fatalf("unmarshal primary result line: %v", err)
+		t.Fatalf("unmarshal invocation result line: %v", err)
 	}
-	if finalRecord.RecordType != responseStreamJSONRecordPrimaryResult {
+	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult {
 		t.Fatalf("final record type = %q", finalRecord.RecordType)
 	}
 	if finalRecord.Invocation.RequestId != "req-1" {
@@ -644,71 +645,62 @@ func TestJSONResponseStreamRenderer_EmitsOrderedProgressAndPrimaryResultRecords(
 	}
 }
 
-func TestJSONResponseStreamRenderer_SurfacesCompactionAndStreamGapRecords(t *testing.T) {
+func TestJSONResponseStreamRenderer_CanonicalEventBytesMatchAPIPayload(t *testing.T) {
 	t.Parallel()
 
+	event := canonicalResponseEventFixture(42, responseevents.KindMessage)
+	domainBytes, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("marshal canonical event fixture: %v", err)
+	}
+	var apiEvent factoryapi.FactoryResponseEvent
+	if err := json.Unmarshal(domainBytes, &apiEvent); err != nil {
+		t.Fatalf("project fixture through generated API type: %v", err)
+	}
+	apiBytes, err := json.Marshal(apiEvent)
+	if err != nil {
+		t.Fatalf("marshal generated API event fixture: %v", err)
+	}
 	var output strings.Builder
 	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		BehindRetainedWindow: true,
-		Compaction: &responsestream.CompactionSummary{
-			Reason:               responsestream.CompactionReasonTruncated,
-			DroppedSequenceCount: 3,
-		},
-	})
-
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
 	renderer.stopProgressRendering()
-	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), output.String())
+	var wire struct {
+		RecordType string          `json:"recordType"`
+		Event      json.RawMessage `json:"event"`
 	}
-
-	var gap responseStreamJSONStreamGapRecord
-	if err := json.Unmarshal([]byte(lines[0]), &gap); err != nil {
-		t.Fatalf("unmarshal stream gap: %v", err)
+	if err := json.Unmarshal([]byte(strings.TrimSpace(output.String())), &wire); err != nil {
+		t.Fatalf("decode NDJSON record: %v", err)
 	}
-	if gap.RecordType != responseStreamJSONRecordStreamGap || gap.Reason != "behind_retained_window" {
-		t.Fatalf("gap = %#v", gap)
+	if wire.RecordType != responseStreamJSONRecordResponseEvent {
+		t.Fatalf("recordType = %q", wire.RecordType)
 	}
-
-	var compaction responseStreamJSONCompactionRecord
-	if err := json.Unmarshal([]byte(lines[1]), &compaction); err != nil {
-		t.Fatalf("unmarshal compaction: %v", err)
-	}
-	if compaction.RecordType != responseStreamJSONRecordCompaction || compaction.DroppedSequenceCount != 3 {
-		t.Fatalf("compaction = %#v", compaction)
+	if string(wire.Event) != string(apiBytes) {
+		t.Fatalf("CLI/API event bytes differ:\ncli=%s\napi=%s", wire.Event, apiBytes)
 	}
 }
 
-func TestJSONResponseStreamRenderer_EmitsTokenUsageProgressRecord(t *testing.T) {
+func TestJSONResponseStreamRenderer_EmitsOnlyPublicRecordTypes(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
 	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:          1,
-				Kind:              responsestream.EventKindProgressFragment,
-				Type:              responsestream.EventTypeProgress,
-				DispatchID:        "dispatch-1",
-				ExternalEventType: "token_count",
-				Payload:           "input_tokens=120 output_tokens=34 total_tokens=154",
-				Metadata: map[string]string{
-					"input_tokens":  "120",
-					"output_tokens": "34",
-				},
-			},
-		},
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{
+		canonicalResponseEventFixture(42, responseevents.KindStreamGap),
 	})
-
-	renderer.stopProgressRendering()
-	got := output.String()
-	if !strings.Contains(got, `"recordType":"progress"`) {
-		t.Fatalf("expected progress record:\n%s", got)
+	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
-	if !strings.Contains(got, `"payload":"input_tokens=120 output_tokens=34 total_tokens=154"`) {
-		t.Fatalf("token usage payload must remain in JSON diagnostics:\n%s", got)
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		var header struct {
+			RecordType string `json:"recordType"`
+		}
+		if err := json.Unmarshal([]byte(line), &header); err != nil {
+			t.Fatalf("line is not independently decodable: %v\n%s", err, line)
+		}
+		if header.RecordType != responseStreamJSONRecordResponseEvent && header.RecordType != responseStreamJSONRecordInvocationResult {
+			t.Fatalf("private record type emitted: %q", header.RecordType)
+		}
 	}
 }
 
@@ -735,28 +727,7 @@ func TestHumanResponseStreamRenderer_SuppressesTerminalOutputBacklog(t *testing.
 	}
 }
 
-func TestJSONResponseStreamRenderer_SurfacesTerminalOutputBacklogRecord(t *testing.T) {
-	t.Parallel()
-
-	output := &gatedResponseStreamWriter{}
-	output.block()
-	renderer := newJSONResponseStreamRenderer(output)
-	floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
-
-	output.release()
-	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	got := output.String()
-	backlogIdx := strings.Index(got, `"reason":"terminal_output_backlog"`)
-	primaryIdx := strings.Index(got, `"recordType":"primary_result"`)
-	if backlogIdx < 0 || !strings.Contains(got, `"recordType":"stream_gap"`) || primaryIdx < 0 || backlogIdx > primaryIdx {
-		t.Fatalf("want backlog record before primary_result:\n%s", got)
-	}
-}
-
-func TestJSONResponseStreamRenderer_EmitsOnlyPrimaryResultWithoutProgress(t *testing.T) {
+func TestJSONResponseStreamRenderer_EmitsOnlyInvocationResultWithoutEvents(t *testing.T) {
 	t.Parallel()
 
 	var output strings.Builder
@@ -774,8 +745,36 @@ func TestJSONResponseStreamRenderer_EmitsOnlyPrimaryResultWithoutProgress(t *tes
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 NDJSON line, got %d:\n%s", len(lines), output.String())
 	}
-	if !strings.Contains(lines[0], `"recordType":"primary_result"`) {
+	if !strings.Contains(lines[0], `"recordType":"invocation_result"`) {
 		t.Fatalf("output = %q", lines[0])
+	}
+}
+
+func canonicalResponseEventFixture(sequence int64, kind responseevents.Kind) responseevents.FactoryResponseEvent {
+	payload := json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"Hello"}`)
+	phase := responseevents.PhaseDelta
+	if kind == responseevents.KindStreamGap {
+		payload = json.RawMessage(`{"fromSequence":1,"toSequence":2,"reason":"retention_eviction"}`)
+		phase = responseevents.PhaseUpdated
+	}
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          fmt.Sprintf("event-%d", sequence),
+		Sequence:         sequence,
+		RecordedAt:       time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
+		FactorySessionID: "session-1",
+		RunID:            "run-1",
+		Kind:             kind,
+		Phase:            phase,
+		Provenance: responseevents.Provenance{
+			Provider:        "test-provider",
+			NativeEventType: "message.delta",
+			Delivery:        responseevents.DeliveryNativeStream,
+			Representation:  responseevents.RepresentationDelta,
+			Fidelity:        responseevents.FidelityLossless,
+		},
+		Payload:    payload,
+		DispatchID: "dispatch-1",
 	}
 }
 

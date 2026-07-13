@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -1187,6 +1188,22 @@ func (fs *FactoryService) SubscribeSessionResponseStream(
 
 func (fs *FactoryService) SessionResponseStreamDispatchIDs(sessionID string) ([]string, error) {
 	return fs.requireSessionGateway().SessionResponseStreamDispatchIDs(sessionID)
+}
+
+// SubscribeSessionResponseEventsFromLatest attaches to canonical response
+// events published after the call begins. This keeps one-shot CLI invocations
+// from replaying observation records left by earlier work in the live session.
+func (fs *FactoryService) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session.ResponseEvents == nil {
+		return nil, fmt.Errorf("factory session %q response-event stream is unavailable", sessionID)
+	}
+	return session.ResponseEvents.Subscribe(session.ResponseEvents.LatestSequence())
 }
 
 func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
