@@ -27,12 +27,11 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
 export function useDashboardBentoSnapshot(
   sessionID: string | null | undefined,
 ) {
-  const timelineEvents = useFactoryTimelineStore((state) => state.events);
+  const materializedWorkOutcomeState = useFactoryTimelineStore(
+    (state) => state.materializedWorkOutcomeState,
+  );
   const selectedTimelineTick = useFactoryTimelineStore(
     (state) => state.selectedTick,
-  );
-  const worldViewCache = useFactoryTimelineStore(
-    (state) => state.worldViewCache,
   );
   const workstationRequestsByDispatchID = useFactoryTimelineStore(
     (state) =>
@@ -50,10 +49,9 @@ export function useDashboardBentoSnapshot(
 
   return {
     currentSelection,
+    materializedWorkOutcomeState,
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
-    timelineEvents,
-    worldViewCache,
   };
 }

@@ -82,3 +82,10 @@ export function createMaterializedWorkOutcomeState(): MaterializedWorkOutcomeSta
     version: MATERIALIZED_WORK_OUTCOME_VERSION,
   };
 }
+
+export function selectMaterializedWorkOutcomeSamples(
+  state: MaterializedWorkOutcomeState,
+  selectedTick: number,
+): ThroughputSample[] {
+  return state.samples.filter((sample) => sample.tick <= selectedTick);
+}

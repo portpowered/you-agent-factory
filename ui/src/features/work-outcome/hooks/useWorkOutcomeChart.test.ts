@@ -11,13 +11,11 @@ import {
 import {
   createMaterializedWorkOutcomeState,
   reduceMaterializedWorkOutcomeEvents,
+  selectMaterializedWorkOutcomeSamples,
 } from "../lib/materializer/materialized-work-outcome";
-import {
-  buildWorkOutcomeTimelineSamplesFromEvents,
-  useWorkOutcomeChart,
-} from "./useWorkOutcomeChart";
+import { useWorkOutcomeChart } from "./useWorkOutcomeChart";
 
-describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
+describe("materialized work outcome chart projection", () => {
   const baselineEvents = [
     event("run-started", 0, FACTORY_EVENT_TYPES.runRequest, {
       factory: {
@@ -205,8 +203,11 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
   });
 
   it("projects the exact uninterrupted customer work-outcome series", () => {
-    const samples = buildWorkOutcomeTimelineSamplesFromEvents(
-      baselineEvents,
+    const samples = selectMaterializedWorkOutcomeSamples(
+      reduceMaterializedWorkOutcomeEvents(
+        createMaterializedWorkOutcomeState(),
+        baselineEvents,
+      ),
       6,
     );
 
@@ -291,7 +292,7 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     ]);
   });
 
-  it("adapts selected events from the materialized state", () => {
+  it("clips the retained materialized samples without rebuilding from events", () => {
     const selectedEvents = baselineEvents.filter(
       (timelineEvent) => timelineEvent.context.tick <= 4,
     );
@@ -301,15 +302,23 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     );
 
     expect(
-      buildWorkOutcomeTimelineSamplesFromEvents(
-        [...baselineEvents, tailEvent],
+      selectMaterializedWorkOutcomeSamples(
+        reduceMaterializedWorkOutcomeEvents(
+          createMaterializedWorkOutcomeState(),
+          [...baselineEvents, tailEvent],
+        ),
         4,
       ),
     ).toEqual(materialized.samples);
-    expect(buildWorkOutcomeTimelineSamplesFromEvents([], 4)).toEqual([]);
+    expect(
+      selectMaterializedWorkOutcomeSamples(
+        createMaterializedWorkOutcomeState(),
+        4,
+      ),
+    ).toEqual([]);
   });
 
-  it("characterizes checkpoint restore, tail replacement, and duplicate delivery", async () => {
+  it("preserves the restored baseline and extends it with one accepted live event", async () => {
     const { indexedDB } = createIndexedDBTestDouble();
     const streamIdentity = streamIdentityFixture();
 
@@ -318,6 +327,7 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     expect(
       uninterrupted.result.current.samples.map((sample) => sample.tick),
     ).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    const uninterruptedBaseline = uninterrupted.result.current.samples;
 
     const baselineCheckpoint =
       useFactoryTimelineStore.getState().currentReplayCheckpoint;
@@ -343,42 +353,24 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     });
 
     const restored = renderHook(() => useTimelineWorkOutcomeChart());
-    expect(restored.result.current.samples).toEqual([
-      {
-        completedCount: 1,
-        dispatchedCount: 2,
-        failedByWorkType: { story: 1 },
-        failedCount: 1,
-        failedWorkLabels: ["Story Two"],
-        inFlightCount: 0,
-        observedAt: 0,
-        queuedCount: 0,
-        tick: 6,
-      },
-    ]);
+    expect(restored.result.current.samples).toEqual(uninterruptedBaseline);
+    expect(
+      restored.result.current.samples.map((sample) => sample.tick),
+    ).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(restored.result.current.samples.at(-1)).toMatchObject({
+      completedCount: 1,
+      dispatchedCount: 2,
+      failedByWorkType: { story: 1 },
+      failedCount: 1,
+      failedWorkLabels: ["Story Two"],
+      tick: 6,
+    });
 
     act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
     expect(restored.result.current.samples).toEqual([
-      {
-        completedCount: 0,
-        dispatchedCount: 0,
-        failedByWorkType: {},
-        failedCount: 0,
-        failedWorkLabels: [],
-        inFlightCount: 0,
-        observedAt: 1777464007000,
-        queuedCount: 0,
-        tick: 7,
-      },
+      ...uninterruptedBaseline,
+      expect.objectContaining({ queuedCount: 1, tick: 7 }),
     ]);
-    expect(
-      [0, 1, 2, 3, 4, 5, 6].filter(
-        (tick) =>
-          !restored.result.current.samples.some(
-            (sample) => sample.tick === tick,
-          ),
-      ),
-    ).toEqual([0, 1, 2, 3, 4, 5, 6]);
 
     const samplesAfterFirstTail = restored.result.current.samples;
     act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
@@ -388,19 +380,19 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
         .getState()
         .events.filter((timelineEvent) => timelineEvent.id === tailEvent.id),
     ).toHaveLength(1);
+    uninterrupted.unmount();
+    restored.unmount();
   });
 });
 
 function useTimelineWorkOutcomeChart() {
-  const events = useFactoryTimelineStore((state) => state.events);
-  const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
-  const worldViewCache = useFactoryTimelineStore(
-    (state) => state.worldViewCache,
+  const materializedWorkOutcomeState = useFactoryTimelineStore(
+    (state) => state.materializedWorkOutcomeState,
   );
+  const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
   return useWorkOutcomeChart({
+    materializedWorkOutcomeState,
     selectedTimelineTick: selectedTick,
-    timelineEvents: events,
-    worldViewCache,
   });
 }
 

@@ -1354,12 +1354,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
   {
-    relativeFilePath: "src/features/work-outcome/hooks/useWorkOutcomeChart.ts",
-    importSpecifiers: ["../../timeline/state/factoryTimelineStore"],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
     relativeFilePath:
       "src/features/workflow-activity/components/dashboard-flow-axis-legend.tsx",
     importSpecifiers: [

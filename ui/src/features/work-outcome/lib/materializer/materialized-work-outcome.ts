@@ -32,6 +32,7 @@ export {
   type MaterializedWorkOutcomeCounts,
   type MaterializedWorkOutcomeEventCursor,
   type MaterializedWorkOutcomeState,
+  selectMaterializedWorkOutcomeSamples,
 } from "./materialized-work-outcome-state";
 
 const SYSTEM_TIME_WORK_TYPE_ID = "__system_time";

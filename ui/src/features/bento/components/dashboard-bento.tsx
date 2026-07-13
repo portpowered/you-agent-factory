@@ -59,11 +59,10 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
   const { rawSessionID, sessionID } = useDashboardSession();
   const {
     currentSelection,
+    materializedWorkOutcomeState,
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
-    timelineEvents,
-    worldViewCache,
   } = useDashboardBentoSnapshot(sessionID);
   const importController = useCurrentActivityImportController({
     currentFactoryDefinition: snapshot.factory,
@@ -93,9 +92,8 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     });
   const workChartModel = useWorkOutcomeChart({
     locale: resolvedLocale,
+    materializedWorkOutcomeState,
     selectedTimelineTick,
-    timelineEvents,
-    worldViewCache,
   });
   const cards = buildDashboardCardLayouts({
     addDashboardWidget,
