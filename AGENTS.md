@@ -80,8 +80,10 @@ the standards.
 - `examples/` contains example factory directories.
 - `factory/` contains this repository's checked-in factory scaffold and
   factory-local docs.
-- `pkg/api/` contains HTTP handlers, API boundary tests, OpenAPI contract tests,
-  server tests, and API test data.
+- `pkg/transports/http/` contains handwritten HTTP handlers, HTTP boundary and
+  server tests, API contract tests, and generated-only contract/client child
+  packages. `pkg/api/` is a deprecated forwarding package pending Batch 008;
+  API compatibility fixture data remains there until that removal lane.
 - `pkg/apisurface/` contains transport-neutral public contracts and legacy
   request/response shaping that is still converging into the transport family.
 - `pkg/transports/mapping/` owns stateless composition of explicit wired
@@ -130,7 +132,7 @@ the standards.
   - `pkg/transports/http/client/client.gen.go`
   - `ui/src/api/generated/openapi.ts`
 - Run `make generate-api` after OpenAPI changes.
-- For API surface changes, update the matching `pkg/api` handlers,
+- For API surface changes, update the matching `pkg/transports/http` handlers,
   `pkg/apisurface` mappers/normalizers, generated clients, UI API adapters, and
   contract tests as applicable.
 - Run `make api-smoke` for public REST contract changes when feasible.

@@ -12,7 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/oapi-codegen/runtime"
-	"github.com/portpowered/infinite-you/pkg/api/apitypes"
+	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 )
 
 // Defines values for AgentWorkerToolPolicy.

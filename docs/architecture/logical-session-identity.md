@@ -201,7 +201,7 @@ remap, or default-alias behavior.
 | --- | --- |
 | Target normalization | `pkg/factorysessions/logicaltarget/normalize_test.go`, `derive_key_test.go`, `api_target_test.go` |
 | Key derivation stability | `pkg/factorysessions/logicaltarget/derive_key_test.go`, `pkg/service/runtime_session_runtime_test.go` (logical key assertions) |
-| API resolution / sync preflight | `pkg/service/runtime_session_runtime_test.go` (resolved, remapped, unresolved, wrong-scope, invalid-key, default alias cases), `pkg/api/contracttests/openapi_contract_surface_test.go` |
+| API resolution / sync preflight | `pkg/service/runtime_session_runtime_test.go` (resolved, remapped, unresolved, wrong-scope, invalid-key, default alias cases), `pkg/transports/http/contracttests/openapi_contract_surface_test.go` |
 | Public contract fields | `api/components/schemas/api/FactorySessionLogicalTarget.yaml`, `FactorySessionStreamIdentity.yaml`, `FactorySessionSyncPreflight*.yaml`; regenerate with `make generate-api` |
 | Dashboard preflight decisions | `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`, `dashboard-session-sync-preflight.test.ts` |
 | Guarded checkpoint restore, remap, and recovery | `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`, `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx` |

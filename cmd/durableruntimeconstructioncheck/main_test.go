@@ -34,7 +34,7 @@ func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/factorysessionexecution/service.go":             "testdata/approved_composition.go.txt",
 		"pkg/factorysessionexecution/testharness/harness.go": "testdata/approved_harness.go.txt",
-		"pkg/api/transport_test.go":                          "testdata/approved_transport_test.go.txt",
+		"pkg/transports/http/transport_test.go":              "testdata/approved_transport_test.go.txt",
 	})
 
 	findings, err := scan(root)

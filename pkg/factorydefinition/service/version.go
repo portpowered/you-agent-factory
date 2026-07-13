@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

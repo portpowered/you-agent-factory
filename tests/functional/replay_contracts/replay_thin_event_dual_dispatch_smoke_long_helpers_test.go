@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

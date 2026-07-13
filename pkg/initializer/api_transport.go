@@ -75,7 +75,7 @@ func composeSessionAPISurfaceWithConstructor(
 	)
 }
 
-// SessionAPISurface returns handler dependencies for api.NewServer.
+// SessionAPISurface returns handler dependencies for transport/http.NewServer.
 func (t *APITransport) SessionAPISurface() apisurface.SessionAPISurface {
 	if t == nil {
 		return nil

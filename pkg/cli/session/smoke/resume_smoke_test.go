@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/api"
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -22,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"

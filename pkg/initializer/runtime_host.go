@@ -36,7 +36,7 @@ func NewSessionRuntimeHostFromCore(core *Core, cfg *Config) *SessionRuntimeHost 
 	return &SessionRuntimeHost{host: host}
 }
 
-// SessionAPISurface returns handler dependencies for api.NewServer.
+// SessionAPISurface returns handler dependencies for transport/http.NewServer.
 func (h *SessionRuntimeHost) SessionAPISurface() apisurface.SessionAPISurface {
 	if h == nil || h.host == nil {
 		return nil

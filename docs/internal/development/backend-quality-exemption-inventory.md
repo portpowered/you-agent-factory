@@ -58,9 +58,9 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | Owning package | Active directives | Files | Quality-system status |
 | --- | ---: | ---: | --- |
 | `pkg/api` | 7 | 3 | directive + coverage baseline |
-| `pkg/api/providersessioncursor` | 1 | 1 | directive only |
-| `pkg/api/servertests` | 1 | 1 | directive only |
-| `pkg/api/workstationprojection` | 3 | 1 | directive only |
+| `pkg/transports/http/providersessioncursor` | 1 | 1 | directive only |
+| `pkg/transports/http/servertests` | 1 | 1 | directive only |
+| `pkg/transports/http/workstationprojection` | 3 | 1 | directive only |
 | `pkg/apisurface/factorysession` | 8 | 6 | directive only |
 | `pkg/cli` | 2 | 1 | directive only |
 | `pkg/cli/cliinputs` | 5 | 3 | directive only |
@@ -159,45 +159,45 @@ directive occurrence in the focused scan:
 Each section's named owner is that package directory's maintainers. `Evidence` refers to
 the objective removal condition defined for the row's single reason class above.
 
-### `pkg/api`
+### `pkg/transports/http`
 
-Owner: `pkg/api` package maintainers. Status: **directive + coverage baseline**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/api/server_factory_sessions_test.go:1` | `pkgmaintcheck:ignore-file-lines` | `pkg/api/server_factory_sessions_test.go` | T | T gate |
-| `pkg/api/server_factory_sessions_test.go:2` | `backendsizecheck:ignore-file` | `pkg/api/server_factory_sessions_test.go` | T | T gate |
-| `pkg/api/server_submit_work_test.go:125` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSubmitWork_AcceptsCanonicalContent` | T | T gate |
-| `pkg/api/server_work_query_test.go:1` | `backendsizecheck:ignore-file` | `pkg/api/server_work_query_test.go` | T | T gate |
-| `pkg/api/server_work_query_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/api/server_work_query_test.go` | T | T gate |
-| `pkg/api/server_work_query_test.go:722` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection` | T | T gate |
-| `pkg/api/server_work_query_test.go:1054` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime` | T | T gate |
-
-### `pkg/api/providersessioncursor`
-
-Owner: `pkg/api/providersessioncursor` package maintainers. Status: **directive only**.
+Owner: `pkg/transports/http` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/api/providersessioncursor/detail_test.go:15` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestLoadDetails_ReadsReadableSessionFromConfiguredRoot` | T | T gate |
+| `pkg/transports/http/server_factory_sessions_test.go:1` | `pkgmaintcheck:ignore-file-lines` | `pkg/transports/http/server_factory_sessions_test.go` | T | T gate |
+| `pkg/transports/http/server_factory_sessions_test.go:2` | `backendsizecheck:ignore-file` | `pkg/transports/http/server_factory_sessions_test.go` | T | T gate |
+| `pkg/transports/http/server_submit_work_test.go:125` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSubmitWork_AcceptsCanonicalContent` | T | T gate |
+| `pkg/transports/http/server_work_query_test.go:1` | `backendsizecheck:ignore-file` | `pkg/transports/http/server_work_query_test.go` | T | T gate |
+| `pkg/transports/http/server_work_query_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/transports/http/server_work_query_test.go` | T | T gate |
+| `pkg/transports/http/server_work_query_test.go:722` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection` | T | T gate |
+| `pkg/transports/http/server_work_query_test.go:1054` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime` | T | T gate |
 
-### `pkg/api/servertests`
+### `pkg/transports/http/providersessioncursor`
 
-Owner: `pkg/api/servertests` package maintainers. Status: **directive only**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/api/servertests/server_durable_session_interrupt_dispatch_test.go:262` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromNormalRouting` | T | T gate |
-
-### `pkg/api/workstationprojection`
-
-Owner: `pkg/api/workstationprojection` package maintainers. Status: **directive only**.
+Owner: `pkg/transports/http/providersessioncursor` package maintainers. Status: **directive only**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/api/workstationprojection/projection_test.go:128` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesPendingDispatchWithoutInferenceFallback` | T | T gate |
-| `pkg/api/workstationprojection/projection_test.go:676` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertCompletedProjectionRequest` | T | T gate |
-| `pkg/api/workstationprojection/projection_test.go:848` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertCompletedScriptProjection` | T | T gate |
+| `pkg/transports/http/providersessioncursor/detail_test.go:15` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestLoadDetails_ReadsReadableSessionFromConfiguredRoot` | T | T gate |
+
+### `pkg/transports/http/servertests`
+
+Owner: `pkg/transports/http/servertests` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/transports/http/servertests/server_durable_session_interrupt_dispatch_test.go:262` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromNormalRouting` | T | T gate |
+
+### `pkg/transports/http/workstationprojection`
+
+Owner: `pkg/transports/http/workstationprojection` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/transports/http/workstationprojection/projection_test.go:128` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestBuildFactoryWorldWorkstationRequestProjectionSlice_PreservesPendingDispatchWithoutInferenceFallback` | T | T gate |
+| `pkg/transports/http/workstationprojection/projection_test.go:676` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertCompletedProjectionRequest` | T | T gate |
+| `pkg/transports/http/workstationprojection/projection_test.go:848` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertCompletedScriptProjection` | T | T gate |
 
 ### `pkg/apisurface/factorysession`
 
@@ -623,7 +623,7 @@ as follows:
 | --- | --- |
 | Batch 005 — `create-root-process-owner` | Active head `4516ea35aeff5cdde5e578b9000b8054db6bb834`; changed files: `pkg/cli/root.go`, `pkg/cli/root_run_test.go`, `pkg/cli/root_work.go`, `pkg/config/operatorconfig/environment_resolution.go`, `pkg/root/input.go`, `pkg/root/root.go`, `pkg/root/root_test.go`. |
 | Batch 005 — `create-wire-application-graph` | Active head `8015a87fb4594a1659ab21c6a7720bf324ea7a85`; changed files: `pkg/wire/doc.go`, `pkg/wire/graph.go`, `pkg/wire/graph_test.go`. The dependency-blocked initializer item had no implementation file set yet. |
-| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/api/**`, `pkg/apisurface/**`, `pkg/cli/**`, and `pkg/mcp/**`. |
+| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/transports/http/**`, `pkg/apisurface/**`, `pkg/cli/**`, and `pkg/mcp/**`. |
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factorysessionexecution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
@@ -638,7 +638,7 @@ every file in the named path set; the two file exceptions add the named PR colli
 
 | Detailed file set | Files | Directives | Snapshot ownership |
 | --- | ---: | ---: | --- |
-| `pkg/api/**` | 6 | 12 | **Externally owned:** Batch 006 transport-family convergence |
+| `pkg/transports/http/**` | 6 | 12 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/apisurface/**` | 6 | 8 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
 | `pkg/factorysessionexecution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
