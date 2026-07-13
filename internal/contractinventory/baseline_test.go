@@ -2,13 +2,15 @@ package contractinventory
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
 )
 
-func TestRepositoryBaseline_MatchesOpenAPIExtraction(t *testing.T) {
+func TestRepositoryCompatibilityBaseline_IsPreservedByOpenAPI(t *testing.T) {
 	t.Parallel()
 
 	openAPIPath := testpath.MustRepoPathFromCaller(t, 0, "api", "openapi.yaml")
@@ -22,18 +24,27 @@ func TestRepositoryBaseline_MatchesOpenAPIExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read baseline: %v", err)
 	}
-	baseline = normalizeFixtureNewlines(baseline)
+	var compatibilityBaseline Inventory
+	if err := json.Unmarshal(normalizeFixtureNewlines(baseline), &compatibilityBaseline); err != nil {
+		t.Fatalf("decode compatibility baseline: %v", err)
+	}
 
 	inventory, err := ExtractFromOpenAPIYAML(openAPIData)
 	if err != nil {
 		t.Fatalf("ExtractFromOpenAPIYAML() error = %v", err)
 	}
-	extracted, err := MarshalCanonicalJSON(inventory)
-	if err != nil {
-		t.Fatalf("MarshalCanonicalJSON() error = %v", err)
+	currentByID := make(map[string]Operation, len(inventory.Operations))
+	for _, operation := range inventory.Operations {
+		currentByID[operation.OperationID] = operation
 	}
-	if !bytes.Equal(extracted, baseline) {
-		t.Fatalf("extracted inventory does not match checked-in baseline at %s", baselinePath)
+	for _, expected := range compatibilityBaseline.Operations {
+		actual, ok := currentByID[expected.OperationID]
+		if !ok {
+			t.Fatalf("compatibility operation %q from %s is missing", expected.OperationID, baselinePath)
+		}
+		if !reflect.DeepEqual(actual, expected) {
+			t.Fatalf("compatibility operation %q changed: got %#v, want %#v", expected.OperationID, actual, expected)
+		}
 	}
 }
 

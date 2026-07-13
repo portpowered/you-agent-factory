@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.contract-fixtures.tsbuildinfo"
+  },
+  "include": [
+    "src/api/generated/openapi.ts",
+    "src/api/generated/openapi.session-factory.test.ts"
+  ],
+  "exclude": []
+}

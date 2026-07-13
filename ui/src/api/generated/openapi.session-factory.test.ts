@@ -3,6 +3,70 @@ import { describe, expect, it } from "vitest";
 import type { components, operations, paths } from "./openapi";
 
 describe("generated session factory OpenAPI types", () => {
+  it("supports a typed response-event stream consumer", () => {
+    type ResponseEventOperation =
+      operations["getFactoryResponseEventsBySessionId"];
+
+    const request: ResponseEventOperation["parameters"] = {
+      path: { session_id: "session one" },
+      query: {
+        after_sequence: 42,
+        dispatch_id: "dispatch/one",
+        kind: ["MESSAGE", "TOOL"],
+      },
+    };
+    const route: paths["/factory-sessions/{session_id}/response-events"]["get"] =
+      {} as ResponseEventOperation;
+    const success: ResponseEventOperation["responses"][200]["content"]["text/event-stream"] =
+      "data: {}\n\n";
+    const badRequest: ResponseEventOperation["responses"][400]["content"]["application/json"] =
+      {
+        code: "INVALID_RESPONSE_EVENT_CURSOR",
+        family: "BAD_REQUEST",
+        message: "response-event cursor is invalid",
+      };
+    const notFound: ResponseEventOperation["responses"][404]["content"]["application/json"] =
+      {
+        code: "RESPONSE_EVENT_SESSION_NOT_FOUND",
+        family: "NOT_FOUND",
+        message: "factory session not found",
+      };
+    const expired: ResponseEventOperation["responses"][410]["content"]["application/json"] =
+      {
+        code: "RESPONSE_EVENT_STREAM_EXPIRED",
+        family: "GONE",
+        message: "response-event stream expired",
+      };
+    const internalError: ResponseEventOperation["responses"][500]["content"]["application/json"] =
+      {
+        code: "INTERNAL_ERROR",
+        family: "INTERNAL_SERVER_ERROR",
+        message: "unexpected response-event stream failure",
+      };
+
+    expect(route).toEqual({});
+    expect(request).toEqual({
+      path: { session_id: "session one" },
+      query: {
+        after_sequence: 42,
+        dispatch_id: "dispatch/one",
+        kind: ["MESSAGE", "TOOL"],
+      },
+    });
+    expect(success).toBe("data: {}\n\n");
+    expect([
+      badRequest.code,
+      notFound.code,
+      expired.code,
+      internalError.code,
+    ]).toEqual([
+      "INVALID_RESPONSE_EVENT_CURSOR",
+      "RESPONSE_EVENT_SESSION_NOT_FOUND",
+      "RESPONSE_EVENT_STREAM_EXPIRED",
+      "INTERNAL_ERROR",
+    ]);
+  });
+
   it("exposes typed session factory save payloads and machine-readable error codes", () => {
     const factory: components["schemas"]["Factory"] = {
       name: "customer-support-triage",

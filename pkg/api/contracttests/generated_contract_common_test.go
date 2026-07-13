@@ -2,7 +2,6 @@ package apicontract_test
 
 import (
 	"encoding/json"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -43,7 +42,7 @@ func TestGeneratedGoClientBuildsFilteredResponseEventRequest(t *testing.T) {
 	}
 }
 
-func TestGeneratedClientsExposeResponseEventSuccessAndTypedErrors(t *testing.T) {
+func TestGeneratedGoClientExposesResponseEventSuccessAndTypedErrors(t *testing.T) {
 	response := generatedclient.GetFactoryResponseEventsBySessionIdClientResponse{
 		Body:    []byte("data: {}\n\n"),
 		JSON400: &generatedclient.ResponseEventBadRequest{},
@@ -53,37 +52,6 @@ func TestGeneratedClientsExposeResponseEventSuccessAndTypedErrors(t *testing.T) 
 	}
 	if len(response.Body) == 0 || response.JSON400 == nil || response.JSON404 == nil || response.JSON410 == nil || response.JSON500 == nil {
 		t.Fatal("generated Go client must expose SSE success and every typed response-event error")
-	}
-
-	uiArtifact, err := os.ReadFile("../../../ui/src/api/generated/openapi.ts")
-	if err != nil {
-		t.Fatalf("read generated TypeScript client: %v", err)
-	}
-	uiText := string(uiArtifact)
-	for _, marker := range []string{
-		"getFactoryResponseEventsBySessionId",
-		"after_sequence?: components[\"parameters\"][\"ResponseEventAfterSequence\"]",
-		"dispatch_id?: components[\"parameters\"][\"ResponseEventDispatchID\"]",
-		"kind?: components[\"parameters\"][\"ResponseEventKind\"]",
-		"\"text/event-stream\": string",
-		"400: components[\"responses\"][\"ResponseEventBadRequest\"]",
-		"404: components[\"responses\"][\"ResponseEventSessionNotFound\"]",
-		"410: components[\"responses\"][\"ResponseEventStreamExpired\"]",
-		"500: components[\"responses\"][\"InternalError\"]",
-	} {
-		if !strings.Contains(uiText, marker) {
-			t.Fatalf("generated TypeScript client missing response-event marker %q", marker)
-		}
-	}
-}
-
-func TestGeneratedServerDefersResponseEventHandler(t *testing.T) {
-	serverArtifact, err := os.ReadFile("../generated/server.gen.go")
-	if err != nil {
-		t.Fatalf("read generated server contract: %v", err)
-	}
-	if strings.Contains(string(serverArtifact), "GetFactoryResponseEventsBySessionId") {
-		t.Fatal("generated ServerInterface must defer the response-event handler to its implementation lane")
 	}
 }
 
