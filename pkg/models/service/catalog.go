@@ -7,8 +7,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 )
 
 // ListModels returns configured model summaries with managed-runtime readiness projection.

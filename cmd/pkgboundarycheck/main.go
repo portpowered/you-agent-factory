@@ -64,7 +64,6 @@ var approvedProductPackageFamilies = []string{
 	"pkg/initializer",
 	"pkg/interfaces",
 	"pkg/internal",
-	"pkg/localmodels",
 	"pkg/modelhost",
 	"pkg/models",
 	"pkg/orchestrators",

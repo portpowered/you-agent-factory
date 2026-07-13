@@ -14,7 +14,7 @@ sessions.
 | Responsibility | Owner |
 | --- | --- |
 | Local model asset cache inspection | `pkg/modelhost` via `AssetGateway` |
-| Pull or install materialization | `pkg/modelhost` delegating to `pkg/localmodels` pull/cache |
+| Pull or install materialization | `pkg/modelhost` delegating to `pkg/models/local` pull/cache |
 | Supervised local server lifecycle (`LLAMACPP`) | `pkg/modelhost` `CatalogHost` runtime slots |
 | Readiness and failure-class projection | `pkg/modelhost` |
 | Lease issuance, release, and capacity | `pkg/modelhost` |

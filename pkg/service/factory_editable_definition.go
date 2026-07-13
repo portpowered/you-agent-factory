@@ -496,7 +496,7 @@ func NewFactorySessionsRegistry() *factorysessions.Registry {
 	return factorysessions.NewRegistry()
 }
 
-// LocalModelDomain wires pkg/localmodels runtime dependencies constructed at
+// LocalModelDomain wires pkg/models/local runtime dependencies constructed at
 // service build time and copied onto each factoryRuntimeBundle.
 type LocalModelDomain = factoryservice.LocalModelDomain
 

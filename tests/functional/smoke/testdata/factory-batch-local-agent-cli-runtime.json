@@ -10,7 +10,7 @@
         "sourcePath": "docs/temp/local-agent-cli/prd-modelhost-data-plane.md",
         "planPath": "docs/temp/local-agent-cli/plan-runtime-taxonomy-and-model-host.md",
         "currentProgress": [
-          "The repo already has managed runtime readiness, pull, and invocation surfaces through /models and pkg/localmodels.",
+          "The repo already has managed runtime readiness, pull, and invocation surfaces through /models and pkg/models/local.",
           "The current local runtime is scoped to OmniVoice llama.cpp TTS behavior rather than a reusable model host boundary.",
           "No clear pkg/modelhost data-plane package exists yet for assets, process supervision, readiness, leases, unload policy, and resource pressure."
         ],

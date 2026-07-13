@@ -9,8 +9,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"go.uber.org/zap"
 )
 

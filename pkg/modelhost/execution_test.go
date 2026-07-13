@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 )
 
 type recordingLeaseHost struct {
@@ -31,9 +31,9 @@ func (h *recordingLeaseHost) ReleaseLease(ctx context.Context, leaseID string) e
 }
 
 type executionTestRuntime struct {
-	mu               sync.Mutex
-	loads            int
-	invocations      int
+	mu                  sync.Mutex
+	loads               int
+	invocations         int
 	lastServingEndpoint string
 }
 

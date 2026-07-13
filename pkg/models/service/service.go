@@ -4,8 +4,8 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"go.uber.org/zap"
 )
 

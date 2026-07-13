@@ -99,7 +99,7 @@ the standards.
   types used across subsystems.
 - `pkg/invocations/`, `pkg/workcontent/`, `pkg/workquery/`, and
   `pkg/materialize/` contain shared work and invocation helpers.
-- `pkg/localmodels/` contains managed model runtime catalog, readiness,
+- `pkg/models/local/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
 - `pkg/petri/` contains internal Petri-net primitives.
 - `pkg/service/` coordinates backend service behavior across sessions,

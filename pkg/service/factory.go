@@ -26,9 +26,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -133,7 +133,7 @@ type serviceRunState struct {
 // so that CLI and other entry points remain thin wrappers.
 //
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
-// session registry, pkg/localmodels owns managed model runtime wiring, and
+// session registry, pkg/models/local owns managed model runtime wiring, and
 // pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu        sync.RWMutex

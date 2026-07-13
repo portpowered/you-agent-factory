@@ -1,4 +1,4 @@
-package localmodels
+package local
 
 import (
 	"context"
@@ -452,7 +452,6 @@ func generatedModelResourceSummary(resource interfaces.ResourceConfig) factoryap
 func canonicalModelName(model string) string {
 	return strings.ToUpper(strings.TrimSpace(model))
 }
-
 
 func buildCatalogManagedRuntime(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,

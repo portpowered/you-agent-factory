@@ -130,8 +130,8 @@ directive occurrence in the focused scan:
 - `pkg/hostedworkers`
 - `pkg/hostedworkers/linear`
 - `pkg/invocations`
-- `pkg/localmodels`
-- `pkg/localmodels/assets`
+- `pkg/models/local`
+- `pkg/models/assets`
 - `pkg/logging`
 - `pkg/mcp/server`
 - `pkg/modelhost`
