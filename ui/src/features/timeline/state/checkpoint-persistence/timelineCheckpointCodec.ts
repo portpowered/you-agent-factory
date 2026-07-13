@@ -35,13 +35,17 @@ export function isSupportedPersistedTimelineCheckpoint(
 
 export function buildPersistedCheckpoint(
   checkpoint: FactoryTimelineCheckpoint,
-): PersistedTimelineCheckpoint {
+): PersistedTimelineCheckpoint | null {
+  const materializedWorkOutcomeState = retainMaterializedWorkOutcomeState(
+    checkpoint.materializedWorkOutcomeState,
+  );
+  if (!materializedWorkOutcomeState) {
+    return null;
+  }
   return {
     afterEventId: checkpoint.afterEventId,
     afterSequence: checkpoint.afterSequence,
-    materializedWorkOutcomeState: retainMaterializedWorkOutcomeState(
-      checkpoint.materializedWorkOutcomeState,
-    ),
+    materializedWorkOutcomeState,
     replayState: compactReplayState(checkpoint.replayState),
     selectedTick: checkpoint.selectedTick,
     syncIdentity: checkpoint.syncIdentity,

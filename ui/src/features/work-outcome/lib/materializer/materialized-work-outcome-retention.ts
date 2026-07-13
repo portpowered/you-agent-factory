@@ -9,8 +9,9 @@ import {
 /**
  * Checkpoints are disposable projections, so their detailed history has fixed
  * limits even though aggregate counts continue to describe the full stream.
- * Map-like collections retain the lexicographically first keys, set-like
- * arrays retain sorted unique values, and samples retain the newest window.
+ * Presentation-only collections retain a deterministic subset. Continuation
+ * accumulator fields are instead retained exactly or rejected: truncating a
+ * work or dispatch identifier can change how a later event is reduced.
  */
 export const MATERIALIZED_WORK_OUTCOME_RETENTION = {
   accumulatorMapEntries: 2048,
@@ -23,37 +24,35 @@ export const MATERIALIZED_WORK_OUTCOME_RETENTION = {
 
 export function retainMaterializedWorkOutcomeState(
   state: MaterializedWorkOutcomeState,
-): MaterializedWorkOutcomeState {
+): MaterializedWorkOutcomeState | null {
+  if (!isRetainableContinuationState(state)) {
+    return null;
+  }
+
   return {
     accumulator: {
-      activeDispatchesByID: retainRecord(
+      activeDispatchesByID: retainRecordExactly(
         state.accumulator.activeDispatchesByID,
-        MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries,
-        retainActiveDispatch,
+        cloneActiveDispatch,
       ),
       appliedEventCount: state.accumulator.appliedEventCount,
       completedAcceptedCount: state.accumulator.completedAcceptedCount,
       completedDispatchCount: state.accumulator.completedDispatchCount,
-      failedWorkItemsByID: retainRecord(
+      failedWorkItemsByID: retainRecordExactly(
         state.accumulator.failedWorkItemsByID,
-        MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries,
-        retainWorkItem,
+        cloneWorkItem,
       ),
-      initialPlaceIDs: retainSortedText(
-        state.accumulator.initialPlaceIDs,
-        MATERIALIZED_WORK_OUTCOME_RETENTION.nestedIDs,
-      ),
-      workItemsByID: retainRecord(
+      initialPlaceIDs: [...state.accumulator.initialPlaceIDs],
+      workItemsByID: retainRecordExactly(
         state.accumulator.workItemsByID,
-        MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries,
-        retainWorkItem,
+        cloneWorkItem,
       ),
     },
     counts: { ...state.counts },
     cursor: state.cursor
       ? {
-          eventID: retainText(state.cursor.eventID),
-          eventTime: retainText(state.cursor.eventTime),
+          eventID: state.cursor.eventID,
+          eventTime: state.cursor.eventTime,
           sequence: state.cursor.sequence,
           tick: state.cursor.tick,
         }
@@ -73,28 +72,87 @@ export function retainMaterializedWorkOutcomeState(
   };
 }
 
-function retainActiveDispatch(
+function cloneActiveDispatch(
   dispatch: MaterializedActiveDispatch,
 ): MaterializedActiveDispatch {
   return {
-    inputWorkIDs: retainSortedText(
-      dispatch.inputWorkIDs,
-      MATERIALIZED_WORK_OUTCOME_RETENTION.nestedIDs,
-    ),
+    inputWorkIDs: [...dispatch.inputWorkIDs],
     systemOnly: dispatch.systemOnly,
   };
 }
 
-function retainWorkItem(
+function cloneWorkItem(
   item: MaterializedTimelineWorkItem,
 ): MaterializedTimelineWorkItem {
   return {
-    ...(item.displayName ? { displayName: retainText(item.displayName) } : {}),
-    id: retainText(item.id),
-    ...(item.placeID ? { placeID: retainText(item.placeID) } : {}),
-    ...(item.traceID ? { traceID: retainText(item.traceID) } : {}),
-    workTypeID: retainText(item.workTypeID),
+    ...(item.displayName !== undefined
+      ? { displayName: item.displayName }
+      : {}),
+    id: item.id,
+    ...(item.placeID !== undefined ? { placeID: item.placeID } : {}),
+    ...(item.traceID !== undefined ? { traceID: item.traceID } : {}),
+    workTypeID: item.workTypeID,
   };
+}
+
+function isRetainableContinuationState(
+  state: MaterializedWorkOutcomeState,
+): boolean {
+  const { accumulator } = state;
+  return (
+    (state.cursor === null ||
+      (isBoundedText(state.cursor.eventID) &&
+        isBoundedText(state.cursor.eventTime))) &&
+    hasAtMostEntries(
+      accumulator.activeDispatchesByID,
+      MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries,
+    ) &&
+    Object.entries(accumulator.activeDispatchesByID).every(
+      ([dispatchID, dispatch]) =>
+        isBoundedText(dispatchID) &&
+        dispatch.inputWorkIDs.length <=
+          MATERIALIZED_WORK_OUTCOME_RETENTION.nestedIDs &&
+        dispatch.inputWorkIDs.every(isBoundedText),
+    ) &&
+    hasAtMostEntries(
+      accumulator.failedWorkItemsByID,
+      MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries,
+    ) &&
+    Object.entries(accumulator.failedWorkItemsByID).every(
+      ([workID, item]) => isBoundedText(workID) && isBoundedWorkItem(item),
+    ) &&
+    accumulator.initialPlaceIDs.length <=
+      MATERIALIZED_WORK_OUTCOME_RETENTION.nestedIDs &&
+    accumulator.initialPlaceIDs.every(isBoundedText) &&
+    hasAtMostEntries(
+      accumulator.workItemsByID,
+      MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries,
+    ) &&
+    Object.entries(accumulator.workItemsByID).every(
+      ([workID, item]) => isBoundedText(workID) && isBoundedWorkItem(item),
+    )
+  );
+}
+
+function hasAtMostEntries<T>(
+  values: Record<string, T>,
+  limit: number,
+): boolean {
+  return Object.keys(values).length <= limit;
+}
+
+function isBoundedWorkItem(item: MaterializedTimelineWorkItem): boolean {
+  return (
+    isBoundedText(item.id) &&
+    isBoundedText(item.workTypeID) &&
+    (item.displayName === undefined || isBoundedText(item.displayName)) &&
+    (item.placeID === undefined || isBoundedText(item.placeID)) &&
+    (item.traceID === undefined || isBoundedText(item.traceID))
+  );
+}
+
+function isBoundedText(value: string): boolean {
+  return value.length <= MATERIALIZED_WORK_OUTCOME_RETENTION.textChars;
 }
 
 function retainSample(sample: ThroughputSample): ThroughputSample {
@@ -134,6 +192,17 @@ function retainRecord<T, R>(
     retained[retainText(key)] = retainValue(values[key] as T);
   }
   return retained;
+}
+
+function retainRecordExactly<T, R>(
+  values: Record<string, T>,
+  retainValue: (value: T) => R,
+): Record<string, R> {
+  return Object.fromEntries(
+    Object.keys(values)
+      .sort()
+      .map((key) => [key, retainValue(values[key] as T)]),
+  );
 }
 
 function retainSortedText(values: string[], limit: number): string[] {

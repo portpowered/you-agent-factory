@@ -78,7 +78,7 @@ describe("materialized timeline checkpoint round trip", () => {
     ).resolves.toEqual(expected);
   });
 
-  it("applies deterministic limits while preserving full aggregate counts", async () => {
+  it("applies deterministic presentation limits while preserving the exact accumulator", async () => {
     const ascending = createTimelineCheckpointIndexedDBTestDouble();
     const descending = createTimelineCheckpointIndexedDBTestDouble();
     const ascendingState = overLimitState(false);
@@ -111,23 +111,61 @@ describe("materialized timeline checkpoint round trip", () => {
     expect(first.failedWorkLabels).toHaveLength(
       MATERIALIZED_WORK_OUTCOME_RETENTION.labels,
     );
-    expect(Object.keys(first.accumulator.workItemsByID)).toHaveLength(
-      MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries,
-    );
+    expect(first.accumulator).toEqual(ascendingState.accumulator);
     expect(
       first.accumulator.activeDispatchesByID["dispatch-0000"]?.inputWorkIDs,
-    ).toHaveLength(MATERIALIZED_WORK_OUTCOME_RETENTION.nestedIDs);
+    ).toHaveLength(4);
     expect(first.failedWorkLabels[0]).toBe("label-0000");
     expect(first.failedWorkLabels.at(-1)).toBe("label-0127");
-    expect(
-      first.accumulator.workItemsByID["work-0000"]?.displayName,
-    ).toHaveLength(MATERIALIZED_WORK_OUTCOME_RETENTION.textChars);
     expect(
       first.samples[0]?.failedWorkLabels.every(
         (label) =>
           label.length <= MATERIALIZED_WORK_OUTCOME_RETENTION.textChars,
       ),
     ).toBe(true);
+  });
+});
+
+describe("materialized timeline checkpoint accumulator overflow", () => {
+  it("removes a prior checkpoint instead of hydrating a lossy accumulator", async () => {
+    const fixture = createTimelineCheckpointIndexedDBTestDouble();
+    const identity = streamIdentity("generation-overflow");
+    const prefixEvents = overLimitQueuedEvents();
+    const overLimit = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      prefixEvents,
+    );
+    const suffix = continuationEvent();
+
+    await persistTimelineCheckpoint(
+      fixture.indexedDB,
+      representativeCheckpoint(),
+      identity,
+    );
+    expect(fixture.records.size).toBe(1);
+
+    await persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpointWithState(overLimit),
+      identity,
+    );
+
+    await expect(
+      readTimelineCheckpoint(fixture.indexedDB, identity),
+    ).resolves.toBeNull();
+    expect(fixture.records.size).toBe(0);
+
+    const replayed = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      [...prefixEvents, suffix],
+    );
+    const uninterrupted = reduceMaterializedWorkOutcomeEvents(overLimit, [
+      suffix,
+    ]);
+    expect(replayed).toEqual(uninterrupted);
+    expect(uninterrupted.counts.queued).toBe(
+      MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries + 1,
+    );
   });
 });
 
@@ -197,41 +235,34 @@ function overLimitState(
   reverseInsertion: boolean,
 ): MaterializedWorkOutcomeState {
   const state = createMaterializedWorkOutcomeState();
-  const mapEntryCount =
-    MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries + 1;
-  const detailEntryCount = Math.max(
-    mapEntryCount,
-    MATERIALIZED_WORK_OUTCOME_RETENTION.nestedIDs + 1,
-  );
+  const detailEntryCount = 4;
   const indexes = Array.from({ length: detailEntryCount }, (_, index) => index);
   if (reverseInsertion) {
     indexes.reverse();
   }
-  const longText = "x".repeat(
+  const longPresentationText = "x".repeat(
     MATERIALIZED_WORK_OUTCOME_RETENTION.textChars + 20,
   );
 
   for (const index of indexes) {
     const suffix = String(index).padStart(4, "0");
-    if (index < mapEntryCount) {
-      state.accumulator.workItemsByID[`work-${suffix}`] = {
-        displayName: longText,
-        id: `work-${suffix}`,
-        placeID: `story:${longText}`,
-        traceID: `trace-${longText}`,
-        workTypeID: `type-${longText}`,
-      };
-    }
+    state.accumulator.workItemsByID[`work-${suffix}`] = {
+      displayName: `Work ${suffix}`,
+      id: `work-${suffix}`,
+      placeID: "story:init",
+      traceID: `trace-${suffix}`,
+      workTypeID: "story",
+    };
   }
   state.accumulator.activeDispatchesByID["dispatch-0000"] = {
-    inputWorkIDs: indexes.map(
-      (index) => `input-${String(index).padStart(4, "0")}`,
-    ),
+    inputWorkIDs: [...indexes]
+      .sort((left, right) => left - right)
+      .map((index) => `input-${String(index).padStart(4, "0")}`),
     systemOnly: false,
   };
-  state.accumulator.initialPlaceIDs = indexes.map(
-    (index) => `place-${String(index).padStart(4, "0")}`,
-  );
+  state.accumulator.initialPlaceIDs = [...indexes]
+    .sort((left, right) => left - right)
+    .map((index) => `place-${String(index).padStart(4, "0")}`);
   state.counts = {
     completed: 50_000,
     dispatched: 60_000,
@@ -243,24 +274,54 @@ function overLimitState(
   const breakdownCount =
     MATERIALIZED_WORK_OUTCOME_RETENTION.breakdownEntries + 1;
   const labelCount = MATERIALIZED_WORK_OUTCOME_RETENTION.labels + 1;
-  for (const index of indexes) {
+  for (
+    let index = 0;
+    index < Math.max(breakdownCount, labelCount);
+    index += 1
+  ) {
     const suffix = String(index).padStart(4, "0");
-    if (index < breakdownCount) {
+    if (index < breakdownCount)
       state.failedByWorkType[`type-${suffix}`] = index;
-    }
-    if (index < labelCount) {
-      state.failedWorkLabels.push(`label-${suffix}`);
-    }
+    if (index < labelCount) state.failedWorkLabels.push(`label-${suffix}`);
   }
   state.samples = Array.from(
     { length: MATERIALIZED_WORK_OUTCOME_RETENTION.samples + 1 },
     (_, tick) =>
       sample(tick, {
         failedByWorkType: state.failedByWorkType,
-        failedWorkLabels: [...state.failedWorkLabels, longText],
+        failedWorkLabels: [...state.failedWorkLabels, longPresentationText],
       }),
   );
   return state;
+}
+
+function overLimitQueuedEvents(): FactoryEvent[] {
+  const count = MATERIALIZED_WORK_OUTCOME_RETENTION.accumulatorMapEntries + 1;
+  return [
+    {
+      context: { eventTime: "2026-07-13T11:59:58Z", sequence: 0, tick: 0 },
+      id: "initial-overflow",
+      payload: {
+        factory: {
+          workTypes: [
+            { name: "story", states: [{ name: "init", type: "INITIAL" }] },
+          ],
+        },
+      },
+      type: FACTORY_EVENT_TYPES.initialStructureRequest,
+    },
+    {
+      context: { eventTime: "2026-07-13T11:59:59Z", sequence: 1, tick: 1 },
+      id: "work-overflow",
+      payload: {
+        works: Array.from({ length: count }, (_, index) => ({
+          workId: `work-${String(index).padStart(4, "0")}`,
+          workTypeName: "story",
+        })),
+      },
+      type: FACTORY_EVENT_TYPES.workRequest,
+    },
+  ];
 }
 
 function sample(

@@ -389,9 +389,10 @@ export async function persistTimelineCheckpoint(
   const normalizedStreamIdentity =
     normalizeTimelineCheckpointIdentity(streamIdentity);
   const storageKey = checkpointStorageKey(normalizedStreamIdentity);
-  const persistedCheckpoint = checkpoint
-    ? buildPersistedCheckpoint(checkpoint)
-    : null;
+  const persistedCheckpoint =
+    checkpoint && buildPersistedCheckpoint(checkpoint);
+  if (checkpoint && !persistedCheckpoint)
+    return clearTimelineCheckpoint(indexedDB, normalizedStreamIdentity);
   if (
     !indexedDB ||
     !persistedCheckpoint ||
@@ -422,9 +423,7 @@ export async function persistTimelineCheckpoint(
 export async function purgeLegacyTimelineCheckpoints(
   indexedDB: IndexedDBLike | undefined,
 ): Promise<void> {
-  if (!indexedDB) {
-    return;
-  }
+  if (!indexedDB) return;
   await deleteIndexedCheckpoint(indexedDB, DEFAULT_FACTORY_SESSION_ID).catch(
     () => {},
   );
