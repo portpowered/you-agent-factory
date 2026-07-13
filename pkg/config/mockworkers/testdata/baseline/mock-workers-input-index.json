@@ -142,6 +142,96 @@
       }
     },
     {
+      "id": "invalid-unknown-top-level",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/unknown-top-level.json",
+      "description": "unknown top-level keys are rejected under strict decode",
+      "errorFragments": [
+        "decode mock workers JSON",
+        "unknown field"
+      ]
+    },
+    {
+      "id": "invalid-unknown-nested-mock-worker",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/unknown-nested-mock-worker.json",
+      "description": "unknown nested mockWorkers[] keys are rejected under strict decode",
+      "errorFragments": [
+        "decode mock workers JSON",
+        "unknown field"
+      ]
+    },
+    {
+      "id": "invalid-trailing-json",
+      "category": "parse-unknown-field",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/trailing-json.json",
+      "description": "trailing JSON values after the root object are rejected",
+      "errorFragments": [
+        "unexpected trailing JSON"
+      ]
+    },
+    {
+      "id": "invalid-unknown-run-type",
+      "category": "parse-accept-entry",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/unknown-run-type.json",
+      "description": "unknown runType values fail validation with actionable diagnostics",
+      "errorFragments": [
+        "runType must be one of \"accept\", \"script\", or \"reject\"; got \"maybe\""
+      ]
+    },
+    {
+      "id": "invalid-unknown-unmatched-policy",
+      "category": "parse-unmatched-policy",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/unknown-unmatched-policy.json",
+      "description": "unknown unmatchedDispatchPolicy values fail validation with actionable diagnostics",
+      "errorFragments": [
+        "unmatchedDispatchPolicy must be one of \"accept\" or \"passthrough\"; got \"maybe\""
+      ]
+    },
+    {
+      "id": "invalid-script-without-script-config",
+      "category": "parse-script-entry",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/script-without-script-config.json",
+      "description": "script runType without scriptConfig fails validation",
+      "errorFragments": [
+        "scriptConfig is required"
+      ]
+    },
+    {
+      "id": "invalid-script-without-command",
+      "category": "parse-script-entry",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/script-without-command.json",
+      "description": "script runType without scriptConfig.command fails validation",
+      "errorFragments": [
+        "scriptConfig.command is required"
+      ]
+    },
+    {
+      "id": "invalid-reject-exit-code-out-of-range",
+      "category": "parse-reject-entry",
+      "entrypoint": "ParseMockWorkersConfig",
+      "outcome": "reject",
+      "fixture": "pkg/config/mockworkers/testdata/fixtures/invalid/reject-exit-code-out-of-range.json",
+      "description": "rejectConfig.exitCode outside 1-255 fails validation",
+      "errorFragments": [
+        "rejectConfig.exitCode must be between 1 and 255"
+      ]
+    },
+    {
       "id": "valid-load-empty-path",
       "category": "load-empty-path",
       "entrypoint": "LoadMockWorkersConfig",

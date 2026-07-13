@@ -1,0 +1,8 @@
+{
+  "mockWorkers": [
+    {
+      "id": "script",
+      "runType": "script"
+    }
+  ]
+}

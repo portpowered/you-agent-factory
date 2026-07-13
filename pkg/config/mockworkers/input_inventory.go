@@ -22,6 +22,7 @@ const (
 	categoryParseScriptEntry     = "parse-script-entry"
 	categoryParseUnmatchedPolicy = "parse-unmatched-policy"
 	categoryParseDocsExample     = "parse-docs-example"
+	categoryParseUnknownField    = "parse-unknown-field"
 	categoryLoadFile             = "load-file"
 	categoryLoadEmptyPath        = "load-empty-path"
 )

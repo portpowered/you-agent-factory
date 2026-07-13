@@ -53,6 +53,51 @@ func TestProjectInputInventory_HasDocsExampleAndVariantCases(t *testing.T) {
 	}
 }
 
+func TestProjectInputInventory_HasUnknownFieldAndInvalidUnionRejectCases(t *testing.T) {
+	t.Parallel()
+
+	inventory := mockworkers.ProjectInputInventory()
+	byID := indexInputCasesByID(t, inventory.Cases)
+
+	required := []string{
+		"invalid-unknown-top-level",
+		"invalid-unknown-nested-mock-worker",
+		"invalid-trailing-json",
+		"invalid-unknown-run-type",
+		"invalid-unknown-unmatched-policy",
+		"invalid-script-without-script-config",
+		"invalid-script-without-command",
+		"invalid-reject-exit-code-out-of-range",
+	}
+	for _, id := range required {
+		inputCase, ok := byID[id]
+		if !ok {
+			t.Fatalf("missing indexed invalid input case %q", id)
+		}
+		if inputCase.Outcome != "reject" {
+			t.Fatalf("input case %q outcome = %q, want reject", id, inputCase.Outcome)
+		}
+		if len(inputCase.ErrorFragments) == 0 {
+			t.Fatalf("input case %q missing errorFragments", id)
+		}
+	}
+
+	var unknownFieldReject bool
+	for _, inputCase := range inventory.Cases {
+		if inputCase.Category != "parse-unknown-field" || inputCase.Outcome != "reject" {
+			continue
+		}
+		if inputCase.Fixture == "" {
+			t.Fatalf("unknown-field case %q missing fixture", inputCase.ID)
+		}
+		unknownFieldReject = true
+		break
+	}
+	if !unknownFieldReject {
+		t.Fatal("missing unknown-field reject case in input inventory")
+	}
+}
+
 func TestIndexedInputCases_MatchProductionLoaders(t *testing.T) {
 	inventory := mockworkers.ProjectInputInventory()
 	seen := make(map[string]struct{}, len(inventory.Cases))

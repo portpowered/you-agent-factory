@@ -3,8 +3,9 @@ package mockworkers
 // ProjectInputInventory builds the deterministic mock-worker input inventory
 // from committed fixtures, docs examples, and documented loader outcomes.
 func ProjectInputInventory() InputInventory {
-	cases := make([]InputCase, 0, 16)
+	cases := make([]InputCase, 0, 24)
 	cases = append(cases, parseValidInputCases()...)
+	cases = append(cases, parseInvalidInputCases()...)
 	cases = append(cases, loadValidInputCases()...)
 
 	return InputInventory{

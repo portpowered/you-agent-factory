@@ -1,0 +1,11 @@
+{
+  "mockWorkers": [
+    {
+      "id": "script",
+      "runType": "script",
+      "scriptConfig": {
+        "args": ["ok"]
+      }
+    }
+  ]
+}
