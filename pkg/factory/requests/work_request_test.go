@@ -61,7 +61,6 @@ func TestValidateWorkRequestTraceFields(t *testing.T) {
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this normalization contract test keeps shared-request, trace, and relation assertions inline for readability.
 func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testing.T) {
 	request := interfaces.WorkRequest{
 		RequestID:              "request-1",
@@ -79,6 +78,13 @@ func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testin
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
+	assertIndependentWorkIdentity(t, normalized)
+	assertIndependentWorkMetadata(t, normalized)
+}
+
+func assertIndependentWorkIdentity(t *testing.T, normalized []interfaces.SubmitRequest) {
+	t.Helper()
+
 	if len(normalized) != 2 {
 		t.Fatalf("normalized count = %d, want 2", len(normalized))
 	}
@@ -94,6 +100,11 @@ func TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace(t *testin
 	if normalized[0].TraceID != normalized[0].CurrentChainingTraceID || normalized[1].TraceID != normalized[1].CurrentChainingTraceID {
 		t.Fatalf("trace IDs and current chaining trace IDs should match, got %#v", normalized)
 	}
+}
+
+func assertIndependentWorkMetadata(t *testing.T, normalized []interfaces.SubmitRequest) {
+	t.Helper()
+
 	if normalized[0].WorkID != "batch-request-1-first" || normalized[1].WorkID != "batch-request-1-second" {
 		t.Fatalf("work IDs = %q/%q", normalized[0].WorkID, normalized[1].WorkID)
 	}

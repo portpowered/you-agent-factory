@@ -453,18 +453,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factory/requests/work_request_submit_test.go#TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this canonical batch-contract test keeps cross-item payload, relation, and trace assertions visible in one flow."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factory/requests/work_request_test.go#TestNormalizeWorkRequest_IndependentWorkItemsShareRequestAndTrace",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this normalization contract test keeps shared-request, trace, and relation assertions inline for readability."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/factory/runtime/factory_event_history_test.go#assertBatchRequestReplayEvents",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the batch replay event contract visible in one assertion owner."
@@ -1065,4 +1053,3 @@
     }
   ]
 }
-
