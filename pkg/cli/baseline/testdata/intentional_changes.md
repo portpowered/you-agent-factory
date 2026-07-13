@@ -13,7 +13,7 @@ contract without an intentional ledger update.
 
 | Surface | Identifier | Rationale |
 | --- | --- | --- |
-| _none_ | _none_ | `you run --workflow` removed; workflow selection uses dedicated workflow commands. |
+| _none_ | _none_ | No planned CLI removals. |
 
 ## Planned moves
 
