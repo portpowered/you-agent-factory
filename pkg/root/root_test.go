@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/wire"
 	"go.uber.org/zap"
 )
@@ -60,6 +61,38 @@ func TestStartPreservesCanceledConstructionContext(t *testing.T) {
 	application, err := root.Start(ctx, root.Inputs{})
 	if application != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("Start() = (%v, %v), want nil application wrapping context.Canceled", application, err)
+	}
+}
+
+func TestStartReturnsApplicationForConstructedGraph(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, factoryfixtures.MinimalFactoryConfig())
+	application, err := root.Start(context.Background(), root.Inputs{
+		Mode: initializer.ModeMCP,
+		Graph: wire.Inputs{
+			Config: &runtimehost.Config{
+				Dir:                                     factoryDir,
+				Logger:                                  zap.NewNop(),
+				Clock:                                   rootClock{},
+				RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+				RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+				DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+				SkipBuiltInRunnerPrerequisiteValidation: true,
+			},
+			MCPInput:  strings.NewReader(""),
+			MCPOutput: &bytes.Buffer{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if application == nil || application.Graph() == nil {
+		t.Fatal("Start() returned no application graph")
+	}
+	if err := application.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
 	}
 }
 

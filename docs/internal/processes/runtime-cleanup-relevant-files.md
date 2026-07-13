@@ -105,6 +105,13 @@ Documentation-only runtime-cleanup changes should also run `git diff --check`
 and `make typecheck`. Add `make docs-reference-smoke` only when packaged
 `docs/reference/` content or `you docs` routing changes.
 
+New production composition packages such as `pkg/wire`, `pkg/root`, and
+`pkg/initializer` are subject to the non-baselined per-package Go coverage
+minimum. Exercise their observable construction, lifecycle, failure, and
+shutdown behavior and run `make test-backend-verification`; do not add a new
+package to the temporary coverage baseline merely because production adoption
+made it visible to the merged coverage profile.
+
 When changing durable Factory Session execution construction, run
 `make durable-runtime-construction-check`. The guard permits direct
 `NewJavaScriptRuntimeService` calls only in the package-local execution-provider

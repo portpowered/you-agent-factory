@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/wire"
@@ -375,6 +377,30 @@ func TestApplicationRunWaitsForSelectedTransportAndShutsDownOnce(t *testing.T) {
 	}
 	if len(fixture.stops) != 4 {
 		t.Fatalf("stop calls after repeated shutdown = %v, want exactly once", fixture.stops)
+	}
+}
+
+func TestApplicationRuntimeDiagnosticsAndNonWaitableRun(t *testing.T) {
+	t.Parallel()
+
+	var nilApplication *initializer.Application
+	if got := nilApplication.RuntimeLogDiagnostics(); got.Path != "" {
+		t.Fatalf("nil application diagnostics = %+v, want disabled zero value", got)
+	}
+	fixture := newApplicationFixture()
+	fixture.graph.RuntimeLog = runtimehost.RuntimeLogDiagnostics{Path: "runtime.log"}
+	application, err := initializer.Start(context.Background(), initializer.ModeMCP, fixture.graph)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if got := application.RuntimeLogDiagnostics(); got.Path != "runtime.log" {
+		t.Fatalf("RuntimeLogDiagnostics() = %+v, want graph metadata", got)
+	}
+	if err := application.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "MCP transport lifecycle is not waitable") {
+		t.Fatalf("Run() error = %v, want non-waitable lifecycle error", err)
+	}
+	if err := application.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
 	}
 }
 
