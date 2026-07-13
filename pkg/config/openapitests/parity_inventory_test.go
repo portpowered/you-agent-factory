@@ -326,11 +326,11 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "pkg/api/generated/server.gen.go",
-		sha256Hex:    "31cb73f21474acb5903127fc46517f80a4009e23f5f545a8b16aebbdf1a040a4",
+		sha256Hex:    "0e65e94caafa7c5a6bf55d5804b81543c34b60f24beaa64eab7200bf5ddb3404",
 	},
 	{
 		relativePath: "pkg/generatedclient/client.gen.go",
-		sha256Hex:    "2ad86aba1ef76f69b1bfdeee0d02cfc4398ebab95b556dfc01cec778eb9f8233",
+		sha256Hex:    "131f2a707b66e04e6501cf2cea5f767280fdcf4b27ee4d23320bcd5eb356b39e",
 	},
 }
 
