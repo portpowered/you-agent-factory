@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
-import {
-  recordSessionPersistenceInvalidation,
-  silentReplayRecoveryDiagnostic,
-} from "../public";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   clearTimelineCheckpoint,
   type FactoryTimelineCheckpoint,
@@ -14,10 +11,13 @@ import {
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  recordSessionPersistenceInvalidation,
+  silentReplayRecoveryDiagnostic,
+} from "../public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
-import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
+import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
@@ -25,6 +25,18 @@ import { useDashboardWorldView } from "./useDashboardWorldView";
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
   refreshToken?: number;
+}
+
+export interface DashboardSnapshotResult {
+  error: Error | null;
+  isInitialLoading: boolean;
+  preflightRecovery: ReturnType<
+    typeof useDashboardCheckpointPreflight
+  >["preflightRecovery"];
+  preflightStatus: DashboardPreflightStatus;
+  snapshot: ReturnType<typeof useDashboardWorldView>["snapshot"] | null;
+  streamState: ReturnType<typeof useDashboardWorldView>["streamState"];
+  workOutcomeStreamIdentity?: TimelineCheckpointStreamIdentity | null;
 }
 
 type DashboardPreflightStatus = "loading" | "non-recoverable" | "success";
@@ -66,7 +78,7 @@ function usePersistedTimelineCheckpoint({
 export function useDashboardSnapshot({
   locale,
   refreshToken = 0,
-}: UseDashboardSnapshotOptions = {}) {
+}: UseDashboardSnapshotOptions = {}): DashboardSnapshotResult {
   const activateTimelineEntry = useFactoryTimelineStore(
     (state) => state.activateEntry,
   );
@@ -285,6 +297,7 @@ export function useDashboardSnapshot({
       preflightStatus,
       snapshot: preflightRecovery ? null : snapshot,
       streamState,
+      workOutcomeStreamIdentity: streamIdentity,
     }),
     [
       error,
@@ -294,6 +307,7 @@ export function useDashboardSnapshot({
       preflightStatus,
       snapshot,
       streamState,
+      streamIdentity,
     ],
   );
 }

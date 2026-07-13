@@ -1,88 +1,66 @@
 import { useMemo } from "react";
-
-import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { FactoryEvent } from "../../../api/events";
-import type { WorldState } from "../../timeline/state/factoryTimelineStore";
+import type { WorkChartState } from "../components/work-chart";
 import {
-  createMaterializedWorkOutcomeState,
-  reduceMaterializedWorkOutcomeEvents,
+  isSupportedMaterializedWorkOutcomeState,
+  selectMaterializedWorkOutcomeSamples,
 } from "../lib/materializer/materialized-work-outcome";
-import {
-  buildWorkChartModel,
-  recordThroughputSample,
-  type ThroughputSample,
-} from "../lib/trends";
+import { buildWorkChartModel } from "../lib/trends";
 
 const WORK_OUTCOME_RANGE_ID = "session";
 const SESSION_WORK_CHART_NOW = 0;
 
 export function useWorkOutcomeChart({
+  hydrationStatus = "ready",
   locale,
+  materializedWorkOutcomeState,
   selectedTimelineTick,
-  timelineEvents,
-  worldViewCache,
 }: {
+  hydrationStatus?: "loading" | "ready";
   locale?: string | null;
+  materializedWorkOutcomeState: unknown;
   selectedTimelineTick: number;
-  timelineEvents: FactoryEvent[];
-  worldViewCache: Record<number, WorldState | DashboardSnapshot | unknown>;
 }) {
   const workOutcomeSamples = useMemo(() => {
-    if (timelineEvents.length > 0) {
-      return buildWorkOutcomeTimelineSamplesFromEvents(
-        timelineEvents,
-        selectedTimelineTick,
-      );
+    if (
+      hydrationStatus !== "ready" ||
+      !isSupportedMaterializedWorkOutcomeState(materializedWorkOutcomeState)
+    ) {
+      return [];
     }
-    return buildWorkOutcomeTimelineSamplesFromCachedSnapshots(
-      worldViewCache,
+    return selectMaterializedWorkOutcomeSamples(
+      materializedWorkOutcomeState,
       selectedTimelineTick,
     );
-  }, [selectedTimelineTick, timelineEvents, worldViewCache]);
+  }, [hydrationStatus, materializedWorkOutcomeState, selectedTimelineTick]);
+
+  const chartStatus: WorkChartState["status"] =
+    hydrationStatus === "loading"
+      ? "loading"
+      : isSupportedMaterializedWorkOutcomeState(materializedWorkOutcomeState)
+        ? "ready"
+        : "error";
 
   return useMemo(
-    () =>
-      buildWorkChartModel(
+    () => ({
+      ...buildWorkChartModel(
         workOutcomeSamples,
         WORK_OUTCOME_RANGE_ID,
         SESSION_WORK_CHART_NOW,
         locale,
       ),
-    [locale, workOutcomeSamples],
+      chartState: workChartState(chartStatus),
+    }),
+    [chartStatus, locale, workOutcomeSamples],
   );
 }
 
-export function buildWorkOutcomeTimelineSamplesFromEvents(
-  events: FactoryEvent[],
-  selectedTick: number,
-): ThroughputSample[] {
-  const selectedEvents = events.filter(
-    (event) => event.context.tick <= selectedTick,
-  );
-  if (selectedEvents.length === 0) {
-    return [];
+function workChartState(status: WorkChartState["status"]): WorkChartState {
+  switch (status) {
+    case "loading":
+      return { status: "loading" };
+    case "error":
+      return { status: "error" };
+    default:
+      return { status: "ready" };
   }
-
-  return reduceMaterializedWorkOutcomeEvents(
-    createMaterializedWorkOutcomeState(),
-    selectedEvents,
-  ).samples;
-}
-
-function buildWorkOutcomeTimelineSamplesFromCachedSnapshots(
-  worldViewCache: Record<number, WorldState | DashboardSnapshot | unknown>,
-  selectedTick: number,
-): ThroughputSample[] {
-  const ticks = Object.keys(worldViewCache)
-    .map((value) => Number(value))
-    .filter((tick) => Number.isFinite(tick) && tick <= selectedTick)
-    .sort((left, right) => left - right);
-
-  return ticks.reduce<ThroughputSample[]>((samples, tick, index) => {
-    const snapshot = worldViewCache[tick] as DashboardSnapshot | undefined;
-    if (!snapshot) {
-      return samples;
-    }
-    return recordThroughputSample(samples, snapshot, index);
-  }, []);
 }
