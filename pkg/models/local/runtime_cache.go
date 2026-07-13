@@ -1,4 +1,4 @@
-package localmodels
+package local
 
 import (
 	"context"
@@ -51,7 +51,7 @@ func runtimeCacheInspectDiagnostics(inspection RuntimeCacheInspection, forInspec
 
 const (
 	ManagedRuntimeSourceKindUpstreamRepository = "UPSTREAM_REPOSITORY"
-	ManagedRuntimeSourceKindManagedMirror        = "MANAGED_MIRROR"
+	ManagedRuntimeSourceKindManagedMirror      = "MANAGED_MIRROR"
 )
 
 // ManagedRuntimeSourceResolution classifies which configured backend source

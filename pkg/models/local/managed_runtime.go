@@ -1,4 +1,4 @@
-package localmodels
+package local
 
 import (
 	"fmt"
@@ -11,11 +11,11 @@ import (
 )
 
 type managedRuntimeProjection struct {
-	summary           factoryapi.ModelSummary
-	baseDiagnostics   factoryapi.StringMap
-	cacheInspection   *RuntimeCacheInspection
-	sourceResolution  *ManagedRuntimeSourceResolution
-	includeInspect    bool
+	summary          factoryapi.ModelSummary
+	baseDiagnostics  factoryapi.StringMap
+	cacheInspection  *RuntimeCacheInspection
+	sourceResolution *ManagedRuntimeSourceResolution
+	includeInspect   bool
 }
 
 func buildManagedRuntime(summary factoryapi.ModelSummary, diagnostics factoryapi.StringMap) factoryapi.ManagedRuntime {

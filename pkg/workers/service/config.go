@@ -4,8 +4,8 @@ import (
 	"net/http"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"go.uber.org/zap"
 )
 

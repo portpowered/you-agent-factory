@@ -1,4 +1,4 @@
-package localmodels
+package local
 
 import (
 	"testing"

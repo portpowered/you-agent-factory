@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -53,10 +54,10 @@ func TestStartLinearPoller_SubmitsIssuesThroughSubmitter(t *testing.T) {
 		t.Fatalf("write secret file: %v", err)
 	}
 
-	var submitCalls int
+	var submitCalls atomic.Int32
 	var submittedWorkID string
 	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
-		submitCalls++
+		submitCalls.Add(1)
 		if len(request.Works) > 0 {
 			submittedWorkID = request.Works[0].WorkID
 		}
@@ -108,8 +109,8 @@ func TestStartLinearPoller_SubmitsIssuesThroughSubmitter(t *testing.T) {
 	cancel()
 	sidecars.Wait()
 
-	if submitCalls != 1 {
-		t.Fatalf("submit calls = %d, want 1", submitCalls)
+	if got := submitCalls.Load(); got != 1 {
+		t.Fatalf("submit calls = %d, want 1", got)
 	}
 	if submittedWorkID != "linear:issue-new" {
 		t.Fatalf("submitted work id = %q, want linear:issue-new", submittedWorkID)
@@ -263,13 +264,13 @@ func TestStartLinearPoller_KeepsPollingOverTime(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeHostedLinearSecretForTest(t, factoryDir)
 
-	var submitCalls int
+	var submitCalls atomic.Int32
 	var submittedWorkIDs []string
 	var submitMu sync.Mutex
 	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
 		submitMu.Lock()
 		defer submitMu.Unlock()
-		submitCalls++
+		submitCalls.Add(1)
 		for _, work := range request.Works {
 			submittedWorkIDs = append(submittedWorkIDs, work.WorkID)
 		}
@@ -336,9 +337,9 @@ func TestStartLinearPoller_RestartsOnProviderHTTPFailure(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeHostedLinearSecretForTest(t, factoryDir)
 
-	var submitCalls int
+	var submitCalls atomic.Int32
 	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
-		submitCalls++
+		submitCalls.Add(1)
 		return nil
 	})
 
@@ -460,16 +461,16 @@ func hostedLinearPollerFixtureForTest(
 	}, runtimeCfg, poller, worker
 }
 
-func waitForSubmitCalls(t *testing.T, submitCalls *int, want int, timeout time.Duration) {
+func waitForSubmitCalls(t *testing.T, submitCalls *atomic.Int32, want int32, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if *submitCalls >= want {
+		if submitCalls.Load() >= want {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("timed out waiting for %d submit call(s); got %d", want, *submitCalls)
+	t.Fatalf("timed out waiting for %d submit call(s); got %d", want, submitCalls.Load())
 }
 
 func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, message string, timeout time.Duration) {

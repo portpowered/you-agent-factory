@@ -160,8 +160,8 @@ for new placement decisions.
 | Dynamic workflow / JavaScript orchestration | `pkg/orchestrators/javascript/*` | Put source resolution, validation, policy, preview preparation, runtime execution, result shaping, and checkpoints under the JavaScript orchestrator packages. |
 | Factory runtime loop and projections | `pkg/factory` | Own event-first runtime behavior, subsystem coordination, emitted Factory events, replay, and world-state projections. |
 | Internal Petri implementation | `pkg/petri` | Keep tokens, places, transitions, markings, and guard mechanics internal; do not promote them as the primary public resource model. |
-| Workers and providers | `pkg/workers` and `pkg/hostedworkers` | Put worker execution, provider adapters, mock workers, process runners, sidecars, and hosted-worker integrations in the worker owner. |
-| Models and managed runtimes | `pkg/modelhost` | Put process-wide model runtime lifecycle, readiness, supervised servers, leases, capacity, and diagnostics in the model host; keep API/CLI adapters in `pkg/models/service`. |
+| Workers and providers | `pkg/workers` and `pkg/workers/hosted` | Put worker execution, provider adapters, mock workers, process runners, sidecars, and hosted-worker integrations in the worker owner. |
+| Models and managed runtimes | `pkg/models/host` | Put process-wide model runtime lifecycle, readiness, supervised servers, leases, capacity, and diagnostics in the model host; keep API/CLI adapters in `pkg/models/service`. |
 | Work domain | target `pkg/work` | Own Work and Work Request content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts. Exclude Factory Session orchestration, worker/provider execution, and generic platform clocks. |
 | Platform infrastructure | target `pkg/platform` | Own cross-cutting logging, replay and artifact infrastructure, metrics, cursor storage, and non-domain clocks. Implement domain-owned interfaces where needed, but do not choose Factory, Factory Session, worker, model, or Work policy. |
 
@@ -192,6 +192,14 @@ Generated-code exceptions are a separate policy class, not migration roots:
 standard `Code generated ... DO NOT EDIT.` header. They may contain generated
 transport contracts or clients but must never own handwritten product behavior.
 
+Historical model and hosted-worker roots are a prohibited policy class, not
+migration exceptions. `pkg/modelhost`, `pkg/localmodels`, and
+`pkg/hostedworkers` must not be recreated or imported. Their canonical owners
+are `pkg/models/host`, `pkg/models/local` or `pkg/models/assets`, and
+`pkg/workers/hosted`, respectively. The package-boundary check enforces both
+directory creation and Go imports while allowing legitimate nested packages
+within the canonical model and worker families.
+
 ### Other migration-era surfaces and compatibility aliases
 
 The following packages and aliases exist to keep current behavior working while
@@ -202,7 +210,7 @@ or part of an active removal lane.
 
 | Migration-era surface | Temporary role | Target owner or sunset expectation |
 | --- | --- | --- |
-| Broad `pkg/service` runtime composition files, including `factory.go`, `factory_build.go`, `runtime_sessions.go`, `model_catalog.go`, and `factory_editable_definition.go` | Compatibility shell for existing API, CLI, session, model, save, and runtime construction entrypoints. | Move durable behavior to the narrow owner: Factory Session state to `pkg/factorysessions`, durable execution to `pkg/factorysessionexecution`, model behavior to `pkg/modelhost` and `pkg/models/service`, Work behavior to target `pkg/work`, factory definition behavior to `pkg/factorydefinition/service`, and startup graph construction to target `pkg/wire`. Leave `pkg/service` as thin routing until Batch 007 convergence and Batch 008 deletion gates are complete. |
+| Broad `pkg/service` runtime composition files, including `factory.go`, `factory_build.go`, `runtime_sessions.go`, `model_catalog.go`, and `factory_editable_definition.go` | Compatibility shell for existing API, CLI, session, model, save, and runtime construction entrypoints. | Move durable behavior to the narrow owner: Factory Session state to `pkg/factorysessions`, durable execution to `pkg/factorysessionexecution`, model behavior to `pkg/models/host` and `pkg/models/service`, Work behavior to target `pkg/work`, factory definition behavior to `pkg/factorydefinition/service`, and startup graph construction to target `pkg/wire`. Leave `pkg/service` as thin routing until Batch 007 convergence and Batch 008 deletion gates are complete. |
 | `pkg/runtimehost` | Transitional wrapper around the service-backed runtime host shape. | Replace host ownership with explicit Factory Session, runtime loop, and initializer dependencies. Sunset the package once transports and session APIs no longer need a runtime-host facade around `FactoryService` compatibility. |
 | `pkg/composebridge` | Bridge that lets `pkg/initializer` reuse service-owned runtime bundle construction during the migration. | Move dependency graph assembly to target `pkg/wire` and keep lifecycle execution in `pkg/initializer`. Delete the bridge under Batch 008 when initializer paths consume the explicit graph without reaching through service composition internals. |
 | Host-object dependency-injection adapters such as service-local `factoryDefinitionHost`, `factorySaveHost`, and `sessionGatewayHost` structs, plus cmd-owned Wire providers under `cmd/factory/compose` | Adapter objects that satisfy narrower service interfaces while the old coordinator still carries many collaborators. | Prefer explicit constructor inputs and graph assembly in target `pkg/wire`, with domain packages owning their own host interfaces only at the boundary they actually consume. Delete each adapter when the target owner accepts explicit collaborators or the old coordinator no longer fronts that behavior. |

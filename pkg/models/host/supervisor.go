@@ -13,7 +13,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 )
 
 const (
@@ -54,13 +54,13 @@ type ServerStartBuilder func(identity Identity, inspection CacheInspection, work
 
 // SupervisorConfig configures supervised llama.cpp-backed runtime loading.
 type SupervisorConfig struct {
-	ReadinessTimeout     time.Duration
-	HealthCheckInterval  time.Duration
-	HealthCheckPath      string
-	ProcessLauncher      ProcessLauncher
-	HealthChecker        HealthChecker
-	ServerStartBuilder   ServerStartBuilder
-	Diagnostics          Diagnostics
+	ReadinessTimeout    time.Duration
+	HealthCheckInterval time.Duration
+	HealthCheckPath     string
+	ProcessLauncher     ProcessLauncher
+	HealthChecker       HealthChecker
+	ServerStartBuilder  ServerStartBuilder
+	Diagnostics         Diagnostics
 }
 
 type supervisedState string
@@ -137,7 +137,7 @@ func (r *supervisedRuntime) readinessOverlay(identity Identity, base ReadinessSn
 			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
 			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
 			FailureClass:   FailureClassNone,
-			Diagnostics:    mergeDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateLOADED, map[string]string{
+			Diagnostics: mergeDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateLOADED, map[string]string{
 				"endpoint": r.endpoint,
 			}),
 		}

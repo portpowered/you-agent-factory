@@ -77,6 +77,15 @@ invocation returns actionable outcomes derived from the managed contract through
 `apisurface.InvocationErrorFromManagedRuntime`. When a runtime is `READY`,
 packaged and authored factories invoke through the same managed runtime layer.
 
+Production composition constructs `pkg/models/service.Service` in `pkg/wire`
+from model-scoped dependencies: the dynamic active-runtime configuration reader,
+the process model host, asset puller, logger, clock, pull-metrics recorder,
+direct-invocation executor builder, and factory runner identity. Stable
+collaborators are supplied as direct values; only runtime configuration remains
+a callback because activating another factory changes it after construction.
+The model service does not receive `FactoryService`, `runtimehost.Host`, or an
+adapter around either coordinator.
+
 ## Pull or Install Lifecycle
 
 `POST /models/{model_name}/pull` and `you models pull` use one canonical customer
@@ -90,7 +99,7 @@ Post-pull cache inspection classifies readiness and lifecycle without contacting
 upstream sources again. Pull lifecycle transitions are logged and emitted as
 `managed_runtime.pull.*` counters when a metrics recorder is configured at the
 service boundary. Model host load/lease/unload/crash activity additionally emits
-`model_host.*` diagnostics from `pkg/modelhost`; pull telemetry remains solely at
+`model_host.*` diagnostics from `pkg/models/host`; pull telemetry remains solely at
 the canonical model-service boundary. See `docs/architecture/model-host.md`.
 These operations do not currently emit canonical
 `FactoryEvent` records; invocation and factory session surfaces remain the

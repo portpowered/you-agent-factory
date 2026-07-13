@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -29,7 +29,7 @@ func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+		ModelHost:     readyInvokeHost{},
 		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
 			return stubInvocationExecutor{
 				workerName: workerName,
@@ -81,7 +81,7 @@ func TestService_InvokeModel_ReturnsManagedRuntimeMissingWhenCacheNotReady(t *te
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return missingCacheInspectHost{} },
+		ModelHost:     missingCacheInspectHost{},
 	})
 
 	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
@@ -112,7 +112,7 @@ func TestService_InvokeModel_ReturnsErrorWhenExecutorMissing(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+		ModelHost:     readyInvokeHost{},
 	})
 
 	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
@@ -134,8 +134,8 @@ func TestService_InvokeModel_LogsInvocationReadiness(t *testing.T) {
 	logger := zap.New(core)
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return missingCacheInspectHost{} },
-		Logger:        func() *zap.Logger { return logger },
+		ModelHost:     missingCacheInspectHost{},
+		Logger:        logger,
 	})
 
 	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
@@ -188,7 +188,7 @@ func TestService_InvokeModel_PropagatesCancellationAndDeadlines(t *testing.T) {
 			runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 			svc := modelsservice.New(modelsservice.Dependencies{
 				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-				ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+				ModelHost:     readyInvokeHost{},
 				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
 					return invocationExecutorFunc(func(got context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
 						if got != ctx {
@@ -248,7 +248,7 @@ func TestService_InvokeModel_ClassifiesExecutorAndFailedResultFailures(t *testin
 			runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 			svc := modelsservice.New(modelsservice.Dependencies{
 				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-				ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+				ModelHost:     readyInvokeHost{},
 				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
 					return tt.execute, nil
 				},
@@ -270,7 +270,7 @@ func TestService_InvokeModel_ReturnsUnsupportedModeWhenAudioStreamMissingOutput(
 	mode := factoryapi.AUDIOSTREAM
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:     func() modelhost.Host { return readyInvokeHost{} },
+		ModelHost:     readyInvokeHost{},
 		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
 			return stubInvocationExecutor{
 				workerName: workerName,
@@ -298,8 +298,8 @@ func TestService_InvokeModel_UsesFactoryRunnerID(t *testing.T) {
 	var capturedRunnerID string
 	svc := modelsservice.New(modelsservice.Dependencies{
 		RuntimeConfig:   func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:       func() modelhost.Host { return readyInvokeHost{} },
-		FactoryRunnerID: func() string { return "runner-42" },
+		ModelHost:       readyInvokeHost{},
+		FactoryRunnerID: "runner-42",
 		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
 			return capturingInvocationExecutor{
 				workerName:       workerName,

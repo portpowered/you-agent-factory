@@ -8,14 +8,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 )
 
 type localAssetGateway struct {
 	puller localmodels.AssetPuller
 }
 
-// NewLocalAssetGateway adapts pkg/localmodels asset integration for the model host boundary.
+// NewLocalAssetGateway adapts pkg/models/local asset integration for the model host boundary.
 func NewLocalAssetGateway(puller localmodels.AssetPuller) AssetGateway {
 	if puller == nil {
 		return nil
@@ -90,8 +90,8 @@ func snapshotFromPullResult(result apisurface.ModelPullResult) ReadinessSnapshot
 	}
 	return ReadinessSnapshot{
 		Identity: Identity{
-			Name:     strings.TrimSpace(result.ModelName),
-			Locality: factoryapi.WorkerModelLocality(result.ProviderLocality),
+			Name:          strings.TrimSpace(result.ModelName),
+			Locality:      factoryapi.WorkerModelLocality(result.ProviderLocality),
 			SourceKind:    result.SourceKind,
 			SourceID:      result.SourceID,
 			ResolverNotes: result.ResolverNotes,

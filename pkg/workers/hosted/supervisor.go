@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	hostedlinear "github.com/portpowered/infinite-you/pkg/hostedworkers/linear"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
 	"go.uber.org/zap"
 )
 

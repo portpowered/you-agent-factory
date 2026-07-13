@@ -9,8 +9,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"go.uber.org/zap"
 )
 
@@ -136,7 +136,7 @@ func (s *Service) modelAssetPuller() localmodels.AssetPuller {
 	if s == nil || s.deps.ModelAssetPuller == nil {
 		return localmodels.NewAssetPuller("")
 	}
-	return s.deps.ModelAssetPuller()
+	return s.deps.ModelAssetPuller
 }
 
 func (s *Service) recordManagedRuntimePull(modelName string, result apisurface.ModelPullResult, err error, elapsed time.Duration) {
@@ -189,21 +189,17 @@ func (s *Service) recordModelPullMetric(name string, labels map[string]string) {
 	if s == nil || s.deps.ModelPullMetrics == nil {
 		return
 	}
-	recorder := s.deps.ModelPullMetrics()
-	if recorder == nil {
-		return
-	}
-	recorder.RecordModelPullMetric(PullMetric{
+	s.deps.ModelPullMetrics.RecordModelPullMetric(PullMetric{
 		Name:   name,
 		Labels: cloneMetricLabels(labels),
 	})
 }
 
 func (s *Service) logger() *zap.Logger {
-	if s == nil || s.deps.Logger == nil {
+	if s == nil {
 		return nil
 	}
-	return s.deps.Logger()
+	return s.deps.Logger
 }
 
 func mergeMetricLabels(parts ...map[string]string) map[string]string {
