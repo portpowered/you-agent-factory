@@ -1,6 +1,7 @@
 package apicontract_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"gopkg.in/yaml.v3"
 )
 
@@ -691,6 +693,74 @@ func TestGeneratedFactoryResponseEventRepresentativeFixturesRoundTrip(t *testing
 			decodeRoundTripJSON(t, raw, &event, "representative response-event fixture "+fixtureName)
 			assertGeneratedFactoryResponseEventRoundTrip(t, event)
 		})
+	}
+}
+
+func TestFactoryResponseEventRepresentativeFixturesHaveCanonicalWireParity(t *testing.T) {
+	for _, fixtureName := range representativeResponseEventFixtureNames {
+		fixtureName := fixtureName
+		t.Run(fixtureName, func(t *testing.T) {
+			raw := readRepresentativeResponseEventFixtureBytes(t, fixtureName)
+
+			var domainEvent responseevents.FactoryResponseEvent
+			if err := json.Unmarshal(raw, &domainEvent); err != nil {
+				t.Fatalf("unmarshal domain FactoryResponseEvent: %v", err)
+			}
+			var generatedEvent factoryapi.FactoryResponseEvent
+			if err := json.Unmarshal(raw, &generatedEvent); err != nil {
+				t.Fatalf("unmarshal generated FactoryResponseEvent: %v", err)
+			}
+
+			domainJSON, err := json.Marshal(domainEvent)
+			if err != nil {
+				t.Fatalf("marshal domain FactoryResponseEvent: %v", err)
+			}
+			generatedJSON, err := json.Marshal(generatedEvent)
+			if err != nil {
+				t.Fatalf("marshal generated FactoryResponseEvent: %v", err)
+			}
+			if !bytes.Equal(domainJSON, generatedJSON) {
+				t.Fatalf(
+					"canonical FactoryResponseEvent bytes differ:\ndomain=%s\ngenerated=%s",
+					domainJSON,
+					generatedJSON,
+				)
+			}
+
+			if fixtureName == "stream_gap" {
+				assertStreamGapBounds(t, domainEvent.Payload, 100, 150)
+				assertStreamGapBounds(t, generatedJSONPayload(t, generatedEvent), 100, 150)
+			}
+		})
+	}
+}
+
+func generatedJSONPayload(t *testing.T, event factoryapi.FactoryResponseEvent) json.RawMessage {
+	t.Helper()
+	encoded, err := json.Marshal(event.Payload)
+	if err != nil {
+		t.Fatalf("marshal generated FactoryResponseEvent payload: %v", err)
+	}
+	return encoded
+}
+
+func assertStreamGapBounds(t *testing.T, payload json.RawMessage, wantFrom, wantTo int64) {
+	t.Helper()
+	var gap struct {
+		FromSequence int64 `json:"fromSequence"`
+		ToSequence   int64 `json:"toSequence"`
+	}
+	if err := json.Unmarshal(payload, &gap); err != nil {
+		t.Fatalf("unmarshal STREAM_GAP payload: %v", err)
+	}
+	if gap.FromSequence != wantFrom || gap.ToSequence != wantTo {
+		t.Fatalf(
+			"STREAM_GAP bounds = %d..%d, want %d..%d",
+			gap.FromSequence,
+			gap.ToSequence,
+			wantFrom,
+			wantTo,
+		)
 	}
 }
 
