@@ -210,15 +210,17 @@ func (fs *Host) registerLiveSession(
 		return ""
 	}
 	isDefault := factorysessions.IsDefaultSessionSelector(sessionID)
+	runtimeFactorySessionID := ""
 	if isDefault {
 		if existing := fs.defaultSession(); existing != nil {
 			sessionID = existing.ID
+			runtimeFactorySessionID = existing.RuntimeFactorySessionID
 		} else {
 			sessionID = factorysessions.NewSessionID()
 		}
 	}
 	registration := fs.buildLiveSessionRegistration(sessionID, handle, target)
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
+	session := factorysessions.NewLiveSession(
 		sessionID,
 		registration.factoryDir,
 		registration.folderPath,
@@ -227,7 +229,15 @@ func (fs *Host) registerLiveSession(
 		&liveSessionState{bundle: handle.Bundle, handle: handle, spec: registration.preparedSpec},
 		isDefault,
 		registration.project,
-	), selectSession)
+	)
+	session.RuntimeFactorySessionID = runtimeFactorySessionID
+	if session.IsDefault && session.RuntimeFactorySessionID == "" {
+		if factorysessions.IsUUIDFactorySessionID(session.ID) {
+			session.RuntimeFactorySessionID = session.ID
+		}
+	}
+	factorysessions.EnsureRuntimeFactorySessionID(session)
+	fs.sessions.Upsert(session, selectSession)
 	return sessionID
 }
 
@@ -282,7 +292,20 @@ func (fs *Host) sessionByID(sessionID string) *factorysessions.LiveSession {
 	if fs == nil || fs.sessions == nil {
 		return nil
 	}
-	return fs.sessions.Get(sessionID)
+	trimmed := strings.TrimSpace(sessionID)
+	if trimmed == "" {
+		return nil
+	}
+	if session := fs.sessions.Get(trimmed); session != nil {
+		return session
+	}
+	for _, id := range fs.sessions.IDs() {
+		session := fs.sessions.Get(id)
+		if session != nil && factorysessions.CanonicalFactorySessionID(session) == trimmed {
+			return session
+		}
+	}
+	return nil
 }
 
 func (fs *Host) resolveLiveSessionSelector(sessionID string) (*factorysessions.LiveSession, error) {
@@ -414,7 +437,7 @@ func (c *runtimeCoordinator) SubscribeFactoryEventsForSession(ctx context.Contex
 	if err != nil || stream == nil || session == nil {
 		return stream, err
 	}
-	stream.FactorySessionID = strings.TrimSpace(session.ID)
+	stream.FactorySessionID = factorysessions.CanonicalFactorySessionID(session)
 	stream.LogicalSessionKeyID = factorysessions.LogicalSessionKeyID(session)
 	return stream, err
 }
@@ -705,7 +728,7 @@ func (c *runtimeCoordinator) ReplaceSessionRuntime(
 		}
 	}
 	fs.closeSessionResponseStreams(session)
-	fs.sessions.Upsert(factorysessions.NewLiveSession(
+	replacementSession := factorysessions.NewLiveSession(
 		session.ID,
 		replacement.Dir,
 		session.FolderPath,
@@ -714,7 +737,10 @@ func (c *runtimeCoordinator) ReplaceSessionRuntime(
 		&liveSessionState{handle: replacementHandle, spec: liveSessionBuildSpec(session)},
 		session.IsDefault,
 		session.Project,
-	), isActiveSession)
+	)
+	replacementSession.RuntimeFactorySessionID = session.RuntimeFactorySessionID
+	factorysessions.EnsureRuntimeFactorySessionID(replacementSession)
+	fs.sessions.Upsert(replacementSession, isActiveSession)
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
@@ -1020,11 +1046,12 @@ func (fs *Host) buildSessionProjectionContext(
 	}
 	factoryCfg := runtimeCfg.FactoryConfig()
 	projectionCtx := factorysessions.ProjectionContext{
-		Session:          session,
-		FactoryCfg:       factoryCfg,
-		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).BackendScopeID),
-		RuntimeStartedAt: liveSessionBundle(session).StartedAtUTC,
-		Now:              time.Now().UTC(),
+		Session:             session,
+		FactoryCfg:          factoryCfg,
+		BackendScopeID:      factorySessionBackendScopeID(fs, session),
+		LogicalSessionKeyID: factorysessions.LogicalSessionKeyID(session),
+		RuntimeStartedAt:    liveSessionBundle(session).StartedAtUTC,
+		Now:                 time.Now().UTC(),
 	}
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
 	if err != nil {

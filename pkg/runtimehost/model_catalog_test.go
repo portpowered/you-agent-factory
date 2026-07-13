@@ -14,12 +14,50 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestHostDefaultSessionRegistrationPreservesCanonicalIdentity(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	startupSession := factorysessions.NewLiveSession(
+		DefaultFactorySessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+		&liveSessionState{},
+		true,
+		"factory",
+	)
+	factorysessions.EnsureRuntimeFactorySessionID(startupSession)
+	wantSessionID := factorysessions.CanonicalFactorySessionID(startupSession)
+	sessions.Upsert(startupSession, true)
+
+	host := &Host{factoryRootDir: "/factory", sessions: sessions}
+	handle := &liveRuntimeHandle{Bundle: &factoryRuntimeBundle{Dir: "/factory", FolderPath: "/factory"}}
+	host.registerLiveSession(
+		DefaultFactorySessionID,
+		handle,
+		FactorySessionTarget{Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault}},
+		true,
+	)
+
+	registered := host.defaultSession()
+	if got := factorysessions.CanonicalFactorySessionID(registered); got != wantSessionID {
+		t.Fatalf("canonical session id = %q, want preserved %q", got, wantSessionID)
+	}
+	if got := factorysessions.SummaryResponse(registered).Id; got != wantSessionID {
+		t.Fatalf("listed session id = %q, want canonical %q", got, wantSessionID)
+	}
+	if got := host.sessionByID(wantSessionID); got != registered {
+		t.Fatalf("sessionByID(%q) = %#v, want registered default session", wantSessionID, got)
+	}
+}
 
 func TestHostDurableOperationsRequireInjectedExecution(t *testing.T) {
 	t.Parallel()
