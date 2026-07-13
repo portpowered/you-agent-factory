@@ -299,6 +299,76 @@ func TestJoinPreservesRetrievalBaseForNestedRelativeResourceID(t *testing.T) {
 	}
 }
 
+func TestJoinResolvesFragmentsWithinSelectedSchemaResourceScope(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "contracts/roots/root.json", `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://schemas.example.test/roots/root.json",
+  "type":"object",
+  "required":["group"],
+  "properties":{"group":{"$ref":"../components/component.json#/$defs/group"}}
+}`)
+	writeFile(t, root, "contracts/components/component.json", `{
+  "$id":"https://schemas.example.test/catalog/component.json",
+  "$defs":{
+    "group":{
+      "$id":"groups/group.json",
+      "type":"object",
+      "required":["first","second"],
+      "$defs":{"item":{"$id":"item.json","type":"string","minLength":2}},
+      "properties":{
+        "first":{"$ref":"#/$defs/item"},
+        "second":{"$ref":"#/$defs/item"}
+      }
+    }
+  }
+}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/roots/root.json"},
+		Components:     []string{"contracts/components/component.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	joined := documents[0].Value
+	if got := countResourceID(joined, "groups/group.json"); got != 1 {
+		t.Fatalf("joined selected resource count = %d, want 1", got)
+	}
+	if got := countResourceID(joined, "item.json"); got != 1 {
+		t.Fatalf("joined selected descendant resource count = %d, want 1", got)
+	}
+	wantItemURI := "https://schemas.example.test/catalog/groups/item.json"
+	itemReferenceCount := 0
+	walkJSON(joined, func(value map[string]any) {
+		if value["$ref"] == wantItemURI {
+			itemReferenceCount++
+		}
+	})
+	if itemReferenceCount != 2 {
+		t.Fatalf("joined selected descendant reference count = %d, want 2 references to %s", itemReferenceCount, wantItemURI)
+	}
+
+	schema := compileJoinedSchema(t, joined)
+	for _, test := range []struct {
+		name  string
+		value any
+		valid bool
+	}{
+		{name: "both scoped fragment uses pass", value: map[string]any{"group": map[string]any{"first": "aa", "second": "bb"}}, valid: true},
+		{name: "first scoped fragment use fails", value: map[string]any{"group": map[string]any{"first": "a", "second": "bb"}}, valid: false},
+		{name: "second scoped fragment use fails", value: map[string]any{"group": map[string]any{"first": "aa", "second": 2}}, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := schema.Validate(test.value)
+			if (err == nil) != test.valid {
+				t.Fatalf("Validate(%v) error = %v, want valid %t", test.value, err, test.valid)
+			}
+		})
+	}
+}
+
 func TestJoinDistinguishesRelativeResourceIDsUnderDifferentBases(t *testing.T) {
 	root := t.TempDir()
 	paths := []string{

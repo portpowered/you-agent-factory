@@ -34,6 +34,12 @@ type resourceLocation struct {
 	segments []string
 }
 
+type resolutionScope struct {
+	baseURI          *url.URL
+	resourceRoot     any
+	resourceSegments []string
+}
+
 // LoadAndResolve loads one authored document through the validator's reviewed
 // repository boundary and resolves references only to the explicitly supplied
 // authored documents. It is intended for repository build tooling such as the
@@ -119,7 +125,10 @@ func resolveReferencesWithin(
 		rejectUnsupportedReferenceKeywords: allowed != nil,
 		resolvedResourceIDs:                make(map[string]resourceLocation),
 	}
-	resolved, diagnostics := resolver.resolveNode(value, document, nil, nil, documentBaseURI(document))
+	resolved, diagnostics := resolver.resolveNode(value, document, nil, nil, resolutionScope{
+		baseURI:      documentBaseURI(document),
+		resourceRoot: value,
+	})
 	if len(diagnostics) != 0 {
 		return nil, nil, diagnostics
 	}
@@ -135,7 +144,7 @@ func resolveReferencesWithin(
 	return resolved, loaded, nil
 }
 
-func (r *referenceResolver) resolveNode(value any, document string, segments, sourceSegments []string, baseURI *url.URL) (any, []Diagnostic) {
+func (r *referenceResolver) resolveNode(value any, document string, segments, sourceSegments []string, scope resolutionScope) (any, []Diagnostic) {
 	switch typed := value.(type) {
 	case map[string]any:
 		if r.rejectUnsupportedReferenceKeywords {
@@ -143,7 +152,7 @@ func (r *referenceResolver) resolveNode(value any, document string, segments, so
 				return nil, diagnostics
 			}
 		}
-		resourceID, resourceURI, hasResourceID := stableResourceID(typed, baseURI)
+		resourceID, resourceURI, hasResourceID := stableResourceID(typed, scope.baseURI)
 		if r.deduplicateResources && hasResourceID {
 			location := resourceLocation{document: document, segments: append([]string(nil), sourceSegments...)}
 			if previous, resolved := r.resolvedResourceIDs[resourceURI.String()]; resolved {
@@ -157,15 +166,21 @@ func (r *referenceResolver) resolveNode(value any, document string, segments, so
 				}
 				return map[string]any{"$ref": reusableResourceReference(resourceID, resourceURI)}, nil
 			}
-			baseURI = resourceURI
+		}
+		if hasResourceID {
+			scope = resolutionScope{
+				baseURI:          resourceURI,
+				resourceRoot:     typed,
+				resourceSegments: append([]string(nil), sourceSegments...),
+			}
 		}
 
 		var resolved any
 		var diagnostics []Diagnostic
 		if reference, ok := typed["$ref"]; ok {
-			resolved, diagnostics = r.resolveReferenceObject(typed, reference, document, segments, sourceSegments, baseURI)
+			resolved, diagnostics = r.resolveReferenceObject(typed, reference, document, segments, sourceSegments, scope)
 		} else {
-			resolved, diagnostics = r.resolveObject(typed, document, segments, sourceSegments, baseURI)
+			resolved, diagnostics = r.resolveObject(typed, document, segments, sourceSegments, scope)
 		}
 		if len(diagnostics) == 0 && r.deduplicateResources && hasResourceID {
 			r.resolvedResourceIDs[resourceURI.String()] = resourceLocation{
@@ -184,7 +199,7 @@ func (r *referenceResolver) resolveNode(value any, document string, segments, so
 				document,
 				appendPath(segments, strconv.Itoa(index)),
 				appendPath(sourceSegments, strconv.Itoa(index)),
-				baseURI,
+				scope,
 			)
 			diagnostics = append(diagnostics, issues...)
 		}
@@ -245,7 +260,7 @@ func documentBaseURI(document string) *url.URL {
 	return &url.URL{Path: "/" + normalizeRepositoryPath(document)}
 }
 
-func (r *referenceResolver) resolveObject(value map[string]any, document string, segments, sourceSegments []string, baseURI *url.URL) (map[string]any, []Diagnostic) {
+func (r *referenceResolver) resolveObject(value map[string]any, document string, segments, sourceSegments []string, scope resolutionScope) (map[string]any, []Diagnostic) {
 	keys := make([]string, 0, len(value))
 	for key := range value {
 		keys = append(keys, key)
@@ -254,15 +269,15 @@ func (r *referenceResolver) resolveObject(value map[string]any, document string,
 	resolved := make(map[string]any, len(value))
 	var diagnostics []Diagnostic
 	for _, key := range keys {
-		child, issues := r.resolveNode(value[key], document, appendPath(segments, key), appendPath(sourceSegments, key), baseURI)
+		child, issues := r.resolveNode(value[key], document, appendPath(segments, key), appendPath(sourceSegments, key), scope)
 		resolved[key] = child
 		diagnostics = append(diagnostics, issues...)
 	}
 	return resolved, diagnostics
 }
 
-func (r *referenceResolver) resolveReferenceObject(value map[string]any, reference any, document string, segments, sourceSegments []string, baseURI *url.URL) (any, []Diagnostic) {
-	resolvedReference, diagnostics := r.resolveReference(reference, document, appendPath(segments, "$ref"), baseURI)
+func (r *referenceResolver) resolveReferenceObject(value map[string]any, reference any, document string, segments, sourceSegments []string, scope resolutionScope) (any, []Diagnostic) {
+	resolvedReference, diagnostics := r.resolveReference(reference, document, appendPath(segments, "$ref"), scope)
 	if len(diagnostics) != 0 {
 		return nil, diagnostics
 	}
@@ -276,7 +291,7 @@ func (r *referenceResolver) resolveReferenceObject(value map[string]any, referen
 			siblings[key] = child
 		}
 	}
-	resolvedSiblings, diagnostics := r.resolveObject(siblings, document, segments, sourceSegments, baseURI)
+	resolvedSiblings, diagnostics := r.resolveObject(siblings, document, segments, sourceSegments, scope)
 	if len(diagnostics) != 0 {
 		return nil, diagnostics
 	}
@@ -288,7 +303,7 @@ func (r *referenceResolver) resolveReferenceObject(value map[string]any, referen
 	return resolvedSiblings, nil
 }
 
-func (r *referenceResolver) resolveReference(value any, referringDocument string, segments []string, baseURI *url.URL) (any, []Diagnostic) {
+func (r *referenceResolver) resolveReference(value any, referringDocument string, segments []string, scope resolutionScope) (any, []Diagnostic) {
 	reference, ok := value.(string)
 	if !ok || reference == "" {
 		return nil, r.issue("reference.invalid", "reference must be a non-empty string", referringDocument, segments)
@@ -297,29 +312,50 @@ func (r *referenceResolver) resolveReference(value any, referringDocument string
 	if issue != nil {
 		return nil, []Diagnostic{*issue}
 	}
-	key := targetDocument + "#" + fragment
+
+	var target any
+	var targetScope resolutionScope
+	var sourceSegments []string
+	if strings.HasPrefix(reference, "#") {
+		target = scope.resourceRoot
+		targetScope = scope
+		sourceSegments = scope.resourceSegments
+	} else {
+		target, issue = r.loadTarget(targetDocument, referringDocument, segments)
+		if issue != nil {
+			return nil, []Diagnostic{*issue}
+		}
+		parsedReference, _ := url.Parse(reference)
+		resolvedBaseURI := scope.baseURI.ResolveReference(parsedReference)
+		resolvedBaseURI.Fragment = ""
+		targetScope = resolutionScope{
+			baseURI:      resolvedBaseURI,
+			resourceRoot: target,
+		}
+	}
+
+	selected, selectedScope, selectedSegments, err := selectFragmentInScope(
+		target,
+		fragment,
+		targetScope,
+		sourceSegments,
+		!strings.HasPrefix(reference, "#"),
+	)
+	if err != nil {
+		return nil, r.issue("reference.fragment", fmt.Sprintf("reference %q has an unresolved fragment", reference), referringDocument, segments)
+	}
+	key := targetDocument + "#" + instancePath(selectedSegments)
 	if r.active[key] {
 		return nil, r.issue("reference.cycle", fmt.Sprintf("reference %q forms a cycle", reference), referringDocument, segments)
 	}
 	r.active[key] = true
 	defer delete(r.active, key)
 
-	target, issue := r.loadTarget(targetDocument, referringDocument, segments)
-	if issue != nil {
-		return nil, []Diagnostic{*issue}
-	}
-	selected, err := selectFragment(target, fragment)
-	if err != nil {
-		return nil, r.issue("reference.fragment", fmt.Sprintf("reference %q has an unresolved fragment", reference), referringDocument, segments)
-	}
-	parsedReference, _ := url.Parse(reference)
-	resolvedBaseURI := baseURI.ResolveReference(parsedReference)
-	resolvedBaseURI.Fragment = ""
-	resolved, diagnostics := r.resolveNode(selected, targetDocument, nil, fragmentSegments(fragment), resolvedBaseURI)
+	resolved, diagnostics := r.resolveNode(selected, targetDocument, nil, selectedSegments, selectedScope)
 	if len(diagnostics) != 0 {
 		return nil, diagnostics
 	}
-	return preserveReferencedResourceBase(resolved, selected, resolvedBaseURI, referringDocument, targetDocument, fragment), nil
+	return preserveReferencedResourceBase(resolved, selected, selectedScope.baseURI, referringDocument, targetDocument, fragment), nil
 }
 
 func preserveReferencedResourceBase(resolved, authored any, baseURI *url.URL, referringDocument, document, fragment string) any {
@@ -374,18 +410,6 @@ func containsOuterBaseDependentResource(value any) bool {
 		}
 	}
 	return false
-}
-
-func fragmentSegments(fragment string) []string {
-	if fragment == "" {
-		return nil
-	}
-	encoded := strings.Split(strings.TrimPrefix(fragment, "/"), "/")
-	segments := make([]string, len(encoded))
-	for index, segment := range encoded {
-		segments[index] = strings.NewReplacer("~1", "/", "~0", "~").Replace(segment)
-	}
-	return segments
 }
 
 func (r *referenceResolver) classifyReference(referringDocument, reference string, segments []string) (string, string, *Diagnostic) {
@@ -463,34 +487,53 @@ func containedBy(root, candidate string) bool {
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
-func selectFragment(value any, fragment string) (any, error) {
+func selectFragmentInScope(
+	value any,
+	fragment string,
+	scope resolutionScope,
+	sourceSegments []string,
+	applyRootID bool,
+) (any, resolutionScope, []string, error) {
 	if fragment == "" {
-		return value, nil
+		return value, scope, sourceSegments, nil
 	}
 	if !strings.HasPrefix(fragment, "/") {
-		return nil, errors.New("fragment is not a JSON Pointer")
+		return nil, resolutionScope{}, nil, errors.New("fragment is not a JSON Pointer")
 	}
 	current := value
+	currentSegments := append([]string(nil), sourceSegments...)
+	applyCurrentID := applyRootID
 	for _, encoded := range strings.Split(strings.TrimPrefix(fragment, "/"), "/") {
+		if object, ok := current.(map[string]any); ok && applyCurrentID {
+			if _, resourceURI, hasResourceID := stableResourceID(object, scope.baseURI); hasResourceID {
+				scope = resolutionScope{
+					baseURI:          resourceURI,
+					resourceRoot:     object,
+					resourceSegments: append([]string(nil), currentSegments...),
+				}
+			}
+		}
 		segment := strings.NewReplacer("~1", "/", "~0", "~").Replace(encoded)
 		switch typed := current.(type) {
 		case map[string]any:
 			var ok bool
 			current, ok = typed[segment]
 			if !ok {
-				return nil, errors.New("object member does not exist")
+				return nil, resolutionScope{}, nil, errors.New("object member does not exist")
 			}
 		case []any:
 			index, err := strconv.Atoi(segment)
 			if err != nil || index < 0 || index >= len(typed) {
-				return nil, errors.New("array element does not exist")
+				return nil, resolutionScope{}, nil, errors.New("array element does not exist")
 			}
 			current = typed[index]
 		default:
-			return nil, errors.New("fragment traverses a scalar")
+			return nil, resolutionScope{}, nil, errors.New("fragment traverses a scalar")
 		}
+		currentSegments = appendPath(currentSegments, segment)
+		applyCurrentID = true
 	}
-	return current, nil
+	return current, scope, currentSegments, nil
 }
 
 func normalizeRepositoryPath(value string) string {
