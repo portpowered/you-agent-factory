@@ -25,6 +25,14 @@ delegation to the target owner or part of an active removal lane.
 | Transport boundaries | target `pkg/transports` | Put HTTP, CLI, MCP, generated transport contracts/clients, and boundary mapping at the process edge. Until Batch 006 moves a slice, use its registered migration root; transport adapters must not own domain policy. |
 | Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin, normalize process input and select mode in `pkg/root`, expose one concrete graph constructor in `pkg/wire`, and execute startup/shutdown lifecycle for already-built transports and sidecars in `pkg/initializer`. Construction-phase callback bundles are test harnesses, not a public composition API. During migration, concrete graph assembly may reuse `composebridge.BuildCore`, but it must do so once inside `pkg/wire`, copy caller-owned config before normalization, project only narrow domain contracts into the graph, and retain cleanup ownership for the startup bundle rather than exposing `runtimehost.Host` or the bridge core. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. A fallible graph phase should retain any closeable construction resource so `pkg/wire` can unwind acquired resources once, in reverse order, before returning a later phase failure. Initializer should record only successfully started collaborators, stop them in reverse order on partial failure or shutdown, and make graph close part of the same idempotent shutdown result. |
 
+Production command runners must remain blocking without taking lifecycle ownership
+back from `pkg/initializer`. The entrypoint should construct and start the graph
+through `pkg/root`, then let the returned application wait for its selected
+graph-owned transport and perform the same idempotent reverse-order shutdown.
+Transport startup must receive the graph's already-composed API surface, and
+startup diagnostics should be copied into immutable graph metadata rather than
+recovered later through `runtimehost.Host` or `FactoryService`.
+
 When a change spans rows, place the durable state or policy in its owner and
 adapt outward. For example, a new session read that exposes JavaScript
 orchestrator progress should keep progress derivation in Factory Session or

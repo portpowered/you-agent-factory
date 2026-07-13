@@ -34,6 +34,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -158,6 +159,10 @@ type RuntimeRunner = factoryServiceRunner
 
 type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
+}
+
+type runtimeHostLogDiagnosticsProvider interface {
+	RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics
 }
 
 type engineStateSnapshotProvider interface {
@@ -531,24 +536,24 @@ func buildRunServiceConfig(
 		apiServerReady = dashboardReady
 	}
 	svcCfg := &service.FactoryServiceConfig{
-		Dir:                       cfg.Dir,
-		RunnerID:                  cfg.RunnerID,
-		OperatorDefaults:          cfg.OperatorDefaults,
-		ExecutionBaseDir:          cfg.ExecutionBaseDir,
-		RuntimeMode:               runtimeModeForRun(cfg),
-		Port:                      cfg.Port,
-		Logger:                    logger,
-		Verbose:                   cfg.Verbose,
-		WorkFile:                  cfg.WorkFile,
-		RecordPath:                cfg.RecordPath,
-		ReplayPath:                cfg.ReplayPath,
-		RuntimeLogDir:             cfg.RuntimeLogDir,
-		RuntimeLogConfig:          cfg.RuntimeLogConfig,
-		RuntimeMetricsDir:         cfg.RuntimeMetricsDir,
-		RuntimeMetricsConfig:      cfg.RuntimeMetricsConfig,
-		WorkflowID:                cfg.Workflow,
-		MockWorkersConfig:         mockWorkersConfig,
-		APIServerStarter:          runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
+		Dir:                               cfg.Dir,
+		RunnerID:                          cfg.RunnerID,
+		OperatorDefaults:                  cfg.OperatorDefaults,
+		ExecutionBaseDir:                  cfg.ExecutionBaseDir,
+		RuntimeMode:                       runtimeModeForRun(cfg),
+		Port:                              cfg.Port,
+		Logger:                            logger,
+		Verbose:                           cfg.Verbose,
+		WorkFile:                          cfg.WorkFile,
+		RecordPath:                        cfg.RecordPath,
+		ReplayPath:                        cfg.ReplayPath,
+		RuntimeLogDir:                     cfg.RuntimeLogDir,
+		RuntimeLogConfig:                  cfg.RuntimeLogConfig,
+		RuntimeMetricsDir:                 cfg.RuntimeMetricsDir,
+		RuntimeMetricsConfig:              cfg.RuntimeMetricsConfig,
+		WorkflowID:                        cfg.Workflow,
+		MockWorkersConfig:                 mockWorkersConfig,
+		APIServerStarter:                  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
 		InvocationMetricsRecorder:         cfg.InvocationMetricsRecorder,
 		InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 		APIServerReady:                    apiServerReady,
@@ -759,11 +764,17 @@ func DashboardURL(host string, port int) string {
 }
 
 func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
-	provider, ok := runner.(runtimeLogDiagnosticsProvider)
-	if !ok {
-		return service.RuntimeLogDiagnostics{}
+	if provider, ok := runner.(runtimeLogDiagnosticsProvider); ok {
+		return provider.RuntimeLogDiagnostics()
 	}
-	return provider.RuntimeLogDiagnostics()
+	if provider, ok := runner.(runtimeHostLogDiagnosticsProvider); ok {
+		diagnostics := provider.RuntimeLogDiagnostics()
+		return service.RuntimeLogDiagnostics{
+			Path: diagnostics.Path, RootDir: diagnostics.RootDir, StartTimeUTC: diagnostics.StartTimeUTC,
+			MetricsPath: diagnostics.MetricsPath, MetricsRootDir: diagnostics.MetricsRootDir, MetricsStartTimeUTC: diagnostics.MetricsStartTimeUTC,
+		}
+	}
+	return service.RuntimeLogDiagnostics{}
 }
 
 func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics) bool {

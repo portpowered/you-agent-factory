@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -158,6 +159,7 @@ func (g *phasedGraph) Close() error {
 type Graph struct {
 	Config            *factoryconfig.LoadedFactoryConfig
 	Runtime           RuntimeInputs
+	RuntimeLog        runtimehost.RuntimeLogDiagnostics
 	Models            apisurface.ModelAPI
 	Workers           *workersservice.Service
 	WorkerProvider    *runtimebuild.Service

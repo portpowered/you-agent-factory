@@ -346,6 +346,38 @@ func TestStartFailureUnwindsActivatedCollaborators(t *testing.T) {
 	}
 }
 
+func TestApplicationRunWaitsForSelectedTransportAndShutsDownOnce(t *testing.T) {
+	t.Parallel()
+
+	fixture := newApplicationFixture()
+	done := make(chan struct{})
+	waitable := &waitableApplicationLifecycle{
+		applicationLifecycle: applicationLifecycle{name: "cli", starts: &fixture.starts, stops: &fixture.stops},
+		done:                 done,
+	}
+	fixture.graph.Transports.CLI = waitable
+	application, err := initializer.Start(context.Background(), initializer.ModeCLI, fixture.graph)
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	runDone := make(chan error, 1)
+	go func() { runDone <- application.Run(context.Background()) }()
+	close(done)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := fixture.stops, []string{"cli", "dashboard", "workers", "runtime"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("stop order = %v, want %v", got, want)
+	}
+	if err := application.Shutdown(context.Background()); err != nil {
+		t.Fatalf("second Shutdown() error = %v", err)
+	}
+	if len(fixture.stops) != 4 {
+		t.Fatalf("stop calls after repeated shutdown = %v, want exactly once", fixture.stops)
+	}
+}
+
 type applicationFixture struct {
 	graph  *wire.Graph
 	starts []string
@@ -375,6 +407,20 @@ type applicationLifecycle struct {
 	starts   *[]string
 	stops    *[]string
 	startErr error
+}
+
+type waitableApplicationLifecycle struct {
+	applicationLifecycle
+	done chan struct{}
+}
+
+func (l *waitableApplicationLifecycle) Wait(ctx context.Context) error {
+	select {
+	case <-l.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (l *applicationLifecycle) Start(context.Context) error {

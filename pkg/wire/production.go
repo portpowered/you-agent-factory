@@ -124,6 +124,7 @@ func assembleProductionGraph(
 	return &Graph{
 		Config:            bundle.RuntimeCfg,
 		Runtime:           runtimeInputs,
+		RuntimeLog:        host.RuntimeLogDiagnostics(),
 		Models:            models,
 		Workers:           core.WorkersScheduler(),
 		WorkerProvider:    core.RuntimeBuild(),
@@ -136,7 +137,9 @@ func assembleProductionGraph(
 			API: newRunnerLifecycle(func(runCtx context.Context) error {
 				return host.RunWithAPISurface(runCtx, apiSurface)
 			}),
-			CLI: newRunnerLifecycle(host.Run),
+			CLI: newRunnerLifecycle(func(runCtx context.Context) error {
+				return host.RunWithAPISurface(runCtx, apiSurface)
+			}),
 			MCP: newRunnerLifecycle(func(runCtx context.Context) error {
 				return mcp.ServeStdio(runCtx, inputs.MCPInput, inputs.MCPOutput)
 			}),
@@ -161,7 +164,8 @@ type runnerLifecycle struct {
 	run      func(context.Context) error
 	mu       sync.Mutex
 	cancel   context.CancelFunc
-	done     chan error
+	done     chan struct{}
+	runErr   error
 	stopOnce sync.Once
 	stopErr  error
 }
@@ -181,9 +185,40 @@ func (l *runnerLifecycle) Start(ctx context.Context) error {
 	}
 	runCtx, cancel := context.WithCancel(ctx)
 	l.cancel = cancel
-	l.done = make(chan error, 1)
-	go func() { l.done <- l.run(runCtx) }()
+	l.done = make(chan struct{})
+	go func() {
+		err := l.run(runCtx)
+		l.mu.Lock()
+		l.runErr = err
+		close(l.done)
+		l.mu.Unlock()
+	}()
 	return nil
+}
+
+// Wait blocks until the lifecycle runner exits or ctx is canceled. It does not
+// stop the runner; initializer owns cancellation and shutdown ordering.
+func (l *runnerLifecycle) Wait(ctx context.Context) error {
+	if l == nil {
+		return nil
+	}
+	l.mu.Lock()
+	done := l.done
+	l.mu.Unlock()
+	if done == nil {
+		return errors.New("wait for transport lifecycle: not started")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-done:
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return l.runErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (l *runnerLifecycle) Stop(context.Context) error {
@@ -198,7 +233,11 @@ func (l *runnerLifecycle) Stop(context.Context) error {
 			return
 		}
 		cancel()
-		if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
+		<-done
+		l.mu.Lock()
+		err := l.runErr
+		l.mu.Unlock()
+		if err != nil && !errors.Is(err, context.Canceled) {
 			l.stopErr = err
 		}
 	})

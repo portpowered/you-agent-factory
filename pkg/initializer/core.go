@@ -34,6 +34,7 @@ const (
 type Application struct {
 	graph     *wire.Graph
 	started   []namedLifecycle
+	primary   namedLifecycle
 	stopOnce  sync.Once
 	stopError error
 }
@@ -66,7 +67,41 @@ func Start(ctx context.Context, mode Mode, graph *wire.Graph) (*Application, err
 		}
 		application.started = append(application.started, component)
 	}
+	application.primary = selected[len(selected)-1]
 	return application, nil
+}
+
+type waitableLifecycle interface {
+	Wait(context.Context) error
+}
+
+// Run blocks on the selected graph-owned transport and then performs the same
+// idempotent shutdown used by explicit process teardown. This lets production
+// command adapters preserve their existing blocking runner contract without
+// reconstructing services behind the transport boundary.
+func (a *Application) Run(ctx context.Context) error {
+	if a == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	waiter, ok := a.primary.lifecycle.(waitableLifecycle)
+	if !ok {
+		return fmt.Errorf("run application: %s lifecycle is not waitable", a.primary.name)
+	}
+	runErr := waiter.Wait(ctx)
+	shutdownErr := a.Shutdown(context.WithoutCancel(ctx))
+	if errors.Is(runErr, context.Canceled) && ctx != nil && ctx.Err() != nil {
+		runErr = nil
+	}
+	if runErr != nil {
+		runErr = fmt.Errorf("run %s: %w", a.primary.name, runErr)
+	}
+	if shutdownErr != nil {
+		shutdownErr = fmt.Errorf("shutdown application: %w", shutdownErr)
+	}
+	return errors.Join(runErr, shutdownErr)
 }
 
 // Graph returns the exact graph consumed during initialization.
@@ -75,6 +110,15 @@ func (a *Application) Graph() *wire.Graph {
 		return nil
 	}
 	return a.graph
+}
+
+// RuntimeLogDiagnostics preserves the CLI startup diagnostic contract using
+// immutable graph metadata rather than exposing the runtime host.
+func (a *Application) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
+	if a == nil || a.graph == nil {
+		return runtimehost.RuntimeLogDiagnostics{}
+	}
+	return a.graph.RuntimeLog
 }
 
 // Shutdown stops activated collaborators in reverse order and then releases
