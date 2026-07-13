@@ -7,9 +7,9 @@ import {
   readSessionPersistenceInvalidationRecords,
   resetSessionPersistenceInvalidationRecords,
 } from "../../../dashboard/lib/session-persistence/diagnostics";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
-import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import {
   clearTimelineCheckpointsForSession,
   persistTimelineCheckpoint,
@@ -65,19 +65,6 @@ describe("timeline checkpoint replacement failure", () => {
     controls.succeed("open");
     await flushPromiseContinuations();
 
-    const replacementWrite = persistTimelineCheckpoint(
-      indexedDB,
-      attemptedReplacement,
-      streamIdentity,
-    );
-    controls.succeed("open");
-    await flushPromiseContinuations();
-    expect(controls.pendingOperations()).toEqual(["put", "put"]);
-
-    controls.fail("put", new Error("replacement put failed"), 1);
-    await replacementWrite;
-    expect(records.size).toBe(0);
-
     controls.succeed("put");
     controls.completeTransaction();
     await firstWrite;
@@ -87,6 +74,16 @@ describe("timeline checkpoint replacement failure", () => {
       afterSequence: 42,
       selectedTick: 7,
     });
+
+    const replacementWrite = persistTimelineCheckpoint(
+      indexedDB,
+      attemptedReplacement,
+      streamIdentity,
+    );
+    controls.succeed("open");
+    await flushPromiseContinuations();
+    controls.fail("put", new Error("replacement put failed"));
+    await replacementWrite;
 
     const restoredCheckpoint = readTimelineCheckpoint(
       indexedDB,

@@ -10,11 +10,19 @@ import {
   streamDerivedCheckpointStorageKey,
 } from "../lib/stream-derived-cache-identity";
 import {
+  checkpointSyncIdentityMatchesStreamIdentity,
+  normalizeFactorySessionUUID,
+  normalizeStoredTimelineCheckpointIdentity,
+  normalizeTimelineCheckpointIdentity,
+  timelineCheckpointIdentitiesMatch,
+} from "./checkpoint-persistence/identity/timelineCheckpointIdentity";
+import {
   type IndexedDBLike,
   indexedDBRequestToPromise,
   openCheckpointDatabase,
   writeCheckpointDatabaseRecord,
 } from "./checkpoint-persistence/indexedDBCheckpointRequests";
+import { enqueueOrderedCheckpointWrite } from "./checkpoint-persistence/ordering/orderedCheckpointWriter";
 import {
   buildPersistedCheckpoint,
   CHECKPOINT_SCHEMA_VERSION_GUARDED,
@@ -22,13 +30,6 @@ import {
   isSupportedPersistedTimelineCheckpoint,
   type PersistedTimelineCheckpoint,
 } from "./checkpoint-persistence/timelineCheckpointCodec";
-import {
-  checkpointSyncIdentityMatchesStreamIdentity,
-  normalizeFactorySessionUUID,
-  normalizeStoredTimelineCheckpointIdentity,
-  normalizeTimelineCheckpointIdentity,
-  timelineCheckpointIdentitiesMatch,
-} from "./checkpoint-persistence/identity/timelineCheckpointIdentity";
 import type { FactoryTimelineCheckpoint } from "./timeline/storeState";
 
 const CHECKPOINT_STORE_NAME = "checkpoints";
@@ -398,7 +399,12 @@ export async function persistTimelineCheckpoint(
   } satisfies TimelineCheckpointEnvelope;
 
   try {
-    await writeCheckpointDatabaseRecord(indexedDB, envelope);
+    await enqueueOrderedCheckpointWrite(
+      indexedDB,
+      normalizedStreamIdentity,
+      persistedCheckpoint.afterSequence,
+      () => writeCheckpointDatabaseRecord(indexedDB, envelope),
+    );
   } catch {
     // Preserve any previously committed checkpoint when its replacement fails.
   }
