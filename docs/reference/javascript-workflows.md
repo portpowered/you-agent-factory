@@ -214,6 +214,6 @@ Use the session lifecycle status together with result status and availability.
 
 - `you docs orchestrators` — canonical Factory Session terminology
 - `you docs sessions` — session discovery and inspection
-- `you docs mcp-hosts` — fixture-backed and runtime-backed MCP setup
+- `you docs mcp` — fixture-backed and runtime-backed MCP host setup
 - `you docs config` — worker preset and operator-default configuration
 - `you docs record-replay` — recording and replay modes

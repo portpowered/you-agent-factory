@@ -838,19 +838,18 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"# MCP Install Path For Factory Preview Tools",
+		"# MCP Host Setup",
 		"you mcp serve",
 		`"args": ["mcp", "serve"]`,
 		"you.factory_session.validate_source",
 		"you.factory_session.start_async",
-		"you docs mcp-hosts",
-		"serve_smoke_test.go",
-		"serve_runtime_smoke_test.go",
-		"Automation-Backed In Repo",
-		"## Serve Mode Scope Boundaries",
+		"## Choose A Backing Mode",
+		"## Run The First-Host Smoke",
+		"## Troubleshoot Setup And Calls",
+		"fixture catalog not found",
+		"factory_session.result.not_ready",
 		"you mcp serve --runtime",
 		"Fixture-backed (default)",
-		"Runtime-backed",
 		"`you docs orchestrators`",
 	} {
 		if !strings.Contains(got, want) {
@@ -858,6 +857,7 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 		}
 	}
 	for _, absent := range []string{
+		"you docs mcp-hosts",
 		"[Orchestrators](orchestrators.md)",
 		"Follow-Up Cell For Async Install Smoke",
 		"follow-up-cell-mcp-session-serve.md",

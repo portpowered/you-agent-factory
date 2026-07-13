@@ -400,7 +400,7 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 		{topic: "run", heading: "# Run"},
 		{topic: "config", heading: "# Config"},
 		{topic: "models", heading: "# Models"},
-		{topic: "mcp", heading: "# MCP Install Path For Factory Preview Tools"},
+		{topic: "mcp", heading: "# MCP Host Setup"},
 		{topic: "javascript-workflows", heading: "# JavaScript Workflow Authoring"},
 	}
 

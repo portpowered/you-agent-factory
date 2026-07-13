@@ -140,11 +140,11 @@ func NewServeCommand() *cobra.Command {
 			"of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP " +
 			"host working directory or an explicit --project-root.\n\n" +
 			"Set the MCP host working directory to the project root where workflow sources and the " +
-			"fixture catalog resolve. See `you docs mcp-hosts` for host-specific configuration examples.",
+			"fixture catalog resolve. See `you docs mcp` for host configuration, serve modes, smoke, and troubleshooting.",
 		Example: "  # Typical MCP host child-process launch.\n" +
 			"  you mcp serve\n\n" +
 			"  # Explicit fixture catalog for offline smoke outside the repository root.\n" +
-			"  you mcp serve --fixture-catalog ./pkg/factorysessionexecution/fixtures/durable-session-contract-fixtures.json\n\n" +
+			"  you mcp serve --fixture-catalog ./pkg/api/testdata/durable-session-contract-fixtures.json\n\n" +
 			"  # Runtime-backed serve against live durable JavaScript execution.\n" +
 			"  you mcp serve --runtime",
 		RunE: func(cmd *cobra.Command, _ []string) error {
