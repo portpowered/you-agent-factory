@@ -1,5 +1,3 @@
-// backendsizecheck:ignore-file consolidated orchestrator validation tests remain with validation_test until dedicated validation test seams split.
-// pkgmaintcheck:ignore-file-lines consolidated orchestrator validation tests remain with validation_test until dedicated validation test seams split.
 package validation_test
 
 import (
@@ -14,44 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
-
-func TestValidate_EquivalentTargetsForInvalidFactoryThroughConfigAndPackageValidation(t *testing.T) {
-	t.Parallel()
-
-	apiFactory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
-	if err != nil {
-		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
-	}
-
-	cfg, err := config.FactoryConfigFromOpenAPI(apiFactory)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
-	}
-
-	explicit := factoryvalidation.Validate(&cfg)
-	configFindings := config.CanonicalStructuralFindings(&cfg)
-
-	if len(explicit.Targets) == 0 || len(configFindings) == 0 {
-		t.Fatalf("explicit targets = %d, config findings = %d, want both non-empty", len(explicit.Targets), len(configFindings))
-	}
-	if len(configFindings) != len(explicit.Targets) {
-		t.Fatalf("config findings = %d, explicit targets = %d, want equivalent coverage", len(configFindings), len(explicit.Targets))
-	}
-	for index, target := range explicit.Targets {
-		if configFindings[index].Rule != target.Code {
-			t.Fatalf("finding[%d].Rule = %q, want explicit target code %q", index, configFindings[index].Rule, target.Code)
-		}
-	}
-
-	validationassert.HasDomainTargetCode(t, explicit.Targets, factoryvalidation.CodeDuplicateIdentifier)
-	validationassert.HasDomainTargetCode(t, explicit.Targets, factoryvalidation.CodeDanglingWorkerReference)
-	validationassert.HasDomainTargetCode(t, explicit.Targets, factoryvalidation.CodeDanglingPlaceReference)
-	validationassert.HasDomainTargetSubject(t, explicit.Targets, factoryvalidation.Subject{
-		Type:     factoryvalidation.SubjectTypeWorkstation,
-		ID:       "process",
-		Location: factoryvalidation.SubjectLocationReference,
-	})
-}
 
 func TestValidate_MissingOutcomeRoutesUseCanonicalWorkstationLocations(t *testing.T) {
 	t.Parallel()
@@ -140,526 +100,6 @@ func TestValidate_MissingWorkTypeOutcomeStates(t *testing.T) {
 	result := factoryvalidation.Validate(cfg)
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeMissingCompletionState)
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeMissingFailureState)
-}
-
-func TestValidate_RejectsDuplicateExplicitEntityIDs(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name                string
-		cfg                 *interfaces.FactoryConfig
-		wantSubjectType     factoryvalidation.SubjectType
-		wantSubjectID       string
-		wantMessageContains string
-		wantPaths           []string
-	}{
-		{
-			name: "resource_ids",
-			cfg: stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
-				cfg.Resources = append(cfg.Resources, interfaces.ResourceConfig{
-					ID:       "resource-agent-slot",
-					Name:     "review-agent-slot",
-					Capacity: 1,
-				})
-			}),
-			wantSubjectType:     factoryvalidation.SubjectTypeResource,
-			wantSubjectID:       "resource-agent-slot",
-			wantMessageContains: `duplicate resource id "resource-agent-slot"`,
-			wantPaths:           []string{"factory.resources[0].id", "factory.resources[1].id"},
-		},
-		{
-			name: "worker_ids",
-			cfg: stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
-				cfg.Workers = append(cfg.Workers, interfaces.WorkerConfig{
-					ID:   "worker-executor",
-					Name: "reviewer",
-				})
-			}),
-			wantSubjectType:     factoryvalidation.SubjectTypeWorker,
-			wantSubjectID:       "worker-executor",
-			wantMessageContains: `duplicate worker id "worker-executor"`,
-			wantPaths:           []string{"factory.workers[0].id", "factory.workers[1].id"},
-		},
-		{
-			name: "work_type_ids",
-			cfg: stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
-				cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{
-					ID:   "work-type-story",
-					Name: "bug",
-					States: []interfaces.StateConfig{
-						{Name: "init", Type: interfaces.StateTypeInitial},
-						{Name: "complete", Type: interfaces.StateTypeTerminal},
-						{Name: "failed", Type: interfaces.StateTypeFailed},
-					},
-				})
-			}),
-			wantSubjectType:     factoryvalidation.SubjectTypeWorkType,
-			wantSubjectID:       "work-type-story",
-			wantMessageContains: `duplicate work type id "work-type-story"`,
-			wantPaths:           []string{"factory.workTypes[0].id", "factory.workTypes[1].id"},
-		},
-		{
-			name: "workstation_ids",
-			cfg: stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
-				cfg.Workstations = append(cfg.Workstations, interfaces.FactoryWorkstationConfig{
-					ID:             "workstation-execute-story",
-					Name:           "review-story",
-					WorkerTypeName: "executor",
-					Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
-					Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
-					OnFailure:      []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-				})
-			}),
-			wantSubjectType:     factoryvalidation.SubjectTypeWorkstation,
-			wantSubjectID:       "workstation-execute-story",
-			wantMessageContains: `duplicate workstation id "workstation-execute-story"`,
-			wantPaths:           []string{"factory.workstations[0].id", "factory.workstations[1].id"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			result := factoryvalidation.Validate(tt.cfg)
-			assertDuplicateExplicitIDTargets(
-				t,
-				result.Targets,
-				tt.wantSubjectType,
-				tt.wantSubjectID,
-				tt.wantMessageContains,
-				tt.wantPaths,
-			)
-		})
-	}
-}
-
-func TestValidate_RejectsDuplicateWorkStateIDsWithinWorkType(t *testing.T) {
-	t.Parallel()
-
-	cfg := stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
-		cfg.WorkTypes[0].States[1].ID = "state-ready"
-	})
-
-	result := factoryvalidation.Validate(cfg)
-	assertDuplicateExplicitIDTargets(
-		t,
-		result.Targets,
-		factoryvalidation.SubjectTypeWorkState,
-		"work-type-story:state-ready",
-		`duplicate work state id "state-ready" on work type "story"`,
-		[]string{"factory.workTypes[0].states[0].id", "factory.workTypes[0].states[1].id"},
-	)
-}
-
-func TestValidate_AllowsSameWorkStateIDAcrossDifferentWorkTypes(t *testing.T) {
-	t.Parallel()
-
-	cfg := stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
-		cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{
-			ID:   "work-type-bug",
-			Name: "bug",
-			States: []interfaces.StateConfig{
-				{ID: "state-ready", Name: "ready", Type: interfaces.StateTypeInitial},
-				{ID: "state-done", Name: "done", Type: interfaces.StateTypeTerminal},
-				{ID: "state-failed", Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		})
-	})
-
-	result := factoryvalidation.Validate(cfg)
-	for _, target := range result.Targets {
-		if target.Code == factoryvalidation.CodeDuplicateIdentifier &&
-			target.Subject.Type == factoryvalidation.SubjectTypeWorkState {
-			t.Fatalf("unexpected duplicate work-state id target %#v", target)
-		}
-	}
-}
-
-func TestValidateBlockingLoad_AllowsLegacyExampleFactoryWithoutEntityIDs(t *testing.T) {
-	t.Parallel()
-
-	path := filepath.Join("..", "..", "..", "examples", "basic", "factory", interfaces.FactoryConfigFile)
-	payload, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", path, err)
-	}
-	loaded, err := config.LoadFromCanonicalJSON(payload, nil)
-	if err != nil {
-		t.Fatalf("LoadFromCanonicalJSON(%s): %v", path, err)
-	}
-
-	result := factoryvalidation.ValidateBlockingLoad(loaded.FactoryConfig())
-	if len(result.Targets) != 0 {
-		t.Fatalf("blocking load targets = %#v, want none for legacy name-keyed example", result.Targets)
-	}
-}
-
-func TestWorkTypeHandlingBehaviorTargets_RejectsMultipleDefaultWorkTypes(t *testing.T) {
-	t.Parallel()
-
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
-			{Name: "story", HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
-			{Name: "task", HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
-		},
-	}
-
-	targets := factoryvalidation.WorkTypeHandlingBehaviorTargets(cfg, factoryvalidation.WorkTypeHandlingBehaviorOptions{})
-	validationassert.HasDomainTargetCode(t, targets, factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
-}
-
-func TestValidate_UsesExplicitSubjectIDsForGraphValidationTargets(t *testing.T) {
-	t.Parallel()
-
-	cfg := stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
-		cfg.WorkTypes[0].States = cfg.WorkTypes[0].States[:1]
-		cfg.Workstations[0].OnFailure = nil
-	})
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
-		Type:     factoryvalidation.SubjectTypeWorkstation,
-		ID:       "workstation-execute-story",
-		Location: factoryvalidation.SubjectLocationOnFailure,
-	})
-	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
-		Type:     factoryvalidation.SubjectTypeWorkType,
-		ID:       "work-type-story",
-		Location: factoryvalidation.SubjectLocationStates,
-	})
-}
-
-func stableIDValidationConfig(mutate func(*interfaces.FactoryConfig)) *interfaces.FactoryConfig {
-	cfg := &interfaces.FactoryConfig{
-		Name: "stable-id-factory",
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			ID:   "work-type-story",
-			Name: "story",
-			States: []interfaces.StateConfig{
-				{ID: "state-ready", Name: "ready", Type: interfaces.StateTypeInitial},
-				{ID: "state-done", Name: "done", Type: interfaces.StateTypeTerminal},
-				{ID: "state-failed", Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
-		Resources: []interfaces.ResourceConfig{{
-			ID:       "resource-agent-slot",
-			Name:     "agent-slot",
-			Capacity: 1,
-		}},
-		Workers: []interfaces.WorkerConfig{{
-			ID:   "worker-executor",
-			Name: "executor",
-		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			ID:             "workstation-execute-story",
-			Name:           "execute-story",
-			WorkerTypeName: "executor",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
-			OnFailure:      []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-		}},
-	}
-	if mutate != nil {
-		mutate(cfg)
-	}
-	return cfg
-}
-
-func invocationSignatureValidationConfig(mutate func(*interfaces.FactoryConfig)) *interfaces.FactoryConfig {
-	cfg := &interfaces.FactoryConfig{
-		Name: "invocation-signature-validation",
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "queued", Type: interfaces.StateTypeInitial},
-				{Name: "done", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
-		Workers: []interfaces.WorkerConfig{{
-			Name: "worker-a",
-			Type: interfaces.WorkerTypeInference,
-		}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name:           "process",
-			WorkerTypeName: "worker-a",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-			OnFailure:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
-		}},
-	}
-	if mutate != nil {
-		mutate(cfg)
-	}
-	return cfg
-}
-
-func assertDuplicateExplicitIDTargets(
-	t *testing.T,
-	targets []factoryvalidation.Target,
-	subjectType factoryvalidation.SubjectType,
-	subjectID string,
-	messageContains string,
-	paths []string,
-) {
-	t.Helper()
-
-	for _, path := range paths {
-		found := false
-		for _, target := range targets {
-			if target.Code != factoryvalidation.CodeDuplicateIdentifier ||
-				target.Subject.Type != subjectType ||
-				target.Subject.ID != subjectID ||
-				target.Path != path ||
-				!strings.Contains(target.Message, messageContains) {
-				continue
-			}
-			found = true
-			break
-		}
-		if !found {
-			t.Fatalf("missing duplicate id target type=%s id=%q path=%q message containing %q in %#v", subjectType, subjectID, path, messageContains, targets)
-		}
-	}
-}
-
-func TestWorkTypeHandlingBehaviorTargets_AllowsSingleDefaultWorkType(t *testing.T) {
-	t.Parallel()
-
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
-			{Name: "story", HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
-			{Name: "task"},
-		},
-	}
-
-	targets := factoryvalidation.WorkTypeHandlingBehaviorTargets(cfg, factoryvalidation.WorkTypeHandlingBehaviorOptions{})
-	if len(targets) != 0 {
-		t.Fatalf("targets = %#v, want no handlingBehavior findings", targets)
-	}
-}
-
-func TestValidate_RejectsDuplicateDefaultWorkTypesOnSavePath(t *testing.T) {
-	t.Parallel()
-
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{
-			{Name: "story", HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
-			{Name: "task", HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}},
-		},
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
-}
-
-func TestValidate_InvocationReturnExplicitValid(t *testing.T) {
-	t.Parallel()
-
-	cfg := &interfaces.FactoryConfig{
-		InvocationReturn: &interfaces.InvocationReturnConfig{
-			Policy:        string(factoryapi.InvocationReturnPolicyExplicit),
-			WorkTypeName:  "story",
-			TerminalState: "complete",
-		},
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-			},
-		}},
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	for _, target := range result.Targets {
-		if strings.HasPrefix(target.Code, "factory.invocationReturn.") {
-			t.Fatalf("targets = %#v, want no invocationReturn findings", result.Targets)
-		}
-	}
-}
-
-func TestValidate_InvocationReturnExplicitMissingWorkType(t *testing.T) {
-	t.Parallel()
-
-	cfg := &interfaces.FactoryConfig{
-		InvocationReturn: &interfaces.InvocationReturnConfig{
-			Policy:        string(factoryapi.InvocationReturnPolicyExplicit),
-			TerminalState: "complete",
-		},
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-			},
-		}},
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationReturnMissingWorkTypeName)
-}
-
-func TestValidate_InvocationReturnExplicitInvalidTerminalState(t *testing.T) {
-	t.Parallel()
-
-	cfg := &interfaces.FactoryConfig{
-		InvocationReturn: &interfaces.InvocationReturnConfig{
-			Policy:        string(factoryapi.InvocationReturnPolicyExplicit),
-			WorkTypeName:  "story",
-			TerminalState: "review",
-		},
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "review", Type: interfaces.StateTypeProcessing},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-			},
-		}},
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationReturnInvalidTerminalState)
-}
-
-func TestValidate_InvocationReturnOmitted(t *testing.T) {
-	t.Parallel()
-
-	cfg := &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	for _, target := range result.Targets {
-		if strings.HasPrefix(target.Code, "factory.invocationReturn.") {
-			t.Fatalf("targets = %#v, want omitted invocationReturn to stay valid", result.Targets)
-		}
-	}
-}
-
-func TestValidate_InvocationSignatureValid(t *testing.T) {
-	t.Parallel()
-
-	cfg := invocationSignatureValidationConfig(func(cfg *interfaces.FactoryConfig) {
-		cfg.InvocationSignature = &interfaces.InvocationSignatureConfig{
-			UnknownNamedArgumentPolicy: string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject),
-			Parameters: []interfaces.InvocationParameterConfig{
-				{
-					Name:         "input",
-					ExternalName: "input",
-					Bindings: []interfaces.InvocationParameterBindingConfig{
-						{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 1},
-					},
-				},
-				{
-					Name:         "output",
-					ExternalName: "output",
-					TypeHint:     string(factoryapi.FactoryInvocationParameterTypeHintPath),
-					Bindings: []interfaces.InvocationParameterBindingConfig{
-						{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)},
-					},
-				},
-			},
-			OutputContract: &interfaces.InvocationOutputContractConfig{
-				Mode:          string(factoryapi.FactoryInvocationOutputContractModeFile),
-				PathParameter: "output",
-			},
-		}
-		cfg.Workers[0].Model = "${input}"
-		cfg.Workstations[0].Body = "Render ${input}"
-		cfg.Workstations[0].WorkingDirectory = "/tmp/${output}"
-	})
-
-	result := factoryvalidation.Validate(cfg)
-	for _, target := range result.Targets {
-		if strings.HasPrefix(target.Code, "factory.invocationSignature.") {
-			t.Fatalf("targets = %#v, want no invocationSignature findings", result.Targets)
-		}
-	}
-}
-
-func TestValidate_InvocationSignatureRejectsMalformedBindingsAndDefaults(t *testing.T) {
-	t.Parallel()
-
-	cfg := invocationSignatureValidationConfig(func(cfg *interfaces.FactoryConfig) {
-		cfg.InvocationSignature = &interfaces.InvocationSignatureConfig{
-			UnknownNamedArgumentPolicy: string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect),
-			Parameters: []interfaces.InvocationParameterConfig{
-				{
-					Name:         "secret",
-					ExternalName: "token",
-					Sensitive:    true,
-					Bindings: []interfaces.InvocationParameterBindingConfig{
-						{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 2},
-					},
-				},
-				{
-					Name:         "secret",
-					ExternalName: "token",
-					ValueMode:    string(factoryapi.FactoryInvocationParameterValueModeRepeated),
-					DefaultValue: "one",
-					Bindings: []interfaces.InvocationParameterBindingConfig{
-						{Kind: string(factoryapi.FactoryInvocationParameterBindingKindStdin)},
-						{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)},
-					},
-				},
-				{
-					Name:         "extras",
-					ExternalName: "extras",
-					ValueMode:    string(factoryapi.FactoryInvocationParameterValueModeVariadic),
-					Bindings: []interfaces.InvocationParameterBindingConfig{
-						{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 4},
-					},
-				},
-			},
-		}
-	})
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureDuplicateParameterName)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureDuplicateNamedKey)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureSensitivePositional)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidDefaultShape)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidStdinRouting)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidPositionalOrdering)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidNamedRestShape)
-}
-
-func TestValidate_InvocationSignatureRejectsInvalidInterpolationReferences(t *testing.T) {
-	t.Parallel()
-
-	cfg := invocationSignatureValidationConfig(func(cfg *interfaces.FactoryConfig) {
-		cfg.InvocationSignature = &interfaces.InvocationSignatureConfig{
-			Parameters: []interfaces.InvocationParameterConfig{
-				{
-					Name:         "items",
-					ExternalName: "item",
-					ValueMode:    string(factoryapi.FactoryInvocationParameterValueModeRepeated),
-					Bindings: []interfaces.InvocationParameterBindingConfig{
-						{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)},
-					},
-				},
-			},
-			OutputContract: &interfaces.InvocationOutputContractConfig{
-				Mode:          string(factoryapi.FactoryInvocationOutputContractModeFile),
-				PathParameter: "missing-output",
-			},
-		}
-		cfg.Workers[0].Model = "${missing}"
-		cfg.Workstations[0].Body = "Use ${items}"
-	})
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureUnknownOutputPathParameter)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidInterpolationReference)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureIncompatibleInterpolationReference)
 }
 
 type missingOutputRoutesCase struct {
@@ -1076,225 +516,245 @@ func TestValidate_LogicalMoveOutcomeRouteExemption(t *testing.T) {
 		})
 	}
 }
-func TestValidate_LegacyPetriFactoryWithoutOrchestratorRemainsValid(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Name: "legacy-petri",
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name:   "task",
-			States: []interfaces.StateConfig{{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "done", Type: interfaces.StateTypeTerminal}},
-		}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker", Type: interfaces.WorkerTypeModel}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name:           "execute",
-			WorkerTypeName: "worker",
-			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-		}},
-	}
 
-	if got := interfaces.EffectiveOrchestratorKind(cfg); got != interfaces.OrchestratorKindPetri {
-		t.Fatalf("EffectiveOrchestratorKind = %q, want PETRI", got)
-	}
-	if targets := factoryvalidation.OrchestratorTargets(cfg); len(targets) > 0 {
-		t.Fatalf("orchestrator targets = %#v, want none for legacy Petri factory", targets)
-	}
-	if !factoryvalidation.IsPetriOrchestratorValidationScope(cfg) {
-		t.Fatal("expected legacy factory to remain in Petri validation scope")
+func TestValidate_CanonicalFindingsAndStableIdentity(t *testing.T) {
+	t.Run("canonical findings match config validation", func(t *testing.T) {
+		apiFactory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+		if err != nil {
+			t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
+		}
+		cfg, err := config.FactoryConfigFromOpenAPI(apiFactory)
+		if err != nil {
+			t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+		}
+		explicit, findings := factoryvalidation.Validate(&cfg), config.CanonicalStructuralFindings(&cfg)
+		if len(explicit.Targets) == 0 || len(explicit.Targets) != len(findings) {
+			t.Fatalf("explicit targets = %d, config findings = %d, want equal non-zero counts", len(explicit.Targets), len(findings))
+		}
+		for i, target := range explicit.Targets {
+			if findings[i].Rule != target.Code {
+				t.Fatalf("finding[%d].Rule = %q, want %q", i, findings[i].Rule, target.Code)
+			}
+		}
+		for _, code := range []string{factoryvalidation.CodeDuplicateIdentifier, factoryvalidation.CodeDanglingWorkerReference, factoryvalidation.CodeDanglingPlaceReference} {
+			validationassert.HasDomainTargetCode(t, explicit.Targets, code)
+		}
+		validationassert.HasDomainTargetSubject(t, explicit.Targets, factoryvalidation.Subject{Type: factoryvalidation.SubjectTypeWorkstation, ID: "process", Location: factoryvalidation.SubjectLocationReference})
+	})
+
+	t.Run("duplicate explicit ids retain subjects messages and paths", func(t *testing.T) {
+		cases := []struct {
+			name, id, message string
+			typeOf            factoryvalidation.SubjectType
+			paths             []string
+			mutate            func(*interfaces.FactoryConfig)
+		}{
+			{"resources", "resource-agent-slot", `duplicate resource id "resource-agent-slot"`, factoryvalidation.SubjectTypeResource, []string{"factory.resources[0].id", "factory.resources[1].id"}, func(c *interfaces.FactoryConfig) {
+				c.Resources = append(c.Resources, interfaces.ResourceConfig{ID: "resource-agent-slot", Name: "review-slot", Capacity: 1})
+			}},
+			{"workers", "worker-executor", `duplicate worker id "worker-executor"`, factoryvalidation.SubjectTypeWorker, []string{"factory.workers[0].id", "factory.workers[1].id"}, func(c *interfaces.FactoryConfig) {
+				c.Workers = append(c.Workers, interfaces.WorkerConfig{ID: "worker-executor", Name: "reviewer"})
+			}},
+			{"work types", "work-type-story", `duplicate work type id "work-type-story"`, factoryvalidation.SubjectTypeWorkType, []string{"factory.workTypes[0].id", "factory.workTypes[1].id"}, func(c *interfaces.FactoryConfig) {
+				c.WorkTypes = append(c.WorkTypes, interfaces.WorkTypeConfig{ID: "work-type-story", Name: "bug"})
+			}},
+			{"workstations", "workstation-execute-story", `duplicate workstation id "workstation-execute-story"`, factoryvalidation.SubjectTypeWorkstation, []string{"factory.workstations[0].id", "factory.workstations[1].id"}, func(c *interfaces.FactoryConfig) {
+				c.Workstations = append(c.Workstations, interfaces.FactoryWorkstationConfig{ID: "workstation-execute-story", Name: "review-story", WorkerTypeName: "executor", Inputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}}})
+			}},
+			{"work states", "work-type-story:state-ready", `duplicate work state id "state-ready" on work type "story"`, factoryvalidation.SubjectTypeWorkState, []string{"factory.workTypes[0].states[0].id", "factory.workTypes[0].states[1].id"}, func(c *interfaces.FactoryConfig) { c.WorkTypes[0].States[1].ID = "state-ready" }},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				cfg := stableIDConfig()
+				tc.mutate(cfg)
+				assertTargetDetails(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeDuplicateIdentifier, tc.typeOf, tc.id, "", tc.message, tc.paths...)
+			})
+		}
+	})
+
+	t.Run("same state id in different work types remains valid", func(t *testing.T) {
+		cfg := stableIDConfig()
+		cfg.WorkTypes = append(cfg.WorkTypes, interfaces.WorkTypeConfig{ID: "work-type-bug", Name: "bug", States: []interfaces.StateConfig{{ID: "state-ready", Name: "ready", Type: interfaces.StateTypeInitial}}})
+		assertTargetAbsent(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeDuplicateIdentifier, factoryvalidation.SubjectTypeWorkState)
+	})
+
+	t.Run("explicit ids remain graph target subjects", func(t *testing.T) {
+		cfg := stableIDConfig()
+		cfg.WorkTypes[0].States = cfg.WorkTypes[0].States[:1]
+		cfg.Workstations[0].Outputs[0].StateName = "missing"
+		cfg.Workstations[0].OnFailure = nil
+		result := factoryvalidation.Validate(cfg)
+		validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDanglingPlaceReference)
+		validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{Type: factoryvalidation.SubjectTypeWorkstation, ID: "workstation-execute-story", Location: factoryvalidation.SubjectLocationOnFailure})
+		validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{Type: factoryvalidation.SubjectTypeWorkType, ID: "work-type-story", Location: factoryvalidation.SubjectLocationStates})
+	})
+
+	t.Run("legacy example without ids remains valid", func(t *testing.T) {
+		path := filepath.Join("..", "..", "..", "examples", "basic", "factory", interfaces.FactoryConfigFile)
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("ReadFile(%s): %v", path, err)
+		}
+		loaded, err := config.LoadFromCanonicalJSON(payload, nil)
+		if err != nil {
+			t.Fatalf("LoadFromCanonicalJSON(%s): %v", path, err)
+		}
+		if got := factoryvalidation.ValidateBlockingLoad(loaded.FactoryConfig()).Targets; len(got) != 0 {
+			t.Fatalf("blocking load targets = %#v, want none", got)
+		}
+	})
+
+	t.Run("default work type uniqueness is consistent", func(t *testing.T) {
+		cfg := &interfaces.FactoryConfig{WorkTypes: []interfaces.WorkTypeConfig{{Name: "story", HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault}}, {Name: "task"}}}
+		if got := factoryvalidation.WorkTypeHandlingBehaviorTargets(cfg, factoryvalidation.WorkTypeHandlingBehaviorOptions{}); len(got) != 0 {
+			t.Fatalf("single default targets = %#v, want none", got)
+		}
+		cfg.WorkTypes[1].HandlingBehavior = []string{interfaces.WorkTypeHandlingBehaviorDefault}
+		validationassert.HasDomainTargetCode(t, factoryvalidation.WorkTypeHandlingBehaviorTargets(cfg, factoryvalidation.WorkTypeHandlingBehaviorOptions{}), factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
+		validationassert.HasDomainTargetCode(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
+	})
+}
+
+func TestValidate_InvocationContracts(t *testing.T) {
+	t.Run("return policy accepts explicit valid and omitted configurations", func(t *testing.T) {
+		cfg := invocationConfig()
+		cfg.InvocationReturn = &interfaces.InvocationReturnConfig{Policy: string(factoryapi.InvocationReturnPolicyExplicit), WorkTypeName: "task", TerminalState: "done"}
+		assertCodePrefixAbsent(t, factoryvalidation.Validate(cfg).Targets, "factory.invocationReturn.")
+		cfg.InvocationReturn = nil
+		assertCodePrefixAbsent(t, factoryvalidation.Validate(cfg).Targets, "factory.invocationReturn.")
+	})
+
+	t.Run("return policy rejects missing work type and non-terminal state", func(t *testing.T) {
+		cfg := invocationConfig()
+		cfg.InvocationReturn = &interfaces.InvocationReturnConfig{Policy: string(factoryapi.InvocationReturnPolicyExplicit), TerminalState: "done"}
+		validationassert.HasDomainTargetCode(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeInvocationReturnMissingWorkTypeName)
+		cfg.InvocationReturn = &interfaces.InvocationReturnConfig{Policy: string(factoryapi.InvocationReturnPolicyExplicit), WorkTypeName: "task", TerminalState: "queued"}
+		validationassert.HasDomainTargetCode(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeInvocationReturnInvalidTerminalState)
+	})
+
+	t.Run("valid signature remains accepted", func(t *testing.T) {
+		cfg := invocationConfig()
+		cfg.InvocationSignature = &interfaces.InvocationSignatureConfig{UnknownNamedArgumentPolicy: string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject), Parameters: []interfaces.InvocationParameterConfig{
+			{Name: "input", ExternalName: "input", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 1}}},
+			{Name: "output", ExternalName: "output", TypeHint: string(factoryapi.FactoryInvocationParameterTypeHintPath), Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)}}},
+		}, OutputContract: &interfaces.InvocationOutputContractConfig{Mode: string(factoryapi.FactoryInvocationOutputContractModeFile), PathParameter: "output"}}
+		cfg.Workers[0].Model, cfg.Workstations[0].Body, cfg.Workstations[0].WorkingDirectory = "${input}", "Render ${input}", "/tmp/${output}"
+		assertCodePrefixAbsent(t, factoryvalidation.Validate(cfg).Targets, "factory.invocationSignature.")
+	})
+
+	t.Run("malformed bindings defaults and interpolation are rejected", func(t *testing.T) {
+		cfg := invocationConfig()
+		cfg.InvocationSignature = &interfaces.InvocationSignatureConfig{UnknownNamedArgumentPolicy: string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect), Parameters: []interfaces.InvocationParameterConfig{
+			{Name: "secret", ExternalName: "token", Sensitive: true, Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 2}}},
+			{Name: "secret", ExternalName: "token", ValueMode: string(factoryapi.FactoryInvocationParameterValueModeRepeated), DefaultValue: "one", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindStdin)}, {Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)}}},
+			{Name: "extras", ExternalName: "extras", ValueMode: string(factoryapi.FactoryInvocationParameterValueModeVariadic), Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 4}}},
+		}}
+		for _, code := range []string{factoryvalidation.CodeInvocationSignatureDuplicateParameterName, factoryvalidation.CodeInvocationSignatureDuplicateNamedKey, factoryvalidation.CodeInvocationSignatureSensitivePositional, factoryvalidation.CodeInvocationSignatureInvalidDefaultShape, factoryvalidation.CodeInvocationSignatureInvalidStdinRouting, factoryvalidation.CodeInvocationSignatureInvalidPositionalOrdering, factoryvalidation.CodeInvocationSignatureInvalidNamedRestShape} {
+			validationassert.HasDomainTargetCode(t, factoryvalidation.Validate(cfg).Targets, code)
+		}
+		cfg = invocationConfig()
+		cfg.InvocationSignature = &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{{Name: "items", ExternalName: "item", ValueMode: string(factoryapi.FactoryInvocationParameterValueModeRepeated), Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)}}}}, OutputContract: &interfaces.InvocationOutputContractConfig{Mode: string(factoryapi.FactoryInvocationOutputContractModeFile), PathParameter: "missing-output"}}
+		cfg.Workers[0].Model, cfg.Workstations[0].Body = "${missing}", "Use ${items}"
+		for _, code := range []string{factoryvalidation.CodeInvocationSignatureUnknownOutputPathParameter, factoryvalidation.CodeInvocationSignatureInvalidInterpolationReference, factoryvalidation.CodeInvocationSignatureIncompatibleInterpolationReference} {
+			validationassert.HasDomainTargetCode(t, factoryvalidation.Validate(cfg).Targets, code)
+		}
+	})
+}
+
+func TestValidate_OrchestratorCompatibilityAndWorkPropagation(t *testing.T) {
+	t.Run("legacy Petri factory without orchestrator remains valid", func(t *testing.T) {
+		cfg := invocationConfig()
+		if got := interfaces.EffectiveOrchestratorKind(cfg); got != interfaces.OrchestratorKindPetri {
+			t.Fatalf("EffectiveOrchestratorKind = %q, want PETRI", got)
+		}
+		if targets := factoryvalidation.OrchestratorTargets(cfg); len(targets) != 0 || !factoryvalidation.IsPetriOrchestratorValidationScope(cfg) {
+			t.Fatalf("orchestrator targets = %#v, Petri scope = %v", targets, factoryvalidation.IsPetriOrchestratorValidationScope(cfg))
+		}
+	})
+
+	t.Run("JavaScript acceptance and rejection boundaries", func(t *testing.T) {
+		valid := &interfaces.FactoryConfig{Name: "dynamic", Orchestrator: &interfaces.FactoryOrchestratorConfig{Kind: interfaces.OrchestratorKindJavaScript, JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{SourceRef: "factory/workflows/review.js", Entrypoint: "main"}}}
+		if result := factoryvalidation.Validate(valid); result.HasTargets() {
+			t.Fatalf("valid JavaScript targets = %#v, want none", result.Targets)
+		}
+		cases := []struct {
+			name, code string
+			cfg        *interfaces.FactoryConfig
+		}{
+			{"missing source", factoryvalidation.CodeOrchestratorJavaScriptMissingSource, &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{Kind: interfaces.OrchestratorKindJavaScript, JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{}}}},
+			{"empty agent preset", factoryvalidation.CodeOrchestratorJavaScriptInvalidAgent, &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{Kind: interfaces.OrchestratorKindJavaScript, JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{SourceRef: "workflow.js", Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{"reviewer": {Preset: "   "}}}}}},
+			{"Petri fields", factoryvalidation.CodeOrchestratorIncompatiblePetriField, &interfaces.FactoryConfig{Orchestrator: valid.Orchestrator, WorkTypes: []interfaces.WorkTypeConfig{{Name: "task"}}}},
+			{"unsupported kind", factoryvalidation.CodeOrchestratorUnsupportedKind, &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{Kind: "STREAM"}}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				validationassert.HasDomainTargetCode(t, factoryvalidation.Validate(tc.cfg).Targets, tc.code)
+			})
+		}
+	})
+
+	t.Run("generated work propagation modes and omission remain accepted", func(t *testing.T) {
+		for _, generated := range []factoryapi.WorkPropagationMode{factoryapi.WorkPropagationModeOutputAsPayload, factoryapi.WorkPropagationModePreserveInput} {
+			cfg := invocationConfig()
+			cfg.Workstations[0].WorkPropagation = &interfaces.WorkPropagationConfig{Mode: interfaces.WorkPropagationMode(generated)}
+			assertTargetAbsent(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode, factoryvalidation.SubjectTypeWorkstation)
+		}
+		assertTargetAbsent(t, factoryvalidation.Validate(invocationConfig()).Targets, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode, factoryvalidation.SubjectTypeWorkstation)
+	})
+
+	t.Run("empty and unsupported work propagation modes are rejected", func(t *testing.T) {
+		for _, mode := range []interfaces.WorkPropagationMode{"", "MERGE_PAYLOAD", interfaces.WorkPropagationMode(factoryapi.WorkPropagationMode("PRESERVE_OUTPUT"))} {
+			cfg := invocationConfig()
+			cfg.Workstations[0].WorkPropagation = &interfaces.WorkPropagationConfig{Mode: mode}
+			targets := factoryvalidation.Validate(cfg).Targets
+			validationassert.HasDomainTargetCode(t, targets, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode)
+			if mode == "MERGE_PAYLOAD" {
+				assertTargetDetails(t, targets, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode, factoryvalidation.SubjectTypeWorkstation, "process", factoryvalidation.SubjectLocation(""), `unsupported workPropagation.mode "MERGE_PAYLOAD"`, "factory.workstations[0](process).workPropagation.mode")
+			}
+		}
+	})
+}
+
+func stableIDConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{Name: "stable-id-factory",
+		WorkTypes: []interfaces.WorkTypeConfig{{ID: "work-type-story", Name: "story", States: []interfaces.StateConfig{{ID: "state-ready", Name: "ready", Type: interfaces.StateTypeInitial}, {ID: "state-done", Name: "done", Type: interfaces.StateTypeTerminal}, {ID: "state-failed", Name: "failed", Type: interfaces.StateTypeFailed}}}},
+		Resources: []interfaces.ResourceConfig{{ID: "resource-agent-slot", Name: "agent-slot", Capacity: 1}}, Workers: []interfaces.WorkerConfig{{ID: "worker-executor", Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{ID: "workstation-execute-story", Name: "execute-story", WorkerTypeName: "executor", Inputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}}}}}
+}
+
+func invocationConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{Name: "invocation-validation", WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{{Name: "queued", Type: interfaces.StateTypeInitial}, {Name: "done", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed}}}}, Workers: []interfaces.WorkerConfig{{Name: "worker-a", Type: interfaces.WorkerTypeInference}}, Workstations: []interfaces.FactoryWorkstationConfig{{Name: "process", WorkerTypeName: "worker-a", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}}}}
+}
+
+func assertTargetDetails(t *testing.T, targets []factoryvalidation.Target, code string, subjectType factoryvalidation.SubjectType, id string, location factoryvalidation.SubjectLocation, message string, paths ...string) {
+	t.Helper()
+	for _, path := range paths {
+		found := false
+		for _, target := range targets {
+			if target.Code == code && target.Subject.Type == subjectType && target.Subject.ID == id && (location == "" || target.Subject.Location == location) && target.Path == path && strings.Contains(target.Message, message) {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("missing target code=%q type=%q id=%q location=%q path=%q message containing %q in %#v", code, subjectType, id, location, path, message, targets)
+		}
 	}
 }
 
-func TestValidate_JavaScriptFactoryAcceptsSourceRefWithoutPetriGraph(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Name: "dynamic-workflow",
-		Orchestrator: &interfaces.FactoryOrchestratorConfig{
-			Kind: interfaces.OrchestratorKindJavaScript,
-			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
-				SourceRef:  "factory/workflows/review.js",
-				Entrypoint: "main",
-				Metadata:   map[string]string{"team": "platform"},
-			},
-		},
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	if result.HasTargets() {
-		t.Fatalf("validation targets = %#v, want none for valid JavaScript factory", result.Targets)
-	}
-}
-
-func TestValidate_JavaScriptFactoryRejectsMissingSource(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Name: "invalid-javascript",
-		Orchestrator: &interfaces.FactoryOrchestratorConfig{
-			Kind:       interfaces.OrchestratorKindJavaScript,
-			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{},
-		},
-	}
-
-	assertValidationCode(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeOrchestratorJavaScriptMissingSource)
-}
-
-func TestValidate_JavaScriptFactoryRejectsEmptyNamedAgentPreset(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Name: "invalid-named-agent",
-		Orchestrator: &interfaces.FactoryOrchestratorConfig{
-			Kind: interfaces.OrchestratorKindJavaScript,
-			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
-				SourceRef: "factory/workflows/review.js",
-				Agents: map[string]interfaces.FactoryOrchestratorJavaScriptAgent{
-					"reviewer": {Preset: "   "},
-				},
-			},
-		},
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	assertValidationCode(t, result.Targets, factoryvalidation.CodeOrchestratorJavaScriptInvalidAgent)
-	if !strings.Contains(result.Targets[0].Message, "reviewer") {
-		t.Fatalf("diagnostic = %q, want agent id", result.Targets[0].Message)
-	}
-}
-
-func TestValidate_JavaScriptFactoryRejectsPetriGraphFields(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Name: "invalid-javascript",
-		Orchestrator: &interfaces.FactoryOrchestratorConfig{
-			Kind: interfaces.OrchestratorKindJavaScript,
-			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
-				SourceRef: "factory/workflows/review.js",
-			},
-		},
-		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{{Name: "init", Type: interfaces.StateTypeInitial}}}},
-	}
-
-	assertValidationCode(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeOrchestratorIncompatiblePetriField)
-}
-
-func TestValidate_UnsupportedOrchestratorKindRejected(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{
-		Name: "invalid-kind",
-		Orchestrator: &interfaces.FactoryOrchestratorConfig{
-			Kind: "STREAM",
-		},
-	}
-
-	assertValidationCode(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeOrchestratorUnsupportedKind)
-}
-
-func assertValidationCode(t *testing.T, targets []factoryvalidation.Target, code string) {
+func assertTargetAbsent(t *testing.T, targets []factoryvalidation.Target, code string, subjectType factoryvalidation.SubjectType) {
 	t.Helper()
 	for _, target := range targets {
-		if target.Code == code {
-			return
-		}
-	}
-	t.Fatalf("validation targets = %#v, want code %q", targets, code)
-}
-
-func workPropagationValidationBaseConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "story",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name:   "execute-story",
-			Inputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
-			Outputs: []interfaces.IOConfig{
-				{WorkTypeName: "story", StateName: "complete"},
-			},
-			OnFailure: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-		}},
-	}
-}
-
-func TestValidate_WorkPropagationSupportedModes(t *testing.T) {
-	t.Parallel()
-
-	for _, mode := range []interfaces.WorkPropagationMode{
-		interfaces.WorkPropagationModeOutputAsPayload,
-		interfaces.WorkPropagationModePreserveInput,
-	} {
-		t.Run(string(mode), func(t *testing.T) {
-			cfg := workPropagationValidationBaseConfig()
-			cfg.Workstations[0].WorkPropagation = &interfaces.WorkPropagationConfig{Mode: mode}
-
-			result := factoryvalidation.Validate(cfg)
-			for _, target := range result.Targets {
-				if target.Code == factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode {
-					t.Fatalf("targets = %#v, want supported mode %q to stay valid", result.Targets, mode)
-				}
-			}
-		})
-	}
-}
-
-func TestValidate_WorkPropagationOmitted(t *testing.T) {
-	t.Parallel()
-
-	result := factoryvalidation.Validate(workPropagationValidationBaseConfig())
-	for _, target := range result.Targets {
-		if target.Code == factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode {
-			t.Fatalf("targets = %#v, want omitted workPropagation to stay valid", result.Targets)
+		if target.Code == code && target.Subject.Type == subjectType {
+			t.Fatalf("unexpected target %#v", target)
 		}
 	}
 }
 
-func TestValidate_WorkPropagationUnsupportedMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := workPropagationValidationBaseConfig()
-	cfg.Workstations[0].WorkPropagation = &interfaces.WorkPropagationConfig{
-		Mode: interfaces.WorkPropagationMode("MERGE_PAYLOAD"),
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode)
-
-	var matched bool
-	for _, target := range result.Targets {
-		if target.Code != factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode {
-			continue
-		}
-		matched = true
-		if target.Subject.Type != factoryvalidation.SubjectTypeWorkstation || target.Subject.ID != "execute-story" {
-			t.Fatalf("target subject = %#v, want workstation execute-story", target.Subject)
-		}
-		if target.Path != "factory.workstations[0](execute-story).workPropagation.mode" {
-			t.Fatalf("target path = %q, want workstation workPropagation path", target.Path)
-		}
-		if !strings.Contains(target.Message, `unsupported workPropagation.mode "MERGE_PAYLOAD"`) {
-			t.Fatalf("target message = %q, want unsupported mode detail", target.Message)
+func assertCodePrefixAbsent(t *testing.T, targets []factoryvalidation.Target, prefix string) {
+	t.Helper()
+	for _, target := range targets {
+		if strings.HasPrefix(target.Code, prefix) {
+			t.Fatalf("targets = %#v, want no code with prefix %q", targets, prefix)
 		}
 	}
-	if !matched {
-		t.Fatal("expected unsupported work propagation target")
-	}
-}
-
-func TestValidate_WorkPropagationEmptyMode(t *testing.T) {
-	t.Parallel()
-
-	cfg := workPropagationValidationBaseConfig()
-	cfg.Workstations[0].WorkPropagation = &interfaces.WorkPropagationConfig{}
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode)
-}
-
-func TestValidate_WorkPropagationUnsupportedModeUsesGeneratedEnumValues(t *testing.T) {
-	t.Parallel()
-
-	cfg := workPropagationValidationBaseConfig()
-	cfg.Workstations[0].WorkPropagation = &interfaces.WorkPropagationConfig{
-		Mode: interfaces.WorkPropagationMode(factoryapi.WorkPropagationMode("PRESERVE_OUTPUT")),
-	}
-
-	result := factoryvalidation.Validate(cfg)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode)
 }
