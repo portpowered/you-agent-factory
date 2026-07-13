@@ -1,0 +1,96 @@
+package opencode
+
+import (
+	"context"
+	"errors"
+	"os"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+)
+
+const providerSessionKind = "session_id"
+
+// StructuredAdapter implements the provider-neutral adapter contract for one
+// positively negotiated OpenCode installation. Capability negotiation remains
+// separate so no customer request is needed to construct this adapter.
+type StructuredAdapter struct {
+	decision Decision
+}
+
+// NewStructuredAdapter binds structured execution to one negotiated decision.
+func NewStructuredAdapter(decision Decision) (*StructuredAdapter, error) {
+	if decision.Mode != ModeStructured {
+		return nil, errors.New("opencode structured adapter requires a structured capability decision")
+	}
+	if strings.TrimSpace(decision.Installation.Executable) == "" {
+		return nil, errors.New("opencode structured adapter requires a resolved executable")
+	}
+	return &StructuredAdapter{decision: decision}, nil
+}
+
+func (*StructuredAdapter) Identity() adapter.Identity {
+	return adapter.Identity(interfaces.ModelProviderOpenCode)
+}
+
+func (a *StructuredAdapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
+	request := input.Request
+	args := []string{"run", "--format", "json"}
+	if request.Model != "" {
+		args = append(args, "--model", request.Model)
+	}
+	if request.OpenCodeAgent != "" {
+		args = append(args, "--agent", request.OpenCodeAgent)
+	}
+	if request.SessionID != "" {
+		args = append(args, "--session", request.SessionID)
+	}
+	if request.WorkingDirectory != "" {
+		args = append(args, "--dir", request.WorkingDirectory)
+	}
+	if input.SkipPermissions {
+		args = append(args, "--dangerously-skip-permissions")
+	}
+	args = append(args, request.UserMessage)
+
+	command := workerprocess.SubprocessRequestBase(request.Dispatch)
+	command.Command = a.decision.Installation.Executable
+	command.Args = args
+	command.Env = structuredCommandEnv(request.EnvVars)
+	command.WorkDir = request.WorkingDirectory
+	command.InputTokens = append([]any(nil), request.InputTokens...)
+	if request.WorkerType != "" {
+		command.WorkerType = request.WorkerType
+	}
+	if request.WorkstationType != "" {
+		command.WorkstationName = request.WorkstationType
+	}
+	if request.ProjectID != "" {
+		command.ProjectID = request.ProjectID
+	}
+	return adapter.CommandBuildResult{Request: command}, nil
+}
+
+func structuredCommandEnv(overrides map[string]string) []string {
+	automation := []workerprocess.CommandEnvEntry{
+		{Name: "GIT_EDITOR", Value: "true"},
+		{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
+		{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
+		{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
+		{Name: "EDITOR", Value: "true"},
+		{Name: "VISUAL", Value: "true"},
+	}
+	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(overrides), automation)
+}
+
+func (*StructuredAdapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (adapter.Decoder, error) {
+	return newStructuredDecoder(input), nil
+}
+
+func (a *StructuredAdapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
+	return adapter.CapabilityResult{Capabilities: a.decision.Capabilities()}, nil
+}
+
+var _ adapter.Adapter = (*StructuredAdapter)(nil)
