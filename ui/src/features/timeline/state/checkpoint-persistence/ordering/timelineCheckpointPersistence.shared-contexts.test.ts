@@ -253,6 +253,33 @@ describe("timeline checkpoint shared IndexedDB invalidation settlement", () => {
     });
     expect(fixture.controls.closedDatabaseCount()).toBe(1);
   });
+
+  it("keeps durable records when the concrete-session record scan fails", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const sessionAStorageKey = streamDerivedCheckpointStorageKey(IDENTITY_A);
+    fixture.records.set(sessionAStorageKey, {
+      checkpoint: checkpoint(80, "current-event", 80),
+      schemaVersion: 4,
+      storageKey: sessionAStorageKey,
+      streamIdentity: IDENTITY_A,
+    });
+
+    const clearA = clearTimelineCheckpointsForSession(
+      fixture.createIndexedDBContext(),
+      SESSION_A,
+    );
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.fail("getAll", new Error("record scan failed"));
+    fixture.controls.failTransaction(new Error("transaction failed"));
+    await clearA;
+
+    expect(fixture.records.get(sessionAStorageKey)).toMatchObject({
+      checkpoint: { afterEventId: "current-event" },
+    });
+    expect(fixture.controls.closedDatabaseCount()).toBe(1);
+  });
 });
 
 describe("timeline checkpoint shared IndexedDB invalidation", () => {
