@@ -79,7 +79,12 @@ type lifecycleOrder struct {
 }
 
 func (o *lifecycleOrder) wrap(name string, lifecycle Lifecycle) Lifecycle {
-	return &recordingProductionLifecycle{order: o, name: name, lifecycle: lifecycle}
+	recording := &recordingProductionLifecycle{order: o, name: name, lifecycle: lifecycle}
+	waiter, ok := lifecycle.(interface{ Wait(context.Context) error })
+	if !ok {
+		return recording
+	}
+	return &recordingWaitableProductionLifecycle{recordingProductionLifecycle: recording, waiter: waiter}
 }
 
 type recordingProductionLifecycle struct {
@@ -102,12 +107,13 @@ func (l *recordingProductionLifecycle) Stop(ctx context.Context) error {
 	return l.lifecycle.Stop(ctx)
 }
 
-func (l *recordingProductionLifecycle) Wait(ctx context.Context) error {
-	waiter, ok := l.lifecycle.(interface{ Wait(context.Context) error })
-	if !ok {
-		return errors.New("recorded lifecycle is not waitable")
-	}
-	return waiter.Wait(ctx)
+type recordingWaitableProductionLifecycle struct {
+	*recordingProductionLifecycle
+	waiter interface{ Wait(context.Context) error }
+}
+
+func (l *recordingWaitableProductionLifecycle) Wait(ctx context.Context) error {
+	return l.waiter.Wait(ctx)
 }
 
 func (o *lifecycleOrder) started() []string {

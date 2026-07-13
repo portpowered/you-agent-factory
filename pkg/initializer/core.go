@@ -1,10 +1,12 @@
 package initializer
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -154,6 +156,10 @@ type Application struct {
 	selected  []namedLifecycle
 	started   []namedLifecycle
 	primary   namedLifecycle
+	operation sync.Mutex
+	runCtx    context.Context
+	cancelRun context.CancelFunc
+	stopped   bool
 	startOnce sync.Once
 	startErr  error
 	stopOnce  sync.Once
@@ -216,33 +222,25 @@ func (a *Application) Run(ctx context.Context) error {
 	if err := a.start(ctx); err != nil {
 		return err
 	}
-	waiter, ok := a.primary.lifecycle.(waitableLifecycle)
-	if !ok {
-		return fmt.Errorf("run application: %s lifecycle is not waitable", a.primary.name)
-	}
-	runErr := waiter.Wait(ctx)
-	shutdownErr := a.Shutdown(context.WithoutCancel(ctx))
-	if errors.Is(runErr, context.Canceled) && ctx.Err() != nil {
-		runErr = nil
-	}
-	if runErr != nil {
-		runErr = fmt.Errorf("run %s: %w", a.primary.name, runErr)
-	}
-	if shutdownErr != nil {
-		shutdownErr = fmt.Errorf("shutdown application: %w", shutdownErr)
-	}
-	return errors.Join(runErr, shutdownErr)
+	return a.waitForTermination()
 }
 
 func (a *Application) start(ctx context.Context) error {
 	a.startOnce.Do(func() {
+		a.operation.Lock()
+		defer a.operation.Unlock()
+		if a.stopped {
+			a.startErr = fmt.Errorf("initialize application: process mode %q was already shut down", a.mode)
+			return
+		}
+		a.runCtx, a.cancelRun = context.WithCancel(ctx)
 		for _, component := range a.selected {
-			if err := ctx.Err(); err != nil {
-				a.startErr = a.failStart(ctx, component.name, err)
+			if err := a.runCtx.Err(); err != nil {
+				a.startErr = a.failStartLocked(ctx, component.name, err)
 				return
 			}
-			if err := component.lifecycle.Start(ctx); err != nil {
-				a.startErr = a.failStart(ctx, component.name, err)
+			if err := component.lifecycle.Start(a.runCtx); err != nil {
+				a.startErr = a.failStartLocked(ctx, component.name, err)
 				return
 			}
 			a.started = append(a.started, component)
@@ -277,28 +275,38 @@ func (a *Application) Shutdown(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	a.stopOnce.Do(func() { a.stopError = a.shutdown(ctx) })
+	a.operation.Lock()
+	defer a.operation.Unlock()
+	a.stopOnce.Do(func() { a.stopError = a.shutdownLocked(ctx) })
 	return a.stopError
 }
 
-func (a *Application) failStart(ctx context.Context, name string, startErr error) error {
+func (a *Application) failStartLocked(ctx context.Context, name string, startErr error) error {
 	startupErr := fmt.Errorf(
 		"initialize application: process mode %q start %s: %w",
 		a.mode,
 		name,
 		startErr,
 	)
-	if cleanupErr := a.Shutdown(context.WithoutCancel(ctx)); cleanupErr != nil {
+	a.stopOnce.Do(func() { a.stopError = a.shutdownLocked(context.WithoutCancel(ctx)) })
+	if cleanupErr := a.stopError; cleanupErr != nil {
 		return errors.Join(startupErr, fmt.Errorf("unwind application startup: %w", cleanupErr))
 	}
 	return startupErr
 }
 
-func (a *Application) shutdown(ctx context.Context) error {
+func (a *Application) shutdownLocked(ctx context.Context) error {
+	a.stopped = true
+	if a.cancelRun != nil {
+		a.cancelRun()
+	}
 	var result error
 	for index := len(a.started) - 1; index >= 0; index-- {
 		component := a.started[index]
 		if err := component.lifecycle.Stop(ctx); err != nil {
+			if isCancellation(err) && a.runCtx != nil && a.runCtx.Err() != nil {
+				continue
+			}
 			result = errors.Join(result, fmt.Errorf("stop %s: %w", component.name, err))
 		}
 	}
@@ -306,6 +314,72 @@ func (a *Application) shutdown(ctx context.Context) error {
 		result = errors.Join(result, fmt.Errorf("close application graph: %w", err))
 	}
 	return result
+}
+
+type lifecycleResult struct {
+	index int
+	name  string
+	err   error
+}
+
+// waitForTermination observes every join-capable component. The first terminal
+// exit begins shutdown, but errors are reported in lifecycle-plan order so
+// goroutine scheduling cannot change the process result.
+func (a *Application) waitForTermination() error {
+	results := make(chan lifecycleResult, len(a.started))
+	waiterCount := 0
+	for index, component := range a.started {
+		waiter, ok := component.lifecycle.(waitableLifecycle)
+		if !ok {
+			continue
+		}
+		waiterCount++
+		go func(index int, component namedLifecycle, waiter waitableLifecycle) {
+			results <- lifecycleResult{index: index, name: component.name, err: waiter.Wait(context.Background())}
+		}(index, component, waiter)
+	}
+
+	collected := make([]lifecycleResult, 0, waiterCount)
+	waitResults := 0
+	select {
+	case result := <-results:
+		collected = append(collected, result)
+		waitResults++
+	case <-a.runCtx.Done():
+	}
+	if a.cancelRun != nil {
+		a.cancelRun()
+	}
+	shutdownErr := a.Shutdown(context.Background())
+	for waitResults < waiterCount {
+		collected = append(collected, <-results)
+		waitResults++
+	}
+	if shutdownErr != nil {
+		collected = append(collected, lifecycleResult{
+			index: len(a.started), name: "shutdown", err: fmt.Errorf("shutdown application: %w", shutdownErr),
+		})
+	}
+
+	slices.SortFunc(collected, func(left, right lifecycleResult) int {
+		return cmp.Compare(left.index, right.index)
+	})
+	var result error
+	for _, lifecycleResult := range collected {
+		if lifecycleResult.err == nil || isCancellation(lifecycleResult.err) {
+			continue
+		}
+		if lifecycleResult.name == "shutdown" {
+			result = errors.Join(result, lifecycleResult.err)
+			continue
+		}
+		result = errors.Join(result, fmt.Errorf("run %s: %w", lifecycleResult.name, lifecycleResult.err))
+	}
+	return result
+}
+
+func isCancellation(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func lifecyclesForMode(mode Mode, lifecycles ApplicationLifecycles) ([]namedLifecycle, error) {

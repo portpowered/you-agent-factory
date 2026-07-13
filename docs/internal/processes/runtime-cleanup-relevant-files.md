@@ -48,6 +48,15 @@ receive no start, wait, or stop calls. The selected foreground transport must be
 joinable so initializer can validate complete lifecycle ownership before any
 component starts.
 
+One initializer run derives a single child context for every selected lifecycle.
+It observes every started lifecycle that supports `Wait`, not only the foreground
+transport; any terminal exit cancels that shared context before reverse-order
+stops begin. `Stop` remains responsible for joining component-owned work, and
+initializer also drains every lifecycle wait before returning. Cancellation and
+deadline exits are normal shutdown outcomes. When multiple components return
+non-cancellation failures, report them in declared lifecycle-plan order rather
+than arrival order so goroutine scheduling cannot change terminal precedence.
+
 The production `you mcp serve` branch follows the same ownership path even
 though it does not activate run sidecars. Resolve the selected fixture-backed
 or runtime-backed durable execution service before startup, retain that exact

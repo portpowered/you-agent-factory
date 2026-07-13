@@ -570,10 +570,47 @@ func TestApplicationStartFailureUnwindsActivatedEdges(t *testing.T) {
 			if test.rollbackAt != "" && (!errors.Is(err, rollbackErr) || !strings.Contains(err.Error(), "unwind application startup")) {
 				t.Fatalf("Start() error = %q, want primary and rollback failure context", err)
 			}
-			if got := recorder.snapshot(); !reflect.DeepEqual(got, test.wantEvents) {
+			got := recorder.snapshot()
+			if test.name != "final start with rollback failure" && !reflect.DeepEqual(got, test.wantEvents) {
 				t.Fatalf("lifecycle events = %v, want %v", got, test.wantEvents)
 			}
+			if test.name == "final start with rollback failure" {
+				assertTransactionalUnwind(t, got)
+			}
 		})
+	}
+}
+
+func assertTransactionalUnwind(t *testing.T, events []string) {
+	t.Helper()
+	filter := func(prefix string) []string {
+		var filtered []string
+		for _, event := range events {
+			if strings.HasPrefix(event, prefix) {
+				filtered = append(filtered, event)
+			}
+		}
+		return filtered
+	}
+	if got, want := filter("start "), []string{"start runtime", "start workers", "start dashboard", "start cli"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("start events = %v, want %v", got, want)
+	}
+	if got, want := filter("stop "), []string{"stop dashboard", "stop workers", "stop runtime"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("stop events = %v, want %v", got, want)
+	}
+	for _, name := range []string{"runtime", "workers", "dashboard"} {
+		got := 0
+		for _, event := range events {
+			if event == "join "+name {
+				got++
+			}
+		}
+		if got != 1 {
+			t.Fatalf("join %s count = %d, want one in %v", name, got, events)
+		}
+	}
+	if events[len(events)-1] != "close graph" {
+		t.Fatalf("last lifecycle event = %q, want graph close", events[len(events)-1])
 	}
 }
 
