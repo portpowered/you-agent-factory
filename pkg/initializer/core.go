@@ -155,7 +155,6 @@ type Application struct {
 	graph     ApplicationGraph
 	selected  []namedLifecycle
 	started   []namedLifecycle
-	primary   namedLifecycle
 	operation sync.Mutex
 	runCtx    context.Context
 	cancelRun context.CancelFunc
@@ -188,7 +187,7 @@ func NewApplication(mode Mode, graph ApplicationGraph) (*Application, error) {
 			primary.name,
 		)
 	}
-	return &Application{mode: mode, graph: graph, selected: selected, primary: primary}, nil
+	return &Application{mode: mode, graph: graph, selected: selected}, nil
 }
 
 // Start activates the selected mode immediately for compatibility callers.
@@ -210,8 +209,8 @@ type waitableLifecycle interface {
 	Wait(context.Context) error
 }
 
-// Run starts the selected graph edges, waits for the primary transport, and
-// performs the same idempotent shutdown used by explicit process teardown.
+// Run starts the selected graph edges, observes all join-capable components,
+// and performs the same idempotent shutdown used by explicit process teardown.
 func (a *Application) Run(ctx context.Context) error {
 	if a == nil {
 		return nil

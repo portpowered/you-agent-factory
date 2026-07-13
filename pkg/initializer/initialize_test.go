@@ -571,13 +571,35 @@ func TestApplicationStartFailureUnwindsActivatedEdges(t *testing.T) {
 				t.Fatalf("Start() error = %q, want primary and rollback failure context", err)
 			}
 			got := recorder.snapshot()
-			if test.name != "final start with rollback failure" && !reflect.DeepEqual(got, test.wantEvents) {
+			if test.name == "first start" && !reflect.DeepEqual(got, test.wantEvents) {
 				t.Fatalf("lifecycle events = %v, want %v", got, test.wantEvents)
+			}
+			if test.name == "middle start" {
+				assertMiddleStartUnwind(t, got)
 			}
 			if test.name == "final start with rollback failure" {
 				assertTransactionalUnwind(t, got)
 			}
 		})
+	}
+}
+
+func assertMiddleStartUnwind(t *testing.T, events []string) {
+	t.Helper()
+	withoutJoin := make([]string, 0, len(events)-1)
+	joinCount := 0
+	for _, event := range events {
+		if event == "join runtime" {
+			joinCount++
+			continue
+		}
+		withoutJoin = append(withoutJoin, event)
+	}
+	wantWithoutJoin := []string{
+		"start runtime", "start workers", "stop runtime", "cancel runtime", "close graph",
+	}
+	if joinCount != 1 || !reflect.DeepEqual(withoutJoin, wantWithoutJoin) {
+		t.Fatalf("lifecycle events = %v, want one runtime join and ordered synchronous events %v", events, wantWithoutJoin)
 	}
 }
 
