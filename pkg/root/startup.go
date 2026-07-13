@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 )
 
@@ -59,8 +60,9 @@ type Initializer interface {
 // Dependencies are the only construction and lifecycle capabilities retained
 // by the process root.
 type Dependencies struct {
-	GraphBuilder GraphBuilder
-	Initializer  Initializer
+	GraphBuilder          GraphBuilder
+	Initializer           Initializer
+	FactoryServiceBuilder runcli.FactoryServiceBuilder
 }
 
 func executeStartup(ctx context.Context, request startupcli.Request, dependencies Dependencies) error {

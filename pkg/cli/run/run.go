@@ -181,7 +181,7 @@ type cleanInvocationWorkTarget struct {
 type FactoryServiceBuilder func(
 	context.Context,
 	*service.FactoryServiceConfig,
-) (factoryServiceRunner, error)
+) (RuntimeRunner, error)
 
 // FactoryServiceBuildFunc constructs *service.FactoryService for registration
 // from cmd/ when the builder is defined outside pkg/cli/run.
@@ -208,8 +208,8 @@ func defaultBuildFactoryService(
 var buildFactoryService FactoryServiceBuilder = defaultBuildFactoryService
 
 // SetBuildFactoryService registers the factory service builder used by Run.
-// cmd/factory/main should call this before cli.Execute. Tests may assign
-// buildFactoryService directly without calling SetBuildFactoryService.
+// Legacy callers may use this compatibility hook; process-root executions use
+// RunWithFactoryServiceBuilder so construction stays invocation-scoped.
 func SetBuildFactoryService(builder FactoryServiceBuilder) {
 	if builder == nil {
 		buildFactoryService = defaultBuildFactoryService
@@ -363,6 +363,16 @@ func (r *reservedAPIServerListener) CloseIfUnused() error {
 // FactoryService. The CLI is a thin wrapper — all orchestration logic
 // (file watcher, dashboard, API server, engine) lives in the service layer.
 func Run(ctx context.Context, cfg RunConfig) error {
+	return runWithFactoryServiceBuilder(ctx, cfg, nil)
+}
+
+// RunWithFactoryServiceBuilder executes a local run with an explicit,
+// invocation-scoped construction boundary.
+func RunWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) error {
+	return runWithFactoryServiceBuilder(ctx, cfg, builder)
+}
+
+func runWithFactoryServiceBuilder(ctx context.Context, cfg RunConfig, builder FactoryServiceBuilder) error {
 	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
@@ -406,7 +416,10 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	var dashboardReadyOnce sync.Once
 	svcCfg := buildRunServiceConfig(cfg, logger, mockWorkersConfig, reservedAPIServer, dashboardReady, &dashboardReadyOnce)
 
-	factorySvc, err := buildFactoryService(ctx, svcCfg)
+	if builder == nil {
+		builder = buildFactoryService
+	}
+	factorySvc, err := builder(ctx, svcCfg)
 	if err != nil {
 		return err
 	}
@@ -531,24 +544,24 @@ func buildRunServiceConfig(
 		apiServerReady = dashboardReady
 	}
 	svcCfg := &service.FactoryServiceConfig{
-		Dir:                       cfg.Dir,
-		RunnerID:                  cfg.RunnerID,
-		OperatorDefaults:          cfg.OperatorDefaults,
-		ExecutionBaseDir:          cfg.ExecutionBaseDir,
-		RuntimeMode:               runtimeModeForRun(cfg),
-		Port:                      cfg.Port,
-		Logger:                    logger,
-		Verbose:                   cfg.Verbose,
-		WorkFile:                  cfg.WorkFile,
-		RecordPath:                cfg.RecordPath,
-		ReplayPath:                cfg.ReplayPath,
-		RuntimeLogDir:             cfg.RuntimeLogDir,
-		RuntimeLogConfig:          cfg.RuntimeLogConfig,
-		RuntimeMetricsDir:         cfg.RuntimeMetricsDir,
-		RuntimeMetricsConfig:      cfg.RuntimeMetricsConfig,
-		WorkflowID:                cfg.Workflow,
-		MockWorkersConfig:         mockWorkersConfig,
-		APIServerStarter:          runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
+		Dir:                               cfg.Dir,
+		RunnerID:                          cfg.RunnerID,
+		OperatorDefaults:                  cfg.OperatorDefaults,
+		ExecutionBaseDir:                  cfg.ExecutionBaseDir,
+		RuntimeMode:                       runtimeModeForRun(cfg),
+		Port:                              cfg.Port,
+		Logger:                            logger,
+		Verbose:                           cfg.Verbose,
+		WorkFile:                          cfg.WorkFile,
+		RecordPath:                        cfg.RecordPath,
+		ReplayPath:                        cfg.ReplayPath,
+		RuntimeLogDir:                     cfg.RuntimeLogDir,
+		RuntimeLogConfig:                  cfg.RuntimeLogConfig,
+		RuntimeMetricsDir:                 cfg.RuntimeMetricsDir,
+		RuntimeMetricsConfig:              cfg.RuntimeMetricsConfig,
+		WorkflowID:                        cfg.Workflow,
+		MockWorkersConfig:                 mockWorkersConfig,
+		APIServerStarter:                  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
 		InvocationMetricsRecorder:         cfg.InvocationMetricsRecorder,
 		InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
 		APIServerReady:                    apiServerReady,

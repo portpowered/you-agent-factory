@@ -83,9 +83,10 @@ type cliOperatorDefaultsOptions struct {
 // RootCommandOptions supplies process-owned values used while executing a
 // command. Zero values preserve the legacy process environment behavior.
 type RootCommandOptions struct {
-	HomeDir   func() (string, error)
-	LookupEnv func(string) (string, bool)
-	Startup   startupcli.Handler
+	HomeDir    func() (string, error)
+	LookupEnv  func(string) (string, bool)
+	Startup    startupcli.Handler
+	RunFactory func(context.Context, runcli.RunConfig) error
 }
 
 func NewRootCommand() *cobra.Command {
@@ -169,6 +170,11 @@ func normalizeRootCommandOptions(options RootCommandOptions) RootCommandOptions 
 	}
 	if options.LookupEnv == nil {
 		options.LookupEnv = os.LookupEnv
+	}
+	if options.RunFactory == nil {
+		options.RunFactory = func(ctx context.Context, cfg runcli.RunConfig) error {
+			return runCLI(ctx, cfg)
+		}
 	}
 	return options
 }
@@ -369,13 +375,6 @@ func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	return docsCmd
 }
 
-// Execute runs the root command.
-func Execute() {
-	if err := NewRootCommand().Execute(); err != nil {
-		os.Exit(1)
-	}
-}
-
 func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := initcmd.InitConfig{
 		Dir:      defaultcmd.FactoryDir,
@@ -467,7 +466,6 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	}
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
-
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
 
@@ -484,12 +482,12 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	}()
 
 	if rootOptions.Startup == nil {
-		return runCLI(ctx, cfg)
+		return rootOptions.RunFactory(ctx, cfg)
 	}
-	return delegateRunStartup(ctx, cfg, defaultInvocation, rootOptions.Startup)
+	return delegateRunStartup(ctx, cfg, defaultInvocation, rootOptions)
 }
 
-func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, startup startupcli.Handler) error {
+func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options RootCommandOptions) error {
 	request := startupcli.Request{
 		Kind: startupcli.KindRun,
 		Run: startupcli.RunIntent{
@@ -501,11 +499,11 @@ func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvoca
 		},
 		Construct: func(context.Context) (startupcli.Lifecycle, error) {
 			return startupcli.LifecycleFunc(func(runCtx context.Context) error {
-				return runCLI(runCtx, cfg)
+				return options.RunFactory(runCtx, cfg)
 			}), nil
 		},
 	}
-	return startup(ctx, request)
+	return options.Startup(ctx, request)
 }
 
 func resolveEffectiveRunPolicy(cmd *cobra.Command, cfg runcli.RunConfig, basePolicy terminalpolicy.Policy) terminalpolicy.Policy {
