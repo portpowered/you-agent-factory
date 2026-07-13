@@ -604,6 +604,140 @@ func TestRuntimeVisitCountRoutesSharedTraceSiblingsIndependentlyAtThreshold(t *t
 	assertReviewDispatch(t, independent, maxReviews, "work-unaffected")
 }
 
+func TestRuntimeVisitCountReplayPreservesSharedTraceSiblingRouting(t *testing.T) {
+	const maxReviews = 3
+	live := runVisitCountSiblingIsolationScenario(t, maxReviews)
+	replayed := replayVisitCountSiblingIsolationScenario(t, maxReviews, runtimeGeneratedEvents(t, live))
+
+	liveSnapshot := runtimeSnapshot(t, live)
+	replaySnapshot := runtimeSnapshot(t, replayed)
+	assertWorkVisitState(t, replaySnapshot, "work-repeated", "task:failed", maxReviews)
+	assertWorkVisitState(t, replaySnapshot, "work-unaffected", "task:review", 1)
+	if len(replaySnapshot.DispatchHistory) != len(liveSnapshot.DispatchHistory) {
+		t.Fatalf("replayed dispatch count = %d, want live count %d", len(replaySnapshot.DispatchHistory), len(liveSnapshot.DispatchHistory))
+	}
+	for index := range liveSnapshot.DispatchHistory {
+		liveDispatch := liveSnapshot.DispatchHistory[index]
+		replayDispatch := replaySnapshot.DispatchHistory[index]
+		if liveDispatch.TransitionID != replayDispatch.TransitionID {
+			t.Fatalf("replayed dispatch[%d] transition = %q, want live %q", index, replayDispatch.TransitionID, liveDispatch.TransitionID)
+		}
+		assertReviewDispatch(t, replaySnapshot, index, workIDForCompletedDispatch(t, liveDispatch))
+	}
+}
+
+func runVisitCountSiblingIsolationScenario(t *testing.T, maxReviews int) factory.Factory {
+	t.Helper()
+	f, err := New(
+		factory.WithNet(buildVisitCountSiblingIsolationNet(maxReviews)),
+		factory.WithServiceMode(),
+		factory.WithWorkerExecutor("mock", &passExecutor{}),
+		factory.WithCompletionDeliveryPlanner(nextTickCompletionPlanner{}),
+		factory.WithLogger(logging.NoopLogger{}),
+	)
+	if err != nil {
+		t.Fatalf("New live factory: %v", err)
+	}
+
+	ctx := context.Background()
+	if _, err := submitWorkRequests(ctx, f, sharedTraceSiblingSubmissions("trace-shared-siblings-replay")); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	tickable := tickableFactory(t, f)
+	for completedReviews := 1; completedReviews <= maxReviews; completedReviews++ {
+		for phase := 0; phase < 2; phase++ {
+			if err := tickable.Tick(ctx); err != nil {
+				t.Fatalf("Tick live review cycle %d phase %d: %v", completedReviews, phase+1, err)
+			}
+		}
+		snapshot := runtimeSnapshot(t, f)
+		assertWorkVisitState(t, snapshot, "work-repeated", "task:review", completedReviews)
+		assertWorkVisitState(t, snapshot, "work-unaffected", "task:held", 0)
+	}
+	if err := tickable.Tick(ctx); err != nil {
+		t.Fatalf("Tick live loop breaker: %v", err)
+	}
+	if _, err := f.MoveWork(ctx, "work-unaffected", "review", interfaces.WorkStateChangeSourceCLI, ""); err != nil {
+		t.Fatalf("MoveWork live unaffected sibling: %v", err)
+	}
+	for phase := 0; phase < 2; phase++ {
+		if err := tickable.Tick(ctx); err != nil {
+			t.Fatalf("Tick live unaffected sibling phase %d: %v", phase+1, err)
+		}
+	}
+	return f
+}
+
+func replayVisitCountSiblingIsolationScenario(t *testing.T, maxReviews int, events []factoryapi.FactoryEvent) factory.Factory {
+	t.Helper()
+	artifact := &interfaces.ReplayArtifact{
+		SchemaVersion: replay.CurrentSchemaVersion,
+		RecordedAt:    time.Date(2026, time.July, 13, 0, 0, 0, 0, time.UTC),
+		Events:        append([]factoryapi.FactoryEvent(nil), events...),
+	}
+	submissions, err := replay.NewSubmissionHook(artifact)
+	if err != nil {
+		t.Fatalf("NewSubmissionHook: %v", err)
+	}
+	workMoves, err := replay.NewWorkStateChangeHook(artifact)
+	if err != nil {
+		t.Fatalf("NewWorkStateChangeHook: %v", err)
+	}
+	completions, err := replay.NewCompletionDeliveryPlan(artifact)
+	if err != nil {
+		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
+	}
+
+	f, err := New(
+		factory.WithNet(buildVisitCountSiblingIsolationNet(maxReviews)),
+		factory.WithServiceMode(),
+		factory.WithWorkerExecutor("mock", &passExecutor{}),
+		factory.WithSubmissionHook(submissions),
+		factory.WithSubmissionHook(workMoves),
+		factory.WithCompletionDeliveryPlanner(completions),
+		factory.WithLogger(logging.NoopLogger{}),
+	)
+	if err != nil {
+		t.Fatalf("New replay factory: %v", err)
+	}
+
+	tickable := tickableFactory(t, f)
+	completedReviews := 0
+	for attempt := 0; attempt < (maxReviews+1)*2+2; attempt++ {
+		if err := tickable.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick replay attempt %d: %v", attempt+1, err)
+		}
+		snapshot := runtimeSnapshot(t, f)
+		if len(snapshot.DispatchHistory) > completedReviews && len(snapshot.DispatchHistory) <= maxReviews {
+			completedReviews = len(snapshot.DispatchHistory)
+			assertWorkVisitState(t, snapshot, "work-repeated", "task:review", completedReviews)
+			assertWorkVisitState(t, snapshot, "work-unaffected", "task:held", 0)
+		}
+		if len(snapshot.DispatchHistory) == maxReviews+1 {
+			return f
+		}
+	}
+	t.Fatalf("replay did not complete %d repeated reviews and one unaffected review", maxReviews)
+	return nil
+}
+
+type nextTickCompletionPlanner struct{}
+
+func (nextTickCompletionPlanner) DeliveryTickForDispatch(dispatch interfaces.WorkDispatch) (int, bool, error) {
+	return dispatch.Execution.DispatchCreatedTick + 1, true, nil
+}
+
+func workIDForCompletedDispatch(t *testing.T, dispatch interfaces.CompletedDispatch) string {
+	t.Helper()
+	for _, token := range dispatch.ConsumedTokens {
+		if token.Color.DataType != interfaces.DataTypeResource && token.Color.WorkID != "" {
+			return token.Color.WorkID
+		}
+	}
+	t.Fatalf("completed dispatch %q has no work input", dispatch.DispatchID)
+	return ""
+}
+
 func buildVisitCountSiblingIsolationNet(maxReviews int) *state.Net {
 	workType := &state.WorkType{
 		ID:   "task",
