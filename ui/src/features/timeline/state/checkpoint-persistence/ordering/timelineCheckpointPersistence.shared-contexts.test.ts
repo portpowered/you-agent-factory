@@ -197,6 +197,64 @@ describe("timeline checkpoint shared IndexedDB session isolation", () => {
 
 });
 
+describe("timeline checkpoint shared IndexedDB invalidation settlement", () => {
+  it("settles a concrete-session clear with no matching records without deleting another session", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const sessionBStorageKey = streamDerivedCheckpointStorageKey(IDENTITY_B);
+    fixture.records.set(sessionBStorageKey, {
+      checkpoint: checkpoint(90, "session-b-event", 90, IDENTITY_B),
+      schemaVersion: 4,
+      storageKey: sessionBStorageKey,
+      streamIdentity: IDENTITY_B,
+    });
+
+    const clearA = clearTimelineCheckpointsForSession(
+      fixture.createIndexedDBContext(),
+      SESSION_A,
+    );
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("getAll");
+    await clearA;
+    fixture.controls.completeTransaction();
+
+    expect(fixture.records.get(sessionBStorageKey)).toMatchObject({
+      checkpoint: { afterEventId: "session-b-event" },
+    });
+    expect(fixture.controls.closedDatabaseCount()).toBe(1);
+  });
+
+  it("keeps durable records when a concrete-session clear is aborted before its read settles", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const sessionAStorageKey = streamDerivedCheckpointStorageKey(IDENTITY_A);
+    fixture.records.set(sessionAStorageKey, {
+      checkpoint: checkpoint(80, "current-event", 80),
+      schemaVersion: 4,
+      storageKey: sessionAStorageKey,
+      streamIdentity: IDENTITY_A,
+    });
+    const controller = new AbortController();
+
+    const clearA = clearTimelineCheckpointsForSession(
+      fixture.createIndexedDBContext(),
+      SESSION_A,
+      { signal: controller.signal },
+    );
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    controller.abort();
+    fixture.controls.abortTransaction(new Error("clear aborted"));
+    await clearA;
+
+    expect(fixture.records.get(sessionAStorageKey)).toMatchObject({
+      checkpoint: { afterEventId: "current-event" },
+    });
+    expect(fixture.controls.closedDatabaseCount()).toBe(1);
+  });
+});
+
 describe("timeline checkpoint shared IndexedDB invalidation", () => {
   it("isolates stale-generation mutation and exact concrete-session clearing", async () => {
     const fixture =
