@@ -113,6 +113,19 @@ var canonicalFactoryResponseEventPayloadSchemaNames = []string{
 	"FactoryResponseEventStreamGapPayload",
 }
 
+var factoryResponseEventKindPayloadSchemaNames = map[string]string{
+	"SESSION":     "FactoryResponseEventSessionPayload",
+	"RUN":         "FactoryResponseEventRunPayload",
+	"TURN":        "FactoryResponseEventTurnPayload",
+	"REASONING":   "FactoryResponseEventReasoningPayload",
+	"FILE_CHANGE": "FactoryResponseEventFileChangePayload",
+	"PLAN":        "FactoryResponseEventPlanPayload",
+	"PROGRESS":    "FactoryResponseEventProgressPayload",
+	"USAGE":       "FactoryResponseEventUsagePayload",
+	"ERROR":       "FactoryResponseEventErrorPayload",
+	"STREAM_GAP":  "FactoryResponseEventStreamGapPayload",
+}
+
 func TestOpenAPIContract_DefinesFactoryResponseEventSchemas(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	schemas := componentSchemas(t, doc)
@@ -450,45 +463,24 @@ func loadResponseEventContentBlockCoverageFixture(t *testing.T) map[string]any {
 func inferFactoryResponseEventPayloadSchemaName(event map[string]any) (string, bool) {
 	kind, _ := event["kind"].(string)
 	phase, _ := event["phase"].(string)
-	payload, ok := event["payload"].(map[string]any)
-	if !ok {
+	if _, ok := event["payload"].(map[string]any); !ok {
 		return "", false
 	}
 
 	switch kind {
-	case "SESSION":
-		return "FactoryResponseEventSessionPayload", true
-	case "RUN":
-		return "FactoryResponseEventRunPayload", true
-	case "TURN":
-		return "FactoryResponseEventTurnPayload", true
 	case "MESSAGE":
 		if phase == "DELTA" {
 			return "FactoryResponseEventMessageDeltaPayload", true
 		}
 		return "FactoryResponseEventMessagePayload", true
-	case "REASONING":
-		return "FactoryResponseEventReasoningPayload", true
 	case "TOOL":
 		if phase == "DELTA" {
 			return "FactoryResponseEventToolDeltaPayload", true
 		}
 		return "FactoryResponseEventToolPayload", true
-	case "FILE_CHANGE":
-		return "FactoryResponseEventFileChangePayload", true
-	case "PLAN":
-		return "FactoryResponseEventPlanPayload", true
-	case "PROGRESS":
-		return "FactoryResponseEventProgressPayload", true
-	case "USAGE":
-		return "FactoryResponseEventUsagePayload", true
-	case "ERROR":
-		return "FactoryResponseEventErrorPayload", true
-	case "STREAM_GAP":
-		return "FactoryResponseEventStreamGapPayload", true
 	default:
-		_ = payload
-		return "", false
+		schemaName, ok := factoryResponseEventKindPayloadSchemaNames[kind]
+		return schemaName, ok
 	}
 }
 
