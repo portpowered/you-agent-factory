@@ -687,9 +687,9 @@ func (r *humanResponseStreamRenderer) emitTerminalBacklogNoticeLocked() {
 // jsonResponseStreamRenderer emits canonical response-event NDJSON followed by
 // the shared invocation response.
 type jsonResponseStreamRenderer struct {
-	mu       sync.Mutex
-	output   io.Writer
-	progress *responseStreamProgressWriter
+	mu           sync.Mutex
+	writer       *canonicalResponseStreamWriter
+	finalWritten bool
 }
 
 func newJSONResponseStreamRenderer(output io.Writer) *jsonResponseStreamRenderer {
@@ -697,8 +697,7 @@ func newJSONResponseStreamRenderer(output io.Writer) *jsonResponseStreamRenderer
 		output = os.Stdout
 	}
 	return &jsonResponseStreamRenderer{
-		output:   output,
-		progress: newResponseStreamProgressWriter(output),
+		writer: newCanonicalResponseStreamWriter(output),
 	}
 }
 
@@ -706,7 +705,7 @@ func (r *jsonResponseStreamRenderer) stopProgressRendering() {
 	if r == nil {
 		return
 	}
-	r.progress.stopAndDrain()
+	_ = r.writer.closeAndDrain()
 }
 
 func (r *jsonResponseStreamRenderer) onResponseEvents(events []responseevents.FactoryResponseEvent) {
@@ -727,13 +726,23 @@ func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
-	r.stopProgressRendering()
-	r.progress.acquireOutputExclusive()
-	defer r.progress.releaseOutputExclusive()
-	return r.writeRecord(responseStreamJSONInvocationResultRecord{
+	r.mu.Lock()
+	if r.finalWritten {
+		r.mu.Unlock()
+		return fmt.Errorf("response-stream invocation result already written")
+	}
+	err := r.writeRecordLocked(responseStreamJSONInvocationResultRecord{
 		RecordType: responseStreamJSONRecordInvocationResult,
 		Invocation: apisurface.InvocationResponseFromResult(result),
 	})
+	if err == nil {
+		r.finalWritten = true
+	}
+	r.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return r.writer.closeAndDrain()
 }
 
 func (r *jsonResponseStreamRenderer) writeRecord(record any) error {
@@ -747,25 +756,7 @@ func (r *jsonResponseStreamRenderer) writeRecordLocked(record any) error {
 	if err != nil {
 		return fmt.Errorf("marshal response-stream JSON record: %w", err)
 	}
-	if recordTypeOf(record) == responseStreamJSONRecordInvocationResult {
-		_, err = fmt.Fprintln(r.output, string(encoded))
-		return err
-	}
-	if !r.progress.enqueue(encoded) {
-		return nil
-	}
-	return nil
-}
-
-func recordTypeOf(record any) string {
-	switch typed := record.(type) {
-	case responseStreamJSONResponseEventRecord:
-		return typed.RecordType
-	case responseStreamJSONInvocationResultRecord:
-		return typed.RecordType
-	default:
-		return ""
-	}
+	return r.writer.enqueue(encoded)
 }
 
 type responseStreamJSONResponseEventRecord struct {

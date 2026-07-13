@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -642,6 +643,112 @@ func TestJSONResponseStreamRenderer_EmitsCanonicalResponseEventsAndInvocationRes
 	}
 	if finalRecord.Invocation.RequestId != "req-1" {
 		t.Fatalf("invocation = %#v", finalRecord.Invocation)
+	}
+}
+
+func TestRun_FactoryInvocationResponseStreamJSONPreservesSlowWriterOrder(t *testing.T) {
+	preserveRunGlobals(t)
+
+	const eventCount = defaultResponseStreamProgressQueueCapacity + 4
+	text := "goal completed"
+	output := &gatedResponseStreamWriter{}
+	output.block()
+	eventsPublished := make(chan struct{})
+	attachable := newRecordingResponseEventAttachable()
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		return stubResponseEventInvocationService{
+			stubInvocationService: stubInvocationService{
+				run: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					select {
+					case <-attachable.subscribed:
+					case <-time.After(2 * time.Second):
+						return apisurface.FactoryInvocationResult{}, fmt.Errorf("canonical response-event subscription was not established")
+					}
+					if err := publishCanonicalResponseEventFixtures(attachable, eventCount); err != nil {
+						return apisurface.FactoryInvocationResult{}, err
+					}
+					close(eventsPublished)
+					return apisurface.FactoryInvocationResult{
+						RequestID: "req-slow-writer",
+						TraceID:   "trace-slow-writer",
+						Status:    factoryapi.InvocationTerminalStatusCompleted,
+						PrimaryResult: []interfaces.WorkContentPart{
+							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						},
+					}, nil
+				},
+			},
+			attachable: attachable,
+		}, nil
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(context.Background(), RunConfig{
+			FactoryConfigPath:        "/tmp/factory.json",
+			InvocationPositionalText: &text,
+			InvocationOutputMode:     InvocationOutputResponseStream,
+			JSONOutput:               true,
+			StdinIsTTY:               func() bool { return true },
+			Output:                   output,
+			Port:                     7437,
+		})
+	}()
+
+	select {
+	case <-eventsPublished:
+	case err := <-done:
+		t.Fatalf("Run completed before canonical events were published: %v", err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for canonical response events")
+	}
+	waitForBlockedStdoutWrites(t, output, 2*time.Second)
+	time.Sleep(responseStreamProgressDrainTimeout + 50*time.Millisecond)
+	select {
+	case err := <-done:
+		t.Fatalf("Run completed while stdout remained blocked: %v", err)
+	default:
+	}
+	output.release()
+	waitForResponseStreamRunCompletion(t, done, 2*time.Second)
+
+	assertSlowWriterCanonicalRecords(t, output.String(), eventCount)
+}
+
+func publishCanonicalResponseEventFixtures(attachable *recordingResponseEventAttachable, count int) error {
+	for index := 1; index <= count; index++ {
+		if err := attachable.publish(canonicalResponseEventFixture(int64(index), responseevents.KindMessage)); err != nil {
+			return fmt.Errorf("publish canonical response event %d: %w", index, err)
+		}
+	}
+	return nil
+}
+
+func assertSlowWriterCanonicalRecords(t *testing.T, output string, eventCount int) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != eventCount+1 {
+		t.Fatalf("NDJSON lines = %d, want %d lossless events plus final result", len(lines), eventCount+1)
+	}
+	for index := 0; index < eventCount; index++ {
+		var record responseStreamJSONResponseEventRecord
+		if err := json.Unmarshal([]byte(lines[index]), &record); err != nil {
+			t.Fatalf("decode response event line %d: %v", index, err)
+		}
+		if record.RecordType != responseStreamJSONRecordResponseEvent || record.Event.Sequence != int64(index+1) {
+			t.Fatalf("response event line %d = %#v", index, record)
+		}
+	}
+	var finalRecord responseStreamJSONInvocationResultRecord
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
+		t.Fatalf("decode final invocation result: %v", err)
+	}
+	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult || finalRecord.Invocation.RequestId != "req-slow-writer" {
+		t.Fatalf("final record = %#v", finalRecord)
 	}
 }
 

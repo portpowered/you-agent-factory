@@ -350,13 +350,13 @@ func runFactoryInvocation(
 	}
 
 	streamRenderer, stopStreamAttachment := startInvocationResponseStream(ctx, cfg, invoker)
+	if streamRenderer != nil {
+		defer streamRenderer.stopProgressRendering()
+	}
 
 	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
 	if stopStreamAttachment != nil {
 		stopStreamAttachment()
-	}
-	if streamRenderer != nil {
-		streamRenderer.stopProgressRendering()
 	}
 	if releaseErr := releaseInvocationSession(runCtx, invoker, factorysessions.DefaultSessionID); releaseErr != nil && err == nil {
 		err = releaseErr

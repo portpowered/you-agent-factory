@@ -168,7 +168,8 @@ primary-result behavior.
   select primary-result-only versus internal `SessionResponseStream` attachment
   for supported one-shot factory invocations; keep mode validation, unsupported
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
-  stream attachment and bounded async stdout draining in
+  stream attachment, bounded human-progress draining, and lossless canonical
+  JSON stdout ordering in
   `pkg/cli/run/invocation_observability.go`, human progress and canonical JSON rendering in
   `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
   `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
@@ -180,7 +181,9 @@ primary-result behavior.
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields. JSON mode subscribes from the latest session-owned canonical response
-  event, emits only `response_event` records, and ends with `invocation_result`.
+  event, emits only `response_event` records, and sends every event plus the
+  final `invocation_result` through one lossless ordered writer. Do not reuse the
+  human progress queue's drop or drain-timeout policy for canonical JSON records.
   Human-only suppression helpers:
   `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
   `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop

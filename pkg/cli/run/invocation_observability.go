@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -622,6 +623,112 @@ func (w *responseStreamProgressWriter) writeOutputLine(line []byte) bool {
 	}
 	_, _ = w.output.Write(line)
 	return !w.drainAbandoned()
+}
+
+// canonicalResponseStreamWriter owns every JSON response-stream stdout write.
+// Its in-memory queue is intentionally lossless: canonical response events may
+// outpace a slow consumer, but they must remain ordered ahead of the terminal
+// invocation result instead of inheriting the human progress drop policy.
+type canonicalResponseStreamWriter struct {
+	mu       sync.Mutex
+	ready    *sync.Cond
+	output   io.Writer
+	pending  [][]byte
+	head     int
+	closed   bool
+	writeErr error
+	wg       sync.WaitGroup
+}
+
+func newCanonicalResponseStreamWriter(output io.Writer) *canonicalResponseStreamWriter {
+	if output == nil {
+		panic("canonical response stream writer output is nil")
+	}
+	writer := &canonicalResponseStreamWriter{output: output}
+	writer.ready = sync.NewCond(&writer.mu)
+	writer.wg.Add(1)
+	go writer.run()
+	return writer
+}
+
+func (w *canonicalResponseStreamWriter) enqueue(payload []byte) error {
+	if w == nil {
+		return fmt.Errorf("canonical response stream writer is nil")
+	}
+	line := appendPayloadLine(payload)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.writeErr != nil {
+		return w.writeErr
+	}
+	if w.closed {
+		return fmt.Errorf("canonical response stream writer is closed")
+	}
+	w.pending = append(w.pending, line)
+	w.ready.Signal()
+	return nil
+}
+
+func (w *canonicalResponseStreamWriter) closeAndDrain() error {
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	if !w.closed {
+		w.closed = true
+		w.ready.Broadcast()
+	}
+	w.mu.Unlock()
+	w.wg.Wait()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.writeErr
+}
+
+func (w *canonicalResponseStreamWriter) run() {
+	defer w.wg.Done()
+	for {
+		line, ok := w.next()
+		if !ok {
+			return
+		}
+		written, err := w.output.Write(line)
+		if err == nil && written != len(line) {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			w.fail(err)
+			return
+		}
+	}
+}
+
+func (w *canonicalResponseStreamWriter) next() ([]byte, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for w.head == len(w.pending) && !w.closed {
+		w.ready.Wait()
+	}
+	if w.head == len(w.pending) {
+		return nil, false
+	}
+	line := w.pending[w.head]
+	w.head++
+	if w.head == len(w.pending) {
+		w.pending = nil
+		w.head = 0
+	}
+	return line, true
+}
+
+func (w *canonicalResponseStreamWriter) fail(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.writeErr = err
+	w.closed = true
+	w.pending = nil
+	w.head = 0
+	w.ready.Broadcast()
 }
 
 func appendPayloadLine(payload []byte) []byte {
