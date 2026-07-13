@@ -1,7 +1,56 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import {
+  factoryTimelineEntryKey,
+  type StreamDerivedCacheIdentity,
+  useFactoryTimelineStore,
+} from "../../timeline/public";
+
+export interface DashboardWorkOutcomeStream {
+  identity: StreamDerivedCacheIdentity | null;
+  status: "loading" | "ready";
+}
+
+interface WorkOutcomeTimelineSelectionState {
+  entriesByKey?: Record<
+    string,
+    | {
+        materializedWorkOutcomeState: unknown;
+        selectedTick: number;
+      }
+    | undefined
+  >;
+  materializedWorkOutcomeState: unknown;
+  selectedTick: number;
+}
+
+export function selectDashboardWorkOutcomeInput(
+  state: WorkOutcomeTimelineSelectionState,
+  stream?: DashboardWorkOutcomeStream,
+): {
+  hydrationStatus: DashboardWorkOutcomeStream["status"];
+  materializedWorkOutcomeState: unknown;
+  selectedTimelineTick: number;
+} {
+  const exactEntryKey = stream?.identity
+    ? factoryTimelineEntryKey(stream.identity)
+    : null;
+  const exactEntry = exactEntryKey ? state.entriesByKey?.[exactEntryKey] : null;
+  const exactEntryPending =
+    stream?.status === "ready" && exactEntryKey !== null && !exactEntry;
+
+  return {
+    hydrationStatus:
+      stream?.status === "loading" || exactEntryPending ? "loading" : "ready",
+    materializedWorkOutcomeState: exactEntryKey
+      ? exactEntry?.materializedWorkOutcomeState
+      : state.materializedWorkOutcomeState,
+    selectedTimelineTick: exactEntryKey
+      ? (exactEntry?.selectedTick ?? 0)
+      : state.selectedTick,
+  };
+}
 
 const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
   factory_state: "IDLE",
@@ -26,12 +75,21 @@ const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {
 
 export function useDashboardBentoSnapshot(
   sessionID: string | null | undefined,
+  workOutcomeStream?: DashboardWorkOutcomeStream,
 ) {
   const materializedWorkOutcomeState = useFactoryTimelineStore(
-    (state) => state.materializedWorkOutcomeState,
+    (state) =>
+      selectDashboardWorkOutcomeInput(state, workOutcomeStream)
+        .materializedWorkOutcomeState,
   );
   const selectedTimelineTick = useFactoryTimelineStore(
-    (state) => state.selectedTick,
+    (state) =>
+      selectDashboardWorkOutcomeInput(state, workOutcomeStream)
+        .selectedTimelineTick,
+  );
+  const workOutcomeHydrationStatus = useFactoryTimelineStore(
+    (state) =>
+      selectDashboardWorkOutcomeInput(state, workOutcomeStream).hydrationStatus,
   );
   const workstationRequestsByDispatchID = useFactoryTimelineStore(
     (state) =>
@@ -46,12 +104,12 @@ export function useDashboardBentoSnapshot(
     snapshot,
     workstationRequestsByDispatchID,
   });
-
   return {
     currentSelection,
     materializedWorkOutcomeState,
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
+    workOutcomeHydrationStatus,
   };
 }

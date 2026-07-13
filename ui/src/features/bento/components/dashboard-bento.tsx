@@ -9,7 +9,10 @@ import { DashboardImportPreviewDialog } from "../../import/public";
 import { useTraceDrilldown } from "../../trace-drilldown/hooks/useTraceDrilldown";
 import { useWorkOutcomeChart } from "../../work-outcome/hooks/useWorkOutcomeChart";
 import { useCurrentActivityImportController } from "../../workflow-activity/hooks/current-activity-import-controller";
-import { useDashboardBentoSnapshot } from "../hooks/use-dashboard-bento-snapshot";
+import {
+  type DashboardWorkOutcomeStream,
+  useDashboardBentoSnapshot,
+} from "../hooks/use-dashboard-bento-snapshot";
 import {
   getRenderableDashboardLayout,
   useDashboardLayout,
@@ -39,9 +42,13 @@ function useDashboardBentoSelectionState() {
 
 export interface DashboardBentoProps {
   locale?: string;
+  workOutcomeStream?: DashboardWorkOutcomeStream;
 }
 
-export function DashboardBento({ locale }: DashboardBentoProps = {}) {
+export function DashboardBento({
+  locale,
+  workOutcomeStream,
+}: DashboardBentoProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
   const {
     addDashboardWidget,
@@ -63,7 +70,8 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     selectedSnapshot,
     selectedTimelineTick,
     snapshot,
-  } = useDashboardBentoSnapshot(sessionID);
+    workOutcomeHydrationStatus,
+  } = useDashboardBentoSnapshot(sessionID, workOutcomeStream);
   const importController = useCurrentActivityImportController({
     currentFactoryDefinition: snapshot.factory,
     locale: resolvedLocale,
@@ -91,6 +99,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
         snapshot.runtime.workstation_requests_by_dispatch_id,
     });
   const workChartModel = useWorkOutcomeChart({
+    hydrationStatus: workOutcomeHydrationStatus,
     locale: resolvedLocale,
     materializedWorkOutcomeState,
     selectedTimelineTick,

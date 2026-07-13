@@ -16,6 +16,74 @@ import {
 import { useWorkOutcomeChart } from "./useWorkOutcomeChart";
 
 describe("materialized work outcome chart projection", () => {
+  it("maps hydration, valid empty, malformed, and zero-valued history to explicit states", () => {
+    const emptyState = createMaterializedWorkOutcomeState();
+    const zeroSampleState = {
+      ...emptyState,
+      samples: [
+        {
+          completedCount: 0,
+          dispatchedCount: 0,
+          failedByWorkType: {},
+          failedCount: 0,
+          failedWorkLabels: [],
+          inFlightCount: 0,
+          observedAt: 0,
+          queuedCount: 0,
+          tick: 0,
+        },
+      ],
+    };
+    const { result, rerender } = renderHook(
+      ({ hydrationStatus, materializedWorkOutcomeState }) =>
+        useWorkOutcomeChart({
+          hydrationStatus,
+          materializedWorkOutcomeState,
+          selectedTimelineTick: 10,
+        }),
+      {
+        initialProps: {
+          hydrationStatus: "loading" as "loading" | "ready",
+          materializedWorkOutcomeState: zeroSampleState as unknown,
+        },
+      },
+    );
+
+    expect(result.current.chartState).toEqual({ status: "loading" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: emptyState,
+    });
+    expect(result.current.chartState).toEqual({ status: "ready" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: { ...zeroSampleState, version: 999 },
+    });
+    expect(result.current.chartState).toEqual({ status: "error" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: {
+        ...zeroSampleState,
+        samples: [{ tick: 0 }],
+      },
+    });
+    expect(result.current.chartState).toEqual({ status: "error" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: zeroSampleState,
+    });
+    expect(result.current.chartState).toEqual({ status: "ready" });
+    expect(result.current.samples).toEqual(zeroSampleState.samples);
+  });
+
   const baselineEvents = [
     event("run-started", 0, FACTORY_EVENT_TYPES.runRequest, {
       factory: {

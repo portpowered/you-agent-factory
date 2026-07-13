@@ -206,7 +206,10 @@ vi.mock("../../trace-drilldown/public", () => ({
 }));
 
 vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
-  useWorkOutcomeChart: () => ({ status: "empty" }),
+  useWorkOutcomeChart: () => ({
+    chartState: { status: "ready" },
+    status: "empty",
+  }),
 }));
 
 vi.mock("../../work-outcome/public", () => ({

@@ -55,10 +55,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   {
     relativeFilePath:
       "src/features/bento/hooks/use-dashboard-bento-snapshot.ts",
-    importSpecifiers: [
-      "../../current-selection/hooks/core/useCurrentSelection",
-      "../../timeline/state/factoryTimelineStore",
-    ],
+    importSpecifiers: ["../../current-selection/hooks/core/useCurrentSelection"],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
