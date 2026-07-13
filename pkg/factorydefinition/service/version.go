@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // RequireFreshEditableFactoryVersion rejects save requests whose base version

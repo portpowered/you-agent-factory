@@ -182,7 +182,7 @@ func newServeCommand(startup startupcli.Handler) *cobra.Command {
 		Example: "  # Typical MCP host child-process launch.\n" +
 			"  you mcp serve\n\n" +
 			"  # Explicit fixture catalog for offline smoke outside the repository root.\n" +
-			"  you mcp serve --fixture-catalog ./pkg/api/testdata/durable-session-contract-fixtures.json\n\n" +
+			"  you mcp serve --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json\n\n" +
 			"  # Runtime-backed serve against live durable JavaScript execution.\n" +
 			"  you mcp serve --runtime",
 		RunE: func(cmd *cobra.Command, _ []string) error {

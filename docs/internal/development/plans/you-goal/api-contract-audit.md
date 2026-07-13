@@ -44,9 +44,9 @@ result transport.
 | Surface | Ownership | Public / internal | @you/goal posture | Follow-on verification |
 |---------|-----------|-------------------|--------------------|------------------------|
 | `POST /factory-sessions/{session_id}/invocations` | Shared live-session invocation API (`invokeFactorySessionBySessionId`) | **Public** | **Reuse as-is** — canonical API entrypoint for `@you/goal` invocations against an open live Factory Session | API regression in `tests/functional/runtime_api/api_session_invocation_test.go`; contract description in `api/openapi-main.yaml` |
-| `InvocationRequest` / `InvocationResponse` | OpenAPI work schemas + `pkg/apisurface` projection | **Public** | **Reuse as-is** — text-first input via `WorkContent`; terminal status and `primaryResult` on `InvocationResponse` | OpenAPI contract tests in `pkg/api/contracttests/`; generated client sync via `make generate-api` only when these schemas change |
+| `InvocationRequest` / `InvocationResponse` | OpenAPI work schemas + `pkg/transports/mapping` projection | **Public** | **Reuse as-is** — text-first input via `WorkContent`; terminal status and `primaryResult` on `InvocationResponse` | OpenAPI contract tests in `pkg/transports/http/contracttests/`; generated client sync via `make generate-api` only when these schemas change |
 | `Factory.invocationReturn` | Factory configuration on the active session factory | **Public** | **Reuse as-is** — sole public selector for the final primary result; default `SUBMITTED_WORK_TERMINAL` when omitted | Factory validation before runtime; primary-result selection tests in `pkg/invocations/primary_result_test.go` |
-| `you run --factory` / `you run --named @you/goal` | CLI transport adapter in `pkg/transports/cli/run/` | **Public CLI** | **Reuse as-is** — must call the same shared resolver and primary-result selector as the API; no goal-specific transport contract | CLI tests in `pkg/transports/cli/run/run_invocation_test.go`, `pkg/cli/root_run_factory_prompt_test.go`, and `pkg/cli/root_run_test.go` (`run --named @you/goal`) |
+| `you run --factory` / `you run --named @you/goal` | CLI transport adapter in `pkg/transports/cli/run/` | **Public CLI** | **Reuse as-is** — must call the same shared resolver and primary-result selector as the API; no goal-specific transport contract | CLI tests in `pkg/transports/cli/run/run_invocation_test.go`, `pkg/transports/cli/root_run_factory_prompt_test.go`, and `pkg/transports/cli/root_run_test.go` (`run --named @you/goal`) |
 | Shared invocation resolver (`pkg/invocations`) | Backend-owned input and return-policy logic | **Internal shared contract** | **Reuse as-is** — `ResolveTextInput` / `ResolveAPITextInputContent` for input; `ResolvePrimaryResult` for return policy | Unit tests in `pkg/invocations/input_test.go` and `pkg/invocations/primary_result_test.go` |
 | Goal-only result endpoint | — | — | **Out of scope** — this slice does **not** add `/goal/...`, `/results` variants, or any goal-named primary-result route | N/A — reject proposals that bypass `InvocationResponse.primaryResult` |
 
@@ -72,7 +72,7 @@ the existing invocation route, not durable start/result routes.
 **Authoritative references:**
 
 - OpenAPI: `api/openapi-main.yaml` (`/factory-sessions/{session_id}/invocations`)
-- Handler: `pkg/api/handlers_work_write.go` → `Server.InvokeFactorySessionBySessionId`
+- Handler: `pkg/transports/http/handlers_work_write.go` → `Server.InvokeFactorySessionBySessionId`
   (delegates to session runtime `InvokeFactorySession`)
 - Service: `pkg/service/model_catalog.go` (`InvokeFactorySession`,
   `resolveSessionInvocationInput`, session wait + primary-result projection)
@@ -155,7 +155,7 @@ Maintainers reviewing `@you/goal` invocation follow-on PRs should verify:
 | `pkg/transports/cli/run/run_invocation_test.go` | CLI request construction from positional/stdin sources |
 | `pkg/transports/cli/run/run_invocation_test.go` (`TestResolveFactoryInvocationRequest_NamedFactory*`) | Named factory positional/stdin text selects standard invocation mode and builds `InvocationRequest` through the shared resolver (same code path as `@you/goal`) |
 | `tests/functional/runtime_api/api_session_invocation_test.go` | End-to-end API invocation returns `primaryResult`; explicit `invocationReturn` policy honored |
-| `pkg/cli/root_run_test.go` (`TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal`) | `run --named @you/goal` resolves built-in goal factory metadata into `RunConfig` at the CLI flag layer |
+| `pkg/transports/cli/root_run_test.go` (`TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal`) | `run --named @you/goal` resolves built-in goal factory metadata into `RunConfig` at the CLI flag layer |
 
 **Follow-on implementation PRs** that touch invocation behavior should extend
 the evidence above (API functional tests, CLI run tests, and
@@ -192,11 +192,11 @@ payloads for goal-mode partial output.
 
 | Surface | Ownership | Public / internal | @you/goal posture | Follow-on verification |
 |---------|-----------|-------------------|--------------------|------------------------|
-| `GET /events` | Runtime SSE (`getEvents`) | **Public** | **Compatibility-only** — process-wide `FactoryEvent` history + live tail retained for legacy tooling and diagnostics; new session-aware consumers should use `GET /factory-sessions/{session_id}/events` | `pkg/api/servertests/server_dashboard_events_test.go`; reconnect cursors in `pkg/factory/events/event_reconnect_test.go` |
-| `GET /factory-sessions/{session_id}/events` | Session-scoped SSE (`getEventsBySessionId`) | **Public** | **Canonical** — same `FactoryEvent` vocabulary filtered to one live or durable session | `pkg/api/servertests/server_durable_session_events_test.go`; `FilterEventsAfterReconnect` in `pkg/factorysessionexecution/listing.go` |
-| `FactoryEventType` / event payloads | OpenAPI `api/components/schemas/events/` | **Public** | **Reuse as-is** — no new types for response-stream chunks | `pkg/api/contracttests/openapi_contract_common_test.go`; `ui/src/api/events/types.test.ts` |
-| `after_event_id` / `after_sequence` reconnect filters | OpenAPI parameters + `pkg/api/handlers_events.go` | **Public** | **Reuse as-is** — cursor filters apply only to canonical `FactoryEvent` replay | `pkg/factory/projections/projectiontests/session_reconnect_replay_test.go` |
-| `POST /factory-sessions/{session_id}/pause` / `/resume` | Durable lifecycle control API | **Public** | **Reuse routes** — behavioral repair may extend live `~default` sessions through the same routes; no `/goal/.../pause` family | `pkg/api/servertests/server_durable_session_lifecycle_control_test.go`; `pkg/factorysessionexecution/control.go` |
+| `GET /events` | Runtime SSE (`getEvents`) | **Public** | **Compatibility-only** — process-wide `FactoryEvent` history + live tail retained for legacy tooling and diagnostics; new session-aware consumers should use `GET /factory-sessions/{session_id}/events` | `pkg/transports/http/servertests/server_dashboard_events_test.go`; reconnect cursors in `pkg/factory/events/event_reconnect_test.go` |
+| `GET /factory-sessions/{session_id}/events` | Session-scoped SSE (`getEventsBySessionId`) | **Public** | **Canonical** — same `FactoryEvent` vocabulary filtered to one live or durable session | `pkg/transports/http/servertests/server_durable_session_events_test.go`; `FilterEventsAfterReconnect` in `pkg/factorysessionexecution/listing.go` |
+| `FactoryEventType` / event payloads | OpenAPI `api/components/schemas/events/` | **Public** | **Reuse as-is** — no new types for response-stream chunks | `pkg/transports/http/contracttests/openapi_contract_common_test.go`; `ui/src/api/events/types.test.ts` |
+| `after_event_id` / `after_sequence` reconnect filters | OpenAPI parameters + `pkg/transports/http/handlers_events.go` | **Public** | **Reuse as-is** — cursor filters apply only to canonical `FactoryEvent` replay | `pkg/factory/projections/projectiontests/session_reconnect_replay_test.go` |
+| `POST /factory-sessions/{session_id}/pause` / `/resume` | Durable lifecycle control API | **Public** | **Reuse routes** — behavioral repair may extend live `~default` sessions through the same routes; no `/goal/.../pause` family | `pkg/transports/http/servertests/server_durable_session_lifecycle_control_test.go`; `pkg/factorysessionexecution/control.go` |
 | `POST /factory-sessions/{session_id}/cancel` / `/terminate` / `/retry-dispatch` | Durable lifecycle + dispatch recovery | **Public** | **Reuse as-is** — graceful cancel and forced terminate for control; `retry-dispatch` for recoverable interruptions | Same lifecycle servertests; `DISPATCH_RECONCILED` replay in dispatch projection tests |
 | Dispatch lifecycle events (`DISPATCH_QUEUED`, `DISPATCH_INTERRUPTED`, `DISPATCH_RECONCILED`) | `pkg/factory/events/event_history_dispatch_lifecycle.go` | **Public** (on canonical stream) | **Reuse vocabulary** — interrupt and recovery facts surface here; no parallel goal run/interrupt API | `pkg/factory/projections/projectiontests/dispatch_lifecycle_event_replay_test.go` |
 | `SessionResponseStream` | Session runtime read model (follow-on internal package) | **Internal** | **New internal model only** — aggregates ephemeral provider/model output for subscribers inside the runtime | Runtime/session unit tests near the implementing package; **no** OpenAPI or generated-client changes |
@@ -226,7 +226,7 @@ events through `pkg/factorysessionexecution/listing.go`
 
 - OpenAPI: `api/openapi-main.yaml` (`/events`,
   `/factory-sessions/{session_id}/events`)
-- Handlers: `pkg/api/handlers_events.go`
+- Handlers: `pkg/transports/http/handlers_events.go`
 - Event vocabulary: `api/components/schemas/events/FactoryEventType.yaml`
 - UI consumer: `ui/src/features/dashboard/hooks/event-stream/useFactoryEventStream.ts`
 
@@ -283,7 +283,7 @@ dispatches, and artifacts.
 through `POST /factory-sessions` or CLI `you run` (session `~default`) may
 receive pause/resume **behavior** on the existing `/pause` and `/resume` routes
 when follow-on work needs goal-mode control during an open live session. That
-repair extends handlers and runtime coordination (`pkg/api/handlers_factory.go`,
+repair extends handlers and runtime coordination (`pkg/transports/http/handlers_factory.go`,
 `pkg/service/runtime_sessions.go`) — it does **not** justify
 `/factory-sessions/{session_id}/goal-pause`, MCP goal tools, or CLI-only pause
 commands.
@@ -326,10 +326,10 @@ verify:
 |----------|----------------|
 | This section + landed public OpenAPI delta | Response streams stay internal; `Workstation.workPropagation` is the landed public factory-configuration delta |
 | `api/components/schemas/events/FactoryEventType.yaml` | No new public event types for streaming chunks |
-| `pkg/api/handlers_events.go` | Public SSE exposes only `FactoryEvent`; no response-stream branch |
+| `pkg/transports/http/handlers_events.go` | Public SSE exposes only `FactoryEvent`; no response-stream branch |
 | `pkg/factory/events/event_history_dispatch_lifecycle.go` | Interrupt facts use `DISPATCH_INTERRUPTED` emission path |
 | `pkg/factory/projections/projectiontests/dispatch_lifecycle_event_replay_test.go` | Dispatch lifecycle replay reconstructs interrupted/recovered state |
-| `pkg/api/servertests/server_durable_session_lifecycle_control_test.go` | Pause/resume/cancel/terminate reuse existing lifecycle routes |
+| `pkg/transports/http/servertests/server_durable_session_lifecycle_control_test.go` | Pause/resume/cancel/terminate reuse existing lifecycle routes |
 | `pkg/factorysessionexecution/control.go` | Lifecycle control semantics and idempotent replay for durable sessions |
 | `ui/src/api/events/types.ts` | Dashboard event mapping includes `DISPATCH_INTERRUPTED` without response-stream types |
 
@@ -456,7 +456,7 @@ response-stream work must not touch them.
 
 | Change class | Regenerate? | Required verification |
 |--------------|-------------|----------------------|
-| Add or modify `Workstation.workPropagation` / `WorkPropagationMode` in authored OpenAPI | **Yes** — run `make generate-api` | `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, `ui/src/api/generated/openapi.ts` must match authored fragments; run `make api-smoke` when feasible |
+| Add or modify `Workstation.workPropagation` / `WorkPropagationMode` in authored OpenAPI | **Yes** — run `make generate-api` | `api/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, `ui/src/api/generated/openapi.ts` must match authored fragments; run `make api-smoke` when feasible |
 | Internal `SessionResponseStream` / `SessionResponseStreamEvent` implementation | **No** | Package-local runtime/session tests; reject PRs that regenerate public clients for stream-only diffs |
 | Invocation reuse, lifecycle behavioral repair, dispatch vocabulary reuse | **No** — unless an unrelated public schema also changes | Extend existing API/CLI/servertests from stories 001–002 |
 | Dashboard factory editor exposing `workPropagation` | **Yes** — when authored OpenAPI or editor behavior changes | UI decoders in `ui/src/api/factory-definition/` aligned with generated `Workstation`; `make ui-test` / `make verify-fast` for affected modules |
@@ -470,7 +470,7 @@ response-stream work must not touch them.
 3. Wire config load/save through `pkg/config/factory_config_mapping*.go` and
    validation through `pkg/factory/validation/` if the field affects runtime
    topology or dispatch behavior.
-4. Map API read/write surfaces through `pkg/apisurface/` when factory
+4. Map API read/write surfaces through `pkg/transports/mapping/` when factory
    configuration crosses the HTTP boundary.
 5. Run `make api-smoke` to prove bundled contract, generated drift checks, and
    contract integration smoke stay aligned.
@@ -489,10 +489,10 @@ response-stream work must not touch them.
 |----------|------|-------------------|
 | `api/openapi-main.yaml` + `api/components/` | Authored public contract | `Workstation.workPropagation` already present; avoid unrelated goal OpenAPI churn |
 | `api/openapi.yaml` | Bundled contract | Regenerated; never hand-edited |
-| `pkg/api/generated/server.gen.go` | Go server types | Regenerated only on public OpenAPI change |
-| `pkg/generatedclient/client.gen.go` | Go HTTP client | Regenerated only on public OpenAPI change |
+| `pkg/transports/http/generated/server.gen.go` | Go server types | Regenerated only on public OpenAPI change |
+| `pkg/transports/http/client/client.gen.go` | Go HTTP client | Regenerated only on public OpenAPI change |
 | `ui/src/api/generated/openapi.ts` | TypeScript API types | Regenerated only on public OpenAPI change |
-| `pkg/api/contracttests/` | Contract smoke and authoring guards | Extend when `Workstation` schema changes; no new inventory tests for streams |
+| `pkg/transports/http/contracttests/` | Contract smoke and authoring guards | Extend when `Workstation` schema changes; no new inventory tests for streams |
 | `pkg/config/builtingoal/factory.json` (`BuiltInGoalFactoryJSON`) | Built-in factory payload | Carries explicit `invocationReturn` and goal routing; may author `workPropagation` through normal factory JSON without new routes |
 | Internal response-stream packages | Runtime/session plumbing | New Go packages only; zero OpenAPI footprint |
 
@@ -506,7 +506,7 @@ Maintainers reviewing `@you/goal` public-contract follow-on PRs should verify:
 | `api/components/schemas/data-models/Workstation.yaml` | Field and enum fragments use `workPropagation` / `WorkPropagationMode` naming |
 | `make generate-api` diff | Generated artifacts change only when authored OpenAPI changes |
 | `make api-smoke` | Bundled contract, drift checks, and integration smoke pass after public delta |
-| `pkg/api/contracttests/openapi_contract_surface_test.go` | Factory data-model schemas remain contract-complete when `Workstation` grows |
+| `pkg/transports/http/contracttests/openapi_contract_surface_test.go` | Factory data-model schemas remain contract-complete when `Workstation` grows |
 | `pkg/config/mappingtests/` or factory validation tests | Factory JSON round-trips `workPropagation` through config mapping |
 | Absence of `SessionResponseStream*` in `api/components/` | Internal stream models did not leak into public contract |
 | Stories 001–002 reviewer tables | Invocation, events, and lifecycle reuse unchanged by `workPropagation` work |
@@ -533,9 +533,9 @@ contracts. Customer wording lives in `docs/reference/packaged-goal.md`
 | CLI/API invocation parity | `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go` | Positional, stdin, and API invocation paths share `InvocationResponse` semantics for success and representative failures |
 | Decision routing | `tests/functional/smoke/cli_named_goal_routing_smoke_test.go` | Accepted, blocked, needs-human, failed, interrupted, rework, and structured unknown decisions surface predictable outcomes |
 | Operator controls, replay, inspection | `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go` | Pause buffers work, resume drains buffered goals in submission order (plan-goal `StartTime` ordering), interrupted inspect summaries stay on shared session/work surfaces, and `SESSION_LIFECYCLE_CONTROL` replay events remain durable |
-| Response-stream boundary | `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go` plus `pkg/api/contracttests/` | CLI `--output response-stream` still returns `primaryResult`; internal `SessionResponseStream` data stays out of public OpenAPI and durable `FactoryEvent` contracts |
+| Response-stream boundary | `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go` plus `pkg/transports/http/contracttests/` | CLI `--output response-stream` still returns `primaryResult`; internal `SessionResponseStream` data stays out of public OpenAPI and durable `FactoryEvent` contracts |
 | Customer docs and vocabulary | `docs/reference/packaged-goal.md`, `pkg/transports/cli/docs/docs_packaged_reference_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go` | Packaged goal docs describe shipped invocation, routing, operator controls, and recovery without goal-specific public routes or internal stream contracts |
-| Generated artifact alignment | `make api-smoke` and `pkg/api/contracttests/openapi_contract_surface_test.go` | Public generated artifacts remain aligned with the internal-only response-stream boundary |
+| Generated artifact alignment | `make api-smoke` and `pkg/transports/http/contracttests/openapi_contract_surface_test.go` | Public generated artifacts remain aligned with the internal-only response-stream boundary |
 
 ### Final verification commands (`you-goal-06-007`, 2026-07-02 UTC)
 
@@ -548,7 +548,7 @@ All commands ran from the `you-goal-06` worktree unless noted.
 | `make api-smoke` | pass | OpenAPI validate/bundle, generated drift check, contract integration smoke |
 | `go test ./tests/functional/smoke/ -run 'TestNamedGoal\|TestDocsCommandSmoke_' -count=1 -timeout 600s` | pass | Focused `@you/goal` functional smoke and packaged-docs CLI smoke |
 | `go test ./pkg/transports/cli/docs/... -count=1` | pass | Packaged reference topic markers |
-| `go test ./pkg/cli -run TestDocsCommand_ -count=1` | pass | `you docs` command coverage |
+| `go test ./pkg/transports/cli -run TestDocsCommand_ -count=1` | pass | `you docs` command coverage |
 | `go test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1` | pass | Functional docs smoke |
 | `make verify-fast` | **narrower** | `make typecheck` and `make test` pass; `make ui-test` fails on pre-existing `factory-graph-layout-performance.test.ts` 500/1000-node budget regressions unrelated to `@you/goal` (no UI graph-editor or layout code changed in this lane) |
 | `make docs-reference-smoke` | **skipped** | See docs verification note below |
@@ -586,7 +586,7 @@ sibling `../markdown-linter` path that is not present in this repository layout.
 For final verification, run the in-repo docs proof instead:
 
 - `go test ./pkg/transports/cli/docs/... -count=1`
-- `go test ./pkg/cli -run TestDocsCommand_ -count=1`
+- `go test ./pkg/transports/cli -run TestDocsCommand_ -count=1`
 - `go test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1`
 
 **Ownership for remaining gaps:** follow-up planning artifacts such as

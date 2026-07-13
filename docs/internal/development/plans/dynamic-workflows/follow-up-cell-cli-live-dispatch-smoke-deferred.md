@@ -29,7 +29,7 @@ inspection, HTTP-only smoke, or a broader multi-surface parity sweep.
 
 | Surface | CLI wiring | Proof |
 |---------|------------|-------|
-| Live-provider session start and re-read | `pkg/transports/cli/sessionexecution/run.go`, `status.go`, `result.go`, `pkg/cli/root_work.go` | `run_test.go` (`TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult`, `TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixtureStub`) |
+| Live-provider session start and re-read | `pkg/transports/cli/sessionexecution/run.go`, `status.go`, `result.go`, `pkg/transports/cli/root_work.go` | `run_test.go` (`TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult`, `TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixtureStub`) |
 | Bridged dispatch and artifact inspection | `pkg/transports/cli/sessionexecution/inspection.go` | `run_test.go` (`TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection`) |
 | Fake/fixture CLI regression | default `--execution-provider fake` | `loopback_test.go` (`TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags`), `run_test.go` (`TestRunSync_JavaScriptRuntimeFakeChildCLIInspectionRegression`, `TestRunSync_ExplicitFakeChildMode_OverridesLiveConfiguredServiceCLI`) |
 | MCP-free live child provider | `factorysessionexecution.SmokeLiveChildProvider()` in `pkg/factorysessionexecution/service.go` | injected in live-provider CLI tests; no `you mcp serve` startup |
@@ -56,7 +56,7 @@ implementing both MCP and website inspection here.
 ## Transport-Neutral Boundary
 
 CLI dispatch and artifact rendering reads shared service projections and maps
-through `pkg/apisurface/factorysession` (`ListDispatchesResponseToAPI`,
+through `pkg/transports/mapping/factorysession` (`ListDispatchesResponseToAPI`,
 `ListArtifactsResponseToAPI`) before human formatting. JSON output is the shared
 API shape; human labels render existing projection fields only.
 

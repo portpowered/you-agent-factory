@@ -4,9 +4,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 )
 
 // BuildFactoryWorldWorkMoveOperationProjectionSlice keeps the additive

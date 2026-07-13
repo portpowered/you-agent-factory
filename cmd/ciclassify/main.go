@@ -208,9 +208,7 @@ func isSharedRiskPath(path string) bool {
 	if strings.HasPrefix(path, "api/") {
 		return true
 	}
-	if strings.HasPrefix(path, "pkg/api/") ||
-		strings.HasPrefix(path, "pkg/apisurface/") ||
-		strings.HasPrefix(path, "pkg/transports/") {
+	if strings.HasPrefix(path, "pkg/transports/") {
 		return true
 	}
 

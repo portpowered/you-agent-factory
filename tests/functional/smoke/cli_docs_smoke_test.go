@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	agentcli "github.com/portpowered/infinite-you/pkg/cli"
+	agentcli "github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 

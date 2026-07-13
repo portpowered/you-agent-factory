@@ -43,7 +43,7 @@ func TestBuildProcessGraphConstructsRunBeforeLifecycle(t *testing.T) {
 
 func TestBuildProcessGraphConstructsMCPBeforeLifecycle(t *testing.T) {
 	t.Parallel()
-	fixturePath := testutil.MustRepoPath(t, "pkg/api/testdata/durable-session-contract-fixtures.json")
+	fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
 	var output bytes.Buffer
 	graph, err := BuildProcessGraph(context.Background(), startupcli.Request{
 		Kind: startupcli.KindMCPServe,

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // ValidateConfig holds parameters for workflow source validation output.

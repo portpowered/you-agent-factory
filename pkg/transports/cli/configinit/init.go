@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	configinit "github.com/portpowered/infinite-you/pkg/config/configinit"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 // InitConfig holds CLI inputs for you config init.
@@ -23,11 +23,11 @@ type InitConfig struct {
 
 // InitResult is the JSON payload for a successful you config init run.
 type InitResult struct {
-	HomeDir              string                      `json:"homeDir"`
-	ConfigPath           string                      `json:"configPath"`
-	NamedFactoriesRoot   string                      `json:"namedFactoriesRoot"`
-	SystemConfigOutcome  string                      `json:"systemConfigOutcome"`
-	PackagedFactories    []PackagedFactoryInitResult `json:"packagedFactories"`
+	HomeDir             string                      `json:"homeDir"`
+	ConfigPath          string                      `json:"configPath"`
+	NamedFactoriesRoot  string                      `json:"namedFactoriesRoot"`
+	SystemConfigOutcome string                      `json:"systemConfigOutcome"`
+	PackagedFactories   []PackagedFactoryInitResult `json:"packagedFactories"`
 }
 
 // PackagedFactoryInitResult is the JSON payload for one packaged default factory.

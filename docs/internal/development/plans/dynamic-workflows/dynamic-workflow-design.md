@@ -33,7 +33,7 @@ implements the ownership and preview boundaries described in this document:
   `FactoryPreviewRequest` / `FactoryPreviewResult`; `POST /workflow-previews` is
   a deprecated compatibility alias with successor headers. Preview preparation
   lives in `pkg/orchestrators/javascript/preview`; transport mapping in
-  `pkg/apisurface/factory_preview.go`; UI adapter in `ui/src/api/factory-preview/`.
+  `pkg/transports/mapping/factory_preview.go`; UI adapter in `ui/src/api/factory-preview/`.
 - **JavaScript orchestrator ownership:** source, validation, policy, preview,
   result, and store behavior under `pkg/orchestrators/javascript/*`. Root
   `pkg/workflow*` packages are documented compatibility shims only.
@@ -1038,7 +1038,7 @@ Acceptance:
 
 ### API Handlers And Surface Mapping
 
-`pkg/apisurface/factory_orchestrator.go`
+`pkg/transports/mapping/factory_orchestrator.go`
 
 - `func FactoryOrchestratorFromGenerated(value factoryapi.FactoryOrchestrator) (interfaces.FactoryOrchestratorConfig, error)`
 - `func GeneratedFactoryOrchestrator(value interfaces.FactoryOrchestratorConfig) factoryapi.FactoryOrchestrator`
@@ -1119,13 +1119,13 @@ CLI resolution rules for `--workflow`:
 - `func renderFactorySessionPhases(...) error`
 - `func renderSessionReplayEvent(...) error`
 
-`pkg/cli/dispatches/dispatches.go`
+`pkg/transports/cli/dispatches/dispatches.go`
 
 - `func NewCommand() *cobra.Command`
 - `func newListCommand() *cobra.Command`
 - `func renderDispatchTable(...) error`
 
-`pkg/cli/artifacts/artifacts.go`
+`pkg/transports/cli/artifacts/artifacts.go`
 
 - `func NewCommand() *cobra.Command`
 - `func newListCommand() *cobra.Command`

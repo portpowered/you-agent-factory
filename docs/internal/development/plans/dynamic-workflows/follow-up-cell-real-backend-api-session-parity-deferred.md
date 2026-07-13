@@ -23,8 +23,8 @@ narrow slice. It does not reopen the completed start/list/get/result/events work
 
 | Route family | Backend wiring | Proof |
 |--------------|----------------|-------|
-| Async/sync start | `pkg/service/durable_session_execution.go`, `pkg/api/handlers_durable_execution.go` | `server_durable_session_execution_test.go` |
-| Scoped list/get | `pkg/service/durable_session_read.go`, `pkg/api/handlers_durable_read.go` | `server_durable_session_read_test.go` |
+| Async/sync start | `pkg/service/durable_session_execution.go`, `pkg/transports/http/handlers_durable_execution.go` | `server_durable_session_execution_test.go` |
+| Scoped list/get | `pkg/service/durable_session_read.go`, `pkg/transports/http/handlers_durable_read.go` | `server_durable_session_read_test.go` |
 | Final result read | same read service + `handlers_durable_read.go` | `server_durable_session_result_test.go` |
 | Canonical event replay | same read service + `handlers_events.go` | `server_durable_session_events_test.go` |
 | Contract alignment | authored OpenAPI + `assertRealBackendSessionAPISliceRoutes` | `generated_contract_durable_session_test.go` |
@@ -33,8 +33,8 @@ narrow slice. It does not reopen the completed start/list/get/result/events work
 
 | Follow-up cell | Deferred surface | Current transport posture |
 |----------------|------------------|---------------------------|
-| `dynamic-workflows-cell-real-backend-api-dispatch-artifact` | `GET /factory-sessions/{session_id}/dispatches`, `GET /factory-sessions/{session_id}/dispatches/{dispatch_id}`, `GET /factory-sessions/{session_id}/artifacts`, `GET /factory-sessions/{session_id}/artifacts/{artifact_id}` | `501 NotImplemented` stubs in `pkg/api/handlers_factory.go`; OpenAPI + mapper contracts remain compiled |
-| `dynamic-workflows-cell-real-backend-api-lifecycle-controls` | `POST /factory-sessions/{session_id}/approve`, `/pause`, `/resume`, `/cancel`, `/terminate`, `/retry-dispatch` | `501 NotImplemented` stubs in `pkg/api/handlers_factory.go`; resume behavior waits on this cell |
+| `dynamic-workflows-cell-real-backend-api-dispatch-artifact` | `GET /factory-sessions/{session_id}/dispatches`, `GET /factory-sessions/{session_id}/dispatches/{dispatch_id}`, `GET /factory-sessions/{session_id}/artifacts`, `GET /factory-sessions/{session_id}/artifacts/{artifact_id}` | `501 NotImplemented` stubs in `pkg/transports/http/handlers_factory.go`; OpenAPI + mapper contracts remain compiled |
+| `dynamic-workflows-cell-real-backend-api-lifecycle-controls` | `POST /factory-sessions/{session_id}/approve`, `/pause`, `/resume`, `/cancel`, `/terminate`, `/retry-dispatch` | `501 NotImplemented` stubs in `pkg/transports/http/handlers_factory.go`; resume behavior waits on this cell |
 | `dynamic-workflows-cell-real-backend-api-website-inspection` | Dashboard durable Factory Session inspection through `ui/src/features/factory-session-detail/` and generated durable read models | Live-session oriented today; HTTP wiring for durable `dur-sess-*` reads is deferred |
 | `dynamic-workflows-cell-mcp-session-serve` | Live runtime-backed MCP host install smoke for async start/status/result | Documented in `follow-up-cell-mcp-session-serve.md`; default `you mcp serve` stays fixture-backed |
 | `dynamic-workflows-cell-real-backend-api-live-provider-bridge` | Provider dispatch bridge parity for queued/running/reconciled dispatches and live external tool sessions | Dispatch bridge lane; not part of the simple final-only API slice |
@@ -53,7 +53,7 @@ narrow slice. It does not reopen the completed start/list/get/result/events work
 ### `dynamic-workflows-cell-real-backend-api-lifecycle-controls`
 
 1. Route durable lifecycle controls through `RuntimeService` pause/resume/cancel/
-   terminate/approve/retry-dispatch using `pkg/apisurface/factorysession/factory_session_lifecycle.go`.
+   terminate/approve/retry-dispatch using `pkg/transports/mapping/factorysession/factory_session_lifecycle.go`.
 2. Prove resume and other controls preserve inspectable partial results, dispatches,
    and artifacts per OpenAPI `FactorySessionLifecycleControlLinks`.
 3. Keep typed `INVALID_STATE`, `TERMINAL_SESSION`, and `CONFLICT` outcomes aligned with
@@ -92,7 +92,7 @@ serve remains out of scope for the API parity slice.
 
 | Artifact | Purpose |
 |----------|---------|
-| `pkg/api/handlers_factory.go` | `501` stubs for deferred durable route families |
-| `pkg/api/server_durable_session_deferred_routes_test.go` | Runtime-backed proof that deferred routes stay stubbed |
+| `pkg/transports/http/handlers_factory.go` | `501` stubs for deferred durable route families |
+| `pkg/transports/http/server_durable_session_deferred_routes_test.go` | Runtime-backed proof that deferred routes stay stubbed |
 | `assertDeferredRealBackendSessionRouteFamilies` in `generated_contract_durable_session_test.go` | OpenAPI deferred-route registry separate from the narrow in-scope slice |
 | `docs/internal/processes/api-relevant-files.md` | Maintainer map for in-scope vs deferred boundaries |

@@ -61,9 +61,9 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/transports/http/providersessioncursor` | 1 | 1 | directive only |
 | `pkg/transports/http/servertests` | 1 | 1 | directive only |
 | `pkg/transports/http/workstationprojection` | 3 | 1 | directive only |
-| `pkg/apisurface/factorysession` | 8 | 6 | directive only |
-| `pkg/cli` | 2 | 1 | directive only |
-| `pkg/cli/cliinputs` | 5 | 3 | directive only |
+| `pkg/transports/mapping/factorysession` | 8 | 6 | directive only |
+| `pkg/transports/cli` | 2 | 1 | directive only |
+| `pkg/transports/cli/cliinputs` | 5 | 3 | directive only |
 | `pkg/transports/cli/config` | 2 | 1 | directive + coverage baseline |
 | `pkg/transports/cli/init` | 2 | 1 | directive only |
 | `pkg/transports/cli/mcp` | 3 | 3 | directive + coverage baseline |
@@ -100,10 +100,10 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 These entries are retained verbatim after whitespace normalization; they have no active
 directive occurrence in the focused scan:
 
-- `pkg/api/apitypes`
-- `pkg/apisurface`
-- `pkg/apisurface/optional`
-- `pkg/cli/clidiag`
+- `pkg/transports/http/apitypes`
+- `pkg/transports/mapping`
+- `pkg/transports/mapping/optional`
+- `pkg/transports/cli/clidiag`
 - `pkg/transports/cli/dashboardrender`
 - `pkg/transports/cli/default`
 - `pkg/transports/cli/models`
@@ -199,41 +199,41 @@ Owner: `pkg/transports/http/workstationprojection` package maintainers. Status: 
 | `pkg/transports/http/workstationprojection/projection_test.go:676` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertCompletedProjectionRequest` | T | T gate |
 | `pkg/transports/http/workstationprojection/projection_test.go:848` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertCompletedScriptProjection` | T | T gate |
 
-### `pkg/apisurface/factorysession`
+### `pkg/transports/mapping/factorysession`
 
-Owner: `pkg/apisurface/factorysession` package maintainers. Status: **directive only**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/apisurface/factorysession/factory_session_execution_test.go:224` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures` | T | T gate |
-| `pkg/apisurface/factorysession/factory_session_fake_consumer_test.go:13` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers` | T | T gate |
-| `pkg/apisurface/factorysession/factory_session_lifecycle.go:344` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `lifecycleTimestampsToAPI` | R | R gate |
-| `pkg/apisurface/factorysession/factory_session_mapper.go:60` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `SessionReadResultFromAPI` | R | R gate |
-| `pkg/apisurface/factorysession/factory_session_mapper.go:226` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `DispatchDetailFromAPI` | R | R gate |
-| `pkg/apisurface/factorysession/factory_session_mapper.go:407` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `DurableSessionListSummaryFromAPI` | R | R gate |
-| `pkg/apisurface/factorysession/factory_session_mapper_test.go:684` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertListSummaryFieldsPreserved` | T | T gate |
-| `pkg/apisurface/factorysession/factory_session_projection_test.go:350` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestProjectionResponses_TrimAndOmitOptionalFields` | T | T gate |
-
-### `pkg/cli`
-
-Owner: `pkg/cli` package maintainers. Status: **directive only**.
+Owner: `pkg/transports/mapping/factorysession` package maintainers. Status: **directive only**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/cli/root_run_test.go:1` | `backendsizecheck:ignore-file` | `pkg/cli/root_run_test.go` | T | T gate |
-| `pkg/cli/root_run_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/cli/root_run_test.go` | T | T gate |
+| `pkg/transports/mapping/factorysession/factory_session_execution_test.go:224` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures` | T | T gate |
+| `pkg/transports/mapping/factorysession/factory_session_fake_consumer_test.go:13` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers` | T | T gate |
+| `pkg/transports/mapping/factorysession/factory_session_lifecycle.go:344` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `lifecycleTimestampsToAPI` | R | R gate |
+| `pkg/transports/mapping/factorysession/factory_session_mapper.go:60` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `SessionReadResultFromAPI` | R | R gate |
+| `pkg/transports/mapping/factorysession/factory_session_mapper.go:226` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `DispatchDetailFromAPI` | R | R gate |
+| `pkg/transports/mapping/factorysession/factory_session_mapper.go:407` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `DurableSessionListSummaryFromAPI` | R | R gate |
+| `pkg/transports/mapping/factorysession/factory_session_mapper_test.go:684` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertListSummaryFieldsPreserved` | T | T gate |
+| `pkg/transports/mapping/factorysession/factory_session_projection_test.go:350` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestProjectionResponses_TrimAndOmitOptionalFields` | T | T gate |
 
-### `pkg/cli/cliinputs`
+### `pkg/transports/cli`
 
-Owner: `pkg/cli/cliinputs` package maintainers. Status: **directive only**.
+Owner: `pkg/transports/cli` package maintainers. Status: **directive only**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/cli/cliinputs/parser_parity_test.go:25` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestProductionParserParity_RepresentativeCommands` | T | T gate |
-| `pkg/cli/cliinputs/parser_parity_test.go:128` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `productionParserParityRunFlagCases` | T | T gate |
-| `pkg/cli/cliinputs/parser_parity_test.go:207` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `productionParserParitySubmitCases` | T | T gate |
-| `pkg/cli/cliinputs/synthetic_args_relationships_test.go:143` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticArgumentRecord` | T | T gate |
-| `pkg/cli/cliinputs/synthetic_flags_test.go:437` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticFlagRecord` | T | T gate |
+| `pkg/transports/cli/root_run_test.go:1` | `backendsizecheck:ignore-file` | `pkg/transports/cli/root_run_test.go` | T | T gate |
+| `pkg/transports/cli/root_run_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/transports/cli/root_run_test.go` | T | T gate |
+
+### `pkg/transports/cli/cliinputs`
+
+Owner: `pkg/transports/cli/cliinputs` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/transports/cli/cliinputs/parser_parity_test.go:25` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestProductionParserParity_RepresentativeCommands` | T | T gate |
+| `pkg/transports/cli/cliinputs/parser_parity_test.go:128` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `productionParserParityRunFlagCases` | T | T gate |
+| `pkg/transports/cli/cliinputs/parser_parity_test.go:207` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `productionParserParitySubmitCases` | T | T gate |
+| `pkg/transports/cli/cliinputs/synthetic_args_relationships_test.go:143` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticArgumentRecord` | T | T gate |
+| `pkg/transports/cli/cliinputs/synthetic_flags_test.go:437` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertSyntheticFlagRecord` | T | T gate |
 
 ### `pkg/transports/cli/config`
 
@@ -621,9 +621,9 @@ as follows:
 
 | Batch/work item | Exact reservation used for this overlay |
 | --- | --- |
-| Batch 005 — `create-root-process-owner` | Active head `4516ea35aeff5cdde5e578b9000b8054db6bb834`; changed files: `pkg/cli/root.go`, `pkg/cli/root_run_test.go`, `pkg/cli/root_work.go`, `pkg/config/operatorconfig/environment_resolution.go`, `pkg/root/input.go`, `pkg/root/root.go`, `pkg/root/root_test.go`. |
+| Batch 005 — `create-root-process-owner` | Active head `4516ea35aeff5cdde5e578b9000b8054db6bb834`; changed files: `pkg/transports/cli/root.go`, `pkg/transports/cli/root_run_test.go`, `pkg/transports/cli/root_work.go`, `pkg/config/operatorconfig/environment_resolution.go`, `pkg/root/input.go`, `pkg/root/root.go`, `pkg/root/root_test.go`. |
 | Batch 005 — `create-wire-application-graph` | Active head `8015a87fb4594a1659ab21c6a7720bf324ea7a85`; changed files: `pkg/wire/doc.go`, `pkg/wire/graph.go`, `pkg/wire/graph_test.go`. The dependency-blocked initializer item had no implementation file set yet. |
-| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/transports/http/**`, `pkg/transports/cli/**`, `pkg/transports/mcp/**`, `pkg/apisurface/**`, and `pkg/cli/**`. |
+| Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/transports/http/**`, `pkg/transports/cli/**`, `pkg/transports/mcp/**`, `pkg/transports/mapping/**`, and `pkg/transports/cli/**`. |
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factorysessionexecution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
@@ -639,8 +639,8 @@ every file in the named path set; the two file exceptions add the named PR colli
 | Detailed file set | Files | Directives | Snapshot ownership |
 | --- | ---: | ---: | --- |
 | `pkg/transports/http/**` | 6 | 12 | **Externally owned:** Batch 006 transport-family convergence |
-| `pkg/apisurface/**` | 6 | 8 | **Externally owned:** Batch 006 transport-family convergence |
-| `pkg/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
+| `pkg/transports/mapping/**` | 6 | 8 | **Externally owned:** Batch 006 transport-family convergence |
+| `pkg/transports/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/transports/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
 | `pkg/factorysessionexecution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
 | `pkg/interfaces/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/internal/cursorstorage/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
@@ -689,10 +689,10 @@ but all files were compared when selecting the cohort.
 | PR | Head revision | Files used for comparison |
 | --- | --- | --- |
 | #1001 `provider-failure-dashboard-details` | `ad2e805a360c1f6aaef11b0a9087c38cd36174ca` | `pkg/workers/provider/recording_provider_test.go`; `ui/src/api/dashboard/types.ts`; `ui/src/api/factory-sessions/normalize-durable-inspection.test.ts`; `ui/src/features/current-selection/base/messages/shell/current-selection-dispatch-history.ts`; `ui/src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-history-card.tsx`; `ui/src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-history.test.tsx`; `ui/src/features/current-selection/work-selection/components/execution/terminal-work-summary-detail.test.tsx`; `ui/src/features/current-selection/work-selection/components/execution/terminal-work-summary-detail.tsx`; `ui/src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-metadata-details.test.tsx`; `ui/src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-metadata-details.tsx`; `ui/src/features/current-selection/work-selection/components/work-item/work-item-card.stories.tsx`; `ui/src/features/factory-session-detail/components/dispatch-detail/dispatch-detail-content.test.tsx`; `ui/src/features/factory-session-detail/components/dispatch-detail/dispatch-detail-content.tsx`; `ui/src/features/factory-session-detail/components/factory-session-detail-panel.failure.test.tsx`; `ui/src/features/factory-session-detail/components/live-provider-inspection/factory-session-detail-panel.failed-bridged-child-inspection.test.tsx`; `ui/src/features/factory-session-detail/components/stories/factory-session-detail-panel.live-provider-story-definitions.stories.shared.tsx`; `ui/src/features/factory-session-detail/lib/factory-session-detail-panel.story-definitions.stories.shared.tsx`; `ui/src/features/factory-session-detail/messages/factory-session-detail.ts`; `ui/src/features/timeline/state/timeline/cloneTimelineSnapshot.ts`; `ui/src/features/timeline/state/timeline/projectWorkstationRequests.ts`; `ui/src/features/timeline/state/timeline/replayCompletion.ts`; `ui/src/features/timeline/state/timeline/replayWorldState.ts`; `ui/src/features/timeline/state/timeline/replayWorldStateInference.test.ts`; `ui/src/features/timeline/state/timeline/replayWorldStateSupport.ts`; `ui/src/features/timeline/state/timeline/types.ts`; `ui/src/testing/factory-session-live-provider-inspection-fixtures.ts` |
-| #1037 `session-repair-exact-checkpoint-identity` | `94066d9ae60a9f609b690076a2a2cd69a61626cb` | `pkg/cli/root.go`; `pkg/transports/cli/run/failure_baseline_quiet_leak_test.go`; `pkg/cli/terminalpolicy/policy.go`; `pkg/cli/terminalpolicy/policy_test.go`; `pkg/workers/process/command_test.go`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.identity-race.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.ts`; `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`; `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.test.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.ts`; `ui/src/features/timeline/public/index.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.multi-session.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.test.ts`; `ui/src/features/timeline/state/timelineCheckpointPersistence.ts` |
-| #1040 `you-goal-b07-stream-program-gate` | `41ad64d6d527d7bb6c09131f94e71c879318f9f3` | `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`; `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`; `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`; `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`; `docs/internal/processes/api-relevant-files.md`; `docs/internal/processes/invocation-relevant-files.md`; `pkg/cli/root.go`; `pkg/packagedfactories/subagent/materialize_test.go`; `pkg/workers/service/hosted_poller_test.go`; `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`; `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`; `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`; `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go` |
+| #1037 `session-repair-exact-checkpoint-identity` | `94066d9ae60a9f609b690076a2a2cd69a61626cb` | `pkg/transports/cli/root.go`; `pkg/transports/cli/run/failure_baseline_quiet_leak_test.go`; `pkg/transports/cli/terminalpolicy/policy.go`; `pkg/transports/cli/terminalpolicy/policy_test.go`; `pkg/workers/process/command_test.go`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.identity-race.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`; `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.ts`; `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx`; `ui/src/features/dashboard/lib/dashboard-session-lifecycle.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`; `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.test.ts`; `ui/src/features/timeline/lib/stream-derived-cache-identity.ts`; `ui/src/features/timeline/public/index.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/deletePersistedTimelineCheckpoint.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.multi-session.test.ts`; `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.test.ts`; `ui/src/features/timeline/state/timelineCheckpointPersistence.ts` |
+| #1040 `you-goal-b07-stream-program-gate` | `41ad64d6d527d7bb6c09131f94e71c879318f9f3` | `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`; `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`; `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`; `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`; `docs/internal/processes/api-relevant-files.md`; `docs/internal/processes/invocation-relevant-files.md`; `pkg/transports/cli/root.go`; `pkg/packagedfactories/subagent/materialize_test.go`; `pkg/workers/service/hosted_poller_test.go`; `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`; `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`; `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`; `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go` |
 | #1062 `fix-sessions` | `76db760b53e0cb0a15b5da8485d4a74f851eb93d` | `factory/workstations/review/AGENTS.md`; `pkg/runtimehost/model_catalog_test.go`; `pkg/runtimehost/runtime_sessions.go` |
-| #1064 `stream-b03-sse-contract` | `be3d3136a5135be080597e488184b054a082a840` | `api/codegen_config/client.yaml`; `api/codegen_config/server.yaml`; `api/components/parameters/ResponseEventAfterSequence.yaml`; `api/components/parameters/ResponseEventDispatchID.yaml`; `api/components/parameters/ResponseEventKind.yaml`; `api/components/responses/ResponseEventBadRequest.yaml`; `api/components/responses/ResponseEventSessionNotFound.yaml`; `api/components/responses/ResponseEventStreamExpired.yaml`; `api/components/schemas/api/ErrorFamily.yaml`; `api/components/schemas/api/ErrorResponse.yaml`; `api/openapi-main.yaml`; `api/openapi.yaml`; `contracts/testdata/baseline/rest-operations.json`; `docs/internal/processes/api-relevant-files.md`; `pkg/api/contracttests/generated_contract_common_test.go`; `pkg/api/contracttests/openapi_contract_authoring_test.go`; `pkg/api/contracttests/openapi_contract_response_events_test.go`; `pkg/api/contracttests/openapi_contract_surface_test.go`; `pkg/api/generated/server.gen.go`; `pkg/config/openapitests/parity_inventory_test.go`; `pkg/generatedclient/client.gen.go`; `ui/src/api/generated/openapi.ts` |
+| #1064 `stream-b03-sse-contract` | `be3d3136a5135be080597e488184b054a082a840` | `api/codegen_config/client.yaml`; `api/codegen_config/server.yaml`; `api/components/parameters/ResponseEventAfterSequence.yaml`; `api/components/parameters/ResponseEventDispatchID.yaml`; `api/components/parameters/ResponseEventKind.yaml`; `api/components/responses/ResponseEventBadRequest.yaml`; `api/components/responses/ResponseEventSessionNotFound.yaml`; `api/components/responses/ResponseEventStreamExpired.yaml`; `api/components/schemas/api/ErrorFamily.yaml`; `api/components/schemas/api/ErrorResponse.yaml`; `api/openapi-main.yaml`; `api/openapi.yaml`; `contracts/testdata/baseline/rest-operations.json`; `docs/internal/processes/api-relevant-files.md`; `pkg/transports/http/contracttests/generated_contract_common_test.go`; `pkg/transports/http/contracttests/openapi_contract_authoring_test.go`; `pkg/transports/http/contracttests/openapi_contract_response_events_test.go`; `pkg/transports/http/contracttests/openapi_contract_surface_test.go`; `pkg/transports/http/generated/server.gen.go`; `pkg/config/openapitests/parity_inventory_test.go`; `pkg/transports/http/client/client.gen.go`; `ui/src/api/generated/openapi.ts` |
 | #1066 `stream-b03-provider-adapter-kernel` | `f680f5737f131888137969574b2721f462f40b67` | `pkg/factorysessions/responseevents/draft.go`; `pkg/factorysessions/responseevents/draft_test.go`; `pkg/workers/provider/adapter/contract.go`; `pkg/workers/provider/adapter/contract_test.go`; `pkg/workers/provider/adapter/orchestration.go`; `pkg/workers/provider/adapter/orchestration_test.go`; `pkg/workers/provider/adapter/registry.go`; `pkg/workers/provider/adapter/registry_test.go`; `pkg/workers/provider/adapter/testkit/conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_test.go`; `pkg/workers/provider/adapter/testkit/full_stream_test.go` |
 
 Active website-session work was also excluded from cohort selection. PR #1037's exact set
@@ -733,7 +733,7 @@ it does not authorize duplicate cleanup.
 
 The focused scan found **0** directive matches in excluded generated, vendored, or
 `testdata` source; this revision has no `vendor/` directory. These are not handwritten debt. The checker policy in
-`internal/backendsizecheck/policy.go` excludes `pkg/api/generated`, `pkg/generatedclient`,
+`internal/backendsizecheck/policy.go` excludes `pkg/transports/http/generated`, `pkg/transports/http/client`,
 any `pkg/**/testdata` or `tests/**/testdata` directory, and all of `vendor` because those
 trees are generated output, test inputs, or third-party code rather than maintained backend
 source. A zero-match section is retained so future refreshes cannot conflate an exclusion

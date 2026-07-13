@@ -28,7 +28,7 @@ CLI response-stream rendering.
 
 | Surface | CLI wiring | Proof |
 |---------|------------|-------|
-| Interrupted-to-resumed success | `pkg/transports/cli/session/show.go`, `pkg/transports/cli/session/lifecycle_control.go`, `pkg/cli/root_work.go` | `pkg/transports/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands`) |
+| Interrupted-to-resumed success | `pkg/transports/cli/session/show.go`, `pkg/transports/cli/session/lifecycle_control.go`, `pkg/transports/cli/root_work.go` | `pkg/transports/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedSessionCommands`) |
 | Resume continuity without replay | `pkg/transports/cli/session/dispatches.go` | `pkg/transports/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay`) |
 | Typed invalid resume outcomes | `pkg/transports/cli/session/lifecycle_control.go` | `pkg/transports/cli/session/smoke/resume_smoke_test.go` (`TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead`, `TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead`) |
 | Additive non-resume CLI regression | existing `pkg/transports/cli/session` create/show/list/lifecycle-control commands | `pkg/transports/cli/session/smoke/resume_non_regression_test.go` |

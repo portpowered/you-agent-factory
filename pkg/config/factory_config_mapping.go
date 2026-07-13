@@ -10,11 +10,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 

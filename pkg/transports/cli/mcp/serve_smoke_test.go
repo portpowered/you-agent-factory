@@ -280,7 +280,7 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 
 func newContractFixtureService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(path)
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)

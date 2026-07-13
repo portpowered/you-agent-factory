@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
@@ -19,6 +18,7 @@ import (
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )

@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestReconstructFactoryWorldState_PetriFixtureReconstructsMarkingWithoutJavaScriptProjection(t *testing.T) {

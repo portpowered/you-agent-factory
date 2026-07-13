@@ -355,7 +355,7 @@ func assertGeneratedFixtureRoundTrip(t *testing.T, payload map[string]any, label
 func loadDurableSessionContractFixtureCatalog(t *testing.T) durableSessionContractFixtureCatalog {
 	t.Helper()
 
-	fixtureBytes, err := os.ReadFile("../../../api/testdata/durable-session-contract-fixtures.json")
+	fixtureBytes, err := os.ReadFile("../testdata/durable-session-contract-fixtures.json")
 	if err != nil {
 		t.Fatalf("read durable session contract fixtures: %v", err)
 	}

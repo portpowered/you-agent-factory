@@ -23,7 +23,7 @@ func TestPackageBoundary_DoesNotImportForbiddenTransportOrProviderPackages(t *te
 	}
 
 	forbiddenRoots := []string{
-		"github.com/portpowered/infinite-you/pkg/cli",
+		"github.com/portpowered/infinite-you/pkg/transports/cli",
 		"github.com/portpowered/infinite-you/pkg/workers",
 		"net/http",
 		"os/exec",

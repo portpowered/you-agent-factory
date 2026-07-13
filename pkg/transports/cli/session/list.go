@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )

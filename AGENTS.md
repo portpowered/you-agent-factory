@@ -82,11 +82,9 @@ the standards.
   factory-local docs.
 - `pkg/transports/http/` contains handwritten HTTP handlers, HTTP boundary and
   server tests, API contract tests, and generated-only contract/client child
-  packages. `pkg/api/` is a deprecated forwarding package pending Batch 008;
-  API compatibility fixture data remains there until that removal lane.
-- `pkg/apisurface/` contains transport-neutral public contracts and legacy
-  request/response shaping that is still converging into the transport family.
-- `pkg/transports/mapping/` owns stateless composition of explicit wired
+  packages, plus HTTP compatibility fixture data under `testdata/`.
+- `pkg/transports/mapping/` contains transport-neutral public contracts,
+  request/response shaping, and stateless composition of explicit wired
   collaborators into transport-facing application surfaces.
 - `pkg/transports/cli/` owns setup, configuration, documentation,
   factory-authoring, workflow validation/preview, execution, Work, Factory
@@ -137,7 +135,7 @@ the standards.
   - `ui/src/api/generated/openapi.ts`
 - Run `make generate-api` after OpenAPI changes.
 - For API surface changes, update the matching `pkg/transports/http` handlers,
-  `pkg/apisurface` mappers/normalizers, generated clients, UI API adapters, and
+  `pkg/transports/mapping` mappers/normalizers, generated clients, UI API adapters, and
   contract tests as applicable.
 - Run `make api-smoke` for public REST contract changes when feasible.
 

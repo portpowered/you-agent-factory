@@ -17,11 +17,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/cli/batchload"
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
-	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -31,10 +26,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 

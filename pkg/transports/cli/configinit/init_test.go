@@ -101,8 +101,8 @@ func TestInit_UsesProvidedHomeDirWithoutReadingProcessHome(t *testing.T) {
 	homeDir := t.TempDir()
 	var stdout bytes.Buffer
 	if err := Init(InitConfig{
-		HomeDir: homeDir,
-		Output:  &stdout,
+		HomeDir:     homeDir,
+		Output:      &stdout,
 		Diagnostics: io.Discard,
 	}); err != nil {
 		t.Fatalf("Init() error = %v", err)

@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 func logInitRequest(cfg InitConfig, scaffoldType ScaffoldType, dirAlreadyExisted bool) {

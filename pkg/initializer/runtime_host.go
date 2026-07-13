@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // LocalRuntimeRunner is the session/runtime seam used by local in-process CLI

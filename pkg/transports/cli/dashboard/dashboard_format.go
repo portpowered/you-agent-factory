@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 )
 
 func formatDurationShort(d time.Duration) string {

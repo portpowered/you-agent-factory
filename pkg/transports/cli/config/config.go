@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 // FactoryConfigFlattenConfig holds parameters for the config flatten command.

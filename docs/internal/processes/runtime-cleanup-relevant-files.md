@@ -105,6 +105,13 @@ finish the named move, not ownership rationale for new product behavior.
 transport packages should own narrow contracts that startup injects instead of
 depending outward on the application graph.
 
+The same guard rejects imports of the retired transport roots `pkg/api`,
+`pkg/apisurface`, `pkg/cli`, `pkg/mcp`, and `pkg/generatedclient`, with a
+diagnostic naming the canonical successor. It also requires every Go file in
+`pkg/transports/http/client` and `pkg/transports/http/generated` to carry the
+standard generated-code marker; handwritten mapping belongs outside those
+generated-only packages.
+
 ## Vocabulary Guardrails
 
 Changed customer-facing docs, API descriptions, CLI help, dashboard copy, and

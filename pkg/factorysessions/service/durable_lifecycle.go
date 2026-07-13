@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // PauseDurableFactorySession applies durable pause control through the control plane.

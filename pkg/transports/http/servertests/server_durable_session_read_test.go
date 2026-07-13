@@ -481,7 +481,7 @@ func setupAPILifecycleWorkflowFixture(t *testing.T, fixtureName, workflowName st
 func newAPILifecycleFakeService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
 	return newAPIFixtureExecutionService(t,
-		filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json"),
+		filepath.Join("..", "testdata", "durable-session-contract-fixtures.json"),
 	)
 }
 

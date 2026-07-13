@@ -1,9 +1,9 @@
 # Backend packages currently below the per-package coverage gate.
 # Keep this list temporary. New packages under the threshold should fail the
 # coverage lane instead of being added here by default.
-github.com/portpowered/infinite-you/pkg/api
-github.com/portpowered/infinite-you/pkg/api/apitypes
-github.com/portpowered/infinite-you/pkg/apisurface
+github.com/portpowered/infinite-you/pkg/transports/http
+github.com/portpowered/infinite-you/pkg/transports/http/apitypes
+github.com/portpowered/infinite-you/pkg/transports/mapping
 github.com/portpowered/infinite-you/pkg/transports/cli/config
 github.com/portpowered/infinite-you/pkg/transports/cli/mcp
 github.com/portpowered/infinite-you/pkg/transports/cli/models
@@ -44,33 +44,33 @@ github.com/portpowered/infinite-you/pkg/workcontent/materialize
 github.com/portpowered/infinite-you/pkg/workers/mockworker
 
 
-github.com/portpowered/infinite-you/pkg/apisurface/optional 
-github.com/portpowered/infinite-you/pkg/cli/clidiag 
-github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender 
-github.com/portpowered/infinite-you/pkg/transports/cli/default 
-github.com/portpowered/infinite-you/pkg/config 
-github.com/portpowered/infinite-you/pkg/config/load 
-github.com/portpowered/infinite-you/pkg/config/mockworkers 
-github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime 
-github.com/portpowered/infinite-you/pkg/config/retiredboundary 
-github.com/portpowered/infinite-you/pkg/factory 
-github.com/portpowered/infinite-you/pkg/factory/events 
-github.com/portpowered/infinite-you/pkg/factory/projections 
-github.com/portpowered/infinite-you/pkg/factory/requests 
-github.com/portpowered/infinite-you/pkg/factory/service 
-github.com/portpowered/infinite-you/pkg/factory/state 
-github.com/portpowered/infinite-you/pkg/factory/subsystems 
-github.com/portpowered/infinite-you/pkg/factory/throttle 
-github.com/portpowered/infinite-you/pkg/factory/token_transformer 
-github.com/portpowered/infinite-you/pkg/factory/validation 
-github.com/portpowered/infinite-you/pkg/interfaces 
-github.com/portpowered/infinite-you/pkg/logging 
-github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview 
-github.com/portpowered/infinite-you/pkg/factory/ingest 
-github.com/portpowered/infinite-you/pkg/service/runtimebuild 
-github.com/portpowered/infinite-you/pkg/timework 
-github.com/portpowered/infinite-you/pkg/workcontent 
-github.com/portpowered/infinite-you/pkg/workers 
-github.com/portpowered/infinite-you/pkg/workers/executor 
-github.com/portpowered/infinite-you/pkg/workers/process 
+github.com/portpowered/infinite-you/pkg/transports/mapping/optional
+github.com/portpowered/infinite-you/pkg/transports/cli/clidiag
+github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender
+github.com/portpowered/infinite-you/pkg/transports/cli/default
+github.com/portpowered/infinite-you/pkg/config
+github.com/portpowered/infinite-you/pkg/config/load
+github.com/portpowered/infinite-you/pkg/config/mockworkers
+github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime
+github.com/portpowered/infinite-you/pkg/config/retiredboundary
+github.com/portpowered/infinite-you/pkg/factory
+github.com/portpowered/infinite-you/pkg/factory/events
+github.com/portpowered/infinite-you/pkg/factory/projections
+github.com/portpowered/infinite-you/pkg/factory/requests
+github.com/portpowered/infinite-you/pkg/factory/service
+github.com/portpowered/infinite-you/pkg/factory/state
+github.com/portpowered/infinite-you/pkg/factory/subsystems
+github.com/portpowered/infinite-you/pkg/factory/throttle
+github.com/portpowered/infinite-you/pkg/factory/token_transformer
+github.com/portpowered/infinite-you/pkg/factory/validation
+github.com/portpowered/infinite-you/pkg/interfaces
+github.com/portpowered/infinite-you/pkg/logging
+github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview
+github.com/portpowered/infinite-you/pkg/factory/ingest
+github.com/portpowered/infinite-you/pkg/service/runtimebuild
+github.com/portpowered/infinite-you/pkg/timework
+github.com/portpowered/infinite-you/pkg/workcontent
+github.com/portpowered/infinite-you/pkg/workers
+github.com/portpowered/infinite-you/pkg/workers/executor
+github.com/portpowered/infinite-you/pkg/workers/process
 github.com/portpowered/infinite-you/pkg/workers/prompting

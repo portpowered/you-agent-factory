@@ -3,12 +3,6 @@
   "entries": [
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/cli/root_run_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/config/config_mapper.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: factory config cloning and layout deep-copy helpers remain consolidated with CloneFactoryConfig until mapper seams are extracted."
@@ -135,6 +129,12 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/transports/cli/root_run_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/transports/cli/run/run_invocation_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated run invocation tests remain together until dedicated CLI invocation test seams split."
@@ -186,84 +186,6 @@
       "target": "tests/functional/runtime_api/factory_transformation/api_current_factory_put_layout_test.go#TestCurrentFactoryPUT_PreservesPortableLayoutThroughSaveReloadAndRuntimeExecution",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: this end-to-end current-factory layout round-trip test keeps save, reload, persistence, and runtime assertions on one contract seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_execution_test.go#TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract test keeps sync start terminal and timeout fixture assertions together on one seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_fake_consumer_test.go#TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this consumer test keeps fake-service projection assertions together across apisurface mappers."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_lifecycle.go#lifecycleTimestampsToAPI",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this mapper keeps optional durable lifecycle timestamp fields together on one API projection seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_mapper.go#DispatchDetailFromAPI",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps dispatch detail fields together for API round-trip coverage."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_mapper.go#DurableSessionListSummaryFromAPI",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps durable list summary fields together for API round-trip coverage."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_mapper.go#SessionReadResultFromAPI",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps durable session read fields together for API round-trip coverage."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_mapper_test.go#assertListSummaryFieldsPreserved",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this assertion keeps durable list summary fixture field checks together on one contract test seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/apisurface/factorysession/factory_session_projection_test.go#TestProjectionResponses_TrimAndOmitOptionalFields",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this boundary regression intentionally covers optional-field trimming in one table-like scenario."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/cliinputs/parser_parity_test.go#TestProductionParserParity_RepresentativeCommands",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: table-driven parser parity keeps inventory lookup, parse, and per-case verify hooks in one harness."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/cliinputs/parser_parity_test.go#productionParserParityRunFlagCases",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: run parser parity cases keep inline verify closures beside argv fixtures for reviewer readability."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/cliinputs/parser_parity_test.go#productionParserParitySubmitCases",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: submit parser parity cases keep inline verify closures beside argv fixtures for reviewer readability."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/cliinputs/synthetic_args_relationships_test.go#assertSyntheticArgumentRecord",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic argument assertions keep the full plan §4.3 field contract visible in one helper."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/cli/cliinputs/synthetic_flags_test.go#assertSyntheticFlagRecord",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic flag assertions keep the full plan §4.3 field contract visible in one helper."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -645,6 +567,36 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/parser_parity_test.go#TestProductionParserParity_RepresentativeCommands",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: table-driven parser parity keeps inventory lookup, parse, and per-case verify hooks in one harness."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/parser_parity_test.go#productionParserParityRunFlagCases",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: run parser parity cases keep inline verify closures beside argv fixtures for reviewer readability."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/parser_parity_test.go#productionParserParitySubmitCases",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: submit parser parity cases keep inline verify closures beside argv fixtures for reviewer readability."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/synthetic_args_relationships_test.go#assertSyntheticArgumentRecord",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic argument assertions keep the full plan §4.3 field contract visible in one helper."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/cliinputs/synthetic_flags_test.go#assertSyntheticFlagRecord",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: synthetic flag assertions keep the full plan §4.3 field contract visible in one helper."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/cli/config/config_test.go#assertDeterministicExpandedRuntimeConfig",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime-shape helper keeps the expanded config contract readable in one assertion pass."
@@ -741,6 +693,54 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_execution_test.go#TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract test keeps sync start terminal and timeout fixture assertions together on one seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_fake_consumer_test.go#TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this consumer test keeps fake-service projection assertions together across apisurface mappers."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_lifecycle.go#lifecycleTimestampsToAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this mapper keeps optional durable lifecycle timestamp fields together on one API projection seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper.go#DispatchDetailFromAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps dispatch detail fields together for API round-trip coverage."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper.go#DurableSessionListSummaryFromAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps durable list summary fields together for API round-trip coverage."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper.go#SessionReadResultFromAPI",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this inverse mapper keeps durable session read fields together for API round-trip coverage."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_mapper_test.go#assertListSummaryFieldsPreserved",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this assertion keeps durable list summary fixture field checks together on one contract test seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/mapping/factorysession/factory_session_projection_test.go#TestProjectionResponses_TrimAndOmitOptionalFields",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this boundary regression intentionally covers optional-field trimming in one table-like scenario."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/mcp/factorysession/execution_test.go#TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this MCP async polling test keeps running, not-ready, and completed fixture assertions together on one mock-client seam."
@@ -834,12 +834,6 @@
       "target": "pkg/workers/provider/recording_provider_test.go#TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEvent",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this recording-provider regression keeps the misconfigured-provider event contract together in one scenario."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/cli/root_run_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
@@ -960,6 +954,12 @@
       "target": "pkg/service/testmain_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated same-package service tests remain on root-only runtime seams until dedicated service test seams are extracted."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/transports/cli/root_run_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",

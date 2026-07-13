@@ -201,7 +201,7 @@ func appendFinding(findings *[]string, fileSet *token.FileSet, position token.Po
 }
 
 func isTransportTest(relative string) bool {
-	for _, root := range []string{"pkg/transports/", "pkg/api/", "pkg/cli/"} {
+	for _, root := range []string{"pkg/transports/"} {
 		if strings.HasPrefix(relative, root) {
 			return true
 		}

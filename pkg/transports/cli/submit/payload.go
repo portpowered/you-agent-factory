@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
 func readSubmitPayload(payloadPath string) (payload json.RawMessage, raw []byte, payloadType string, err error) {

@@ -181,7 +181,6 @@ root.
 
 | Migration-only roots | Target owner | Active work item and deletion gate |
 | --- | --- | --- |
-| `pkg/api`, `pkg/apisurface`, `pkg/cli` | `pkg/transports` | **Batch 006 — Transport family move.** Remove each exception when its HTTP, CLI, generated-contract/client, and boundary-mapping behavior and callers have moved to `pkg/transports`. MCP adapters and callers have moved to `pkg/transports/mcp` and `pkg/transports/cli/mcp`; the historical `pkg/mcp` root is retired. |
 | `pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, `pkg/workquery` | `pkg/work` | **Batch 006 — Work family move.** Remove each exception when its Work content, query, graph, pure invocation policy, materialization, or cron/time-work behavior and callers have moved to `pkg/work`. |
 | `pkg/logging`, `pkg/replay`, `pkg/sessionpersistence` | `pkg/platform` | **Batch 006 — Platform family move.** Remove each exception when its logging, replay/artifact, metrics, cursor persistence, or non-domain clock infrastructure and callers have moved to `pkg/platform`. |
 | `pkg/service` | `pkg/wire` after domain behavior converges on its narrow owners | **Batch 007 — Service and Factory Session ownership convergence**, followed by **Batch 008 — Legacy composition-root deletion.** Remove the exception when domain/session behavior has moved to its narrow owner and the remaining construction shell has moved to `pkg/wire`. |
@@ -193,6 +192,12 @@ files carrying the standard `Code generated ... DO NOT EDIT.` header. They may
 contain generated transport contracts or clients but must never own handwritten
 product behavior.
 
+The historical transport roots `pkg/api`, `pkg/apisurface`, `pkg/cli`,
+`pkg/mcp`, and `pkg/generatedclient` are retired. Repository code imports their
+canonical successors under `pkg/transports`; the package-boundary guard rejects
+reintroduction of those imports and handwritten Go inside generated-only
+transport packages.
+
 ### Other migration-era surfaces and compatibility aliases
 
 The following packages and aliases exist to keep current behavior working while
@@ -203,8 +208,6 @@ or part of an active removal lane.
 
 | Migration-era surface | Temporary role | Target owner or sunset expectation |
 | --- | --- | --- |
-| `pkg/api` and `pkg/api/apitypes` | Deprecated forwarding aliases for the canonical HTTP server and HTTP-specific scalar type; compatibility fixture data remains rooted under `pkg/api/testdata` during the transport migration. | New code imports `pkg/transports/http` and `pkg/transports/http/apitypes`. Remove the aliases and relocate compatibility fixture ownership under Batch 008. |
-| `pkg/cli` | Migration-era root command and MCP adapter. Setup, configuration, packaged docs, factory authoring, workflow validation/preview, execution, Work, Factory Session, model, server/startup, and dashboard adapters already live under `pkg/transports/cli`. | Move the remaining MCP journey under `pkg/transports/cli`, then remove the historical root under Batch 008. |
 | Broad `pkg/service` runtime composition files, including `factory.go`, `factory_build.go`, `runtime_sessions.go`, `model_catalog.go`, and `factory_editable_definition.go` | Compatibility shell for existing API, CLI, session, model, save, and runtime construction entrypoints. | Move durable behavior to the narrow owner: Factory Session state to `pkg/factorysessions`, durable execution to `pkg/factorysessionexecution`, model behavior to `pkg/modelhost` and `pkg/models/service`, Work behavior to target `pkg/work`, factory definition behavior to `pkg/factorydefinition/service`, and startup graph construction to target `pkg/wire`. Leave `pkg/service` as thin routing until Batch 007 convergence and Batch 008 deletion gates are complete. |
 | `pkg/runtimehost` | Transitional wrapper around the service-backed runtime host shape. | Replace host ownership with explicit Factory Session, runtime loop, and initializer dependencies. Sunset the package once transports and session APIs no longer need a runtime-host facade around `FactoryService` compatibility. |
 | `pkg/composebridge` | Bridge that lets `pkg/initializer` reuse service-owned runtime bundle construction during the migration. | Move dependency graph assembly to target `pkg/wire` and keep lifecycle execution in `pkg/initializer`. Delete the bridge under Batch 008 when initializer paths consume the explicit graph without reaching through service composition internals. |

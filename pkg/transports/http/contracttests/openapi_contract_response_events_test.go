@@ -488,7 +488,7 @@ func loadRepresentativeResponseEventFixture(t *testing.T, name string) map[strin
 
 func loadResponseEventPayloadCoverageFixture(t *testing.T) []map[string]any {
 	t.Helper()
-	data, err := os.ReadFile("../../../api/testdata/canonical-response-event-payload-coverage.json")
+	data, err := os.ReadFile("../testdata/canonical-response-event-payload-coverage.json")
 	if err != nil {
 		t.Fatalf("read response-event payload coverage fixture: %v", err)
 	}
@@ -503,7 +503,7 @@ func loadResponseEventPayloadCoverageFixture(t *testing.T) []map[string]any {
 
 func loadResponseEventContentBlockCoverageFixture(t *testing.T) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile("../../../api/testdata/canonical-response-event-content-block-coverage.json")
+	data, err := os.ReadFile("../testdata/canonical-response-event-content-block-coverage.json")
 	if err != nil {
 		t.Fatalf("read response-event content block coverage fixture: %v", err)
 	}
@@ -674,7 +674,7 @@ func assertStreamGapBounds(t *testing.T, payload json.RawMessage, wantFrom, want
 }
 
 func TestGeneratedFactoryResponseEventPayloadCoverageFixturesRoundTrip(t *testing.T) {
-	raw, err := os.ReadFile(filepath.FromSlash("../../../api/testdata/canonical-response-event-payload-coverage.json"))
+	raw, err := os.ReadFile(filepath.FromSlash("../testdata/canonical-response-event-payload-coverage.json"))
 	if err != nil {
 		t.Fatalf("read payload coverage fixture: %v", err)
 	}
@@ -707,7 +707,7 @@ func TestGeneratedFactoryResponseEventPayloadCoverageFixturesRoundTrip(t *testin
 }
 
 func TestGeneratedFactoryResponseEventContentBlockCoverageFixtureRoundTrip(t *testing.T) {
-	raw, err := os.ReadFile(filepath.FromSlash("../../../api/testdata/canonical-response-event-content-block-coverage.json"))
+	raw, err := os.ReadFile(filepath.FromSlash("../testdata/canonical-response-event-content-block-coverage.json"))
 	if err != nil {
 		t.Fatalf("read content block coverage fixture: %v", err)
 	}

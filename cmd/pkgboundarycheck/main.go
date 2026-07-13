@@ -19,6 +19,14 @@ const batch001MigrationShimMarker = "Batch 001 compatibility shim"
 const javascriptOrchestratorImportPrefix = "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/"
 const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire"
 
+var retiredTransportImports = map[string]string{
+	"github.com/portpowered/infinite-you/pkg/api":             "github.com/portpowered/infinite-you/pkg/transports/http",
+	"github.com/portpowered/infinite-you/pkg/apisurface":      "github.com/portpowered/infinite-you/pkg/transports/mapping",
+	"github.com/portpowered/infinite-you/pkg/cli":             "github.com/portpowered/infinite-you/pkg/transports/cli",
+	"github.com/portpowered/infinite-you/pkg/mcp":             "github.com/portpowered/infinite-you/pkg/transports/mcp",
+	"github.com/portpowered/infinite-you/pkg/generatedclient": "github.com/portpowered/infinite-you/pkg/transports/http/client",
+}
+
 var approvedApplicationGraphImporters = []string{
 	"pkg/initializer",
 	"pkg/root",
@@ -88,9 +96,6 @@ const (
 )
 
 var documentedMigrationPackageExceptions = []migrationPackageException{
-	{packagePath: "pkg/api", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after transport contracts, handlers, and callers move to pkg/transports"},
-	{packagePath: "pkg/apisurface", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after boundary mapping and callers move to pkg/transports"},
-	{packagePath: "pkg/cli", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after CLI adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/invocations", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after invocation input and return policy move to pkg/work"},
 	{packagePath: "pkg/materialize", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after materialization behavior and callers move to pkg/work"},
 	{packagePath: "pkg/timework", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after cron and time-work behavior and callers move to pkg/work"},
@@ -127,6 +132,8 @@ type scanResult struct {
 	rootPackageFindings            []rootPackageFinding
 	migrationShimFindings          []migrationShimFinding
 	applicationGraphImportFindings []applicationGraphImportFinding
+	retiredTransportImportFindings []retiredTransportImportFinding
+	handwrittenGeneratedFindings   []handwrittenGeneratedFinding
 }
 
 type rootPackageFinding struct {
@@ -142,6 +149,17 @@ type migrationShimFinding struct {
 type applicationGraphImportFinding struct {
 	packagePath string
 	filePath    string
+}
+
+type retiredTransportImportFinding struct {
+	filePath        string
+	importPath      string
+	canonicalTarget string
+}
+
+type handwrittenGeneratedFinding struct {
+	filePath    string
+	packagePath string
 }
 
 func main() {
@@ -179,7 +197,9 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	}
 	blockingViolationCount := len(findings.rootPackageFindings) +
 		len(findings.migrationShimFindings) +
-		len(findings.applicationGraphImportFindings)
+		len(findings.applicationGraphImportFindings) +
+		len(findings.retiredTransportImportFindings) +
+		len(findings.handwrittenGeneratedFindings)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
@@ -193,6 +213,8 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	}
 	writeMigrationShimBlockingFindings(stderr, findings.migrationShimFindings)
 	writeApplicationGraphImportFindings(stderr, findings.applicationGraphImportFindings)
+	writeRetiredTransportImportFindings(stderr, findings.retiredTransportImportFindings)
+	writeHandwrittenGeneratedFindings(stderr, findings.handwrittenGeneratedFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -246,6 +268,10 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.retiredTransportImportFindings, result.handwrittenGeneratedFindings, err = scanTransportOwnership(repoRoot, scanRoot, cfg.packageRoot, policy)
+	if err != nil {
+		return scanResult{}, err
+	}
 
 	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)
@@ -254,6 +280,104 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return strings.Compare(left.packagePath, right.packagePath)
 	})
 	return result, nil
+}
+
+func scanTransportOwnership(
+	repoRoot string,
+	scanRoot string,
+	packageRoot string,
+	policy boundaryPolicy,
+) ([]retiredTransportImportFinding, []handwrittenGeneratedFinding, error) {
+	var retiredImports []retiredTransportImportFinding
+	var handwrittenGenerated []handwrittenGeneratedFinding
+	err := filepath.WalkDir(scanRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read transport ownership file %s: %w", filepath.ToSlash(path), err)
+		}
+		filePath, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return fmt.Errorf("resolve transport ownership file %s: %w", filepath.ToSlash(path), err)
+		}
+		filePath = filepath.ToSlash(filePath)
+
+		if packagePath, generatedOnly := generatedOnlyPackageForFile(repoRoot, path, policy.generatedCodeExceptions); generatedOnly {
+			parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ParseComments)
+			if err != nil {
+				return fmt.Errorf("parse generated-only package file %s: %w", filePath, err)
+			}
+			if !ast.IsGenerated(parsedFile) {
+				handwrittenGenerated = append(handwrittenGenerated, handwrittenGeneratedFinding{
+					filePath:    filePath,
+					packagePath: packagePath,
+				})
+			}
+		}
+
+		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("parse transport ownership imports %s: %w", filePath, err)
+		}
+		for _, importSpec := range parsedFile.Imports {
+			importPath, err := strconv.Unquote(importSpec.Path.Value)
+			if err != nil {
+				continue
+			}
+			canonicalTarget, retired := retiredTransportTarget(importPath)
+			if !retired {
+				continue
+			}
+			retiredImports = append(retiredImports, retiredTransportImportFinding{
+				filePath:        filePath,
+				importPath:      importPath,
+				canonicalTarget: canonicalTarget,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("scan %s transport ownership: %w", filepath.ToSlash(packageRoot), err)
+	}
+
+	slices.SortFunc(retiredImports, func(left, right retiredTransportImportFinding) int {
+		return strings.Compare(left.filePath+left.importPath, right.filePath+right.importPath)
+	})
+	slices.SortFunc(handwrittenGenerated, func(left, right handwrittenGeneratedFinding) int {
+		return strings.Compare(left.filePath, right.filePath)
+	})
+	return retiredImports, handwrittenGenerated, nil
+}
+
+func retiredTransportTarget(importPath string) (string, bool) {
+	for retiredPath, canonicalTarget := range retiredTransportImports {
+		if importPath == retiredPath || strings.HasPrefix(importPath, retiredPath+"/") {
+			suffix := strings.TrimPrefix(importPath, retiredPath)
+			return canonicalTarget + suffix, true
+		}
+	}
+	return "", false
+}
+
+func generatedOnlyPackageForFile(repoRoot string, path string, exceptions []generatedCodeException) (string, bool) {
+	for _, exception := range exceptions {
+		packageDir := filepath.Join(repoRoot, filepath.FromSlash(exception.packagePath))
+		relativePath, err := filepath.Rel(packageDir, path)
+		if err != nil || relativePath == "." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if exception.scope == generatedCodeExceptionScopeRoot && filepath.Dir(relativePath) != "." {
+			continue
+		}
+		return exception.packagePath, true
+	}
+	return "", false
 }
 
 func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot string) ([]applicationGraphImportFinding, error) {
@@ -510,5 +634,21 @@ func writeApplicationGraphImportFindings(writer io.Writer, findings []applicatio
 		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited application composition import: %s (%s)\n", finding.packagePath, finding.filePath)
 		fmt.Fprintln(writer, "  reason: pkg/wire is the outward application composition root and must not be imported by domain or transport packages.")
 		fmt.Fprintln(writer, "  remediation: depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer.")
+	}
+}
+
+func writeRetiredTransportImportFindings(writer io.Writer, findings []retiredTransportImportFinding) {
+	for _, finding := range findings {
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited legacy transport import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "  reason: %s is a retired transport root.\n", finding.importPath)
+		fmt.Fprintf(writer, "  remediation: import the canonical successor %s.\n", finding.canonicalTarget)
+	}
+}
+
+func writeHandwrittenGeneratedFindings(writer io.Writer, findings []handwrittenGeneratedFinding) {
+	for _, finding := range findings {
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] handwritten Go file in generated-only package: %s (%s)\n", finding.packagePath, finding.filePath)
+		fmt.Fprintln(writer, "  reason: generated-only packages may contain only files with the standard Code generated ... DO NOT EDIT. marker.")
+		fmt.Fprintln(writer, "  remediation: move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping.")
 	}
 }

@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // ProjectCheckpointArtifactRef maps one internal checkpoint record to public

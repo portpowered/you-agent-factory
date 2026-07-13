@@ -15,7 +15,7 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 - `cmd/factory/` is the CLI binary entrypoint.
 - `api/` contains the authored OpenAPI sources, bundling configuration, and published contract artifact used by generation and smoke checks.
 - `factory/` contains the checked-in operator workflow surfaces, including starter guidance, workstation prompts, and the live idea or batch inbox directories under `factory/inputs/`.
-- `pkg/cli/` temporarily owns Cobra root routing and the MCP command adapter;
+- `pkg/transports/cli/` temporarily owns Cobra root routing and the MCP command adapter;
   command-specific adapters, shared server/startup helpers, and CLI dashboard
   read models live under `pkg/transports/cli/`.
 - `pkg/factory/` owns runtime engine behavior, scheduling, markings, transitions, resources, and engine state snapshots.
@@ -161,7 +161,7 @@ The classifier is what decides whether the three downstream required test lanes 
 | `docs-only` | `docs/**` plus root-level docs or text files such as `README.md`, `*.md`, `*.mdx`, and `*.txt` | skip `UI Coverage`, skip `UI Browser Integration`, skip `Backend Verification` | No downstream lane rerun is expected; if the change was misclassified, rerun the classifier logic through `go run ./cmd/ciclassify ...` or use the full path with `make verify-pr`. |
 | `ui-only` | `ui/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | run `UI Coverage`, run `UI Browser Integration`, skip `Backend Verification` | `make run-sharded-ui-coverage` and `make ui-integration-test` |
 | `backend-only` | `cmd/**`, `pkg/**`, or `tests/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | skip `UI Coverage`, skip `UI Browser Integration`, run `Backend Verification` | `make test-backend-verification` |
-| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/api/**`, `pkg/apisurface/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify-pr` |
+| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/api/**`, `pkg/transports/mapping/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify-pr` |
 
 The workflow publishes this routing decision twice in GitHub Actions: the `Classify PR Impact` job summary shows the overall classification, changed-file count, touched areas, and the full required rerun command, and each downstream lane summary shows its own `run` versus `skip` decision together with the specific local rerun command and the short reason emitted by `cmd/ciclassify`.
 

@@ -3,8 +3,8 @@ package profiletests
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestResult_FactoryValidationResultAndTopologyValidationErrorInput(t *testing.T) {

@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/cli"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	"github.com/spf13/cobra"
 )

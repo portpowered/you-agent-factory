@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
@@ -20,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 

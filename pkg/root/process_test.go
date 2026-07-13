@@ -168,7 +168,7 @@ func TestProductionGraphConstructionFailuresPreventInitializerStartup(t *testing
 
 func TestProductionMCPGraphUsesSuppliedProcessStreams(t *testing.T) {
 	t.Parallel()
-	fixturePath := testutil.MustRepoPath(t, "pkg/api/testdata/durable-session-contract-fixtures.json")
+	fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
 	input := strings.NewReader(
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"root-test","version":"test"}}}` + "\n" +
 			`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"you.factory_session.list","arguments":{"scope":"persisted"}}}` + "\n",

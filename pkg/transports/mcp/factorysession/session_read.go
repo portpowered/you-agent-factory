@@ -3,9 +3,9 @@ package factorysession
 import (
 	"context"
 
-	apifactorysession "github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // ListSessionsInput is the MCP request shape for you.factory_session.list.

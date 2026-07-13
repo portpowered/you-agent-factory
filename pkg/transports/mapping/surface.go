@@ -1,72 +1,52 @@
-// Package mapping composes stateless transport-facing application surfaces
-// from explicit collaborators assembled by the application graph.
-package mapping
+package apisurface
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"reflect"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// DurableSessionAPI is the durable execution role consumed by transports.
-type DurableSessionAPI = apisurface.DurableSessionAPI
+// ErrFactoryResponseEventStreamExpired reports that the completed session's
+// ephemeral response-event retention window elapsed before subscription.
+var ErrFactoryResponseEventStreamExpired = errors.New("factory response event stream expired")
 
-type composedSessionAPISurface struct {
-	apisurface.SessionAPI
-	apisurface.ModelAPI
-	apisurface.FactorySaveAPI
-	apisurface.InvocationAPI
-	DurableSessionAPI
+// FactoryResponseEventRecord is one transport-neutral serialized observation
+// returned by a session-owned ephemeral response-event subscription.
+type FactoryResponseEventRecord struct {
+	Sequence int64
+	Kind     string
+	Data     []byte
 }
 
-// NewSessionAPISurface composes the handler contract from five explicit
-// application collaborators. The composed surface is stateless: every method
-// is promoted directly from its owning collaborator without adding policy,
-// normalization, or side effects.
-func NewSessionAPISurface(
-	session apisurface.SessionAPI,
-	model apisurface.ModelAPI,
-	factoryDefinition apisurface.FactorySaveAPI,
-	invocation apisurface.InvocationAPI,
-	durableExecution DurableSessionAPI,
-) (apisurface.SessionAPISurface, error) {
-	required := []struct {
-		role         string
-		collaborator any
-	}{
-		{role: "session", collaborator: session},
-		{role: "model", collaborator: model},
-		{role: "factory-definition", collaborator: factoryDefinition},
-		{role: "invocation", collaborator: invocation},
-		{role: "durable-execution", collaborator: durableExecution},
-	}
-	for _, dependency := range required {
-		if isNilCollaborator(dependency.collaborator) {
-			return nil, fmt.Errorf("compose session API surface: %s collaborator is required", dependency.role)
-		}
-	}
-
-	return &composedSessionAPISurface{
-		SessionAPI:        session,
-		ModelAPI:          model,
-		FactorySaveAPI:    factoryDefinition,
-		InvocationAPI:     invocation,
-		DurableSessionAPI: durableExecution,
-	}, nil
+// FactoryResponseEventSubscription is the transport-independent cursor exposed
+// by one session-owned ephemeral response-event store. The HTTP transport owns
+// detachment; canceling that observer must not cancel the Factory Session run.
+type FactoryResponseEventSubscription interface {
+	Next(ctx context.Context) ([]FactoryResponseEventRecord, error)
+	Detach()
 }
 
-func isNilCollaborator(collaborator any) bool {
-	if collaborator == nil {
-		return true
-	}
-	value := reflect.ValueOf(collaborator)
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	default:
-		return false
-	}
+// DurableSessionAPI groups the durable application capabilities exposed to
+// transport mapping and retained compatibility facades.
+type DurableSessionAPI interface {
+	DurableSessionExecutionAPI
+	DurableSessionListingAPI
+	DurableSessionProjectionAPI
+	DurableSessionLifecycleAPI
 }
 
-var _ apisurface.SessionAPISurface = (*composedSessionAPISurface)(nil)
+// ValidateWritableNamedFactoryName enforces the public named-factory contract
+// for create/import paths. The reserved default-current identifier is valid for
+// readback only and must never be persisted as a customer-named factory.
+func ValidateWritableNamedFactoryName(name factoryapi.FactoryName) error {
+	if err := factoryconfig.ValidateNamedFactoryName(string(name)); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidNamedFactoryName, err)
+	}
+	if name == DefaultCurrentFactoryName {
+		return fmt.Errorf("%w: %q is reserved for current-factory readback", ErrInvalidNamedFactoryName, name)
+	}
+	return nil
+}

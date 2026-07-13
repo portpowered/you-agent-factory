@@ -546,7 +546,7 @@ func newFixtureMCPClient(t *testing.T) *mcpfactorysession.Client {
 
 func fixtureFakeService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
-	path := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
 	service, err := testharness.New(testharness.Config{
 		Mode:            testharness.ModeFake,
 		FakeFixturePath: path,

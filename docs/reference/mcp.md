@@ -68,7 +68,7 @@ you mcp serve --runtime
 ```
 
 Fixture-backed mode searches upward from the working directory for
-`pkg/api/testdata/durable-session-contract-fixtures.json`.
+`pkg/transports/http/testdata/durable-session-contract-fixtures.json`.
 When the catalog is elsewhere, pass its path explicitly:
 
 ```json

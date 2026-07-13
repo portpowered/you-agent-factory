@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
-	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

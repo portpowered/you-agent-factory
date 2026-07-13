@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -17,7 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	"go.uber.org/zap"
 )
 

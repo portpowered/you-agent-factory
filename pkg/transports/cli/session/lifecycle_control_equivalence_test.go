@@ -226,7 +226,7 @@ func TestLifecycleControlResume_NamedLiveSessionCLIJSONMatchesAPIResponse(t *tes
 func newLifecycleEquivalenceFakeService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
-		filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json"),
+		filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json"),
 	)
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)

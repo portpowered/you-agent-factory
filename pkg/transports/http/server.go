@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
 )

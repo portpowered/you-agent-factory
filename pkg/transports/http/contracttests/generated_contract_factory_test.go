@@ -751,7 +751,7 @@ func stringFixtureValue(payload map[string]any, key string) string {
 func loadSyncPreflightRecoveryFixtureCatalog(t *testing.T) syncPreflightRecoveryFixtureCatalog {
 	t.Helper()
 
-	fixtureBytes, err := os.ReadFile("../../../api/testdata/sync-preflight-recovery-contract-fixtures.json")
+	fixtureBytes, err := os.ReadFile("../testdata/sync-preflight-recovery-contract-fixtures.json")
 	if err != nil {
 		t.Fatalf("read sync preflight recovery contract fixtures: %v", err)
 	}

@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/spf13/cobra"
 )

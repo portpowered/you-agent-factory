@@ -3,8 +3,8 @@ package initializer
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 )
 
 // APITransport bundles initializer-produced domain services with the session

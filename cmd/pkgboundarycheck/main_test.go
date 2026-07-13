@@ -64,6 +64,58 @@ func TestRunAllowsOnlyStartupOwnersToImportApplicationGraph(t *testing.T) {
 	}
 }
 
+func TestRunAllowsCanonicalTransportImports(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/transport.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/root/cli.go", "root", "github.com/portpowered/infinite-you/pkg/transports/cli")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v, want canonical transport imports allowed; stderr=%q", err, stderr.String())
+	}
+}
+
+func TestRunRejectsRetiredTransportImports(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	imports := []struct {
+		filePath       string
+		retiredPath    string
+		canonicalOwner string
+	}{
+		{"pkg/factory/runtime/api.go", "github.com/portpowered/infinite-you/pkg/api", "github.com/portpowered/infinite-you/pkg/transports/http"},
+		{"pkg/factory/runtime/mapping.go", "github.com/portpowered/infinite-you/pkg/apisurface/factorysession", "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"},
+		{"pkg/root/cli.go", "github.com/portpowered/infinite-you/pkg/cli", "github.com/portpowered/infinite-you/pkg/transports/cli"},
+		{"pkg/root/mcp.go", "github.com/portpowered/infinite-you/pkg/mcp/server", "github.com/portpowered/infinite-you/pkg/transports/mcp/server"},
+		{"pkg/factory/runtime/client.go", "github.com/portpowered/infinite-you/pkg/generatedclient", "github.com/portpowered/infinite-you/pkg/transports/http/client"},
+	}
+	for _, fixture := range imports {
+		writeGoImportFile(t, repoRoot, fixture.filePath, filepath.Base(filepath.Dir(fixture.filePath)), fixture.retiredPath)
+	}
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want retired transport import failures")
+	}
+	for _, fixture := range imports {
+		got := stderr.String()
+		if !strings.Contains(got, "prohibited legacy transport import: "+fixture.retiredPath) {
+			t.Fatalf("run() stderr = %q, want retired import %q", got, fixture.retiredPath)
+		}
+		if !strings.Contains(got, "canonical successor "+fixture.canonicalOwner) {
+			t.Fatalf("run() stderr = %q, want canonical successor %q", got, fixture.canonicalOwner)
+		}
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 5 package-boundary violation(s)" {
+		t.Fatalf("run() error = %q, want five violations", got)
+	}
+}
+
 func TestRunRejectsDomainPackageImportOfApplicationGraph(t *testing.T) {
 	t.Parallel()
 
@@ -271,6 +323,28 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunRejectsHandwrittenGoInGeneratedOnlyPackage(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/transports/http/client/compatibility.go", "generatedclient", "context")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want handwritten generated-package failure")
+	}
+	for _, want := range []string{
+		"handwritten Go file in generated-only package: pkg/transports/http/client (pkg/transports/http/client/compatibility.go)",
+		"standard Code generated ... DO NOT EDIT. marker",
+		"move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping",
+	} {
+		if got := stderr.String(); !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
 	}
 }
 

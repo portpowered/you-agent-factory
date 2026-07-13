@@ -614,7 +614,7 @@ func assertCanonicalFactoryEventFixtureEnvelope(t *testing.T, index int, event m
 }
 func loadCanonicalFactoryEventVocabularyFixture(t *testing.T) []map[string]any {
 	t.Helper()
-	fixtureBytes, err := os.ReadFile("../../../api/testdata/canonical-event-vocabulary-stream.json")
+	fixtureBytes, err := os.ReadFile("../testdata/canonical-event-vocabulary-stream.json")
 	if err != nil {
 		t.Fatalf("read canonical event vocabulary fixture: %v", err)
 	}

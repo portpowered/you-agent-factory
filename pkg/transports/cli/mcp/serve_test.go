@@ -22,7 +22,7 @@ func TestNewServeCommand_HelpRoutesToCanonicalMCPTopic(t *testing.T) {
 		t.Fatalf("help missing canonical MCP topic:\n%s", got)
 	} else if strings.Contains(got, "mcp-hosts") {
 		t.Fatalf("help still routes to retired MCP topic:\n%s", got)
-	} else if !strings.Contains(got, "pkg/api/testdata/durable-session-contract-fixtures.json") {
+	} else if !strings.Contains(got, "pkg/transports/http/testdata/durable-session-contract-fixtures.json") {
 		t.Fatalf("help missing the real fixture catalog path:\n%s", got)
 	}
 }
@@ -42,7 +42,7 @@ func TestResolveServeService_RuntimeBackedSelectsJavaScriptRuntimeService(t *tes
 }
 
 func TestResolveServeService_DefaultSelectsFixtureService(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
 	service, err := resolveServeService(ServeConfig{FixtureCatalogPath: path})
 	if err != nil {
 		t.Fatalf("resolveServeService: %v", err)

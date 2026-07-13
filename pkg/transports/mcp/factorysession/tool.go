@@ -5,8 +5,8 @@ package factorysession
 import (
 	"encoding/json"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // Tool names use Factory Session vocabulary and align with durable REST routes.

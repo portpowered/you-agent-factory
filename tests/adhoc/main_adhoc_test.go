@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
-	"github.com/portpowered/infinite-you/pkg/cli"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
