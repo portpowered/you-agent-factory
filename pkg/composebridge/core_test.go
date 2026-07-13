@@ -10,10 +10,10 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"go.uber.org/zap"
 )
 

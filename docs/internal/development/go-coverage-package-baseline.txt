@@ -19,8 +19,8 @@ github.com/portpowered/infinite-you/pkg/factorysessions/controlplane
 github.com/portpowered/infinite-you/pkg/factorysessions/dataplane
 github.com/portpowered/infinite-you/pkg/factorysessions/service
 github.com/portpowered/infinite-you/pkg/factorysessions/stream
-github.com/portpowered/infinite-you/pkg/hostedworkers
-github.com/portpowered/infinite-you/pkg/hostedworkers/linear
+github.com/portpowered/infinite-you/pkg/workers/hosted
+github.com/portpowered/infinite-you/pkg/workers/hosted/linear
 github.com/portpowered/infinite-you/pkg/internal/cursorstorage
 github.com/portpowered/infinite-you/pkg/invocations
 github.com/portpowered/infinite-you/pkg/models/assets

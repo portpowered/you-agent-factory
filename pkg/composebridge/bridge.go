@@ -7,7 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
@@ -15,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )

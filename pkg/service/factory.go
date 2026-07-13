@@ -23,7 +23,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -33,6 +32,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
@@ -134,7 +134,7 @@ type serviceRunState struct {
 //
 // Extracted domains are composed explicitly: pkg/factorysessions owns the live
 // session registry, pkg/models/local owns managed model runtime wiring, and
-// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
+// pkg/workers/hosted owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu        sync.RWMutex
 	activationMu     sync.RWMutex

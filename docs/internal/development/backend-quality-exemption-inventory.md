@@ -127,8 +127,8 @@ directive occurrence in the focused scan:
 - `pkg/factorysessions/dataplane`
 - `pkg/factorysessions/service`
 - `pkg/factorysessions/stream`
-- `pkg/hostedworkers`
-- `pkg/hostedworkers/linear`
+- `pkg/workers/hosted`
+- `pkg/workers/hosted/linear`
 - `pkg/invocations`
 - `pkg/models/local`
 - `pkg/models/assets`

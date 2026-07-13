@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
 // StartHostedLinearPoller supervises one hosted Linear poller workstation until ctx is canceled.
