@@ -177,6 +177,9 @@ primary-result behavior.
   response-event storage lives in `pkg/factorysessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is
   session-runtime-local state separate from canonical `FactoryEvent` history.
+  `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
+  after the cursor, then continues live via `Subscription.Next`; mirror
+  `responsestream.Subscription` patterns when extending close/complete behavior.
   Package docs in
   `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`

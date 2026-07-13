@@ -19,6 +19,9 @@ type SessionResponseEventStore struct {
 	factorySessionID string
 	nextSequence     int64
 	events           []responseevents.FactoryResponseEvent
+	closed           bool
+	nextSubID        int64
+	subscribers      map[int64]*storeSubscriber
 }
 
 // NewSessionResponseEventStore allocates an empty store for one session runtime.
@@ -32,6 +35,7 @@ func NewSessionResponseEventStoreWithClock(factorySessionID string, clock factor
 	return &SessionResponseEventStore{
 		clock:            factory.EnsureClock(clock),
 		factorySessionID: strings.TrimSpace(factorySessionID),
+		subscribers:      make(map[int64]*storeSubscriber),
 	}
 }
 
@@ -100,7 +104,10 @@ func (s *SessionResponseEventStore) Publish(input responseevents.FactoryResponse
 	s.mu.Lock()
 	stored := s.assignIdentityLocked(prepared)
 	s.events = append(s.events, stored)
+	subscribers := s.subscribersSnapshotLocked()
 	s.mu.Unlock()
+
+	notifyStoreSubscribers(subscribers)
 
 	return cloneEvent(stored), nil
 }
