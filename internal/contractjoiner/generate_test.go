@@ -77,6 +77,28 @@ func TestGenerateFailurePreservesPreviousCompleteSet(t *testing.T) {
 	}
 }
 
+func TestGenerateUnsupportedReferenceKeywordPreservesPreviousCompleteSet(t *testing.T) {
+	root := t.TempDir()
+	writeGenerationFixture(t, root, "contracts/root.json", `{"$id":"root","type":"object"}`)
+	input := contractjoiner.Input{RepositoryRoot: root, Roots: []string{"contracts/root.json"}}
+	if diagnostics := contractjoiner.Generate(input); len(diagnostics) != 0 {
+		t.Fatalf("initial Generate() diagnostics = %#v, want none", diagnostics)
+	}
+	before := generatedTree(t, root)
+
+	writeGenerationFixture(t, root, "contracts/dynamic.json", `{"nested":{"$dynamicRef":"https://example.test/external.json#node"}}`)
+	diagnostics := contractjoiner.Generate(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/root.json", "contracts/dynamic.json"},
+	})
+	if len(diagnostics) != 1 || diagnostics[0].Code != "reference.unsupported" || diagnostics[0].Path != "/nested/$dynamicRef" {
+		t.Fatalf("Generate(dynamic reference) diagnostics = %#v, want stable unsupported-reference diagnostic", diagnostics)
+	}
+	if after := generatedTree(t, root); !equalByteTrees(before, after) {
+		t.Fatalf("failed generation changed prior output:\nbefore=%q\nafter=%q", before, after)
+	}
+}
+
 func TestGenerateRequiresAtLeastOneRootWithoutChangingPreviousOutput(t *testing.T) {
 	root := t.TempDir()
 	writeGenerationFixture(t, root, "packages/api/generated/joined/existing.json", `{"existing":true}`)

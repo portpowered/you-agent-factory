@@ -42,6 +42,9 @@ func TestJoinRejectsUnsafeReferenceGraphsWithoutPartialDocuments(t *testing.T) {
 		{name: "non-string reference", rootPath: "roots/non-string.json", contents: `{"value":{"$ref":42}}`, code: "reference.invalid", document: "roots/non-string.json", path: "/value/$ref"},
 		{name: "query", rootPath: "roots/query.json", contents: `{"value":{"$ref":"../components/target.json?version=1"}}`, components: []string{"components/target.json"}, code: "reference.unsupported", document: "roots/query.json", path: "/value/$ref"},
 		{name: "unsupported fragment", rootPath: "roots/fragment.json", contents: `{"value":{"$ref":"../components/target.json#anchor"}}`, components: []string{"components/target.json"}, code: "reference.fragment", document: "roots/fragment.json", path: "/value/$ref"},
+		{name: "external dynamic reference", rootPath: "roots/dynamic-external.json", contents: `{"nested":{"$dynamicRef":"https://example.test/external.json#node"}}`, code: "reference.unsupported", document: "roots/dynamic-external.json", path: "/nested/$dynamicRef"},
+		{name: "repository-relative dynamic reference", rootPath: "roots/dynamic-relative.json", contents: `{"nested":{"$dynamicRef":"../components/target.json#node"}}`, components: []string{"components/target.json"}, code: "reference.unsupported", document: "roots/dynamic-relative.json", path: "/nested/$dynamicRef"},
+		{name: "legacy recursive reference", rootPath: "roots/recursive.json", contents: `{"nested":{"$recursiveRef":"#"}}`, code: "reference.unsupported", document: "roots/recursive.json", path: "/nested/$recursiveRef"},
 		{name: "missing target", rootPath: "roots/missing.json", contents: `{"value":{"$ref":"../components/missing.json"}}`, components: []string{"components/missing.json"}, code: "reference.missing", document: "roots/missing.json", path: "/value/$ref"},
 		{name: "repository escape", rootPath: "roots/escape.json", contents: `{"value":{"$ref":"../../outside.json"}}`, code: "reference.escape", document: "roots/escape.json", path: "/value/$ref"},
 		{name: "sibling prefix escape", rootPath: "roots/sibling.json", contents: `{"value":{"$ref":"../../repository-copy/outside.json"}}`, code: "reference.escape", document: "roots/sibling.json", path: "/value/$ref"},
@@ -67,7 +70,7 @@ func TestJoinRejectsUnsafeReferenceGraphsWithoutPartialDocuments(t *testing.T) {
 func TestJoinDiagnosticsUseTotalOrderIndependentOfInputOrder(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "roots/a.json", `{"$ref":"../z-components/first.json"}`)
-	writeFile(t, root, "roots/b.json", `{"value":{"$ref":"https://example.test/external.json"}}`)
+	writeFile(t, root, "roots/b.json", `{"value":{"$dynamicRef":"https://example.test/external.json#node"}}`)
 	writeFile(t, root, "z-components/first.json", `{"$ref":"second.json"}`)
 	writeFile(t, root, "z-components/second.json", `{"$ref":"first.json"}`)
 	input := contractjoiner.Input{
@@ -86,7 +89,7 @@ func TestJoinDiagnosticsUseTotalOrderIndependentOfInputOrder(t *testing.T) {
 		t.Fatalf("input order changed diagnostics:\nforward: %+v\nshuffled: %+v", forward, shuffled)
 	}
 	want := []contractvalidator.Diagnostic{
-		{Code: "reference.unsupported", Path: "/value/$ref", Message: `reference "https://example.test/external.json" is not repository-relative`, Document: "roots/b.json"},
+		{Code: "reference.unsupported", Path: "/value/$dynamicRef", Message: `reference keyword "$dynamicRef" is not supported`, Document: "roots/b.json"},
 		{Code: "reference.cycle", Path: "/$ref", Message: `reference "first.json" forms a cycle`, Document: "z-components/second.json"},
 	}
 	if !reflect.DeepEqual(forward, want) {

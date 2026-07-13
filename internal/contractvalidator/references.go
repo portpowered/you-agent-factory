@@ -20,12 +20,13 @@ func (disabledURLLoader) Load(resourceURL string) (any, error) {
 }
 
 type referenceResolver struct {
-	root                 string
-	documents            map[string]any
-	active               map[string]bool
-	allowed              map[string]struct{}
-	deduplicateResources bool
-	resolvedResourceIDs  map[string]struct{}
+	root                               string
+	documents                          map[string]any
+	active                             map[string]bool
+	allowed                            map[string]struct{}
+	deduplicateResources               bool
+	rejectUnsupportedReferenceKeywords bool
+	resolvedResourceIDs                map[string]struct{}
 }
 
 // LoadAndResolve loads one authored document through the validator's reviewed
@@ -105,12 +106,13 @@ func resolveReferencesWithin(
 	}
 	document = normalizeRepositoryPath(document)
 	resolver := referenceResolver{
-		root:                 root,
-		documents:            map[string]any{document: value},
-		active:               make(map[string]bool),
-		allowed:              allowed,
-		deduplicateResources: deduplicateResources,
-		resolvedResourceIDs:  make(map[string]struct{}),
+		root:                               root,
+		documents:                          map[string]any{document: value},
+		active:                             make(map[string]bool),
+		allowed:                            allowed,
+		deduplicateResources:               deduplicateResources,
+		rejectUnsupportedReferenceKeywords: allowed != nil,
+		resolvedResourceIDs:                make(map[string]struct{}),
 	}
 	resolved, diagnostics := resolver.resolveNode(value, document, nil)
 	if len(diagnostics) != 0 {
@@ -131,6 +133,11 @@ func resolveReferencesWithin(
 func (r *referenceResolver) resolveNode(value any, document string, segments []string) (any, []Diagnostic) {
 	switch typed := value.(type) {
 	case map[string]any:
+		if r.rejectUnsupportedReferenceKeywords {
+			if diagnostics := r.unsupportedReferenceKeywordDiagnostics(typed, document, segments); len(diagnostics) != 0 {
+				return nil, diagnostics
+			}
+		}
 		resourceID, hasResourceID := stableResourceID(typed)
 		if r.deduplicateResources && hasResourceID {
 			if _, resolved := r.resolvedResourceIDs[resourceID]; resolved {
@@ -161,6 +168,22 @@ func (r *referenceResolver) resolveNode(value any, document string, segments []s
 	default:
 		return value, nil
 	}
+}
+
+func (r *referenceResolver) unsupportedReferenceKeywordDiagnostics(value map[string]any, document string, segments []string) []Diagnostic {
+	var diagnostics []Diagnostic
+	for _, keyword := range []string{"$dynamicRef", "$recursiveRef"} {
+		if _, exists := value[keyword]; !exists {
+			continue
+		}
+		diagnostics = append(diagnostics, r.singleIssue(
+			"reference.unsupported",
+			fmt.Sprintf("reference keyword %q is not supported", keyword),
+			document,
+			appendPath(segments, keyword),
+		))
+	}
+	return diagnostics
 }
 
 func stableResourceID(value map[string]any) (string, bool) {
