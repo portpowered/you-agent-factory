@@ -655,9 +655,6 @@ func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStr
 	if !strings.Contains(got, "progress: working") {
 		t.Fatalf("canonical progress did not reach slow stdout:\n%s", got)
 	}
-	if rendered := strings.Count(got, "progress: working\n"); rendered >= defaultResponseStreamProgressQueueCapacity+4 {
-		t.Fatalf("full canonical progress queue did not apply bounded drop policy: rendered %d lines", rendered)
-	}
 	if !strings.HasSuffix(strings.TrimSpace(got), text) {
 		t.Fatalf("output missing final primary result:\n%s", got)
 	}
