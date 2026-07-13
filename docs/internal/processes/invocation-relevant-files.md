@@ -154,7 +154,10 @@ primary-result behavior.
   `invocations.EffectiveSkipPermissions` resolves persisted worker config plus
   `FactoryServiceConfig.InvocationSkipPermissionsOverride` when building
   provider-backed worker CLI args in `pkg/service/factory_build.go` and
-  `pkg/runtimehost/build_workers.go`. `RunConfig.JSONOutput`
+  `pkg/runtimehost/build_workers.go`. `invocations.ValidateInvocationSkipPermissionsWorkers`
+  and `ValidateInvocationSkipPermissionsForWorker` fail closed before worker
+  construction when `--skip-permissions` is set but an agent worker uses an
+  unsupported CLI provider or local managed model path. `RunConfig.JSONOutput`
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
   success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`

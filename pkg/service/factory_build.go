@@ -747,6 +747,9 @@ func loadWorkersFromConfig(
 	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
 		return nil, err
 	}
+	if err := invocations.ValidateInvocationSkipPermissionsWorkers(factoryCfg, runtimeCfg, invocationSkipPermissionsOverride); err != nil {
+		return nil, err
+	}
 	for _, workerCfg := range factoryCfg.Workers {
 		logger.Debug("loading worker", "worker", workerCfg.Name)
 		def, ok := runtimeCfg.Worker(workerCfg.Name)
