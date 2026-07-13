@@ -9,9 +9,8 @@ import (
 
 // ShouldFormatInvocationSummary reports whether workstation output should be
 // shaped into packaged goal summary work content for terminal primary-result
-// selection. Only the execute workstation produces the execution summary;
-// classifier review output is a route label and must not replace carried
-// summary content on the accepted complete path.
+// selection. The minimal factory's execute workstation is the only worker
+// boundary that can produce terminal goal content.
 func ShouldFormatInvocationSummary(workstation *interfaces.FactoryWorkstationConfig) bool {
 	if workstation == nil {
 		return false
