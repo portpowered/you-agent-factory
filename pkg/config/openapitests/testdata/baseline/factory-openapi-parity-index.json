@@ -197,6 +197,38 @@
         "decode factory generated-schema boundary",
         "workstations[0].guards[0].type"
       ]
+    },
+    {
+      "id": "reject-miscased-orchestrator-kind",
+      "shape": "orchestrator",
+      "category": "boundary-enum",
+      "sourceTest": "openapi_factory_boundary_enum_test.go:TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary",
+      "fixture": "reject/miscased-orchestrator-kind.json",
+      "description": "mis-cased orchestrator kind enum fails at generated-schema boundary",
+      "apiOutcome": "reject",
+      "loaderOutcome": "reject",
+      "expectedErrorPath": "orchestrator.kind",
+      "expectedErrorCategory": "boundary-enum",
+      "errorFragments": [
+        "decode factory generated-schema boundary",
+        "unsupported value \"javascript\""
+      ]
+    },
+    {
+      "id": "reject-miscased-resource-type",
+      "shape": "resource",
+      "category": "boundary-enum",
+      "sourceTest": "openapi_factory_boundary_enum_test.go:TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary",
+      "fixture": "reject/miscased-resource-type.json",
+      "description": "mis-cased resource type enum fails at generated-schema boundary",
+      "apiOutcome": "reject",
+      "loaderOutcome": "reject",
+      "expectedErrorPath": "resources[0].type",
+      "expectedErrorCategory": "boundary-enum",
+      "errorFragments": [
+        "decode factory generated-schema boundary",
+        "unsupported value \"model\""
+      ]
     }
   ]
 }

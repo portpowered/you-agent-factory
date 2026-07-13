@@ -51,6 +51,37 @@ func TestProjectParityInventory_CoversRepresentativeFactoryShapes(t *testing.T) 
 	}
 }
 
+func TestProjectParityInventory_CoversRepresentativeShapeAcceptRejectPairs(t *testing.T) {
+	t.Parallel()
+
+	requiredShapes := []string{
+		shapeOrchestrator,
+		shapeWorkstation,
+		shapeWorker,
+		shapeResource,
+		shapeGuard,
+		shapeLayout,
+	}
+	acceptByShape := make(map[string]struct{}, len(requiredShapes))
+	rejectByShape := make(map[string]struct{}, len(requiredShapes))
+	for _, parityCase := range ProjectParityInventory().Cases {
+		switch parityCase.APIOutcome {
+		case outcomeAccept:
+			acceptByShape[parityCase.Shape] = struct{}{}
+		case outcomeReject:
+			rejectByShape[parityCase.Shape] = struct{}{}
+		}
+	}
+	for _, shape := range requiredShapes {
+		if _, ok := acceptByShape[shape]; !ok {
+			t.Fatalf("missing accept parity case for shape %q", shape)
+		}
+		if _, ok := rejectByShape[shape]; !ok {
+			t.Fatalf("missing reject parity case for shape %q", shape)
+		}
+	}
+}
+
 func TestProjectParityInventory_IndexesRepresentativeUnionAndEnumCases(t *testing.T) {
 	t.Parallel()
 

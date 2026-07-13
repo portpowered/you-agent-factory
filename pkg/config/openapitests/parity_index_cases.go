@@ -203,5 +203,37 @@ func baselineRejectParityCases() []ParityCase {
 				"workstations[0].guards[0].type",
 			},
 		},
+		{
+			ID:                    "reject-miscased-orchestrator-kind",
+			Shape:                 shapeOrchestrator,
+			Category:              categoryBoundaryEnum,
+			SourceTest:            "openapi_factory_boundary_enum_test.go:TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary",
+			Fixture:               "reject/miscased-orchestrator-kind.json",
+			Description:           "mis-cased orchestrator kind enum fails at generated-schema boundary",
+			APIOutcome:            outcomeReject,
+			LoaderOutcome:         outcomeReject,
+			ExpectedErrorPath:     "orchestrator.kind",
+			ExpectedErrorCategory: categoryBoundaryEnum,
+			ErrorFragments: []string{
+				"decode factory generated-schema boundary",
+				`unsupported value "javascript"`,
+			},
+		},
+		{
+			ID:                    "reject-miscased-resource-type",
+			Shape:                 shapeResource,
+			Category:              categoryBoundaryEnum,
+			SourceTest:            "openapi_factory_boundary_enum_test.go:TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary",
+			Fixture:               "reject/miscased-resource-type.json",
+			Description:           "mis-cased resource type enum fails at generated-schema boundary",
+			APIOutcome:            outcomeReject,
+			LoaderOutcome:         outcomeReject,
+			ExpectedErrorPath:     "resources[0].type",
+			ExpectedErrorCategory: categoryBoundaryEnum,
+			ErrorFragments: []string{
+				"decode factory generated-schema boundary",
+				`unsupported value "model"`,
+			},
+		},
 	}
 }
