@@ -101,7 +101,7 @@ func TestCommandOutputNormalizerPublishesTypedCanonicalDrafts(t *testing.T) {
 		t.Fatal("NewCommandOutputNormalizer() = nil")
 	}
 	normalizer.Observe("stdout", []byte(lifecycleFixture))
-	normalizer.Flush()
+	normalizer.Flush(context.Background(), provider.CommandResult{}, nil)
 	if len(published) != 5 {
 		t.Fatalf("published = %#v, want five typed records", published)
 	}
@@ -168,6 +168,27 @@ func TestDecoderClassifiesOnlyExactNestedItemTypes(t *testing.T) {
 	}
 	if len(decoded.Drafts) != 0 || len(decoded.Diagnostics) != 1 || decoded.Diagnostics[0].Code != "codex_unknown_item" {
 		t.Fatalf("decoded = %#v", decoded)
+	}
+}
+
+func TestDecoderDoesNotExposeUnknownDiscriminatorValues(t *testing.T) {
+	t.Parallel()
+	const secret = "private prompt sk-codex-secret"
+	decoder := codex.NewDecoder(adapter.DecoderContext{DispatchID: "dispatch-redaction"})
+	decoded, err := decoder.Observe(context.Background(), adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(
+		`{"type":"` + secret + `"}` + "\n" +
+			`{"type":"item.completed","item":{"id":"future-1","type":"` + secret + `"}}` + "\n",
+	)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Diagnostics) != 2 {
+		t.Fatalf("diagnostics = %#v, want unknown event and item diagnostics", decoded.Diagnostics)
+	}
+	for _, diagnostic := range decoded.Diagnostics {
+		if strings.Contains(diagnostic.Code+diagnostic.Message, secret) {
+			t.Fatalf("diagnostic exposed unknown discriminator: %#v", diagnostic)
+		}
 	}
 }
 

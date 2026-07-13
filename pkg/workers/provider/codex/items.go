@@ -75,7 +75,7 @@ func (d *Decoder) decodeItem(nativeEventType string, raw json.RawMessage) adapte
 	case "todo_list":
 		draft, ok = d.planDraft(nativeEventType, item)
 	default:
-		return diagnostic("codex_unknown_item", "codex JSONL item type is not supported: "+safeDiscriminator(item.Type))
+		return diagnostic("codex_unknown_item", "codex JSONL item type is not supported: unknown")
 	}
 	if !ok {
 		return diagnostic("codex_malformed_"+safeDiscriminator(item.Type), diagnosticMessage)

@@ -143,7 +143,7 @@ func (d *Decoder) decodeRecord(raw []byte) adapter.DecodeResult {
 	case "item.started", "item.updated", "item.completed":
 		return d.decodeItem(record.Type, record.Item)
 	default:
-		return diagnostic("codex_unknown_event", "codex JSONL event type is not supported: "+safeDiscriminator(record.Type))
+		return diagnostic("codex_unknown_event", "codex JSONL event type is not supported: unknown")
 	}
 }
 

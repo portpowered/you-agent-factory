@@ -229,10 +229,12 @@ primary-result behavior.
   update, and completion records, and represent the completed full item as the
   authoritative snapshot rather than synthesizing a second completed item.
   Reconcile typed terminal failures before generic process-exit fallback, but
-  preserve cancellation and timeout precedence. When the native decoder already
-  published the exact terminal `ERROR` draft, keep the legacy terminal marker
-  for response-stream consumers while explicitly suppressing its second
-  canonical projection.
+  preserve cancellation and timeout precedence. A streaming normalizer must
+  hold terminal `ERROR` drafts until flush receives the subprocess result and
+  error; discard a native failure when cancellation, deadline, or exit 124 wins.
+  When the native decoder publishes the surviving exact terminal `ERROR` draft,
+  keep the legacy terminal marker for response-stream consumers while explicitly
+  suppressing its second canonical projection.
   Treat provider JSONL as a bounded record stream: diagnose and discard one
   oversized record without retaining the rest of that line, then resume at the
   next newline. Decoder flush and independent final/failure parsers must apply

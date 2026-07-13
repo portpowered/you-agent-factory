@@ -11,7 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/stream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	codexpkg "github.com/portpowered/infinite-you/pkg/workers/provider/codex"
 	"go.uber.org/zap"
 )
 
@@ -91,6 +93,23 @@ func (h *streamTestHost) ObserveResponseStreamDegraded(
 }
 
 var errMissingSession = errors.New("missing session")
+
+type codexTerminalOutcomeRunner struct {
+	publisher workerprovider.InferenceProgressPublisher
+	result    workerprovider.CommandResult
+	err       error
+}
+
+func (r *codexTerminalOutcomeRunner) Run(ctx context.Context, req workerprovider.CommandRequest) (workerprovider.CommandResult, error) {
+	normalizer := codexpkg.NewCommandOutputNormalizer(req, r.publisher)
+	normalizer.Observe(workerprocess.OutputStreamStdout, r.result.Stdout)
+	normalizer.Flush(ctx, r.result, r.err)
+	return r.result, r.err
+}
+
+func (*codexTerminalOutcomeRunner) SupportsResponseStreaming() bool { return true }
+
+func (*codexTerminalOutcomeRunner) PublishesCanonicalCodexJSONL() bool { return true }
 
 func TestManager_SubscribeAndPublishInferenceProgress(t *testing.T) {
 	t.Parallel()
@@ -195,6 +214,62 @@ func TestManager_DoesNotDuplicateTypedTerminalErrorWithLegacyMarker(t *testing.T
 	events := session.ResponseEvents.Events()
 	if len(events) != 1 || events[0].Kind != responseevents.KindError || events[0].Provenance.NativeEventType != "turn.failed" {
 		t.Fatalf("canonical events = %#v, want one native terminal error", events)
+	}
+}
+
+func TestCodexTerminalReconciliationPublishesOnlyWinningProcessFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		result workerprovider.CommandResult
+		err    error
+	}{
+		{name: "cancellation", err: context.DeadlineExceeded},
+		{name: "timeout exit", result: workerprovider.CommandResult{ExitCode: 124}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			session := factorysessions.NewLiveSession("sess-terminal-reconcile", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
+			manager := stream.NewManager(&streamTestHost{session: session})
+			publish := manager.InferenceProgressPublisherFactory(nil)(session.ID)
+			tc.result.Stdout = []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-terminal\"}\n" +
+				"{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n")
+			runner := &codexTerminalOutcomeRunner{publisher: publish, result: tc.result, err: tc.err}
+			provider := workerprovider.NewScriptWrapProvider(
+				workerprovider.WithProviderCommandRunner(runner),
+				workerprovider.WithInferenceProgressPublisher(publish),
+				workerprovider.WithCodexJSONLFinalParser(func(output []byte) (interfaces.InferenceResponse, error) {
+					parsed, err := codexpkg.ParseFinalOutput(output)
+					return interfaces.InferenceResponse{Content: parsed.Content, ProviderSession: parsed.ProviderSession}, err
+				}),
+				workerprovider.WithCodexJSONLTerminalFailureParser(func(output []byte) (workerprovider.CodexJSONLTerminalFailure, bool) {
+					failure, ok := codexpkg.ParseTerminalFailure(output)
+					return workerprovider.CodexJSONLTerminalFailure{Type: failure.Type, Message: failure.Message, ProviderSession: failure.ProviderSession}, ok
+				}),
+			)
+
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+			})
+			providerErr, ok := err.(*workerprovider.ProviderError)
+			if !ok || providerErr.Type != interfaces.WorkFailureTypeTimeout {
+				t.Fatalf("error = %#v, want timeout ProviderError", err)
+			}
+			var terminal []responseevents.FactoryResponseEvent
+			for _, event := range session.ResponseEvents.Events() {
+				if event.Kind == responseevents.KindError {
+					terminal = append(terminal, event)
+				}
+			}
+			if len(terminal) != 1 {
+				t.Fatalf("terminal events = %#v, want exactly one", terminal)
+			}
+			var payload responseevents.ErrorPayload
+			if err := json.Unmarshal(terminal[0].Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Code == "codex_turn_failed" || payload.Message != providerErr.Message {
+				t.Fatalf("terminal payload = %#v, want winning process timeout %#v", payload, providerErr)
+			}
+		})
 	}
 }
 

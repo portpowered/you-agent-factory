@@ -175,14 +175,14 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		cursorStream.Flush()
 	}
 	if normalizer != nil {
-		normalizer.Flush()
+		normalizer.Flush(ctx, result, err)
 	}
 	return result, err
 }
 
 type CommandOutputNormalizer interface {
 	Observe(stream string, chunk []byte) bool
-	Flush()
+	Flush(context.Context, CommandResult, error)
 }
 
 type CommandOutputNormalizerFactory func(CommandRequest, InferenceProgressPublisher) CommandOutputNormalizer
@@ -239,7 +239,7 @@ func (n *codexCommandOutputNormalizer) Observe(stream string, chunk []byte) bool
 	return true
 }
 
-func (n *codexCommandOutputNormalizer) Flush() {
+func (n *codexCommandOutputNormalizer) Flush(_ context.Context, _ CommandResult, _ error) {
 	if trimmed := strings.TrimSpace(n.stdoutBuffer); trimmed != "" {
 		n.handleStdoutLine(trimmed)
 	}

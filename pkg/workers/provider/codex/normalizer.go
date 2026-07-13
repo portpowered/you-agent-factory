@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
 
@@ -14,9 +15,10 @@ import (
 )
 
 type commandOutputNormalizer struct {
-	req       provider.CommandRequest
-	publisher provider.InferenceProgressPublisher
-	decoder   *Decoder
+	req             provider.CommandRequest
+	publisher       provider.InferenceProgressPublisher
+	decoder         *Decoder
+	pendingTerminal *responseevents.Draft
 }
 
 const progressMessageLimit = 1024
@@ -44,8 +46,15 @@ func (n *commandOutputNormalizer) Observe(stream string, chunk []byte) bool {
 	return true
 }
 
-func (n *commandOutputNormalizer) Flush() {
+func (n *commandOutputNormalizer) Flush(ctx context.Context, result provider.CommandResult, commandErr error) {
 	n.publishDecoded(n.decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted}))
+	if n.pendingTerminal == nil {
+		return
+	}
+	if !terminalOutcomeOverridesNativeFailure(ctx, result, commandErr) {
+		n.publishDraft(*n.pendingTerminal)
+	}
+	n.pendingTerminal = nil
 }
 
 func (n *commandOutputNormalizer) publishDecoded(decoded adapter.DecodeResult, err error) {
@@ -59,10 +68,23 @@ func (n *commandOutputNormalizer) publishDecoded(decoded adapter.DecodeResult, e
 	}
 	for index := range decoded.Drafts {
 		draft := decoded.Drafts[index]
-		fragment := canonicalFragment(draft)
-		fragment.CanonicalDraft = &draft
-		n.publisher(fragment)
+		if draft.Kind == responseevents.KindError && draft.Phase == responseevents.PhaseFailed {
+			n.pendingTerminal = &draft
+			continue
+		}
+		n.publishDraft(draft)
 	}
+}
+
+func (n *commandOutputNormalizer) publishDraft(draft responseevents.Draft) {
+	fragment := canonicalFragment(draft)
+	fragment.CanonicalDraft = &draft
+	n.publisher(fragment)
+}
+
+func terminalOutcomeOverridesNativeFailure(ctx context.Context, result provider.CommandResult, commandErr error) bool {
+	return errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) ||
+		errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) || result.ExitCode == 124
 }
 
 func canonicalFragment(draft responseevents.Draft) provider.InferenceProgressFragment {
