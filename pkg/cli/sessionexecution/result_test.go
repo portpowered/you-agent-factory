@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestRunResult_SuccessFixtureFinalResultHumanOutput(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Host exposes session registry, runtime activation, and readback seams owned by pkg/service.

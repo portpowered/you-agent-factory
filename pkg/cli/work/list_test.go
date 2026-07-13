@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestList_SendsStateFilters(t *testing.T) {

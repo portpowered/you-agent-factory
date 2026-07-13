@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func writeHumanSubmitSuccess(w io.Writer, result factoryapi.SubmitWorkResponse, fallbackName, fallbackWorkType string) error {

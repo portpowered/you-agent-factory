@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type fixedClock struct {

@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func (s *Service) serializeNamedFactory(

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -18,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )

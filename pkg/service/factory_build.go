@@ -16,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -41,6 +40,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"

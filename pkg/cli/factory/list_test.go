@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestList_WritesHumanReadableTable(t *testing.T) {
@@ -114,13 +114,13 @@ func listTestNamedFactoryPayload(t *testing.T, project string) []byte {
 		},
 		"workstations": []map[string]any{
 			{
-				"name":    "execute-" + project,
-				"worker":  "executor",
-				"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"name":      "execute-" + project,
+				"worker":    "executor",
+				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 				"type":      "MODEL_WORKSTATION",
-				"body":    "Implement {{ .WorkID }}.",
+				"body":      "Implement {{ .WorkID }}.",
 			},
 		},
 	}

@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestValidate_ValidWorkflowNameHumanOutput(t *testing.T) {

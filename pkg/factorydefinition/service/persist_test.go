@@ -7,11 +7,11 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/apitypes"
-	generatedapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	generatedapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func workerTypeModel() *generatedapi.WorkerType {

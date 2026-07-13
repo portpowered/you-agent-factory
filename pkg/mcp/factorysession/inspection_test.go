@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestMockClient_RuntimeService_DocumentedHostConversationUsesRegisteredTools(t *testing.T) {

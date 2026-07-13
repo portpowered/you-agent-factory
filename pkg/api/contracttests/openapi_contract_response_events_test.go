@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 )
 
@@ -326,7 +326,7 @@ func TestOpenAPIContract_PublicArtifactsExposeFactoryResponseEventContract(t *te
 	}
 	paths := []string{
 		"../../../api/openapi.yaml",
-		"../generated/server.gen.go",
+		"../../transports/http/generated/server.gen.go",
 		"../../../ui/src/api/generated/openapi.ts",
 	}
 
@@ -747,7 +747,7 @@ func TestGeneratedFactoryResponseEventContentBlockCoverageFixtureRoundTrip(t *te
 }
 
 func TestGeneratedPublicArtifactsExposeFactoryResponseEventUnion(t *testing.T) {
-	data, err := os.ReadFile(filepath.FromSlash("../generated/server.gen.go"))
+	data, err := os.ReadFile(filepath.FromSlash("../../transports/http/generated/server.gen.go"))
 	if err != nil {
 		t.Fatalf("read generated server models: %v", err)
 	}

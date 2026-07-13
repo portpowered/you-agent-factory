@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
 func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesReadinessFailureClasses(t *testing.T) {
 	tests := []struct {
-		name          string
-		invokeErr     error
-		wantIs        error
-		wantContains  []string
+		name           string
+		invokeErr      error
+		wantIs         error
+		wantContains   []string
 		wantNotContain string
 	}{
 		{
@@ -115,12 +115,12 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesReadinessFailureCl
 
 func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesManagedRuntimeVocabulary(t *testing.T) {
 	tests := []struct {
-		name           string
-		readiness      factoryapi.ManagedRuntimeReadinessState
-		lifecycle      factoryapi.ManagedRuntimeLifecycleState
-		wantIs         error
-		wantReadiness  factoryapi.ManagedRuntimeReadinessState
-		wantLifecycle  factoryapi.ManagedRuntimeLifecycleState
+		name          string
+		readiness     factoryapi.ManagedRuntimeReadinessState
+		lifecycle     factoryapi.ManagedRuntimeLifecycleState
+		wantIs        error
+		wantReadiness factoryapi.ManagedRuntimeReadinessState
+		wantLifecycle factoryapi.ManagedRuntimeLifecycleState
 	}{
 		{
 			name:          "missing",

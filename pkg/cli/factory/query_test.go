@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestQuery_WritesHumanReadableDefaultRootFactory(t *testing.T) {
@@ -124,7 +124,7 @@ func TestQuery_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	if err := Query(QueryConfig{
-		Server: serverBase(t, srv),
+		Server:      serverBase(t, srv),
 		JSON:        true,
 		Verbose:     true,
 		Output:      &out,
@@ -168,7 +168,7 @@ func TestQuery_VerboseLogsFailureStatus(t *testing.T) {
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
 	err := Query(QueryConfig{
-		Server: serverBase(t, srv),
+		Server:      serverBase(t, srv),
 		JSON:        true,
 		Verbose:     true,
 		Output:      &out,

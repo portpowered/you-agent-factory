@@ -6,10 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestValidateFactory_RoutelessCronAndLogicalMove_ReturnMissingOutputRoutesAtOutputs(t *testing.T) {

@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestInterruptFactorySessionDispatch_FixtureBackedRunningSessionReturnsTypedLifecycleControl(t *testing.T) {

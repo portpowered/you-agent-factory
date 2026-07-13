@@ -1,8 +1,8 @@
 package factorysession
 
 import (
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func derefString(value *string) string {

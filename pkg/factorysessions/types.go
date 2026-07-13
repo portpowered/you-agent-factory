@@ -5,9 +5,9 @@ import (
 
 	"github.com/google/uuid"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.

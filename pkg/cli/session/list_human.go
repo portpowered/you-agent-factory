@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func renderListResult(output io.Writer, result factoryapi.ListFactorySessionsResponse) error {

@@ -13,11 +13,11 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
 	"github.com/portpowered/infinite-you/pkg/config/builtinsubagent"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // InlineRuntimeDefinitionOptions controls how split runtime definition files
@@ -874,10 +874,10 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/fusion":    BuiltInFusionFactoryJSON,
-	"@you/goal":      BuiltInGoalFactoryJSON,
-	"@you/subagent":  BuiltInSubagentFactoryJSON,
-	"@you/tts":       BuiltInTTSFactoryJSON,
+	"@you/fusion":   BuiltInFusionFactoryJSON,
+	"@you/goal":     BuiltInGoalFactoryJSON,
+	"@you/subagent": BuiltInSubagentFactoryJSON,
+	"@you/tts":      BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for

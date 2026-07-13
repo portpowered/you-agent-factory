@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
 )
@@ -29,13 +29,13 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
 type Server struct {
-	runtime           apisurface.APISurface
-	sessionRuntime    apisurface.SessionAPISurface
-	logger            *zap.Logger
-	router            *mux.Router
-	port              int
-	codexSessionsRoot   string
-	cursorSessionsRoot  cursorstorage.AgentStorageRoot
+	runtime            apisurface.APISurface
+	sessionRuntime     apisurface.SessionAPISurface
+	logger             *zap.Logger
+	router             *mux.Router
+	port               int
+	codexSessionsRoot  string
+	cursorSessionsRoot cursorstorage.AgentStorageRoot
 }
 
 var noModTime = time.Time{}
@@ -193,5 +193,3 @@ func (s *Server) serveDashboardIndex(w http.ResponseWriter, r *http.Request, dis
 
 	http.ServeContent(w, r, dashboardUIIndexFile, noModTime, readSeeker)
 }
-
-//go:generate go tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=../../api/codegen_config/server.yaml ../../api/openapi.yaml

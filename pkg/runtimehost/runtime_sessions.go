@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -33,6 +32,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )

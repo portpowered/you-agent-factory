@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type validationDefinitionHost struct {

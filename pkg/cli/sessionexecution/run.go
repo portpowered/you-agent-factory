@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // RunConfig holds CLI inputs for one durable Factory Session synchronous execution.

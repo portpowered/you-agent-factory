@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Service owns session-scoped factory save orchestration.

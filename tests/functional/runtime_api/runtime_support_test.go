@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func normalizeSubmitRequestsForFunctionalTest(requests []interfaces.SubmitRequest) []interfaces.SubmitRequest {

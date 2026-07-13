@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -29,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )

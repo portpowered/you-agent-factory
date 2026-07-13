@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	_ "modernc.org/sqlite"
 )
 

@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type durableLifecycleGatewayHost struct {

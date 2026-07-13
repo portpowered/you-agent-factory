@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 )
 

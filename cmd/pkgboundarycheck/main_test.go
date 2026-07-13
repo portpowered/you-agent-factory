@@ -23,7 +23,7 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	} {
 		makeDir(t, repoRoot, packagePath)
 	}
-	makeDir(t, repoRoot, "pkg/generatedclient")
+	makeDir(t, repoRoot, "pkg/transports/http/client")
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -34,7 +34,7 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "package boundary passed (no blocking package-boundary violations)") {
 		t.Fatalf("run() stdout = %q, want package-boundary success message", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)") {
+	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)") {
 		t.Fatalf("run() stdout = %q, want generated-code exception summary", got)
 	}
 	if got := stderr.String(); got != "" {
@@ -252,8 +252,8 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGeneratedGoFile(t, repoRoot, "pkg/generatedclient/client.gen.go")
-	writeGeneratedGoFile(t, repoRoot, "pkg/api/generated/server.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/transports/http/client/client.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/transports/http/generated/server.gen.go")
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -263,7 +263,7 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	}
 	for _, want := range []string{
 		"package boundary passed",
-		"active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+		"active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
 	} {
 		if got := stdout.String(); !strings.Contains(got, want) {
 			t.Fatalf("run() stdout = %q, want substring %q", got, want)
@@ -278,7 +278,7 @@ func TestRunRejectsGeneratedLookingRootOutsideDocumentedExceptions(t *testing.T)
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGeneratedGoFile(t, repoRoot, "pkg/generatedclient/client.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/transports/http/client/client.gen.go")
 	writeGeneratedGoFile(t, repoRoot, "pkg/generatedexperimental/client.gen.go")
 
 	stdout := &bytes.Buffer{}
@@ -295,13 +295,13 @@ func TestRunRejectsGeneratedLookingRootOutsideDocumentedExceptions(t *testing.T)
 	for _, want := range []string{
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/generatedexperimental",
 		"outside the approved package-family allowlist",
-		"active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+		"active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
 		}
 	}
-	if strings.Contains(got, "unapproved root package family: pkg/generatedclient") {
+	if strings.Contains(got, "unapproved root package family: pkg/transports/http/client") {
 		t.Fatalf("run() stderr = %q, documented generated-code root should not be rejected", got)
 	}
 }
@@ -310,9 +310,9 @@ func TestValidatePolicyRejectsGeneratedExceptionAsProductFamily(t *testing.T) {
 	t.Parallel()
 
 	policy := boundaryPolicy{
-		approvedProductPackageFamilies: []string{"pkg/generatedclient"},
+		approvedProductPackageFamilies: []string{"pkg/transports/http/client"},
 		generatedCodeExceptions: []generatedCodeException{
-			{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
+			{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
 		},
 	}
 
@@ -320,7 +320,7 @@ func TestValidatePolicyRejectsGeneratedExceptionAsProductFamily(t *testing.T) {
 	if err == nil {
 		t.Fatal("validatePolicy() error = nil, want generated-code/product-family overlap rejection")
 	}
-	if got := err.Error(); got != "generated-code exception pkg/generatedclient must not also be an approved product package family" {
+	if got := err.Error(); got != "generated-code exception pkg/transports/http/client must not also be an approved product package family" {
 		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
 	}
 }
@@ -331,13 +331,13 @@ func TestValidatePolicyRejectsGeneratedExceptionAsMigrationException(t *testing.
 	policy := boundaryPolicy{
 		approvedProductPackageFamilies: []string{"pkg/transports"},
 		migrationPackageExceptions: []migrationPackageException{{
-			packagePath:  "pkg/generatedclient",
+			packagePath:  "pkg/transports/http/client",
 			targetOwner:  "pkg/transports",
 			workItem:     batch006TransportFamilyMove,
 			deletionGate: "remove after generated clients move to pkg/transports",
 		}},
 		generatedCodeExceptions: []generatedCodeException{
-			{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
+			{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
 		},
 	}
 
@@ -345,7 +345,7 @@ func TestValidatePolicyRejectsGeneratedExceptionAsMigrationException(t *testing.
 	if err == nil {
 		t.Fatal("validatePolicy() error = nil, want generated-code/migration overlap rejection")
 	}
-	if got := err.Error(); got != "generated-code exception pkg/generatedclient must not also be a migration-only package exception" {
+	if got := err.Error(); got != "generated-code exception pkg/transports/http/client must not also be a migration-only package exception" {
 		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
 	}
 }
@@ -371,7 +371,7 @@ func TestRunFailsForUnapprovedRootPackageFamily(t *testing.T) {
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
 		"  reason: pkg/experimental is outside the approved package-family allowlist.",
 		"  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.",
-		"[agent-factory:pkg-boundary] active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+		"[agent-factory:pkg-boundary] active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
 		"",
 	}, "\n")
 	if got := stderr.String(); got != wantOutput {

@@ -12,23 +12,23 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the session list command.
 type ListConfig struct {
-	Port        int
-	Scope       string
-	JSON        bool
-	Verbose     bool
-	Debug       bool
-	Output      io.Writer
-	Diagnostics io.Writer
+	Port          int
+	Scope         string
+	JSON          bool
+	Verbose       bool
+	Debug         bool
+	Output        io.Writer
+	Diagnostics   io.Writer
 	DurableLister durableSessionLister
 }
 

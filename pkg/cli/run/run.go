@@ -18,7 +18,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
@@ -35,6 +34,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 

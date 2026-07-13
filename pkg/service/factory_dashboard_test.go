@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
@@ -19,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"

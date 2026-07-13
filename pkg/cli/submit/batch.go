@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const batchErrorBodyPreviewLimit = 200

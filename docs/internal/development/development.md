@@ -377,7 +377,13 @@ This uses the repository-supported Redocly CLI from the root `api/` workspace an
 make generate-api
 ```
 
-`make generate-api` rebundles `api/openapi.yaml`, then runs `go generate -tags=interfaces ./pkg/api`, which uses `api/codegen_config/server.yaml` and writes `pkg/api/generated/server.gen.go`. It also runs `go generate -tags=interfaces ./pkg/generatedclient`, which uses `api/codegen_config/client.yaml` and writes `pkg/generatedclient/client.gen.go`, and then runs the dashboard UI OpenAPI generator to refresh `ui/src/api/generated/openapi.ts`.
+`make generate-api` rebundles `api/openapi.yaml`, then runs the server and
+client directives from `pkg/transports/http/generate.go`. Those directives use
+`api/codegen_config/server.yaml` and `api/codegen_config/client.yaml` to write
+`pkg/transports/http/generated/server.gen.go` and
+`pkg/transports/http/client/client.gen.go`, respectively. The target then runs
+the dashboard UI OpenAPI generator to refresh
+`ui/src/api/generated/openapi.ts`.
 
 4. Prove regeneration is stable when the authored sources are unchanged:
 
@@ -385,7 +391,7 @@ make generate-api
 make api-smoke
 ```
 
-`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
+`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
 
 5. Run the focused API and package checks that cover the contract boundary:
 
@@ -395,7 +401,12 @@ make test
 make lint
 ```
 
-Review any generated diff together with the authored OpenAPI change. Do not hand-edit `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, or `ui/src/api/generated/openapi.ts`; change `api/openapi-main.yaml` or a referenced fragment, then regenerate.
+Review any generated diff together with the authored OpenAPI change. Do not
+hand-edit `api/openapi.yaml`,
+`pkg/transports/http/generated/server.gen.go`,
+`pkg/transports/http/client/client.gen.go`, or
+`ui/src/api/generated/openapi.ts`; change `api/openapi-main.yaml` or a
+referenced fragment, then regenerate.
 
 ## Factory CLI Wire Composition
 
@@ -555,7 +566,7 @@ behavior explicit inside the test that needs it.
 
 - Embedded dashboard builds are generated local artifacts. Rebuild `ui/dist/` with `make ui-build` or `make dashboard-verify` after dashboard source changes so Go picks up the refreshed embed registration.
 - Do not run `ui-build` in parallel with Go vet, build, or test commands; Vite rotates hashed files under `ui/dist/assets`.
-- Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/api/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.
+- Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/transports/http/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.
 - Apply that same generated-schema boundary to replay and event-carried factory config: when `RUN_REQUEST.payload.factory` is decoded back from JSON, route the nested factory payload through `config.GeneratedFactoryFromOpenAPIJSON(...)` instead of relying on permissive struct unmarshalling.
 - Browser-side PNG export should load the authored payload from `GET /factory-sessions/{session_id}/factory` and treat that canonical `Factory` response as the only source of truth for embedded sharing metadata. The detailed boundary and wrapper shape are documented in [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md).
 - Browser-side sharing roundtrip coverage should exercise `writeFactoryExportPng(...)`, `readFactoryImportPng(...)`, and `useFactoryImportActivation(...)` together so tests prove the same canonical `Factory` reaches `POST /factories` without dashboard-only reshaping.

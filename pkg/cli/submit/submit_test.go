@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestSubmit_MissingWorkTypeName(t *testing.T) {
@@ -44,7 +44,7 @@ func TestSubmit_VerboseLogsRequestAndResponseMetadataWithoutPayloadContent(t *te
 		Name:         "verbose-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Server: mustServerBase(t, srv.URL),
+		Server:       mustServerBase(t, srv.URL),
 		SessionID:    "session-alpha",
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
@@ -100,7 +100,7 @@ func TestSubmit_VerboseLogsJSONPayloadMetadataWithoutPayloadContentOrToken(t *te
 		Name:         "json-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Server: mustServerBase(t, srv.URL),
+		Server:       mustServerBase(t, srv.URL),
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
 	})
@@ -147,7 +147,7 @@ func TestSubmit_VerboseLogsFailureStatus(t *testing.T) {
 		Name:         "task-submit",
 		WorkTypeName: "task",
 		Payload:      payloadPath,
-		Server: mustServerBase(t, srv.URL),
+		Server:       mustServerBase(t, srv.URL),
 		Verbose:      true,
 		Diagnostics:  &diagnostics,
 	})

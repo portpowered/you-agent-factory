@@ -23,7 +23,7 @@ func TestRunSucceedsWhenOwnedPkgFilesStayWithinLimitsAndGeneratedRootsAreIgnored
 		"\tprintln(\"ok\")",
 		"}",
 	}, "\n"))
-	writeGoFile(t, repoRoot, "pkg/api/generated/server.gen.go", strings.Join([]string{
+	writeGoFile(t, repoRoot, "pkg/transports/http/generated/server.gen.go", strings.Join([]string{
 		"package generated",
 		"",
 		"func Generated() {",

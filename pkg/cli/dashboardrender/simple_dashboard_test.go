@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustomerSummary(t *testing.T) {

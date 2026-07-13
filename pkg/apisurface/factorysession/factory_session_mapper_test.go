@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestDurableSessionMapperRoundTrip_AllFixtureResponses(t *testing.T) {

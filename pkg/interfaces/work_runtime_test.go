@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestWorkDiagnosticsFromSafeWorkDiagnostics_NilSafe(t *testing.T) {

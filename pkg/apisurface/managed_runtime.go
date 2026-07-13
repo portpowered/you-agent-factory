@@ -3,8 +3,8 @@ package apisurface
 import (
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ManagedRuntimePullResultFromService maps a service-owned pull result into the

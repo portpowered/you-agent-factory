@@ -3,9 +3,9 @@ package factorysession
 import (
 	"context"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	apifactorysession "github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // StartAsync runs the durable async Factory Session contract for the

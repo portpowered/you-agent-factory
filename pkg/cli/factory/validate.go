@@ -7,11 +7,11 @@ import (
 	"io"
 	"os"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ValidateConfig holds parameters for factory validation output.
@@ -46,8 +46,8 @@ func Validate(cfg ValidateConfig) error {
 	apiResult := result.FactoryValidationResult()
 	if cfg.JSON {
 		payload := struct {
-			Valid    bool                                   `json:"valid"`
-			Targets  []factoryapi.FactoryValidationTarget   `json:"targets"`
+			Valid    bool                                     `json:"valid"`
+			Targets  []factoryapi.FactoryValidationTarget     `json:"targets"`
 			Taxonomy []apisurface.FactoryRuntimeTaxonomyEntry `json:"taxonomy"`
 		}{
 			Valid:    len(apiResult.Targets) == 0,

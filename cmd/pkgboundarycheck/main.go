@@ -107,8 +107,8 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 }
 
 var documentedGeneratedCodeExceptions = []generatedCodeException{
-	{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
-	{packagePath: "pkg/api/generated", scope: generatedCodeExceptionScopeSubtree},
+	{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
+	{packagePath: "pkg/transports/http/generated", scope: generatedCodeExceptionScopeRoot},
 }
 
 func defaultBoundaryPolicy() boundaryPolicy {

@@ -1,6 +1,6 @@
 package optional
 
-import factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+import factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 func StringValue(value *string) string {
 	if value == nil {

@@ -3,7 +3,7 @@ package factorysave
 import (
 	"context"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func (s *Service) saveReplaceCurrentForSession(

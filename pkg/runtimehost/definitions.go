@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // FactoryDefinitionService owns current-factory read models for the phase-one

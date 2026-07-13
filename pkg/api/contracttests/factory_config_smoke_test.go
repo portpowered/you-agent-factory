@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 )
 

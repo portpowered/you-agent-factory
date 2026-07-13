@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	api "github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 

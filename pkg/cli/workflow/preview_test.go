@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
 	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const validWorkflowSource = `

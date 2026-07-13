@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
@@ -15,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestMockClient_StartAsync_RunningFixtureReturnsInProgressSession(t *testing.T) {

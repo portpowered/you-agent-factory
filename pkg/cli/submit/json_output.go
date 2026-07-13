@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // SubmitSuccessResult is the stable CLI JSON confirmation emitted after HTTP 201.

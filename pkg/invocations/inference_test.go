@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestResolveInferenceOperationBindings_InferenceAndLegacyWorkstationTypesAlign(t *testing.T) {

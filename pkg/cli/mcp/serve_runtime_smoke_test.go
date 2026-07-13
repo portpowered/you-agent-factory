@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP serve smoke fixture: terminal async completion.

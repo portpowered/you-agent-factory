@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
@@ -465,6 +465,7 @@ func assertGeneratedCurrentFactoryNotFoundJSON(t *testing.T) {
 		t.Fatalf("generated CurrentFactoryNotFound JSON missing NOT_FOUND family: %s", encoded)
 	}
 }
+
 type syncPreflightRecoveryFixtureCatalog struct {
 	Scenarios                []syncPreflightRecoveryScenario      `json:"scenarios"`
 	IdentityScopeComparisons []syncPreflightIdentityScopeScenario `json:"identityScopeComparisons"`

@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // RequestOptions configures diagnostics for JSON HTTP transport helpers.

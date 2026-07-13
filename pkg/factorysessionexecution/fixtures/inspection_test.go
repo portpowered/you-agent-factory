@@ -6,10 +6,10 @@ import (
 	"errors"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestFakeService_PublishedScenarios_AsyncStartInspectionLinksAndEventPrefix(t *testing.T) {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	api "github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -20,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 

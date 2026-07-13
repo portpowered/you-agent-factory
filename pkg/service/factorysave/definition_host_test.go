@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 var testDefinitionService = factorydefinition.New(stubDefinitionHost{})

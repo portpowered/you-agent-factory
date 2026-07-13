@@ -3,8 +3,8 @@ package apisurface
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestManagedRuntimePullResultFromService_MapsLegacyOutcomes(t *testing.T) {
@@ -48,8 +48,8 @@ func TestManagedRuntimePullResultFromService_MapsLegacyOutcomes(t *testing.T) {
 			ManagedPullOutcome: "ALREADY_READY",
 			ReadinessState:     "READY",
 			SourceKind:         sourceKind,
-			SourceID:             sourceID,
-			ResolverNotes:        notes,
+			SourceID:           sourceID,
+			ResolverNotes:      notes,
 		}, nil)
 
 		if result.PullOutcome != factoryapi.ManagedRuntimePullOutcomeALREADYREADY {

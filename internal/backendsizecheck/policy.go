@@ -48,8 +48,8 @@ func Inventory() []InventoryEntry {
 			Root: "pkg",
 			Rules: []PathRule{
 				scanRule("pkg/**/*.go", "scan maintained backend package source"),
-				generatedRule("pkg/api/generated", "generated API server output is not maintained handwritten backend source"),
-				generatedRule("pkg/generatedclient", "generated API client output is not maintained handwritten backend source"),
+				generatedRule("pkg/transports/http/generated", "generated API server output is not maintained handwritten backend source"),
+				generatedRule("pkg/transports/http/client", "generated API client output is not maintained handwritten backend source"),
 				fixtureRule("pkg/**/testdata", "Go fixtures under testdata are test inputs rather than maintained backend source"),
 				hiddenRule("hidden repository metadata and nested worktree state are not maintained backend package source"),
 			},
@@ -97,7 +97,11 @@ func ShouldSkipDir(scanRoot, path string) bool {
 	case "cmd", "internal":
 		return contractguard.ShouldSkipDir(scanRoot, path)
 	case "pkg":
-		return shouldSkipByRules(scanRoot, path, []string{"api/generated", "generatedclient", "testdata"})
+		return shouldSkipByRules(scanRoot, path, []string{
+			"transports/http/generated",
+			"transports/http/client",
+			"testdata",
+		})
 	case "tests":
 		return shouldSkipByRules(scanRoot, path, []string{"testdata"})
 	case "vendor":

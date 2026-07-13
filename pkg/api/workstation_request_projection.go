@@ -1,10 +1,10 @@
 package api
 
 import (
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/api/moveprojection"
 	"github.com/portpowered/infinite-you/pkg/api/workstationprojection"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // BuildFactoryWorldWorkstationRequestProjectionSlice delegates to the

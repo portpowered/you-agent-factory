@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestSubmitBatch_DryRunPipedStdinWithNoArgs(t *testing.T) {
@@ -302,10 +302,10 @@ func TestSubmitBatch_DryRunValidFileExitsWithoutHTTP(t *testing.T) {
 
 	var out bytes.Buffer
 	err := SubmitBatch(BatchConfig{
-		Args:    []string{path},
-		DryRun:  true,
-		Server:  "http://127.0.0.1:1",
-		Output:  &out,
+		Args:   []string{path},
+		DryRun: true,
+		Server: "http://127.0.0.1:1",
+		Output: &out,
 	})
 	if err != nil {
 		t.Fatalf("SubmitBatch: %v", err)

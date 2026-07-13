@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ManagedRuntimePullError reports a classified managed-runtime pull failure while

@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -16,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )

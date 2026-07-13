@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
@@ -362,10 +362,10 @@ func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 
 type spyLogger struct{}
 
-func (spyLogger) Debug(string, ...any) {}
-func (spyLogger) Info(string, ...any)  {}
-func (spyLogger) Warn(string, ...any)  {}
-func (spyLogger) Error(string, ...any) {}
+func (spyLogger) Debug(string, ...any)   {}
+func (spyLogger) Info(string, ...any)    {}
+func (spyLogger) Warn(string, ...any)    {}
+func (spyLogger) Error(string, ...any)   {}
 func (spyLogger) Verbose(string, ...any) {}
 
 func TestWithAgentRunLogger_ConfiguresExecutor(t *testing.T) {

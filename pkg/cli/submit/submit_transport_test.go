@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Transport-edge regression tests guard clihttp migration outcomes at the HTTP boundary.

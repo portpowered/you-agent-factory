@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestManagedRuntimePullHTTPStatus_MapsClassifiedOutcomes(t *testing.T) {

@@ -96,10 +96,10 @@ generate-api: bundle-api generate-go-api generate-ui-api
 generate-go-api: generate-go-server-api generate-go-client-api
 
 generate-go-server-api:
-	$(GO) generate -tags=interfaces ./pkg/api
+	$(GO) generate -run=server -tags=interfaces ./pkg/transports/http
 
 generate-go-client-api:
-	$(GO) generate -tags=interfaces ./pkg/generatedclient
+	$(GO) generate -run=client -tags=interfaces ./pkg/transports/http
 
 generate-ui-api:
 	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"reflect"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ErrFactoryResponseEventStreamExpired reports that the completed session's

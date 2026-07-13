@@ -5,8 +5,8 @@ package factorysession
 import (
 	"encoding/json"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Tool names use Factory Session vocabulary and align with durable REST routes.
@@ -73,7 +73,7 @@ type ToolErrorEnvelope struct {
 
 // ToolResponse wraps one tool outcome with either a typed result or a stable error.
 type ToolResponse[T any] struct {
-	Result *T                `json:"result,omitempty"`
+	Result *T                 `json:"result,omitempty"`
 	Error  *ToolErrorEnvelope `json:"error,omitempty"`
 }
 
@@ -152,4 +152,3 @@ func ValidateSource(input factoryapi.FactoryPreviewRequest) ToolResponse[factory
 	}
 	return ToolResponse[factoryapi.FactoryPreviewResult]{Result: &preview}
 }
-

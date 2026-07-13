@@ -4,26 +4,26 @@ import (
 	"errors"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
-	errorCodeBadRequest                = "BAD_REQUEST"
-	errorCodeValidateInvalid           = "factory_session.validate.invalid"
-	errorMessageValidateInvalid        = "factory source validation found blocking issues"
-	errorCodeServiceUnavailable        = "factory_session.service.unavailable"
-	errorCodeStartUnknownScenario      = "factory_session.start.unknown_scenario"
-	errorCodeStartRequestIDConflict    = "factory_session.start.request_id_conflict"
-	errorCodeSessionNotFound           = "factory_session.session.not_found"
-	errorCodeResultNotReady                = "factory_session.result.not_ready"
-	errorCodeReconnectCursorNotFound     = "factory_session.events.reconnect_cursor_not_found"
-	errorMessageServiceUnavailable         = "factory session execution service is unavailable"
-	errorMessageStartRequestIDConflict     = "execution request id was reused with a different start tuple"
-	errorMessageSessionNotFound            = "factory session not found"
-	errorMessageResultNotReady             = "factory session result is not ready"
-	errorMessageReconnectCursorNotFound    = "event reconnect cursor not found in session history"
+	errorCodeBadRequest                 = "BAD_REQUEST"
+	errorCodeValidateInvalid            = "factory_session.validate.invalid"
+	errorMessageValidateInvalid         = "factory source validation found blocking issues"
+	errorCodeServiceUnavailable         = "factory_session.service.unavailable"
+	errorCodeStartUnknownScenario       = "factory_session.start.unknown_scenario"
+	errorCodeStartRequestIDConflict     = "factory_session.start.request_id_conflict"
+	errorCodeSessionNotFound            = "factory_session.session.not_found"
+	errorCodeResultNotReady             = "factory_session.result.not_ready"
+	errorCodeReconnectCursorNotFound    = "factory_session.events.reconnect_cursor_not_found"
+	errorMessageServiceUnavailable      = "factory session execution service is unavailable"
+	errorMessageStartRequestIDConflict  = "execution request id was reused with a different start tuple"
+	errorMessageSessionNotFound         = "factory session not found"
+	errorMessageResultNotReady          = "factory session result is not ready"
+	errorMessageReconnectCursorNotFound = "event reconnect cursor not found in session history"
 )
 
 func requestValidationErrorEnvelope(err error) ToolErrorEnvelope {

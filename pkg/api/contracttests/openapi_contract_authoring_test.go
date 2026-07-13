@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	generated "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	generated "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 )
 

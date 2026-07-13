@@ -8,8 +8,8 @@ import (
 	"time"
 
 	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -660,10 +660,10 @@ func sliceValueForRuntimeTest[T any](values *[]T) []T {
 }
 
 type serviceModeRunHarness struct {
-	t      *testing.T
+	t       *testing.T
 	Factory factory.Factory
-	cancel context.CancelFunc
-	errCh  chan error
+	cancel  context.CancelFunc
+	errCh   chan error
 }
 
 func startServiceModeRunHarness(t *testing.T, opts ...factory.FactoryOption) *serviceModeRunHarness {

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestFailurePaths_MissingSessionStatusHumanAndJSON(t *testing.T) {
@@ -392,7 +392,6 @@ func assertCLIExecutionError(t *testing.T, err error, output, code, field string
 		t.Fatalf("output = %q, want field %q", output, field)
 	}
 }
-
 
 func TestRunDispatches_SuccessFixtureHumanOutput(t *testing.T) {
 	service := newContractFakeService(t)

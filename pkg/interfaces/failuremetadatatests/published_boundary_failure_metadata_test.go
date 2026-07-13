@@ -3,8 +3,8 @@ package failuremetadatatests
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestWorkFailureMetadataFromGenerated_MapsProviderFailureOnlyWireInput(t *testing.T) {

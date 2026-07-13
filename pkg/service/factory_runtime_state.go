@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
@@ -27,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"

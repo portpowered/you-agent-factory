@@ -10,16 +10,16 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/internal/contractguard"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 	moduleRoot := filepath.Clean(filepath.Join("..", "..", ".."))
 	generatedImportPaths := map[string]struct{}{
-		"github.com/portpowered/infinite-you/pkg/api/generated": {},
-		"pkg/api/generated": {},
+		"github.com/portpowered/infinite-you/pkg/transports/http/generated": {},
+		"pkg/transports/http/generated":                                     {},
 	}
 	deletedTypeNames := map[string]struct{}{
 		"FactoryEventEnvelope": {},
@@ -42,7 +42,7 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 			if contractguard.ShouldSkipDir(
 				moduleRoot,
 				path,
-				"pkg/api/generated",
+				"pkg/transports/http/generated",
 				"ui/dist",
 				"ui/node_modules",
 				"ui/storybook-static",

@@ -1,10 +1,10 @@
 package apisurface
 
 import (
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ResolveWorkflowPolicy is the shared entry point for effective policy resolution.

@@ -3,7 +3,7 @@ package sessionpersistence
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )

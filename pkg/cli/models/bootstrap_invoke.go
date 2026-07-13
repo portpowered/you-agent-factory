@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
@@ -21,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )

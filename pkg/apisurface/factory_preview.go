@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // BuildFactoryPreview is the shared API, CLI, MCP, and website entry point for

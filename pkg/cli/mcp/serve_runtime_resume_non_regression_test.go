@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestMCPResumeSmokeLane_FixtureBackedInstallSmokeRegression(t *testing.T) {

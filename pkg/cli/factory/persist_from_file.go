@@ -8,13 +8,13 @@ import (
 	"os"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type persistFromFileMode int

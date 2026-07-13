@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type managedRuntimeProjection struct {
-	summary           factoryapi.ModelSummary
-	baseDiagnostics   factoryapi.StringMap
-	cacheInspection   *RuntimeCacheInspection
-	sourceResolution  *ManagedRuntimeSourceResolution
-	includeInspect    bool
+	summary          factoryapi.ModelSummary
+	baseDiagnostics  factoryapi.StringMap
+	cacheInspection  *RuntimeCacheInspection
+	sourceResolution *ManagedRuntimeSourceResolution
+	includeInspect   bool
 }
 
 func buildManagedRuntime(summary factoryapi.ModelSummary, diagnostics factoryapi.StringMap) factoryapi.ManagedRuntime {

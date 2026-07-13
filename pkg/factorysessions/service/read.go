@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ListFactorySessions returns live workspace session summaries through control-plane read policy.

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Client is a deterministic mock MCP client for Factory Session tool calls.

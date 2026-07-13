@@ -1,8 +1,8 @@
 package logicaltarget
 
 import (
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // APILogicalTarget maps one normalized logical target reference to the public

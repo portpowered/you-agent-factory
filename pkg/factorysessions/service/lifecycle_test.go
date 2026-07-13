@@ -4,18 +4,18 @@ import (
 	"context"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type lifecycleGatewayHost struct {
 	openTestHost
-	factory    factory.Factory
-	stopCalls  []string
+	factory   factory.Factory
+	stopCalls []string
 }
 
 func (h *lifecycleGatewayHost) SessionFactory(_ string) (factory.Factory, error) {

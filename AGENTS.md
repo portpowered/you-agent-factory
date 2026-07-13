@@ -80,8 +80,8 @@ the standards.
 - `examples/` contains example factory directories.
 - `factory/` contains this repository's checked-in factory scaffold and
   factory-local docs.
-- `pkg/api/` contains HTTP handlers, generated server contracts, API boundary
-  tests, OpenAPI contract tests, server tests, and API test data.
+- `pkg/api/` contains HTTP handlers, API boundary tests, OpenAPI contract tests,
+  server tests, and API test data.
 - `pkg/apisurface/` contains mapping and normalization at the public API
   boundary. Prefer this layer for transport-independent request/response
   shaping.
@@ -105,6 +105,8 @@ the standards.
 - `pkg/service/` coordinates backend service behavior across sessions,
   runtime construction, model catalog, replay, ingestion, and factory save or
   validation flows.
+- `pkg/transports/http/` owns API generation entrypoints and the dedicated
+  generated server-contract and Go-client packages.
 - `pkg/workers/`, `pkg/hostedworkers/`, and `pkg/packagedfactories/` contain
   worker execution, provider integration, mock workers, worktrees, hosted
   workers, and packaged factory support.
@@ -123,8 +125,8 @@ the standards.
   under `api/components/`.
 - Do not hand-edit generated files:
   - `api/openapi.yaml`
-  - `pkg/api/generated/server.gen.go`
-  - `pkg/generatedclient/client.gen.go`
+  - `pkg/transports/http/generated/server.gen.go`
+  - `pkg/transports/http/client/client.gen.go`
   - `ui/src/api/generated/openapi.ts`
 - Run `make generate-api` after OpenAPI changes.
 - For API surface changes, update the matching `pkg/api` handlers,

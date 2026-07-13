@@ -3,8 +3,8 @@ package logicaltarget
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestAPILogicalTarget_DefaultNamedAndProvider(t *testing.T) {

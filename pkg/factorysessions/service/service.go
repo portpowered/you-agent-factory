@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/dataplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/stream"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.

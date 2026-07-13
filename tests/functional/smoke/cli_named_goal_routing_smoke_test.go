@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -23,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -214,9 +214,9 @@ func TestNamedGoalRouting_StructuredUnknownDecisionRoutesToFailed(t *testing.T) 
 	writePackagedGoalCheckWorkstationReviewModeForSmoke(t, dir, goal.PackagedReviewModeStructuredLabel)
 	envelope := `{"decision":"MAYBE","feedback":"unknown structured decision"}`
 	mockWorkersPath := writePackagedGoalBuiltinTopologyMockWorkers(t, packagedGoalTopologyMockOptions{
-		checkerOutput:        "structured",
-		reviewerWorkstation:  goal.PackagedStructuredReviewWorkstationName,
-		reviewerOutput:       envelope,
+		checkerOutput:       "structured",
+		reviewerWorkstation: goal.PackagedStructuredReviewWorkstationName,
+		reviewerOutput:      envelope,
 	})
 	goalText := fmt.Sprintf("functional-smoke-goal-routing-structured-unknown-%d", time.Now().UnixNano())
 

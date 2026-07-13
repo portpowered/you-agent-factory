@@ -124,7 +124,7 @@ func TestClassifyPathsMarksSharedRiskForCrossCuttingAndUnknownSurfaces(t *testin
 		{
 			name: "generated-api-surface",
 			paths: []string{
-				"pkg/api/generated/server.gen.go",
+				"pkg/transports/http/generated/server.gen.go",
 			},
 		},
 		{

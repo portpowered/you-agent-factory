@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
@@ -24,6 +23,7 @@ import (
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func int64Ptr(value int64) *int64 {

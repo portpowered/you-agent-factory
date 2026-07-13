@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -14,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/dataplane"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type lifecycleTestHost struct {
@@ -229,8 +229,12 @@ type snapshotErrorFactory struct {
 }
 
 func (f *snapshotErrorFactory) Run(context.Context) error { return f.inner.Run(context.Background()) }
-func (f *snapshotErrorFactory) Pause(context.Context) error { return f.inner.Pause(context.Background()) }
-func (f *snapshotErrorFactory) Resume(context.Context) error { return f.inner.Resume(context.Background()) }
+func (f *snapshotErrorFactory) Pause(context.Context) error {
+	return f.inner.Pause(context.Background())
+}
+func (f *snapshotErrorFactory) Resume(context.Context) error {
+	return f.inner.Resume(context.Background())
+}
 func (f *snapshotErrorFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
 	return f.inner.GetFactoryEvents(context.Background())
 }

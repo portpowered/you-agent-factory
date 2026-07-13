@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type durableSessionContractFixtureCatalog struct {

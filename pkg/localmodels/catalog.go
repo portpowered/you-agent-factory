@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // CatalogEntry holds API summary and detail for one discovered model.
@@ -452,7 +452,6 @@ func generatedModelResourceSummary(resource interfaces.ResourceConfig) factoryap
 func canonicalModelName(model string) string {
 	return strings.ToUpper(strings.TrimSpace(model))
 }
-
 
 func buildCatalogManagedRuntime(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,

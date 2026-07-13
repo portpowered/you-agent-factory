@@ -9,25 +9,25 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type stubDefinitionHost struct {
-	persistRootDir      string
-	workstationLoader   factoryconfig.WorkstationLoader
-	currentRuntime      *factoryconfig.LoadedFactoryConfig
-	workflowID          string
-	session             *factorysessions.LiveSession
-	sessionRuntime      *factoryconfig.LoadedFactoryConfig
-	sessionPersistRoot  string
-	requireSessionErr   error
-	sessionRuntimeErr   error
+	persistRootDir     string
+	workstationLoader  factoryconfig.WorkstationLoader
+	currentRuntime     *factoryconfig.LoadedFactoryConfig
+	workflowID         string
+	session            *factorysessions.LiveSession
+	sessionRuntime     *factoryconfig.LoadedFactoryConfig
+	sessionPersistRoot string
+	requireSessionErr  error
+	sessionRuntimeErr  error
 }
 
 func (h stubDefinitionHost) PersistRootDir() string { return h.persistRootDir }

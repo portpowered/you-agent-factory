@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -32,6 +31,7 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"

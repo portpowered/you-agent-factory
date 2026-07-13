@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestGeneratedFactoryEventContractsCompile(t *testing.T) {
@@ -78,7 +78,7 @@ func TestCanonicalFactoryEventFixtureUsesMachineTimeContract(t *testing.T) {
 
 func TestGeneratedArtifactsAndCanonicalFixturesOmitRetiredEventNames(t *testing.T) {
 	paths := []string{
-		filepath.FromSlash("../generated/server.gen.go"),
+		filepath.FromSlash("../../transports/http/generated/server.gen.go"),
 		filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"),
 		filepath.FromSlash("../../replay/testdata/inference-events.replay.json"),
 	}

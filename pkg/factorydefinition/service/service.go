@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"os"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ErrCurrentFactoryNotFound reports that no durable current-factory pointer

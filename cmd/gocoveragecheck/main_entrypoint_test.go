@@ -148,7 +148,7 @@ func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		}, ","),
 		"-packages=./pkg/config",
 	}
@@ -206,7 +206,7 @@ func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		}, ","),
 		"-packages=./pkg/config",
 	}
@@ -264,7 +264,7 @@ func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		}, ","),
 		"-packages=./pkg/config",
 	}
@@ -322,7 +322,7 @@ func TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary(t *testing.T) {
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		}, ","),
 		"-packages=./pkg/config",
 	}

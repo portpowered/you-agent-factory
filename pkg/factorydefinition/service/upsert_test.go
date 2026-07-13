@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testing.T) {
@@ -200,7 +200,9 @@ func (h *upsertDefinitionHost) GetCurrentFactoryForSession(context.Context, stri
 
 func (h *upsertDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
 
-func (h *upsertDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error { return nil }
+func (h *upsertDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) error {
+	return nil
+}
 
 func (h *upsertDefinitionHost) ActivateSessionEditableFactory(
 	_ context.Context,

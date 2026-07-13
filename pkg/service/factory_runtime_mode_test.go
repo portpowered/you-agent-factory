@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -33,6 +32,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )

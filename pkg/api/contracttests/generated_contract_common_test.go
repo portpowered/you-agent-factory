@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	generatedclient "github.com/portpowered/infinite-you/pkg/generatedclient"
+	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestOpenAPIAuthoring_ResponseEventStreamDeclaresEphemeralSSEContract(t *testing.T) {

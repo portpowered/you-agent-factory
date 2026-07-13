@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -18,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
@@ -42,7 +42,7 @@ func TestOpenAPIContract_CanonicalFactoryEventVocabularyFixtureValidatesAndRetir
 }
 
 func TestOpenAPIContract_GeneratedModelsOmitLegacyConfig(t *testing.T) {
-	data, err := os.ReadFile("../generated/server.gen.go")
+	data, err := os.ReadFile("../../transports/http/generated/server.gen.go")
 	if err != nil {
 		t.Fatalf("read generated server models: %v", err)
 	}
@@ -55,8 +55,8 @@ func TestOpenAPIContract_GeneratedModelsOmitLegacyConfig(t *testing.T) {
 func TestOpenAPIContract_PublicArtifactsOmitInternalResponseStreamTerms(t *testing.T) {
 	paths := []string{
 		"../../../api/openapi.yaml",
-		"../generated/server.gen.go",
-		"../../generatedclient/client.gen.go",
+		"../../transports/http/generated/server.gen.go",
+		"../../transports/http/client/client.gen.go",
 		"../../../ui/src/api/generated/openapi.ts",
 	}
 
@@ -221,16 +221,16 @@ func assertSessionLifecycleEventStatusVocabulary(t *testing.T, schemas map[strin
 func assertSessionLifecyclePayloadsOmitContextIdentityFields(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for schemaName, forbidden := range map[string][]string{
-		"SessionStartedEventPayload":             {"sessionId", "orchestratorKind", "orchestratorDialect"},
-		"SessionPausedEventPayload":              {"sessionId", "orchestratorKind"},
-		"SessionResumedEventPayload":             {"sessionId", "orchestratorKind"},
-		"SessionResultUpdatedEventPayload":       {"sessionId", "orchestratorKind"},
-		"SessionCompletedEventPayload":           {"sessionId", "orchestratorKind"},
-		"OrchestratorPhaseChangedEventPayload":   {"sessionId", "phaseId", "phaseName"},
+		"SessionStartedEventPayload":                {"sessionId", "orchestratorKind", "orchestratorDialect"},
+		"SessionPausedEventPayload":                 {"sessionId", "orchestratorKind"},
+		"SessionResumedEventPayload":                {"sessionId", "orchestratorKind"},
+		"SessionResultUpdatedEventPayload":          {"sessionId", "orchestratorKind"},
+		"SessionCompletedEventPayload":              {"sessionId", "orchestratorKind"},
+		"OrchestratorPhaseChangedEventPayload":      {"sessionId", "phaseId", "phaseName"},
 		"OrchestratorCheckpointWrittenEventPayload": {"sessionId", "checkpointId", "phaseId", "phaseName"},
-		"DispatchQueuedEventPayload":             {"sessionId", "dispatchId", "phaseId", "phaseName"},
-		"DispatchInterruptedEventPayload":        {"sessionId", "dispatchId"},
-		"DispatchReconciledEventPayload":         {"sessionId", "dispatchId"},
+		"DispatchQueuedEventPayload":                {"sessionId", "dispatchId", "phaseId", "phaseName"},
+		"DispatchInterruptedEventPayload":           {"sessionId", "dispatchId"},
+		"DispatchReconciledEventPayload":            {"sessionId", "dispatchId"},
 	} {
 		assertPropertiesAbsent(t, schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName), schemaName, forbidden...)
 	}

@@ -3,7 +3,7 @@ package workquery
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestValidWorkStateType_AllowedValues(t *testing.T) {
