@@ -16,6 +16,7 @@ const (
 	cursorDiagnosticMalformedRecord = "cursor_malformed_record"
 	cursorDiagnosticUnknownRecord   = "cursor_unknown_record"
 	cursorDiagnosticInvalidSession  = "cursor_invalid_session"
+	cursorDiagnosticInvalidToolCall = "cursor_invalid_tool_call"
 	cursorDiagnosticStderrIgnored   = "cursor_stderr_ignored"
 )
 
@@ -26,11 +27,12 @@ type ResponseEventDecoder struct {
 	context            adapter.DecoderContext
 	pendingStdout      []byte
 	providerSessionRef string
+	tools              map[string]cursorToolState
 }
 
 // NewResponseEventDecoder creates a stateful Cursor decoder for one invocation.
 func NewResponseEventDecoder(input adapter.DecoderContext) *ResponseEventDecoder {
-	return &ResponseEventDecoder{context: input}
+	return &ResponseEventDecoder{context: input, tools: make(map[string]cursorToolState)}
 }
 
 // Observe accepts ordered subprocess chunks without assuming record-aligned IO.
@@ -91,6 +93,8 @@ type cursorStreamRecord struct {
 	TimestampMS *int64          `json:"timestamp_ms"`
 	ModelCallID string          `json:"model_call_id"`
 	Message     json.RawMessage `json:"message"`
+	CallID      string          `json:"call_id"`
+	ToolCall    json.RawMessage `json:"tool_call"`
 }
 
 type cursorAssistantMessage struct {
@@ -117,8 +121,10 @@ func (d *ResponseEventDecoder) decodeRecord(raw []byte) (adapter.DecodeResult, e
 		return d.decodeInitialization(record)
 	case "assistant":
 		return d.decodeAssistant(record)
-	case "tool_call", ResultTypeResult:
-		// Later Cursor adapter stories add these provider-owned lifecycle records.
+	case "tool_call":
+		return d.decodeToolCall(record)
+	case ResultTypeResult:
+		// A later Cursor adapter story adds authoritative terminal results.
 		return adapter.DecodeResult{}, nil
 	default:
 		return cursorDiagnostic(cursorDiagnosticUnknownRecord, "Cursor stream ignored an unknown record type"), nil
