@@ -1,6 +1,13 @@
 package openapitests
 
 func baselineAcceptParityCases() []ParityCase {
+	cases := make([]ParityCase, 0, 10)
+	cases = append(cases, baselineAcceptParityCasesWorkstationLayoutOrchestrator()...)
+	cases = append(cases, baselineAcceptParityCasesWorkerResourceGuard()...)
+	return cases
+}
+
+func baselineAcceptParityCasesWorkstationLayoutOrchestrator() []ParityCase {
 	return []ParityCase{
 		{
 			ID:            "accept-canonical-camel-case-workstation",
@@ -52,6 +59,11 @@ func baselineAcceptParityCases() []ParityCase {
 			APIOutcome:    outcomeAccept,
 			LoaderOutcome: outcomeAccept,
 		},
+	}
+}
+
+func baselineAcceptParityCasesWorkerResourceGuard() []ParityCase {
+	return []ParityCase{
 		{
 			ID:            "accept-hosted-linear-worker",
 			Shape:         shapeWorker,
@@ -106,6 +118,13 @@ func baselineAcceptParityCases() []ParityCase {
 }
 
 func baselineRejectParityCases() []ParityCase {
+	cases := make([]ParityCase, 0, 8)
+	cases = append(cases, baselineRejectParityCasesWorkerWorkstation()...)
+	cases = append(cases, baselineRejectParityCasesLayoutGuardOrchestratorResource()...)
+	return cases
+}
+
+func baselineRejectParityCasesWorkerWorkstation() []ParityCase {
 	return []ParityCase{
 		{
 			ID:                    "reject-miscased-worker-type",
@@ -171,6 +190,11 @@ func baselineRejectParityCases() []ParityCase {
 				"workstations[0].join is not supported",
 			},
 		},
+	}
+}
+
+func baselineRejectParityCasesLayoutGuardOrchestratorResource() []ParityCase {
+	return []ParityCase{
 		{
 			ID:                    "reject-malformed-layout-missing-schema-version",
 			Shape:                 shapeLayout,
