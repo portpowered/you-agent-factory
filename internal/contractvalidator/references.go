@@ -20,10 +20,12 @@ func (disabledURLLoader) Load(resourceURL string) (any, error) {
 }
 
 type referenceResolver struct {
-	root      string
-	documents map[string]any
-	active    map[string]bool
-	allowed   map[string]struct{}
+	root                 string
+	documents            map[string]any
+	active               map[string]bool
+	allowed              map[string]struct{}
+	deduplicateResources bool
+	resolvedResourceIDs  map[string]struct{}
 }
 
 // LoadAndResolve loads one authored document through the validator's reviewed
@@ -40,7 +42,7 @@ func LoadAndResolve(repositoryRoot, document string, authoredDocuments []string)
 	for _, path := range authoredDocuments {
 		allowed[normalizeRepositoryPath(path)] = struct{}{}
 	}
-	resolved, _, diagnostics := resolveReferencesWithin(repositoryRoot, document, value, allowed)
+	resolved, _, diagnostics := resolveReferencesWithin(repositoryRoot, document, value, allowed, true)
 	sortDiagnostics(diagnostics)
 	return resolved, diagnostics
 }
@@ -88,20 +90,27 @@ func ValidateAuthoredPaths(repositoryRoot string, documents []string, generatedD
 }
 
 func resolveReferences(repositoryRoot, document string, value any) (any, []loadedDocument, []Diagnostic) {
-	return resolveReferencesWithin(repositoryRoot, document, value, nil)
+	return resolveReferencesWithin(repositoryRoot, document, value, nil, false)
 }
 
-func resolveReferencesWithin(repositoryRoot, document string, value any, allowed map[string]struct{}) (any, []loadedDocument, []Diagnostic) {
+func resolveReferencesWithin(
+	repositoryRoot, document string,
+	value any,
+	allowed map[string]struct{},
+	deduplicateResources bool,
+) (any, []loadedDocument, []Diagnostic) {
 	root, err := canonicalRoot(repositoryRoot)
 	if err != nil {
 		return nil, nil, []Diagnostic{newDiagnostic("reference.root", rootPath, "repository root could not be resolved", document)}
 	}
 	document = normalizeRepositoryPath(document)
 	resolver := referenceResolver{
-		root:      root,
-		documents: map[string]any{document: value},
-		active:    make(map[string]bool),
-		allowed:   allowed,
+		root:                 root,
+		documents:            map[string]any{document: value},
+		active:               make(map[string]bool),
+		allowed:              allowed,
+		deduplicateResources: deduplicateResources,
+		resolvedResourceIDs:  make(map[string]struct{}),
 	}
 	resolved, diagnostics := resolver.resolveNode(value, document, nil)
 	if len(diagnostics) != 0 {
@@ -122,10 +131,24 @@ func resolveReferencesWithin(repositoryRoot, document string, value any, allowed
 func (r *referenceResolver) resolveNode(value any, document string, segments []string) (any, []Diagnostic) {
 	switch typed := value.(type) {
 	case map[string]any:
-		if reference, ok := typed["$ref"]; ok {
-			return r.resolveReferenceObject(typed, reference, document, segments)
+		resourceID, hasResourceID := stableResourceID(typed)
+		if r.deduplicateResources && hasResourceID {
+			if _, resolved := r.resolvedResourceIDs[resourceID]; resolved {
+				return map[string]any{"$ref": resourceID}, nil
+			}
 		}
-		return r.resolveObject(typed, document, segments)
+
+		var resolved any
+		var diagnostics []Diagnostic
+		if reference, ok := typed["$ref"]; ok {
+			resolved, diagnostics = r.resolveReferenceObject(typed, reference, document, segments)
+		} else {
+			resolved, diagnostics = r.resolveObject(typed, document, segments)
+		}
+		if len(diagnostics) == 0 && r.deduplicateResources && hasResourceID {
+			r.resolvedResourceIDs[resourceID] = struct{}{}
+		}
+		return resolved, diagnostics
 	case []any:
 		resolved := make([]any, len(typed))
 		var diagnostics []Diagnostic
@@ -138,6 +161,11 @@ func (r *referenceResolver) resolveNode(value any, document string, segments []s
 	default:
 		return value, nil
 	}
+}
+
+func stableResourceID(value map[string]any) (string, bool) {
+	identifier, ok := value["$id"].(string)
+	return identifier, ok && identifier != ""
 }
 
 func (r *referenceResolver) resolveObject(value map[string]any, document string, segments []string) (map[string]any, []Diagnostic) {

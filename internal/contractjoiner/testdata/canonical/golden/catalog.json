@@ -1,13 +1,7 @@
 {
   "$id": "https://schemas.example.test/catalog.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "alpha": {
-    "nested": {
-      "a": false,
-      "z": true
-    }
-  },
-  "items": [
+  "prefixItems": [
     {
       "$id": "https://schemas.example.test/entry.json",
       "properties": {
@@ -30,30 +24,26 @@
       "description": "array order stays authored"
     }
   ],
-  "numeric": {
-    "const": 9007199254740993
-  },
-  "zeta": {
-    "$defs": {
-      "entry": {
-        "$id": "https://schemas.example.test/entry.json",
-        "properties": {
-          "a": {
-            "$id": "https://schemas.example.test/scalar.json",
-            "type": "string"
-          },
-          "z": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "z",
-          "a"
-        ],
-        "type": "object"
+  "properties": {
+    "alpha": {
+      "const": {
+        "nested": {
+          "a": false,
+          "z": true
+        }
       }
     },
-    "$id": "https://schemas.example.test/shared.json",
-    "type": "object"
+    "numeric": {
+      "const": 9007199254740993
+    },
+    "zeta": {
+      "$defs": {
+        "entry": {
+          "$ref": "https://schemas.example.test/entry.json"
+        }
+      },
+      "$id": "https://schemas.example.test/shared.json",
+      "type": "object"
+    }
   }
 }

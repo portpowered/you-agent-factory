@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -58,6 +59,7 @@ func TestCanonicalJoinedJSONMatchesGoldenAcrossRepeatedAndShuffledInputs(t *test
 	if got := first[0].JSON; !bytes.Equal(got, golden) {
 		t.Fatalf("canonical catalog differs from golden:\ngot:\n%s\nwant:\n%s", got, golden)
 	}
+	compileJoinedSchema(t, joinDocuments(t, input)[0].Value)
 }
 
 type serializedDocument struct {
@@ -112,16 +114,70 @@ func TestJoinBuildsPortableDocumentsFromNestedSharedComponents(t *testing.T) {
 	primary := object(t, properties["primary"])
 	secondary := object(t, properties["secondary"])
 	assertPortableWidget(t, primary)
-	assertPortableWidget(t, secondary)
-	if !reflect.DeepEqual(primary, secondary) {
-		t.Fatalf("shared component joined inconsistently:\nprimary=%v\nsecondary=%v", primary, secondary)
+	if got := secondary["$ref"]; got != "https://schemas.example.test/widget.json" {
+		t.Fatalf("repeated shared component reference = %v, want stable internal resource ID", got)
 	}
 	if got := primary["$id"]; got != "https://schemas.example.test/widget.json" {
 		t.Fatalf("joined component $id = %v", got)
 	}
+	if got := countResourceID(alpha, "https://schemas.example.test/widget.json"); got != 1 {
+		t.Fatalf("joined widget resource count = %d, want 1", got)
+	}
 	beta := object(t, documents[1].Value)
 	assertPortableWidget(t, object(t, beta["items"]))
-	assertNoReferences(t, documents)
+	compileJoinedSchema(t, alpha)
+	compileJoinedSchema(t, beta)
+}
+
+func TestJoinDeduplicatesSharedStableIDResourceAndPreservesValidation(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "contracts/root.json", `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://schemas.example.test/root.json",
+  "type":"object",
+  "required":["a","b"],
+  "properties":{
+    "a":{"$ref":"component.json"},
+    "b":{"$ref":"component.json"}
+  }
+}`)
+	writeFile(t, root, "contracts/component.json", `{
+  "$id":"https://schemas.example.test/component.json",
+  "type":"string",
+  "minLength":2
+}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/root.json"},
+		Components:     []string{"contracts/component.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	joined := documents[0].Value
+	if got := countResourceID(joined, "https://schemas.example.test/component.json"); got != 1 {
+		t.Fatalf("joined component resource count = %d, want 1", got)
+	}
+
+	schema := compileJoinedSchema(t, joined)
+	for _, test := range []struct {
+		name  string
+		value any
+		valid bool
+	}{
+		{name: "both shared uses pass", value: map[string]any{"a": "aa", "b": "bb"}, valid: true},
+		{name: "first use fails", value: map[string]any{"a": "a", "b": "bb"}, valid: false},
+		{name: "second use fails", value: map[string]any{"a": "aa", "b": 2}, valid: false},
+		{name: "required use fails", value: map[string]any{"a": "aa"}, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := schema.Validate(test.value)
+			if (err == nil) != test.valid {
+				t.Fatalf("Validate(%v) error = %v, want valid %t", test.value, err, test.valid)
+			}
+		})
+	}
 }
 
 func TestJoinPreservesAdjacentReferenceKeywordsAndTheirSemantics(t *testing.T) {
@@ -154,17 +210,7 @@ func TestJoinPreservesAdjacentReferenceKeywordsAndTheirSemantics(t *testing.T) {
 	if got := joined["maxProperties"]; got != json.Number("1") {
 		t.Fatalf("joined adjacent assertion = %v, want maxProperties 1", got)
 	}
-	assertNoReferences(t, documents)
-
-	compiler := jsonschema.NewCompiler()
-	compiler.DefaultDraft(jsonschema.Draft2020)
-	if err := compiler.AddResource("joined.json", joined); err != nil {
-		t.Fatalf("add joined schema: %v", err)
-	}
-	schema, err := compiler.Compile("joined.json")
-	if err != nil {
-		t.Fatalf("compile joined schema: %v", err)
-	}
+	schema := compileJoinedSchema(t, joined)
 	for _, test := range []struct {
 		name  string
 		value any
@@ -242,17 +288,6 @@ func assertPortableWidget(t *testing.T, value map[string]any) {
 	}
 }
 
-func assertNoReferences(t *testing.T, documents []contractjoiner.Document) {
-	t.Helper()
-	for _, document := range documents {
-		walkJSON(document.Value, func(value map[string]any) {
-			if reference, ok := value["$ref"]; ok {
-				t.Fatalf("joined document %s retained $ref %v", document.Path, reference)
-			}
-		})
-	}
-}
-
 func walkJSON(value any, visit func(map[string]any)) {
 	switch typed := value.(type) {
 	case map[string]any:
@@ -265,6 +300,37 @@ func walkJSON(value any, visit func(map[string]any)) {
 			walkJSON(child, visit)
 		}
 	}
+}
+
+func countResourceID(value any, identifier string) int {
+	count := 0
+	walkJSON(value, func(object map[string]any) {
+		if object["$id"] == identifier {
+			count++
+		}
+	})
+	return count
+}
+
+type rejectingLoader struct{}
+
+func (rejectingLoader) Load(resourceURL string) (any, error) {
+	return nil, fmt.Errorf("unexpected external schema load: %s", resourceURL)
+}
+
+func compileJoinedSchema(t *testing.T, value any) *jsonschema.Schema {
+	t.Helper()
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	compiler.UseLoader(rejectingLoader{})
+	if err := compiler.AddResource("joined.json", value); err != nil {
+		t.Fatalf("add joined schema: %v", err)
+	}
+	schema, err := compiler.Compile("joined.json")
+	if err != nil {
+		t.Fatalf("compile joined schema without external loading: %v", err)
+	}
+	return schema
 }
 
 func object(t *testing.T, value any) map[string]any {
@@ -299,10 +365,7 @@ func documentJSON(t *testing.T, documents []contractjoiner.Document) map[string]
 
 func joinAndMarshal(t *testing.T, input contractjoiner.Input) []serializedDocument {
 	t.Helper()
-	documents, diagnostics := contractjoiner.Join(input)
-	if len(diagnostics) != 0 {
-		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
-	}
+	documents := joinDocuments(t, input)
 	result := make([]serializedDocument, 0, len(documents))
 	for _, document := range documents {
 		contents, err := contractjoiner.MarshalCanonicalJSON(document.Value)
@@ -312,6 +375,15 @@ func joinAndMarshal(t *testing.T, input contractjoiner.Input) []serializedDocume
 		result = append(result, serializedDocument{Path: document.Path, JSON: contents})
 	}
 	return result
+}
+
+func joinDocuments(t *testing.T, input contractjoiner.Input) []contractjoiner.Document {
+	t.Helper()
+	documents, diagnostics := contractjoiner.Join(input)
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	return documents
 }
 
 func serializedDocumentPaths(documents []serializedDocument) []string {
