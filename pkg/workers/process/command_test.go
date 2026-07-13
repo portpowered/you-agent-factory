@@ -216,7 +216,10 @@ func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 
-	childPID := readCommandHelperPID(t, pidFile)
+	// Antivirus and indexing processes can briefly hold a newly renamed file on
+	// Windows even after the helper has closed it. Treat a transient sharing
+	// violation like the other pid-publication readiness states.
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
