@@ -483,12 +483,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factory/subsystems/dispatchertests/dispatcher_test.go#assertSingleTransitionDispatchResult",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the full dispatch mutation contract together for transition-level assertions."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/factory/subsystems/history_transitioner_pipeline_test.go#TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPreservesRetryableProviderMetadata",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this failure-pipeline regression keeps the retryable Windows exit corpus and metadata assertions inline."
