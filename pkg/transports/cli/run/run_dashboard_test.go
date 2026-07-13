@@ -25,13 +25,17 @@ import (
 
 func TestRun_DefaultDashboardRendering_PrintsSimpleDashboardOutput(t *testing.T) {
 	dir, workFile := writeDashboardRunFixture(t)
+	executionBaseDir := t.TempDir()
+	packageLocalSnapshot := durableSessionSnapshotPath(".")
 
 	output, err := runWithCapturedStdout(t, RunConfig{
-		Dir:                dir,
-		Port:               0,
-		WorkFile:           workFile,
-		MockWorkersEnabled: true,
-		Logger:             zap.NewNop(),
+		Dir:                     dir,
+		ExecutionBaseDir:        executionBaseDir,
+		Port:                    0,
+		WorkFile:                workFile,
+		MockWorkersEnabled:      true,
+		DisableDefaultRecording: true,
+		Logger:                  zap.NewNop(),
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -40,6 +44,16 @@ func TestRun_DefaultDashboardRendering_PrintsSimpleDashboardOutput(t *testing.T)
 	if !strings.Contains(output, "Factory:") {
 		t.Fatalf("expected simple dashboard output, got %q", output)
 	}
+	if _, err := os.Stat(durableSessionSnapshotPath(executionBaseDir)); err != nil {
+		t.Fatalf("temporary durable session snapshot was not written: %v", err)
+	}
+	if _, err := os.Stat(packageLocalSnapshot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("package-local durable session snapshot must not be written, got err=%v", err)
+	}
+}
+
+func durableSessionSnapshotPath(root string) string {
+	return filepath.Join(root, ".you-agent-factory", "durable-sessions", defaultFactorySessionID+".json")
 }
 
 func TestRun_SuppressDashboardRendering_SkipsSimpleDashboardOutput(t *testing.T) {
@@ -47,9 +61,11 @@ func TestRun_SuppressDashboardRendering_SkipsSimpleDashboardOutput(t *testing.T)
 
 	output, err := runWithCapturedStdout(t, RunConfig{
 		Dir:                        dir,
+		ExecutionBaseDir:           t.TempDir(),
 		Port:                       0,
 		WorkFile:                   workFile,
 		MockWorkersEnabled:         true,
+		DisableDefaultRecording:    true,
 		SuppressDashboardRendering: true,
 		Logger:                     zap.NewNop(),
 	})
@@ -77,6 +93,7 @@ func TestRun_CleanInvocationKeepsOperatorChatterOffStdout(t *testing.T) {
 	var startupOut bytes.Buffer
 	output, err := runWithCapturedStdout(t, RunConfig{
 		Dir:                dir,
+		ExecutionBaseDir:   t.TempDir(),
 		Port:               0,
 		WorkFile:           workFile,
 		MockWorkersEnabled: true,
@@ -106,6 +123,7 @@ func TestRun_CleanInvocationEmitsPrimaryTextOutputRepeatedly(t *testing.T) {
 
 		output, err := runWithCapturedStdout(t, RunConfig{
 			Dir:                     dir,
+			ExecutionBaseDir:        t.TempDir(),
 			Port:                    0,
 			WorkFile:                workFile,
 			MockWorkersEnabled:      true,
@@ -128,6 +146,7 @@ func TestRun_CleanInvocationJSONEmitsSinglePrimaryResultObject(t *testing.T) {
 
 	output, err := runWithCapturedStdout(t, RunConfig{
 		Dir:                     dir,
+		ExecutionBaseDir:        t.TempDir(),
 		Port:                    0,
 		WorkFile:                workFile,
 		MockWorkersEnabled:      true,
@@ -164,6 +183,7 @@ func TestRun_CleanInvocationSuccessRecordsStructuredLogAndMetrics(t *testing.T) 
 
 	output, err := runWithCapturedStdout(t, RunConfig{
 		Dir:                        dir,
+		ExecutionBaseDir:           t.TempDir(),
 		Port:                       0,
 		WorkFile:                   workFile,
 		MockWorkersEnabled:         true,
@@ -583,14 +603,16 @@ func startOOTBSmokeRun(t *testing.T, dir string, port int, out *bytes.Buffer) (c
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- Run(ctx, RunConfig{
-			Dir:                dir,
-			Bootstrap:          true,
-			Continuously:       true,
-			MockWorkersEnabled: true,
-			Port:               port,
-			OpenDashboard:      true,
-			StartupOutput:      out,
-			Logger:             zap.NewNop(),
+			Dir:                     dir,
+			ExecutionBaseDir:        dir,
+			Bootstrap:               true,
+			Continuously:            true,
+			MockWorkersEnabled:      true,
+			DisableDefaultRecording: true,
+			Port:                    port,
+			OpenDashboard:           true,
+			StartupOutput:           out,
+			Logger:                  zap.NewNop(),
 		})
 	}()
 	return cancel, errCh
@@ -825,6 +847,9 @@ func writeFile(t *testing.T, path, content string) {
 
 func runWithCapturedStdout(t *testing.T, cfg RunConfig) (string, error) {
 	t.Helper()
+	if cfg.ExecutionBaseDir == "" {
+		cfg.ExecutionBaseDir = t.TempDir()
+	}
 
 	oldStdout := os.Stdout
 	readPipe, writePipe, err := os.Pipe()

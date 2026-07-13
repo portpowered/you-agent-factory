@@ -324,6 +324,11 @@ primary-result behavior.
   stay independent of `~/.you-agent-factory/config.json` contents.
 - `pkg/transports/cli/root_run_test.go` isolates `HOME` for the whole CLI package so `make test`
   does not depend on the developer's real operator config file.
+- Real-service tests under `pkg/transports/cli/run` must set `ExecutionBaseDir` to a
+  `t.TempDir()` root so project-local durable Factory Session snapshots never land in
+  the package working directory. Set `DisableDefaultRecording` when replay recording is
+  irrelevant; tests that cover recording should inject `defaultLiveRunRecordPath` beneath
+  `t.TempDir()` and assert the resolved artifact there.
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
