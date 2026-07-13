@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 )
 
-const namedGoalResponseStreamJSONRecordPrimary = "primary_result"
+const namedGoalResponseStreamJSONRecordInvocation = "invocation_result"
 
 func TestNamedGoalResponseStream_RealCLICompletesWithPrimaryResult(t *testing.T) {
 	if testing.Short() {
@@ -45,7 +45,7 @@ func TestNamedGoalResponseStream_RealCLICompletesWithPrimaryResult(t *testing.T)
 	}
 }
 
-func TestNamedGoalResponseStream_JSONModeEmitsPrimaryResultRecord(t *testing.T) {
+func TestNamedGoalResponseStream_JSONModeEmitsInvocationResultRecord(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI named @you/goal JSON response-stream smoke")
 	}
@@ -69,8 +69,8 @@ func TestNamedGoalResponseStream_JSONModeEmitsPrimaryResultRecord(t *testing.T) 
 	if err != nil {
 		t.Fatalf("parse JSON response-stream stdout: %v\nstdout:\n%s", err, stdout)
 	}
-	if finalRecord.RecordType != namedGoalResponseStreamJSONRecordPrimary {
-		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, namedGoalResponseStreamJSONRecordPrimary)
+	if finalRecord.RecordType != namedGoalResponseStreamJSONRecordInvocation {
+		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, namedGoalResponseStreamJSONRecordInvocation)
 	}
 	if finalRecord.Invocation.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("final record status = %q, want COMPLETED", finalRecord.Invocation.Status)
@@ -108,7 +108,7 @@ func TestNamedGoalResponseStream_DurableFactoryEventsOmitInternalStreamTerms(t *
 	assertNamedGoalDurableEventsOmitInternalResponseStreamTerms(t, string(encoded))
 }
 
-type namedGoalResponseStreamJSONPrimaryResultRecord struct {
+type namedGoalResponseStreamJSONInvocationResultRecord struct {
 	RecordType string                        `json:"recordType"`
 	Invocation factoryapi.InvocationResponse `json:"invocation"`
 }
@@ -166,27 +166,27 @@ func runNamedGoalResponseStreamInvocationCLI(
 	return stdoutBuf.String(), stderrBuf.String(), runErr
 }
 
-func namedGoalResponseStreamFinalJSONRecord(stdout string) (namedGoalResponseStreamJSONPrimaryResultRecord, error) {
+func namedGoalResponseStreamFinalJSONRecord(stdout string) (namedGoalResponseStreamJSONInvocationResultRecord, error) {
 	lines := strings.Split(strings.TrimSpace(stdout), "\n")
 	if len(lines) == 0 {
-		return namedGoalResponseStreamJSONPrimaryResultRecord{}, fmt.Errorf("empty stdout")
+		return namedGoalResponseStreamJSONInvocationResultRecord{}, fmt.Errorf("empty stdout")
 	}
-	var final namedGoalResponseStreamJSONPrimaryResultRecord
+	var final namedGoalResponseStreamJSONInvocationResultRecord
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		var record namedGoalResponseStreamJSONPrimaryResultRecord
+		var record namedGoalResponseStreamJSONInvocationResultRecord
 		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			return namedGoalResponseStreamJSONPrimaryResultRecord{}, fmt.Errorf("decode line %q: %w", line, err)
+			return namedGoalResponseStreamJSONInvocationResultRecord{}, fmt.Errorf("decode line %q: %w", line, err)
 		}
-		if record.RecordType == namedGoalResponseStreamJSONRecordPrimary {
+		if record.RecordType == namedGoalResponseStreamJSONRecordInvocation {
 			final = record
 		}
 	}
 	if final.RecordType == "" {
-		return namedGoalResponseStreamJSONPrimaryResultRecord{}, fmt.Errorf("missing primary_result record in %d lines", len(lines))
+		return namedGoalResponseStreamJSONInvocationResultRecord{}, fmt.Errorf("missing invocation_result record in %d lines", len(lines))
 	}
 	return final, nil
 }
@@ -215,4 +215,3 @@ func assertNamedGoalDurableEventsOmitInternalResponseStreamTerms(t *testing.T, t
 		}
 	}
 }
-

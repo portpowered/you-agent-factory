@@ -92,11 +92,18 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
     (state) => state.incrementRefreshToken,
   );
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
-  const { snapshot, isInitialLoading, error, preflightRecovery, streamState } =
-    useDashboardSnapshot({
-      locale: resolvedLocale,
-      refreshToken,
-    });
+  const {
+    snapshot,
+    isInitialLoading,
+    error,
+    preflightRecovery,
+    preflightStatus,
+    streamState,
+    workOutcomeStreamIdentity,
+  } = useDashboardSnapshot({
+    locale: resolvedLocale,
+    refreshToken,
+  });
   useDashboardWorldView();
   const messages = getHeaderControlsMessages(resolvedLocale);
   const recoveryMessages = getDashboardRecoveryMessages(resolvedLocale);
@@ -194,7 +201,13 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
     <main className={DASHBOARD_SHELL_CLASS}>
       <DashboardHeader locale={locale} />
 
-      <DashboardBento locale={locale} />
+      <DashboardBento
+        locale={locale}
+        workOutcomeStream={{
+          identity: workOutcomeStreamIdentity ?? null,
+          status: preflightStatus === "success" ? "ready" : "loading",
+        }}
+      />
       <DashboardExportDialog locale={locale} />
     </main>
   );

@@ -123,9 +123,17 @@ stream on a supported one-shot invocation:
 you run --named team-review --output response-stream "Review the release notes"
 ```
 
+Add `--json` for newline-delimited automation output. Each event line is a
+complete `{"recordType":"response_event","event":{...}}` record whose nested
+event uses the same `FactoryResponseEvent` contract as the session API. The
+stream ends with exactly one `invocation_result` record when an invocation
+response is available. That terminal record is always the final line, including
+when stdout is slow. JSON mode does not emit the internal progress, compaction,
+gap, or primary-result record shapes used by earlier releases.
+
 `--output response-stream` is not available for `--work`, continuous, replay,
-or other non-invocation run shapes. Global `--json` preserves the invocation
-response contract for automation:
+or other non-invocation run shapes. For primary-result mode, global `--json`
+preserves the invocation response contract for automation:
 
 ```bash
 you --json run --factory ./factory.json "Summarize the changelog"

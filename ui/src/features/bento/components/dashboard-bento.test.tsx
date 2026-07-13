@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
+import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 
 import { DEFAULT_DASHBOARD_LAYOUT } from "../hooks/dashboardLayoutSchema";
 
@@ -152,6 +153,7 @@ vi.mock("../../dashboard/session/dashboard-session-provider", () => ({
 
 const defaultTimelineStoreState = {
   events: [] as [],
+  materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
   selectedTick: 1,
   worldViewCache: {
     1: {
@@ -204,7 +206,10 @@ vi.mock("../../trace-drilldown/public", () => ({
 }));
 
 vi.mock("../../work-outcome/hooks/useWorkOutcomeChart", () => ({
-  useWorkOutcomeChart: () => ({ status: "empty" }),
+  useWorkOutcomeChart: () => ({
+    chartState: { status: "ready" },
+    status: "empty",
+  }),
 }));
 
 vi.mock("../../work-outcome/public", () => ({
@@ -357,6 +362,7 @@ describe("DashboardBento", () => {
   it("renders nothing while the selected timeline snapshot is unavailable", () => {
     timelineStoreState = {
       events: [],
+      materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
       selectedTick: 99,
       worldViewCache: {},
     };

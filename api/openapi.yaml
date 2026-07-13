@@ -7992,6 +7992,7 @@ components:
       required:
         - fromSequence
         - toSequence
+        - firstAvailableSequence
       properties:
         fromSequence:
           type: integer
@@ -8003,6 +8004,11 @@ components:
           format: int64
           minimum: 0
           description: Highest unavailable published sequence in the reader's catch-up window.
+        firstAvailableSequence:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
         reason:
           type: string
           description: Optional reason for the stream gap such as retention_window.

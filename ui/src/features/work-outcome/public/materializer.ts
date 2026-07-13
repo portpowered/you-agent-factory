@@ -5,7 +5,9 @@ export {
 
 export {
   createMaterializedWorkOutcomeState,
+  isSupportedMaterializedWorkOutcomeState,
   MATERIALIZED_WORK_OUTCOME_VERSION,
-  reduceMaterializedWorkOutcomeEvents,
   type MaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
+  selectMaterializedWorkOutcomeSamples,
 } from "../lib/materializer/materialized-work-outcome";

@@ -7,6 +7,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -371,9 +372,9 @@ func TestRun_FactoryInvocationResponseStreamRendersShortLivedDispatch(t *testing
 	preserveRunGlobals(t)
 
 	cases := []struct {
-		name              string
-		dispatchID        string
-		hideUntilReveal   bool
+		name                           string
+		dispatchID                     string
+		hideUntilReveal                bool
 		requireNoSubscribeDuringInvoke bool
 	}{
 		{
@@ -489,31 +490,22 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 
 	text := "goal completed"
 	var output strings.Builder
-	attachable := newRecordingResponseStreamAttachable()
-	attachable.ensureDispatch("dispatch-goal-1")
+	attachable := newRecordingResponseEventAttachable()
 	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
-		return stubResponseStreamInvocationService{
+		return stubResponseEventInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
 					<-ctx.Done()
 					return nil
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					deadline := time.Now().Add(2 * time.Second)
-					for time.Now().Before(deadline) {
-						if len(attachable.subscribeCalls) > 0 {
-							break
-						}
-						time.Sleep(10 * time.Millisecond)
+					select {
+					case <-attachable.subscribed:
+					case <-time.After(2 * time.Second):
+						t.Fatal("canonical response-event subscription was not established")
 					}
-					stream := attachable.stream("dispatch-goal-1")
-					if stream != nil {
-						stream.Append(responsestream.Event{
-							Kind:       responsestream.EventKindProgressFragment,
-							Type:       responsestream.EventTypeProgress,
-							DispatchID: "dispatch-goal-1",
-							Payload:    "planning",
-						})
+					if err := attachable.publish(canonicalResponseEventFixture(1, responseevents.KindMessage)); err != nil {
+						t.Fatalf("publish canonical response event: %v", err)
 					}
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-1",
@@ -546,11 +538,11 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), output.String())
 	}
-	if !strings.Contains(lines[0], `"recordType":"progress"`) || !strings.Contains(lines[0], `"payload":"planning"`) {
-		t.Fatalf("progress line = %q", lines[0])
+	if !strings.Contains(lines[0], `"recordType":"response_event"`) || !strings.Contains(lines[0], `"kind":"MESSAGE"`) {
+		t.Fatalf("response event line = %q", lines[0])
 	}
-	if !strings.Contains(lines[1], `"recordType":"primary_result"`) || !strings.Contains(lines[1], `"requestId":"req-1"`) {
-		t.Fatalf("primary result line = %q", lines[1])
+	if !strings.Contains(lines[1], `"recordType":"invocation_result"`) || !strings.Contains(lines[1], `"requestId":"req-1"`) {
+		t.Fatalf("invocation result line = %q", lines[1])
 	}
 }
 
@@ -632,8 +624,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		jsonMode:    true,
 		wantErrCode: "INVOCATION_NEEDS_HUMAN",
 		wantContains: []string{
-			`"recordType":"progress"`,
-			`"recordType":"primary_result"`,
+			`"recordType":"invocation_result"`,
 			`"status":"FAILED"`,
 			`"errorCode":"INVOCATION_NEEDS_HUMAN"`,
 		},
@@ -671,7 +662,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		jsonMode:    true,
 		wantErrCode: "INVOCATION_TIMED_OUT",
 		wantContains: []string{
-			`"recordType":"primary_result"`,
+			`"recordType":"invocation_result"`,
 			`"status":"TIMED_OUT"`,
 			`"errorCode":"INVOCATION_TIMED_OUT"`,
 		},
@@ -713,21 +704,23 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 					return nil
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					deadline := time.Now().Add(2 * time.Second)
-					for time.Now().Before(deadline) {
-						if len(attachable.subscribeCalls) > 0 {
-							break
+					if !tc.jsonMode {
+						deadline := time.Now().Add(2 * time.Second)
+						for time.Now().Before(deadline) {
+							if len(attachable.subscribeCalls) > 0 {
+								break
+							}
+							time.Sleep(10 * time.Millisecond)
 						}
-						time.Sleep(10 * time.Millisecond)
-					}
-					stream := attachable.stream("dispatch-goal-1")
-					if stream != nil {
-						stream.Append(responsestream.Event{
-							Kind:       responsestream.EventKindProgressFragment,
-							Type:       responsestream.EventTypeProgress,
-							DispatchID: "dispatch-goal-1",
-							Payload:    "planning",
-						})
+						stream := attachable.stream("dispatch-goal-1")
+						if stream != nil {
+							stream.Append(responsestream.Event{
+								Kind:       responsestream.EventKindProgressFragment,
+								Type:       responsestream.EventTypeProgress,
+								DispatchID: "dispatch-goal-1",
+								Payload:    "planning",
+							})
+						}
 					}
 					return result, nil
 				},
@@ -769,9 +762,9 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 		if len(lines) < 1 {
 			t.Fatalf("expected NDJSON output, got empty stdout")
 		}
-		var finalRecord responseStreamJSONPrimaryResultRecord
+		var finalRecord responseStreamJSONInvocationResultRecord
 		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
-			t.Fatalf("unmarshal final primary_result record: %v\n%s", err, lines[len(lines)-1])
+			t.Fatalf("unmarshal final invocation_result record: %v\n%s", err, lines[len(lines)-1])
 		}
 		assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, result)
 	}
@@ -945,22 +938,33 @@ func TestResponseStreamRenderer_FinalResultDoesNotInterleavePastDrainTimeout(t *
 	t.Parallel()
 
 	cases := []struct {
-		name            string
-		newRenderer     func(io.Writer) responseStreamRenderer
-		finalMarker     string
-		progressMarker  string
+		name           string
+		newRenderer    func(io.Writer) responseStreamRenderer
+		enqueue        func(responseStreamRenderer, int)
+		finalMarker    string
+		progressMarker string
 	}{
 		{
-			name:           "human",
-			newRenderer:    func(output io.Writer) responseStreamRenderer { return newHumanResponseStreamRenderer(output) },
+			name:        "human",
+			newRenderer: func(output io.Writer) responseStreamRenderer { return newHumanResponseStreamRenderer(output) },
+			enqueue: func(renderer responseStreamRenderer, count int) {
+				floodResponseStreamProgress(renderer.(*humanResponseStreamRenderer), count)
+			},
 			finalMarker:    responseStreamPrimaryResultHeader,
 			progressMarker: "working",
 		},
 		{
-			name:           "json",
-			newRenderer:    func(output io.Writer) responseStreamRenderer { return newJSONResponseStreamRenderer(output) },
-			finalMarker:    `"recordType":"primary_result"`,
-			progressMarker: `"recordType":"progress"`,
+			name:        "json",
+			newRenderer: func(output io.Writer) responseStreamRenderer { return newJSONResponseStreamRenderer(output) },
+			enqueue: func(renderer responseStreamRenderer, count int) {
+				events := make([]responseevents.FactoryResponseEvent, count)
+				for index := range events {
+					events[index] = canonicalResponseEventFixture(int64(index+1), responseevents.KindMessage)
+				}
+				renderer.(*jsonResponseStreamRenderer).onResponseEvents(events)
+			},
+			finalMarker:    `"recordType":"invocation_result"`,
+			progressMarker: `"recordType":"response_event"`,
 		},
 	}
 
@@ -972,7 +976,7 @@ func TestResponseStreamRenderer_FinalResultDoesNotInterleavePastDrainTimeout(t *
 			output := &gatedResponseStreamWriter{}
 			output.block()
 			renderer := tc.newRenderer(output)
-			floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
+			tc.enqueue(renderer, defaultResponseStreamProgressQueueCapacity+4)
 
 			done := make(chan error, 1)
 			go func() {

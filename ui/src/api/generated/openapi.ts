@@ -3922,6 +3922,11 @@ export interface components {
        * @description Highest unavailable published sequence in the reader's catch-up window.
        */
       toSequence: number;
+      /**
+       * Format: int64
+       * @description Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
+       */
+      firstAvailableSequence: number;
       /** @description Optional reason for the stream gap such as retention_window. */
       reason?: string;
     };

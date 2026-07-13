@@ -4,6 +4,7 @@ package runtimehost
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -417,6 +419,84 @@ func (fs *Host) MoveWork(ctx context.Context, workID, stateName string, source i
 
 func (fs *Host) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
+}
+
+func (fs *Host) SubscribeFactoryResponseEventsForSession(ctx context.Context, sessionID string, afterSequence int64, dispatchID string) (apisurface.FactoryResponseEventSubscription, error) {
+	return fs.requireCoordinator().SubscribeFactoryResponseEventsForSession(ctx, sessionID, afterSequence, dispatchID)
+}
+
+func (c *runtimeCoordinator) SubscribeFactoryResponseEventsForSession(ctx context.Context, sessionID string, afterSequence int64, dispatchID string) (apisurface.FactoryResponseEventSubscription, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	session := c.host.responseEventSession(sessionID)
+	if session == nil {
+		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	}
+	if session.ResponseEvents == nil {
+		return nil, fmt.Errorf("response event store unavailable for factory session %q", sessionID)
+	}
+	options := []responseeventstore.SubscribeOption{}
+	if strings.TrimSpace(dispatchID) != "" {
+		options = append(options, responseeventstore.WithDispatchFilter(dispatchID))
+	}
+	subscription, err := session.ResponseEvents.Subscribe(afterSequence, options...)
+	if err != nil {
+		if errors.Is(err, responseeventstore.ErrStoreExpired) {
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, sessionID)
+		}
+		return nil, err
+	}
+	return &factoryResponseEventSubscription{subscription: subscription}, nil
+}
+
+type factoryResponseEventSubscription struct {
+	subscription *responseeventstore.Subscription
+}
+
+func (s *factoryResponseEventSubscription) Next(ctx context.Context) ([]apisurface.FactoryResponseEventRecord, error) {
+	events, err := s.subscription.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]apisurface.FactoryResponseEventRecord, 0, len(events))
+	for _, event := range events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			return nil, fmt.Errorf("serialize factory response event: %w", err)
+		}
+		records = append(records, apisurface.FactoryResponseEventRecord{Sequence: event.Sequence, Kind: string(event.Kind), Data: data})
+	}
+	return records, nil
+}
+
+func (s *factoryResponseEventSubscription) Detach() {
+	if s != nil && s.subscription != nil {
+		s.subscription.Detach()
+	}
+}
+
+func (fs *Host) responseEventSession(sessionID string) *factorysessions.LiveSession {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	requestedID := strings.TrimSpace(sessionID)
+	if requestedID == "" {
+		return nil
+	}
+	if requestedID == factorysessions.DefaultSessionID {
+		return fs.sessions.DefaultSession()
+	}
+	if session := fs.sessions.Get(requestedID); session != nil {
+		return session
+	}
+	for _, registeredID := range fs.sessions.IDs() {
+		session := fs.sessions.Get(registeredID)
+		if factorysessions.CanonicalFactorySessionID(session) == requestedID {
+			return session
+		}
+	}
+	return nil
 }
 
 func (c *runtimeCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {

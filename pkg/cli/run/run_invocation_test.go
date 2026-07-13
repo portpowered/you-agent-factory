@@ -20,6 +20,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
@@ -1299,6 +1300,16 @@ func (c *capturingBootstrapRunner) CloseFactorySession(ctx context.Context, sess
 	return c.inner.CloseFactorySession(ctx, sessionID)
 }
 
+func (c *capturingBootstrapRunner) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	attachable, ok := c.inner.(sessionResponseEventAttachable)
+	if !ok {
+		return nil, fmt.Errorf("captured invocation bootstrap does not expose canonical response events")
+	}
+	return attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
+}
+
 func cloneInvocationRequestForCapture(request factoryapi.InvocationRequest) *factoryapi.InvocationRequest {
 	data, err := json.Marshal(request)
 	if err != nil {
@@ -1449,6 +1460,39 @@ func TestRun_NoServerBootstrap_SuccessJSONMatchesAPIProjection(t *testing.T) {
 		cfg.JSONOutput = true
 	})
 	assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
+}
+
+func TestRun_NoServerBootstrap_ResponseStreamJSONEmitsCanonicalEvents(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for canonical response events through real no-server bootstrap")
+	}
+
+	goalText := "no-server bootstrap canonical response-event prompt"
+	_, output := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
+		cfg.JSONOutput = true
+		cfg.InvocationOutputMode = InvocationOutputResponseStream
+	})
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("NDJSON lines = %d, want at least one response event and one invocation result:\n%s", len(lines), output.String())
+	}
+	for index, line := range lines[:len(lines)-1] {
+		var record responseStreamJSONResponseEventRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode response event line %d: %v", index, err)
+		}
+		if record.RecordType != responseStreamJSONRecordResponseEvent {
+			t.Fatalf("record type at line %d = %q, want %q", index, record.RecordType, responseStreamJSONRecordResponseEvent)
+		}
+	}
+	var finalRecord responseStreamJSONInvocationResultRecord
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
+		t.Fatalf("decode final invocation result: %v", err)
+	}
+	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult {
+		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, responseStreamJSONRecordInvocationResult)
+	}
 }
 
 func TestRun_NoServerBootstrap_TextPrimaryResultFollowsInvocationReturn(t *testing.T) {
