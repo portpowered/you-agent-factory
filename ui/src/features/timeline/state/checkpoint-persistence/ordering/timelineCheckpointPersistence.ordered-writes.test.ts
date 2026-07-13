@@ -15,6 +15,7 @@ import {
 interface StoredCheckpointEnvelope {
   checkpoint?: FactoryTimelineCheckpoint;
   storageKey?: string;
+  streamIdentity?: TimelineCheckpointStreamIdentity;
 }
 
 const streamIdentity = {
@@ -28,6 +29,7 @@ function checkpoint(
   selectedTick: number,
   afterEventId: string,
   afterSequence: number,
+  identity: TimelineCheckpointStreamIdentity = streamIdentity,
 ): FactoryTimelineCheckpoint {
   const materializedWorkOutcomeState = createMaterializedWorkOutcomeState();
   materializedWorkOutcomeState.counts.completed = selectedTick;
@@ -38,10 +40,10 @@ function checkpoint(
     replayState: emptyReplayWorldState(selectedTick),
     selectedTick,
     syncIdentity: {
-      backendScopeId: streamIdentity.backendScopeID,
-      factorySessionId: streamIdentity.factorySessionID,
-      logicalSessionKeyId: streamIdentity.logicalSessionKeyID,
-      streamGenerationId: streamIdentity.streamGenerationID,
+      backendScopeId: identity.backendScopeID,
+      factorySessionId: identity.factorySessionID,
+      logicalSessionKeyId: identity.logicalSessionKeyID,
+      streamGenerationId: identity.streamGenerationID,
     },
   };
 }
@@ -161,5 +163,114 @@ describe("timeline checkpoint same-stream write ordering", () => {
       afterSequence: 52,
       selectedTick: 52,
     });
+  });
+});
+
+describe("timeline checkpoint independent stream writes", () => {
+  it.each([
+    ["backend scope", { backendScopeID: "backend-scope-b" }],
+    [
+      "Factory Session",
+      { factorySessionID: "b1b2c3d4-e5f6-4789-a012-3456789abcde" },
+    ],
+    ["logical session key", { logicalSessionKeyID: "logical-other" }],
+    ["stream generation", { streamGenerationID: "2026-07-14T00:00:00Z" }],
+  ] as const)("allows a stream with a different %s to reach IndexedDB concurrently", async (_label, identityDifference) => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const otherIdentity = {
+      ...streamIdentity,
+      ...identityDifference,
+    } satisfies TimelineCheckpointStreamIdentity;
+    let firstSettled = false;
+    let otherSettled = false;
+
+    const first = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(61, "event-61", 61),
+      streamIdentity,
+    ).then(() => {
+      firstSettled = true;
+    });
+    const other = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(72, "event-72", 72, otherIdentity),
+      otherIdentity,
+    ).then(() => {
+      otherSettled = true;
+    });
+
+    expect(fixture.controls.pendingOperations()).toEqual(["open", "open"]);
+    fixture.controls.succeed("open");
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    expect(fixture.controls.pendingOperations()).toEqual(["put", "put"]);
+
+    fixture.controls.succeed("put");
+    fixture.controls.succeed("put");
+    fixture.controls.completeTransaction(1);
+    await flushPromiseContinuations();
+    await flushPromiseContinuations();
+    await flushPromiseContinuations();
+    await flushPromiseContinuations();
+
+    expect(otherSettled).toBe(true);
+    expect(firstSettled).toBe(false);
+    expect([...fixture.records.values()]).toEqual([
+      expect.objectContaining({
+        checkpoint: expect.objectContaining({
+          afterEventId: "event-72",
+          afterSequence: 72,
+          materializedWorkOutcomeState: expect.objectContaining({
+            counts: expect.objectContaining({ completed: 72 }),
+          }),
+        }),
+        streamIdentity: otherIdentity,
+      }),
+    ]);
+
+    fixture.controls.failTransaction(new Error("first stream failed"));
+    await Promise.all([first, other]);
+
+    expect([...fixture.records.values()]).toHaveLength(1);
+  });
+
+  it("removes idle lane state after the last pending write settles", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const first = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(81, "event-81", 81),
+      streamIdentity,
+    );
+
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("put");
+    fixture.controls.completeTransaction();
+    await first;
+    await flushPromiseContinuations();
+
+    const next = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(82, "event-82", 82),
+      streamIdentity,
+    );
+
+    expect(fixture.controls.pendingOperations()).toEqual(["open"]);
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("put");
+    fixture.controls.completeTransaction();
+    await next;
+
+    expect([...fixture.records.values()]).toEqual([
+      expect.objectContaining({
+        checkpoint: expect.objectContaining({
+          afterEventId: "event-82",
+          afterSequence: 82,
+        }),
+      }),
+    ]);
   });
 });
