@@ -3,10 +3,8 @@ package codex
 import (
 	"context"
 	"errors"
-	"os"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -19,23 +17,9 @@ func NewResponseAdapter() adapter.Adapter { return ResponseAdapter{} }
 
 func (ResponseAdapter) Identity() adapter.Identity { return "codex" }
 
-func (ResponseAdapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
-	req := input.Request
-	args := []string{"exec", "--json"}
-	if input.SkipPermissions {
-		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	}
-	if req.Model != "" {
-		args = append(args, "--model", req.Model)
-	}
-	args = append(args, "-")
-	command := workerprocess.SubprocessRequestBase(req.Dispatch)
-	command.Command = string(interfaces.ModelProviderCodex)
-	command.Args = args
-	command.Stdin = []byte(req.UserMessage)
-	command.Env = workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(req.EnvVars))
-	command.WorkDir = req.WorkingDirectory
-	return adapter.CommandBuildResult{Request: command}, nil
+func (ResponseAdapter) BuildCommand(ctx context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
+	command, cleanup, err := provider.BuildCodexStructuredCommand(ctx, input.Request, input.SkipPermissions, input.MaterializeOptions)
+	return adapter.CommandBuildResult{Request: command, Cleanup: cleanup}, err
 }
 
 func (ResponseAdapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (adapter.Decoder, error) {
@@ -60,11 +44,14 @@ func (ResponseAdapter) Capabilities(context.Context, adapter.CapabilityContext) 
 }
 
 func (ResponseAdapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
-	if errors.Is(input.CommandError, context.Canceled) || input.FlushReason == adapter.FlushReasonCanceled {
+	if errors.Is(input.CommandError, context.Canceled) {
 		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Codex execution was canceled.", nil)
 	}
 	if errors.Is(input.CommandError, context.DeadlineExceeded) || input.CommandResult.ExitCode == 124 {
 		return normalizedFailureResult(interfaces.WorkFailureTypeTimeout, "Codex execution timed out.", nil)
+	}
+	if input.FlushReason == adapter.FlushReasonCanceled {
+		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Codex execution was canceled.", nil)
 	}
 	if failure, ok := ParseTerminalFailure(input.CommandResult.Stdout); ok {
 		return terminalFailureResult(failure)

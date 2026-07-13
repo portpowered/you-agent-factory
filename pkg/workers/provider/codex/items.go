@@ -214,6 +214,13 @@ func boundedItemText(value string) string {
 	return boundedText(strings.TrimSpace(value), itemSummaryLimit)
 }
 
+func boundedText(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
+}
+
 func mustJSON(value any) []byte {
 	payload, err := json.Marshal(value)
 	if err != nil {

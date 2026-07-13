@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
@@ -45,14 +45,7 @@ const (
 	providerSessionKindResponseID     = "response_id"
 )
 
-var providerAutomationEnvDefaults = []workerprocess.CommandEnvEntry{
-	{Name: "GIT_EDITOR", Value: "true"},
-	{Name: "GIT_SEQUENCE_EDITOR", Value: "true"},
-	{Name: "GIT_MERGE_AUTOEDIT", Value: "no"},
-	{Name: "GIT_TERMINAL_PROMPT", Value: "0"},
-	{Name: "EDITOR", Value: "true"},
-	{Name: "VISUAL", Value: "true"},
-}
+var providerAutomationEnvDefaults = commandenv.AutomationDefaults()
 
 var providerSessionPatterns = []struct {
 	kind    string
@@ -100,24 +93,31 @@ func WithInferenceProgressPublisher(publisher InferenceProgressPublisher) Script
 	}
 }
 
-// WithCodexJSONLFinalParser injects the authoritative typed Codex final parser
-// without reversing the provider package's dependency direction.
-func WithCodexJSONLFinalParser(parser func([]byte) (interfaces.InferenceResponse, error)) ScriptWrapProviderOption {
-	return func(p *ScriptWrapProvider) { p.codexJSONLFinalParser = parser }
+// ResponseStreamExecutor runs a provider-owned structured response lifecycle
+// without making the core provider package depend on Factory Session types.
+type ResponseStreamExecutor interface {
+	Supports(provider string) bool
+	Execute(context.Context, interfaces.ProviderInferenceRequest, bool, *materialize.Options, CommandRunner, InferenceProgressPublisher, logging.Logger) ResponseStreamExecutionResult
 }
 
-// CodexJSONLTerminalFailure is the provider-boundary projection of a typed
-// Codex terminal event. The Codex adapter owns native JSONL interpretation.
-type CodexJSONLTerminalFailure struct {
-	Type            interfaces.WorkFailureType
-	Message         string
-	ProviderSession *interfaces.ProviderSessionMetadata
+// ResponseStreamExecutionResult carries the structured execution outcome back
+// to the provider boundary for existing diagnostics and failure publication.
+type ResponseStreamExecutionResult struct {
+	Response                  interfaces.InferenceResponse
+	Request                   CommandRequest
+	Command                   CommandResult
+	FailureType               interfaces.WorkFailureType
+	FailureMessage            string
+	FailureSession            *interfaces.ProviderSessionMetadata
+	CanonicalFailurePublished bool
+	Err                       error
 }
 
-// WithCodexJSONLTerminalFailureParser injects exact typed terminal parsing
-// without making the provider coordinator import its Codex adapter child.
-func WithCodexJSONLTerminalFailureParser(parser func([]byte) (CodexJSONLTerminalFailure, bool)) ScriptWrapProviderOption {
-	return func(p *ScriptWrapProvider) { p.codexJSONLTerminalFailureParser = parser }
+// WithResponseStreamExecutor injects structured provider mode selection.
+func WithResponseStreamExecutor(executor ResponseStreamExecutor) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) {
+		p.responseStreamExecutor = executor
+	}
 }
 
 // WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
@@ -140,9 +140,8 @@ type ScriptWrapProvider struct {
 	Logger logging.Logger
 	exec   CommandRunner
 
-	progressPublisher               InferenceProgressPublisher
-	codexJSONLFinalParser           func([]byte) (interfaces.InferenceResponse, error)
-	codexJSONLTerminalFailureParser func([]byte) (CodexJSONLTerminalFailure, bool)
+	progressPublisher      InferenceProgressPublisher
+	responseStreamExecutor ResponseStreamExecutor
 }
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
@@ -188,6 +187,18 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 
 	logger.Info("inferencer: request starting",
 		providerLogFields(req, "model", req.Model)...)
+	structuredResponseStream := p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider)
+	if structuredResponseStream && strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderCodex)) {
+		structuredResponseStream = p.codexResponseStreamCapable()
+	}
+	if structuredResponseStream {
+		if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderClaude)) {
+			if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
+				return providerRequestValidationFailure(req, err, logger)
+			}
+		}
+		return p.executeStructuredResponseStream(ctx, req, logger)
+	}
 
 	behavior := providerBehaviorFor(req.ModelProvider, logger)
 	buildCtx := &ProviderBuildContext{
@@ -197,18 +208,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	defer buildCtx.release()
 	args, err := behavior.BuildArgs(ctx, req, p.SkipPermissions, buildCtx)
 	if err != nil {
-		logger.Error("inferencer: request argument validation failed",
-			providerLogFields(req, "error", err.Error())...)
-		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
-			interfaces.WorkFailureTypePermanentBadRequest,
-			err.Error(),
-			err,
-			nil,
-			workDiagnosticsForInferenceRequest(req),
-		)
-	}
-	if req.ModelProvider == string(interfaces.ModelProviderCodex) && p.responseStreamCapable() {
-		args = enableCodexJSONL(args)
+		return providerRequestValidationFailure(req, err, logger)
 	}
 	execReq := behavior.BuildCommandRequest(req, args)
 	logger.Info("provider invocation prepared", providerPreparedLogFields(ctx, req, execReq)...)
@@ -218,12 +218,6 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	commandDiagnostics := commandDiagnostics(execReq, result, duration, false)
 	providerSession := effectiveProviderSession(req, result)
 	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
-	codexJSONL := req.ModelProvider == string(interfaces.ModelProviderCodex) && hasCommandArg(execReq.Args, "--json")
-	if providerErr := p.codexTypedTerminalFailure(ctx, codexJSONL, result, err, commandDiagnostics); providerErr != nil {
-		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
-		p.publishTypedFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
-		return interfaces.InferenceResponse{}, providerErr
-	}
 	if err != nil {
 		logger.Error("inference dispatch failed with error",
 			providerLogFields(req, "error", err.Error())...)
@@ -257,19 +251,6 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	if cursorProvider {
 		return p.completeCursorInference(req, result, commandDiagnostics, logger)
 	}
-	if codexJSONL {
-		parsed, parseErr := p.codexJSONLFinalParser(result.Stdout)
-		if parseErr != nil {
-			providerErr := newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeUnknown, parseErr.Error(), parseErr, providerSession, commandDiagnostics)
-			p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
-			return interfaces.InferenceResponse{}, providerErr
-		}
-		logger.Info("inferencer: request completed", appendProviderSessionLogFields(providerLogFields(req, "output_len", len(parsed.Content)), parsed.ProviderSession)...)
-		p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
-		parsed.Diagnostics = commandDiagnostics
-		return parsed, nil
-	}
-
 	content := string(result.Stdout)
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req,
@@ -283,50 +264,41 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	}, nil
 }
 
-func (p *ScriptWrapProvider) codexTypedTerminalFailure(
-	ctx context.Context,
-	codexJSONL bool,
-	result CommandResult,
-	commandErr error,
-	diagnostics *interfaces.WorkDiagnostics,
-) *ProviderError {
-	if !codexJSONL || p.codexJSONLTerminalFailureParser == nil || isProviderExecutionCancellation(ctx, commandErr) || result.ExitCode == 124 {
-		return nil
-	}
-	failure, failed := p.codexJSONLTerminalFailureParser(result.Stdout)
-	if !failed {
-		return nil
-	}
-	return newProviderErrorFromResultWithDiagnostics(
-		ProviderFailureResult{Reason: failure.Type, Message: failure.Message}, commandErr,
-		failure.ProviderSession, diagnostics,
-	)
-}
-
-func isProviderExecutionCancellation(ctx context.Context, err error) bool {
-	return errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) ||
-		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-func (p *ScriptWrapProvider) responseStreamCapable() bool {
-	if p == nil || p.progressPublisher == nil || p.exec == nil || p.codexJSONLFinalParser == nil {
+func (p *ScriptWrapProvider) codexResponseStreamCapable() bool {
+	if p == nil || p.exec == nil {
 		return false
 	}
 	capable, ok := p.exec.(interface{ SupportsResponseStreaming() bool })
 	return ok && capable.SupportsResponseStreaming()
 }
 
-func enableCodexJSONL(args []string) []string {
-	if hasCommandArg(args, "--json") {
-		return args
+func (p *ScriptWrapProvider) executeStructuredResponseStream(
+	ctx context.Context,
+	req interfaces.ProviderInferenceRequest,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	started := time.Now()
+	result := p.responseStreamExecutor.Execute(ctx, req, p.SkipPermissions, p.MaterializeOptions, p.exec, p.progressPublisher, logger)
+	duration := time.Since(started)
+	diagnostics := commandDiagnostics(result.Request, result.Command, duration, false)
+	if result.Err != nil || result.FailureType != "" {
+		failureType := result.FailureType
+		if failureType == "" {
+			failureType = interfaces.WorkFailureTypeUnknown
+		}
+		message := strings.TrimSpace(result.FailureMessage)
+		if message == "" {
+			message = "Provider invocation failed."
+		}
+		providerErr := newProviderErrorWithDiagnostics(failureType, message, result.Err, result.FailureSession, diagnostics)
+		p.publishFailureFragmentWithCanonicalState(req.Dispatch.DispatchID, result.FailureSession, providerErr, result.CanonicalFailurePublished)
+		return interfaces.InferenceResponse{}, providerErr
 	}
-	if len(args) == 0 {
-		return []string{"exec", "--json"}
-	}
-	out := make([]string, 0, len(args)+1)
-	out = append(out, args[0], "--json")
-	out = append(out, args[1:]...)
-	return out
+	result.Response.Diagnostics = diagnostics
+	logger.Info("inferencer: request completed",
+		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(result.Response.Content)), result.Response.ProviderSession)...)
+	p.publishCompletedFragment(req.Dispatch.DispatchID, result.Response.ProviderSession)
+	return result.Response, nil
 }
 
 // ContainsStopToken checks whether the output text contains the given stop token.
@@ -342,7 +314,23 @@ func ContainsStopToken(output, stopToken string) bool {
 // buildProviderEnv merges subprocess environment sources with deterministic
 // precedence: process environment, provider env vars, then automation defaults.
 func buildProviderEnv(envVars map[string]string) []string {
-	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(envVars), providerAutomationEnvDefaults)
+	return commandenv.Build(envVars)
+}
+
+func providerRequestValidationFailure(
+	req interfaces.ProviderInferenceRequest,
+	err error,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	logger.Error("inferencer: request argument validation failed",
+		providerLogFields(req, "error", err.Error())...)
+	return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		err.Error(),
+		err,
+		nil,
+		workDiagnosticsForInferenceRequest(req),
+	)
 }
 
 // TODO: right now the stderr/stdout for the print prints out the entire response log for the stdout....
@@ -614,16 +602,6 @@ func (p *ScriptWrapProvider) publishCompletedFragment(dispatchID string, provide
 
 func (p *ScriptWrapProvider) publishFailureFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, err error) {
 	p.publishFailureFragmentWithCanonicalState(dispatchID, providerSession, err, false)
-}
-
-func (p *ScriptWrapProvider) publishTypedFailureFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, err error) {
-	canonicalPublished := false
-	if p != nil {
-		if publisher, ok := p.exec.(interface{ PublishesCanonicalCodexJSONL() bool }); ok {
-			canonicalPublished = publisher.PublishesCanonicalCodexJSONL()
-		}
-	}
-	p.publishFailureFragmentWithCanonicalState(dispatchID, providerSession, err, canonicalPublished)
 }
 
 func (p *ScriptWrapProvider) publishFailureFragmentWithCanonicalState(

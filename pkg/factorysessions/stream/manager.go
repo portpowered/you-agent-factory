@@ -139,6 +139,17 @@ func (m *Manager) inferenceProgressPublisher(
 		if session == nil && normalizedSessionID == factorysessions.DefaultSessionID {
 			session = m.host.GetLiveSession(factorysessions.DefaultSessionID)
 		}
+		if fragment.CanonicalDraft != nil {
+			draft, ok := fragment.CanonicalDraft.(responseevents.Draft)
+			if !ok {
+				m.host.ObserveResponseStreamDegraded(session, normalizedSessionID, dispatchID, "CANONICAL_EVENT_PUBLISH_FAILED", logger, fmt.Errorf("canonical response draft has type %T", fragment.CanonicalDraft))
+				return
+			}
+			if err := publishCanonicalDraft(session, draft); err != nil {
+				m.host.ObserveResponseStreamDegraded(session, normalizedSessionID, dispatchID, "CANONICAL_EVENT_PUBLISH_FAILED", logger, err)
+			}
+			return
+		}
 		streams := m.host.ResponseStreams(session)
 		if streams == nil {
 			m.host.ObserveResponseStreamDegraded(session, normalizedSessionID, dispatchID, "STREAM_UNAVAILABLE", logger, nil)
@@ -154,12 +165,8 @@ func (m *Manager) inferenceProgressPublisher(
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
-		var canonicalDraft *responseevents.Draft
-		if fragment.CanonicalDraft != nil {
-			canonicalDraft, _ = fragment.CanonicalDraft.(*responseevents.Draft)
-		}
 		if !fragment.CanonicalEventAlreadyPublished {
-			if err := publishCanonicalResponseEvents(session, stored, canonicalDraft); err != nil {
+			if err := publishCanonicalResponseEvents(session, stored); err != nil {
 				m.host.ObserveResponseStreamDegraded(
 					session,
 					normalizedSessionID,
@@ -174,20 +181,27 @@ func (m *Manager) inferenceProgressPublisher(
 	}
 }
 
-func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event, draft *responseevents.Draft) error {
+func publishCanonicalDraft(session *factorysessions.LiveSession, draft responseevents.Draft) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
 	}
-	if draft != nil {
-		event := responseevents.FactoryResponseEvent{
-			RunID: draft.RunID, Kind: draft.Kind, Phase: draft.Phase, Provenance: draft.Provenance,
-			Payload: draft.Payload, DispatchID: draft.DispatchID, TurnID: draft.TurnID,
-			ItemID: draft.ItemID, ParentItemID: draft.ParentItemID, ProviderSessionRef: draft.ProviderSessionRef,
-		}
-		if _, err := session.ResponseEvents.Publish(event); err != nil {
-			return fmt.Errorf("publish canonical adapter event: %w", err)
-		}
-		return nil
+	if err := responseevents.ValidateDraft(draft); err != nil {
+		return fmt.Errorf("validate canonical response draft: %w", err)
+	}
+	_, err := session.ResponseEvents.Publish(responseevents.FactoryResponseEvent{
+		RunID: draft.RunID, Kind: draft.Kind, Phase: draft.Phase, Provenance: draft.Provenance,
+		Payload: append([]byte(nil), draft.Payload...), DispatchID: draft.DispatchID, TurnID: draft.TurnID,
+		ItemID: draft.ItemID, ParentItemID: draft.ParentItemID, ProviderSessionRef: draft.ProviderSessionRef,
+	})
+	if err != nil {
+		return fmt.Errorf("publish canonical response draft: %w", err)
+	}
+	return nil
+}
+
+func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event) error {
+	if session == nil || session.ResponseEvents == nil {
+		return fmt.Errorf("session response-event store is unavailable")
 	}
 	events, err := compat.MapFragment(compat.Context{
 		FactorySessionID: factorysessions.CanonicalFactorySessionID(session),

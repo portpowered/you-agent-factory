@@ -75,3 +75,10 @@ func classifyTerminalMessage(nativeType, message, threadID string) (TerminalFail
 		ProviderSession: providerSession(threadID), NativeEventType: nativeType,
 	}, recognized
 }
+
+func providerSession(id string) *interfaces.ProviderSessionMetadata {
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	return &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: ProviderSessionKindSessionID, ID: id}
+}

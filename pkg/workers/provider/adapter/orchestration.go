@@ -31,6 +31,9 @@ type ExecuteInput struct {
 	Provider Identity
 	Command  CommandContext
 	Decoder  DecoderContext
+	// ObserveDraft receives correlated drafts as decoding progresses. Session
+	// publication metadata remains owned by the caller.
+	ObserveDraft func(responseevents.Draft)
 }
 
 // ExecuteResult contains neutral adapter outputs from one subprocess attempt.
@@ -39,6 +42,7 @@ type ExecuteInput struct {
 type ExecuteResult struct {
 	Outcome      CommandOutcome
 	Capabilities Capabilities
+	Request      workerprocess.CommandRequest
 	Response     interfaces.InferenceResponse
 	Drafts       []responseevents.Draft
 	Diagnostics  []Diagnostic
@@ -70,15 +74,19 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	if err != nil {
 		return ExecuteResult{}, fmt.Errorf("build provider adapter command: %w", err)
 	}
+	if built.Cleanup != nil {
+		defer built.Cleanup()
+	}
 	decoder, err := selected.NewDecoder(ctx, input.Decoder)
 	if err != nil {
 		return ExecuteResult{}, fmt.Errorf("create provider adapter decoder: %w", err)
 	}
 
-	result := ExecuteResult{Capabilities: capabilityResult.Capabilities}
+	result := ExecuteResult{Capabilities: capabilityResult.Capabilities, Request: built.Request}
 	commandResult, commandErr := runner.Run(ctx, built.Request, func(observation Observation) error {
 		decoded, observeErr := decoder.Observe(ctx, observation)
-		result.appendDecoded(decoded)
+		correlateDrafts(decoded.Drafts, input.Decoder)
+		result.appendDecoded(decoded, input.ObserveDraft)
 		if observeErr != nil && result.DecodeError == nil {
 			result.DecodeError = observeErr
 		}
@@ -89,7 +97,8 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	result.Outcome = outcome
 
 	flushed, flushErr := decoder.Flush(ctx, FlushContext{Reason: flushReason})
-	result.appendDecoded(flushed)
+	correlateDrafts(flushed.Drafts, input.Decoder)
+	result.appendDecoded(flushed, input.ObserveDraft)
 	result.FlushError = flushErr
 
 	final, parseErr := selected.ParseFinal(ctx, FinalParseContext{
@@ -97,7 +106,9 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 		RunID: input.Decoder.RunID, DispatchID: input.Decoder.DispatchID,
 	})
 	result.Response, result.ParseError = final.Response, parseErr
+	correlateDrafts(final.Drafts, input.Decoder)
 	result.Drafts = append(result.Drafts, final.Drafts...)
+	observeDrafts(final.Drafts, input.ObserveDraft)
 	classified := selected.ClassifyFailure(ctx, FailureContext{
 		CommandResult: commandResult, CommandError: commandErr, DecodeError: result.DecodeError,
 		FlushError: flushErr, ParseError: parseErr, FlushReason: flushReason,
@@ -106,14 +117,35 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	return result, errors.Join(result.DecodeError, flushErr, parseErr)
 }
 
-func (r *ExecuteResult) appendDecoded(decoded DecodeResult) {
+func correlateDrafts(drafts []responseevents.Draft, correlation DecoderContext) {
+	for index := range drafts {
+		if drafts[index].RunID == "" {
+			drafts[index].RunID = correlation.RunID
+		}
+		if drafts[index].DispatchID == "" {
+			drafts[index].DispatchID = correlation.DispatchID
+		}
+	}
+}
+
+func (r *ExecuteResult) appendDecoded(decoded DecodeResult, observe func(responseevents.Draft)) {
 	r.Drafts = append(r.Drafts, decoded.Drafts...)
 	r.Diagnostics = append(r.Diagnostics, decoded.Diagnostics...)
+	observeDrafts(decoded.Drafts, observe)
+}
+
+func observeDrafts(drafts []responseevents.Draft, observe func(responseevents.Draft)) {
+	if observe == nil {
+		return
+	}
+	for _, draft := range drafts {
+		observe(draft)
+	}
 }
 
 func commandOutcome(ctx context.Context, result workerprocess.CommandResult, commandErr error) (CommandOutcome, FlushReason) {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) ||
-		errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) {
+		errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) || result.ExitCode == 124 {
 		return CommandOutcomeCanceled, FlushReasonCanceled
 	}
 	if commandErr != nil || result.ExitCode != 0 {

@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
-	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex"
 )
@@ -92,33 +91,6 @@ func TestParseFinalOutputIsIndependentAndUsesOnlyThreadID(t *testing.T) {
 	}
 }
 
-func TestCommandOutputNormalizerPublishesTypedCanonicalDrafts(t *testing.T) {
-	var published []provider.InferenceProgressFragment
-	normalizer := codex.NewCommandOutputNormalizer(provider.CommandRequest{
-		Command: "codex", Args: []string{"exec", "--json", "-"}, DispatchID: "dispatch-stream-codex",
-	}, func(fragment provider.InferenceProgressFragment) { published = append(published, fragment) })
-	if normalizer == nil {
-		t.Fatal("NewCommandOutputNormalizer() = nil")
-	}
-	normalizer.Observe("stdout", []byte(lifecycleFixture))
-	normalizer.Flush(context.Background(), provider.CommandResult{}, nil)
-	if len(published) != 5 {
-		t.Fatalf("published = %#v, want five typed records", published)
-	}
-	for index, fragment := range published {
-		draft, ok := fragment.CanonicalDraft.(*responseevents.Draft)
-		if !ok {
-			t.Fatalf("published[%d] canonical draft = %T", index, fragment.CanonicalDraft)
-		}
-		if err := responseevents.ValidateDraft(*draft); err != nil {
-			t.Fatalf("published[%d] invalid: %v", index, err)
-		}
-		if draft.ProviderSessionRef != "thread-codex-123" {
-			t.Fatalf("published[%d] session = %q", index, draft.ProviderSessionRef)
-		}
-	}
-}
-
 func TestDecoderPreservesEverySupportedItemSemanticAndIdentity(t *testing.T) {
 	fixture, err := os.ReadFile(filepath.Join("testdata", "supported_items.jsonl"))
 	if err != nil {
@@ -192,7 +164,7 @@ func TestDecoderDoesNotExposeUnknownDiscriminatorValues(t *testing.T) {
 	}
 }
 
-func TestDecoderMapsFullUsageAndTypedFailuresToCanonicalFacts(t *testing.T) {
+func TestDecoderMapsFullUsageAndSelectsOneTypedTerminalFactAtFlush(t *testing.T) {
 	stream := strings.Join([]string{
 		`{"type":"thread.started","thread_id":"thread-terminal-1"}`,
 		`{"type":"turn.started"}`,
@@ -205,7 +177,12 @@ func TestDecoderMapsFullUsageAndTypedFailuresToCanonicalFacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(decoded.Diagnostics) != 0 || len(decoded.Drafts) != 6 {
+	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded.Drafts = append(decoded.Drafts, flushed.Drafts...)
+	if len(decoded.Diagnostics) != 0 || len(decoded.Drafts) != 5 {
 		t.Fatalf("decoded = %#v", decoded)
 	}
 	var usage responseevents.UsagePayload
@@ -213,16 +190,14 @@ func TestDecoderMapsFullUsageAndTypedFailuresToCanonicalFacts(t *testing.T) {
 	if usage.InputTokens != 100 || usage.CachedInputTokens != 40 || usage.OutputTokens != 25 || usage.ReasoningOutputTokens != 5 {
 		t.Fatalf("usage = %#v", usage)
 	}
-	for index, wantCode := range []string{"codex_turn_failed", "codex_error"} {
-		draft := decoded.Drafts[index+4]
-		if draft.Kind != responseevents.KindError || draft.Phase != responseevents.PhaseFailed || draft.ProviderSessionRef != "thread-terminal-1" {
-			t.Fatalf("failure draft[%d] = %#v", index, draft)
-		}
-		var payload responseevents.ErrorPayload
-		decodePayload(t, draft, &payload)
-		if payload.Code != wantCode || !payload.Retryable || strings.Contains(payload.Message, "upstream") {
-			t.Fatalf("failure payload[%d] = %#v", index, payload)
-		}
+	draft := decoded.Drafts[4]
+	if draft.Kind != responseevents.KindError || draft.Phase != responseevents.PhaseFailed || draft.ProviderSessionRef != "thread-terminal-1" {
+		t.Fatalf("failure draft = %#v", draft)
+	}
+	var payload responseevents.ErrorPayload
+	decodePayload(t, draft, &payload)
+	if payload.Code != "codex_error" || !payload.Retryable || strings.Contains(payload.Message, "upstream") {
+		t.Fatalf("failure payload = %#v", payload)
 	}
 }
 
@@ -386,6 +361,54 @@ func verifyAdapterCapabilities(t *testing.T, fixture responseAdapterFixture) {
 	if err != nil || !reflect.DeepEqual(result.Capabilities, fixture.Expected.Capabilities) {
 		t.Fatalf("Capabilities() = %#v, %v", result.Capabilities, err)
 	}
+}
+
+func TestResponseAdapterBuildCommandPreservesOrderedImagesAndExecutionControls(t *testing.T) {
+	workspace := t.TempDir()
+	first := filepath.Join(workspace, "first.png")
+	second := filepath.Join(workspace, "second.png")
+	for _, path := range []string{first, second} {
+		if err := os.WriteFile(path, []byte("png"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	request := interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-command"},
+		ModelProvider: string(interfaces.ModelProviderCodex), Model: "gpt-test",
+		UserMessage: "private prompt", WorkingDirectory: workspace,
+		EnvVars: map[string]string{"CUSTOM_CODEX_ENV": "set", "GIT_EDITOR": "vim"},
+		InputTokens: []any{interfaces.Token{ID: "token-images", Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeImage, File: first},
+			{Type: interfaces.WorkContentPartTypeImage, File: second},
+		}}}},
+	}
+	built, err := codex.NewResponseAdapter().BuildCommand(context.Background(), adapter.CommandContext{Request: request, SkipPermissions: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Cleanup != nil {
+		defer built.Cleanup()
+	}
+	wantArgs := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-test", "-i", first, "-i", second, "-"}
+	if !reflect.DeepEqual(built.Request.Args, wantArgs) || string(built.Request.Stdin) != request.UserMessage || built.Request.WorkDir != workspace {
+		t.Fatalf("command = %#v, want args %#v", built.Request, wantArgs)
+	}
+	assertEnvironmentValue(t, built.Request.Env, "CUSTOM_CODEX_ENV", "set")
+	assertEnvironmentValue(t, built.Request.Env, "GIT_EDITOR", "true")
+}
+
+func assertEnvironmentValue(t *testing.T, environment []string, name, want string) {
+	t.Helper()
+	prefix := name + "="
+	for _, entry := range environment {
+		if strings.HasPrefix(entry, prefix) {
+			if got := strings.TrimPrefix(entry, prefix); got != want {
+				t.Fatalf("%s = %q, want %q", name, got, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("environment does not contain %s", name)
 }
 
 func verifyAdapterDrafts(t *testing.T, fixture responseAdapterFixture) {

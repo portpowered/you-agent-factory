@@ -58,12 +58,19 @@ type InferenceProgressFragment struct {
 	ProviderSessionRef *interfaces.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
-	// CanonicalDraft carries an exact provider-adapter event alongside the
-	// legacy fragment used by compatibility consumers.
-	CanonicalDraft any
-	// CanonicalEventAlreadyPublished prevents a legacy terminal marker from
-	// duplicating an exact native terminal draft published earlier in the stream.
+	CanonicalDraft     any
+	// CanonicalEventAlreadyPublished keeps a compatibility terminal marker
+	// from projecting a second canonical failure after a native terminal draft.
 	CanonicalEventAlreadyPublished bool
+}
+
+// CanonicalDraftFragment carries one provider-native canonical response draft
+// to the session-owned publisher without flattening it into a legacy fragment.
+func CanonicalDraftFragment(dispatchID string, draft any) InferenceProgressFragment {
+	return InferenceProgressFragment{
+		DispatchID:     strings.TrimSpace(dispatchID),
+		CanonicalDraft: draft,
+	}
 }
 
 // InferenceProgressPublisher receives provider progress fragments for one live
@@ -114,20 +121,13 @@ func FailedFragment(dispatchID string, providerSession *interfaces.ProviderSessi
 // InferenceProgressPublishingCommandRunner publishes internal response-stream
 // fragments while provider subprocess stdout/stderr grow.
 type InferenceProgressPublishingCommandRunner struct {
-	Publisher         InferenceProgressPublisher
-	Logger            logging.Logger
-	NormalizerFactory CommandOutputNormalizerFactory
+	Publisher InferenceProgressPublisher
+	Logger    logging.Logger
 }
 
 // SupportsResponseStreaming reports that the runner observes subprocess output
 // incrementally and can therefore consume native streaming protocols.
 func (InferenceProgressPublishingCommandRunner) SupportsResponseStreaming() bool { return true }
-
-// PublishesCanonicalCodexJSONL reports whether this runner has the typed Codex
-// normalizer needed to publish exact native terminal drafts before process exit.
-func (r InferenceProgressPublishingCommandRunner) PublishesCanonicalCodexJSONL() bool {
-	return r.Publisher != nil && r.NormalizerFactory != nil
-}
 
 // Run executes the provider subprocess and publishes incremental stdout/stderr
 // fragments into the configured internal session response stream.
@@ -147,7 +147,7 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 			}
 		})
 	}
-	normalizer := newCommandOutputNormalizer(req, r.Publisher, r.NormalizerFactory)
+	normalizer := newCommandOutputNormalizer(req, r.Publisher)
 	observer := func(stream string, chunk []byte) {
 		if len(chunk) == 0 {
 			return
@@ -175,24 +175,17 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		cursorStream.Flush()
 	}
 	if normalizer != nil {
-		normalizer.Flush(ctx, result, err)
+		normalizer.Flush()
 	}
 	return result, err
 }
 
-type CommandOutputNormalizer interface {
+type commandOutputNormalizer interface {
 	Observe(stream string, chunk []byte) bool
-	Flush(context.Context, CommandResult, error)
+	Flush()
 }
 
-type CommandOutputNormalizerFactory func(CommandRequest, InferenceProgressPublisher) CommandOutputNormalizer
-
-func newCommandOutputNormalizer(req CommandRequest, publisher InferenceProgressPublisher, factory CommandOutputNormalizerFactory) CommandOutputNormalizer {
-	if factory != nil {
-		if normalizer := factory(req, publisher); normalizer != nil {
-			return normalizer
-		}
-	}
+func newCommandOutputNormalizer(req CommandRequest, publisher InferenceProgressPublisher) commandOutputNormalizer {
 	if !isCodexCommand(req.Command) {
 		return nil
 	}
@@ -201,15 +194,6 @@ func newCommandOutputNormalizer(req CommandRequest, publisher InferenceProgressP
 		publisher: publisher,
 		hasher:    sha256.New(),
 	}
-}
-
-func hasCommandArg(args []string, expected string) bool {
-	for _, arg := range args {
-		if arg == expected {
-			return true
-		}
-	}
-	return false
 }
 
 type codexCommandOutputNormalizer struct {
@@ -239,7 +223,7 @@ func (n *codexCommandOutputNormalizer) Observe(stream string, chunk []byte) bool
 	return true
 }
 
-func (n *codexCommandOutputNormalizer) Flush(_ context.Context, _ CommandResult, _ error) {
+func (n *codexCommandOutputNormalizer) Flush() {
 	if trimmed := strings.TrimSpace(n.stdoutBuffer); trimmed != "" {
 		n.handleStdoutLine(trimmed)
 	}
@@ -598,19 +582,14 @@ func (n *codexCommandOutputNormalizer) publishProgressEvent(eventType string, ex
 func NewInferenceProgressPublishingCommandRunner(
 	publisher InferenceProgressPublisher,
 	logger logging.Logger,
-	normalizerFactories ...CommandOutputNormalizerFactory,
 ) CommandRunner {
 	if publisher == nil {
 		return workerprocess.ExecCommandRunner{}
 	}
-	runner := InferenceProgressPublishingCommandRunner{
+	return InferenceProgressPublishingCommandRunner{
 		Publisher: publisher,
 		Logger:    logger,
 	}
-	if len(normalizerFactories) > 0 {
-		runner.NormalizerFactory = normalizerFactories[0]
-	}
-	return runner
 }
 
 func isCodexCommand(command string) bool {

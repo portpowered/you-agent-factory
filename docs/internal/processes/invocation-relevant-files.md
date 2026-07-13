@@ -197,7 +197,31 @@ primary-result behavior.
   presentation fallback.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
-  `pkg/factorysessions/responsestream` fragment kinds). Legacy fragment
+  `pkg/factorysessions/responsestream` fragment kinds).
+
+  Provider-native structured response adapters live in provider-owned
+  subpackages under `pkg/workers/provider/` and implement the neutral lifecycle
+  in `pkg/workers/provider/adapter`. Keep each decoder invocation-local and
+  stateful, return only canonical `responseevents.Draft` values plus bounded
+  diagnostics, and leave event ID, sequence, recorded time, and Factory Session
+  publication to the session owner. Adapter `BuildCommand` selects structured
+  output only for the response-adapter execution path; the established
+  final-only provider command path must remain unchanged until its caller
+  explicitly opts into response streaming. Both command paths must use
+  `pkg/workers/provider/commandenv` so provider variables retain the established
+  non-interactive Git/editor safeguards, and the production mode-selection
+  boundary must preserve provider input validation before starting either
+  runner. Native JSONL fixture tests should
+  fragment reads and flush an unterminated final record so command selection,
+  decoder buffering, and final-result parsing are proven independently.
+  Provider retry and compaction records should publish only bounded typed facts
+  with static safe messages; adapters may classify those facts but must not
+  sleep, rerun commands, choose backoff, or expose raw provider payloads.
+  Preserve optional provider attribution only from an explicit native field on
+  the supported record, and omit malformed or absent attribution instead of
+  inferring it from neighboring stream activity.
+
+  Legacy fragment
   compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
@@ -229,9 +253,9 @@ primary-result behavior.
   update, and completion records, and represent the completed full item as the
   authoritative snapshot rather than synthesizing a second completed item.
   Reconcile typed terminal failures before generic process-exit fallback, but
-  preserve cancellation and timeout precedence. A streaming normalizer must
-  hold terminal `ERROR` drafts until flush receives the subprocess result and
-  error; discard a native failure when cancellation, deadline, or exit 124 wins.
+  preserve cancellation and timeout precedence. A streaming decoder must hold
+  terminal `ERROR` drafts until the shared executor flushes it with the process
+  outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and
   final failure parser must use the same selection rule: recognized failures
   outrank later unrecognized cleanup errors, while later recognized failures
@@ -558,6 +582,14 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- Production provider mode selection lives at the `pkg/workers/provider`
+  execution boundary: a configured Factory Session response-stream publisher
+  selects a registered structured adapter, while final-only invocations retain
+  the established provider behavior. Provider-native `responseevents.Draft`
+  values must be published directly by `pkg/factorysessions/stream` so the
+  session store assigns event ID, sequence, recorded time, and Factory Session
+  identity without flattening stable message or tool identity through the
+  legacy fragment compatibility mapper.
 - `docs/reference/run.md` is the customer-facing owner for packaged `@you/goal`
   invocation behavior. Operator-visible blocked, needs-human, paused,
   interrupted, failed, timed-out, and unresolved-primary-result outcomes plus

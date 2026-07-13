@@ -46,7 +46,7 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
-	codexpkg "github.com/portpowered/infinite-you/pkg/workers/provider/codex"
+	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -979,19 +979,12 @@ func providerRunnerOptions(
 			invocationSkipPermissionsOverride,
 		)),
 		workerprovider.WithProviderLogger(logger),
-		workerprovider.WithCodexJSONLFinalParser(func(output []byte) (interfaces.InferenceResponse, error) {
-			parsed, err := codexpkg.ParseFinalOutput(output)
-			return interfaces.InferenceResponse{Content: parsed.Content, ProviderSession: parsed.ProviderSession}, err
-		}),
-		workerprovider.WithCodexJSONLTerminalFailureParser(func(output []byte) (workerprovider.CodexJSONLTerminalFailure, bool) {
-			failure, ok := codexpkg.ParseTerminalFailure(output)
-			return workerprovider.CodexJSONLTerminalFailure{
-				Type: failure.Type, Message: failure.Message, ProviderSession: failure.ProviderSession,
-			}, ok
-		}),
 	}
 	if inferenceProgressPublisher != nil {
-		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
+		opts = append(opts,
+			workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher),
+			workerprovider.WithResponseStreamExecutor(providerstructured.NewExecutor()),
+		)
 	}
 	if providerCommandRunner != nil {
 		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
@@ -1209,7 +1202,6 @@ func wrapProviderCommandRunnerForProgress(
 	return workerprovider.NewInferenceProgressPublishingCommandRunner(
 		input.inferenceProgressPublisher,
 		logger,
-		codexpkg.NewCommandOutputNormalizer,
 	)
 }
 

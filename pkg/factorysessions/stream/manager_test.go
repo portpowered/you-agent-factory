@@ -10,10 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/stream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
-	codexpkg "github.com/portpowered/infinite-you/pkg/workers/provider/codex"
 	"go.uber.org/zap"
 )
 
@@ -94,23 +91,6 @@ func (h *streamTestHost) ObserveResponseStreamDegraded(
 
 var errMissingSession = errors.New("missing session")
 
-type codexTerminalOutcomeRunner struct {
-	publisher workerprovider.InferenceProgressPublisher
-	result    workerprovider.CommandResult
-	err       error
-}
-
-func (r *codexTerminalOutcomeRunner) Run(ctx context.Context, req workerprovider.CommandRequest) (workerprovider.CommandResult, error) {
-	normalizer := codexpkg.NewCommandOutputNormalizer(req, r.publisher)
-	normalizer.Observe(workerprocess.OutputStreamStdout, r.result.Stdout)
-	normalizer.Flush(ctx, r.result, r.err)
-	return r.result, r.err
-}
-
-func (*codexTerminalOutcomeRunner) SupportsResponseStreaming() bool { return true }
-
-func (*codexTerminalOutcomeRunner) PublishesCanonicalCodexJSONL() bool { return true }
-
 func TestManager_SubscribeAndPublishInferenceProgress(t *testing.T) {
 	t.Parallel()
 
@@ -180,143 +160,39 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 
 func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testing.T) {
 	t.Parallel()
-	session := factorysessions.NewLiveSession("sess-adapter", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
-	manager := stream.NewManager(&streamTestHost{session: session})
-	payload, _ := json.Marshal(responseevents.MessagePayload{Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "snapshot"}}})
-	draft := responseevents.Draft{DispatchID: "dispatch-adapter", TurnID: "turn-1", ItemID: "native-message-1", ProviderSessionRef: "thread-1",
-		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted, Payload: payload,
-		Provenance: responseevents.Provenance{Provider: "codex", NativeEventType: "item.completed", Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationSnapshot, Fidelity: responseevents.FidelityNormalized}}
-	fragment := workerprovider.ResponseFragment("dispatch-adapter", &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "thread-1"}, "snapshot")
-	fragment.CanonicalDraft = &draft
-	manager.InferenceProgressPublisherFactory(nil)(session.ID)(fragment)
 
-	events := session.ResponseEvents.Events()
-	if len(events) != 1 || events[0].Kind != responseevents.KindMessage || events[0].Phase != responseevents.PhaseCompleted || events[0].ItemID != "native-message-1" {
-		t.Fatalf("canonical events = %#v", events)
-	}
-}
-
-func TestManager_DoesNotDuplicateTypedTerminalErrorWithLegacyMarker(t *testing.T) {
-	t.Parallel()
-	session := factorysessions.NewLiveSession("sess-terminal-dedup", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
-	manager := stream.NewManager(&streamTestHost{session: session})
-	publish := manager.InferenceProgressPublisherFactory(nil)(session.ID)
-	payload, _ := json.Marshal(responseevents.ErrorPayload{Code: "codex_turn_failed", Message: "Codex request timed out.", Retryable: true})
-	draft := responseevents.Draft{DispatchID: "dispatch-terminal", ProviderSessionRef: "thread-terminal", Kind: responseevents.KindError, Phase: responseevents.PhaseFailed, Payload: payload,
-		Provenance: responseevents.Provenance{Provider: "codex", NativeEventType: "turn.failed", Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationNotification, Fidelity: responseevents.FidelityNormalized}}
-	native := workerprovider.ProgressFragment("dispatch-terminal", &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "thread-terminal"}, "ERROR")
-	native.CanonicalDraft = &draft
-	publish(native)
-	terminal := workerprovider.FailedFragment("dispatch-terminal", native.ProviderSessionRef, "Codex request timed out.")
-	terminal.CanonicalEventAlreadyPublished = true
-	publish(terminal)
-
-	events := session.ResponseEvents.Events()
-	if len(events) != 1 || events[0].Kind != responseevents.KindError || events[0].Provenance.NativeEventType != "turn.failed" {
-		t.Fatalf("canonical events = %#v, want one native terminal error", events)
-	}
-}
-
-func TestCodexTerminalReconciliationPublishesOnlyWinningProcessFailure(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		result workerprovider.CommandResult
-		err    error
-	}{
-		{name: "cancellation", err: context.DeadlineExceeded},
-		{name: "timeout exit", result: workerprovider.CommandResult{ExitCode: 124}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			session := factorysessions.NewLiveSession("sess-terminal-reconcile", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
-			manager := stream.NewManager(&streamTestHost{session: session})
-			publish := manager.InferenceProgressPublisherFactory(nil)(session.ID)
-			tc.result.Stdout = []byte("{\"type\":\"thread.started\",\"thread_id\":\"thread-terminal\"}\n" +
-				"{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n")
-			runner := &codexTerminalOutcomeRunner{publisher: publish, result: tc.result, err: tc.err}
-			provider := workerprovider.NewScriptWrapProvider(
-				workerprovider.WithProviderCommandRunner(runner),
-				workerprovider.WithInferenceProgressPublisher(publish),
-				workerprovider.WithCodexJSONLFinalParser(func(output []byte) (interfaces.InferenceResponse, error) {
-					parsed, err := codexpkg.ParseFinalOutput(output)
-					return interfaces.InferenceResponse{Content: parsed.Content, ProviderSession: parsed.ProviderSession}, err
-				}),
-				workerprovider.WithCodexJSONLTerminalFailureParser(func(output []byte) (workerprovider.CodexJSONLTerminalFailure, bool) {
-					failure, ok := codexpkg.ParseTerminalFailure(output)
-					return workerprovider.CodexJSONLTerminalFailure{Type: failure.Type, Message: failure.Message, ProviderSession: failure.ProviderSession}, ok
-				}),
-			)
-
-			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
-			})
-			providerErr, ok := err.(*workerprovider.ProviderError)
-			if !ok || providerErr.Type != interfaces.WorkFailureTypeTimeout {
-				t.Fatalf("error = %#v, want timeout ProviderError", err)
-			}
-			var terminal []responseevents.FactoryResponseEvent
-			for _, event := range session.ResponseEvents.Events() {
-				if event.Kind == responseevents.KindError {
-					terminal = append(terminal, event)
-				}
-			}
-			if len(terminal) != 1 {
-				t.Fatalf("terminal events = %#v, want exactly one", terminal)
-			}
-			var payload responseevents.ErrorPayload
-			if err := json.Unmarshal(terminal[0].Payload, &payload); err != nil {
-				t.Fatal(err)
-			}
-			if payload.Code == "codex_turn_failed" || payload.Message != providerErr.Message {
-				t.Fatalf("terminal payload = %#v, want winning process timeout %#v", payload, providerErr)
-			}
-		})
-	}
-}
-
-func TestCodexTerminalReconciliationKeepsRecognizedTypedFailure(t *testing.T) {
-	session := factorysessions.NewLiveSession("sess-terminal-selection", "/factory", "/workspace", "/workspace", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory")
-	manager := stream.NewManager(&streamTestHost{session: session})
-	publish := manager.InferenceProgressPublisherFactory(nil)(session.ID)
-	result := workerprovider.CommandResult{Stdout: []byte(
-		"{\"type\":\"thread.started\",\"thread_id\":\"thread-terminal\"}\n" +
-			"{\"type\":\"turn.failed\",\"error\":{\"message\":\"unexpected status 429\"}}\n" +
-			"{\"type\":\"error\",\"message\":\"cleanup detail that must not override\"}\n")}
-	runner := &codexTerminalOutcomeRunner{publisher: publish, result: result}
-	provider := workerprovider.NewScriptWrapProvider(
-		workerprovider.WithProviderCommandRunner(runner),
-		workerprovider.WithInferenceProgressPublisher(publish),
-		workerprovider.WithCodexJSONLFinalParser(func(output []byte) (interfaces.InferenceResponse, error) {
-			parsed, err := codexpkg.ParseFinalOutput(output)
-			return interfaces.InferenceResponse{Content: parsed.Content, ProviderSession: parsed.ProviderSession}, err
-		}),
-		workerprovider.WithCodexJSONLTerminalFailureParser(func(output []byte) (workerprovider.CodexJSONLTerminalFailure, bool) {
-			failure, ok := codexpkg.ParseTerminalFailure(output)
-			return workerprovider.CodexJSONLTerminalFailure{Type: failure.Type, Message: failure.Message, ProviderSession: failure.ProviderSession}, ok
-		}),
+	session := factorysessions.NewLiveSession(
+		"sess-native-draft", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
 	)
-
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+	host := &streamTestHost{session: session}
+	publisher := stream.NewManager(host).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.MessageDeltaPayload{
+		ContentBlockIndex: 2, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "native delta",
 	})
-	providerErr, ok := err.(*workerprovider.ProviderError)
-	if !ok || providerErr.Type != interfaces.WorkFailureTypeThrottled {
-		t.Fatalf("error = %#v, want throttled ProviderError", err)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
 	}
-	var terminal []responseevents.FactoryResponseEvent
-	for _, event := range session.ResponseEvents.Events() {
-		if event.Kind == responseevents.KindError {
-			terminal = append(terminal, event)
-		}
+	publisher(workerprovider.CanonicalDraftFragment("dispatch-native", responseevents.Draft{
+		RunID: "dispatch-native", DispatchID: "dispatch-native", ItemID: "claude-message-7",
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "claude", NativeEventType: "content_block_delta",
+			Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationDelta,
+			Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: payload,
+	}))
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].ItemID != "claude-message-7" || events[0].Provenance.Delivery != responseevents.DeliveryNativeStream {
+		t.Fatalf("canonical events = %#v, want unchanged provider-native identity and provenance", events)
 	}
-	if len(terminal) != 1 || terminal[0].Provenance.NativeEventType != "turn.failed" {
-		t.Fatalf("terminal events = %#v, want one recognized turn.failed", terminal)
+	if events[0].Sequence != 1 || events[0].EventID == "" || events[0].RecordedAt.IsZero() {
+		t.Fatalf("publication metadata = %#v, want session-owned identity, sequence, and time", events[0])
 	}
-	var payload responseevents.ErrorPayload
-	if err := json.Unmarshal(terminal[0].Payload, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if !payload.Retryable || payload.Message != providerErr.Message {
-		t.Fatalf("terminal payload = %#v, want authoritative failure %#v", payload, providerErr)
+	if host.published != 0 {
+		t.Fatalf("legacy response-stream publications = %d, want no lossy remapping", host.published)
 	}
 }
 

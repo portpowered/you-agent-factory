@@ -24,6 +24,7 @@ type Decoder struct {
 	discardLine                bool
 	selectedTerminal           *responseevents.Draft
 	selectedTerminalRecognized bool
+	terminalFlushed            bool
 }
 
 func NewDecoder(input adapter.DecoderContext) *Decoder { return &Decoder{context: input} }
@@ -69,18 +70,21 @@ func (d *Decoder) Observe(_ context.Context, observation adapter.Observation) (a
 	return result, nil
 }
 
-func (d *Decoder) Flush(_ context.Context, _ adapter.FlushContext) (adapter.DecodeResult, error) {
+func (d *Decoder) Flush(_ context.Context, input adapter.FlushContext) (adapter.DecodeResult, error) {
+	var result adapter.DecodeResult
 	if d.discardLine {
 		d.stdout = nil
 		d.discardLine = false
-		return adapter.DecodeResult{}, nil
-	}
-	if len(bytes.TrimSpace(d.stdout)) == 0 {
+	} else if len(bytes.TrimSpace(d.stdout)) != 0 {
+		result = d.decodeRecord(d.stdout)
 		d.stdout = nil
-		return adapter.DecodeResult{}, nil
 	}
-	result := d.decodeRecord(d.stdout)
-	d.stdout = nil
+	if !d.terminalFlushed && input.Reason != adapter.FlushReasonCanceled {
+		if terminal, ok := d.terminalDraft(); ok {
+			result = appendResult(result, oneDraft(terminal))
+		}
+	}
+	d.terminalFlushed = true
 	return result, nil
 }
 
@@ -136,12 +140,14 @@ func (d *Decoder) decodeRecord(raw []byte) adapter.DecodeResult {
 		if record.Error == nil || strings.TrimSpace(record.Error.Message) == "" {
 			return diagnostic("codex_malformed_turn_failed", diagnosticMessage)
 		}
-		return oneDraft(d.errorDraft("turn.failed", record.Error.Message))
+		d.errorDraft("turn.failed", record.Error.Message)
+		return adapter.DecodeResult{}
 	case "error":
 		if strings.TrimSpace(record.Message) == "" {
 			return diagnostic("codex_malformed_error", diagnosticMessage)
 		}
-		return oneDraft(d.errorDraft("error", record.Message))
+		d.errorDraft("error", record.Message)
+		return adapter.DecodeResult{}
 	case "item.started", "item.updated", "item.completed":
 		return d.decodeItem(record.Type, record.Item)
 	default:
