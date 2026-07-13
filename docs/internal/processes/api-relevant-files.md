@@ -11,11 +11,8 @@ Use this map when changing the public REST contract.
 - `cmd/restoperationinventory` writes that inventory from `api/openapi.yaml` for
   baseline generation; the checked-in baseline lives at
   `contracts/testdata/baseline/rest-operations.json`.
-- `internal/contractinventory/baseline_test.go` treats the checked-in inventory
-  as a compatibility baseline: every recorded operation must remain present and
-  semantically unchanged, while new operations use focused OpenAPI contract and
-  generated-consumer compile evidence instead of route-inventory registration.
-  It also proves byte-identical repeated extraction from `api/openapi.yaml`.
+- `internal/contractinventory/baseline_test.go` proves byte-identical repeated
+  extraction from `api/openapi.yaml` without enforcing a route inventory.
 - Story 004 preservation is proven behaviorally via focused extractor tests and
   `make api-smoke`; this inventory lane must not modify authored OpenAPI,
   generated clients, or `pkg/api` handlers.
