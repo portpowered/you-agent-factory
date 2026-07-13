@@ -189,12 +189,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/api/providersessioncursor/detail_test.go#TestLoadDetails_ReadsReadableSessionFromConfiguredRoot",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: fixture-backed test keeps cursor detail response assertions together."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/api/server_submit_work_test.go#TestSubmitWork_AcceptsCanonicalContent",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract-heavy submit boundary test keeps the full canonical request and response shape in one reviewer-readable flow."
