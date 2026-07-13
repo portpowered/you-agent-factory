@@ -337,6 +337,71 @@ describe("materialized work outcome resume ordering", () => {
     );
     expect(shuffledSuffix).toEqual(batchBefore);
   });
+
+  it("preserves factory-definition order when resuming queued work with multiple initial states", () => {
+    const events = [
+      factoryEvent("initial", 0, 0, FACTORY_EVENT_TYPES.initialStructureRequest, {
+        factory: {
+          ...factoryDefinition(),
+          workTypes: [
+            {
+              name: "task",
+              states: [
+                { name: "ready-b", type: "INITIAL" as const },
+                { name: "ready-a", type: "INITIAL" as const },
+              ],
+            },
+          ],
+        },
+      }),
+      factoryEvent("work", 1, 1, FACTORY_EVENT_TYPES.workRequest, {
+        works: [
+          {
+            name: "Definition-ordered task",
+            traceId: "task-trace",
+            workId: "task-work",
+            workTypeName: "task",
+          },
+        ],
+      }),
+    ];
+    const uninterrupted = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      events,
+    );
+    const prefix = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      events.slice(0, 1),
+    );
+    const serializedPrefix = JSON.parse(
+      JSON.stringify(prefix),
+    ) as MaterializedWorkOutcomeState;
+    const resumed = reduceMaterializedWorkOutcomeEvents(
+      serializedPrefix,
+      events.slice(1),
+    );
+
+    expect(uninterrupted.accumulator.initialPlaceIDs).toEqual([
+      "task:ready-b",
+      "task:ready-a",
+    ]);
+    expect(uninterrupted.accumulator.workItemsByID["task-work"]).toEqual({
+      displayName: "Definition-ordered task",
+      id: "task-work",
+      placeID: "task:ready-b",
+      traceID: "task-trace",
+      workTypeID: "task",
+    });
+    expect(uninterrupted.counts).toEqual({
+      completed: 0,
+      dispatched: 0,
+      failed: 0,
+      inFlight: 0,
+      queued: 1,
+    });
+    expect(resumed).toEqual(uninterrupted);
+    expect(serializedPrefix).toEqual(prefix);
+  });
 });
 
 describe("materialized work outcome duplicate and tie ordering", () => {

@@ -191,7 +191,7 @@ function applyFactoryDefinition(
     }
   }
 
-  accumulator.initialPlaceIDs = [...initialPlaceIDs].sort();
+  accumulator.initialPlaceIDs = [...initialPlaceIDs];
 }
 
 function applyWorkRequest(
