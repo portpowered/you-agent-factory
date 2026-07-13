@@ -1,13 +1,14 @@
 // biome-ignore-all lint/nursery/noExcessiveLinesPerFile: the materializer fixture keeps every reducer boundary visible in one focused behavioral suite.
 import { describe, expect, it } from "vitest";
 
-import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
+import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../../api/events";
 import {
   applyMaterializedWorkOutcomeEvent,
   createMaterializedWorkOutcomeState,
   MATERIALIZED_WORK_OUTCOME_VERSION,
   MAX_MATERIALIZED_WORK_OUTCOME_SAMPLES,
   type MaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
 } from "./materialized-work-outcome";
 
 describe("empty materialized work outcome", () => {
@@ -284,6 +285,162 @@ describe("materialized work outcome retention", () => {
         },
       },
     });
+  });
+});
+
+describe("materialized work outcome resume ordering", () => {
+  it.each([
+    ["empty", 0],
+    ["queued work", 2],
+    ["active dispatch", 5],
+    ["accepted response", 7],
+    ["failed response", 10],
+  ])("matches uninterrupted reduction after a JSON-round-tripped %s checkpoint", (_boundary, prefixLength) => {
+    const events = baselineEvents();
+    const uninterrupted = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      events,
+    );
+    const prefix = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      events.slice(0, prefixLength),
+    );
+    const serializedPrefix = JSON.parse(
+      JSON.stringify(prefix),
+    ) as MaterializedWorkOutcomeState;
+
+    const resumed = reduceMaterializedWorkOutcomeEvents(
+      serializedPrefix,
+      events.slice(prefixLength),
+    );
+
+    expect(resumed).toEqual(uninterrupted);
+    expect(serializedPrefix).toEqual(prefix);
+  });
+
+  it("canonically orders shuffled suffixes without mutating the batch", () => {
+    const events = baselineEvents();
+    const prefix = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      events.slice(0, 2),
+    );
+    const shuffledSuffix = [
+      ...events.slice(2).filter((_, index) => index % 2 === 0),
+      ...events.slice(2).filter((_, index) => index % 2 !== 0),
+    ].reverse();
+    const batchBefore = structuredClone(shuffledSuffix);
+
+    const resumed = reduceMaterializedWorkOutcomeEvents(prefix, shuffledSuffix);
+
+    expect(resumed).toEqual(
+      reduceMaterializedWorkOutcomeEvents(prefix, events.slice(2)),
+    );
+    expect(shuffledSuffix).toEqual(batchBefore);
+  });
+});
+
+describe("materialized work outcome duplicate and tie ordering", () => {
+  it("ignores duplicate and stale deliveries without changing materialized state", () => {
+    const events = baselineEvents();
+    const checkpoint = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      events.slice(0, 7),
+    );
+
+    expect(
+      reduceMaterializedWorkOutcomeEvents(checkpoint, [
+        events[6],
+        events[1],
+        events[6],
+      ]),
+    ).toBe(checkpoint);
+
+    const resumedWithDuplicates = reduceMaterializedWorkOutcomeEvents(
+      checkpoint,
+      [events[8], events[7], events[8], events[9], events[7]],
+    );
+    expect(resumedWithDuplicates).toEqual(
+      reduceMaterializedWorkOutcomeEvents(checkpoint, events.slice(7)),
+    );
+  });
+
+  it("uses event time and event ID to break same-tick and same-sequence ties", () => {
+    const samePositionEvents = [
+      factoryEvent(
+        "work-z",
+        1,
+        1,
+        FACTORY_EVENT_TYPES.workRequest,
+        {
+          works: [
+            {
+              name: "Late Work",
+              traceId: "trace-z",
+              workId: "work-z",
+              workTypeName: "story",
+            },
+          ],
+        },
+        { eventTime: "2026-04-29T12:00:02.000Z" },
+      ),
+      factoryEvent(
+        "work-b",
+        1,
+        1,
+        FACTORY_EVENT_TYPES.workRequest,
+        {
+          works: [
+            {
+              name: "Second Work",
+              traceId: "trace-b",
+              workId: "work-b",
+              workTypeName: "story",
+            },
+          ],
+        },
+        { eventTime: "2026-04-29T12:00:01.000Z" },
+      ),
+      factoryEvent(
+        "work-a",
+        1,
+        1,
+        FACTORY_EVENT_TYPES.workRequest,
+        {
+          works: [
+            {
+              name: "First Work",
+              traceId: "trace-a",
+              workId: "work-a",
+              workTypeName: "story",
+            },
+          ],
+        },
+        { eventTime: "2026-04-29T12:00:01.000Z" },
+      ),
+    ];
+    const initial = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      [baselineEvents()[0]],
+    );
+
+    const forward = reduceMaterializedWorkOutcomeEvents(
+      initial,
+      samePositionEvents,
+    );
+    const reverse = reduceMaterializedWorkOutcomeEvents(
+      initial,
+      [...samePositionEvents].reverse(),
+    );
+
+    expect(reverse).toEqual(forward);
+    expect(forward.cursor).toEqual({
+      eventID: "work-z",
+      eventTime: "2026-04-29T12:00:02.000Z",
+      sequence: 1,
+      tick: 1,
+    });
+    expect(forward.counts.queued).toBe(3);
+    expect(forward.accumulator.appliedEventCount).toBe(4);
   });
 });
 
