@@ -29,7 +29,6 @@ func TestWorkRequestRecordFromSubmitRequests_UsesSharedTraceFallback(t *testing.
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this canonical batch-contract test keeps cross-item payload, relation, and trace assertions visible in one flow.
 func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testing.T) {
 	requests := []interfaces.SubmitRequest{
 		{
@@ -59,6 +58,19 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	}
 
 	workRequest := WorkRequestFromSubmitRequests(requests)
+	assertCanonicalBatchEnvelope(t, workRequest)
+	assertCanonicalFirstWork(t, workRequest.Works[0])
+	assertCanonicalSecondWork(t, workRequest.Works[1])
+
+	requests[0].Payload[0] = 'X'
+	requests[0].Tags["scope"] = "mutated"
+	requests[0].Relations[0].TargetWorkID = "mutated"
+	assertCanonicalFirstWorkClones(t, workRequest.Works[0])
+}
+
+func assertCanonicalBatchEnvelope(t *testing.T, workRequest interfaces.WorkRequest) {
+	t.Helper()
+
 	if workRequest.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("work request type = %q, want %q", workRequest.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
 	}
@@ -71,8 +83,11 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	if len(workRequest.Works) != 2 {
 		t.Fatalf("work count = %d, want 2", len(workRequest.Works))
 	}
+}
 
-	first := workRequest.Works[0]
+func assertCanonicalFirstWork(t *testing.T, first interfaces.Work) {
+	t.Helper()
+
 	if first.Name != "draft" {
 		t.Fatalf("first work name = %q, want draft", first.Name)
 	}
@@ -94,8 +109,11 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	if len(first.RuntimeRelations) != 1 || first.RuntimeRelations[0].TargetWorkID != "work-2" {
 		t.Fatalf("first runtime relations = %#v", first.RuntimeRelations)
 	}
+}
 
-	second := workRequest.Works[1]
+func assertCanonicalSecondWork(t *testing.T, second interfaces.Work) {
+	t.Helper()
+
 	if second.Name != "draft-2" {
 		t.Fatalf("second work name = %q, want draft-2", second.Name)
 	}
@@ -105,10 +123,11 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	if second.CurrentChainingTraceID != "trace-second" {
 		t.Fatalf("second current chaining trace ID = %q, want trace-second", second.CurrentChainingTraceID)
 	}
+}
 
-	requests[0].Payload[0] = 'X'
-	requests[0].Tags["scope"] = "mutated"
-	requests[0].Relations[0].TargetWorkID = "mutated"
+func assertCanonicalFirstWorkClones(t *testing.T, first interfaces.Work) {
+	t.Helper()
+
 	if string(first.Payload.([]byte)) != `{"title":"first"}` {
 		t.Fatalf("first payload should be cloned, got %s", first.Payload)
 	}
