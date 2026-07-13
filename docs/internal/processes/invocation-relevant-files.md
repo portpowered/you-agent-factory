@@ -181,8 +181,11 @@ primary-result behavior.
   `MESSAGE`/`DELTA` with `MessageDeltaPayload` (`contentBlockIndex` 0,
   `contentBlockKind` `TEXT`, `textDelta` from fragment payload without parsing
   provider grammar) and dispatch-scoped `item-legacy-*` IDs from
-  `factorySessionId|runId|dispatchId|providerSessionRef`. Package docs in
-  `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
+  `factorySessionId|runId|dispatchId|providerSessionRef`. Terminal stream markers
+  map to `RUN`/`COMPLETED` (`RunPayload.status` `completed`) or `ERROR`/`FAILED`
+  (`ErrorPayload` with stable `stream_failed` / `stream_canceled` codes and
+  fragment payload as message) without selecting invocation primary results.
+  Package docs in `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`
   enforces isolation from CLI, HTTP, subprocess, and provider imports.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so

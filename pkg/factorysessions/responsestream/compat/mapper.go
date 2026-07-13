@@ -25,9 +25,9 @@ type Context struct {
 }
 
 // MapFragment converts one legacy response-stream event into canonical
-// FactoryResponseEvent values. Progress and response fragments are supported in
-// this lane; other kinds return ErrUnsupportedFragmentKind until later stories
-// land.
+// FactoryResponseEvent values. Progress, response, and terminal stream markers
+// are supported in this lane; other kinds return ErrUnsupportedFragmentKind until
+// later stories land.
 func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.FactoryResponseEvent, error) {
 	switch fragment.Kind {
 	case responsestream.EventKindProgressFragment:
@@ -46,6 +46,24 @@ func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.F
 		}
 		if err := responseevents.ValidateEvent(event); err != nil {
 			return nil, fmt.Errorf("mapped response event invalid: %w", err)
+		}
+		return []responseevents.FactoryResponseEvent{event}, nil
+	case responsestream.EventKindStreamCompleted:
+		event, err := mapStreamCompletedFragment(ctx, fragment)
+		if err != nil {
+			return nil, err
+		}
+		if err := responseevents.ValidateEvent(event); err != nil {
+			return nil, fmt.Errorf("mapped stream-completed event invalid: %w", err)
+		}
+		return []responseevents.FactoryResponseEvent{event}, nil
+	case responsestream.EventKindStreamFailed:
+		event, err := mapStreamFailedFragment(ctx, fragment)
+		if err != nil {
+			return nil, err
+		}
+		if err := responseevents.ValidateEvent(event); err != nil {
+			return nil, fmt.Errorf("mapped stream-failed event invalid: %w", err)
 		}
 		return []responseevents.FactoryResponseEvent{event}, nil
 	default:
@@ -107,6 +125,92 @@ func synthesizedItemID(ctx Context, fragment responsestream.Event) string {
 	)
 	sum := sha256.Sum256([]byte(material))
 	return "item-legacy-" + hex.EncodeToString(sum[:8])
+}
+
+func mapStreamCompletedFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {
+	payload, err := json.Marshal(responseevents.RunPayload{Status: "completed"})
+	if err != nil {
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("marshal run payload: %w", err)
+	}
+
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          synthesizedEventID(ctx, fragment),
+		Sequence:         fragment.Sequence,
+		RecordedAt:       fragment.RecordedAt,
+		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
+		RunID:            strings.TrimSpace(ctx.RunID),
+		Kind:             responseevents.KindRun,
+		Phase:            responseevents.PhaseCompleted,
+		Provenance: responseevents.Provenance{
+			Provider:        fragmentProvider(fragment),
+			NativeEventType: fragmentNativeEventType(fragment),
+			Delivery:        responseevents.DeliverySynthesized,
+			Representation:  responseevents.RepresentationSnapshot,
+			Fidelity:        terminalFragmentFidelity(fragment),
+		},
+		Payload:            payload,
+		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
+	}, nil
+}
+
+func mapStreamFailedFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {
+	payload, err := json.Marshal(errorPayloadFromFragment(fragment))
+	if err != nil {
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("marshal error payload: %w", err)
+	}
+
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          synthesizedEventID(ctx, fragment),
+		Sequence:         fragment.Sequence,
+		RecordedAt:       fragment.RecordedAt,
+		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
+		RunID:            strings.TrimSpace(ctx.RunID),
+		Kind:             responseevents.KindError,
+		Phase:            responseevents.PhaseFailed,
+		Provenance: responseevents.Provenance{
+			Provider:        fragmentProvider(fragment),
+			NativeEventType: fragmentNativeEventType(fragment),
+			Delivery:        responseevents.DeliverySynthesized,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        terminalFragmentFidelity(fragment),
+		},
+		Payload:            payload,
+		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
+	}, nil
+}
+
+func errorPayloadFromFragment(fragment responsestream.Event) responseevents.ErrorPayload {
+	code := streamFailedErrorCode(fragment)
+	message := strings.TrimSpace(fragment.Payload)
+	if message == "" {
+		message = "dispatch stream failed"
+	}
+	return responseevents.ErrorPayload{
+		Code:    code,
+		Message: message,
+	}
+}
+
+func streamFailedErrorCode(fragment responsestream.Event) string {
+	switch fragment.Type {
+	case responsestream.EventTypeCanceled:
+		return "stream_canceled"
+	case responsestream.EventTypeFailed:
+		return "stream_failed"
+	default:
+		return "stream_failed"
+	}
+}
+
+func terminalFragmentFidelity(fragment responsestream.Event) responseevents.Fidelity {
+	if fragmentPayloadTruncated(fragment.Metadata) {
+		return responseevents.FidelityLossy
+	}
+	return responseevents.FidelityNormalized
 }
 
 func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {
