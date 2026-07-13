@@ -14,7 +14,6 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex"
 )
 
@@ -271,7 +270,7 @@ func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
 		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":2}}`,
 	)
 	session := interfaces.ProviderSessionMetadata{Provider: "codex", Kind: codex.ProviderSessionKindSessionID, ID: threadID}
-	testkit.RunSnapshotStream(t, testkit.SnapshotStreamFixture{
+	runResponseAdapterConformance(t, responseAdapterFixture{
 		NewAdapter: func() adapter.Adapter { return codex.NewResponseAdapter() },
 		Request: interfaces.ProviderInferenceRequest{
 			Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
@@ -294,12 +293,12 @@ func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
 				`{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"safe final"}}`,
 		)}},
 		FinalResult: workerprocess.CommandResult{Stdout: observationsStdout(content)},
-		Expected: testkit.SnapshotStreamExpected{
+		Expected: responseAdapterExpected{
 			Capabilities: adapter.Capabilities{
 				NativeStreaming: true, MessageSnapshots: true, ReasoningSummaries: true,
 				ToolLifecycle: true, ToolOutputDeltas: true, StableItemIDs: true,
 			},
-			Drafts: []testkit.DraftExpectation{
+			Drafts: []draftExpectation{
 				{Kind: responseevents.KindSession, Phase: responseevents.PhaseStarted, ProviderRef: threadID},
 				{Kind: responseevents.KindTurn, Phase: responseevents.PhaseStarted, ProviderRef: threadID},
 				{Kind: responseevents.KindTool, Phase: responseevents.PhaseStarted, ItemID: "command-1", ProviderRef: threadID},
@@ -314,6 +313,177 @@ func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
 		},
 		ForbiddenDiagnostic: []string{prompt, secret},
 	})
+}
+
+type responseAdapterFixture struct {
+	NewAdapter          func() adapter.Adapter
+	Request             interfaces.ProviderInferenceRequest
+	Content             []adapter.Observation
+	TerminalFailure     []adapter.Observation
+	UnsafeAndRecovering []adapter.Observation
+	UnterminatedFinal   []adapter.Observation
+	FinalResult         workerprocess.CommandResult
+	Expected            responseAdapterExpected
+	ForbiddenDiagnostic []string
+}
+
+type responseAdapterExpected struct {
+	Capabilities     adapter.Capabilities
+	Drafts           []draftExpectation
+	ProviderSession  interfaces.ProviderSessionMetadata
+	FinalContent     string
+	FailureFamily    interfaces.WorkFailureFamily
+	FailureType      interfaces.WorkFailureType
+	FailureRetryable bool
+}
+
+type draftExpectation struct {
+	Kind        responseevents.Kind
+	Phase       responseevents.Phase
+	ItemID      string
+	ProviderRef string
+}
+
+func runResponseAdapterConformance(t *testing.T, fixture responseAdapterFixture) {
+	t.Helper()
+	t.Run("declared capabilities and command", func(t *testing.T) { verifyAdapterCapabilities(t, fixture) })
+	t.Run("ordered canonical snapshots", func(t *testing.T) { verifyAdapterDrafts(t, fixture) })
+	t.Run("authoritative final result", func(t *testing.T) { verifyAdapterFinal(t, fixture) })
+	t.Run("unsafe input recovers", func(t *testing.T) { verifyAdapterRecovery(t, fixture) })
+	t.Run("flush processes final unterminated record", func(t *testing.T) { verifyAdapterFlush(t, fixture) })
+	t.Run("terminal failure reconciliation", func(t *testing.T) { verifyAdapterFailure(t, fixture) })
+}
+
+func verifyAdapterCapabilities(t *testing.T, fixture responseAdapterFixture) {
+	t.Helper()
+	providerAdapter := fixture.NewAdapter()
+	command, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{Request: fixture.Request})
+	if err != nil || command.Request.Command != "codex" || !reflect.DeepEqual(command.Request.Args, []string{"exec", "--json", "--model", "gpt-test", "-"}) || string(command.Request.Stdin) != fixture.Request.UserMessage {
+		t.Fatalf("BuildCommand() = %#v, %v", command, err)
+	}
+	result, err := providerAdapter.Capabilities(context.Background(), adapter.CapabilityContext{Request: fixture.Request})
+	if err != nil || !reflect.DeepEqual(result.Capabilities, fixture.Expected.Capabilities) {
+		t.Fatalf("Capabilities() = %#v, %v", result.Capabilities, err)
+	}
+}
+
+func verifyAdapterDrafts(t *testing.T, fixture responseAdapterFixture) {
+	t.Helper()
+	drafts, diagnostics := decodeAdapter(t, fixture.NewAdapter(), fixture.Content, adapter.FlushReasonCompleted)
+	assertSafeAdapterDiagnostics(t, diagnostics, fixture.ForbiddenDiagnostic)
+	if len(drafts) != len(fixture.Expected.Drafts) {
+		t.Fatalf("draft count = %d, want %d", len(drafts), len(fixture.Expected.Drafts))
+	}
+	for index, expected := range fixture.Expected.Drafts {
+		got := drafts[index]
+		if got.Kind != expected.Kind || got.Phase != expected.Phase || got.ItemID != expected.ItemID || got.ProviderSessionRef != expected.ProviderRef {
+			t.Fatalf("draft[%d] = %#v, want %#v", index, got, expected)
+		}
+	}
+}
+
+func verifyAdapterFinal(t *testing.T, fixture responseAdapterFixture) {
+	t.Helper()
+	result, err := fixture.NewAdapter().ParseFinal(context.Background(), adapter.FinalParseContext{CommandResult: fixture.FinalResult})
+	if err != nil || result.Response.Content != fixture.Expected.FinalContent || result.Response.ProviderSession == nil || *result.Response.ProviderSession != fixture.Expected.ProviderSession || len(result.Drafts) != 0 {
+		t.Fatalf("ParseFinal() = %#v, %v", result, err)
+	}
+}
+
+func verifyAdapterRecovery(t *testing.T, fixture responseAdapterFixture) {
+	t.Helper()
+	drafts, diagnostics := decodeAdapter(t, fixture.NewAdapter(), fixture.UnsafeAndRecovering, adapter.FlushReasonCompleted)
+	assertSafeAdapterDiagnostics(t, diagnostics, fixture.ForbiddenDiagnostic)
+	if len(diagnostics) == 0 || completedMessage(drafts) == nil {
+		t.Fatalf("recovery drafts/diagnostics = %#v / %#v", drafts, diagnostics)
+	}
+}
+
+func verifyAdapterFlush(t *testing.T, fixture responseAdapterFixture) {
+	t.Helper()
+	drafts, diagnostics := decodeAdapter(t, fixture.NewAdapter(), fixture.UnterminatedFinal, adapter.FlushReasonCompleted)
+	assertSafeAdapterDiagnostics(t, diagnostics, fixture.ForbiddenDiagnostic)
+	message := completedMessage(drafts)
+	if message == nil || messagePayloadText(t, *message) != fixture.Expected.FinalContent {
+		t.Fatalf("unterminated final drafts = %#v", drafts)
+	}
+}
+
+func verifyAdapterFailure(t *testing.T, fixture responseAdapterFixture) {
+	t.Helper()
+	providerAdapter := fixture.NewAdapter()
+	stdout := observationsStdout(fixture.TerminalFailure)
+	_, parseErr := providerAdapter.ParseFinal(context.Background(), adapter.FinalParseContext{CommandResult: workerprocess.CommandResult{Stdout: stdout}})
+	result := providerAdapter.ClassifyFailure(context.Background(), adapter.FailureContext{CommandResult: workerprocess.CommandResult{Stdout: stdout}, ParseError: parseErr})
+	failure := result.Failure
+	if parseErr == nil || failure == nil || failure.Family != fixture.Expected.FailureFamily || failure.Type != fixture.Expected.FailureType || failure.Retry.Retryable != fixture.Expected.FailureRetryable {
+		t.Fatalf("ClassifyFailure() = %#v, parse error %v", result, parseErr)
+	}
+	if failure.ProviderSession == nil || *failure.ProviderSession != fixture.Expected.ProviderSession {
+		t.Fatalf("failure provider session = %#v", failure.ProviderSession)
+	}
+	assertSafeAdapterText(t, failure.Message, fixture.ForbiddenDiagnostic)
+}
+
+func decodeAdapter(t *testing.T, providerAdapter adapter.Adapter, observations []adapter.Observation, reason adapter.FlushReason) ([]responseevents.Draft, []adapter.Diagnostic) {
+	t.Helper()
+	decoder, err := providerAdapter.NewDecoder(context.Background(), adapter.DecoderContext{RunID: "run-conformance", DispatchID: "dispatch-conformance"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var drafts []responseevents.Draft
+	var diagnostics []adapter.Diagnostic
+	for _, observation := range observations {
+		result, observeErr := decoder.Observe(context.Background(), observation)
+		if observeErr != nil {
+			t.Fatal(observeErr)
+		}
+		drafts = append(drafts, result.Drafts...)
+		diagnostics = append(diagnostics, result.Diagnostics...)
+	}
+	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: reason})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return append(drafts, flushed.Drafts...), append(diagnostics, flushed.Diagnostics...)
+}
+
+func assertSafeAdapterDiagnostics(t *testing.T, diagnostics []adapter.Diagnostic, forbidden []string) {
+	t.Helper()
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == "" || diagnostic.Message == "" || len(diagnostic.Message) > 160 {
+			t.Fatalf("invalid diagnostic = %#v", diagnostic)
+		}
+		assertSafeAdapterText(t, diagnostic.Code+diagnostic.Message, forbidden)
+	}
+}
+
+func assertSafeAdapterText(t *testing.T, value string, forbidden []string) {
+	t.Helper()
+	for _, secret := range forbidden {
+		if strings.Contains(value, secret) {
+			t.Fatalf("unsafe adapter text %q contains %q", value, secret)
+		}
+	}
+}
+
+func completedMessage(drafts []responseevents.Draft) *responseevents.Draft {
+	for index := range drafts {
+		if drafts[index].Kind == responseevents.KindMessage && drafts[index].Phase == responseevents.PhaseCompleted {
+			return &drafts[index]
+		}
+	}
+	return nil
+}
+
+func messagePayloadText(t *testing.T, draft responseevents.Draft) string {
+	t.Helper()
+	var payload responseevents.MessagePayload
+	decodePayload(t, draft, &payload)
+	if len(payload.ContentBlocks) != 1 {
+		t.Fatalf("message payload = %#v", payload)
+	}
+	return payload.ContentBlocks[0].Text
 }
 
 func TestDecoderBoundsOversizedRecordsAndContinuesWithUnterminatedCompletion(t *testing.T) {
