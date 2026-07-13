@@ -399,12 +399,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factory/ingest/filewatcher_test.go#TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this watcher batch-contract test keeps parent-child mapping and canonical submit assertions in one scenario."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/factory/projections/projectiontests/dispatch_lifecycle_event_replay_test.go#assertJavaScriptDispatchLifecycleReplay",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this replay assertion keeps JavaScript dispatch lifecycle counts, metadata, and artifacts visible in one scenario."
