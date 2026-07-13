@@ -244,7 +244,7 @@ primary-result behavior.
   Provider-native typed adapters live under `pkg/workers/provider/<provider>`
   and emit validated `responseevents.Draft` values. While legacy response-stream
   consumers remain supported, carry an exact draft beside the compatibility
-  fragment and let `pkg/factorysessions/stream/manager.go` publish that draft
+  fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
   provider's final-result parser independent from decoder observation state so
   streamed message snapshots cannot select or duplicate invocation
