@@ -401,7 +401,7 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 		{topic: "config", heading: "# Config"},
 		{topic: "models", heading: "# Models"},
 		{topic: "mcp", heading: "# MCP Host Setup"},
-		{topic: "javascript-workflows", heading: "# JavaScript Workflow Authoring"},
+		{topic: "javascript-workflows", heading: "# JavaScript Workflows"},
 	}
 
 	for _, tc := range cases {
@@ -422,6 +422,54 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 				t.Fatalf("docs %s missing heading %q:\n%s", tc.topic, tc.heading, got)
 			}
 		})
+	}
+}
+
+func TestDocsCommand_JavaScriptWorkflowExamplesMatchCLIBoundary(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		args       []string
+		wantOutput string
+		wantError  string
+	}{
+		{name: "validate", args: []string{"workflow", "validate", "--kind", "INLINE_WORKFLOW", "--inline", `phase("setup");`}, wantOutput: "Workflow validation passed."},
+		{name: "synchronous run", args: []string{"--json", "workflow", "run", "--request-id", "req-js-timeout-001", "--workflow", "long-running-audit", "--args", `{"scope":"release"}`, "--wait-timeout-millis", "1000"}, wantOutput: `"sessionId":"dur-sess-js-timeout-001"`},
+		{name: "asynchronous start", args: []string{"--json", "workflow", "start", "--request-id", "req-js-run-n-001", "--workflow", "release-train", "--args", `{"release":"2026.06"}`}, wantOutput: `"sessionId":"dur-sess-js-run-n-001"`},
+		{name: "status", args: []string{"--json", "workflow", "status", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
+		{name: "result", args: []string{"--json", "workflow", "result", "dur-sess-js-run-n-001", "--mode", "partial"}, wantError: "SESSION_NOT_FOUND"},
+		{name: "dispatches", args: []string{"--json", "workflow", "dispatches", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
+		{name: "artifacts", args: []string{"--json", "workflow", "artifacts", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
+		{name: "events", args: []string{"--json", "workflow", "events", "dur-sess-js-run-n-001"}, wantError: "SESSION_NOT_FOUND"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertDocumentedWorkflowCommand(t, tc.args, tc.wantOutput, tc.wantError)
+		})
+	}
+}
+
+func assertDocumentedWorkflowCommand(t *testing.T, args []string, wantOutput, wantError string) {
+	t.Helper()
+	var output bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&output)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+
+	err := root.Execute()
+	if wantError == "" && err != nil {
+		t.Fatalf("execute %v: %v\n%s", args, err, output.String())
+	}
+	if wantError != "" && (err == nil || !strings.Contains(output.String(), wantError)) {
+		t.Fatalf("execute %v error = %v, output = %q, want %q", args, err, output.String(), wantError)
+	}
+	if wantOutput != "" && !strings.Contains(output.String(), wantOutput) {
+		t.Fatalf("execute %v output missing %q:\n%s", args, wantOutput, output.String())
 	}
 }
 

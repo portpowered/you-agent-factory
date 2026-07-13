@@ -1,14 +1,104 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-12
+last-modified: 2026-07-13
 doc-id: agent-factory/guides/javascript-workflows
 ---
 
-# JavaScript Workflow Authoring
+# JavaScript Workflows
 
-Use a JavaScript orchestrator when authored code should coordinate child work
-inside a `FactorySession`. The script receives JSON-compatible inputs and a
-small host API; it does not receive general-purpose machine access.
+Use this guide to author or select a JavaScript workflow, validate it, start a
+Factory Session, inspect its durable facts, and recover from supported failure
+outcomes. A JavaScript orchestrator coordinates child work inside a Factory
+Session. The script receives JSON-compatible inputs and a small host API; it
+does not receive general-purpose machine access.
+
+## Operator flow
+
+### 1. Author or select source
+
+Put reusable project workflows under `.claude/workflows/` and select them by
+name. For a one-off source check, pass inline JavaScript directly:
+
+```bash
+you workflow validate --kind INLINE_WORKFLOW --inline 'phase("setup");'
+```
+
+To validate a reusable project workflow named `release-train`, run from its
+project root so ordered source lookup can find `.claude/workflows/`:
+
+```bash
+you workflow validate --kind WORKFLOW_NAME --value release-train --dir .
+```
+
+Validation resolves and checks source without creating a Factory Session.
+Correct every blocking diagnostic before execution.
+
+### 2. Start synchronously or asynchronously
+
+Every start needs a stable request id and exactly one source selector:
+`--workflow`, `--workflow-file`, or `--factory`. Supply invocation data as a
+JSON object with `--args` when the workflow expects inputs.
+
+Use `run` when the caller should wait for a terminal result or the configured
+timeout. This copy-paste command exercises the published deterministic timeout
+fixture and still returns its Factory Session id for inspection:
+
+```bash
+you --json workflow run \
+  --request-id req-js-timeout-001 \
+  --workflow long-running-audit \
+  --args '{"scope":"release"}' \
+  --wait-timeout-millis 1000
+```
+
+Use `start` when the caller should receive the Factory Session id immediately
+and poll it later:
+
+```bash
+you --json workflow start \
+  --request-id req-js-run-n-001 \
+  --workflow release-train \
+  --args '{"release":"2026.06"}'
+```
+
+Retain the returned `sessionId`. The retired run-level workflow source flag is
+not supported; dynamic workflow execution belongs to `you workflow run` and
+`you workflow start`.
+
+These examples use the deterministic fake execution provider and published
+fixture catalog selected by default. For live source resolution and JavaScript
+execution, replace the fixture request/source values with your own and add
+`--execution-provider javascript-runtime --project-root .`. Configure MCP with
+runtime backing separately as described in `you docs mcp`.
+
+### 3. Inspect the Factory Session
+
+Use the exact returned id for every read. Status describes lifecycle and
+progress; results expose final or partial Work output; dispatches describe
+child work; artifacts are session-owned durable outputs; and events are the
+ordered replay and reconnect history.
+
+```bash
+you --json workflow status SESSION_ID
+you --json workflow result SESSION_ID --mode final
+you --json workflow dispatches SESSION_ID
+you --json workflow artifacts SESSION_ID
+you --json workflow events SESSION_ID
+```
+
+For an in-progress Factory Session, use `result SESSION_ID --mode partial` and
+poll `status` or `events` before retrying the final result. Use
+`events SESSION_ID --after-event-id EVENT_ID` to continue after an acknowledged
+event.
+
+### 4. Recover
+
+If validation fails, correct the source or selector and validate again. If a
+child fails, inspect its Dispatch and the surrounding events before starting a
+new request or using an explicitly supported resume path. If a result is
+`NOT_READY`, keep the same Factory Session id and poll; do not create a new
+request merely to read progress. The recovery table below maps stable signals
+to the facts that remain inspectable.
 
 ## Inputs and final output
 
@@ -29,7 +119,7 @@ small host API; it does not receive general-purpose machine access.
 | `phase` | `phase(name: string): void` | Appends an ordered phase observation for the `FactorySession` and its `FactoryEvent` stream. |
 | `log` | `log(message: string, fields?: object): void` | Appends a structured log observation. Fields must be JSON-compatible. |
 | `workflow.log` | `workflow.log(message: string, fields?: object): void` | Same observable log contract as `log`. |
-| `agent.run` | `await agent.run({prompt, label?, agentId?, preset?, modelProvider?, model?, reasoningEffort?, command?, sandbox?, writableRoots?, allowNetwork?, concurrency?, outputSchema?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. Explicit settings remain subject to policy. |
+| `agent.run` | `await agent.run({prompt, label?, preset?, modelProvider?, model?, reasoningEffort?})` | Requests one child execution and resolves to its structured result. Its resolved worker selection and lifecycle are inspectable as a `Dispatch` and related `FactoryEvent` records. Explicit settings remain subject to policy. |
 | `parallel` | `await parallel(items)` where each item is an `agent.run` request object or async function | Runs bounded child work and returns results in input order. Child work remains individually inspectable as `Dispatch` records. |
 | `pipeline` | `await pipeline(items, worker, next?)` | Runs `worker(item, index)` and optional `next(workerResult, item, index)` for each item. Returns ordered per-item status and stage results. |
 | `workflow.checkpoint` | `workflow.checkpoint({label: string, state?: object}): void` | Persists JSON-compatible application state as a checkpoint artifact/reference and appends a checkpoint observation. It does not snapshot the JavaScript VM. |
@@ -46,9 +136,10 @@ otherwise resolved before the workflow completes.
 Workflow source is validated before execution and runs with only the globals
 listed above plus ordinary JavaScript language facilities. Direct filesystem,
 shell, process, module `import`/`require`, and network access is unavailable.
-Child requests may ask for scoped capabilities such as a model, command,
-writable roots, or network, but the host permits them only when effective
-policy explicitly allows them. Use `agent.run` for host-mediated child work and
+Child requests may select a preset, model provider, model, and reasoning effort;
+the host permits them only when effective policy allows them. Command, sandbox,
+writable-root, network, concurrency, and output-schema fields are not supported
+`agent.run` arguments. Use `agent.run` for host-mediated child work and
 `workflow.artifact` for durable outputs.
 
 ## Runnable examples
@@ -109,8 +200,8 @@ result availability have the same meaning on every surface.
 | Operation | CLI | REST API | MCP |
 |-----------|-----|----------|-----|
 | Validate or resolve source without starting a session | `you workflow validate --kind WORKFLOW_NAME --value review` | `POST /factories/preview` | `you.factory_session.validate_source` |
-| Start and wait | `you --json workflow run --request-id req-review-1 --workflow review` | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
-| Start for polling | `you --json workflow start --request-id req-review-1 --workflow review` | `POST /factory-sessions/async` | `you.factory_session.start_async` |
+| Start and wait | `you --json workflow run --request-id req-js-timeout-001 --workflow long-running-audit --args '{"scope":"release"}' --wait-timeout-millis 1000` | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
+| Start for polling | `you --json workflow start --request-id req-js-run-n-001 --workflow release-train --args '{"release":"2026.06"}'` | `POST /factory-sessions/async` | `you.factory_session.start_async` |
 | Read status or final/partial result | `you --json workflow status SESSION_ID`; `you --json workflow result SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
 | Inspect child work and durable facts | `you --json workflow dispatches SESSION_ID`; `artifacts`; `events` | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
 
@@ -156,21 +247,18 @@ Reusable JavaScript child settings are operator-owned in
 Each preset supports a required, unique, non-empty `id` and required
 `modelProvider`; `model` and `reasoningEffort` are optional. Supported reasoning
 efforts are `minimal`, `low`, `medium`, and `high`. Reference a preset directly
-with `agent.run({preset: "careful-review", ...})`, or assign it to a named
-factory agent under `orchestrator.javascript.agents.<agentId>.preset` and call
-`agent.run({agentId: "reviewer", ...})`.
+with `agent.run({preset: "careful-review", ...})`.
 
 Worker fields resolve independently. Highest precedence is an explicit
-`agent.run` field, then the preset selected directly by that call, then the
-named factory agent's preset, then that preset's fields, then operator
+`agent.run` field, then the preset selected by that call, then operator
 `defaults.workerModelProvider` and `defaults.workerModel`. The selected preset
 id remains observable even when an explicit child field overrides one preset
 value. The completed selection is canonicalized and checked against effective
 policy before a `Dispatch` is created.
 
-Unknown direct or named-agent presets are rejected with the preset id and its
-selection source. Invalid preset definitions fail operator configuration load;
-policy-denied resolved models or reasoning efforts fail before child dispatch.
+Unknown presets are rejected with the preset id and its selection source.
+Invalid preset definitions fail operator configuration load; policy-denied
+resolved models or reasoning efforts fail before child dispatch.
 Successful dispatch list/detail, event, and replay projections retain the
 resolved preset id, provider, model, reasoning effort, runner, execution
 provider, and provider-session reference when available. See `you docs config`

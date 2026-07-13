@@ -9,11 +9,10 @@ doc-id: agent-factory/guides/sessions
 Use this guide when you need to discover live factory sessions, confirm a
 service is listening, inspect the active factory on a running host, read session
 status from the API, or route submit and work commands to a non-default session.
-It also owns the operator path for the currently supported durable JavaScript
-`FactorySession` slice: validate source, start a durable session, inspect
-status, result, dispatches, artifacts, and `FactoryEvent` history, confirm the
-same session in the website detail surface, and apply lifecycle controls where
-the current surface supports them.
+For the end-to-end JavaScript workflow task—select or author source, validate,
+start, inspect, and recover—use `you docs javascript-workflows`. This page owns
+general Factory Session discovery, lifecycle controls, routing, and runtime
+inspection shared by every orchestrator kind.
 
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
@@ -25,7 +24,11 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
-## Canonical JavaScript Factory Session Path
+## JavaScript Factory Session Model
+
+The task procedure and complete CLI/API/MCP command sequence live in
+`you docs javascript-workflows`. The material here only maps that procedure to
+the shared Factory Session model used by the rest of this session reference.
 
 A JavaScript execution is a `FactorySession` whose `orchestratorKind` is
 `JAVASCRIPT`. It is not a workflow run or another resource alongside a Factory
