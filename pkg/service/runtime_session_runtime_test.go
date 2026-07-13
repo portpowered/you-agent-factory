@@ -165,6 +165,46 @@ func TestFactoryService_LiveSessionsOwnIsolatedResponseEventStores(t *testing.T)
 	}
 }
 
+type serviceResponseEventClock struct {
+	now time.Time
+}
+
+func (c *serviceResponseEventClock) Now() time.Time {
+	return c.now
+}
+
+func TestFactoryService_SubscribeFactoryResponseEventsClassifiesExpiredStream(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &serviceResponseEventClock{now: start}
+	store := responseeventstore.NewSessionResponseEventStoreWithClock(
+		factorysessions.CanonicalFactorySessionID(session),
+		clock,
+	)
+	if _, err := store.Publish(sessionResponseEventFixture("run-completed")); err != nil {
+		t.Fatalf("publish response event: %v", err)
+	}
+	store.Complete()
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+	session.ResponseEvents = store
+
+	_, err := harness.svc.SubscribeFactoryResponseEventsForSession(
+		context.Background(),
+		factorysessions.CanonicalFactorySessionID(session),
+		0,
+		"",
+	)
+	if !errors.Is(err, apisurface.ErrFactoryResponseEventStreamExpired) {
+		t.Fatalf("SubscribeFactoryResponseEventsForSession error = %v, want ErrFactoryResponseEventStreamExpired", err)
+	}
+}
+
 func assertSessionsOwnIsolatedResponseEventStores(
 	t *testing.T,
 	first *factorysessions.LiveSession,

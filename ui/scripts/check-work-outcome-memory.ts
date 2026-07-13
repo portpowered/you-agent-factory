@@ -4,7 +4,11 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import type { FactoryEvent } from "../src/api/events";
-import { buildWorkOutcomeTimelineSamplesFromEvents } from "../src/features/work-outcome/hooks/useWorkOutcomeChart";
+import {
+  createMaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
+  selectMaterializedWorkOutcomeSamples,
+} from "../src/features/work-outcome/lib/materializer/materialized-work-outcome";
 
 type FixtureName =
   | "baseline"
@@ -168,8 +172,11 @@ function main(): void {
   gcIfAvailable();
   const heapBeforeMB = sampleHeapUsedMB();
   const startedAt = performance.now();
-  const samples = buildWorkOutcomeTimelineSamplesFromEvents(
-    events,
+  const samples = selectMaterializedWorkOutcomeSamples(
+    reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      events,
+    ),
     selectedTick,
   );
   const durationMs = Number((performance.now() - startedAt).toFixed(1));

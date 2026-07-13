@@ -1,6 +1,7 @@
 package apiserver_test
 
 import (
+	"bufio"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,9 +12,184 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
 )
+
+func TestFactorySessionsAPI_ResponseEventsRouteStreamsGeneratedContractEnvelope(t *testing.T) {
+	store := responseeventstore.NewSessionResponseEventStore("session-beta")
+	want := publishIntegrationResponseProgress(t, store, "integration-retained")
+	store.Complete()
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET response-events status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	reader := bufio.NewReader(rec.Body)
+	idLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read SSE id: %v", err)
+	}
+	dataLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read SSE data: %v", err)
+	}
+	separator, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read SSE separator: %v", err)
+	}
+	if strings.TrimSpace(idLine) != "id: 1" || strings.TrimSpace(separator) != "" || !strings.HasPrefix(dataLine, "data: ") {
+		t.Fatalf("SSE framing = %q%q%q, want one id and one data line", idLine, dataLine, separator)
+	}
+	var got responseevents.FactoryResponseEvent
+	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(dataLine, "data: "))), &got); err != nil {
+		t.Fatalf("decode response-event SSE data: %v", err)
+	}
+	if got.EventID != want.EventID || got.FactorySessionID != "session-beta" {
+		t.Fatalf("response event = %#v, want event %q for session-beta", got, want.EventID)
+	}
+	if err := responseevents.ValidateEvent(got); err != nil {
+		t.Fatalf("response event violates public schema semantics: %v", err)
+	}
+}
+
+func TestFactorySessionsAPI_ResponseEventsRouteSignalsStaleReconnectFirst(t *testing.T) {
+	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
+		"session-beta",
+		responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20},
+	)
+	if err != nil {
+		t.Fatalf("new response-event store: %v", err)
+	}
+	publishIntegrationResponseProgress(t, store, "dropped-1")
+	publishIntegrationResponseProgress(t, store, "dropped-2")
+	wantFirst := publishIntegrationResponseProgress(t, store, "retained-3")
+	wantSecond := publishIntegrationResponseProgress(t, store, "retained-4")
+	store.Complete()
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events?after_sequence=1", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET stale response-events status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	reader := bufio.NewReader(rec.Body)
+	gap := readIntegrationResponseEvent(t, reader)
+	if gap.Kind != responseevents.KindStreamGap {
+		t.Fatalf("first stale response event kind = %q, want STREAM_GAP", gap.Kind)
+	}
+	var gapPayload responseevents.StreamGapPayload
+	if err := json.Unmarshal(gap.Payload, &gapPayload); err != nil {
+		t.Fatalf("decode STREAM_GAP payload: %v", err)
+	}
+	if gapPayload.FromSequence != 2 || gapPayload.ToSequence != 2 || gapPayload.FirstAvailableSequence != 3 {
+		t.Fatalf("STREAM_GAP payload = %#v, want unavailable 2..2 and first available 3", gapPayload)
+	}
+	gotFirst := readIntegrationResponseEvent(t, reader)
+	gotSecond := readIntegrationResponseEvent(t, reader)
+	if gotFirst.EventID != wantFirst.EventID || gotSecond.EventID != wantSecond.EventID {
+		t.Fatalf("stale catch-up = [%q %q], want [%q %q]", gotFirst.EventID, gotSecond.EventID, wantFirst.EventID, wantSecond.EventID)
+	}
+}
+
+type integrationResponseEventClock struct {
+	now time.Time
+}
+
+func (c *integrationResponseEventClock) Now() time.Time {
+	return c.now
+}
+
+func TestFactorySessionsAPI_ResponseEventsRouteReturnsTypedExpiredOutcome(t *testing.T) {
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &integrationResponseEventClock{now: start}
+	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-beta", clock)
+	publishIntegrationResponseProgress(t, store, "completed")
+	store.Complete()
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusGone {
+		t.Fatalf("GET expired response-events status = %d, want 410: %s", rec.Code, rec.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode expired response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED || response.Family != factoryapi.ErrorFamilyGone {
+		t.Fatalf("expired response = %#v, want typed RESPONSE_EVENT_STREAM_EXPIRED/GONE", response)
+	}
+	if got := rec.Header().Get("Content-Type"); strings.Contains(got, "text/event-stream") {
+		t.Fatalf("expired response Content-Type = %q, want JSON before SSE headers", got)
+	}
+}
+
+func publishIntegrationResponseProgress(
+	t *testing.T,
+	store *responseeventstore.SessionResponseEventStore,
+	label string,
+) responseevents.FactoryResponseEvent {
+	t.Helper()
+	payload, err := json.Marshal(responseevents.ProgressPayload{Label: label})
+	if err != nil {
+		t.Fatalf("marshal response-event payload: %v", err)
+	}
+	event, err := store.Publish(responseevents.FactoryResponseEvent{
+		FactorySessionID: store.FactorySessionID(),
+		Kind:             responseevents.KindProgress,
+		Phase:            responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider:        "test-provider",
+			NativeEventType: "progress",
+			Delivery:        responseevents.DeliveryNativeStream,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        responseevents.FidelityLossless,
+		},
+		RunID:   "run-integration",
+		Payload: payload,
+	})
+	if err != nil {
+		t.Fatalf("publish response event: %v", err)
+	}
+	return event
+}
+
+func readIntegrationResponseEvent(t *testing.T, reader *bufio.Reader) responseevents.FactoryResponseEvent {
+	t.Helper()
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("read SSE id: %v", err)
+	}
+	dataLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read SSE data: %v", err)
+	}
+	if _, err := reader.ReadString('\n'); err != nil {
+		t.Fatalf("read SSE separator: %v", err)
+	}
+	var event responseevents.FactoryResponseEvent
+	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(dataLine, "data: "))), &event); err != nil {
+		t.Fatalf("decode response-event SSE data: %v", err)
+	}
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("response event violates public schema semantics: %v", err)
+	}
+	return event
+}
 
 func newMockFactorySessionTestServer(f *testutil.MockFactory) *api.Server {
 	logger, _ := zap.NewDevelopment()

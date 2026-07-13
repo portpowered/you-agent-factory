@@ -124,7 +124,7 @@ primary-result behavior.
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`, `InjectCLIRunner`), and `cmd/factory/main.go` (`buildCLIRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `InjectCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Compose regression coverage for quiet batch work-file preservation lives in `cmd/factory/compose/compose_test.go` (`TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchMode`). Focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/service/invocation_bootstrap_test.go`, `pkg/service/invocation_bootstrap_ownership_test.go`, and consolidated startup parity plus cross-transport composition evidence in `pkg/initializer/startup_compatibility_test.go`.   Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
+- Process startup follows `cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`: `pkg/cli/startup` carries parsed run or MCP inputs, `pkg/root` selects one `initializer.ProcessPolicy`, `pkg/wire/process.go` applies that policy while constructing exactly one typed `initializer.ProcessGraph`, and `pkg/initializer/core.go` validates the graph policy before starting the already-built graph. Do not duplicate or recompute mode/sidecar policy downstream; API, dashboard, runtime mode, worker-scheduler, and watcher enablement must be governed by the root-selected policy carried on the graph. Keep domain construction out of root and do not restore root-local deferred lifecycle closures or process-global builder registration. The normalized root home must likewise remain authoritative: thread it through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, system-config persistence, automatic recording, runtime logging, and runtime metrics rather than consulting ambient process globals after command construction. Run construction is split between `run.BuildApplication` and `Application.Run`; MCP construction is split between `mcp.BuildServeApplication` and `ServeApplication.Run`, so construction failures occur before initializer startup. Initializer-backed local construction uses `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`) and `pkg/wire/cli.go` (`BuildCLIRunner`). Dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `wire.BuildCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Boundary coverage lives in `pkg/root/process_test.go`, `pkg/wire/process_test.go`, `pkg/initializer/initialize_test.go`, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`; transport parity coverage remains in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
 - `you models invoke` reuses the same `service.BuildInvocationBootstrap` /
   `service.NormalizeInvocationBootstrapConfig` path as one-shot factory
   invocation, wired from `pkg/cli/models/bootstrap_invoke.go`. The CLI must call
@@ -168,8 +168,9 @@ primary-result behavior.
   select primary-result-only versus internal `SessionResponseStream` attachment
   for supported one-shot factory invocations; keep mode validation, unsupported
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
-  stream attachment and bounded async progress stdout draining in
-  `pkg/cli/run/invocation_observability.go`, human and JSON progress rendering in
+  stream attachment, bounded human-progress draining, and lossless canonical
+  JSON stdout ordering in
+  `pkg/cli/run/invocation_observability.go`, human progress and canonical JSON rendering in
   `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
   `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
   `pkg/cli/run/run_wire_api_test.go`, and invocation wiring in
@@ -179,12 +180,19 @@ primary-result behavior.
   The `pkg/cli/run` package is at the
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
-  fields; JSON response-stream terminal outcomes stay on the final
-  `primary_result` NDJSON record. Human-only suppression helpers:
+  fields. JSON mode subscribes from the latest session-owned canonical response
+  event, emits only `response_event` records, and sends every event plus the
+  final `invocation_result` through one lossless ordered writer. Do not reuse the
+  human progress queue's drop or drain-timeout policy for canonical JSON records.
+  Keep `service.InvocationBootstrap.SubscribeSessionResponseEventsFromLatest`
+  as a transparent forward and explicitly drain the retained subscription after
+  stopping its live consumer so an event published at invocation return remains
+  ordered before the terminal record.
+  Human-only suppression helpers:
   `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
   `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop
-  compaction/backlog/stream-gap text and token-usage chatter while JSON mode
-  keeps `compaction` / `stream_gap` records. Internal stream listing for
+  compaction/backlog/stream-gap text and token-usage chatter. Canonical retained
+  window loss reaches JSON mode only as a public `STREAM_GAP` event. Internal stream listing for
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
@@ -438,8 +446,9 @@ primary-result behavior.
 - Named `@you/goal` response-stream boundary smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`,
   proving real CLI `--output response-stream` still returns the packaged
-  `primaryResult`, JSON response-stream NDJSON ends with a `primary_result`
-  record, durable `FactoryEvent` history omits internal response-stream terms,
+  `primaryResult`, JSON response-stream NDJSON contains canonical `response_event`
+  records and ends with an `invocation_result` record, durable `FactoryEvent`
+  history omits internal response-stream terms,
   and generated public API artifacts stay internal-only. Reuse
   `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
   and `support.StartFunctionalAPIServer` when extending boundary verification.

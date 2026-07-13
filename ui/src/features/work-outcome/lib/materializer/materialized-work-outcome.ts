@@ -36,7 +36,9 @@ export {
   type MaterializedWorkOutcomeCounts,
   type MaterializedWorkOutcomeEventCursor,
   type MaterializedWorkOutcomeState,
+  selectMaterializedWorkOutcomeSamples,
 } from "./materialized-work-outcome-state";
+export { isSupportedMaterializedWorkOutcomeState } from "./materialized-work-outcome-validation";
 
 const SYSTEM_TIME_WORK_TYPE_ID = "__system_time";
 const SYSTEM_TIME_EXPIRY_TRANSITION_ID = `${SYSTEM_TIME_WORK_TYPE_ID}:expire`;

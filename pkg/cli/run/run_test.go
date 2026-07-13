@@ -435,6 +435,43 @@ func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTempl
 	}
 }
 
+func TestBuildApplicationSequentialHomesControlDefaultRecordingPath(t *testing.T) {
+	ambientHome := t.TempDir()
+	setUserHomeForTest(t, ambientHome)
+
+	for _, homeDir := range []string{t.TempDir(), t.TempDir()} {
+		var gotRecordPath string
+		var gotSystemHome string
+		var gotLogDir string
+		var gotMetricsDir string
+		application, err := BuildApplication(context.Background(), RunConfig{
+			Dir: t.TempDir(), HomeDir: homeDir, Port: 0, SuppressDashboardRendering: true,
+		}, func(_ context.Context, cfg *service.FactoryServiceConfig) (RuntimeRunner, error) {
+			gotRecordPath = cfg.RecordPath
+			gotSystemHome = cfg.SystemConfigHomeDir
+			gotLogDir = cfg.RuntimeLogDir
+			gotMetricsDir = cfg.RuntimeMetricsDir
+			return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+		})
+		if err != nil {
+			t.Fatalf("BuildApplication(home %q) error = %v", homeDir, err)
+		}
+		wantRoot := defaultpaths.RecordingsRoot(homeDir)
+		if !strings.HasPrefix(filepath.Clean(gotRecordPath), filepath.Clean(wantRoot)+string(os.PathSeparator)) {
+			t.Fatalf("record path = %q, want below supplied home root %q", gotRecordPath, wantRoot)
+		}
+		if strings.HasPrefix(filepath.Clean(gotRecordPath), filepath.Clean(defaultpaths.RecordingsRoot(ambientHome))) {
+			t.Fatalf("record path = %q, unexpectedly used ambient home %q", gotRecordPath, ambientHome)
+		}
+		if gotSystemHome != homeDir || gotLogDir != defaultpaths.RuntimeLogsRoot(homeDir) || gotMetricsDir != defaultpaths.RuntimeMetricsRoot(homeDir) {
+			t.Fatalf("service home paths = home %q logs %q metrics %q; want roots below %q", gotSystemHome, gotLogDir, gotMetricsDir, homeDir)
+		}
+		if err := application.Run(context.Background()); err != nil {
+			t.Fatalf("Application.Run(home %q) error = %v", homeDir, err)
+		}
+	}
+}
+
 func TestGenerateDefaultLiveRunRecordPath_UsesUniqueSuffixes(t *testing.T) {
 	originalTime := defaultLiveRunRecordTime
 	originalUUID := defaultLiveRunRecordUUID

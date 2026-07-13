@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -26,6 +27,7 @@ import (
 
 type bootstrapInvokeConfig struct {
 	FactoryDir       string
+	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
 	Verbose          bool
@@ -122,6 +124,7 @@ func resolveBootstrapInvokeConfig(cfg invokeOptions) (bootstrapInvokeConfig, err
 	}
 	return bootstrapInvokeConfig{
 		FactoryDir:       factoryDir,
+		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: cfg.OperatorDefaults,
 		Logger:           logger,
 		Verbose:          cfg.Verbose,
@@ -147,6 +150,7 @@ func buildModelsInvokeBootstrapServiceConfig(cfg bootstrapInvokeConfig) *service
 	}
 	svcCfg := &service.FactoryServiceConfig{
 		Dir:                  cfg.FactoryDir,
+		SystemConfigHomeDir:  cfg.HomeDir,
 		OperatorDefaults:     cfg.OperatorDefaults,
 		ExecutionBaseDir:     executionBaseDir,
 		RuntimeMode:          interfaces.RuntimeModeService,
@@ -154,6 +158,10 @@ func buildModelsInvokeBootstrapServiceConfig(cfg bootstrapInvokeConfig) *service
 		Verbose:              cfg.Verbose,
 		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
 		RuntimeMetricsConfig: logging.DefaultRuntimeMetricsConfig(),
+	}
+	if strings.TrimSpace(cfg.HomeDir) != "" {
+		svcCfg.RuntimeLogDir = defaultpaths.RuntimeLogsRoot(cfg.HomeDir)
+		svcCfg.RuntimeMetricsDir = defaultpaths.RuntimeMetricsRoot(cfg.HomeDir)
 	}
 	normalized := service.NormalizeInvocationBootstrapConfig(svcCfg)
 	if augmentModelsInvokeBootstrapServiceConfig != nil {
