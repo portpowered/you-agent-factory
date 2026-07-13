@@ -2,6 +2,12 @@
 // exercises cross-dialect agreement through focused table-driven tests.
 package openapitests
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
+
 // ParityInventoryFormatVersion identifies the Factory/OpenAPI parity index shape.
 const ParityInventoryFormatVersion = "factory-openapi-parity/v1"
 
@@ -51,4 +57,33 @@ type ParityCase struct {
 	ExpectedErrorPath     string   `json:"expectedErrorPath,omitempty"`
 	ExpectedErrorCategory string   `json:"expectedErrorCategory,omitempty"`
 	ErrorFragments        []string `json:"errorFragments,omitempty"`
+}
+
+// ProjectParityInventory builds the deterministic Factory/OpenAPI parity index
+// from committed fixtures and documented API/config-loader outcomes.
+func ProjectParityInventory() ParityInventory {
+	cases := make([]ParityCase, 0, 20)
+	cases = append(cases, baselineAcceptParityCases()...)
+	cases = append(cases, baselineRejectParityCases()...)
+
+	return ParityInventory{
+		FormatVersion: ParityInventoryFormatVersion,
+		Scope: "Factory/OpenAPI config parity index referencing existing openapitests " +
+			"fixtures; each case records GeneratedFactoryFromOpenAPIJSON and " +
+			"FactoryConfigFromOpenAPIJSON outcomes without changing schemas or mapping behavior",
+		Cases: cases,
+	}
+}
+
+// MarshalParityInventoryJSON renders the Factory/OpenAPI parity inventory as stable JSON.
+func MarshalParityInventoryJSON(inventory ParityInventory) ([]byte, error) {
+	payload, err := json.MarshalIndent(inventory, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal factory openapi parity inventory: %w", err)
+	}
+
+	var buffer bytes.Buffer
+	buffer.Write(payload)
+	buffer.WriteByte('\n')
+	return buffer.Bytes(), nil
 }
