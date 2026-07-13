@@ -1,6 +1,11 @@
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../../api/events";
 import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
+import { createTimelineCheckpointIndexedDBTestDouble } from "../../../../testing/timeline-checkpoint-indexeddb-test-utils";
 import { useFactoryTimelineStore } from "../factoryTimelineStore";
+import {
+  persistTimelineCheckpoint,
+  readTimelineCheckpoint,
+} from "../timelineCheckpointPersistence";
 
 const identity: StreamDerivedCacheIdentity = {
   backendScopeID: "backend-a",
@@ -99,6 +104,25 @@ const dispatchResponse = event(
   "dispatch-1",
 );
 
+const reconnectSuffix = event(
+  "event-work-2",
+  5,
+  5,
+  FACTORY_EVENT_TYPES.workRequest,
+  {
+    source: "api",
+    type: "FACTORY_REQUEST_BATCH",
+    works: [
+      {
+        name: "Reconnect Suffix Story",
+        traceId: "trace-2",
+        workId: "work-2",
+        workTypeName: "story",
+      },
+    ],
+  },
+);
+
 function entry() {
   return useFactoryTimelineStore.getState().entryForIdentity(identity);
 }
@@ -174,6 +198,77 @@ describe("factory timeline ordered outcome append", () => {
 
     store.appendEventsForEntry(identity, [workRequest, initialStructure]);
     expect(entry()).toBe(before);
+  });
+});
+
+describe("factory timeline persisted append continuation", () => {
+  it("restores one persisted boundary and applies only a reconnect suffix", async () => {
+    const store = useFactoryTimelineStore.getState();
+    store.appendEventsForEntry(identity, [
+      initialStructure,
+      workRequest,
+      dispatchRequest,
+      dispatchResponse,
+    ]);
+    const checkpoint = entry()?.currentReplayCheckpoint;
+    if (!checkpoint) {
+      throw new Error("expected checkpoint after initial timeline append");
+    }
+    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+    await persistTimelineCheckpoint(indexedDB, checkpoint, identity);
+
+    store.resetEntry(identity);
+    const restored = await readTimelineCheckpoint(indexedDB, identity);
+    if (!restored) {
+      throw new Error("expected persisted timeline checkpoint");
+    }
+    store.restoreCheckpointForEntry(identity, restored);
+    const beforeReconnect = entry();
+
+    store.appendEventsForEntry(identity, [
+      dispatchRequest,
+      dispatchResponse,
+      reconnectSuffix,
+    ]);
+
+    const current = entry();
+    expect(
+      beforeReconnect?.currentReplayCheckpoint?.replayState.completedDispatches,
+    ).toHaveLength(1);
+    expect(beforeReconnect?.materializedWorkOutcomeState).toMatchObject({
+      accumulator: { appliedEventCount: 4, completedDispatchCount: 1 },
+      counts: { completed: 1, dispatched: 1 },
+      cursor: { eventID: "event-response", sequence: 4, tick: 4 },
+    });
+    expect(current?.events.map(({ id }) => id)).toEqual(["event-work-2"]);
+    expect(current?.receivedEventIDs).toEqual(["event-work-2"]);
+    expect(
+      current?.currentReplayCheckpoint?.replayState.completedDispatches,
+    ).toHaveLength(1);
+    expect(current?.currentReplayCheckpoint).toMatchObject({
+      afterEventId: "event-work-2",
+      afterSequence: 5,
+      selectedTick: 5,
+    });
+    expect(current?.materializedWorkOutcomeState).toMatchObject({
+      accumulator: {
+        appliedEventCount: 5,
+        completedAcceptedCount: 1,
+        completedDispatchCount: 1,
+      },
+      counts: {
+        completed: 1,
+        dispatched: 1,
+        failed: 0,
+        inFlight: 0,
+        queued: 1,
+      },
+      cursor: { eventID: "event-work-2", sequence: 5, tick: 5 },
+    });
+    expect(current?.materializedWorkOutcomeState.samples).toHaveLength(5);
+    expect(current?.currentReplayCheckpoint?.afterEventId).toBe(
+      current?.materializedWorkOutcomeState.cursor?.eventID,
+    );
   });
 });
 

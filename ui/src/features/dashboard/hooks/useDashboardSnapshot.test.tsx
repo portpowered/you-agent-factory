@@ -29,6 +29,7 @@ import {
 } from "../../timeline/state/factoryTimelineStore";
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
 import { readTimelineCheckpoint } from "../../timeline/state/timelineCheckpointPersistence";
+import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -285,10 +286,11 @@ describe("useDashboardSnapshot composer", () => {
       checkpoint: {
         afterEventId: "event-2",
         afterSequence: 2,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(17),
         selectedTick: 17,
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey(),
       streamIdentity: defaultStreamIdentity(),
     });
@@ -561,10 +563,11 @@ describe("useDashboardSnapshot composer", () => {
       checkpoint: {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey(),
       streamIdentity: defaultStreamIdentity(),
     });
@@ -637,6 +640,7 @@ describe("useDashboardSnapshot composer", () => {
       checkpoint: {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
         syncIdentity: {
@@ -646,7 +650,7 @@ describe("useDashboardSnapshot composer", () => {
           streamGenerationId: "2026-06-27T00:00:00Z",
         },
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey("session-stale-001"),
       streamIdentity: staleStreamIdentity,
     });
@@ -654,10 +658,11 @@ describe("useDashboardSnapshot composer", () => {
       checkpoint: {
         afterEventId: "beta-event-9",
         afterSequence: 9,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(9),
         selectedTick: 9,
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey("session-beta"),
       streamIdentity: defaultStreamIdentity("session-beta"),
     });
@@ -754,10 +759,11 @@ describe("useDashboardSnapshot composer", () => {
       checkpoint: {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey(staleSessionID),
       streamIdentity: staleStreamIdentity,
     });
