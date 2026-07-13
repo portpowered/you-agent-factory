@@ -196,8 +196,8 @@ primary-result behavior.
   consumers through `pkg/service/runtime_sessions.go`, but is not a CLI human
   presentation fallback.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
-  `pkg/factorysessions/responseevents` (distinct from internal
-  `pkg/factorysessions/responsestream` fragment kinds).
+  `pkg/factory/sessions/responseevents` (distinct from internal
+  `pkg/factory/sessions/responsestream` fragment kinds).
 
   Provider-native structured response adapters live in provider-owned
   subpackages under `pkg/workers/provider/` and implement the neutral lifecycle
@@ -222,7 +222,7 @@ primary-result behavior.
   inferring it from neighboring stream activity.
 
   Legacy fragment
-  compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
+  compatibility mapping lives in `pkg/factory/sessions/responsestream/compat`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
   later transport lanes adopt mapped canonical events. Response fragments map to
@@ -544,7 +544,7 @@ primary-result behavior.
   execution boundary: a configured Factory Session response-stream publisher
   selects a registered structured adapter, while final-only invocations retain
   the established provider behavior. Provider-native `responseevents.Draft`
-  values must be published directly by `pkg/factorysessions/stream` so the
+  values must be published directly by `pkg/factory/sessions/stream` so the
   session store assigns event ID, sequence, recorded time, and Factory Session
   identity without flattening stable message or tool identity through the
   legacy fragment compatibility mapper.
