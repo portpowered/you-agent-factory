@@ -8,6 +8,7 @@ import {
   readSessionPersistenceInvalidationRecords,
   resetSessionPersistenceInvalidationRecords,
 } from "../../../dashboard/public/session-persistence-diagnostics";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
@@ -18,7 +19,6 @@ import {
   type TimelineCheckpointStreamIdentity,
 } from "../timelineCheckpointPersistence";
 import { reconnectCursorFromCheckpoint } from "../timelineCheckpointReconnect";
-import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 
 interface StoredCheckpointEnvelope {
   checkpoint?: {
@@ -68,7 +68,11 @@ function createIndexedDBTestDouble(
           getAll: () => indexedDBTestRequest(Array.from(records.values())),
           put: (value: StoredCheckpointEnvelope) =>
             options.failPut
-              ? indexedDBErrorTestRequest<string>(new Error("put failed"))
+              ? indexedDBErrorTestRequest<string>(new Error("put failed"), () =>
+                  (transaction.onabort as ((event: Event) => void) | null)?.(
+                    {} as Event,
+                  ),
+                )
               : indexedDBTestRequest(
                   value.storageKey ?? "",
                   () => {
@@ -78,9 +82,7 @@ function createIndexedDBTestDouble(
                   },
                   () =>
                     (
-                      transaction.oncomplete as
-                        | ((event: Event) => void)
-                        | null
+                      transaction.oncomplete as ((event: Event) => void) | null
                     )?.({} as Event),
                 ),
         }),

@@ -35,9 +35,9 @@ export function createTimelineCheckpointIndexedDBTestDouble(): {
                 }
               },
               () =>
-                (
-                  transaction.oncomplete as ((event: Event) => void) | null
-                )?.({} as Event),
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
             ),
         }),
       };
@@ -85,13 +85,19 @@ export function indexedDBTestRequest<T>(
   return request;
 }
 
-export function indexedDBErrorTestRequest<T>(error: Error): IDBRequest<T> {
+export function indexedDBErrorTestRequest<T>(
+  error: Error,
+  afterError?: () => void,
+): IDBRequest<T> {
   const request = {
     error,
     onerror: null,
     onsuccess: null,
     result: undefined,
   } as unknown as IDBRequest<T>;
-  queueMicrotask(() => request.onerror?.({} as Event));
+  queueMicrotask(() => {
+    request.onerror?.({} as Event);
+    afterError?.();
+  });
   return request;
 }

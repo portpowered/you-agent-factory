@@ -81,6 +81,8 @@ describe("timeline checkpoint same-stream write ordering", () => {
     fixture.controls.completeTransaction();
     await flushPromiseContinuations();
     await flushPromiseContinuations();
+    await flushPromiseContinuations();
+    await flushPromiseContinuations();
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
     fixture.controls.succeed("open");

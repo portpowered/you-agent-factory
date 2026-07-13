@@ -16,12 +16,22 @@ export async function writeCheckpointDatabaseRecord(
       CHECKPOINT_STORE_NAME,
       "readwrite",
     );
-    await Promise.all([
-      indexedDBRequestToPromise(
-        transaction.objectStore(CHECKPOINT_STORE_NAME).put(value),
-      ),
-      indexedDBTransactionToPromise(transaction),
+    const requestOutcome = indexedDBRequestToPromise(
+      transaction.objectStore(CHECKPOINT_STORE_NAME).put(value),
+    ).then(
+      () => ({ succeeded: true }) as const,
+      (error: unknown) => ({ error, succeeded: false }) as const,
+    );
+    const transactionOutcome = indexedDBTransactionToPromise(transaction).then(
+      () => ({ succeeded: true }) as const,
+      (error: unknown) => ({ error, succeeded: false }) as const,
+    );
+    const [request, durableTransaction] = await Promise.all([
+      requestOutcome,
+      transactionOutcome,
     ]);
+    if (!request.succeeded) throw request.error;
+    if (!durableTransaction.succeeded) throw durableTransaction.error;
   } finally {
     database.close();
   }
