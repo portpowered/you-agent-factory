@@ -112,13 +112,14 @@ func Validate(repositoryRoot string, registry Registry, family, formatVersion st
 	}
 
 	var diagnostics []Diagnostic
+	loadedDocuments := make(map[string]loadedDocument)
 	for _, document := range entry.Documents {
 		value, issue := loadJSON(repositoryRoot, document.Path, "document")
 		if issue != nil {
 			diagnostics = append(diagnostics, *issue)
 			continue
 		}
-		value, referenceDiagnostics := resolveReferences(repositoryRoot, document.Path, value)
+		value, sourceDocuments, referenceDiagnostics := resolveReferences(repositoryRoot, document.Path, value)
 		if len(referenceDiagnostics) != 0 {
 			diagnostics = append(diagnostics, referenceDiagnostics...)
 			continue
@@ -130,8 +131,17 @@ func Validate(repositoryRoot string, registry Registry, family, formatVersion st
 		}
 		if err := schema.Validate(value); err != nil {
 			diagnostics = append(diagnostics, validationDiagnostics(document.Path, err)...)
+			continue
+		}
+		for _, source := range sourceDocuments {
+			loadedDocuments[source.path] = source
 		}
 	}
+	uniqueDocuments := make([]loadedDocument, 0, len(loadedDocuments))
+	for _, document := range loadedDocuments {
+		uniqueDocuments = append(uniqueDocuments, document)
+	}
+	diagnostics = append(diagnostics, duplicateStableIDDiagnostics(uniqueDocuments)...)
 	sortDiagnostics(diagnostics)
 	return diagnostics
 }

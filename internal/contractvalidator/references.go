@@ -25,10 +25,10 @@ type referenceResolver struct {
 	active    map[string]bool
 }
 
-func resolveReferences(repositoryRoot, document string, value any) (any, []Diagnostic) {
+func resolveReferences(repositoryRoot, document string, value any) (any, []loadedDocument, []Diagnostic) {
 	root, err := canonicalRoot(repositoryRoot)
 	if err != nil {
-		return nil, []Diagnostic{newDiagnostic("reference.root", rootPath, "repository root could not be resolved", document)}
+		return nil, nil, []Diagnostic{newDiagnostic("reference.root", rootPath, "repository root could not be resolved", document)}
 	}
 	document = normalizeRepositoryPath(document)
 	resolver := referenceResolver{
@@ -37,7 +37,19 @@ func resolveReferences(repositoryRoot, document string, value any) (any, []Diagn
 		active:    make(map[string]bool),
 	}
 	resolved, diagnostics := resolver.resolveNode(value, document, nil)
-	return resolved, diagnostics
+	if len(diagnostics) != 0 {
+		return nil, nil, diagnostics
+	}
+	paths := make([]string, 0, len(resolver.documents))
+	for path := range resolver.documents {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	loaded := make([]loadedDocument, 0, len(paths))
+	for _, path := range paths {
+		loaded = append(loaded, loadedDocument{path: path, value: resolver.documents[path]})
+	}
+	return resolved, loaded, nil
 }
 
 func (r *referenceResolver) resolveNode(value any, document string, segments []string) (any, []Diagnostic) {

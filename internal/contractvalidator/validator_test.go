@@ -157,11 +157,68 @@ func TestValidateNormalizesWindowsAndSlashReferencePaths(t *testing.T) {
 	assertSingleDiagnostic(t, windowsDiagnostics, "reference.missing", "nested/root.json", "/component/$ref")
 }
 
+func TestValidateAcceptsUniqueStableIDs(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "schema.json", identitySchema)
+	writeFile(t, root, "first.json", identityDocument("component.first"))
+	writeFile(t, root, "second.json", identityDocument("component.second"))
+
+	diagnostics := contractvalidator.Validate(root, identityRegistry("first.json", "second.json"), "test", "1.0.0")
+	if len(diagnostics) != 0 {
+		t.Fatalf("Validate() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
+func TestValidateReportsEveryDuplicateStableIDOccurrence(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "schema.json", identitySchema)
+	writeFile(t, root, "first.json", identityDocument("component.shared"))
+	writeFile(t, root, "nested/second.json", identityDocument("component.shared"))
+
+	diagnostics := contractvalidator.Validate(root, identityRegistry("first.json", "nested/second.json"), "test", "1.0.0")
+	want := []contractvalidator.Diagnostic{
+		{Code: "identity.duplicate", Path: "/identity/id", Message: `stable ID "component.shared" appears more than once`, Document: "first.json"},
+		{Code: "identity.duplicate", Path: "/identity/id", Message: `stable ID "component.shared" appears more than once`, Document: "nested/second.json"},
+	}
+	if fmt.Sprint(diagnostics) != fmt.Sprint(want) {
+		t.Fatalf("Validate() diagnostics = %+v, want %+v", diagnostics, want)
+	}
+}
+
+func TestValidateDuplicateStableIDsAreIndependentOfDocumentOrder(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "schema.json", identitySchema)
+	writeFile(t, root, "alpha.json", identityDocument("duplicate.alpha"))
+	writeFile(t, root, "beta.json", identityDocument("duplicate.beta"))
+	writeFile(t, root, "other-alpha.json", identityDocument("duplicate.alpha"))
+	writeFile(t, root, "other-beta.json", identityDocument("duplicate.beta"))
+
+	forward := contractvalidator.Validate(root, identityRegistry("alpha.json", "beta.json", "other-alpha.json", "other-beta.json"), "test", "1.0.0")
+	reversed := contractvalidator.Validate(root, identityRegistry("other-beta.json", "other-alpha.json", "beta.json", "alpha.json"), "test", "1.0.0")
+	if fmt.Sprint(forward) != fmt.Sprint(reversed) {
+		t.Fatalf("document order changed diagnostics:\nforward: %+v\nreverse: %+v", forward, reversed)
+	}
+	if len(forward) != 4 {
+		t.Fatalf("Validate() diagnostics = %+v, want four occurrences from two duplicate groups", forward)
+	}
+}
+
 const componentSchema = `{
   "$schema":"https://json-schema.org/draft/2020-12/schema",
   "type":"object",
   "required":["component"],
   "properties":{"component":{"type":"object","required":["id"],"properties":{"id":{"type":"string"}}}}
+}`
+
+const identitySchema = `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "type":"object",
+  "required":["identity"],
+  "properties":{"identity":{
+    "type":"object",
+    "required":["id","canonicalEnglish"],
+    "properties":{"id":{"type":"string"},"canonicalEnglish":{"type":"string"}}
+  }}
 }`
 
 func referenceRegistry(document string) contractvalidator.Registry {
@@ -170,6 +227,22 @@ func referenceRegistry(document string) contractvalidator.Registry {
 		Schemas:   []contractvalidator.Schema{{ID: "https://example.test/schema.json", Path: "schema.json"}},
 		Documents: []contractvalidator.Document{{Path: document, SchemaID: "https://example.test/schema.json"}},
 	})
+}
+
+func identityRegistry(documents ...string) contractvalidator.Registry {
+	registered := make([]contractvalidator.Document, 0, len(documents))
+	for _, document := range documents {
+		registered = append(registered, contractvalidator.Document{Path: document, SchemaID: "https://example.test/identity.schema.json"})
+	}
+	return contractvalidator.NewRegistry(contractvalidator.Entry{
+		Family: "test", FormatVersion: "1.0.0",
+		Schemas:   []contractvalidator.Schema{{ID: "https://example.test/identity.schema.json", Path: "schema.json"}},
+		Documents: registered,
+	})
+}
+
+func identityDocument(id string) string {
+	return fmt.Sprintf(`{"identity":{"id":%q,"canonicalEnglish":"Component documentation"}}`, id)
 }
 
 func writeReferenceDocument(t *testing.T, root, path, reference string) {
